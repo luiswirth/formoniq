@@ -4,4 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+mshio = "0.4.2"
 nalgebra = "0.32.5"
+thiserror = "1.0.61"

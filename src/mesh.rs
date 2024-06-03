@@ -1,69 +1,71 @@
+//! This module defined the objects necessary for a Triangulation.
+
+pub mod util;
+
 use std::rc::Rc;
 
 pub type NodeId = usize;
+pub type EntityId = usize;
+
+// A mesh plays the role of a container of mesh entities (cells,faces,edges,vertices).
+// It must allows the unique identification of the entities.
+// It must allow from traversal of the cells -> must induce a global numbering on all entities.
+// It must represent mesh topology (incidence).
+// It must represent mesh geometry (location, shape)
 
 /// All simplicies of a Mesh are connected to this MeshNodes object.
 /// It contains all the Nodes of the Mesh.
-#[derive(Debug)]
-pub struct MeshNodes(Vec<na::DVector<f64>>);
+#[derive(Debug, Clone)]
+pub struct MeshNodes(Rc<Vec<na::DVector<f64>>>);
 impl MeshNodes {
   pub fn new(nodes: Vec<na::DVector<f64>>) -> Self {
+    assert!(!nodes.is_empty(), "Mesh nodes may not be empty.");
+    let dim_ambient = nodes[0].len();
+    assert!(nodes.iter().all(|n| dim_ambient == n.len()));
+    let nodes = Rc::new(nodes);
+    Self(nodes)
+  }
+  pub fn new_unchecked(nodes: Vec<na::DVector<f64>>) -> Self {
+    let nodes = Rc::new(nodes);
     Self(nodes)
   }
 
   pub fn nodes(&self) -> &[na::DVector<f64>] {
     &self.0
   }
+  pub fn dim_ambient(&self) -> usize {
+    self.0[0].len()
+  }
 }
+impl std::cmp::PartialEq for MeshNodes {
+  fn eq(&self, other: &Self) -> bool {
+    Rc::ptr_eq(&self.0, &other.0)
+  }
+}
+impl std::cmp::Eq for MeshNodes {}
 
 /// Not supposed to be mutated, once created.
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Simplex {
   /// connection to mesh
-  mesh_nodes: Rc<MeshNodes>,
-  /// sorted nodes of the Simplex
-  nodes: Vec<NodeId>,
-  orientation: Orientation,
-}
-impl PartialEq for Simplex {
-  fn eq(&self, other: &Self) -> bool {
-    self.cmp(other) == Some(Orientation::Pos)
-  }
+  mesh_nodes: MeshNodes,
+  /// sorted vertices of the Simplex
+  vertices: Vec<NodeId>,
 }
 
 impl Simplex {
-  pub fn new(mesh_nodes: Rc<MeshNodes>, nodes: Vec<NodeId>) -> Self {
-    Self::new_with_orientation(mesh_nodes, nodes, Default::default())
-  }
-  pub fn new_with_orientation(
-    mesh_nodes: Rc<MeshNodes>,
-    mut nodes: Vec<NodeId>,
-    mut orientation: Orientation,
-  ) -> Self {
-    assert!(!nodes.is_empty(), "Simplex may not be empty.");
-    let swaps = sort_count(&mut nodes);
-    orientation *= Orientation::from(swaps);
+  pub fn new(mesh_nodes: MeshNodes, vertices: Vec<NodeId>) -> Self {
+    assert!(!vertices.is_empty(), "Simplex may not be empty.");
     Self {
       mesh_nodes,
-      nodes,
-      orientation,
+      vertices,
     }
   }
   pub fn dim(&self) -> usize {
-    self.nodes.len() - 1
+    self.vertices.len() - 1
   }
   pub fn vertices(&self) -> &[NodeId] {
-    &self.nodes
-  }
-
-  pub fn cmp(&self, other: &Self) -> Option<Orientation> {
-    if Rc::ptr_eq(&self.mesh_nodes, &other.mesh_nodes) || self.nodes != other.nodes {
-      return None;
-    }
-    Some(match self.orientation == other.orientation {
-      true => Orientation::Pos,
-      false => Orientation::Neg,
-    })
+    &self.vertices
   }
 
   /// all direct proper (one dim lower) faces
@@ -71,16 +73,14 @@ impl Simplex {
     if self.dim() == 0 {
       return Vec::new();
     }
-    (0..self.nodes.len())
+    (0..self.vertices.len())
       .map(|i| {
-        let mesh_nodes = Rc::clone(&self.mesh_nodes);
-        let mut nodes = self.nodes.clone();
-        nodes.remove(i);
-        let orientation = Orientation::from(i);
+        let mesh_nodes = self.mesh_nodes.clone();
+        let mut vertices = self.vertices.clone();
+        vertices.remove(i);
         Self {
           mesh_nodes,
-          orientation,
-          nodes,
+          vertices,
         }
       })
       .collect()
@@ -88,7 +88,7 @@ impl Simplex {
 }
 impl std::fmt::Display for Simplex {
   fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-    write!(fmt, "Simplex({})[", self.orientation)?;
+    write!(fmt, "Simplex[")?;
     for v in self.vertices() {
       write!(fmt, " x_{},", v)?;
     }
@@ -96,37 +96,71 @@ impl std::fmt::Display for Simplex {
   }
 }
 
-/// Not supposed to be mutated, once created.
+/// A k-Skeleton, is a collection of only k-simplicies.
 #[derive(Debug)]
-pub struct Triangulation {
-  /// Simplicies of highest intrinsic dimension.
-  /// Subsimplicies are not stored, but computed.
+pub struct Skeleton {
   simplicies: Vec<Simplex>,
 }
-impl Triangulation {
+impl Skeleton {
   pub fn new(simplicies: Vec<Simplex>) -> Self {
-    assert!(!simplicies.is_empty(), "Triangulation may not be empty.");
-    let dim_intrinsic = simplicies[0].dim();
+    assert!(!simplicies.is_empty(), "Skeleton may not be empty.");
+    let dim = simplicies[0].dim();
     assert!(
-      simplicies.iter().all(|s| s.dim() == dim_intrinsic),
-      "Intrinsic dimension of Simplicies in Triangulation must match."
+      simplicies.iter().all(|s| s.dim() == dim),
+      "Simplicies in Skeleton must all have same dimension."
     );
-
     Self { simplicies }
   }
-  pub fn dim_intrinsic(&self) -> usize {
+
+  pub fn dim(&self) -> usize {
     self.simplicies[0].dim()
   }
-  pub fn simplicies(&self) -> &[Simplex] {
-    &self.simplicies
+}
+
+/// A `Triangulation` or a Simplicial Mesh
+/// It's a pure simplicial complex.
+#[derive(Debug)]
+pub struct Triangulation {
+  nodes: MeshNodes,
+  skeletons: Vec<Skeleton>,
+}
+impl Triangulation {
+  pub fn from_skeletons(nodes: MeshNodes, skeletons: Vec<Skeleton>) -> Self {
+    assert!(!skeletons.is_empty(), "Triangulation may not be empty.");
+    assert!(
+      skeletons.iter().enumerate().all(|(i, s)| s.dim() == i),
+      "Skeletons in Triangulation must have their index be equal to the dimension."
+    );
+    Self { nodes, skeletons }
+  }
+  /// The dimension of highest dimensional [`Skeleton`]
+  pub fn dim(&self) -> usize {
+    self.skeletons.len() - 1
+  }
+  pub fn nodes(&self) -> &MeshNodes {
+    &self.nodes
   }
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Orientation {
   #[default]
-  Pos,
-  Neg,
+  Pos = 1,
+  Neg = -1,
+}
+impl Orientation {
+  /// Simplex orientation might change when permuting the vertices.
+  /// This depends on the parity of the number of swaps.
+  /// Even permutations preserve the orientation.
+  /// Odd permutations invert the orientation.
+  /// Based on the number
+  pub fn from_permutation_parity(n: usize) -> Self {
+    match n % 2 {
+      0 => Self::Pos,
+      1 => Self::Neg,
+      _ => unreachable!(),
+    }
+  }
 }
 impl std::ops::Neg for Orientation {
   type Output = Self;
@@ -141,95 +175,28 @@ impl std::ops::Neg for Orientation {
 impl std::ops::Mul for Orientation {
   type Output = Self;
 
-  fn mul(self, rhs: Self) -> Self::Output {
-    Self::from(self == rhs)
-  }
-}
-impl std::ops::MulAssign for Orientation {
-  fn mul_assign(&mut self, rhs: Self) {
-    *self = Self::from(*self == rhs);
-  }
-}
-impl From<bool> for Orientation {
-  fn from(b: bool) -> Self {
-    match b {
+  fn mul(self, other: Self) -> Self::Output {
+    match self == other {
       true => Self::Pos,
       false => Self::Neg,
     }
   }
 }
-impl From<usize> for Orientation {
-  fn from(n: usize) -> Self {
-    match n % 2 {
-      0 => Self::Pos,
-      1 => Self::Neg,
-      _ => unreachable!(),
+impl std::ops::MulAssign for Orientation {
+  fn mul_assign(&mut self, other: Self) {
+    *self = *self * other;
+  }
+}
+impl From<Orientation> for char {
+  fn from(o: Orientation) -> Self {
+    match o {
+      Orientation::Pos => '+',
+      Orientation::Neg => '-',
     }
   }
 }
 impl std::fmt::Display for Orientation {
   fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-    write!(
-      fmt,
-      "{}",
-      match self {
-        Self::Pos => '+',
-        Self::Neg => '-',
-      }
-    )
-  }
-}
-
-// TODO: horribly inefficent -> better algorithm
-/// sorts the slice and counts the swaps
-/// bubble sort
-pub fn sort_count<T: Ord>(s: &mut [T]) -> usize {
-  let mut nswaps = 0;
-  let mut swapped = true;
-  while swapped {
-    swapped = false;
-    for i in 1..s.len() {
-      if s[i - 1] > s[i] {
-        s.swap(i - 1, i);
-        nswaps += 1;
-        swapped = true;
-      }
-    }
-  }
-  nswaps
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  #[test]
-  fn unit_squared_2d_triangulation() {
-    let nodes = MeshNodes::new(vec![
-      na::DVector::from_column_slice(&[0.0, 0.0]),
-      na::DVector::from_column_slice(&[1.0, 0.0]),
-      na::DVector::from_column_slice(&[1.0, 1.0]),
-      na::DVector::from_column_slice(&[0.0, 1.0]),
-    ]);
-    let nodes = Rc::new(nodes);
-    let unit_triangle = Simplex::new(nodes.clone(), vec![0, 1, 3]);
-    assert_eq!(unit_triangle.dim(), 2);
-    let other_triangle = Simplex::new(nodes, vec![1, 2, 3]);
-    assert_eq!(other_triangle.dim(), 2);
-    let triangulation = Triangulation::new(vec![unit_triangle, other_triangle]);
-    assert_eq!(triangulation.dim_intrinsic(), 2);
-    let edges: Vec<_> = triangulation
-      .simplicies()
-      .iter()
-      .map(|s| s.subs())
-      .flatten()
-      .collect();
-    for e in &edges {
-      println!("{e}");
-    }
-    let vertices: Vec<_> = edges.iter().map(|s| s.subs()).flatten().collect();
-    for v in &vertices {
-      println!("{v}");
-    }
+    write!(fmt, "{}", char::from(*self))
   }
 }
