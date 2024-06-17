@@ -1,4 +1,4 @@
-use super::{MeshNodes, Simplex, Skeleton, Triangulation};
+use super::{MeshNodes, SimplexEntity, Skeleton, Triangulation};
 
 /// Load Gmesh `.msh` file (version 4.1).
 pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
@@ -9,7 +9,7 @@ pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
     .node_blocks
     .iter()
     .flat_map(|block| block.nodes.iter())
-    .map(|node| na::DVector::from_column_slice(&[node.x, node.y]))
+    .map(|node| na::DVector::from_column_slice(&[node.x, node.y]).into())
     .collect();
   let mesh_nodes = MeshNodes::new(nodes);
 
@@ -29,8 +29,8 @@ pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
       _ => continue,
     };
     for e in block.elements {
-      let indicies = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      let simplex = Simplex::new(mesh_nodes.clone(), indicies);
+      let vertices = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
+      let simplex = SimplexEntity::new(vertices);
       simplex_acc.push(simplex);
     }
   }
