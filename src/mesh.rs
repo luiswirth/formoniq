@@ -64,6 +64,9 @@ impl SimplexEntity {
   pub fn dim_intrinsic(&self) -> Dim {
     self.vertices.len() - 1
   }
+  pub fn nvertices(&self) -> usize {
+    self.vertices.len()
+  }
   pub fn vertices(&self) -> &[NodeId] {
     &self.vertices
   }
@@ -91,6 +94,9 @@ impl Skeleton {
   pub fn simplicies(&self) -> &[SimplexEntity] {
     &self.simplicies
   }
+  pub fn nsimplicies(&self) -> usize {
+    self.simplicies.len()
+  }
 }
 
 /// A `Triangulation` or a Simplicial Mesh
@@ -108,6 +114,9 @@ impl Triangulation {
       "Skeletons in Triangulation must have their index be equal to the dimension."
     );
     Self { nodes, skeletons }
+  }
+  pub fn nskeletons(&self) -> usize {
+    self.skeletons.len()
   }
   /// The dimension of highest dimensional [`Skeleton`]
   pub fn dim_intrinsic(&self) -> Dim {
@@ -127,7 +136,7 @@ impl Triangulation {
   }
   pub fn coordinate_simplex(&self, id: EntityId) -> Simplex {
     let entity = self.entity_by_id(id);
-    let mut vertices = na::DMatrix::zeros(self.nodes().dim_ambient(), entity.dim_intrinsic());
+    let mut vertices = na::DMatrix::zeros(self.nodes().dim_ambient(), entity.nvertices());
     for (i, &v) in entity.vertices().iter().enumerate() {
       vertices.column_mut(i).copy_from(&self.nodes.nodes()[v]);
     }

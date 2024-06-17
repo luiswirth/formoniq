@@ -1,4 +1,7 @@
-use crate::Dim;
+use crate::{
+  util::{factorial, gram_det_sqrt},
+  Dim,
+};
 
 pub struct Simplex {
   /// rows are vertex coordinates
@@ -40,22 +43,37 @@ impl Simplex {
     self.vertices.nrows()
   }
 
+  pub fn span_matrix(&self) -> na::DMatrix<f64> {
+    let n = self.nvertices() - 1;
+    let p = self.vertices.column(n);
+
+    let mut m = na::DMatrix::zeros(self.dim_ambient(), n);
+    for (c, v) in self.vertices().column_iter().take(n).enumerate() {
+      m.column_mut(c).copy_from(&(v - p));
+    }
+    m
+  }
+
   /// an auxiliar matrix that aids the computation of some quantities
-  pub fn auxiliar_matrix(&self) -> na::DMatrix<f64> {
-    let n = self.nvertices();
-    let mut mat = na::DMatrix::zeros(n, n);
-    mat
-      .column_mut(0)
-      .copy_from(&na::DVector::from_element(n, 1.0));
-    mat
-      .view_range_mut(0..n, 1..n)
-      .copy_from(&self.vertices.transpose());
-    mat
+  pub fn auxiliary_matrix(&self) -> na::DMatrix<f64> {
+    // TODO: think about this assert
+    assert!(
+      self.dim_ambient() == self.dim_intrinsic(),
+      "auxiliary matrix only work when n-simplex is in R^n"
+    );
+    let n = self.vertices.nrows();
+    self.vertices.clone().insert_row(n, 1.0)
   }
 
   /// The determinate (signed volume) of the simplex.
   pub fn det(&self) -> f64 {
-    0.5 * self.auxiliar_matrix().determinant()
+    let mat = self.span_matrix();
+    let det = if self.dim_ambient() == self.dim_intrinsic() {
+      mat.determinant()
+    } else {
+      gram_det_sqrt(&mat)
+    };
+    (factorial(self.dim_intrinsic()) as f64).recip() * det
   }
 
   /// The (unsigned) volume of the simplex.
@@ -65,7 +83,7 @@ impl Simplex {
 
   pub fn bary_coord_deriv(&self) -> na::DMatrix<f64> {
     let n = self.nvertices();
-    let mat = self.auxiliar_matrix();
+    let mat = self.auxiliary_matrix();
     mat
       .try_inverse()
       .unwrap()
@@ -77,5 +95,17 @@ impl Simplex {
   pub fn lin_laplacian_0form_elmat(&self) -> na::DMatrix<f64> {
     let m = self.bary_coord_deriv();
     self.vol() * m.transpose() * m
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  fn ref_vol() {
+    for d in 0..=8 {
+      let simp = Simplex::new_ref(d);
+      assert_eq!(simp.det(), (factorial(d) as f64).recip());
+    }
   }
 }

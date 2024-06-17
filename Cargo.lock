@@ -47,6 +47,7 @@ version = "0.1.0"
 dependencies = [
  "mshio",
  "nalgebra",
+ "nalgebra-sparse",
  "thiserror",
 ]
 
@@ -117,6 +118,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "nalgebra-sparse"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b113b3101e137b3d0ef20b76b7579cde88e3d1f2f64993d4d6a49f232055cc9"
+dependencies = [
+ "nalgebra",
+ "num-traits",
 ]
 
 [[package]]
