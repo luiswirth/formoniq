@@ -1,119 +1,95 @@
 //! This module defined the objects necessary for a Triangulation.
+//! A mesh plays the role of a container of mesh entities (cells,faces,edges,vertices).
+//! It must allows the unique identification of the entities.
+//! It must allow from traversal of the cells -> must induce a global numbering on all entities.
+//! It must represent mesh topology (incidence).
+//! It must represent mesh geometry (location, shape)
 
 pub mod util;
+
+use crate::{simplex::Simplex, Dim};
 
 use std::rc::Rc;
 
 pub type NodeId = usize;
-pub type EntityId = usize;
+/// SimplexDim, SimplexDimIdx
+pub type EntityId = (Dim, usize);
 
-// A mesh plays the role of a container of mesh entities (cells,faces,edges,vertices).
-// It must allows the unique identification of the entities.
-// It must allow from traversal of the cells -> must induce a global numbering on all entities.
-// It must represent mesh topology (incidence).
-// It must represent mesh geometry (location, shape)
+pub type Node = na::DVector<f64>;
 
 /// All simplicies of a Mesh are connected to this MeshNodes object.
 /// It contains all the Nodes of the Mesh.
 #[derive(Debug, Clone)]
-pub struct MeshNodes(Rc<Vec<na::DVector<f64>>>);
+pub struct MeshNodes(Rc<Vec<Node>>);
 impl MeshNodes {
-  pub fn new(nodes: Vec<na::DVector<f64>>) -> Self {
+  pub fn new(nodes: Vec<Node>) -> Self {
     assert!(!nodes.is_empty(), "Mesh nodes may not be empty.");
     let dim_ambient = nodes[0].len();
-    assert!(nodes.iter().all(|n| dim_ambient == n.len()));
-    let nodes = Rc::new(nodes);
-    Self(nodes)
-  }
-  pub fn new_unchecked(nodes: Vec<na::DVector<f64>>) -> Self {
+    assert!(
+      nodes.iter().all(|n| dim_ambient == n.len()),
+      "All mesh nodes must have the same dimension."
+    );
     let nodes = Rc::new(nodes);
     Self(nodes)
   }
 
-  pub fn nodes(&self) -> &[na::DVector<f64>] {
+  pub fn nodes(&self) -> &[Node] {
     &self.0
   }
-  pub fn dim_ambient(&self) -> usize {
+  pub fn dim_ambient(&self) -> Dim {
     self.0[0].len()
   }
 }
-impl std::cmp::PartialEq for MeshNodes {
-  fn eq(&self, other: &Self) -> bool {
-    Rc::ptr_eq(&self.0, &other.0)
+impl<'n> std::ops::Index<usize> for MeshNodes {
+  type Output = Node;
+
+  fn index(&self, i: usize) -> &Self::Output {
+    &self.0[i]
   }
 }
-impl std::cmp::Eq for MeshNodes {}
 
 /// Not supposed to be mutated, once created.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Simplex {
-  /// connection to mesh
-  mesh_nodes: MeshNodes,
+/// Lifetime 'n of nodes
+#[derive(Debug)]
+pub struct SimplexEntity {
   /// sorted vertices of the Simplex
   vertices: Vec<NodeId>,
 }
 
-impl Simplex {
-  pub fn new(mesh_nodes: MeshNodes, vertices: Vec<NodeId>) -> Self {
+impl SimplexEntity {
+  pub fn new(vertices: Vec<NodeId>) -> Self {
     assert!(!vertices.is_empty(), "Simplex may not be empty.");
-    Self {
-      mesh_nodes,
-      vertices,
-    }
+    Self { vertices }
   }
-  pub fn dim(&self) -> usize {
+  pub fn dim_intrinsic(&self) -> Dim {
     self.vertices.len() - 1
   }
   pub fn vertices(&self) -> &[NodeId] {
     &self.vertices
-  }
-
-  /// all direct proper (one dim lower) faces
-  pub fn subs(&self) -> Vec<Simplex> {
-    if self.dim() == 0 {
-      return Vec::new();
-    }
-    (0..self.vertices.len())
-      .map(|i| {
-        let mesh_nodes = self.mesh_nodes.clone();
-        let mut vertices = self.vertices.clone();
-        vertices.remove(i);
-        Self {
-          mesh_nodes,
-          vertices,
-        }
-      })
-      .collect()
-  }
-}
-impl std::fmt::Display for Simplex {
-  fn fmt(&self, fmt: &mut std::fmt::Formatter) -> Result<(), std::fmt::Error> {
-    write!(fmt, "Simplex[")?;
-    for v in self.vertices() {
-      write!(fmt, " x_{},", v)?;
-    }
-    write!(fmt, "]")
   }
 }
 
 /// A k-Skeleton, is a collection of only k-simplicies.
 #[derive(Debug)]
 pub struct Skeleton {
-  simplicies: Vec<Simplex>,
+  simplicies: Vec<SimplexEntity>,
 }
 impl Skeleton {
-  pub fn new(simplicies: Vec<Simplex>) -> Self {
+  pub fn new(simplicies: Vec<SimplexEntity>) -> Self {
     assert!(!simplicies.is_empty(), "Skeleton may not be empty.");
-    let dim = simplicies[0].dim();
+    let dim = simplicies[0].dim_intrinsic();
     assert!(
-      simplicies.iter().all(|s| s.dim() == dim),
+      simplicies.iter().all(|s| s.dim_intrinsic() == dim),
       "Simplicies in Skeleton must all have same dimension."
     );
     Self { simplicies }
   }
 
-  pub fn dim(&self) -> usize {
-    self.simplicies[0].dim()
+  pub fn dim(&self) -> Dim {
+    self.simplicies[0].dim_intrinsic()
+  }
+  pub fn simplicies(&self) -> &[SimplexEntity] {
+    &self.simplicies
   }
 }
 
@@ -134,11 +110,28 @@ impl Triangulation {
     Self { nodes, skeletons }
   }
   /// The dimension of highest dimensional [`Skeleton`]
-  pub fn dim(&self) -> usize {
+  pub fn dim_intrinsic(&self) -> Dim {
     self.skeletons.len() - 1
+  }
+  pub fn dim_ambient(&self) -> Dim {
+    self.nodes.dim_ambient()
   }
   pub fn nodes(&self) -> &MeshNodes {
     &self.nodes
+  }
+  pub fn skeletons(&self) -> &[Skeleton] {
+    &self.skeletons
+  }
+  pub fn entity_by_id(&self, id: EntityId) -> &SimplexEntity {
+    &self.skeletons[id.0].simplicies()[id.1]
+  }
+  pub fn coordinate_simplex(&self, id: EntityId) -> Simplex {
+    let entity = self.entity_by_id(id);
+    let mut vertices = na::DMatrix::zeros(self.nodes().dim_ambient(), entity.dim_intrinsic());
+    for (i, &v) in entity.vertices().iter().enumerate() {
+      vertices.column_mut(i).copy_from(&self.nodes.nodes()[v]);
+    }
+    Simplex::new(vertices)
   }
 }
 
