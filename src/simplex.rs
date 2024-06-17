@@ -3,6 +3,7 @@ use crate::{
   Dim,
 };
 
+#[derive(Debug, Clone)]
 pub struct Simplex {
   /// rows are vertex coordinates
   vertices: na::DMatrix<f64>,
