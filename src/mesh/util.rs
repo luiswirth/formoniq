@@ -9,7 +9,7 @@ pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
     .node_blocks
     .iter()
     .flat_map(|block| block.nodes.iter())
-    .map(|node| na::DVector::from_column_slice(&[node.x, node.y]).into())
+    .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]).into())
     .collect();
   let mesh_nodes = MeshNodes::new(nodes);
 
