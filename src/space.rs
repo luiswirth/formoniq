@@ -1,16 +1,28 @@
-use crate::mesh::{EntityId, Triangulation};
+use crate::{
+  mesh::{EntityId, Triangulation},
+  Dim,
+};
 
 use std::rc::Rc;
 
 pub type DofId = usize;
 
-pub struct DofHandler {
+pub struct FeSpace {
   mesh: Rc<Triangulation>,
 }
 
-impl DofHandler {
+impl FeSpace {
   pub fn new(mesh: Rc<Triangulation>) -> Self {
     Self { mesh }
+  }
+
+  pub fn mesh(&self) -> &Rc<Triangulation> {
+    &self.mesh
+  }
+
+  /// The number of degrees of freedoms _associated_ with simplicies of the given dimension.
+  pub fn ndofs(&self, dim: Dim) -> usize {
+    self.mesh.skeletons()[dim].nsimplicies()
   }
 
   pub fn dof2simplex(&self, mut idof: DofId) -> EntityId {
@@ -32,4 +44,12 @@ impl DofHandler {
     }
     idof
   }
+
+  ///// Returns the dofs, relevant to the given differential form rank, covering the supplied simplex.
+  //pub fn dof_indices_global(&self, simplex: EntityId, form_rank: usize) -> Vec<DofId> {
+  //  assert_eq!(form_rank, 0, "Only Lagrangian (0-form) is supported");
+  //  let vertex_ids = simplex.subentites_ids(0);
+  //  let vertices = simplex.subentities(0);
+  //  for vertex in vertices {}
+  //}
 }
