@@ -1,17 +1,20 @@
-use super::{MeshNodes, SimplexEntity, Skeleton, Triangulation};
+use tracing::warn;
+
+use super::{SimplexEntity, Skeleton, Triangulation};
 
 /// Load Gmesh `.msh` file (version 4.1).
 pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
-  let nodes = msh.data.nodes.unwrap();
-  let nodes = nodes
+  let mesh_nodes: Vec<_> = msh
+    .data
+    .nodes
+    .unwrap()
     .node_blocks
     .iter()
     .flat_map(|block| block.nodes.iter())
     .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]).into())
     .collect();
-  let mesh_nodes = MeshNodes::new(nodes);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();
@@ -26,7 +29,10 @@ pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
       ElType::Lin2 => &mut edges,
       ElType::Tri3 => &mut trias,
       ElType::Tet4 => &mut quads,
-      _ => continue,
+      _ => {
+        warn!("unsupported gmsh ElementType: {:?}", block.element_type);
+        continue;
+      }
     };
     for e in block.elements {
       let vertices = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
