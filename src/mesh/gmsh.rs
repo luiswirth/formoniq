@@ -1,9 +1,9 @@
 use tracing::warn;
 
-use super::{SimplexEntity, Skeleton, Triangulation};
+use super::Mesh;
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
+pub fn load_gmsh(bytes: &[u8]) -> Mesh {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_nodes: Vec<_> = msh
@@ -13,8 +13,9 @@ pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
     .node_blocks
     .iter()
     .flat_map(|block| block.nodes.iter())
-    .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]).into())
+    .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]))
     .collect();
+  let mesh_nodes = na::DMatrix::from_columns(&mesh_nodes);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();
@@ -35,23 +36,19 @@ pub fn load_gmsh(bytes: &[u8]) -> Triangulation {
       }
     };
     for e in block.elements {
-      let vertices = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      let simplex = SimplexEntity::new(vertices);
+      let simplex = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
       simplex_acc.push(simplex);
     }
   }
 
-  let mut skeletons = Vec::new();
-  skeletons.push(Skeleton::new(points));
-  if !edges.is_empty() {
-    skeletons.push(Skeleton::new(edges));
+  if !quads.is_empty() {
+    return super::factory::from_facets(mesh_nodes, quads);
   }
   if !trias.is_empty() {
-    skeletons.push(Skeleton::new(trias));
+    return super::factory::from_facets(mesh_nodes, trias);
   }
-  if !quads.is_empty() {
-    skeletons.push(Skeleton::new(quads));
+  if !edges.is_empty() {
+    return super::factory::from_facets(mesh_nodes, edges);
   }
-
-  Triangulation::from_skeletons(mesh_nodes, skeletons)
+  panic!("failed to construct Triangulation from gmsh");
 }
