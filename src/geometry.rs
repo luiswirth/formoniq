@@ -4,12 +4,12 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct Simplex {
-  /// rows are vertex coordinates
+pub struct CoordSimplex {
   vertices: na::DMatrix<f64>,
 }
-impl Simplex {
+impl CoordSimplex {
   pub fn new(vertices: na::DMatrix<f64>) -> Self {
+    assert!(!vertices.is_empty());
     Self { vertices }
   }
 
@@ -25,26 +25,24 @@ impl Simplex {
     Self { vertices }
   }
 
-  /// The vertices of the simplex, in the columns of the returned matrix.
-  pub fn vertices(&self) -> &na::DMatrix<f64> {
-    &self.vertices
-  }
-
-  /// Number of vertices
-  pub fn nvertices(&self) -> usize {
-    self.vertices.ncols()
-  }
-
-  /// Intrinsic dimension of simplex
   pub fn dim_intrinsic(&self) -> Dim {
     self.vertices.ncols() - 1
   }
-
   pub fn dim_ambient(&self) -> Dim {
     self.vertices.nrows()
   }
 
-  pub fn span_matrix(&self) -> na::DMatrix<f64> {
+  pub fn nvertices(&self) -> usize {
+    self.vertices.ncols()
+  }
+  pub fn vertices(&self) -> &na::DMatrix<f64> {
+    &self.vertices
+  }
+
+  /// The vectors you get by subtracing a reference point (here the last one),
+  /// from all other points.
+  /// These vectors are then the axes of simple.
+  pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
     let n = self.nvertices() - 1;
     let p = self.vertices.column(n);
 
@@ -55,20 +53,9 @@ impl Simplex {
     m
   }
 
-  /// an auxiliar matrix that aids the computation of some quantities
-  pub fn auxiliary_matrix(&self) -> na::DMatrix<f64> {
-    // TODO: think about this assert
-    assert!(
-      self.dim_ambient() == self.dim_intrinsic(),
-      "auxiliary matrix only work when n-simplex is in R^n"
-    );
-    let n = self.vertices.nrows();
-    self.vertices.clone().insert_row(n, 1.0)
-  }
-
   /// The determinate (signed volume) of the simplex.
   pub fn det(&self) -> f64 {
-    let mat = self.span_matrix();
+    let mat = self.spanning_vectors();
     let det = if self.dim_ambient() == self.dim_intrinsic() {
       mat.determinant()
     } else {
@@ -80,6 +67,17 @@ impl Simplex {
   /// The (unsigned) volume of the simplex.
   pub fn vol(&self) -> f64 {
     self.det().abs()
+  }
+
+  /// an auxiliar matrix that aids the computation of some quantities
+  pub fn auxiliary_matrix(&self) -> na::DMatrix<f64> {
+    // TODO: think about this assert
+    assert!(
+      self.dim_ambient() == self.dim_intrinsic(),
+      "auxiliary matrix only work when n-simplex is in R^n"
+    );
+    let n = self.vertices.nrows();
+    self.vertices.clone().insert_row(n, 1.0)
   }
 
   pub fn bary_coord_deriv(&self) -> na::DMatrix<f64> {
@@ -103,9 +101,10 @@ impl Simplex {
 mod test {
   use super::*;
 
+  #[test]
   fn ref_vol() {
     for d in 0..=8 {
-      let simp = Simplex::new_ref(d);
+      let simp = CoordSimplex::new_ref(d);
       assert_eq!(simp.det(), (factorial(d) as f64).recip());
     }
   }
