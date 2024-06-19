@@ -3,7 +3,7 @@ use formoniq::mesh;
 fn main() {
   tracing_subscriber::fmt::init();
 
-  let msh_bytes = std::fs::read("res/square.msh").unwrap();
+  let msh_bytes = std::fs::read("res/cube.msh").unwrap();
   let mesh = mesh::gmsh::load_gmsh(&msh_bytes);
   println!("There are {} nodes in this mesh.", mesh.nnodes());
   for (i, n) in mesh.node_coords().column_iter().enumerate() {
