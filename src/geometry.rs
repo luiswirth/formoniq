@@ -18,10 +18,10 @@ impl CoordSimplex {
   /// The ambient and intrinsic dimension are the same.
   pub fn new_ref(dim: Dim) -> Self {
     let mut vertices = na::DMatrix::zeros(dim, dim + 1);
+    // first col is already all zeros (origin)
     for d in 0..dim {
-      vertices[(d, d)] = 1.0;
+      vertices[(d, d + 1)] = 1.0;
     }
-    // last col is already all zeros (origin)
     Self { vertices }
   }
 

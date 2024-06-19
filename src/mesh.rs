@@ -14,18 +14,21 @@ pub type NodeId = usize;
 pub type EntityId = (Dim, usize);
 
 /// This is what is called an Entity in LehrFEMpp
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone)]
 pub struct MeshSimplex {
-  /// sorted vertex indices
   vertices: Vec<NodeId>,
+  sorted_vertices: Vec<NodeId>,
 }
 
 impl MeshSimplex {
-  pub fn new(mut vertices: Vec<NodeId>) -> Self {
-    // TODO: this makes us lose the original orientation, this might be a problem.
-    vertices.sort_unstable();
+  pub fn new(vertices: Vec<NodeId>) -> Self {
+    let mut sorted_vertices = vertices.clone();
+    sorted_vertices.sort_unstable();
 
-    Self { vertices }
+    Self {
+      vertices,
+      sorted_vertices,
+    }
   }
   pub fn dim_intrinsic(&self) -> Dim {
     self.vertices.len() - 1
@@ -37,6 +40,13 @@ impl MeshSimplex {
     &self.vertices
   }
 }
+// NOTE: this doesn't care about orientation
+impl PartialEq for MeshSimplex {
+  fn eq(&self, other: &Self) -> bool {
+    self.sorted_vertices == other.sorted_vertices
+  }
+}
+impl Eq for MeshSimplex {}
 
 /// A Simplicial Mesh or Triangulation.
 #[derive(Debug)]
