@@ -1,35 +1,26 @@
 use std::rc::Rc;
 
-use crate::{mesh::SimplexEntity, space::FeSpace, Dim};
-
-struct ElmatProvider;
+use crate::space::FeSpace;
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
 /// `cell_dim`: The simplex dimension we are assembling over.
-pub fn assemble_galmat_lagrangian<ElmatProvider>(
-  cell_dim: Dim,
-  trial_space: Rc<FeSpace>,
-  test_space: Rc<FeSpace>,
-  elmat_provider: ElmatProvider,
-) -> nas::CscMatrix<f64>
-where
-  ElmatProvider: Fn(&SimplexEntity) -> na::DMatrix<f64>,
-{
-  assert!(Rc::ptr_eq(trial_space.mesh(), test_space.mesh()));
-  let mesh = trial_space.mesh();
+pub fn assemble_galmat_lagrangian(space: Rc<FeSpace>) -> nas::CscMatrix<f64> {
+  let mesh = space.mesh();
+  let cell_dim = mesh.dim_intrinsic();
 
   // Lagrangian (0-form) has dofs associated with the nodes.
-  let mut galmat = nas::CooMatrix::new(test_space.ndofs(0), trial_space.ndofs(0));
-  for entity in mesh.skeleton(cell_dim).simplicies() {
-    let elmat = elmat_provider(entity);
-    for (ilocal, iglobal) in test_space
-      .dof_indices_global(*entity, 0)
+  let mut galmat = nas::CooMatrix::new(space.ndofs(), space.ndofs());
+  for (icell, _) in mesh.dsimplicies(cell_dim).iter().enumerate() {
+    let cell_geo = mesh.coordinate_simplex((cell_dim, icell));
+    let elmat = cell_geo.elmat();
+    for (ilocal, iglobal) in space
+      .dof_indices_global((cell_dim, icell))
       .iter()
       .copied()
       .enumerate()
     {
-      for (jlocal, jglobal) in trial_space
-        .dof_indices_global(*entity, 0)
+      for (jlocal, jglobal) in space
+        .dof_indices_global((cell_dim, icell))
         .iter()
         .copied()
         .enumerate()

@@ -1,55 +1,30 @@
-use crate::{
-  mesh::{EntityId, Triangulation},
-  Dim,
-};
+use crate::mesh::{EntityId, Mesh};
 
 use std::rc::Rc;
 
 pub type DofId = usize;
 
 pub struct FeSpace {
-  mesh: Rc<Triangulation>,
+  mesh: Rc<Mesh>,
 }
 
 impl FeSpace {
-  pub fn new(mesh: Rc<Triangulation>) -> Self {
+  pub fn new(mesh: Rc<Mesh>) -> Self {
     Self { mesh }
   }
 
-  pub fn mesh(&self) -> &Rc<Triangulation> {
+  pub fn mesh(&self) -> &Rc<Mesh> {
     &self.mesh
   }
 
   /// The number of degrees of freedoms _associated_ with simplicies of the given dimension.
-  pub fn ndofs(&self, dim: Dim) -> usize {
-    self.mesh.pures()[dim].nsimplicies()
+  pub fn ndofs(&self) -> usize {
+    self.mesh.dsimplicies(0).len()
   }
 
-  pub fn dof2simplex(&self, mut idof: DofId) -> EntityId {
-    for k in 0..self.mesh.dim_intrinsic() {
-      let simps = self.mesh.pures()[k].simplicies();
-      if idof < simps.len() {
-        return (k, idof);
-      } else {
-        idof -= simps.len();
-      }
-    }
-    panic!("no simplex found for this dof");
-  }
-  pub fn simplex2dof(&self, simplex: EntityId) -> DofId {
-    let mut idof = 0;
-    for k in 0..simplex.0 {
-      let simps = self.mesh.pures()[k].simplicies();
-      idof += simps.len();
-    }
-    idof
-  }
-
-  /// Returns the dofs, relevant to the given differential form rank, covering the supplied simplex.
-  pub fn dof_indices_global(&self, simplex: EntityId, form_rank: usize) -> Vec<DofId> {
-    assert_eq!(form_rank, 0, "Only Lagrangian (0-form) is supported");
-    let vertex_ids = simplex.subentites_ids(0);
-    let vertices = simplex.subentities(0);
-    for vertex in vertices {}
+  /// Lagrangian dofs
+  pub fn dof_indices_global(&self, simplex: EntityId) -> Vec<DofId> {
+    let vertices = self.mesh.simplex_by_id(simplex).vertices();
+    vertices.to_vec()
   }
 }

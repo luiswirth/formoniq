@@ -71,13 +71,13 @@ impl CoordSimplex {
 
   /// an auxiliar matrix that aids the computation of some quantities
   pub fn auxiliary_matrix(&self) -> na::DMatrix<f64> {
-    // TODO: think about this assert
     assert!(
       self.dim_ambient() == self.dim_intrinsic(),
       "auxiliary matrix only work when n-simplex is in R^n"
     );
-    let n = self.vertices.nrows();
-    self.vertices.clone().insert_row(n, 1.0)
+    //let n = self.vertices.nrows();
+    //self.vertices.clone().insert_row(n, 1.0)
+    self.vertices.transpose().insert_column(0, 1.0)
   }
 
   pub fn bary_coord_deriv(&self) -> na::DMatrix<f64> {
@@ -91,7 +91,7 @@ impl CoordSimplex {
   }
 
   /// The element matrix for the laplacian in linear lagrangian fe.
-  pub fn lin_laplacian_0form_elmat(&self) -> na::DMatrix<f64> {
+  pub fn elmat(&self) -> na::DMatrix<f64> {
     let m = self.bary_coord_deriv();
     self.vol() * m.transpose() * m
   }
