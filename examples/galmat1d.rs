@@ -9,7 +9,7 @@ fn main() {
 
   let ncells = 3;
   let nnodes = ncells + 1;
-  let nodes: Vec<_> = (0..nnodes).into_iter().map(|c| c as f64).collect();
+  let nodes: Vec<_> = (0..nnodes).map(|c| c as f64).collect();
   let nodes = na::DMatrix::from_column_slice(1, nodes.len(), &nodes);
   let cells: Vec<_> = (0..nnodes)
     .collect::<Vec<_>>()
