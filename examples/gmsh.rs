@@ -11,7 +11,7 @@ fn main() {
     println!("{}", n.transpose());
   }
 
-  for (d, dsimps) in mesh.simplicies().into_iter().enumerate() {
+  for (d, dsimps) in mesh.simplicies().iter().enumerate() {
     let ndsimps = dsimps.len();
     println!("There are {} simplicies in dimension {}.", ndsimps, d);
     for (isimp, simp) in dsimps.iter().enumerate() {
