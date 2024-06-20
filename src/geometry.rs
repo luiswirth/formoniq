@@ -17,9 +17,14 @@ impl CoordSimplex {
   /// The simplex has unit vertices plus the origin.
   /// The ambient and intrinsic dimension are the same.
   pub fn new_ref(dim: Dim) -> Self {
-    let mut vertices = na::DMatrix::zeros(dim, dim + 1);
+    Self::new_ref_embedded(dim, dim)
+  }
+
+  pub fn new_ref_embedded(intrinsic_dim: Dim, ambient_dim: Dim) -> Self {
+    assert!(intrinsic_dim <= ambient_dim);
+    let mut vertices = na::DMatrix::zeros(ambient_dim, intrinsic_dim + 1);
     // first col is already all zeros (origin)
-    for d in 0..dim {
+    for d in 0..intrinsic_dim {
       vertices[(d, d + 1)] = 1.0;
     }
     Self { vertices }
@@ -30,6 +35,9 @@ impl CoordSimplex {
   }
   pub fn dim_ambient(&self) -> Dim {
     self.vertices.nrows()
+  }
+  pub fn dims_agree(&self) -> bool {
+    self.dim_intrinsic() == self.dim_ambient()
   }
 
   pub fn nvertices(&self) -> usize {
@@ -69,30 +77,38 @@ impl CoordSimplex {
     self.det().abs()
   }
 
-  /// an auxiliar matrix that aids the computation of some quantities
-  pub fn auxiliary_matrix(&self) -> na::DMatrix<f64> {
-    assert!(
-      self.dim_ambient() == self.dim_intrinsic(),
-      "auxiliary matrix only work when n-simplex is in R^n"
-    );
-    //let n = self.vertices.nrows();
-    //self.vertices.clone().insert_row(n, 1.0)
-    self.vertices.transpose().insert_column(0, 1.0)
+  /// linear transformation from [lambda_1, dots lambda_k]^T -> [1, x_1 dots, x_n]^T
+  /// where k in the intrinsic dim and n is the ambient dim
+  /// maps barycentric coordinates to cartesian coordinates
+  pub fn barycentric_to_cartesian(&self) -> na::DMatrix<f64> {
+    self.vertices.clone().insert_row(0, 1.0)
   }
 
-  pub fn bary_coord_deriv(&self) -> na::DMatrix<f64> {
+  /// linear transformation from [1, x_1 dots, x_n]^T -> [lambda_1, dots lambda_k]^T
+  /// where k in the intrinsic dim and n is the ambient dim
+  /// maps cartesian coordinates to barycentric coordinates
+  pub fn cartesian_to_barycentric(&self) -> na::DMatrix<f64> {
+    let m = self.barycentric_to_cartesian();
+    if self.dims_agree() {
+      m.try_inverse().unwrap()
+    } else {
+      m.pseudo_inverse(1e-10).unwrap()
+    }
+  }
+
+  /// constant gradients of barycentric coordinate functions
+  pub fn barycentric_functions_grad(&self) -> na::DMatrix<f64> {
     let n = self.nvertices();
-    let mat = self.auxiliary_matrix();
-    mat
-      .try_inverse()
-      .unwrap()
+    self
+      .cartesian_to_barycentric()
+      .transpose()
       .view_range(1..n, 0..n)
       .clone_owned()
   }
 
-  /// The element matrix for the laplacian in linear lagrangian fe.
+  /// The exact Element Matrix for the Laplacian in Linear Lagrangian FE.
   pub fn elmat(&self) -> na::DMatrix<f64> {
-    let m = self.bary_coord_deriv();
+    let m = self.barycentric_functions_grad();
     self.vol() * m.transpose() * m
   }
 }

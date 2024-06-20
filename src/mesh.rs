@@ -22,6 +22,7 @@ pub struct MeshSimplex {
 
 impl MeshSimplex {
   pub fn new(vertices: Vec<NodeId>) -> Self {
+    assert!(!vertices.is_empty(), "vertices cannot be empty");
     let mut sorted_vertices = vertices.clone();
     sorted_vertices.sort_unstable();
 
