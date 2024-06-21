@@ -1,5 +1,7 @@
 use std::rc::Rc;
 
+use nalgebra_sparse::CscMatrix;
+
 use crate::space::{DofId, FeSpace};
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
@@ -37,8 +39,8 @@ pub fn assemble_galmat_lagrangian(space: Rc<FeSpace>) -> nas::CscMatrix<f64> {
 /// Is primarly used the enforce essential boundary conditions.
 pub fn fix_dof_coeffs<F>(
   coefficent_map: F,
-  galmat: nas::CscMatrix<f64>,
-  mut galvec: na::DVector<f64>,
+  galmat: &mut nas::CscMatrix<f64>,
+  galvec: &mut na::DVector<f64>,
 ) where
   F: Fn(DofId) -> Option<f64>,
 {
@@ -51,7 +53,7 @@ pub fn fix_dof_coeffs<F>(
   let dof_coeffs_zeroed =
     na::DVector::from_iterator(ndofs, dof_coeffs.iter().copied().map(|v| v.unwrap_or(0.0)));
 
-  galvec -= galmat.clone() * dof_coeffs_zeroed;
+  *galvec -= galmat.clone() * dof_coeffs_zeroed;
 
   // set galvec to prescribed coefficents
   dof_coeffs
@@ -62,7 +64,7 @@ pub fn fix_dof_coeffs<F>(
     .for_each(|(i, v)| galvec[i] = v);
 
   // set entires zero that share a (row or column) index with a fixed dof.
-  let (mut trows, mut tcols, mut tvalues) = galmat.disassemble();
+  let (mut trows, mut tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
   let mut i = 0;
   while i < trows.len() {
     let r = trows[i];
@@ -75,9 +77,12 @@ pub fn fix_dof_coeffs<F>(
       i += 1;
     }
   }
-  let mut galmat = nas::CooMatrix::try_from_triplets(ndofs, ndofs, trows, tcols, tvalues).unwrap();
+  let mut galmat_coo =
+    nas::CooMatrix::try_from_triplets(ndofs, ndofs, trows, tcols, tvalues).unwrap();
 
   for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
-    galmat.push(i, i, if coeff.is_some() { 1.0 } else { 0.0 });
+    galmat_coo.push(i, i, if coeff.is_some() { 1.0 } else { 0.0 });
   }
+
+  *galmat = CscMatrix::from(&galmat_coo);
 }
