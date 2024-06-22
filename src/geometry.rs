@@ -52,10 +52,10 @@ impl CoordSimplex {
   /// These vectors are then the axes of simple.
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
     let n = self.nvertices() - 1;
-    let p = self.vertices.column(n);
+    let p = self.vertices.column(0);
 
     let mut m = na::DMatrix::zeros(self.dim_ambient(), n);
-    for (c, v) in self.vertices().column_iter().take(n).enumerate() {
+    for (c, v) in self.vertices().column_iter().skip(1).enumerate() {
       m.column_mut(c).copy_from(&(v - p));
     }
     m
