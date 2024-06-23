@@ -1,4 +1,5 @@
 use crate::{
+  mesh::{factory::from_facets, Mesh},
   util::{factorial, gram_det_sqrt},
   Dim,
 };
@@ -77,18 +78,18 @@ impl CoordSimplex {
     self.det().abs()
   }
 
-  /// linear transformation from [lambda_1, dots lambda_k]^T -> [1, x_1 dots, x_n]^T
-  /// where k in the intrinsic dim and n is the ambient dim
-  /// maps barycentric coordinates to cartesian coordinates
-  pub fn barycentric_to_cartesian(&self) -> na::DMatrix<f64> {
+  /// Linear map from $[lambda_1, dots lambda_k]^T -> [1, x_1 dots, x_n]^T$,
+  /// where $k$ is the intrinsic dim and $n$ is the ambient dim.
+  /// Maps barycentric coordinates to cartesian coordinates.
+  pub fn barycentric_to_cartesian_map(&self) -> na::DMatrix<f64> {
     self.vertices.clone().insert_row(0, 1.0)
   }
 
-  /// linear transformation from [1, x_1 dots, x_n]^T -> [lambda_1, dots lambda_k]^T
-  /// where k in the intrinsic dim and n is the ambient dim
-  /// maps cartesian coordinates to barycentric coordinates
-  pub fn cartesian_to_barycentric(&self) -> na::DMatrix<f64> {
-    let m = self.barycentric_to_cartesian();
+  /// Linear map from $[1, x_1 dots, x_n]^T -> [lambda_1, dots lambda_k]^T$,
+  /// where $k$ is the intrinsic dim and $n$ is the ambient dim.
+  /// Maps cartesian coordinates to barycentric coordinates.
+  pub fn cartesian_to_barycentric_map(&self) -> na::DMatrix<f64> {
+    let m = self.barycentric_to_cartesian_map();
     if self.dims_agree() {
       m.try_inverse().unwrap()
     } else {
@@ -96,20 +97,19 @@ impl CoordSimplex {
     }
   }
 
-  /// constant gradients of barycentric coordinate functions
+  /// Constant gradients of barycentric coordinate functions.
   pub fn barycentric_functions_grad(&self) -> na::DMatrix<f64> {
     let n = self.nvertices();
     self
-      .cartesian_to_barycentric()
+      .cartesian_to_barycentric_map()
       .transpose()
       .view_range(1..n, 0..n)
       .clone_owned()
   }
 
-  /// The exact Element Matrix for the Laplacian in Linear Lagrangian FE.
-  pub fn elmat(&self) -> na::DMatrix<f64> {
-    let m = self.barycentric_functions_grad();
-    self.vol() * m.transpose() * m
+  pub fn into_singleton_mesh(self) -> Mesh {
+    let nvertices = self.nvertices();
+    from_facets(self.vertices, vec![(0..nvertices).collect()])
   }
 }
 

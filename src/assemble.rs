@@ -2,19 +2,23 @@ use std::rc::Rc;
 
 use nalgebra_sparse::CscMatrix;
 
-use crate::space::{DofId, FeSpace};
+use crate::{
+  fe::{ElmatProvider, ElvecProvider},
+  space::{DofId, FeSpace},
+};
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
-/// `cell_dim`: The simplex dimension we are assembling over.
-pub fn assemble_galmat_lagrangian(space: Rc<FeSpace>) -> nas::CscMatrix<f64> {
+pub fn assemble_galmat_lagrangian(
+  space: Rc<FeSpace>,
+  elmat: impl ElmatProvider,
+) -> nas::CscMatrix<f64> {
   let mesh = space.mesh();
   let cell_dim = mesh.dim_intrinsic();
 
   // Lagrangian (0-form) has dofs associated with the nodes.
   let mut galmat = nas::CooMatrix::new(space.ndofs(), space.ndofs());
   for (icell, _) in mesh.dsimplicies(cell_dim).iter().enumerate() {
-    let cell_geo = mesh.coordinate_simplex((cell_dim, icell));
-    let elmat = cell_geo.elmat();
+    let elmat = elmat.eval(mesh, (cell_dim, icell));
     for (ilocal, iglobal) in space
       .dof_indices_global((cell_dim, icell))
       .iter()
@@ -34,26 +38,21 @@ pub fn assemble_galmat_lagrangian(space: Rc<FeSpace>) -> nas::CscMatrix<f64> {
   nas::CscMatrix::from(&galmat)
 }
 
-// Galerkin vector for load with trapezoidal rule.
-pub fn assemble_galvec<F>(space: Rc<FeSpace>, load: F) -> na::DVector<f64>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
+/// Assembly algorithm for the Galerkin Vector in Lagrangian (0-form) FE.
+pub fn assemble_galvec(space: Rc<FeSpace>, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mesh = space.mesh();
   let cell_dim = mesh.dim_intrinsic();
 
   let mut galvec = na::DVector::zeros(space.ndofs());
   for (icell, _) in mesh.dsimplicies(cell_dim).iter().enumerate() {
-    let coord_cell = mesh.coordinate_simplex((cell_dim, icell));
+    let elvec = elvec.eval(mesh, (cell_dim, icell));
     for (ilocal, iglobal) in space
       .dof_indices_global((cell_dim, icell))
       .iter()
       .copied()
       .enumerate()
     {
-      let local = coord_cell.vol() / coord_cell.nvertices() as f64
-        * load(coord_cell.vertices().column(ilocal));
-      galvec[iglobal] += local;
+      galvec[iglobal] += elvec[ilocal];
     }
   }
   galvec

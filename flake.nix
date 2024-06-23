@@ -31,8 +31,10 @@
               pkg-config
               rust-toolchain
               rust-analyzer
-              cargo-edit
               bacon
+              cargo-edit
+              cargo-flamegraph
+              linuxPackages_latest.perf
             ];
           };
         }

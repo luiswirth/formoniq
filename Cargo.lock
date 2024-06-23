@@ -48,6 +48,7 @@ dependencies = [
  "mshio",
  "nalgebra",
  "nalgebra-sparse",
+ "numerics",
  "once_cell",
  "thiserror",
  "tracing",
@@ -269,6 +270,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
+]
+
+[[package]]
+name = "numerics"
+version = "0.1.0"
+source = "git+https://github.com/luiswirth/numerics#677d3430605a7fbee7237d9499cfb20fc80bb31d"
+dependencies = [
+ "nalgebra",
 ]
 
 [[package]]
