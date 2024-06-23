@@ -3,6 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   assemble::{self, assemble_galmat_lagrangian, assemble_galvec},
+  fe::{laplacian_neg_elmat, LoadElvec},
   mesh::factory,
   space::FeSpace,
 };
@@ -46,15 +47,15 @@ fn main() {
   let mesh = Rc::new(mesh);
 
   // Create FE space.
-  let space = Rc::new(FeSpace::new(mesh));
+  let space = Rc::new(FeSpace::new(mesh.clone()));
   let ndofs = space.ndofs();
 
   // Assemble galerkin matrix and galerkin vector.
-  let mut galmat = assemble_galmat_lagrangian(space.clone());
-  let mut galvec = assemble_galvec(space, |_| 1.0);
+  let mut galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);
+  let mut galvec = assemble_galvec(space, LoadElvec::new(|_| 1.0));
 
   // Enforce homogeneous dirichlet boundary conditions
-  // by dropping dofs on boundary.
+  // by fixing dofs on boundary.
   assemble::fix_dof_coeffs(
     |idof| {
       if idof < nodes_per_dim
@@ -78,15 +79,21 @@ fn main() {
 
   // Compute exact analytical solution on nodes.
   let exact_sol = |x: na::DVectorView<f64>| 0.25 * (x[0] * x[0] - x[0]) * (x[1] * x[1] - x[1]);
-  println!("{nodes}");
   let exact_sol = na::DVector::from_iterator(ndofs, nodes.column_iter().map(exact_sol));
 
-  for (a, e) in galsol.iter().zip(exact_sol.iter()) {
-    println!("a={a:.3}, e={e:.3}");
+  // Compute L2 error.
+  let diff = exact_sol - galsol;
+  let mut error = 0.0;
+  for (icell, cell) in mesh.dsimplicies(1).iter().enumerate() {
+    let mut sum = 0.0;
+    for &ivertex in cell.vertices() {
+      sum += diff[ivertex].powi(2);
+    }
+    let nvertices = cell.nvertices();
+    let vol = mesh.coordinate_simplex((1, icell)).vol();
+    let local_error = (vol / nvertices as f64) * sum;
+    error += local_error;
   }
-
-  // Compute error norm.
-  let error = exact_sol - galsol;
-  let error = error.norm();
-  println!("error = {:e}", error);
+  error = error.sqrt();
+  println!("{error}");
 }

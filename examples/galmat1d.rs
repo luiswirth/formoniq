@@ -1,6 +1,8 @@
 extern crate nalgebra as na;
 
-use formoniq::{assemble::assemble_galmat_lagrangian, mesh::factory, space::FeSpace};
+use formoniq::{
+  assemble::assemble_galmat_lagrangian, fe::laplacian_neg_elmat, mesh::factory, space::FeSpace,
+};
 
 use std::rc::Rc;
 
@@ -21,7 +23,7 @@ fn main() {
   let mesh = factory::from_facets(nodes, cells);
   let mesh = Rc::new(mesh);
   let space = Rc::new(FeSpace::new(mesh));
-  let galmat = assemble_galmat_lagrangian(space);
+  let galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);
   let galmat = na::DMatrix::from(&galmat);
   println!("{galmat}");
 }
