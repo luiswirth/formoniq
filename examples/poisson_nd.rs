@@ -1,9 +1,12 @@
+//! Solves a manufactored poisson problem in d dimensions
+//! and determines the algebraic convergence rate.
+
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   assemble::{self, assemble_galmat_lagrangian, assemble_galvec},
-  fe::{laplacian_neg_elmat, LoadElvec},
+  fe::{l2_norm, laplacian_neg_elmat, LoadElvec},
   mesh::factory::unit_hypercube_mesh,
   space::FeSpace,
 };
@@ -14,114 +17,121 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 2;
+  let d: usize = 1;
+
+  // Define analytic solution.
+  // $u = exp(x_1 x_2 dots x_n)$
+  let analytic_sol = |x: na::DVectorView<f64>| (x.iter().product::<f64>()).exp();
+  let analytic_laplacian = |x: na::DVectorView<f64>| {
+    let mut prefactor = 0.0;
+
+    for i in 0..d {
+      let mut partial_product = 1.0;
+      for j in 0..d {
+        if i != j {
+          partial_product *= x[j].powi(2);
+        }
+      }
+      prefactor += partial_product;
+    }
+
+    prefactor * analytic_sol(x)
+  };
 
   let kstart = 0;
   let kend = 15;
   let klen = kend - kstart + 1;
   let mut errors = Vec::with_capacity(klen);
+
+  println!("{}", std::iter::repeat('-').take(46).collect::<String>());
+  println!(
+    "| {:>2} | {:>13} | {:>9} | {:>9} |",
+    "k", "nsubdivisions", "error", "conv_rate",
+  );
+  println!("{}", std::iter::repeat('-').take(46).collect::<String>());
+
   for k in kstart..=kend {
     let expk = 2usize.pow(k as u32);
+    let nsubdivisions = expk;
 
     // Create mesh of unit hypercube $[0, 1]^d$.
-    let subdivisions = expk;
-    let cells_per_dim = subdivisions;
-    let nodes_per_dim = subdivisions + 1;
-    let ncells = cells_per_dim.pow(d as u32);
-    let nnodes = nodes_per_dim.pow(d as u32);
-    let mesh = unit_hypercube_mesh(d, subdivisions);
-    let mesh = Rc::new(mesh);
-
-    // Analytical solution.
-    let analytical_sol = |x: na::DVectorView<f64>| (x.iter().product::<f64>()).exp();
-    let analytic_laplacian = |x: na::DVectorView<f64>| {
-      let mut prefactor = 0.0;
-
-      for i in 0..d {
-        let mut partial_product = 1.0;
-        for j in 0..d {
-          if i != j {
-            partial_product *= x[j].powi(2);
-          }
-        }
-        prefactor += partial_product;
-      }
-
-      prefactor * analytical_sol(x)
-    };
+    let mesh = Rc::new(unit_hypercube_mesh(d, nsubdivisions));
 
     // Create FE space.
     let space = Rc::new(FeSpace::new(mesh.clone()));
-    let ndofs = space.ndofs();
 
-    // Assemble galerkin matrix and galerkin vector.
-    let mut galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);
-    let mut galvec = assemble_galvec(space, LoadElvec::new(|x| -analytic_laplacian(x)));
-
-    // Enforce homogeneous Dirichlet boundary conditions
-    // by fixing dofs on boundary for any dimension d.
-    assemble::fix_dof_coeffs(
-      |mut idof| {
-        let mut fcoord = na::DVector::zeros(d);
-        let mut is_boundary = false;
-
-        for dim in 0..d {
-          let icoord = idof % nodes_per_dim;
-          fcoord[dim] = icoord as f64 / (nodes_per_dim as f64 - 1.0);
-
-          if icoord == 0 || icoord == nodes_per_dim - 1 {
-            is_boundary = true;
-            break;
-          }
-          idof /= nodes_per_dim;
-        }
-
-        is_boundary.then_some(analytical_sol(fcoord.as_view()))
-      },
-      &mut galmat,
-      &mut galvec,
-    );
-
-    // Obtain galerkin solution by solving LSE.
-    let galsol = nas::factorization::CscCholesky::factor(&galmat)
-      .unwrap()
-      .solve(&galvec);
+    // Compute Galerkin solution to manufactored poisson problem.
+    let galsol = solve_poisson(space, analytic_sol, analytic_laplacian);
 
     // Compute analytical solution on mesh nodes.
-    let analytical_sol =
-      na::DVector::from_iterator(nnodes, mesh.node_coords().column_iter().map(analytical_sol));
+    let analytical_sol = na::DVector::from_iterator(
+      mesh.nnodes(),
+      mesh.node_coords().column_iter().map(analytic_sol),
+    );
 
-    // Compute L2 error.
-    let diff = analytical_sol - galsol;
-    let mut error = 0.0;
-    for (icell, cell) in mesh.dsimplicies(d).iter().enumerate() {
-      let mut sum = 0.0;
-      for &ivertex in cell.vertices() {
-        sum += diff[ivertex].powi(2);
-      }
-      let nvertices = cell.nvertices();
-      let vol = mesh.coordinate_simplex((d, icell)).vol();
-      let local_error = (vol / nvertices as f64) * sum;
-      error += local_error;
-    }
-    error = error.sqrt();
-
+    // Compute L2 error and convergence rate.
+    let error = l2_norm(analytical_sol - galsol, &mesh);
     let conv_rate = if let Some(&prev_error) = errors.last() {
       let quot: f64 = error / prev_error;
       -quot.log2()
     } else {
-      f64::NAN
+      f64::INFINITY
     };
-
     errors.push(error);
+
     println!(
-      "\
-      nsubdivisions: {subdivisions:4}, \
-      ncells: {ncells:6}, \
-      ndofs: {ndofs:6}, \
-      error: {error:9.3e}, \
-      conv_rate: {conv_rate:6.2} \
-      "
+      "| {:>2} | {:>13} | {:>9.3e} | {:>9.2} |",
+      k, nsubdivisions, error, conv_rate
     );
   }
+  println!("{}", std::iter::repeat('-').take(46).collect::<String>());
+}
+
+fn solve_poisson<F, G>(
+  space: Rc<FeSpace>,
+  analytic_sol: F,
+  analytic_laplacian: G,
+) -> na::DVector<f64>
+where
+  F: Fn(na::DVectorView<f64>) -> f64,
+  G: Fn(na::DVectorView<f64>) -> f64,
+{
+  let mesh = space.mesh().clone();
+  let d = mesh.dim_ambient();
+
+  // Assemble galerkin matrix and galerkin vector.
+  let mut galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);
+  let mut galvec = assemble_galvec(space, LoadElvec::new(|x| -analytic_laplacian(x)));
+
+  // Enforce homogeneous Dirichlet boundary conditions
+  // by fixing dofs on boundary.
+  let nodes_per_dim = (mesh.nnodes() as f64).powf((d as f64).recip()) as usize;
+  assemble::fix_dof_coeffs(
+    |mut idof| {
+      let mut fcoord = na::DVector::zeros(d);
+      let mut is_boundary = false;
+
+      for dim in 0..d {
+        let icoord = idof % nodes_per_dim;
+        fcoord[dim] = icoord as f64 / (nodes_per_dim as f64 - 1.0);
+
+        if icoord == 0 || icoord == nodes_per_dim - 1 {
+          is_boundary = true;
+          break;
+        }
+        idof /= nodes_per_dim;
+      }
+
+      is_boundary.then_some(analytic_sol(fcoord.as_view()))
+    },
+    &mut galmat,
+    &mut galvec,
+  );
+
+  // Obtain Galerkin solution by solving LSE.
+  let galsol = nas::factorization::CscCholesky::factor(&galmat)
+    .unwrap()
+    .solve(&galvec);
+
+  galsol.column(0).into()
 }

@@ -59,3 +59,19 @@ where
     Self { load_fn }
   }
 }
+
+// NOTE: In general this should depend on the FE Space and not just the mesh.
+pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &Mesh) -> f64 {
+  let mut norm = 0.0;
+  let d = mesh.dim_intrinsic();
+  for (icell, cell) in mesh.dsimplicies(d).iter().enumerate() {
+    let mut sum = 0.0;
+    for &ivertex in cell.vertices() {
+      sum += fn_coeffs[ivertex].powi(2);
+    }
+    let nvertices = cell.nvertices();
+    let vol = mesh.coordinate_simplex((d, icell)).vol();
+    norm += (vol / nvertices as f64) * sum;
+  }
+  norm.sqrt()
+}
