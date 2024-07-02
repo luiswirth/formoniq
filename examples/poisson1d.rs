@@ -35,7 +35,7 @@ fn main() {
       .map(|w| w.to_vec())
       .collect();
     assert!(cells.len() == ncells);
-    let mesh = factory::from_facets(nodes.clone(), cells);
+    let mesh = factory::from_facets(nodes.clone(), cells, false);
     let mesh = Rc::new(mesh);
 
     // Create FE space.
