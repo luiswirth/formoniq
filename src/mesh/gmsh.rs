@@ -42,13 +42,13 @@ pub fn load_gmsh(bytes: &[u8]) -> Mesh {
   }
 
   if !quads.is_empty() {
-    return super::factory::from_facets(mesh_nodes, quads);
+    return super::factory::from_facets(mesh_nodes, quads, true);
   }
   if !trias.is_empty() {
-    return super::factory::from_facets(mesh_nodes, trias);
+    return super::factory::from_facets(mesh_nodes, trias, true);
   }
   if !edges.is_empty() {
-    return super::factory::from_facets(mesh_nodes, edges);
+    return super::factory::from_facets(mesh_nodes, edges, true);
   }
   panic!("failed to construct Triangulation from gmsh");
 }

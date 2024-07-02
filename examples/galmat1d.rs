@@ -20,7 +20,7 @@ fn main() {
     .collect();
   assert!(cells.len() == ncells);
   println!("{cells:?}");
-  let mesh = factory::from_facets(nodes, cells);
+  let mesh = factory::from_facets(nodes, cells, false);
   let mesh = Rc::new(mesh);
   let space = Rc::new(FeSpace::new(mesh));
   let galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);

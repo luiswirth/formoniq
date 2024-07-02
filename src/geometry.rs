@@ -109,7 +109,7 @@ impl CoordSimplex {
 
   pub fn into_singleton_mesh(self) -> Mesh {
     let nvertices = self.nvertices();
-    from_facets(self.vertices, vec![(0..nvertices).collect()])
+    from_facets(self.vertices, vec![(0..nvertices).collect()], true)
   }
 }
 
