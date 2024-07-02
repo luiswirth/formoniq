@@ -17,7 +17,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 1;
+  let d: usize = 2;
 
   // Define analytic solution.
   // $u = exp(x_1 x_2 dots x_n)$
@@ -39,7 +39,7 @@ fn main() {
   };
 
   let kstart = 0;
-  let kend = 15;
+  let kend = 10;
   let klen = kend - kstart + 1;
   let mut errors = Vec::with_capacity(klen);
 
@@ -62,6 +62,17 @@ fn main() {
 
     // Compute Galerkin solution to manufactored poisson problem.
     let galsol = solve_poisson(space, analytic_sol, analytic_laplacian);
+
+    if k == kend {
+      let mut file = std::fs::File::create("out/galsol.txt").unwrap();
+      let contents: String = galsol.iter().map(|v| format!("{v}\n")).collect();
+      std::io::Write::write_all(
+        &mut file,
+        format!("{} {}\n", d, nsubdivisions + 1).as_bytes(),
+      )
+      .unwrap();
+      std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
+    }
 
     // Compute analytical solution on mesh nodes.
     let analytical_sol = na::DVector::from_iterator(
@@ -110,15 +121,10 @@ where
     |mut idof| {
       let mut fcoord = na::DVector::zeros(d);
       let mut is_boundary = false;
-
       for dim in 0..d {
         let icoord = idof % nodes_per_dim;
-        fcoord[dim] = icoord as f64 / (nodes_per_dim as f64 - 1.0);
-
-        if icoord == 0 || icoord == nodes_per_dim - 1 {
-          is_boundary = true;
-          break;
-        }
+        fcoord[dim] = icoord as f64 / (nodes_per_dim - 1) as f64;
+        is_boundary |= icoord == 0 || icoord == nodes_per_dim - 1;
         idof /= nodes_per_dim;
       }
 
