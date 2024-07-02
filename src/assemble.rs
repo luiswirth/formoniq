@@ -87,18 +87,14 @@ pub fn fix_dof_coeffs<F>(
     .filter_map(|(i, v)| v.map(|v| (i, v)))
     .for_each(|(i, v)| galvec[i] = v);
 
-  // set entires zero that share a (row or column) index with a fixed dof.
-  let (mut trows, mut tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
-  let mut i = 0;
-  while i < trows.len() {
+  // Set entires zero that share a (row or column) index with a fixed dof.
+  let (trows, tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
+  for i in 0..trows.len() {
     let r = trows[i];
     let c = tcols[i];
     if dof_coeffs[r].is_some() || dof_coeffs[c].is_some() {
-      trows.remove(i);
-      tcols.remove(i);
-      tvalues.remove(i);
-    } else {
-      i += 1;
+      // TODO: consider deleting triplet
+      tvalues[i] = 0.0;
     }
   }
   let mut galmat_coo =
