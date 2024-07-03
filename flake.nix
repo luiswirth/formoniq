@@ -43,8 +43,6 @@
                 numpy
                 scipy
                 matplotlib
-
-                meshio
               ]))
             ];
           };
