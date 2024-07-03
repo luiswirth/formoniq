@@ -62,15 +62,9 @@ fn main() {
   for istep in 1..nsteps {
     println!("step={istep}");
 
-    nu = galmat_mass_cholesky
-      .solve(
-        &(galmat_mass.clone() * nu.clone()
-          + tau * (galvec.clone() - galmat_laplacian.clone() * mu.clone())),
-      )
-      .column(0)
-      .into();
-
-    mu = mu + tau * nu.clone();
+    let rhs = &galmat_mass * nu + tau * (&galvec - &galmat_laplacian * &mu);
+    nu = galmat_mass_cholesky.solve(&rhs).column(0).into();
+    mu = mu + tau * &nu;
 
     let contents: String = mu.iter().map(|v| format!("{v}\n")).collect();
     std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();

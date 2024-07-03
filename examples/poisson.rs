@@ -17,7 +17,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 3;
+  let d: usize = 2;
 
   // Define analytic solution.
   // $u = exp(x_1 x_2 dots x_n)$
@@ -39,7 +39,7 @@ fn main() {
   };
 
   let kstart = 1;
-  let kend = 4;
+  let kend = 7;
   let klen = kend - kstart + 1;
   let mut errors = Vec::with_capacity(klen);
 
@@ -137,7 +137,9 @@ where
   // Obtain Galerkin solution by solving LSE.
   let galsol = nas::factorization::CscCholesky::factor(&galmat)
     .unwrap()
-    .solve(&galvec);
+    .solve(&galvec)
+    .column(0)
+    .into();
 
-  galsol.column(0).into()
+  galsol
 }

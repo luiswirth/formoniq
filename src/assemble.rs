@@ -59,6 +59,8 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
 /// Modifies supplied galerkin matrix and galerkin vector,
 /// such that the FE solution has the optionally given coefficents on the dofs.
 /// Is primarly used the enforce essential boundary conditions.
+///
+/// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
 pub fn fix_dof_coeffs<F>(
   coefficent_map: F,
   galmat: &mut nas::CscMatrix<f64>,
@@ -75,7 +77,7 @@ pub fn fix_dof_coeffs<F>(
   let dof_coeffs_zeroed =
     na::DVector::from_iterator(ndofs, dof_coeffs.iter().copied().map(|v| v.unwrap_or(0.0)));
 
-  *galvec -= galmat.clone() * dof_coeffs_zeroed;
+  *galvec -= &*galmat * dof_coeffs_zeroed;
 
   // set galvec to prescribed coefficents
   dof_coeffs
@@ -85,16 +87,67 @@ pub fn fix_dof_coeffs<F>(
     .filter_map(|(i, v)| v.map(|v| (i, v)))
     .for_each(|(i, v)| galvec[i] = v);
 
-  // Set entires zero that share a (row or column) index with a fixed dof.
   let (trows, tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
+
+  // Set entires zero that share a (row or column) index with a fixed dof.
   for i in 0..trows.len() {
     let r = trows[i];
     let c = tcols[i];
     if dof_coeffs[r].is_some() || dof_coeffs[c].is_some() {
-      // TODO: consider deleting triplet
       tvalues[i] = 0.0;
     }
   }
+
+  let mut galmat_coo =
+    nas::CooMatrix::try_from_triplets(ndofs, ndofs, trows, tcols, tvalues).unwrap();
+
+  for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
+    if coeff.is_some() {
+      galmat_coo.push(i, i, 1.0);
+    }
+  }
+
+  *galmat = CscMatrix::from(&galmat_coo);
+}
+
+/// Modifies supplied galerkin matrix and galerkin vector,
+/// such that the FE solution has the optionally given coefficents on the dofs.
+/// Is primarly used the enforce essential boundary conditions.
+///
+/// $mat(A_0, A_(0 diff); 0, I) vec(mu_0, mu_diff) = vec(phi, gamma)$
+#[allow(unused_variables, unreachable_code)]
+pub fn fix_dof_coeffs_alt<F>(
+  coefficent_map: F,
+  galmat: &mut nas::CscMatrix<f64>,
+  galvec: &mut na::DVector<f64>,
+) where
+  F: Fn(DofId) -> Option<f64>,
+{
+  panic!("DOES NOT WORK");
+
+  let ndofs = galmat.ncols();
+
+  // create vec of all (possibly missing) coefficents
+  let dof_coeffs: Vec<_> = (0..ndofs).map(coefficent_map).collect();
+
+  // set galvec to prescribed coefficents
+  dof_coeffs
+    .iter()
+    .copied()
+    .enumerate()
+    .filter_map(|(i, v)| v.map(|v| (i, v)))
+    .for_each(|(i, v)| galvec[i] = v);
+
+  let (trows, tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
+
+  // Set entires zero that share a row index with a fixed dof.
+  for i in 0..trows.len() {
+    let r = trows[i];
+    if dof_coeffs[r].is_some() {
+      tvalues[i] = 0.0;
+    }
+  }
+
   let mut galmat_coo =
     nas::CooMatrix::try_from_triplets(ndofs, ndofs, trows, tcols, tvalues).unwrap();
 
