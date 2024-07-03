@@ -79,6 +79,10 @@ impl Mesh {
   pub fn dsimplicies(&self, d: Dim) -> &[MeshSimplex] {
     &self.simplicies[d]
   }
+  /// cells or facets of the mesh
+  pub fn cells(&self) -> &[MeshSimplex] {
+    self.dsimplicies(self.dim_intrinsic())
+  }
   pub fn coordinate_simplex(&self, id: EntityId) -> CoordSimplex {
     let entity = self.simplex_by_id(id);
     let mut vertices = na::DMatrix::zeros(self.dim_ambient(), entity.nvertices());
@@ -96,5 +100,27 @@ impl Mesh {
     } else {
       &self.face_relation[id.0 - 1][id.1]
     }
+  }
+
+  pub fn mesh_width(&self) -> f64 {
+    (0..self.cells().len())
+      .map(|isimp| {
+        self
+          .coordinate_simplex((self.dim_intrinsic(), isimp))
+          .diameter()
+      })
+      .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .unwrap()
+  }
+
+  pub fn shape_regularity_measure(&self) -> f64 {
+    (0..self.cells().len())
+      .map(|isimp| {
+        self
+          .coordinate_simplex((self.dim_intrinsic(), isimp))
+          .shape_reguarity_measure()
+      })
+      .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .unwrap()
   }
 }

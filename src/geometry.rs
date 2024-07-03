@@ -48,9 +48,9 @@ impl CoordSimplex {
     &self.vertices
   }
 
-  /// The vectors you get by subtracing a reference point (here the last one),
+  /// The vectors you get by subtracing a reference point (here the first one),
   /// from all other points.
-  /// These vectors are then the axes of simple.
+  /// These vectors are then the axes of the simplex.
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
     let n = self.nvertices() - 1;
     let p = self.vertices.column(0);
@@ -76,6 +76,28 @@ impl CoordSimplex {
   /// The (unsigned) volume of the simplex.
   pub fn vol(&self) -> f64 {
     self.det().abs()
+  }
+
+  /// The diameter of the simplex.
+  /// This is the maximum distance of two points inside the simplex.
+  pub fn diameter(&self) -> f64 {
+    let n = self.nvertices();
+    let mut dia = 0.0;
+
+    for i in 0..n {
+      for j in (i + 1)..n {
+        let dist = (self.vertices().column(i) - self.vertices().column(j)).norm();
+        if dist > dia {
+          dia = dist;
+        }
+      }
+    }
+    dia
+  }
+
+  /// The shape regualrity measure of the simplex.
+  pub fn shape_reguarity_measure(&self) -> f64 {
+    self.diameter().powi(self.dim_intrinsic() as i32) / self.vol()
   }
 
   /// Linear map from $[lambda_1, dots lambda_k]^T -> [1, x_1 dots, x_n]^T$,

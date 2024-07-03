@@ -38,8 +38,8 @@ fn main() {
     prefactor * analytic_sol(x)
   };
 
-  let kstart = 0;
-  let kend = 5;
+  let kstart = 1;
+  let kend = 4;
   let klen = kend - kstart + 1;
   let mut errors = Vec::with_capacity(klen);
 
@@ -111,8 +111,8 @@ where
   let d = mesh.dim_ambient();
 
   // Assemble galerkin matrix and galerkin vector.
-  let mut galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);
-  let mut galvec = assemble_galvec(space, LoadElvec::new(|x| -analytic_laplacian(x)));
+  let mut galmat = assemble_galmat_lagrangian(&space, laplacian_neg_elmat);
+  let mut galvec = assemble_galvec(&space, LoadElvec::new(|x| -analytic_laplacian(x)));
 
   // Enforce homogeneous Dirichlet boundary conditions
   // by fixing dofs on boundary.
