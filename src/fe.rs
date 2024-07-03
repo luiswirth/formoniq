@@ -20,6 +20,15 @@ pub fn laplacian_neg_elmat(mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64> {
   cell_geo.vol() * m.transpose() * m
 }
 
+/// Approximated Element Matrix for mass bilinear form,
+/// obtained through trapezoidal quadrature rule.
+pub fn lumped_mass_elmat(mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64> {
+  let cell_geo = mesh.coordinate_simplex(icell);
+  let n = cell_geo.nvertices();
+  let v = cell_geo.vol() / n as f64;
+  na::DMatrix::from_diagonal_element(n, n, v)
+}
+
 pub trait ElvecProvider {
   fn eval(&self, mesh: &Mesh, icell: EntityId) -> na::DVector<f64>;
 }

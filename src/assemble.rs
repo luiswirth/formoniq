@@ -107,7 +107,7 @@ pub fn fix_dof_coeffs<F>(
   *galmat = CscMatrix::from(&galmat_coo);
 }
 
-pub fn drop_dofs<F>(drop_map: F, galmat: &mut nas::CscMatrix<f64>, galvec: &mut na::DVector<f64>)
+pub fn drop_dofs_galmat<F>(drop_map: F, galmat: &mut nas::CscMatrix<f64>)
 where
   F: Fn(DofId) -> bool,
 {
@@ -142,7 +142,14 @@ where
   let galmat_coo =
     nas::CooMatrix::try_from_triplets(ndofs_new, ndofs_new, trows, tcols, tvalues).unwrap();
   *galmat = nas::CscMatrix::from(&galmat_coo);
+}
 
+pub fn drop_dofs_galvec<F>(drop_map: F, galvec: &mut na::DVector<f64>)
+where
+  F: Fn(DofId) -> bool,
+{
+  let ndofs_old = galvec.ncols();
+  let drop_ids: Vec<_> = (0..ndofs_old).filter(|idof| drop_map(*idof)).collect();
   let galvec_new = std::mem::replace(galvec, na::DVector::zeros(1));
   *galvec = galvec_new.remove_rows_at(&drop_ids);
 }
