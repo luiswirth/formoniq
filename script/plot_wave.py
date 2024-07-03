@@ -7,6 +7,8 @@ def read_coefficients(file_path):
         header = file.readline().strip()
         dim, nodes_per_dim = map(int, header.split())
         coefficients = np.array([float(line.strip()) for line in file])
+    nsteps = len(coefficients) // nodes_per_dim
+    coefficients = coefficients.reshape(nodes_per_dim, nsteps)
     return dim, nodes_per_dim, coefficients
 
 file_path = 'out/wavesol.txt'
@@ -14,7 +16,7 @@ dim, nodes_per_dim, coefficients = read_coefficients(file_path)
 
 x_grid = np.linspace(0, 1, nodes_per_dim)
 
-f_fe = coefficients.reshape([nodes_per_dim, -1])
+f_fe = coefficients
 nsteps = f_fe.shape[1]
 
 fig, ax1 = plt.subplots()
@@ -27,14 +29,15 @@ def update(istep):
     f_anal = np.sin(2 * np.pi * x_grid) * np.cos(2 * np.pi * t)
 
     ax1.clear()
-    ax1.plot(x_grid, f_fe[:, istep], color='blue')
-    ax1.plot(x_grid, f_anal, color='red')
-    ax1.set_title(f'Wave Equation - t={t:.2}')
-    ax1.set_xlabel('X axis')
-    ax1.set_ylabel('f')
+    ax1.plot(x_grid, f_fe[:, istep], color='blue', label='Finite Element Solution')
+    ax1.plot(x_grid, f_anal, color='red', label='Analytical Solution')
+    ax1.set_title(f'Wave Equation - t={t:.2f}')
+    ax1.set_xlabel('x')
+    ax1.set_ylabel('u(x)')
     ax1.set_ylim(y_min - 0.1 * y_range, y_max + 0.1 * y_range)
     ax1.axhline(0, color='black', linewidth=0.5)
     ax1.grid(True)
+    ax1.legend()
 
 ani = animation.FuncAnimation(fig, update, frames=f_fe.shape[1], interval=50)
 
