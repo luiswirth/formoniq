@@ -2,9 +2,9 @@ use formoniq::mesh::factory::unit_hypercube_mesh;
 
 fn main() {
   let d = 3;
-  let nsubdivisions = 1;
-  let mesh = unit_hypercube_mesh(d, nsubdivisions);
-  for simplex in mesh.dsimplicies(d) {
-    println!("{:?}", simplex.vertices());
+  for k in 0..5 {
+    let expk = 2usize.pow(k);
+    let mesh = unit_hypercube_mesh(d, expk);
+    println!("{}", mesh.mesh_width());
   }
 }

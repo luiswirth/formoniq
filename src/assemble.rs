@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use nalgebra_sparse::CscMatrix;
 
 use crate::{
@@ -9,7 +7,7 @@ use crate::{
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
 pub fn assemble_galmat_lagrangian(
-  space: Rc<FeSpace>,
+  space: &FeSpace,
   elmat: impl ElmatProvider,
 ) -> nas::CscMatrix<f64> {
   let mesh = space.mesh();
@@ -39,7 +37,7 @@ pub fn assemble_galmat_lagrangian(
 }
 
 /// Assembly algorithm for the Galerkin Vector in Lagrangian (0-form) FE.
-pub fn assemble_galvec(space: Rc<FeSpace>, elvec: impl ElvecProvider) -> na::DVector<f64> {
+pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mesh = space.mesh();
   let cell_dim = mesh.dim_intrinsic();
 

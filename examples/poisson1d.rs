@@ -43,8 +43,8 @@ fn main() {
     let ndofs = space.ndofs();
 
     // Assemble galerkin matrix and galerkin vector.
-    let mut galmat = assemble_galmat_lagrangian(space.clone(), laplacian_neg_elmat);
-    let mut galvec = assemble_galvec(space, LoadElvec::new(|x| -x[0].exp()));
+    let mut galmat = assemble_galmat_lagrangian(&space, laplacian_neg_elmat);
+    let mut galvec = assemble_galvec(&space, LoadElvec::new(|x| -x[0].exp()));
 
     // Enforce homogeneous dirichlet boundary conditions
     // by fixing dofs on boundary.
