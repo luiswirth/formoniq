@@ -8,7 +8,7 @@ def read_coefficients(file_path):
         dim, nodes_per_dim = map(int, header.split())
         coefficients = np.array([float(line.strip()) for line in file])
     nsteps = len(coefficients) // nodes_per_dim
-    coefficients = coefficients.reshape(nodes_per_dim, nsteps)
+    coefficients = coefficients.reshape(nsteps, nodes_per_dim).T
     return dim, nodes_per_dim, coefficients
 
 file_path = 'out/wavesol.txt'

@@ -8,14 +8,13 @@ def read_coefficients(file_path):
         dim, nodes_per_dim = map(int, header.split())
         coefficients = np.array([float(line.strip()) for line in file])
     nsteps = len(coefficients) // nodes_per_dim
-    coefficients = coefficients.reshape(nodes_per_dim, nsteps)
+    coefficients = coefficients.reshape(nsteps, nodes_per_dim).T
     return dim, nodes_per_dim, coefficients
 
 file_path = 'out/heatsol.txt'
 dim, nodes_per_dim, coefficients = read_coefficients(file_path)
 
 x_grid = np.linspace(0, 1, nodes_per_dim)
-alpha = 1.0
 
 f_fe = coefficients
 nsteps = f_fe.shape[1]
@@ -26,8 +25,8 @@ y_min, y_max = np.min(f_fe), np.max(f_fe)
 y_range = y_max - y_min
 
 def update(istep):
-    t = istep / (nsteps - 1) * 0.1  # Adjust based on final time
-    f_anal = np.sin(np.pi * x_grid) * np.exp(-alpha * np.pi**2 * t)
+    t = istep / (nsteps - 1)
+    f_anal = np.sin(np.pi * x_grid) * np.exp(-np.pi**2 * t)
 
     ax1.clear()
     ax1.plot(x_grid, f_fe[:, istep], color='blue', label='Finite Element Solution')

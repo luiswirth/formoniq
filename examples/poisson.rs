@@ -17,7 +17,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 2;
+  let d: usize = 3;
 
   // Define analytic solution.
   // $u = exp(x_1 x_2 dots x_n)$
@@ -39,7 +39,7 @@ fn main() {
   };
 
   let kstart = 1;
-  let kend = 7;
+  let kend = 5;
   let klen = kend - kstart + 1;
   let mut errors = Vec::with_capacity(klen);
 
