@@ -1,43 +1,46 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.animation as animation
 
-def read_coefficients(file_path):
-    with open(file_path, 'r') as file:
-        header = file.readline().strip()
-        dim, nodes_per_dim = map(int, header.split())
-        coefficients = np.array([float(line.strip()) for line in file])
-    nsteps = len(coefficients) // nodes_per_dim
-    coefficients = coefficients.reshape(nsteps, nodes_per_dim).T
-    return dim, nodes_per_dim, coefficients
-
 file_path = 'out/wavesol.txt'
-dim, nodes_per_dim, coefficients = read_coefficients(file_path)
+with open(file_path, 'r') as file:
+    header = file.readline().strip()
+    dim, nodes_per_dim, tfinal, nsteps = map(float, header.split())
+    dim = int(dim)
+    nodes_per_dim = int(nodes_per_dim)
+    nsteps = int(nsteps)
+    ndofs = nodes_per_dim**dim
+    coefficients = np.array([float(line.strip()) for line in file])
+nsteps = len(coefficients) // (nodes_per_dim * nodes_per_dim)
+coefficients = coefficients.reshape(nsteps, nodes_per_dim, nodes_per_dim).T
+
 
 x_grid = np.linspace(0, 1, nodes_per_dim)
+y_grid = np.linspace(0, 1, nodes_per_dim)
+X, Y = np.meshgrid(x_grid, y_grid)
 
 f_fe = coefficients
-nsteps = f_fe.shape[1]
+nsteps = f_fe.shape[2]
 
-fig, ax1 = plt.subplots()
+fig = plt.figure()
+ax1 = fig.add_subplot(111, projection='3d')
 
-y_min, y_max = np.min(f_fe), np.max(f_fe)
-y_range = y_max - y_min
+z_min, z_max = np.min(f_fe), np.max(f_fe)
+z_range = z_max - z_min
 
 def update(istep):
-    t = istep / (nsteps - 1)
-
+    t = istep / (nsteps - 1) * tfinal
+    
     ax1.clear()
-    ax1.plot(x_grid, f_fe[:, istep], color='blue', label='Finite Element Solution')
+    Z = f_fe[:, :, istep]
+    ax1.plot_surface(X, Y, Z, cmap='viridis')
     ax1.set_title(f'Wave Equation - t={t:.2f}')
     ax1.set_xlabel('x')
-    ax1.set_ylabel('u(x)')
-    ax1.set_ylim(y_min - 0.1 * y_range, y_max + 0.1 * y_range)
-    ax1.axhline(0, color='black', linewidth=0.5)
-    ax1.grid(True)
-    ax1.legend()
+    ax1.set_ylabel('y')
+    ax1.set_zlabel('u(x,y)')
+    ax1.set_zlim(z_min - 0.1 * z_range, z_max + 0.1 * z_range)
 
-ani = animation.FuncAnimation(fig, update, frames=f_fe.shape[1], interval=50)
+ani = animation.FuncAnimation(fig, update, frames=nsteps, interval=10)
 
-plt.tight_layout()
 plt.show()
