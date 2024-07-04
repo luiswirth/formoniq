@@ -26,11 +26,9 @@ y_range = y_max - y_min
 
 def update(istep):
     t = istep / (nsteps - 1)
-    f_anal = np.sin(2 * np.pi * x_grid) * np.cos(2 * np.pi * t)
 
     ax1.clear()
     ax1.plot(x_grid, f_fe[:, istep], color='blue', label='Finite Element Solution')
-    ax1.plot(x_grid, f_anal, color='red', label='Analytical Solution')
     ax1.set_title(f'Wave Equation - t={t:.2f}')
     ax1.set_xlabel('x')
     ax1.set_ylabel('u(x)')

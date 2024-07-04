@@ -8,7 +8,6 @@ itertools = "0.13.0"
 mshio = "0.4.2"
 nalgebra = "0.32.5"
 nalgebra-sparse = "0.9.0"
-numerics = { git = "https://github.com/luiswirth/numerics", version = "0.1.0" }
 once_cell = "1.19.0"
 thiserror = "1.0.61"
 tracing = "0.1.40"
