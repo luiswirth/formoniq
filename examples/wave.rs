@@ -53,7 +53,7 @@ fn main() {
   for inode in 0..nnodes {
     let x = inode as f64 / (nnodes - 1) as f64;
     mu[inode] = (x * TAU).sin();
-    nu[inode] = -TAU * (x * TAU).sin();
+    //nu[inode] = -TAU * (x * TAU).sin();
   }
 
   let contents: String = mu.iter().map(|v| format!("{v}\n")).collect();
