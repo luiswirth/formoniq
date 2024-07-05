@@ -19,3 +19,7 @@ extends these spaces from 3D to higher dimensions.
 
 Our primary focus is solving elliptic Hodge-Laplace problems on simplicial
 meshes with first-order Whitney forms.
+
+# Plots and Animations
+
+![wave](https://github.com/luiswirth/formoniq/assets/37505890/cb198575-e4dc-42d4-9fe3-d0d38e333c29)
