@@ -69,17 +69,26 @@ pub fn cartesian_idx2linear_idx(coord: na::DVector<usize>, dlen: usize) -> usize
   idx
 }
 
-pub fn unit_hypercube_mesh_nodes(d: usize, nsubdivisions: usize) -> na::DMatrix<f64> {
+pub fn linear_idx2cartesian_coords(
+  idx: usize,
+  d: Dim,
+  dlen: usize,
+  side_length: f64,
+) -> na::DVector<f64> {
+  linear_idx2cartesian_idx(idx, d, dlen).cast::<f64>() / dlen as f64 * side_length
+}
+
+pub fn hypercube_mesh_nodes(d: usize, nsubdivisions: usize, side_length: f64) -> na::DMatrix<f64> {
   let nodes_per_dim = nsubdivisions + 1;
   let nnodes = nodes_per_dim.pow(d as u32);
   let mut nodes = na::DMatrix::zeros(d, nnodes);
 
   for (inode, mut coord) in nodes.column_iter_mut().enumerate() {
-    coord.copy_from(&na::DVector::from_iterator(
+    coord.copy_from(&linear_idx2cartesian_coords(
+      inode,
       d,
-      linear_idx2cartesian_idx(inode, d, nodes_per_dim)
-        .into_iter()
-        .map(|&c| c as f64 / (nodes_per_dim - 1) as f64),
+      nodes_per_dim,
+      side_length,
     ));
   }
 
@@ -87,7 +96,7 @@ pub fn unit_hypercube_mesh_nodes(d: usize, nsubdivisions: usize) -> na::DMatrix<
 }
 
 /// Create a structured mesh of the unit hypercube $[0, 1]^d$.
-pub fn unit_hypercube_mesh(d: Dim, nsubdivisions: usize) -> Mesh {
+pub fn hypercube_mesh(d: Dim, nsubdivisions: usize, side_length: f64) -> Mesh {
   let nodes_per_dim = nsubdivisions + 1;
   let ncubes = nsubdivisions.pow(d as u32);
   let nsimplicies = factorial(d) * ncubes;
@@ -108,6 +117,6 @@ pub fn unit_hypercube_mesh(d: Dim, nsubdivisions: usize) -> Mesh {
     }));
   }
 
-  let nodes = unit_hypercube_mesh_nodes(d, nsubdivisions);
+  let nodes = hypercube_mesh_nodes(d, nsubdivisions, side_length);
   from_facets(nodes, simplicies, false)
 }
