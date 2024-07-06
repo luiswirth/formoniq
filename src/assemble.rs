@@ -6,10 +6,7 @@ use crate::{
 };
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
-pub fn assemble_galmat_lagrangian(
-  space: &FeSpace,
-  elmat: impl ElmatProvider,
-) -> nas::CscMatrix<f64> {
+pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> nas::CscMatrix<f64> {
   let mesh = space.mesh();
   let cell_dim = mesh.dim_intrinsic();
 
