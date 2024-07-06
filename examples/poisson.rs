@@ -5,7 +5,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  assemble::{self, assemble_galmat_lagrangian, assemble_galvec},
+  assemble::{self, assemble_galmat, assemble_galvec},
   fe::{l2_norm, laplacian_neg_elmat, LoadElvec},
   mesh::factory::hypercube_mesh,
   space::FeSpace,
@@ -17,7 +17,11 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 3;
+  let d: usize = 1;
+
+  let kstart = 0;
+  let kend = 15;
+  let klen = kend - kstart + 1;
 
   // Define analytic solution.
   // $u = exp(x_1 x_2 dots x_n)$
@@ -38,24 +42,28 @@ fn main() {
     prefactor * analytic_sol(x)
   };
 
-  let kstart = 1;
-  let kend = 5;
-  let klen = kend - kstart + 1;
-  let mut errors = Vec::with_capacity(klen);
+  fn print_seperator() {
+    let nchar = 78;
+    println!("{}", std::iter::repeat('-').take(nchar).collect::<String>());
+  }
 
-  println!("{}", std::iter::repeat('-').take(46).collect::<String>());
+  print_seperator();
   println!(
-    "| {:>2} | {:>13} | {:>9} | {:>9} |",
-    "k", "nsubdivisions", "error", "conv_rate",
+    "| {:>2} | {:>13} | {:>10} | {:>16} | {:>9} | {:>9} |",
+    "k", "nsubdivisions", "mesh width", "shape regularity", "L2 error", "conv rate"
   );
-  println!("{}", std::iter::repeat('-').take(46).collect::<String>());
+  print_seperator();
 
+  let mut errors = Vec::with_capacity(klen);
   for k in kstart..=kend {
     let expk = 2usize.pow(k as u32);
     let nsubdivisions = expk;
 
     // Create mesh of unit hypercube $[0, 1]^d$.
-    let mesh = Rc::new(hypercube_mesh(d, nsubdivisions, 1.0));
+    let mesh = hypercube_mesh(d, nsubdivisions, 1.0);
+    let mesh = Rc::new(mesh);
+    let mesh_width = mesh.mesh_width();
+    let shape_regularity = mesh.shape_regularity_measure();
 
     // Create FE space.
     let space = Rc::new(FeSpace::new(mesh.clone()));
@@ -91,11 +99,11 @@ fn main() {
     errors.push(error);
 
     println!(
-      "| {:>2} | {:>13} | {:>9.3e} | {:>9.2} |",
-      k, nsubdivisions, error, conv_rate
+      "| {:>2} | {:>13} | {:>10.3e} | {:>16.3e} | {:>9.3e} | {:>9.2} |",
+      k, nsubdivisions, mesh_width, shape_regularity, error, conv_rate
     );
   }
-  println!("{}", std::iter::repeat('-').take(46).collect::<String>());
+  print_seperator();
 }
 
 fn solve_poisson<F, G>(
@@ -111,7 +119,7 @@ where
   let d = mesh.dim_ambient();
 
   // Assemble galerkin matrix and galerkin vector.
-  let mut galmat = assemble_galmat_lagrangian(&space, laplacian_neg_elmat);
+  let mut galmat = assemble_galmat(&space, laplacian_neg_elmat);
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|x| -analytic_laplacian(x)));
 
   // Enforce homogeneous Dirichlet boundary conditions

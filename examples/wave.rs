@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  assemble::{assemble_galmat_lagrangian, assemble_galvec, fix_dof_coeffs},
+  assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
   mesh::factory::{hypercube_mesh, linear_idx2cartesian_coords},
   space::FeSpace,
@@ -41,8 +41,8 @@ fn main() {
 
   let space = Rc::new(FeSpace::new(mesh.clone()));
 
-  let mut galmat_laplacian = assemble_galmat_lagrangian(&space, laplacian_neg_elmat);
-  let mut galmat_mass = assemble_galmat_lagrangian(&space, lumped_mass_elmat);
+  let mut galmat_laplacian = assemble_galmat(&space, laplacian_neg_elmat);
+  let mut galmat_mass = assemble_galmat(&space, lumped_mass_elmat);
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|_| 0.0));
 
   let bc = |mut idof| {
