@@ -32,28 +32,33 @@ nframes = coeffs.shape[0]
 
 x_grid = np.linspace(0, xfinal, nodes_per_dim)
 y_grid = np.linspace(0, xfinal, nodes_per_dim)
+h = xfinal / nodes_per_dim
 X, Y = np.meshgrid(x_grid, y_grid)
 
-fig = plt.figure()
-ax1 = fig.add_subplot(111, projection='3d')
+fig = plt.figure(figsize=(5, 5), dpi=150)
+ax = fig.add_subplot(projection='3d')
 
 z_min, z_max = np.min(coeffs), np.max(coeffs)
 z_range = z_max - z_min
 
 def update(iframe):
-    print(f"Plotting wave equation at frame={iframe}/{nframes} ...")
     t = iframe / (nframes - 1) * tfinal
-    
-    ax1.clear()
     Z = coeffs[iframe, :, :]
-    ax1.plot_surface(X, Y, Z, cmap='viridis')
-    ax1.set_title(f'Wave Equation - t={t:.2f}')
-    ax1.set_xlabel('x')
-    ax1.set_ylabel('y')
-    ax1.set_zlabel('u(x,y)')
-    ax1.set_zlim(z_min - 0.1 * z_range, z_max + 0.1 * z_range)
+
+    ax.clear()
+
+    ax.plot_surface(X, Y, Z, edgecolor='white', linewidth=50/nodes_per_dim)
+    ax.set_title(f'Wave Equation\n$t={t:.2f}$')
+    ax.set_xlabel('$x$')
+    ax.set_ylabel('$y$')
+    ax.set_zlabel('$u(x,y,t)$')
+    ax.set_zlim(z_min - 0.1 * z_range, z_max + 0.1 * z_range)
 
 ani = animation.FuncAnimation(fig, update, frames=nframes, interval=1)
-
-ani.save('out/wave.gif', writer='pillow', fps=fps)
+ani.save(
+    'out/wave.gif',
+    fps=fps,
+    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
+    writer='pillow',
+)
 plt.close(fig)

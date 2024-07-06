@@ -16,7 +16,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let ndims: usize = 2;
-  let nsubdivisions = 100;
+  let nsubdivisions = 500;
   let domain_length = TAU;
   let mesh_width = domain_length / nsubdivisions as f64;
 
@@ -80,7 +80,7 @@ fn main() {
 
   for istep in 0..nsteps {
     let _t = istep as f64 / (nsteps - 1) as f64 * final_time;
-    println!("Solving wave equation at step={istep}/{nsteps} ...");
+    println!("Solving wave equation at step={istep}/{nsteps}...");
 
     let rhs = &galmat_mass * nu + timestep * (&galvec - &galmat_laplacian * &mu);
     nu = galmat_mass_cholesky.solve(&rhs).column(0).into();
