@@ -75,7 +75,7 @@ pub fn linear_idx2cartesian_coords(
   dlen: usize,
   side_length: f64,
 ) -> na::DVector<f64> {
-  linear_idx2cartesian_idx(idx, d, dlen).cast::<f64>() / dlen as f64 * side_length
+  linear_idx2cartesian_idx(idx, d, dlen).cast::<f64>() / (dlen - 1) as f64 * side_length
 }
 
 pub fn hypercube_mesh_nodes(d: usize, nsubdivisions: usize, side_length: f64) -> na::DMatrix<f64> {
