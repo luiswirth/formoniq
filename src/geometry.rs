@@ -129,6 +129,10 @@ impl CoordSimplex {
       .clone_owned()
   }
 
+  pub fn face_unit_normals(&self) -> na::DMatrix<f64> {
+    -self.barycentric_functions_grad().normalize()
+  }
+
   pub fn into_singleton_mesh(self) -> Mesh {
     let nvertices = self.nvertices();
     from_facets(self.vertices, vec![(0..nvertices).collect()], true)
