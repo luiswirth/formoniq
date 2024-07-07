@@ -20,6 +20,11 @@ extends these spaces from 3D to higher dimensions.
 Our primary focus is solving elliptic Hodge-Laplace problems on simplicial
 meshes with first-order Whitney forms.
 
-# Plots and Animations
+# Example
 
-![wave](https://github.com/luiswirth/formoniq/assets/37505890/cb198575-e4dc-42d4-9fe3-d0d38e333c29)
+The following animation shows a solution to the wave equation, solved using formoniq.
+
+It's the result of the [wave example](./examples/wave.rs) and the corresponding [wave plot script](/script/plot_wave.py).
+
+<img src="https://github.com/luiswirth/formoniq/assets/37505890/450e2cd0-ffeb-48ef-8b0a-64de5d75b557" width="400" height="400">
+
