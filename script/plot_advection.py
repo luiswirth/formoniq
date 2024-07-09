@@ -29,7 +29,7 @@ z_min, z_max = np.min(coeffs), np.max(coeffs)
 z_range = z_max - z_min
 
 Z = coeffs[:, :]
-ax.plot_surface(X, Y, Z, edgecolor='white', linewidth=50/nodes_per_dim)
+ax.plot_surface(X, Y, Z, edgecolor='white', linewidth=500/nodes_per_dim)
 ax.set_title(f'Linear Advection')
 ax.set_xlabel('$x$')
 ax.set_ylabel('$y$')
