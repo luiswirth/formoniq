@@ -41,6 +41,9 @@ fn main() {
     &mut galvec,
   );
 
+  let galmat_laplacian = galmat_laplacian.to_nalgebra();
+  let galmat_mass = galmat_mass.to_nalgebra();
+
   let galmat = &galmat_mass + alpha * tau * &galmat_laplacian;
   let galmat_cholesky = nas::factorization::CscCholesky::factor(&galmat).unwrap();
 

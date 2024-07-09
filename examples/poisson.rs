@@ -7,6 +7,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{l2_norm, laplacian_neg_elmat, LoadElvec},
+  matrix::FaerCholesky,
   mesh::factory::hypercube_mesh,
   space::FeSpace,
 };
@@ -142,12 +143,10 @@ where
     &mut galvec,
   );
 
+  let galmat = galmat.to_nalgebra();
+
   // Obtain Galerkin solution by solving LSE.
-  let galsol = nas::factorization::CscCholesky::factor(&galmat)
-    .unwrap()
-    .solve(&galvec)
-    .column(0)
-    .into();
+  let galsol = FaerCholesky::new(galmat).solve(&galvec).column(0).into();
 
   galsol
 }

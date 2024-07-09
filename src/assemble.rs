@@ -1,17 +1,17 @@
-use nalgebra_sparse::CscMatrix;
-
 use crate::{
   fe::{ElmatProvider, ElvecProvider},
+  matrix::SparseMatrix,
   space::{DofId, FeSpace},
+  util::{faervec2navec, navec2faervec},
 };
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
-pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> nas::CscMatrix<f64> {
+pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mesh = space.mesh();
   let cell_dim = mesh.dim_intrinsic();
 
   // Lagrangian (0-form) has dofs associated with the nodes.
-  let mut galmat = nas::CooMatrix::new(space.ndofs(), space.ndofs());
+  let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
   for (icell, _) in mesh.dsimplicies(cell_dim).iter().enumerate() {
     let elmat = elmat.eval(mesh, (cell_dim, icell));
     for (ilocal, iglobal) in space
@@ -30,7 +30,7 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> nas::CscMa
       }
     }
   }
-  nas::CscMatrix::from(&galmat)
+  galmat
 }
 
 /// Assembly algorithm for the Galerkin Vector in Lagrangian (0-form) FE.
@@ -60,7 +60,7 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
 /// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
 pub fn fix_dof_coeffs<F>(
   coefficent_map: F,
-  galmat: &mut nas::CscMatrix<f64>,
+  galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) where
   F: Fn(DofId) -> Option<f64>,
@@ -71,10 +71,19 @@ pub fn fix_dof_coeffs<F>(
   let dof_coeffs: Vec<_> = (0..ndofs).map(coefficent_map).collect();
 
   // zero out missing coefficents
-  let dof_coeffs_zeroed =
-    na::DVector::from_iterator(ndofs, dof_coeffs.iter().copied().map(|v| v.unwrap_or(0.0)));
+  let mut dof_coeffs_zeroed = faer::Mat::zeros(ndofs, 1);
+  dof_coeffs
+    .iter()
+    .copied()
+    .map(|v| v.unwrap_or(0.0))
+    .enumerate()
+    .for_each(|(i, v)| dof_coeffs_zeroed[(i, 0)] = v);
 
-  *galvec -= &*galmat * dof_coeffs_zeroed;
+  let galmat_faer = galmat.to_faer();
+  let mut galvec_faer = navec2faervec(galvec);
+
+  galvec_faer -= galmat_faer * dof_coeffs_zeroed;
+  *galvec = faervec2navec(&galvec_faer);
 
   // set galvec to prescribed coefficents
   dof_coeffs
@@ -84,27 +93,14 @@ pub fn fix_dof_coeffs<F>(
     .filter_map(|(i, v)| v.map(|v| (i, v)))
     .for_each(|(i, v)| galvec[i] = v);
 
-  let (trows, tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
-
   // Set entires zero that share a (row or column) index with a fixed dof.
-  for i in 0..trows.len() {
-    let r = trows[i];
-    let c = tcols[i];
-    if dof_coeffs[r].is_some() || dof_coeffs[c].is_some() {
-      tvalues[i] = 0.0;
-    }
-  }
-
-  let mut galmat_coo =
-    nas::CooMatrix::try_from_triplets(ndofs, ndofs, trows, tcols, tvalues).unwrap();
+  galmat.set_zero(|r, c| dof_coeffs[r].is_some() || dof_coeffs[c].is_some());
 
   for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
     if coeff.is_some() {
-      galmat_coo.push(i, i, 1.0);
+      galmat.push(i, i, 1.0);
     }
   }
-
-  *galmat = CscMatrix::from(&galmat_coo);
 }
 
 /// Modifies supplied galerkin matrix and galerkin vector,
@@ -115,7 +111,7 @@ pub fn fix_dof_coeffs<F>(
 #[allow(unused_variables, unreachable_code)]
 pub fn fix_dof_coeffs_alt<F>(
   coefficent_map: F,
-  galmat: &mut nas::CscMatrix<f64>,
+  galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) where
   F: Fn(DofId) -> Option<f64>,
@@ -135,29 +131,17 @@ pub fn fix_dof_coeffs_alt<F>(
     .filter_map(|(i, v)| v.map(|v| (i, v)))
     .for_each(|(i, v)| galvec[i] = v);
 
-  let (trows, tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
-
   // Set entires zero that share a row index with a fixed dof.
-  for i in 0..trows.len() {
-    let r = trows[i];
-    if dof_coeffs[r].is_some() {
-      tvalues[i] = 0.0;
-    }
-  }
-
-  let mut galmat_coo =
-    nas::CooMatrix::try_from_triplets(ndofs, ndofs, trows, tcols, tvalues).unwrap();
+  galmat.set_zero(|r, c| dof_coeffs[r].is_some());
 
   for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
     if coeff.is_some() {
-      galmat_coo.push(i, i, 1.0);
+      galmat.push(i, i, 1.0);
     }
   }
-
-  *galmat = CscMatrix::from(&galmat_coo);
 }
 
-pub fn drop_dofs_galmat<F>(drop_map: F, galmat: &mut nas::CscMatrix<f64>)
+pub fn drop_dofs_galmat<F>(drop_map: F, galmat: &mut SparseMatrix)
 where
   F: Fn(DofId) -> bool,
 {
@@ -166,17 +150,16 @@ where
   let drop_ids: Vec<_> = (0..ndofs_old).filter(|idof| drop_map(*idof)).collect();
   let ndofs_new = ndofs_old - drop_ids.len();
 
-  let (mut trows, mut tcols, mut tvalues) = nas::CooMatrix::from(&*galmat).disassemble();
+  let mut triplets = std::mem::take(galmat).to_triplets();
   for (ndrops, mut drop_id) in drop_ids.iter().copied().enumerate() {
     drop_id -= ndrops;
     let mut itriplet = 0;
-    while itriplet < trows.len() {
-      let r = &mut trows[itriplet];
-      let c = &mut tcols[itriplet];
+    while itriplet < triplets.len() {
+      let mut triplet = triplets[itriplet];
+      let r = &mut triplet.0;
+      let c = &mut triplet.1;
       if *r == drop_id || *c == drop_id {
-        trows.remove(itriplet);
-        tcols.remove(itriplet);
-        tvalues.remove(itriplet);
+        triplets.remove(itriplet);
       } else {
         if *r > drop_id {
           *r -= 1;
@@ -189,9 +172,7 @@ where
       }
     }
   }
-  let galmat_coo =
-    nas::CooMatrix::try_from_triplets(ndofs_new, ndofs_new, trows, tcols, tvalues).unwrap();
-  *galmat = nas::CscMatrix::from(&galmat_coo);
+  *galmat = SparseMatrix::from_triplets(ndofs_new, ndofs_new, triplets);
 }
 
 pub fn drop_dofs_galvec<F>(drop_map: F, galvec: &mut na::DVector<f64>)

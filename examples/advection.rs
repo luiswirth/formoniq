@@ -7,6 +7,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{LoadElvec, UpwindAdvectionElmat},
+  matrix::FaerLu,
   mesh::factory::hypercube_mesh,
   space::FeSpace,
 };
@@ -17,7 +18,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 2;
-  let nsubdivisions = 50;
+  let nsubdivisions = 1500;
 
   let dirichlet_data = |x: na::DVectorView<f64>| {
     if x[1] == 0.0 {
@@ -29,17 +30,22 @@ fn main() {
 
   let velocity_field = |x: na::DVectorView<f64>| na::DVector::from_column_slice(&[-x[1], x[0]]);
 
+  println!("meshing...");
   let mesh = hypercube_mesh(d, nsubdivisions, 1.0);
+  println!("meshing done.");
   let mesh = Rc::new(mesh);
 
   let space = Rc::new(FeSpace::new(mesh.clone()));
 
+  println!("assembling galmat...");
   let mut galmat = assemble_galmat(
     &space,
     UpwindAdvectionElmat::new(velocity_field, space.mesh()),
   );
+  println!("assembling galmat done.");
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|_| 0.0));
 
+  println!("fixing dofs...");
   let nodes_per_dim = (mesh.nnodes() as f64).powf((d as f64).recip()) as usize;
   assemble::fix_dof_coeffs(
     |mut idof| {
@@ -60,11 +66,12 @@ fn main() {
     &mut galmat,
     &mut galvec,
   );
+  println!("fixing dofs done.");
 
-  // Obtain Galerkin solution by solving LSE.
-  // TODO: Dense matrix construted!!! We need a sparse solver for non s.p.d. matrices.
-  let galmat: na::DMatrix<f64> = (&galmat).into();
-  let galsol: na::DVector<f64> = galmat.lu().solve(&galvec).unwrap().column(0).into();
+  let galmat = galmat.to_nalgebra();
+
+  let galmat_lu = FaerLu::new(galmat);
+  let galsol = galmat_lu.solve(&galvec);
 
   let mut file = std::fs::File::create("out/advectionsol.txt").unwrap();
   std::io::Write::write_all(
@@ -72,6 +79,6 @@ fn main() {
     format!("{} {}\n", d, nsubdivisions + 1).as_bytes(),
   )
   .unwrap();
-  let contents: String = galsol.iter().map(|v| format!("{v}\n")).collect();
+  let contents: String = galsol.row_iter().map(|v| format!("{}\n", v[0])).collect();
   std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
 }

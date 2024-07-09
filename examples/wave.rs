@@ -4,6 +4,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
+  matrix::FaerCholesky,
   mesh::factory::{hypercube_mesh, linear_idx2cartesian_coords},
   space::FeSpace,
 };
@@ -60,7 +61,10 @@ fn main() {
   fix_dof_coeffs(bc, &mut galmat_laplacian, &mut galvec);
   fix_dof_coeffs(bc, &mut galmat_mass, &mut galvec);
 
-  let galmat_mass_cholesky = nas::factorization::CscCholesky::factor(&galmat_mass).unwrap();
+  let galmat_laplacian = galmat_laplacian.to_nalgebra();
+  let galmat_mass = galmat_mass.to_nalgebra();
+
+  let galmat_mass_cholesky = FaerCholesky::new(galmat_mass.clone());
 
   let mut file = std::fs::File::create("out/wavesol.txt").unwrap();
   std::io::Write::write_all(
