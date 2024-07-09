@@ -149,3 +149,53 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &Mesh) -> f64 {
   }
   norm.sqrt()
 }
+
+#[cfg(test)]
+mod test {
+  use super::laplacian_neg_elmat;
+  use crate::geometry::CoordSimplex;
+
+  fn check_galmat_refd(d: usize, expected_elmat: na::DMatrixView<f64>) {
+    let mesh = CoordSimplex::new_ref(d).into_singleton_mesh();
+    let computed_elmat = laplacian_neg_elmat(&mesh, (d, 0));
+    assert_eq!(computed_elmat, expected_elmat);
+
+    let mesh = CoordSimplex::new_ref_embedded(d, d + 1).into_singleton_mesh();
+    let computed_elmat = laplacian_neg_elmat(&mesh, (d, 0));
+    assert!((computed_elmat - expected_elmat).norm_squared() < f64::EPSILON);
+  }
+
+  #[test]
+  fn laplacian_galmat_ref1d() {
+    #[rustfmt::skip]
+    let expected_elmat = na::DMatrix::from_row_slice(2, 2, &[
+      1.0, -1.0,
+      -1.0, 1.0
+    ]);
+    check_galmat_refd(1, expected_elmat.as_view());
+  }
+
+  #[test]
+  fn laplacian_galmat_ref2d() {
+    #[rustfmt::skip]
+    let expected_elmat = na::DMatrix::from_row_slice(3, 3, &[
+      1.0, -0.5, -0.5,
+      -0.5, 0.5, 0.0,
+      -0.5, 0.0, 0.5
+    ]);
+    check_galmat_refd(2, expected_elmat.as_view());
+  }
+
+  #[test]
+  fn laplacian_galmat_ref3d() {
+    let a = 1. / 6.;
+    #[rustfmt::skip]
+    let expected_elmat = na::DMatrix::from_row_slice(4, 4, &[
+      0.5, -a, -a, -a,
+      -a, a, 0., 0.,
+      -a, 0., a, 0.,
+      -a, 0., 0., a
+    ]);
+    check_galmat_refd(3, expected_elmat.as_view());
+  }
+}

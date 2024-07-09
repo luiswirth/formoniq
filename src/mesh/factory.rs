@@ -1,8 +1,7 @@
-use itertools::Itertools;
-
+use super::{Mesh, MeshSimplex, NodeId};
 use crate::{util::factorial, Dim};
 
-use super::{Mesh, MeshSimplex, NodeId};
+use itertools::Itertools;
 
 pub fn from_facets(
   node_coords: na::DMatrix<f64>,
@@ -119,4 +118,36 @@ pub fn hypercube_mesh(d: Dim, nsubdivisions: usize, side_length: f64) -> Mesh {
 
   let nodes = hypercube_mesh_nodes(d, nsubdivisions, side_length);
   from_facets(nodes, simplicies, false)
+}
+
+#[cfg(test)]
+mod test {
+  use super::hypercube_mesh;
+
+  #[test]
+  fn unit_cube_mesh() {
+    let mesh = hypercube_mesh(3, 1, 1.0);
+    #[rustfmt::skip]
+    let node_coords = na::DMatrix::from_column_slice(3, 8, &[
+      0., 0., 0.,
+      1., 0., 0.,
+      0., 1., 0.,
+      1., 1., 0.,
+      0., 0., 1.,
+      1., 0., 1.,
+      0., 1., 1.,
+      1., 1., 1.,
+    ]);
+    assert_eq!(*mesh.node_coords(), node_coords);
+    let expected_simplicies = vec![
+      &[0, 1, 3, 7],
+      &[0, 1, 5, 7],
+      &[0, 2, 3, 7],
+      &[0, 2, 6, 7],
+      &[0, 4, 5, 7],
+      &[0, 4, 6, 7],
+    ];
+    let computed_simplicies: Vec<_> = mesh.cells().iter().map(|c| c.vertices()).collect();
+    assert_eq!(computed_simplicies, expected_simplicies);
+  }
 }
