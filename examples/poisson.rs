@@ -17,7 +17,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 1;
+  let d: usize = 3;
 
   let kstart = 0;
   let kend = 15;
