@@ -62,7 +62,7 @@ pub fn linear_idx2cartesian_idx(mut idx: usize, d: Dim, dlen: usize) -> na::DVec
 pub fn cartesian_idx2linear_idx(coord: na::DVector<usize>, dlen: usize) -> usize {
   let d = coord.len();
   let mut idx = 0;
-  for icomp in 0..d {
+  for icomp in (0..d).rev() {
     idx *= dlen;
     idx += coord[icomp];
   }
