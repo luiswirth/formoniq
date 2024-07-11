@@ -22,9 +22,9 @@ meshes with first-order Whitney forms.
 
 # Example
 
-The following animation shows a solution to the wave equation, solved using formoniq.
+The following animations shows finite element solutions of various PDEs computed using formoniq.
 
-It's the result of the [wave example](./examples/wave.rs) and the corresponding [wave plot script](/script/plot_wave.py).
+<img src="https://github.com/luiswirth/formoniq/assets/37505890/450e2cd0-ffeb-48ef-8b0a-64de5d75b557" width="33%">
+<img src="https://github.com/luiswirth/formoniq/assets/37505890/1f7116a2-5a44-43a4-a6a5-e5b645e0f9d2" width="66%">
 
-<img src="https://github.com/luiswirth/formoniq/assets/37505890/450e2cd0-ffeb-48ef-8b0a-64de5d75b557" width="400" height="400">
 
