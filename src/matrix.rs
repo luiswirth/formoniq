@@ -27,6 +27,10 @@ impl SparseMatrix {
     self.ncols
   }
 
+  pub fn ntriplets(&self) -> usize {
+    self.triplets.len()
+  }
+
   pub fn push(&mut self, r: usize, c: usize, v: f64) {
     self.triplets.push((r, c, v));
   }

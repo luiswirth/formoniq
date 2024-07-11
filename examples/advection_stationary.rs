@@ -18,7 +18,12 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 2;
-  let nsubdivisions = 1500;
+  let nsubdivisions = 5000;
+
+  println!(
+    "solving problem in d={} with nsubdivisions={}",
+    d, nsubdivisions
+  );
 
   let dirichlet_data = |x: na::DVectorView<f64>| {
     if x[1] == 0.0 {
@@ -43,7 +48,9 @@ fn main() {
     UpwindAdvectionElmat::new(velocity_field, space.mesh()),
   );
   println!("assembling galmat done.");
+  println!("assembling galvec...");
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|_| 0.0));
+  println!("assembling galvec done.");
 
   println!("fixing dofs...");
   let nodes_per_dim = (mesh.nnodes() as f64).powf((d as f64).recip()) as usize;
@@ -70,10 +77,15 @@ fn main() {
 
   let galmat = galmat.to_nalgebra();
 
+  println!("computing LU...");
   let galmat_lu = FaerLu::new(galmat);
+  println!("computing LU done.");
+  println!("solving LU...");
   let galsol = galmat_lu.solve(&galvec);
+  println!("solving LU done.");
 
-  let mut file = std::fs::File::create("out/advectionsol.txt").unwrap();
+  println!("writing solution...");
+  let mut file = std::fs::File::create("out/advection_stationary_sol.txt").unwrap();
   std::io::Write::write_all(
     &mut file,
     format!("{} {}\n", d, nsubdivisions + 1).as_bytes(),
@@ -81,4 +93,5 @@ fn main() {
   .unwrap();
   let contents: String = galsol.row_iter().map(|v| format!("{}\n", v[0])).collect();
   std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
+  println!("writing solution done.");
 }
