@@ -120,6 +120,13 @@ pub fn hypercube_mesh(d: Dim, nsubdivisions: usize, side_length: f64) -> Mesh {
   from_facets(nodes, simplicies, false)
 }
 
+pub fn is_hypercube_node_on_boundary(mesh: &Mesh, node: NodeId) -> bool {
+  let d = mesh.dim_intrinsic();
+  let nodes_per_dim = mesh.nnodes() / d;
+  let coords = linear_idx2cartesian_idx(node, d, nodes_per_dim);
+  coords.iter().any(|&c| c == 0 || c == nodes_per_dim - 1)
+}
+
 #[cfg(test)]
 mod test {
   use super::hypercube_mesh;
