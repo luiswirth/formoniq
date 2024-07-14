@@ -8,7 +8,7 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{LoadElvec, UpwindAdvectionElmat},
   matrix::FaerLu,
-  mesh::factory::hypercube_mesh,
+  mesh::hypercube::{hypercube_mesh, Hypercube},
   space::FeSpace,
 };
 
@@ -36,7 +36,8 @@ fn main() {
   let velocity_field = |x: na::DVectorView<f64>| na::DVector::from_column_slice(&[-x[1], x[0]]);
 
   println!("meshing...");
-  let mesh = hypercube_mesh(d, nsubdivisions, 1.0);
+  let cube = Hypercube::new_unit(d);
+  let mesh = hypercube_mesh(&cube, nsubdivisions);
   println!("meshing done.");
   let mesh = Rc::new(mesh);
 
