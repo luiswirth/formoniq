@@ -7,6 +7,7 @@
 
 pub mod factory;
 pub mod gmsh;
+pub mod hypercube;
 
 use crate::{geometry::CoordSimplex, Dim};
 

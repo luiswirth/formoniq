@@ -9,9 +9,8 @@ duration = 5
 file_path = 'out/advection_transient_sol.txt'
 with open(file_path, 'r') as file:
     header = file.readline().strip()
-    ndims, xfinal, nodes_per_dim, tfinal, nsteps = header.split()
+    ndims, nodes_per_dim, tfinal, nsteps = header.split()
     ndims = int(ndims)
-    xfinal = float(xfinal)
     nodes_per_dim = int(nodes_per_dim)
     tfinal = float(tfinal)
     nsteps = int(nsteps)
@@ -30,9 +29,9 @@ step_frame_interval = int(np.ceil(nsteps / nframes))
 coeffs = coeffs[::step_frame_interval, :, :]
 nframes = coeffs.shape[0]
 
-x_grid = np.linspace(0, 1.0, nodes_per_dim)
-y_grid = np.linspace(0, 1.0, nodes_per_dim)
-h = 1.0 / nodes_per_dim
+x_grid = np.linspace(-1.0, 1.0, nodes_per_dim)
+y_grid = np.linspace(-1.0, 1.0, nodes_per_dim)
+h = 2.0 / nodes_per_dim
 X, Y = np.meshgrid(x_grid, y_grid)
 
 fig = plt.figure(figsize=(10, 5), dpi=150)
@@ -43,12 +42,13 @@ ax3d = fig.add_subplot(121, projection='3d')
 # Set up 2D heatmap subplot
 ax2d = fig.add_subplot(122)
 
-z_min, z_max = np.min(coeffs), np.max(coeffs)
-z_range = z_max - z_min
 
 def update(iframe):
     t = iframe / (nframes - 1) * tfinal
     Z = coeffs[iframe, :, :]
+
+    z_min, z_max = np.min(Z), np.max(Z)
+    z_range = z_max - z_min
 
     ax3d.clear()
     ax2d.clear()
@@ -70,11 +70,11 @@ def update(iframe):
     return c,
 
 ani = animation.FuncAnimation(fig, update, frames=nframes, interval=1000/fps)
-#plt.show()
-ani.save(
-    'out/advection.gif',
-    fps=fps,
-    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
-    writer='pillow',
-)
-plt.close(fig)
+plt.show()
+#ani.save(
+#    'out/advection.gif',
+#    fps=fps,
+#    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
+#    writer='pillow',
+#)
+#plt.close(fig)

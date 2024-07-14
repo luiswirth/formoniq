@@ -5,7 +5,7 @@ use formoniq::{
   assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::factory::{hypercube_mesh, linear_idx2cartesian_coords},
+  mesh::hypercube::{hypercube_mesh, linear_idx2cartesian_coords, Hypercube},
   space::FeSpace,
 };
 
@@ -35,7 +35,8 @@ fn main() {
     timestep = final_time as f64 / nsteps as f64;
   }
 
-  let mesh = hypercube_mesh(ndims, nsubdivisions, domain_length);
+  let cube = Hypercube::new_uniscaled_unit(ndims, domain_length);
+  let mesh = hypercube_mesh(&cube, nsubdivisions);
   let mesh = Rc::new(mesh);
   let nnodes = mesh.nnodes();
   let nodes_per_dim = (nnodes as f64).powf((ndims as f64).recip()) as usize;
@@ -76,7 +77,7 @@ fn main() {
   let mut mu = na::DVector::from_iterator(
     nnodes,
     (0..nnodes).map(|inode| {
-      let x = linear_idx2cartesian_coords(inode, ndims, nodes_per_dim, domain_length);
+      let x = linear_idx2cartesian_coords(inode, &cube, nodes_per_dim);
       (0..ndims).map(|idim| x[idim].sin()).product()
     }),
   );

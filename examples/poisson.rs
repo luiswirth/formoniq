@@ -8,7 +8,7 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{l2_norm, laplacian_neg_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::factory::hypercube_mesh,
+  mesh::hypercube::{hypercube_mesh, Hypercube},
   space::FeSpace,
 };
 
@@ -61,7 +61,8 @@ fn main() {
     let nsubdivisions = expk;
 
     // Create mesh of unit hypercube $[0, 1]^d$.
-    let mesh = hypercube_mesh(d, nsubdivisions, 1.0);
+    let cube = Hypercube::new_unit(d);
+    let mesh = hypercube_mesh(&cube, nsubdivisions);
     let mesh = Rc::new(mesh);
     let mesh_width = mesh.mesh_width();
     let shape_regularity = mesh.shape_regularity_measure();
