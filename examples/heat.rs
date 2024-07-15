@@ -23,7 +23,6 @@ fn main() {
 
   let cube = HyperRectangle::new_unit(d);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
-  let mesh = Rc::new(mesh);
   let nnodes = mesh.nnodes();
 
   let space = Rc::new(FeSpace::new(mesh.clone()));

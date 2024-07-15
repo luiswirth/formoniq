@@ -37,7 +37,6 @@ fn main() {
 
   let cube = HyperRectangle::new_uniscaled_unit(ndims, domain_length);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
-  let mesh = Rc::new(mesh);
   let nnodes = mesh.nnodes();
   let nodes_per_dim = (nnodes as f64).powf((ndims as f64).recip()) as usize;
 

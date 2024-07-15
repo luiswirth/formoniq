@@ -26,3 +26,22 @@ pub fn navec2faervec(na: &na::DVector<f64>) -> faer::Mat<f64> {
   }
   faer
 }
+
+pub fn sort_swap_count<T: Ord>(a: &mut [T]) -> usize {
+  let mut nswaps = 0;
+
+  let mut n = a.len();
+  let mut swapped = true;
+  while swapped {
+    swapped = false;
+    for i in 1..n {
+      if a[i - 1] > a[i] {
+        a.swap(i - 1, i);
+        swapped = true;
+        nswaps += 1;
+      }
+    }
+    n -= 1;
+  }
+  nswaps
+}

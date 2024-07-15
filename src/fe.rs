@@ -153,19 +153,15 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialMesh) -> f64 {
 
 #[cfg(test)]
 mod test {
-  use std::rc::Rc;
-
   use super::laplacian_neg_elmat;
   use crate::{geometry::CoordSimplex, space::FeSpace};
 
   fn check_galmat_refd(d: usize, expected_elmat: na::DMatrixView<f64>) {
-    let space = FeSpace::new(Rc::new(CoordSimplex::new_ref(d).into_singleton_mesh()));
+    let space = FeSpace::new(CoordSimplex::new_ref(d).into_singleton_mesh());
     let computed_elmat = laplacian_neg_elmat(&space, 0);
     assert_eq!(computed_elmat, expected_elmat);
 
-    let space = FeSpace::new(Rc::new(
-      CoordSimplex::new_ref_embedded(d, d + 1).into_singleton_mesh(),
-    ));
+    let space = FeSpace::new(CoordSimplex::new_ref_embedded(d, d + 1).into_singleton_mesh());
     let computed_elmat = laplacian_neg_elmat(&space, 0);
     assert!((computed_elmat - expected_elmat).norm_squared() < f64::EPSILON);
   }

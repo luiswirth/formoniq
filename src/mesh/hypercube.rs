@@ -1,4 +1,6 @@
-use super::{MeshSimplex, NodeId, SimplicialMesh};
+use std::rc::Rc;
+
+use super::{NodeId, SimplicialMesh};
 use crate::{util::factorial, Dim};
 
 use itertools::Itertools;
@@ -89,7 +91,7 @@ pub fn hypercube_mesh_nodes(
 }
 
 /// Create a structured mesh of the unit hypercube $[0, 1]^d$.
-pub fn hypercube_mesh(hypercube: &HyperRectangle, nsubdivisions: usize) -> SimplicialMesh {
+pub fn hypercube_mesh(hypercube: &HyperRectangle, nsubdivisions: usize) -> Rc<SimplicialMesh> {
   let d = hypercube.ndims();
   let nodes_per_dim = nsubdivisions + 1;
   let ncubes = nsubdivisions.pow(d as u32);
@@ -107,12 +109,12 @@ pub fn hypercube_mesh(hypercube: &HyperRectangle, nsubdivisions: usize) -> Simpl
         vertex[p] += 1;
         vertices.push(cartesian_idx2linear_idx(vertex.clone(), nodes_per_dim));
       }
-      MeshSimplex::new(vertices)
+      vertices
     }));
   }
 
   let nodes = hypercube_mesh_nodes(d, nsubdivisions, hypercube);
-  SimplicialMesh::new(nodes, simplicies)
+  SimplicialMesh::from_cells(nodes, simplicies)
 }
 
 pub fn is_hypercube_node_on_boundary(mesh: &SimplicialMesh, node: NodeId) -> bool {
