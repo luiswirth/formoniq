@@ -7,25 +7,11 @@ use crate::{
 
 /// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
-  let mesh = space.mesh();
-  let cell_dim = mesh.dim_intrinsic();
-
-  // Lagrangian (0-form) has dofs associated with the nodes.
   let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
-  for (icell, _) in mesh.dsimplicies(cell_dim).iter().enumerate() {
-    let elmat = elmat.eval(mesh, (cell_dim, icell));
-    for (ilocal, iglobal) in space
-      .dof_indices_global((cell_dim, icell))
-      .iter()
-      .copied()
-      .enumerate()
-    {
-      for (jlocal, jglobal) in space
-        .dof_indices_global((cell_dim, icell))
-        .iter()
-        .copied()
-        .enumerate()
-      {
+  for icell in 0..space.mesh().ncells() {
+    let elmat = elmat.eval(space, icell);
+    for (ilocal, iglobal) in space.dof_indices_global(icell).into_iter().enumerate() {
+      for (jlocal, jglobal) in space.dof_indices_global(icell).into_iter().enumerate() {
         galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
       }
     }
@@ -35,18 +21,10 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
 
 /// Assembly algorithm for the Galerkin Vector in Lagrangian (0-form) FE.
 pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVector<f64> {
-  let mesh = space.mesh();
-  let cell_dim = mesh.dim_intrinsic();
-
   let mut galvec = na::DVector::zeros(space.ndofs());
-  for (icell, _) in mesh.dsimplicies(cell_dim).iter().enumerate() {
-    let elvec = elvec.eval(mesh, (cell_dim, icell));
-    for (ilocal, iglobal) in space
-      .dof_indices_global((cell_dim, icell))
-      .iter()
-      .copied()
-      .enumerate()
-    {
+  for icell in 0..space.mesh().ncells() {
+    let elvec = elvec.eval(space, icell);
+    for (ilocal, iglobal) in space.dof_indices_global(icell).into_iter().enumerate() {
       galvec[iglobal] += elvec[ilocal];
     }
   }

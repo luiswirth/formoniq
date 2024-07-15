@@ -1,41 +1,44 @@
-use crate::mesh::{EntityId, Mesh};
+use crate::{
+  mesh::{CellId, SimplicialMesh},
+  space::FeSpace,
+};
 
 pub trait ElmatProvider {
-  fn eval(&self, mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64>;
+  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64>;
 }
 
 impl<F> ElmatProvider for F
 where
-  F: Fn(&Mesh, EntityId) -> na::DMatrix<f64>,
+  F: Fn(&FeSpace, CellId) -> na::DMatrix<f64>,
 {
-  fn eval(&self, mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64> {
-    self(mesh, icell)
+  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
+    self(space, icell)
   }
 }
 
 pub trait ElvecProvider {
-  fn eval(&self, mesh: &Mesh, icell: EntityId) -> na::DVector<f64>;
+  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DVector<f64>;
 }
 impl<F> ElvecProvider for F
 where
-  F: Fn(&Mesh, EntityId) -> na::DVector<f64>,
+  F: Fn(&FeSpace, CellId) -> na::DVector<f64>,
 {
-  fn eval(&self, mesh: &Mesh, icell: EntityId) -> nalgebra::DVector<f64> {
-    self(mesh, icell)
+  fn eval(&self, space: &FeSpace, icell: CellId) -> nalgebra::DVector<f64> {
+    self(space, icell)
   }
 }
 
 /// The exact Element Matrix for the negative laplacian in linear lagrangian FE.
-pub fn laplacian_neg_elmat(mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64> {
-  let cell_geo = mesh.coordinate_simplex(icell);
+pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
+  let cell_geo = space.mesh().coordinate_cell(icell);
   let m = cell_geo.barycentric_functions_grad();
   cell_geo.vol() * m.transpose() * m
 }
 
 /// Approximated Element Matrix for mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
-pub fn lumped_mass_elmat(mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64> {
-  let cell_geo = mesh.coordinate_simplex(icell);
+pub fn lumped_mass_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
+  let cell_geo = space.mesh().coordinate_cell(icell);
   let n = cell_geo.nvertices();
   let v = cell_geo.vol() / n as f64;
   na::DMatrix::from_diagonal_element(n, n, v)
@@ -54,12 +57,11 @@ impl<V> UpwindAdvectionElmat<V>
 where
   V: Fn(na::DVectorView<f64>) -> na::DVector<f64>,
 {
-  pub fn new(advection_vel: V, mesh: &Mesh) -> Self {
+  pub fn new(advection_vel: V, mesh: &SimplicialMesh) -> Self {
     let mut vertex_masses = vec![0.0; mesh.nnodes()];
 
-    let intrinsic_dim = mesh.dim_intrinsic();
     for (icell, cell) in mesh.cells().iter().enumerate() {
-      let cell_geo = mesh.coordinate_simplex((intrinsic_dim, icell));
+      let cell_geo = mesh.coordinate_cell(icell);
       let vol = cell_geo.vol();
       for &ivertex in cell.vertices() {
         vertex_masses[ivertex] += vol / cell.nvertices() as f64;
@@ -76,9 +78,9 @@ impl<V> ElmatProvider for UpwindAdvectionElmat<V>
 where
   V: Fn(na::DVectorView<f64>) -> na::DVector<f64>,
 {
-  fn eval(&self, mesh: &Mesh, icell: EntityId) -> na::DMatrix<f64> {
-    let cell = mesh.simplex_by_id(icell);
-    let cell_geo = mesh.coordinate_simplex(icell);
+  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
+    let cell = space.mesh().cell(icell);
+    let cell_geo = space.mesh().coordinate_cell(icell);
     let bary_grads = cell_geo.barycentric_functions_grad();
     let normals = -bary_grads.clone();
     let nvertices = cell_geo.nvertices();
@@ -117,8 +119,8 @@ impl<F> ElvecProvider for LoadElvec<F>
 where
   F: Fn(na::DVectorView<f64>) -> f64,
 {
-  fn eval(&self, mesh: &Mesh, icell: EntityId) -> na::DVector<f64> {
-    let cell_geo = mesh.coordinate_simplex(icell);
+  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DVector<f64> {
+    let cell_geo = space.mesh().coordinate_cell(icell);
     let nverts = cell_geo.nvertices();
     let verts = cell_geo.vertices();
     cell_geo.vol() / nverts as f64
@@ -135,16 +137,15 @@ where
 }
 
 // NOTE: In general this should depend on the FE Space and not just the mesh.
-pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &Mesh) -> f64 {
+pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialMesh) -> f64 {
   let mut norm = 0.0;
-  let d = mesh.dim_intrinsic();
-  for (icell, cell) in mesh.dsimplicies(d).iter().enumerate() {
+  for (icell, cell) in mesh.cells().iter().enumerate() {
     let mut sum = 0.0;
     for &ivertex in cell.vertices() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
-    let vol = mesh.coordinate_simplex((d, icell)).vol();
+    let vol = mesh.coordinate_cell(icell).vol();
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
@@ -152,16 +153,20 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &Mesh) -> f64 {
 
 #[cfg(test)]
 mod test {
+  use std::rc::Rc;
+
   use super::laplacian_neg_elmat;
-  use crate::geometry::CoordSimplex;
+  use crate::{geometry::CoordSimplex, space::FeSpace};
 
   fn check_galmat_refd(d: usize, expected_elmat: na::DMatrixView<f64>) {
-    let mesh = CoordSimplex::new_ref(d).into_singleton_mesh();
-    let computed_elmat = laplacian_neg_elmat(&mesh, (d, 0));
+    let space = FeSpace::new(Rc::new(CoordSimplex::new_ref(d).into_singleton_mesh()));
+    let computed_elmat = laplacian_neg_elmat(&space, 0);
     assert_eq!(computed_elmat, expected_elmat);
 
-    let mesh = CoordSimplex::new_ref_embedded(d, d + 1).into_singleton_mesh();
-    let computed_elmat = laplacian_neg_elmat(&mesh, (d, 0));
+    let space = FeSpace::new(Rc::new(
+      CoordSimplex::new_ref_embedded(d, d + 1).into_singleton_mesh(),
+    ));
+    let computed_elmat = laplacian_neg_elmat(&space, 0);
     assert!((computed_elmat - expected_elmat).norm_squared() < f64::EPSILON);
   }
 

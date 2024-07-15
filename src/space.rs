@@ -1,30 +1,28 @@
-use crate::mesh::{EntityId, Mesh};
+use crate::mesh::{CellId, SimplicialMesh};
 
 use std::rc::Rc;
 
 pub type DofId = usize;
 
 pub struct FeSpace {
-  mesh: Rc<Mesh>,
+  mesh: Rc<SimplicialMesh>,
 }
 
 impl FeSpace {
-  pub fn new(mesh: Rc<Mesh>) -> Self {
+  pub fn new(mesh: Rc<SimplicialMesh>) -> Self {
     Self { mesh }
   }
 
-  pub fn mesh(&self) -> &Rc<Mesh> {
+  pub fn mesh(&self) -> &Rc<SimplicialMesh> {
     &self.mesh
   }
 
-  /// The number of degrees of freedoms _associated_ with simplicies of the given dimension.
   pub fn ndofs(&self) -> usize {
-    self.mesh.dsimplicies(0).len()
+    self.mesh.nnodes()
   }
 
-  /// Lagrangian dofs
-  pub fn dof_indices_global(&self, simplex: EntityId) -> Vec<DofId> {
-    let vertices = self.mesh.simplex_by_id(simplex).vertices();
+  pub fn dof_indices_global(&self, icell: CellId) -> Vec<DofId> {
+    let vertices = self.mesh.cell(icell).vertices();
     vertices.to_vec()
   }
 

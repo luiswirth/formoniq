@@ -12,7 +12,7 @@ pub mod hypercube;
 use crate::{geometry::CoordSimplex, Dim};
 
 pub type NodeId = usize;
-pub type EntityId = (Dim, usize);
+pub type CellId = usize;
 
 /// This is what is called an Entity in LehrFEMpp
 #[derive(Debug, Clone)]
@@ -42,6 +42,7 @@ impl MeshSimplex {
     &self.vertices
   }
 }
+
 // NOTE: this doesn't care about orientation
 impl PartialEq for MeshSimplex {
   fn eq(&self, other: &Self) -> bool {
@@ -52,14 +53,17 @@ impl Eq for MeshSimplex {}
 
 /// A Simplicial Mesh or Triangulation.
 #[derive(Debug)]
-pub struct Mesh {
+pub struct SimplicialMesh {
   node_coords: na::DMatrix<f64>,
-  simplicies: Vec<Vec<MeshSimplex>>,
-  face_relation: Vec<Vec<Vec<usize>>>,
+  cells: Vec<MeshSimplex>,
 }
-impl Mesh {
+impl SimplicialMesh {
+  pub fn new(node_coords: na::DMatrix<f64>, cells: Vec<MeshSimplex>) -> Self {
+    Self { node_coords, cells }
+  }
+
   pub fn dim_intrinsic(&self) -> Dim {
-    self.simplicies.len() - 1
+    self.cells.len() - 1
   }
   pub fn dim_ambient(&self) -> Dim {
     self.node_coords.nrows()
@@ -71,56 +75,39 @@ impl Mesh {
   pub fn node_coords(&self) -> &na::DMatrix<f64> {
     &self.node_coords
   }
-  pub fn simplex_by_id(&self, id: EntityId) -> &MeshSimplex {
-    &self.simplicies[id.0][id.1]
+
+  pub fn ncells(&self) -> usize {
+    self.cells.len()
   }
-  pub fn simplicies(&self) -> &[Vec<MeshSimplex>] {
-    &self.simplicies
-  }
-  pub fn dsimplicies(&self, d: Dim) -> &[MeshSimplex] {
-    &self.simplicies[d]
-  }
-  /// cells or facets of the mesh
+  /// cells of the mesh
   pub fn cells(&self) -> &[MeshSimplex] {
-    self.dsimplicies(self.dim_intrinsic())
+    &self.cells
   }
-  pub fn coordinate_simplex(&self, id: EntityId) -> CoordSimplex {
-    let entity = self.simplex_by_id(id);
-    let mut vertices = na::DMatrix::zeros(self.dim_ambient(), entity.nvertices());
-    for (i, &v) in entity.vertices().iter().enumerate() {
+  pub fn cell(&self, id: CellId) -> &MeshSimplex {
+    &self.cells[id]
+  }
+
+  pub fn coordinate_cell(&self, id: CellId) -> CoordSimplex {
+    let cell = &self.cells[id];
+    let mut vertices = na::DMatrix::zeros(self.dim_ambient(), cell.nvertices());
+    for (i, &v) in cell.vertices().iter().enumerate() {
       vertices
         .column_mut(i)
         .copy_from(&self.node_coords.column(v));
     }
     CoordSimplex::new(vertices)
   }
-  /// returns the faces of the given entity
-  pub fn simplex_faces(&self, id: EntityId) -> &[usize] {
-    if id.0 == 0 {
-      &[]
-    } else {
-      &self.face_relation[id.0 - 1][id.1]
-    }
-  }
 
   pub fn mesh_width(&self) -> f64 {
     (0..self.cells().len())
-      .map(|isimp| {
-        self
-          .coordinate_simplex((self.dim_intrinsic(), isimp))
-          .diameter()
-      })
+      .map(|icell| self.coordinate_cell(icell).diameter())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
 
   pub fn shape_regularity_measure(&self) -> f64 {
     (0..self.cells().len())
-      .map(|isimp| {
-        self
-          .coordinate_simplex((self.dim_intrinsic(), isimp))
-          .shape_reguarity_measure()
-      })
+      .map(|icell| self.coordinate_cell(icell).shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
