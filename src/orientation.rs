@@ -4,6 +4,7 @@ pub enum Orientation {
   Pos = 1,
   Neg = -1,
 }
+
 impl Orientation {
   /// Simplex orientation might change when permuting the vertices.
   /// This depends on the parity of the number of swaps.

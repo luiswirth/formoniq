@@ -63,7 +63,6 @@ fn main() {
     // Create mesh of unit hypercube $[0, 1]^d$.
     let cube = HyperRectangle::new_unit(d);
     let mesh = hypercube_mesh(&cube, nsubdivisions);
-    let mesh = Rc::new(mesh);
     let mesh_width = mesh.mesh_width();
     let shape_regularity = mesh.shape_regularity_measure();
 

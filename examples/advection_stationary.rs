@@ -39,7 +39,6 @@ fn main() {
   let cube = HyperRectangle::new_unit(d);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
   println!("meshing done.");
-  let mesh = Rc::new(mesh);
 
   let space = Rc::new(FeSpace::new(mesh.clone()));
 

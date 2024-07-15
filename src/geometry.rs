@@ -1,5 +1,7 @@
+use std::rc::Rc;
+
 use crate::{
-  mesh::{MeshSimplex, SimplicialMesh},
+  mesh::SimplicialMesh,
   util::{factorial, gram_det_sqrt},
   Dim,
 };
@@ -133,12 +135,9 @@ impl CoordSimplex {
     -self.barycentric_functions_grad().normalize()
   }
 
-  pub fn into_singleton_mesh(self) -> SimplicialMesh {
+  pub fn into_singleton_mesh(self) -> Rc<SimplicialMesh> {
     let nvertices = self.nvertices();
-    SimplicialMesh::new(
-      self.vertices,
-      vec![MeshSimplex::new((0..nvertices).collect())],
-    )
+    SimplicialMesh::from_cells(self.vertices, vec![(0..nvertices).collect()])
   }
 }
 
