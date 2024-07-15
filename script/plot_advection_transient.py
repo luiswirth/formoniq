@@ -29,8 +29,8 @@ step_frame_interval = int(np.ceil(nsteps / nframes))
 coeffs = coeffs[::step_frame_interval, :, :]
 nframes = coeffs.shape[0]
 
-x_grid = np.linspace(-1.0, 1.0, nodes_per_dim)
-y_grid = np.linspace(-1.0, 1.0, nodes_per_dim)
+x_grid = np.linspace(0.0, 1.0, nodes_per_dim)
+y_grid = np.linspace(0.0, 1.0, nodes_per_dim)
 h = 2.0 / nodes_per_dim
 X, Y = np.meshgrid(x_grid, y_grid)
 
@@ -70,11 +70,11 @@ def update(iframe):
     return c,
 
 ani = animation.FuncAnimation(fig, update, frames=nframes, interval=1000/fps)
-plt.show()
-#ani.save(
-#    'out/advection.gif',
-#    fps=fps,
-#    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
-#    writer='pillow',
-#)
-#plt.close(fig)
+#plt.show()
+ani.save(
+    'out/advection.gif',
+    fps=fps,
+    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
+    writer='pillow',
+)
+plt.close(fig)

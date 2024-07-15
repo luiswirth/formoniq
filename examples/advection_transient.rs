@@ -14,27 +14,29 @@ use formoniq::{
   space::FeSpace,
 };
 
-use std::rc::Rc;
+use std::{f64::consts::PI, rc::Rc};
 
 fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 2;
-  let nsubdivisions = 500;
+  let nsubdivisions = 700;
   let nodes_per_dim = nsubdivisions + 1;
 
-  let final_time = 30.0;
+  let final_time = 5.0;
   let nsteps = 1000;
   let timestep = final_time / nsteps as f64;
 
   let dirichlet_data = |_: na::DVectorView<f64>| 0.0;
 
-  let velocity_field = |x: na::DVectorView<f64>| na::DVector::from_column_slice(&[-x[1], x[0]]);
+  let velocity_field = |x: na::DVectorView<f64>| {
+    na::DVector::from_column_slice(&[
+      -(PI * x[0]).sin() * (PI * x[1]).cos(),
+      (PI * x[1]).sin() * (PI * x[0]).cos(),
+    ])
+  };
 
-  let cube = Hypercube::new_min_max(
-    na::DVector::from_element(d, -1.0),
-    na::DVector::from_element(d, 1.0),
-  );
+  let cube = Hypercube::new_unit(d);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
   let mesh = Rc::new(mesh);
 
@@ -70,10 +72,8 @@ fn main() {
   let mut mu = na::DVector::zeros(ndofs);
   for idof in 0..ndofs {
     let x = linear_idx2cartesian_coords(idof, &cube, nodes_per_dim);
-    let alpha = 10.0;
-    let offset = na::DVector::from_column_slice(&[0.5, 0.0]);
-    let norm = (x - offset).norm_squared();
-    mu[idof] = (-alpha * norm).exp()
+    let v = (x - na::Vector2::new(0.5, 0.25)).norm();
+    mu[idof] = (1.0 - 4.0 * v).max(0.0);
   }
 
   let mut file = std::fs::File::create("out/advection_transient_sol.txt").unwrap();
