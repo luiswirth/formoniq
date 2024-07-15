@@ -5,7 +5,7 @@ use formoniq::{
   assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::hypercube::{hypercube_mesh, linear_idx2cartesian_coords, Hypercube},
+  mesh::hypercube::{hypercube_mesh, linear_idx2cartesian_coords, HyperRectangle},
   space::FeSpace,
 };
 
@@ -35,7 +35,7 @@ fn main() {
     timestep = final_time as f64 / nsteps as f64;
   }
 
-  let cube = Hypercube::new_uniscaled_unit(ndims, domain_length);
+  let cube = HyperRectangle::new_uniscaled_unit(ndims, domain_length);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
   let mesh = Rc::new(mesh);
   let nnodes = mesh.nnodes();

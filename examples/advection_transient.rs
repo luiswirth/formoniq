@@ -9,7 +9,7 @@ use formoniq::{
   fe::{self, LoadElvec, UpwindAdvectionElmat},
   matrix::FaerLu,
   mesh::hypercube::{
-    hypercube_mesh, linear_idx2cartesian_coords, linear_idx2cartesian_idx, Hypercube,
+    hypercube_mesh, linear_idx2cartesian_coords, linear_idx2cartesian_idx, HyperRectangle,
   },
   space::FeSpace,
 };
@@ -20,11 +20,11 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 2;
-  let nsubdivisions = 700;
+  let nsubdivisions = 1000;
   let nodes_per_dim = nsubdivisions + 1;
 
   let final_time = 5.0;
-  let nsteps = 1000;
+  let nsteps = 100;
   let timestep = final_time / nsteps as f64;
 
   let dirichlet_data = |_: na::DVectorView<f64>| 0.0;
@@ -36,7 +36,7 @@ fn main() {
     ])
   };
 
-  let cube = Hypercube::new_unit(d);
+  let cube = HyperRectangle::new_unit(d);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
   let mesh = Rc::new(mesh);
 
@@ -52,8 +52,10 @@ fn main() {
     is_imposable.then_some(dirichlet_data(card_coords.as_view()))
   };
 
+  println!("assembling galvec...");
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|_| 0.0));
 
+  println!("assembling galmat...");
   let mut galmat_mass = assemble_galmat(&space, fe::lumped_mass_elmat);
   assemble::fix_dof_coeffs(dirichlet_map, &mut galmat_mass, &mut galvec);
   let galmat_mass = galmat_mass.to_nalgebra();
@@ -62,11 +64,13 @@ fn main() {
     &space,
     UpwindAdvectionElmat::new(velocity_field, space.mesh()),
   );
+  println!("fixing dofs...");
   assemble::fix_dof_coeffs(dirichlet_map, &mut galmat_advection, &mut galvec);
   let galmat_advection = galmat_advection.to_nalgebra();
 
   let galmat = &galmat_mass + timestep * &galmat_advection;
 
+  println!("computing lu...");
   let galmat_lu = FaerLu::new(galmat);
 
   let mut mu = na::DVector::zeros(ndofs);
@@ -94,4 +98,5 @@ fn main() {
     let contents: String = mu.row_iter().map(|v| format!("{}\n", v[0])).collect();
     std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
   }
+  println!("done!");
 }

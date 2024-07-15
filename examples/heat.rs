@@ -4,7 +4,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
-  mesh::hypercube::{hypercube_mesh, Hypercube},
+  mesh::hypercube::{hypercube_mesh, HyperRectangle},
   space::FeSpace,
 };
 
@@ -21,7 +21,7 @@ fn main() {
   let nsteps = 200;
   let tau = tfinal / nsteps as f64;
 
-  let cube = Hypercube::new_unit(d);
+  let cube = HyperRectangle::new_unit(d);
   let mesh = hypercube_mesh(&cube, nsubdivisions);
   let mesh = Rc::new(mesh);
   let nnodes = mesh.nnodes();

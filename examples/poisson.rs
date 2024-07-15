@@ -8,7 +8,7 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{l2_norm, laplacian_neg_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::hypercube::{hypercube_mesh, Hypercube},
+  mesh::hypercube::{hypercube_mesh, HyperRectangle},
   space::FeSpace,
 };
 
@@ -18,10 +18,10 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 3;
+  let d: usize = 2;
 
   let kstart = 0;
-  let kend = 15;
+  let kend = 10;
   let klen = kend - kstart + 1;
 
   // Define analytic solution.
@@ -61,7 +61,7 @@ fn main() {
     let nsubdivisions = expk;
 
     // Create mesh of unit hypercube $[0, 1]^d$.
-    let cube = Hypercube::new_unit(d);
+    let cube = HyperRectangle::new_unit(d);
     let mesh = hypercube_mesh(&cube, nsubdivisions);
     let mesh = Rc::new(mesh);
     let mesh_width = mesh.mesh_width();

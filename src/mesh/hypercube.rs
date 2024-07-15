@@ -1,14 +1,14 @@
-use super::{factory::from_facets, Mesh, NodeId};
+use super::{MeshSimplex, NodeId, SimplicialMesh};
 use crate::{util::factorial, Dim};
 
 use itertools::Itertools;
 
-pub struct Hypercube {
+pub struct HyperRectangle {
   ndims: Dim,
   min: na::DVector<f64>,
   max: na::DVector<f64>,
 }
-impl Hypercube {
+impl HyperRectangle {
   pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>) -> Self {
     assert!(min.len() == max.len());
     let d = min.len();
@@ -60,7 +60,7 @@ pub fn cartesian_idx2linear_idx(coord: na::DVector<usize>, dlen: usize) -> usize
 
 pub fn linear_idx2cartesian_coords(
   idx: usize,
-  hypercube: &Hypercube,
+  hypercube: &HyperRectangle,
   dlen: usize,
 ) -> na::DVector<f64> {
   (linear_idx2cartesian_idx(idx, hypercube.ndims(), dlen).cast::<f64>() / (dlen - 1) as f64)
@@ -71,7 +71,7 @@ pub fn linear_idx2cartesian_coords(
 pub fn hypercube_mesh_nodes(
   d: usize,
   nsubdivisions: usize,
-  hypercube: &Hypercube,
+  hypercube: &HyperRectangle,
 ) -> na::DMatrix<f64> {
   let nodes_per_dim = nsubdivisions + 1;
   let nnodes = nodes_per_dim.pow(d as u32);
@@ -89,7 +89,7 @@ pub fn hypercube_mesh_nodes(
 }
 
 /// Create a structured mesh of the unit hypercube $[0, 1]^d$.
-pub fn hypercube_mesh(hypercube: &Hypercube, nsubdivisions: usize) -> Mesh {
+pub fn hypercube_mesh(hypercube: &HyperRectangle, nsubdivisions: usize) -> SimplicialMesh {
   let d = hypercube.ndims();
   let nodes_per_dim = nsubdivisions + 1;
   let ncubes = nsubdivisions.pow(d as u32);
@@ -107,15 +107,15 @@ pub fn hypercube_mesh(hypercube: &Hypercube, nsubdivisions: usize) -> Mesh {
         vertex[p] += 1;
         vertices.push(cartesian_idx2linear_idx(vertex.clone(), nodes_per_dim));
       }
-      vertices
+      MeshSimplex::new(vertices)
     }));
   }
 
   let nodes = hypercube_mesh_nodes(d, nsubdivisions, hypercube);
-  from_facets(nodes, simplicies, false)
+  SimplicialMesh::new(nodes, simplicies)
 }
 
-pub fn is_hypercube_node_on_boundary(mesh: &Mesh, node: NodeId) -> bool {
+pub fn is_hypercube_node_on_boundary(mesh: &SimplicialMesh, node: NodeId) -> bool {
   let d = mesh.dim_intrinsic();
   let nodes_per_dim = mesh.nnodes() / d;
   let coords = linear_idx2cartesian_idx(node, d, nodes_per_dim);
@@ -125,11 +125,11 @@ pub fn is_hypercube_node_on_boundary(mesh: &Mesh, node: NodeId) -> bool {
 #[cfg(test)]
 mod test {
   use super::hypercube_mesh;
-  use super::Hypercube;
+  use super::HyperRectangle;
 
   #[test]
   fn unit_cube_mesh() {
-    let mesh = hypercube_mesh(&Hypercube::new_unit(3), 1);
+    let mesh = hypercube_mesh(&HyperRectangle::new_unit(3), 1);
     #[rustfmt::skip]
     let node_coords = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,

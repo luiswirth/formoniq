@@ -1,9 +1,11 @@
 use tracing::warn;
 
-use super::Mesh;
+use crate::mesh::MeshSimplex;
+
+use super::SimplicialMesh;
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn load_gmsh(bytes: &[u8]) -> Mesh {
+pub fn load_gmsh(bytes: &[u8]) -> SimplicialMesh {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_nodes: Vec<_> = msh
@@ -36,19 +38,20 @@ pub fn load_gmsh(bytes: &[u8]) -> Mesh {
       }
     };
     for e in block.elements {
-      let simplex = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
+      let vertices = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
+      let simplex = MeshSimplex::new(vertices);
       simplex_acc.push(simplex);
     }
   }
 
   if !quads.is_empty() {
-    return super::factory::from_facets(mesh_nodes, quads, true);
+    return SimplicialMesh::new(mesh_nodes, quads);
   }
   if !trias.is_empty() {
-    return super::factory::from_facets(mesh_nodes, trias, true);
+    return SimplicialMesh::new(mesh_nodes, trias);
   }
   if !edges.is_empty() {
-    return super::factory::from_facets(mesh_nodes, edges, true);
+    return SimplicialMesh::new(mesh_nodes, edges);
   }
   panic!("failed to construct Triangulation from gmsh");
 }

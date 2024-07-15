@@ -1,5 +1,5 @@
 use crate::{
-  mesh::{factory::from_facets, Mesh},
+  mesh::{MeshSimplex, SimplicialMesh},
   util::{factorial, gram_det_sqrt},
   Dim,
 };
@@ -133,9 +133,12 @@ impl CoordSimplex {
     -self.barycentric_functions_grad().normalize()
   }
 
-  pub fn into_singleton_mesh(self) -> Mesh {
+  pub fn into_singleton_mesh(self) -> SimplicialMesh {
     let nvertices = self.nvertices();
-    from_facets(self.vertices, vec![(0..nvertices).collect()], true)
+    SimplicialMesh::new(
+      self.vertices,
+      vec![MeshSimplex::new((0..nvertices).collect())],
+    )
   }
 }
 
