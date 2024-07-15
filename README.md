@@ -20,11 +20,11 @@ extends these spaces from 3D to higher dimensions.
 Our primary focus is solving elliptic Hodge-Laplace problems on simplicial
 meshes with first-order Whitney forms.
 
-# Example
+# Visualizations
 
-The following animations shows finite element solutions of various PDEs computed using formoniq.
+The following plots and animations show finite element solutions of various PDEs computed using formoniq.
 
 <img src="https://github.com/luiswirth/formoniq/assets/37505890/450e2cd0-ffeb-48ef-8b0a-64de5d75b557" width="33%">
-<img src="https://github.com/luiswirth/formoniq/assets/37505890/1f7116a2-5a44-43a4-a6a5-e5b645e0f9d2" width="66%">
+<img src="https://github.com/user-attachments/assets/bcc88a07-907d-4eb4-b18c-3235a6f5b787" width="66%">
 
 
