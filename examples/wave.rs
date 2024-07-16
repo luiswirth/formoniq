@@ -9,7 +9,7 @@ use formoniq::{
   space::FeSpace,
 };
 
-use std::{f64::consts::TAU, rc::Rc};
+use std::{f64::consts::TAU, fmt::Write, rc::Rc};
 
 // $u(x, t) = sin(x_1) sin(x_2) ... sin(x_d) cos(sqrt(d) t)$
 
@@ -32,7 +32,7 @@ fn main() {
   let anim_nframes = anim_fps * anim_duration;
   if nsteps < anim_nframes {
     nsteps = anim_nframes;
-    timestep = final_time as f64 / nsteps as f64;
+    timestep = final_time / nsteps as f64;
   }
 
   let cube = HyperRectangle::new_uniscaled_unit(ndims, domain_length);
@@ -88,9 +88,12 @@ fn main() {
 
     let rhs = &galmat_mass * nu + timestep * (&galvec - &galmat_laplacian * &mu);
     nu = galmat_mass_cholesky.solve(&rhs).column(0).into();
-    mu = mu + timestep * &nu;
+    mu += timestep * &nu;
 
-    let contents: String = mu.iter().map(|v| format!("{v}\n")).collect();
+    let contents: String = mu.row_iter().fold(String::new(), |mut s, v| {
+      let _ = writeln!(s, "{}", v[0]);
+      s
+    });
     std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
   }
 }

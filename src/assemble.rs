@@ -31,6 +31,18 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
   galvec
 }
 
+pub trait DofCoeffMap {
+  fn eval(&self, idof: DofId) -> Option<f64>;
+}
+impl<F> DofCoeffMap for F
+where
+  F: Fn(DofId) -> Option<f64>,
+{
+  fn eval(&self, idof: DofId) -> Option<f64> {
+    self(idof)
+  }
+}
+
 /// Modifies supplied galerkin matrix and galerkin vector,
 /// such that the FE solution has the optionally given coefficents on the dofs.
 /// Is primarly used the enforce essential boundary conditions.
@@ -41,12 +53,12 @@ pub fn fix_dof_coeffs<F>(
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) where
-  F: Fn(DofId) -> Option<f64>,
+  F: DofCoeffMap,
 {
   let ndofs = galmat.ncols();
 
   // create vec of all (possibly missing) coefficents
-  let dof_coeffs: Vec<_> = (0..ndofs).map(coefficent_map).collect();
+  let dof_coeffs: Vec<_> = (0..ndofs).map(|idof| coefficent_map.eval(idof)).collect();
 
   // zero out missing coefficents
   let mut dof_coeffs_zeroed = faer::Mat::zeros(ndofs, 1);

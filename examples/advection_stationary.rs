@@ -12,6 +12,7 @@ use formoniq::{
   space::FeSpace,
 };
 
+use std::fmt::Write;
 use std::{f64::consts::PI, rc::Rc};
 
 fn main() {
@@ -91,7 +92,10 @@ fn main() {
     format!("{} {}\n", d, nsubdivisions + 1).as_bytes(),
   )
   .unwrap();
-  let contents: String = galsol.row_iter().map(|v| format!("{}\n", v[0])).collect();
+  let contents: String = galsol.row_iter().fold(String::new(), |mut s, v| {
+    let _ = writeln!(s, "{}", v[0]);
+    s
+  });
   std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
   println!("writing solution done.");
 }

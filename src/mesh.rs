@@ -5,13 +5,13 @@
 //! It stores the mesh geometry (location information), but more of this can be
 //! found in the geometry module.
 
+pub mod boundary;
 pub mod gmsh;
 pub mod hypercube;
 
+use crate::{geometry::GeometrySimplex, orientation::Orientation, util::sort_swap_count, Dim};
+
 use indexmap::{set::MutableValues, IndexSet};
-
-use crate::{geometry::CoordSimplex, orientation::Orientation, util::sort_swap_count, Dim};
-
 use std::{
   hash::Hash,
   rc::{self, Rc},
@@ -19,7 +19,8 @@ use std::{
 
 pub type NodeId = usize;
 pub type CellId = usize;
-pub type SimplexId = usize;
+pub type DSimplexId = usize;
+pub type SimplexId = (Dim, DSimplexId);
 
 /// A mesh entity of a simplicial mesh.
 /// Defines the simplex based on its vertices and contains topological
@@ -36,12 +37,12 @@ pub struct MeshSimplex {
   sort_orientation: Orientation,
   /// The sub entities of this simplex, which are all the direct (only 1
   /// dimension difference) faces of this simplex.
-  subs: Vec<(SimplexId, Orientation)>,
+  subs: Vec<(DSimplexId, Orientation)>,
   /// The super entities of this simplex, which are all the simplicies that
   /// directly (only 1 dimension difference) contain this simplex as a face.
-  supers: Vec<(SimplexId, Orientation)>,
-  /// ID identifiying this simplex in the mesh
-  id: SimplexId,
+  supers: Vec<(DSimplexId, Orientation)>,
+  /// ID identifiying this simplex in the d-th dimension of the mesh
+  id: DSimplexId,
   /// The mesh this simplex lives in.
   mesh: rc::Weak<SimplicialMesh>,
 }
@@ -56,6 +57,23 @@ impl MeshSimplex {
   }
   pub fn vertices(&self) -> &[NodeId] {
     &self.vertices
+  }
+  pub fn dsimplex_id(&self) -> DSimplexId {
+    self.id
+  }
+  pub fn simplex_id(&self) -> SimplexId {
+    (self.dim_intrinsic(), self.id)
+  }
+
+  pub fn geometry_simplex(&self) -> GeometrySimplex {
+    let mesh = &self.mesh.upgrade().unwrap();
+    let mut vertices = na::DMatrix::zeros(mesh.dim_ambient(), self.nvertices());
+    for (i, &v) in self.vertices.iter().enumerate() {
+      vertices
+        .column_mut(i)
+        .copy_from(&mesh.node_coords.column(v));
+    }
+    GeometrySimplex::new(vertices)
   }
 }
 
@@ -92,37 +110,32 @@ impl SimplicialMesh {
   pub fn nnodes(&self) -> usize {
     self.node_coords.ncols()
   }
-  /// The dimension of highest dimensional [`Skeleton`]
   pub fn node_coords(&self) -> &na::DMatrix<f64> {
     &self.node_coords
   }
-
   pub fn cells(&self) -> &IndexSet<MeshSimplex> {
     self.simplicies.last().unwrap()
   }
   pub fn ncells(&self) -> usize {
     self.cells().len()
   }
-  /// cells of the mesh
   pub fn cell(&self, id: CellId) -> &MeshSimplex {
     self.cells().get_index(id).unwrap()
   }
-
-  pub fn coordinate_cell(&self, id: CellId) -> CoordSimplex {
-    let cell = self.cell(id);
-    let mut vertices = na::DMatrix::zeros(self.dim_ambient(), cell.nvertices());
-    for (i, &v) in cell.vertices().iter().enumerate() {
-      vertices
-        .column_mut(i)
-        .copy_from(&self.node_coords.column(v));
-    }
-    CoordSimplex::new(vertices)
+  pub fn simplicies(&self) -> &[IndexSet<MeshSimplex>] {
+    &self.simplicies
+  }
+  pub fn dsimplicies(&self, d: Dim) -> &IndexSet<MeshSimplex> {
+    &self.simplicies[d]
+  }
+  pub fn simplex(&self, id: SimplexId) -> &MeshSimplex {
+    self.simplicies[id.0].get_index(id.1).unwrap()
   }
 
   /// The mesh width $h$, which is the largest diameter of all cells.
   pub fn mesh_width(&self) -> f64 {
     (0..self.cells().len())
-      .map(|icell| self.coordinate_cell(icell).diameter())
+      .map(|icell| self.cell(icell).geometry_simplex().diameter())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -131,7 +144,12 @@ impl SimplicialMesh {
   /// shape regularity measure over all cells.
   pub fn shape_regularity_measure(&self) -> f64 {
     (0..self.cells().len())
-      .map(|icell| self.coordinate_cell(icell).shape_reguarity_measure())
+      .map(|icell| {
+        self
+          .cell(icell)
+          .geometry_simplex()
+          .shape_reguarity_measure()
+      })
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -227,11 +245,11 @@ impl SimplicialMesh {
 
 #[cfg(test)]
 mod test {
-  use crate::{geometry::CoordSimplex, orientation::Orientation as O};
+  use crate::{geometry::GeometrySimplex, orientation::Orientation as O};
 
   #[test]
   fn incidence_check_1d() {
-    let mesh = CoordSimplex::new_ref(2).into_singleton_mesh();
+    let mesh = GeometrySimplex::new_ref(2).into_singleton_mesh();
     let vertices = &mesh.simplicies[0];
     let edges = &mesh.simplicies[1];
     let cells = &mesh.simplicies[2];
@@ -261,5 +279,8 @@ mod test {
     assert!(cells[0].id == 0);
     assert_eq!(cells[0].subs, vec![(0, O::Pos), (1, O::Neg), (2, O::Pos)]);
     assert!(cells[0].supers.is_empty());
+
+    assert_eq!(mesh.boundary(), vec![(1, 0), (1, 1), (1, 2)]);
+    assert_eq!(mesh.boundary_nodes(), vec![2, 1, 0]);
   }
 }

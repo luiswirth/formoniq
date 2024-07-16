@@ -7,10 +7,10 @@ use crate::{
 };
 
 #[derive(Debug, Clone)]
-pub struct CoordSimplex {
+pub struct GeometrySimplex {
   vertices: na::DMatrix<f64>,
 }
-impl CoordSimplex {
+impl GeometrySimplex {
   pub fn new(vertices: na::DMatrix<f64>) -> Self {
     assert!(!vertices.is_empty());
     Self { vertices }
@@ -148,7 +148,7 @@ mod test {
   #[test]
   fn ref_vol() {
     for d in 0..=8 {
-      let simp = CoordSimplex::new_ref(d);
+      let simp = GeometrySimplex::new_ref(d);
       assert_eq!(simp.det(), (factorial(d) as f64).recip());
     }
   }
