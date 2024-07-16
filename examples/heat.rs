@@ -8,7 +8,7 @@ use formoniq::{
   space::FeSpace,
 };
 
-use std::{f64::consts::PI, rc::Rc};
+use std::{f64::consts::PI, fmt::Write, rc::Rc};
 
 fn main() {
   tracing_subscriber::fmt::init();
@@ -58,7 +58,10 @@ fn main() {
     mu[inode] = (x * PI).sin();
   }
 
-  let contents: String = mu.iter().map(|v| format!("{v}\n")).collect();
+  let contents: String = mu.row_iter().fold(String::new(), |mut s, v| {
+    let _ = writeln!(s, "{}", v[0]);
+    s
+  });
   std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
 
   for istep in 1..nsteps {
@@ -67,7 +70,10 @@ fn main() {
     let rhs = &galmat_mass * mu + tau * &galvec;
     mu = galmat_cholesky.solve(&rhs).column(0).into();
 
-    let contents: String = mu.iter().map(|v| format!("{v}\n")).collect();
+    let contents: String = mu.row_iter().fold(String::new(), |mut s, v| {
+      let _ = writeln!(s, "{}", v[0]);
+      s
+    });
     std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
   }
 }

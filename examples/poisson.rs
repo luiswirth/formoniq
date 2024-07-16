@@ -12,6 +12,7 @@ use formoniq::{
   space::FeSpace,
 };
 
+use std::fmt::Write;
 use std::rc::Rc;
 
 fn main() {
@@ -45,7 +46,7 @@ fn main() {
 
   fn print_seperator() {
     let nchar = 78;
-    println!("{}", std::iter::repeat('-').take(nchar).collect::<String>());
+    println!("{}", "-".repeat(nchar));
   }
 
   print_seperator();
@@ -74,7 +75,10 @@ fn main() {
 
     if k == kend {
       let mut file = std::fs::File::create("out/galsol.txt").unwrap();
-      let contents: String = galsol.iter().map(|v| format!("{v}\n")).collect();
+      let contents: String = galsol.row_iter().fold(String::new(), |mut s, v| {
+        let _ = writeln!(s, "{}", v[0]);
+        s
+      });
       std::io::Write::write_all(
         &mut file,
         format!("{} {}\n", d, nsubdivisions + 1).as_bytes(),

@@ -14,7 +14,7 @@ use formoniq::{
   space::FeSpace,
 };
 
-use std::{f64::consts::PI, rc::Rc};
+use std::{f64::consts::PI, fmt::Write, rc::Rc};
 
 fn main() {
   tracing_subscriber::fmt::init();
@@ -85,7 +85,10 @@ fn main() {
     format!("{} {} {} {}\n", d, nodes_per_dim, final_time, nsteps).as_bytes(),
   )
   .unwrap();
-  let contents: String = mu.row_iter().map(|v| format!("{}\n", v[0])).collect();
+  let contents: String = mu.row_iter().fold(String::new(), |mut s, v| {
+    let _ = writeln!(s, "{}", v[0]);
+    s
+  });
   std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
 
   for istep in 1..nsteps {
@@ -94,7 +97,10 @@ fn main() {
     let rhs = &galmat_mass * mu + timestep * &galvec;
     mu = galmat_lu.solve(&rhs).column(0).into();
 
-    let contents: String = mu.row_iter().map(|v| format!("{}\n", v[0])).collect();
+    let contents: String = mu.row_iter().fold(String::new(), |mut s, v| {
+      let _ = writeln!(s, "{}", v[0]);
+      s
+    });
     std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();
   }
   println!("done!");
