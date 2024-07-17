@@ -5,7 +5,7 @@ use formoniq::{
   assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::hypercube::{hypercube_mesh, linear_idx2cartesian_coords, HyperRectangle},
+  mesh::hyperbox::{HyperBoxDirichletBcMap, HyperBoxMesh},
   space::FeSpace,
 };
 
@@ -16,15 +16,15 @@ use std::{f64::consts::TAU, fmt::Write, rc::Rc};
 fn main() {
   tracing_subscriber::fmt::init();
 
-  let ndims: usize = 2;
-  let nsubdivisions = 500;
+  let dim: usize = 2;
+  let nboxes_per_dim = 50;
   let domain_length = TAU;
-  let mesh_width = domain_length / nsubdivisions as f64;
+  let mesh_width = domain_length / nboxes_per_dim as f64;
 
-  let final_time = TAU / (ndims as f64).sqrt();
+  let final_time = TAU / (dim as f64).sqrt();
 
   // CFL condition (with 5% margin)
-  let mut timestep = 0.95 * mesh_width / (ndims as f64).sqrt();
+  let mut timestep = 0.95 * mesh_width / (dim as f64).sqrt();
   let mut nsteps = (final_time / timestep).ceil() as usize;
 
   let anim_fps = 30;
@@ -35,31 +35,18 @@ fn main() {
     timestep = final_time / nsteps as f64;
   }
 
-  let cube = HyperRectangle::new_uniscaled_unit(ndims, domain_length);
-  let mesh = hypercube_mesh(&cube, nsubdivisions);
-  let nnodes = mesh.nnodes();
-  let nodes_per_dim = (nnodes as f64).powf((ndims as f64).recip()) as usize;
+  let mesh = HyperBoxMesh::new_unit_scaled(dim, domain_length, nboxes_per_dim);
 
-  let space = Rc::new(FeSpace::new(mesh.clone()));
+  let space = Rc::new(FeSpace::new(mesh.mesh().clone()));
 
   let mut galmat_laplacian = assemble_galmat(&space, laplacian_neg_elmat);
   let mut galmat_mass = assemble_galmat(&space, lumped_mass_elmat);
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|_| 0.0));
 
-  let bc = |mut idof| {
-    let mut fcoord = na::DVector::zeros(ndims);
-    let mut is_boundary = false;
-    for dim in 0..ndims {
-      let icoord = idof % nodes_per_dim;
-      fcoord[dim] = icoord as f64 / (nodes_per_dim - 1) as f64;
-      is_boundary |= icoord == 0 || icoord == nodes_per_dim - 1;
-      idof /= nodes_per_dim;
-    }
-    is_boundary.then_some(0.0)
-  };
+  let dirichlet_bc = HyperBoxDirichletBcMap::new(&mesh, |_| 0.0);
 
-  fix_dof_coeffs(bc, &mut galmat_laplacian, &mut galvec);
-  fix_dof_coeffs(bc, &mut galmat_mass, &mut galvec);
+  fix_dof_coeffs(dirichlet_bc.clone(), &mut galmat_laplacian, &mut galvec);
+  fix_dof_coeffs(dirichlet_bc, &mut galmat_mass, &mut galvec);
 
   let galmat_laplacian = galmat_laplacian.to_nalgebra();
   let galmat_mass = galmat_mass.to_nalgebra();
@@ -69,18 +56,27 @@ fn main() {
   let mut file = std::fs::File::create("out/wavesol.txt").unwrap();
   std::io::Write::write_all(
     &mut file,
-    format!("{ndims} {domain_length} {nodes_per_dim} {final_time} {nsteps}\n").as_bytes(),
+    format!(
+      "{} {} {} {} {}\n",
+      dim,
+      domain_length,
+      mesh.nnodes_per_dim(),
+      final_time,
+      nsteps
+    )
+    .as_bytes(),
   )
   .unwrap();
 
   let mut mu = na::DVector::from_iterator(
-    nnodes,
-    (0..nnodes).map(|inode| {
-      let x = linear_idx2cartesian_coords(inode, &cube, nodes_per_dim);
-      (0..ndims).map(|idim| x[idim].sin()).product()
+    space.ndofs(),
+    (0..space.ndofs()).map(|idof| {
+      let inode = idof;
+      let x = mesh.nodes().coord(inode);
+      (0..dim).map(|idim| x[idim].sin()).product()
     }),
   );
-  let mut nu = na::DVector::zeros(nnodes);
+  let mut nu = na::DVector::zeros(space.ndofs());
 
   for istep in 0..nsteps {
     let _t = istep as f64 / (nsteps - 1) as f64 * final_time;

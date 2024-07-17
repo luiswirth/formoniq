@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::{
-  mesh::SimplicialMesh,
+  mesh::{MeshNodes, SimplicialMesh},
   util::{factorial, gram_det_sqrt},
   Dim,
 };
@@ -137,7 +137,8 @@ impl GeometrySimplex {
 
   pub fn into_singleton_mesh(self) -> Rc<SimplicialMesh> {
     let nvertices = self.nvertices();
-    SimplicialMesh::from_cells(self.vertices, vec![(0..nvertices).collect()])
+    let nodes = MeshNodes::new(self.vertices);
+    SimplicialMesh::from_cells(nodes, vec![(0..nvertices).collect()])
   }
 }
 

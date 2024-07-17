@@ -8,7 +8,7 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{LoadElvec, UpwindAdvectionElmat},
   matrix::FaerLu,
-  mesh::hypercube::{hypercube_mesh, HyperRectangle},
+  mesh::hyperbox::HyperBoxMesh,
   space::FeSpace,
 };
 
@@ -19,11 +19,11 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 2;
-  let nsubdivisions = 5000;
+  let nboxes_per_dim = 50;
 
   println!(
-    "solving problem in d={} with nsubdivisions={}",
-    d, nsubdivisions
+    "solving problem in d={} with nboxes_per_dim={}",
+    d, nboxes_per_dim
   );
 
   let dirichlet_data = |x: na::DVectorView<f64>| {
@@ -37,11 +37,10 @@ fn main() {
   let velocity_field = |x: na::DVectorView<f64>| na::DVector::from_column_slice(&[-x[1], x[0]]);
 
   println!("meshing...");
-  let cube = HyperRectangle::new_unit(d);
-  let mesh = hypercube_mesh(&cube, nsubdivisions);
+  let mesh = HyperBoxMesh::new_unit(d, nboxes_per_dim);
   println!("meshing done.");
 
-  let space = Rc::new(FeSpace::new(mesh.clone()));
+  let space = Rc::new(FeSpace::new(mesh.mesh().clone()));
 
   println!("assembling galmat...");
   let mut galmat = assemble_galmat(
@@ -89,7 +88,7 @@ fn main() {
   let mut file = std::fs::File::create("out/advection_stationary_sol.txt").unwrap();
   std::io::Write::write_all(
     &mut file,
-    format!("{} {}\n", d, nsubdivisions + 1).as_bytes(),
+    format!("{} {}\n", d, nboxes_per_dim + 1).as_bytes(),
   )
   .unwrap();
   let contents: String = galsol.row_iter().fold(String::new(), |mut s, v| {
