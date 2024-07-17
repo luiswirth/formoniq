@@ -7,9 +7,9 @@
 
 pub mod boundary;
 pub mod gmsh;
-pub mod hypercube;
+pub mod hyperbox;
 
-use crate::{geometry::GeometrySimplex, orientation::Orientation, util::sort_swap_count, Dim};
+use crate::{geometry::GeometrySimplex, orientation::Orientation, util::sort_count_swaps, Dim};
 
 use indexmap::{set::MutableValues, IndexSet};
 use std::{
@@ -21,6 +21,190 @@ pub type NodeId = usize;
 pub type CellId = usize;
 pub type DSimplexId = usize;
 pub type SimplexId = (Dim, DSimplexId);
+
+pub type RawSimplex = Vec<usize>;
+
+/// A pure simplicial mesh also called a triangulation.
+#[derive(Debug)]
+pub struct SimplicialMesh {
+  /// The nodes of this mesh.
+  nodes: Rc<MeshNodes>,
+  /// All simplicies of the mesh, from 0-simplicies (vertices) to d-simplicies (cells).
+  simplicies: Vec<IndexSet<MeshSimplex>>,
+}
+
+// getters
+impl SimplicialMesh {
+  pub fn dim_intrinsic(&self) -> Dim {
+    self.simplicies.len() - 1
+  }
+  pub fn dim_ambient(&self) -> Dim {
+    self.nodes.dim()
+  }
+  pub fn nodes(&self) -> &Rc<MeshNodes> {
+    &self.nodes
+  }
+  pub fn nnodes(&self) -> usize {
+    self.nodes.len()
+  }
+  pub fn node_coords(&self) -> &na::DMatrix<f64> {
+    &self.nodes.coords
+  }
+  pub fn node_coord(&self, inode: NodeId) -> na::DVectorView<f64> {
+    self.nodes.coord(inode)
+  }
+  pub fn cells(&self) -> &IndexSet<MeshSimplex> {
+    self.simplicies.last().unwrap()
+  }
+  pub fn ncells(&self) -> usize {
+    self.cells().len()
+  }
+  pub fn cell(&self, id: CellId) -> &MeshSimplex {
+    self.cells().get_index(id).unwrap()
+  }
+  pub fn simplicies(&self) -> &[IndexSet<MeshSimplex>] {
+    &self.simplicies
+  }
+  pub fn dsimplicies(&self, d: Dim) -> &IndexSet<MeshSimplex> {
+    &self.simplicies[d]
+  }
+  pub fn simplex(&self, id: SimplexId) -> &MeshSimplex {
+    self.simplicies[id.0].get_index(id.1).unwrap()
+  }
+
+  /// The mesh width $h$, which is the largest diameter of all cells.
+  pub fn mesh_width(&self) -> f64 {
+    (0..self.cells().len())
+      .map(|icell| self.cell(icell).geometry_simplex().diameter())
+      .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .unwrap()
+  }
+
+  /// The shape regularity measure $rho$ of the whole mesh, which is the largest
+  /// shape regularity measure over all cells.
+  pub fn shape_regularity_measure(&self) -> f64 {
+    (0..self.cells().len())
+      .map(|icell| {
+        self
+          .cell(icell)
+          .geometry_simplex()
+          .shape_reguarity_measure()
+      })
+      .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .unwrap()
+  }
+}
+
+// constructors
+impl SimplicialMesh {
+  pub fn from_cells(nodes: Rc<MeshNodes>, cells: Vec<RawSimplex>) -> Rc<Self> {
+    Rc::new_cyclic(|this| {
+      let dim_intrinsic = cells[0].len() - 1;
+      let mut simplicies = vec![IndexSet::new(); dim_intrinsic + 1];
+
+      // add 0-simplicies (vertices)
+      simplicies[0] = (0..nodes.len())
+        .map(|ivertex| MeshSimplex {
+          vertices: vec![ivertex],
+          sorted_vertices: vec![ivertex],
+          sort_orientation: Orientation::Pos,
+          subs: Vec::new(),
+          supers: Vec::new(),
+          id: ivertex,
+          mesh: this.clone(),
+        })
+        .collect();
+
+      // add d-simplicies (cells)
+      simplicies[dim_intrinsic] = cells
+        .into_iter()
+        .enumerate()
+        .map(|(icell, vertices)| {
+          let mut sorted_vertices = vertices.clone();
+          let nswaps = sort_count_swaps(&mut sorted_vertices);
+          let orientation = Orientation::from_permutation_parity(nswaps);
+          MeshSimplex {
+            vertices,
+            sorted_vertices,
+            sort_orientation: orientation,
+            subs: Vec::new(),
+            supers: Vec::new(),
+            id: icell,
+            mesh: this.clone(),
+          }
+        })
+        .collect();
+
+      for sub_dim in (0..dim_intrinsic).rev() {
+        let super_dim = sub_dim + 1;
+
+        let ([.., sub_simps], [super_simps, ..]) = simplicies.split_at_mut(super_dim) else {
+          unreachable!()
+        };
+
+        for isuper_simp in 0..super_simps.len() {
+          let super_simp = super_simps.get_index_mut2(isuper_simp).unwrap();
+          for ivertex in 0..super_simp.vertices.len() {
+            let super_orientation = Orientation::from_permutation_parity(ivertex);
+
+            let mut vertices = super_simp.vertices.clone();
+            vertices.remove(ivertex);
+            let mut sorted_vertices = vertices.clone();
+            let sort_orientation =
+              Orientation::from_permutation_parity(sort_count_swaps(&mut sorted_vertices));
+
+            // TODO: can we avoid constructing this, before checking that this simplex already exists?
+            let sub_simp = MeshSimplex {
+              vertices,
+              sorted_vertices,
+              sort_orientation,
+              subs: Vec::new(),
+              supers: vec![(isuper_simp, super_orientation)],
+              id: sub_simps.len(),
+              mesh: this.clone(),
+            };
+
+            let (isub_simp, new_insert) = sub_simps.insert_full(sub_simp);
+            if !new_insert {
+              let sub_simp = sub_simps.get_index_mut2(isub_simp).unwrap();
+              sub_simp.supers.push((isuper_simp, super_orientation));
+            }
+            super_simp.subs.push((isub_simp, super_orientation));
+          }
+        }
+      }
+
+      Self { nodes, simplicies }
+    })
+  }
+}
+
+/// The nodes that can be used for building meshes.
+#[derive(Debug, Clone)]
+pub struct MeshNodes {
+  /// The coordinates of the nodes in the columns of a matrix.
+  coords: na::DMatrix<f64>,
+}
+impl MeshNodes {
+  pub fn new(coords: na::DMatrix<f64>) -> Rc<Self> {
+    Rc::new(Self { coords })
+  }
+  pub fn dim(&self) -> Dim {
+    self.coords.nrows()
+  }
+  pub fn len(&self) -> usize {
+    self.coords.ncols()
+  }
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+  pub fn coords(&self) -> &na::DMatrix<f64> {
+    &self.coords
+  }
+  pub fn coord(&self, inode: NodeId) -> na::DVectorView<f64> {
+    self.coords.column(inode)
+  }
+}
 
 /// A mesh entity of a simplicial mesh.
 /// Defines the simplex based on its vertices and contains topological
@@ -69,9 +253,7 @@ impl MeshSimplex {
     let mesh = &self.mesh.upgrade().unwrap();
     let mut vertices = na::DMatrix::zeros(mesh.dim_ambient(), self.nvertices());
     for (i, &v) in self.vertices.iter().enumerate() {
-      vertices
-        .column_mut(i)
-        .copy_from(&mesh.node_coords.column(v));
+      vertices.column_mut(i).copy_from(&mesh.nodes.coord(v));
     }
     GeometrySimplex::new(vertices)
   }
@@ -89,157 +271,6 @@ impl Eq for MeshSimplex {}
 impl Hash for MeshSimplex {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.sorted_vertices.hash(state)
-  }
-}
-
-/// A pure simplicial mesh also called a triangulation.
-#[derive(Debug)]
-pub struct SimplicialMesh {
-  /// The coordinates of the nodes of this mesh in the matrix columns.
-  node_coords: na::DMatrix<f64>,
-  /// All simplicies of the mesh. From 0-simplicies (vertices) to d-simplicies (cells).
-  simplicies: Vec<IndexSet<MeshSimplex>>,
-}
-impl SimplicialMesh {
-  pub fn dim_intrinsic(&self) -> Dim {
-    self.simplicies.len() - 1
-  }
-  pub fn dim_ambient(&self) -> Dim {
-    self.node_coords.nrows()
-  }
-  pub fn nnodes(&self) -> usize {
-    self.node_coords.ncols()
-  }
-  pub fn node_coords(&self) -> &na::DMatrix<f64> {
-    &self.node_coords
-  }
-  pub fn cells(&self) -> &IndexSet<MeshSimplex> {
-    self.simplicies.last().unwrap()
-  }
-  pub fn ncells(&self) -> usize {
-    self.cells().len()
-  }
-  pub fn cell(&self, id: CellId) -> &MeshSimplex {
-    self.cells().get_index(id).unwrap()
-  }
-  pub fn simplicies(&self) -> &[IndexSet<MeshSimplex>] {
-    &self.simplicies
-  }
-  pub fn dsimplicies(&self, d: Dim) -> &IndexSet<MeshSimplex> {
-    &self.simplicies[d]
-  }
-  pub fn simplex(&self, id: SimplexId) -> &MeshSimplex {
-    self.simplicies[id.0].get_index(id.1).unwrap()
-  }
-
-  /// The mesh width $h$, which is the largest diameter of all cells.
-  pub fn mesh_width(&self) -> f64 {
-    (0..self.cells().len())
-      .map(|icell| self.cell(icell).geometry_simplex().diameter())
-      .max_by(|a, b| a.partial_cmp(b).unwrap())
-      .unwrap()
-  }
-
-  /// The shape regularity measure $rho$ of the whole mesh, which is the largest
-  /// shape regularity measure over all cells.
-  pub fn shape_regularity_measure(&self) -> f64 {
-    (0..self.cells().len())
-      .map(|icell| {
-        self
-          .cell(icell)
-          .geometry_simplex()
-          .shape_reguarity_measure()
-      })
-      .max_by(|a, b| a.partial_cmp(b).unwrap())
-      .unwrap()
-  }
-}
-
-pub type RawSimplex = Vec<usize>;
-
-impl SimplicialMesh {
-  pub fn from_cells(node_coords: na::DMatrix<f64>, cells: Vec<RawSimplex>) -> Rc<Self> {
-    Rc::new_cyclic(|this| {
-      let dim_intrinsic = cells[0].len() - 1;
-      let mut simplicies = vec![IndexSet::new(); dim_intrinsic + 1];
-
-      // add 0-simplicies (vertices)
-      simplicies[0] = (0..node_coords.ncols())
-        .map(|ivertex| MeshSimplex {
-          vertices: vec![ivertex],
-          sorted_vertices: vec![ivertex],
-          sort_orientation: Orientation::Pos,
-          subs: Vec::new(),
-          supers: Vec::new(),
-          id: ivertex,
-          mesh: this.clone(),
-        })
-        .collect();
-
-      // add d-simplicies (cells)
-      simplicies[dim_intrinsic] = cells
-        .into_iter()
-        .enumerate()
-        .map(|(icell, vertices)| {
-          let mut sorted_vertices = vertices.clone();
-          let nswaps = sort_swap_count(&mut sorted_vertices);
-          let orientation = Orientation::from_permutation_parity(nswaps);
-          MeshSimplex {
-            vertices,
-            sorted_vertices,
-            sort_orientation: orientation,
-            subs: Vec::new(),
-            supers: Vec::new(),
-            id: icell,
-            mesh: this.clone(),
-          }
-        })
-        .collect();
-
-      for sub_dim in (0..dim_intrinsic).rev() {
-        let super_dim = sub_dim + 1;
-
-        let ([.., sub_simps], [super_simps, ..]) = simplicies.split_at_mut(super_dim) else {
-          unreachable!()
-        };
-
-        for isuper_simp in 0..super_simps.len() {
-          let super_simp = super_simps.get_index_mut2(isuper_simp).unwrap();
-          for ivertex in 0..super_simp.vertices.len() {
-            let super_orientation = Orientation::from_permutation_parity(ivertex);
-
-            let mut vertices = super_simp.vertices.clone();
-            vertices.remove(ivertex);
-            let mut sorted_vertices = vertices.clone();
-            let sort_orientation =
-              Orientation::from_permutation_parity(sort_swap_count(&mut sorted_vertices));
-
-            // TODO: can we avoid constructing this, before checking that this simplex already exists?
-            let sub_simp = MeshSimplex {
-              vertices,
-              sorted_vertices,
-              sort_orientation,
-              subs: Vec::new(),
-              supers: vec![(isuper_simp, super_orientation)],
-              id: sub_simps.len(),
-              mesh: this.clone(),
-            };
-
-            let (isub_simp, new_insert) = sub_simps.insert_full(sub_simp);
-            if !new_insert {
-              let sub_simp = sub_simps.get_index_mut2(isub_simp).unwrap();
-              sub_simp.supers.push((isuper_simp, super_orientation));
-            }
-            super_simp.subs.push((isub_simp, super_orientation));
-          }
-        }
-      }
-
-      Self {
-        node_coords,
-        simplicies,
-      }
-    })
   }
 }
 

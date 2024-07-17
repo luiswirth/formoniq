@@ -8,9 +8,7 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{self, LoadElvec, UpwindAdvectionElmat},
   matrix::FaerLu,
-  mesh::hypercube::{
-    hypercube_mesh, linear_idx2cartesian_coords, linear_idx2cartesian_idx, HyperRectangle,
-  },
+  mesh::hyperbox::HyperBoxMesh,
   space::FeSpace,
 };
 
@@ -20,11 +18,11 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 2;
-  let nsubdivisions = 1000;
-  let nodes_per_dim = nsubdivisions + 1;
+  let nboxes_per_dim = 50;
+  let nodes_per_dim = nboxes_per_dim + 1;
 
   let final_time = 5.0;
-  let nsteps = 100;
+  let nsteps = 150;
   let timestep = final_time / nsteps as f64;
 
   let dirichlet_data = |_: na::DVectorView<f64>| 0.0;
@@ -36,19 +34,18 @@ fn main() {
     ])
   };
 
-  let cube = HyperRectangle::new_unit(d);
-  let mesh = hypercube_mesh(&cube, nsubdivisions);
+  let mesh = HyperBoxMesh::new_unit(d, nboxes_per_dim);
 
-  let space = Rc::new(FeSpace::new(mesh.clone()));
+  let space = Rc::new(FeSpace::new(mesh.mesh().clone()));
   let ndofs = space.ndofs();
 
   let dirichlet_map = |idof| {
-    let cart_idx = linear_idx2cartesian_idx(idof, d, nodes_per_dim);
-    let card_coords = linear_idx2cartesian_coords(idof, &cube, nodes_per_dim);
-    let is_boundary = cart_idx.iter().any(|&c| c == 0 || c == nodes_per_dim - 1);
+    let inode = idof;
+    let is_boundary = mesh.is_node_on_boundary(inode);
     let is_inflow = false;
     let is_imposable = is_boundary && is_inflow;
-    is_imposable.then_some(dirichlet_data(card_coords.as_view()))
+    let pos = mesh.nodes().coord(inode);
+    is_imposable.then_some(dirichlet_data(pos))
   };
 
   println!("assembling galvec...");
@@ -74,7 +71,8 @@ fn main() {
 
   let mut mu = na::DVector::zeros(ndofs);
   for idof in 0..ndofs {
-    let x = linear_idx2cartesian_coords(idof, &cube, nodes_per_dim);
+    let inode = idof;
+    let x = mesh.nodes().coord(inode);
     let v = (x - na::Vector2::new(0.5, 0.25)).norm();
     mu[idof] = (1.0 - 4.0 * v).max(0.0);
   }

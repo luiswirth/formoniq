@@ -1,3 +1,5 @@
+use crate::mesh::MeshNodes;
+
 use super::SimplicialMesh;
 
 use std::rc::Rc;
@@ -8,16 +10,14 @@ use tracing::warn;
 pub fn load_gmsh(bytes: &[u8]) -> Rc<SimplicialMesh> {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
-  let mesh_nodes: Vec<_> = msh
-    .data
-    .nodes
-    .unwrap()
-    .node_blocks
+  let mesh_nodes = msh.data.nodes.unwrap().node_blocks;
+  let mesh_nodes: Vec<_> = mesh_nodes
     .iter()
     .flat_map(|block| block.nodes.iter())
     .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]))
     .collect();
   let mesh_nodes = na::DMatrix::from_columns(&mesh_nodes);
+  let mesh_nodes = MeshNodes::new(mesh_nodes);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();

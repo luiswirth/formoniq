@@ -55,10 +55,11 @@ def update(iframe):
     ax.set_zlim(z_min - 0.1 * z_range, z_max + 0.1 * z_range)
 
 ani = animation.FuncAnimation(fig, update, frames=nframes, interval=1)
-ani.save(
-    'out/wave.gif',
-    fps=fps,
-    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
-    writer='pillow',
-)
-plt.close(fig)
+plt.show()
+#ani.save(
+#    'out/wave.gif',
+#    fps=fps,
+#    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
+#    writer='pillow',
+#)
+#plt.close(fig)

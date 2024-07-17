@@ -70,11 +70,11 @@ def update(iframe):
     return c,
 
 ani = animation.FuncAnimation(fig, update, frames=nframes, interval=1000/fps)
-#plt.show()
-ani.save(
-    'out/advection.gif',
-    fps=fps,
-    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
-    writer='pillow',
-)
-plt.close(fig)
+plt.show()
+#ani.save(
+#    'out/advection.gif',
+#    fps=fps,
+#    progress_callback=lambda i, n: print(f"Saving Animation Frame {i}/{n}..."),
+#    writer='pillow',
+#)
+#plt.close(fig)

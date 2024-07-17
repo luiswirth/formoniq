@@ -4,7 +4,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble::{assemble_galmat, assemble_galvec, fix_dof_coeffs},
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
-  mesh::hypercube::{hypercube_mesh, HyperRectangle},
+  mesh::hyperbox::{HyperBoxDirichletBcMap, HyperBoxMesh},
   space::FeSpace,
 };
 
@@ -14,33 +14,25 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let d: usize = 1;
-  let nsubdivisions = 100;
+  let nboxes_per_dim = 100;
 
   let alpha = 1.0;
   let tfinal = 1.0;
   let nsteps = 200;
   let tau = tfinal / nsteps as f64;
 
-  let cube = HyperRectangle::new_unit(d);
-  let mesh = hypercube_mesh(&cube, nsubdivisions);
-  let nnodes = mesh.nnodes();
+  let mesh = HyperBoxMesh::new_unit(d, nboxes_per_dim);
 
-  let space = Rc::new(FeSpace::new(mesh.clone()));
+  let space = Rc::new(FeSpace::new(mesh.mesh().clone()));
 
   let mut galmat_laplacian = assemble_galmat(&space, laplacian_neg_elmat);
   let mut galmat_mass = assemble_galmat(&space, lumped_mass_elmat);
   let mut galvec = assemble_galvec(&space, LoadElvec::new(|_| 0.0));
 
-  fix_dof_coeffs(
-    |idof| (idof == 0 || idof == nnodes - 1).then_some(0.0),
-    &mut galmat_laplacian,
-    &mut galvec,
-  );
-  fix_dof_coeffs(
-    |idof| (idof == 0 || idof == nnodes - 1).then_some(0.0),
-    &mut galmat_mass,
-    &mut galvec,
-  );
+  let dirichlet_bc = HyperBoxDirichletBcMap::new(&mesh, |_| 0.0);
+
+  fix_dof_coeffs(dirichlet_bc.clone(), &mut galmat_laplacian, &mut galvec);
+  fix_dof_coeffs(dirichlet_bc, &mut galmat_mass, &mut galvec);
 
   let galmat_laplacian = galmat_laplacian.to_nalgebra();
   let galmat_mass = galmat_mass.to_nalgebra();
@@ -49,13 +41,13 @@ fn main() {
   let galmat_cholesky = nas::factorization::CscCholesky::factor(&galmat).unwrap();
 
   let mut file = std::fs::File::create("out/heatsol.txt").unwrap();
-  std::io::Write::write_all(&mut file, format!("{} {}\n", d, nnodes).as_bytes()).unwrap();
+  std::io::Write::write_all(&mut file, format!("{} {}\n", d, space.ndofs()).as_bytes()).unwrap();
 
-  let mut mu = na::DVector::zeros(nnodes);
+  let mut mu = na::DVector::zeros(space.ndofs());
 
-  for inode in 0..nnodes {
-    let x = inode as f64 / (nnodes - 1) as f64;
-    mu[inode] = (x * PI).sin();
+  for idof in 0..space.ndofs() {
+    let x = idof as f64 / (space.ndofs() - 1) as f64;
+    mu[idof] = (x * PI).sin();
   }
 
   let contents: String = mu.row_iter().fold(String::new(), |mut s, v| {
