@@ -71,6 +71,11 @@ impl SimplicialMesh {
   pub fn simplex(&self, id: SimplexId) -> &MeshSimplex {
     self.simplicies[id.0].get_index(id.1).unwrap()
   }
+  pub fn facet(&self, id: DSimplexId) -> &MeshSimplex {
+    self.simplicies[self.dim_intrinsic() - 1]
+      .get_index(id)
+      .unwrap()
+  }
 
   /// The mesh width $h$, which is the largest diameter of all cells.
   pub fn mesh_width(&self) -> f64 {
@@ -247,6 +252,19 @@ impl MeshSimplex {
   }
   pub fn simplex_id(&self) -> SimplexId {
     (self.dim_intrinsic(), self.id)
+  }
+
+  pub fn subs_with_orientation(&self) -> &[(DSimplexId, Orientation)] {
+    &self.subs
+  }
+  pub fn subs(&self) -> Vec<DSimplexId> {
+    self.subs.iter().map(|s| s.0).collect()
+  }
+  pub fn supers_with_orientation(&self) -> &[(DSimplexId, Orientation)] {
+    &self.supers
+  }
+  pub fn supers(&self) -> Vec<DSimplexId> {
+    self.supers.iter().map(|s| s.0).collect()
   }
 
   pub fn geometry_simplex(&self) -> GeometrySimplex {

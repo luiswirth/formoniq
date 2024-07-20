@@ -81,25 +81,37 @@ where
 {
   fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
     let cell = space.mesh().cell(icell);
+    let nvertices = cell.nvertices();
+    let vertices = cell.vertices();
+    let facets = cell
+      .subs()
+      .iter()
+      .map(|&f| space.mesh().facet(f))
+      .collect::<Vec<_>>();
     let cell_geo = space.mesh().cell(icell).geometry_simplex();
     let bary_grads = cell_geo.barycentric_functions_grad();
-    let normals = -bary_grads.clone();
-    let nvertices = cell_geo.nvertices();
-
-    assert!(nvertices == 3, "only works for triangles");
+    let normals = cell_geo.face_normals();
 
     let mut elmat = na::DMatrix::zeros(nvertices, nvertices);
-    for ivertex in 0..nvertices {
+    for (ivertex, &vertex) in vertices.iter().enumerate() {
       let advection_vel = (self.advection_vel)(cell_geo.vertices().column(ivertex));
-      let normal0 = normals.column((ivertex + 2) % 3);
-      let normal1 = normals.column((ivertex + 1) % 3);
-      let dot0 = advection_vel.dot(&normal0);
-      let dot1 = advection_vel.dot(&normal1);
-      let is_upwind = dot0 >= 0.0 && dot1 >= 0.0;
+      let normals_at_vertex: Vec<_> = facets
+        .iter()
+        .zip(normals.column_iter())
+        .filter_map(|(f, n)| f.vertices().contains(&vertex).then_some(n))
+        .collect();
+
+      let dots: Vec<_> = normals_at_vertex
+        .iter()
+        .map(|n| advection_vel.dot(n))
+        .collect();
+      let is_upwind = dots.iter().all(|&dot| dot >= 0.0);
+      let is_upwind_shared = dots.iter().all(|&dot| dot == 0.0);
+
       if is_upwind {
-        let mass = self.vertex_masses[cell.vertices()[ivertex]];
+        let mass = self.vertex_masses[vertex];
         let mut row = mass * advection_vel.transpose() * &bary_grads;
-        if dot0 == 0.0 && dot1 == 0.0 {
+        if is_upwind_shared {
           row *= 0.5;
         }
         elmat.row_mut(ivertex).copy_from(&row);
