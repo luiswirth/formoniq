@@ -131,8 +131,16 @@ impl GeometrySimplex {
       .clone_owned()
   }
 
+  /// The unnormalized normal vectors of the faces ((d-1)-simplicies).
+  /// The ordering of these normal vectors corresponds to the natural ordering of
+  /// the subsimplicies, given by removing one vertex at a time in order.
+  pub fn face_normals(&self) -> na::DMatrix<f64> {
+    -self.barycentric_functions_grad()
+  }
+
+  /// The normalized normal vectors of the faces ((d-1)-simplicies).
   pub fn face_unit_normals(&self) -> na::DMatrix<f64> {
-    -self.barycentric_functions_grad().normalize()
+    self.face_normals().normalize()
   }
 
   pub fn into_singleton_mesh(self) -> Rc<SimplicialMesh> {
