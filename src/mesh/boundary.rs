@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{NodeId, SimplexId, SimplicialMesh};
+use super::{CellId, NodeId, SimplexId, SimplicialMesh};
 
 impl SimplicialMesh {
   /// For a d-mesh computes the boundary, which consists of (d-1)-simplicies.
@@ -26,5 +26,15 @@ impl SimplicialMesh {
       boundary_nodes.extend(self.simplex(boundary_simp).vertices().iter());
     }
     boundary_nodes.into_iter().collect()
+  }
+
+  pub fn boundary_cells(&self) -> Vec<CellId> {
+    let boundary = self.boundary();
+    let cells: HashSet<_> = boundary
+      .into_iter()
+      // the boundary has only one super by definition
+      .map(|s| self.simplex(s).supers()[0])
+      .collect();
+    cells.into_iter().collect()
   }
 }
