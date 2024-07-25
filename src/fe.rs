@@ -196,37 +196,6 @@ impl DofCoeffMap for DirichletInflowBcMap {
     self.dirichlet_coeffs[idof]
   }
 }
-#[allow(
-  unused_variables,
-  unreachable_code,
-  unused_mut,
-  clippy::diverging_sub_expression
-)]
-impl DirichletInflowBcMap {
-  pub fn new<F, V>(space: &FeSpace, dirichlet_data: F, velocity: V) -> Self
-  where
-    F: Fn(na::DVectorView<f64>) -> f64,
-    V: Fn(na::DVectorView<f64>) -> na::DVector<f64>,
-  {
-    let mut dirichlet_coeffs = vec![None; space.ndofs()];
-    let boundary_dofs = space.mesh().boundary_nodes();
-    for idof in boundary_dofs {
-      let pos = space.mesh().node_coords().column(idof);
-
-      let vel = velocity(pos);
-      let normal0: na::DVector<f64> = todo!();
-      let normal1: na::DVector<f64> = todo!();
-      let dot0 = vel.dot(&normal0);
-      let dot1 = vel.dot(&normal1);
-      let is_inflow = dot0 <= 0.0 && dot1 <= 0.0;
-      if is_inflow {
-        let dof_value = dirichlet_data(pos);
-        dirichlet_coeffs[idof] = Some(dof_value);
-      }
-    }
-    Self { dirichlet_coeffs }
-  }
-}
 
 #[cfg(test)]
 mod test {
