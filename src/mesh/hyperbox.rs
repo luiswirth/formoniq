@@ -1,12 +1,12 @@
-use super::{MeshNodes, NodeId, SimplicialMesh};
+use super::{MeshNodes, NodeId, RawSimplex, SimplicialMesh};
 use crate::{
   assemble::DofCoeffMap,
+  combinatorics::{factorial, Permutations},
   space::DofId,
-  util::{cartesian_index2linear_index, factorial, linear_index2cartesian_index},
+  util::{cartesian_index2linear_index, linear_index2cartesian_index},
   Dim,
 };
 
-use itertools::Itertools;
 use std::rc::Rc;
 
 pub struct HyperBox {
@@ -224,28 +224,48 @@ impl HyperBoxMesh {
   }
 
   fn compute_mesh(info: &HyperBoxMeshInfo, nodes: Rc<MeshNodes>) -> Rc<SimplicialMesh> {
-    let nsimplicies = factorial(info.dim()) * info.nboxes();
-    let mut simplicies = Vec::with_capacity(nsimplicies);
+    let dim = info.dim();
+    let nsimplicies = factorial(dim) * info.nboxes();
+    let mut simplicies: Vec<RawSimplex> = Vec::with_capacity(nsimplicies);
 
+    // iterate through all boxes that make up the mesh
     for icube in 0..info.nboxes() {
-      let cube_coord = linear_index2cartesian_index(icube, info.nboxes_per_dim, info.dim());
+      let cube_icart = linear_index2cartesian_index(icube, info.nboxes_per_dim, info.dim());
 
-      simplicies.extend((0..info.dim()).permutations(info.dim()).map(|permut| {
-        let mut vertices = Vec::with_capacity(info.dim() + 1);
-        let mut vertex = cube_coord.clone();
-        vertices.push(cartesian_index2linear_index(
-          vertex.clone(),
-          info.nnodes_per_dim(),
-        ));
-        for p in permut {
-          vertex[p] += 1;
-          vertices.push(cartesian_index2linear_index(
-            vertex.clone(),
-            info.nnodes_per_dim(),
-          ));
-        }
-        vertices
-      }));
+      let vertex_icart_origin = cube_icart;
+      let ivertex_origin =
+        cartesian_index2linear_index(vertex_icart_origin.clone(), info.nnodes_per_dim());
+
+      // construct all $d!$ simplicies that make up the current box
+      // each permutation of the basis directions (dimensions) gives rise to one simplex
+      let basisdirs = (0..dim).collect();
+
+      let cube_simplicies = Permutations::new(basisdirs)
+        .enumerate()
+        .map(|(iperm, basisdirs)| {
+          // construct simplex by adding all shifted vertices
+          let mut simplex: RawSimplex = vec![ivertex_origin];
+
+          // add every shift (according to permutation) to vertex iteratively
+          // every shift step gives us one vertex
+          let mut vertex_icart = vertex_icart_origin.clone();
+          for basisdir in basisdirs {
+            vertex_icart[basisdir] += 1;
+
+            let ivertex = cartesian_index2linear_index(vertex_icart.clone(), info.nnodes_per_dim());
+            simplex.push(ivertex);
+          }
+
+          // TODO: do we want this?
+          // force positive orientation
+          if iperm % 2 == 1 {
+            //simplex.swap(0, 1);
+          }
+
+          simplex
+        });
+
+      simplicies.extend(cube_simplicies);
     }
 
     SimplicialMesh::from_cells(nodes, simplicies)
@@ -288,10 +308,10 @@ mod test {
   use super::HyperBoxMesh;
 
   #[test]
-  fn unit_cube_mesh() {
+  fn unit_cube_mesh_1sub() {
     let mesh = HyperBoxMesh::new_unit(3, 1);
     #[rustfmt::skip]
-    let node_coords = na::DMatrix::from_column_slice(3, 8, &[
+    let expected_nodes = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,
       1., 0., 0.,
       0., 1., 0.,
@@ -301,14 +321,46 @@ mod test {
       0., 1., 1.,
       1., 1., 1.,
     ]);
-    assert_eq!(*mesh.nodes().coords(), node_coords);
+    let computed_nodes = mesh.nodes().coords();
+    assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 3, 7],
       &[0, 1, 5, 7],
-      &[0, 2, 3, 7],
-      &[0, 2, 6, 7],
       &[0, 4, 5, 7],
       &[0, 4, 6, 7],
+      &[0, 2, 6, 7],
+      &[0, 2, 3, 7],
+    ];
+    let computed_simplicies: Vec<_> = mesh.mesh().cells().iter().map(|c| c.vertices()).collect();
+    assert_eq!(computed_simplicies, expected_simplicies);
+  }
+
+  #[test]
+  fn unit_square_mesh_2sub() {
+    let mesh = HyperBoxMesh::new_unit(2, 2);
+    #[rustfmt::skip]
+    let expected_nodes = na::DMatrix::from_column_slice(2, 9, &[
+      0.0, 0.0,
+      0.5, 0.0,
+      1.0, 0.0,
+      0.0, 0.5,
+      0.5, 0.5,
+      1.0, 0.5,
+      0.0, 1.0,
+      0.5, 1.0,
+      1.0, 1.0,
+    ]);
+    let computed_nodes = mesh.nodes().coords();
+    assert_eq!(*computed_nodes, expected_nodes);
+    let expected_simplicies = vec![
+      &[0, 1, 4],
+      &[0, 3, 4],
+      &[1, 2, 5],
+      &[1, 4, 5],
+      &[3, 4, 7],
+      &[3, 6, 7],
+      &[4, 5, 8],
+      &[4, 7, 8],
     ];
     let computed_simplicies: Vec<_> = mesh.mesh().cells().iter().map(|c| c.vertices()).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
