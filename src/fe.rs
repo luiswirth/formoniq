@@ -106,13 +106,13 @@ where
         .map(|n| advection_vel.dot(n))
         .collect();
       let is_upwind = dots.iter().all(|&dot| dot >= 0.0);
-      let is_upwind_shared = dots.iter().all(|&dot| dot == 0.0);
+      let upwind_share_count = dots.iter().filter(|&&dot| dot == 0.0).count();
 
       if is_upwind {
         let mass = self.vertex_masses[vertex];
         let mut row = mass * advection_vel.transpose() * &bary_grads;
-        if is_upwind_shared {
-          row *= 0.5;
+        if upwind_share_count > 0 {
+          row /= upwind_share_count as f64;
         }
         elmat.row_mut(ivertex).copy_from(&row);
       }
