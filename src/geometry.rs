@@ -1,8 +1,10 @@
 use std::rc::Rc;
 
 use crate::{
+  combinatorics::factorial,
   mesh::{MeshNodes, SimplicialMesh},
-  util::{factorial, gram_det_sqrt},
+  orientation::Orientation,
+  util::gram_det_sqrt,
   Dim,
 };
 
@@ -78,6 +80,14 @@ impl GeometrySimplex {
   /// The (unsigned) volume of the simplex.
   pub fn vol(&self) -> f64 {
     self.det().abs()
+  }
+
+  /// The orientation of the simplex.
+  pub fn orientation(&self) -> Orientation {
+    match self.det().is_sign_positive() {
+      true => Orientation::Pos,
+      false => Orientation::Neg,
+    }
   }
 
   /// The diameter of the simplex.

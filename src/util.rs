@@ -23,10 +23,6 @@ pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize
   lin_idx
 }
 
-pub fn factorial(num: usize) -> usize {
-  (1..=num).product()
-}
-
 pub fn gram(m: &na::DMatrix<f64>) -> na::DMatrix<f64> {
   m.transpose() * m
 }
@@ -37,25 +33,6 @@ pub fn gram_det(m: &na::DMatrix<f64>) -> f64 {
 
 pub fn gram_det_sqrt(m: &na::DMatrix<f64>) -> f64 {
   gram_det(m).sqrt()
-}
-
-pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
-  let mut nswaps = 0;
-
-  let mut n = a.len();
-  let mut swapped = true;
-  while swapped {
-    swapped = false;
-    for i in 1..n {
-      if a[i - 1] > a[i] {
-        a.swap(i - 1, i);
-        swapped = true;
-        nswaps += 1;
-      }
-    }
-    n -= 1;
-  }
-  nswaps
 }
 
 pub fn faervec2navec(faer: &faer::Mat<f64>) -> na::DVector<f64> {

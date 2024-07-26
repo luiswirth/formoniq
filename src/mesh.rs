@@ -9,7 +9,9 @@ pub mod boundary;
 pub mod gmsh;
 pub mod hyperbox;
 
-use crate::{geometry::GeometrySimplex, orientation::Orientation, util::sort_count_swaps, Dim};
+use crate::{
+  combinatorics::sort_count_swaps, geometry::GeometrySimplex, orientation::Orientation, Dim,
+};
 
 use indexmap::{set::MutableValues, IndexSet};
 use std::{
@@ -140,6 +142,8 @@ impl SimplicialMesh {
         })
         .collect();
 
+      // add all other simplicies in between and record the incidence
+      // relationship
       for sub_dim in (0..dim_intrinsic).rev() {
         let super_dim = sub_dim + 1;
 
@@ -330,6 +334,9 @@ mod test {
     assert!(cells[0].supers.is_empty());
 
     assert_eq!(mesh.boundary(), vec![(1, 0), (1, 1), (1, 2)]);
-    assert_eq!(mesh.boundary_nodes(), vec![2, 1, 0]);
+
+    let mut boundary_nodes = mesh.boundary_nodes();
+    boundary_nodes.sort_unstable();
+    assert_eq!(boundary_nodes, vec![0, 1, 2]);
   }
 }
