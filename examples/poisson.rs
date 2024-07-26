@@ -19,7 +19,9 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let d: usize = 2;
+  let dim: usize = 2;
+
+  println!("Poisson in {dim}D");
 
   let kstart = 0;
   let kend = 10;
@@ -31,9 +33,9 @@ fn main() {
   let analytic_laplacian = |x: na::DVectorView<f64>| {
     let mut prefactor = 0.0;
 
-    for i in 0..d {
+    for i in 0..dim {
       let mut partial_product = 1.0;
-      for j in 0..d {
+      for j in 0..dim {
         if i != j {
           partial_product *= x[j].powi(2);
         }
@@ -62,7 +64,7 @@ fn main() {
     let nboxes_per_dim = expk;
 
     // Create mesh of unit hypercube $[0, 1]^d$.
-    let mesh = HyperBoxMesh::new_unit(d, nboxes_per_dim);
+    let mesh = HyperBoxMesh::new_unit(dim, nboxes_per_dim);
     let mesh_width = mesh.mesh().mesh_width();
     let shape_regularity = mesh.mesh().shape_regularity_measure();
 
@@ -80,7 +82,7 @@ fn main() {
       });
       std::io::Write::write_all(
         &mut file,
-        format!("{} {}\n", d, nboxes_per_dim + 1).as_bytes(),
+        format!("{} {}\n", dim, nboxes_per_dim + 1).as_bytes(),
       )
       .unwrap();
       std::io::Write::write_all(&mut file, contents.as_bytes()).unwrap();

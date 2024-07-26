@@ -106,9 +106,11 @@ impl HyperBoxMeshInfo {
   pub fn nnodes(&self) -> usize {
     self.nnodes_per_dim().pow(self.dim() as u32)
   }
+  pub fn node_cart_idx(&self, inode: NodeId) -> na::DVector<usize> {
+    linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim())
+  }
   pub fn node_pos(&self, inode: NodeId) -> na::DVector<f64> {
-    (linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim()).cast::<f64>()
-      / (self.nnodes_per_dim() - 1) as f64)
+    (self.node_cart_idx(inode).cast::<f64>() / (self.nnodes_per_dim() - 1) as f64)
       .component_mul(&self.side_lengths())
       + self.min()
   }
