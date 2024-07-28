@@ -144,8 +144,8 @@ impl SimplicialMesh {
 
       // add all other simplicies in between and record the incidence
       // relationship
-      for sub_dim in (0..dim_intrinsic).rev() {
-        let super_dim = sub_dim + 1;
+      for super_dim in (1..=dim_intrinsic).rev() {
+        let _sub_dim = super_dim - 1;
 
         let ([.., sub_simps], [super_simps, ..]) = simplicies.split_at_mut(super_dim) else {
           unreachable!()
