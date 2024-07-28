@@ -51,19 +51,32 @@ impl GeometrySimplex {
   pub fn vertices(&self) -> &na::DMatrix<f64> {
     &self.vertices
   }
+  pub fn vertex(&self, i: usize) -> na::DVectorView<f64> {
+    self.vertices.column(i)
+  }
 
   /// The vectors you get by subtracing a reference point (here the first one),
   /// from all other points.
   /// These vectors are then the axes of the simplex.
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
+    let p = self.vertex(0);
     let n = self.nvertices() - 1;
-    let p = self.vertices.column(0);
-
-    let mut m = na::DMatrix::zeros(self.dim_ambient(), n);
+    let mut mat = na::DMatrix::zeros(self.dim_ambient(), n);
     for (c, v) in self.vertices().column_iter().skip(1).enumerate() {
-      m.column_mut(c).copy_from(&(v - p));
+      mat.column_mut(c).copy_from(&(v - p));
     }
-    m
+    mat
+  }
+
+  /// Transformation from reference simplex to this simplex.
+  pub fn reference_transform(&self) -> AffineTransform {
+    let linear = self.spanning_vectors();
+    println!("{:?}", linear.shape());
+    let translation = self.vertex(0).into();
+    AffineTransform {
+      linear,
+      translation,
+    }
   }
 
   /// The determinate (signed volume) of the simplex.
@@ -160,15 +173,56 @@ impl GeometrySimplex {
   }
 }
 
+pub fn ref_vol(dim: Dim) -> f64 {
+  (factorial(dim) as f64).recip()
+}
+
+pub struct AffineTransform {
+  linear: na::DMatrix<f64>,
+  translation: na::DVector<f64>,
+}
+impl AffineTransform {
+  pub fn apply(&self, p: na::DMatrixView<f64>) -> na::DMatrix<f64> {
+    let mut r = &self.linear * p;
+    r.column_iter_mut().for_each(|mut c| c += &self.translation);
+    r
+  }
+  pub fn det(&self) -> f64 {
+    self.linear.determinant()
+  }
+  pub fn jacobi(&self) -> &na::DMatrix<f64> {
+    &self.linear
+  }
+}
+
 #[cfg(test)]
 mod test {
   use super::*;
 
   #[test]
-  fn ref_vol() {
+  fn ref_vol_test() {
     for d in 0..=8 {
       let simp = GeometrySimplex::new_ref(d);
-      assert_eq!(simp.det(), (factorial(d) as f64).recip());
+      assert_eq!(simp.det(), ref_vol(d));
     }
+  }
+
+  #[test]
+  fn reference_transform() {
+    let refsimp = GeometrySimplex::new_ref(3);
+    let simp = GeometrySimplex::new(na::DMatrix::from_columns(&[
+      na::DVector::from_row_slice(&[5.0, 6.0, -2.0]),
+      na::DVector::from_row_slice(&[2.0, 10.0, -1.0]),
+      na::DVector::from_row_slice(&[1.0, 3.0, -3.0]),
+      na::DVector::from_row_slice(&[0.0, -2.0, -4.0]),
+    ]));
+    println!("ref{:?}", refsimp.vertices().shape());
+    assert_eq!(
+      simp
+        .reference_transform()
+        .apply(refsimp.vertices().as_view()),
+      *simp.vertices()
+    );
+    assert_eq!(simp.det(), refsimp.det() * simp.reference_transform().det());
   }
 }

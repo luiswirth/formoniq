@@ -4,6 +4,7 @@ use std::rc::Rc;
 
 pub type DofId = usize;
 
+/// A Linear Lagrangian Finite Element Space
 pub struct FeSpace {
   mesh: Rc<SimplicialMesh>,
 }
