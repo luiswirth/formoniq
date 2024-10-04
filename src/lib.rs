@@ -8,7 +8,6 @@ pub mod geometry;
 pub mod matrix;
 pub mod mesh;
 pub mod orientation;
-pub mod quadrature;
 pub mod space;
 pub mod util;
 

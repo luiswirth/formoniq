@@ -254,6 +254,7 @@ dependencies = [
  "mshio",
  "nalgebra",
  "nalgebra-sparse",
+ "num-integer",
  "once_cell",
  "thiserror",
  "tracing",

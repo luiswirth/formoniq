@@ -1,93 +1,62 @@
-use std::rc::Rc;
+use std::{collections::HashMap, f64::consts::SQRT_2, rc::Rc};
+
+use num_integer::binomial;
 
 use crate::{
   combinatorics::factorial,
-  mesh::{MeshNodes, SimplicialMesh},
+  mesh::{EdgeBetweenVertices, SimplicialManifold},
   orientation::Orientation,
-  util::gram_det_sqrt,
   Dim,
 };
 
+fn nedges(dim: Dim) -> usize {
+  binomial(dim + 1, 2)
+}
+
 #[derive(Debug, Clone)]
 pub struct GeometrySimplex {
-  vertices: na::DMatrix<f64>,
+  /// Lengths of all edges in simplex
+  /// Order of edges is lexicographical in vertex tuples.
+  /// E.g. For a 3-simplex the edges are sorted as (0,1),(0,2),(0,3),(1,2),(1,3),(2,3)
+  dim: Dim,
+  edge_lengths: Vec<f64>,
 }
 impl GeometrySimplex {
-  pub fn new(vertices: na::DMatrix<f64>) -> Self {
-    assert!(!vertices.is_empty());
-    Self { vertices }
+  pub fn new(dim: Dim, edge_lengths: Vec<f64>) -> Self {
+    assert!(edge_lengths.len() == nedges(dim));
+    Self { dim, edge_lengths }
+  }
+
+  pub fn edge_lengths(&self) -> &[f64] {
+    &self.edge_lengths
   }
 
   /// Constructs a reference simplex in `dim` dimensions.
-  /// The simplex has unit vertices plus the origin.
-  /// The ambient and intrinsic dimension are the same.
   pub fn new_ref(dim: Dim) -> Self {
-    Self::new_ref_embedded(dim, dim)
-  }
-
-  pub fn new_ref_embedded(intrinsic_dim: Dim, ambient_dim: Dim) -> Self {
-    assert!(intrinsic_dim <= ambient_dim);
-    let mut vertices = na::DMatrix::zeros(ambient_dim, intrinsic_dim + 1);
-    // first col is already all zeros (origin)
-    for d in 0..intrinsic_dim {
-      vertices[(d, d + 1)] = 1.0;
+    let nedges = nedges(dim);
+    let mut edge_lengths = vec![0.0; nedges];
+    for l in edge_lengths.iter_mut().take(dim) {
+      *l = 1.0;
     }
-    Self { vertices }
+    for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
+      *l = SQRT_2;
+    }
+    Self { dim, edge_lengths }
   }
 
-  pub fn dim_intrinsic(&self) -> Dim {
-    self.vertices.ncols() - 1
+  pub fn dim(&self) -> Dim {
+    self.dim
   }
-  pub fn dim_ambient(&self) -> Dim {
-    self.vertices.nrows()
-  }
-  pub fn dims_agree(&self) -> bool {
-    self.dim_intrinsic() == self.dim_ambient()
-  }
-
   pub fn nvertices(&self) -> usize {
-    self.vertices.ncols()
+    self.dim + 1
   }
-  pub fn vertices(&self) -> &na::DMatrix<f64> {
-    &self.vertices
-  }
-  pub fn vertex(&self, i: usize) -> na::DVectorView<f64> {
-    self.vertices.column(i)
-  }
-
-  /// The vectors you get by subtracing a reference point (here the first one),
-  /// from all other points.
-  /// These vectors are then the axes of the simplex.
-  pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
-    let p = self.vertex(0);
-    let n = self.nvertices() - 1;
-    let mut mat = na::DMatrix::zeros(self.dim_ambient(), n);
-    for (c, v) in self.vertices().column_iter().skip(1).enumerate() {
-      mat.column_mut(c).copy_from(&(v - p));
-    }
-    mat
-  }
-
-  /// Transformation from reference simplex to this simplex.
-  pub fn reference_transform(&self) -> AffineTransform {
-    let linear = self.spanning_vectors();
-    println!("{:?}", linear.shape());
-    let translation = self.vertex(0).into();
-    AffineTransform {
-      linear,
-      translation,
-    }
+  pub fn nedges(&self) -> usize {
+    self.edge_lengths.len()
   }
 
   /// The determinate (signed volume) of the simplex.
   pub fn det(&self) -> f64 {
-    let mat = self.spanning_vectors();
-    let det = if self.dim_ambient() == self.dim_intrinsic() {
-      mat.determinant()
-    } else {
-      gram_det_sqrt(&mat)
-    };
-    (factorial(self.dim_intrinsic()) as f64).recip() * det
+    ref_vol(self.dim) * self.metric_tensor().determinant().sqrt()
   }
 
   /// The (unsigned) volume of the simplex.
@@ -106,70 +75,73 @@ impl GeometrySimplex {
   /// The diameter of the simplex.
   /// This is the maximum distance of two points inside the simplex.
   pub fn diameter(&self) -> f64 {
-    let n = self.nvertices();
-    let mut dia = 0.0;
+    self
+      .edge_lengths
+      .iter()
+      .copied()
+      .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .unwrap()
+  }
 
-    for i in 0..n {
-      for j in (i + 1)..n {
-        let dist = (self.vertices().column(i) - self.vertices().column(j)).norm();
-        if dist > dia {
-          dia = dist;
-        }
+  /// Returns the result of the Regge metric on the
+  /// edge vectors (tangent vectors) i and j.
+  /// This is the entry $G_(i j)$ of the metric tensor $G$.
+  pub fn metric(&self, mut ei: usize, mut ej: usize) -> f64 {
+    if ei == ej {
+      self.edge_lengths[ei].powi(2)
+    } else {
+      if ei > ej {
+        std::mem::swap(&mut ei, &mut ej);
+      }
+
+      let l0i = self.edge_lengths[ei];
+      let l0j = self.edge_lengths[ej];
+
+      // TODO: improve index computation
+      let vi = ei + 1;
+      let vj = ej + 1;
+      let mut eij = 0;
+      for i in 0..vi {
+        eij += self.nvertices() - i - 1;
+      }
+      eij += (vj - vi) - 1;
+      let lij = self.edge_lengths[eij];
+
+      0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2))
+    }
+  }
+
+  pub fn metric_tensor(&self) -> na::DMatrix<f64> {
+    let mut mat = na::DMatrix::zeros(self.dim, self.dim);
+    for i in 0..self.dim {
+      for j in i..self.dim {
+        let v = self.metric(i, j);
+        mat[(i, j)] = v;
+        mat[(j, i)] = v;
       }
     }
-    dia
+    mat
   }
 
-  /// The shape regualrity measure of the simplex.
+  /// The shape regularity measure of the simplex.
   pub fn shape_reguarity_measure(&self) -> f64 {
-    self.diameter().powi(self.dim_intrinsic() as i32) / self.vol()
+    self.diameter().powi(self.dim() as i32) / self.vol()
   }
 
-  /// Linear map from $[lambda_1, dots lambda_k]^T -> [1, x_1 dots, x_n]^T$,
-  /// where $k$ is the intrinsic dim and $n$ is the ambient dim.
-  /// Maps barycentric coordinates to cartesian coordinates.
-  pub fn barycentric_to_cartesian_map(&self) -> na::DMatrix<f64> {
-    self.vertices.clone().insert_row(0, 1.0)
-  }
-
-  /// Linear map from $[1, x_1 dots, x_n]^T -> [lambda_1, dots lambda_k]^T$,
-  /// where $k$ is the intrinsic dim and $n$ is the ambient dim.
-  /// Maps cartesian coordinates to barycentric coordinates.
-  pub fn cartesian_to_barycentric_map(&self) -> na::DMatrix<f64> {
-    let m = self.barycentric_to_cartesian_map();
-    if self.dims_agree() {
-      m.try_inverse().unwrap()
-    } else {
-      m.pseudo_inverse(1e-10).unwrap()
+  pub fn into_singleton_mesh(&self) -> Rc<SimplicialManifold> {
+    let mut edge_lengths = HashMap::new();
+    let mut idx = 0;
+    for i in 0..self.nvertices() {
+      for j in (i + 1)..self.nvertices() {
+        edge_lengths.insert(EdgeBetweenVertices::new(i, j), self.edge_lengths[idx]);
+        idx += 1;
+      }
     }
-  }
-
-  /// Constant gradients of barycentric coordinate functions.
-  pub fn barycentric_functions_grad(&self) -> na::DMatrix<f64> {
-    let n = self.nvertices();
-    self
-      .cartesian_to_barycentric_map()
-      .transpose()
-      .view_range(1..n, 0..n)
-      .clone_owned()
-  }
-
-  /// The unnormalized normal vectors of the faces ((d-1)-simplicies).
-  /// The ordering of these normal vectors corresponds to the natural ordering of
-  /// the subsimplicies, given by removing one vertex at a time in order.
-  pub fn face_normals(&self) -> na::DMatrix<f64> {
-    -self.barycentric_functions_grad()
-  }
-
-  /// The normalized normal vectors of the faces ((d-1)-simplicies).
-  pub fn face_unit_normals(&self) -> na::DMatrix<f64> {
-    self.face_normals().normalize()
-  }
-
-  pub fn into_singleton_mesh(self) -> Rc<SimplicialMesh> {
-    let nvertices = self.nvertices();
-    let nodes = MeshNodes::new(self.vertices);
-    SimplicialMesh::from_cells(nodes, vec![(0..nvertices).collect()])
+    SimplicialManifold::from_cells(
+      self.nvertices(),
+      vec![(0..self.nvertices()).collect()],
+      edge_lengths,
+    )
   }
 }
 
@@ -177,27 +149,16 @@ pub fn ref_vol(dim: Dim) -> f64 {
   (factorial(dim) as f64).recip()
 }
 
-pub struct AffineTransform {
-  linear: na::DMatrix<f64>,
-  translation: na::DVector<f64>,
-}
-impl AffineTransform {
-  pub fn apply(&self, p: na::DMatrixView<f64>) -> na::DMatrix<f64> {
-    let mut r = &self.linear * p;
-    r.column_iter_mut().for_each(|mut c| c += &self.translation);
-    r
-  }
-  pub fn det(&self) -> f64 {
-    self.linear.determinant()
-  }
-  pub fn jacobi(&self) -> &na::DMatrix<f64> {
-    &self.linear
-  }
-}
-
 #[cfg(test)]
 mod test {
   use super::*;
+
+  #[test]
+  fn reference_transform() {
+    let refsimp = GeometrySimplex::new_ref(3);
+    let simp = GeometrySimplex::new(3, vec![1.0, 1.0, 1.0, SQRT_2, SQRT_2, SQRT_2]);
+    assert_eq!(refsimp.edge_lengths, simp.edge_lengths);
+  }
 
   #[test]
   fn ref_vol_test() {
@@ -205,24 +166,5 @@ mod test {
       let simp = GeometrySimplex::new_ref(d);
       assert_eq!(simp.det(), ref_vol(d));
     }
-  }
-
-  #[test]
-  fn reference_transform() {
-    let refsimp = GeometrySimplex::new_ref(3);
-    let simp = GeometrySimplex::new(na::DMatrix::from_columns(&[
-      na::DVector::from_row_slice(&[5.0, 6.0, -2.0]),
-      na::DVector::from_row_slice(&[2.0, 10.0, -1.0]),
-      na::DVector::from_row_slice(&[1.0, 3.0, -3.0]),
-      na::DVector::from_row_slice(&[0.0, -2.0, -4.0]),
-    ]));
-    println!("ref{:?}", refsimp.vertices().shape());
-    assert_eq!(
-      simp
-        .reference_transform()
-        .apply(refsimp.vertices().as_view()),
-      *simp.vertices()
-    );
-    assert_eq!(simp.det(), refsimp.det() * simp.reference_transform().det());
   }
 }
