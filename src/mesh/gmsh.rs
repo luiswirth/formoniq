@@ -1,13 +1,13 @@
 use crate::mesh::MeshNodes;
 
-use super::SimplicialMesh;
+use super::SimplicialManifold;
 
 use std::rc::Rc;
 
 use tracing::warn;
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn load_gmsh(bytes: &[u8]) -> Rc<SimplicialMesh> {
+pub fn load_gmsh(bytes: &[u8]) -> Rc<SimplicialManifold> {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_nodes = msh.data.nodes.unwrap().node_blocks;
@@ -44,13 +44,13 @@ pub fn load_gmsh(bytes: &[u8]) -> Rc<SimplicialMesh> {
   }
 
   if !quads.is_empty() {
-    return SimplicialMesh::from_cells(mesh_nodes, quads);
+    return SimplicialManifold::from_cells(mesh_nodes, quads);
   }
   if !trias.is_empty() {
-    return SimplicialMesh::from_cells(mesh_nodes, trias);
+    return SimplicialManifold::from_cells(mesh_nodes, trias);
   }
   if !edges.is_empty() {
-    return SimplicialMesh::from_cells(mesh_nodes, edges);
+    return SimplicialManifold::from_cells(mesh_nodes, edges);
   }
   panic!("failed to construct Triangulation from gmsh");
 }

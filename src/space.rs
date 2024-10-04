@@ -1,4 +1,4 @@
-use crate::mesh::{CellId, SimplicialMesh};
+use crate::mesh::{CellId, SimplicialManifold};
 
 use std::rc::Rc;
 
@@ -6,15 +6,15 @@ pub type DofId = usize;
 
 /// A Linear Lagrangian Finite Element Space
 pub struct FeSpace {
-  mesh: Rc<SimplicialMesh>,
+  mesh: Rc<SimplicialManifold>,
 }
 
 impl FeSpace {
-  pub fn new(mesh: Rc<SimplicialMesh>) -> Self {
+  pub fn new(mesh: Rc<SimplicialManifold>) -> Self {
     Self { mesh }
   }
 
-  pub fn mesh(&self) -> &Rc<SimplicialMesh> {
+  pub fn mesh(&self) -> &Rc<SimplicialManifold> {
     &self.mesh
   }
 

@@ -15,68 +15,56 @@ use crate::{
 
 use indexmap::{set::MutableValues, IndexSet};
 use std::{
+  collections::HashMap,
   hash::Hash,
   rc::{self, Rc},
 };
 
 pub type NodeId = usize;
+pub type EdgeId = usize; // Or should this be (usize, usize)?
 pub type CellId = usize;
 pub type DSimplexId = usize;
 pub type SimplexId = (Dim, DSimplexId);
 
-pub type RawSimplex = Vec<usize>;
-
-/// A pure simplicial mesh also called a triangulation.
+// A simplicial manifold is a piecewiese-linear manifold.
 #[derive(Debug)]
-pub struct SimplicialMesh {
-  /// The nodes of this mesh.
-  nodes: Rc<MeshNodes>,
+pub struct SimplicialManifold {
   /// All simplicies of the mesh, from 0-simplicies (vertices) to d-simplicies (cells).
-  simplicies: Vec<IndexSet<MeshSimplex>>,
+  nnodes: usize,
+  /// topology
+  simplicies: Vec<IndexSet<ManifoldSimplex>>,
+  /// geometry
+  edge_lengths: HashMap<(NodeId, NodeId), f64>,
 }
 
 // getters
-impl SimplicialMesh {
-  pub fn dim_intrinsic(&self) -> Dim {
+impl SimplicialManifold {
+  pub fn dim(&self) -> Dim {
     self.simplicies.len() - 1
   }
-  pub fn dim_ambient(&self) -> Dim {
-    self.nodes.dim()
-  }
-  pub fn nodes(&self) -> &Rc<MeshNodes> {
-    &self.nodes
-  }
   pub fn nnodes(&self) -> usize {
-    self.nodes.len()
+    self.nnodes
   }
-  pub fn node_coords(&self) -> &na::DMatrix<f64> {
-    &self.nodes.coords
-  }
-  pub fn node_coord(&self, inode: NodeId) -> na::DVectorView<f64> {
-    self.nodes.coord(inode)
-  }
-  pub fn cells(&self) -> &IndexSet<MeshSimplex> {
+  pub fn cells(&self) -> &IndexSet<ManifoldSimplex> {
     self.simplicies.last().unwrap()
   }
   pub fn ncells(&self) -> usize {
     self.cells().len()
   }
-  pub fn cell(&self, id: CellId) -> &MeshSimplex {
+  pub fn cell(&self, id: CellId) -> &ManifoldSimplex {
     self.cells().get_index(id).unwrap()
   }
-  pub fn simplicies(&self) -> &[IndexSet<MeshSimplex>] {
+  pub fn simplicies(&self) -> &[IndexSet<ManifoldSimplex>] {
     &self.simplicies
   }
-  pub fn dsimplicies(&self, d: Dim) -> &IndexSet<MeshSimplex> {
+  pub fn dsimplicies(&self, d: Dim) -> &IndexSet<ManifoldSimplex> {
     &self.simplicies[d]
   }
-  pub fn simplex(&self, id: SimplexId) -> &MeshSimplex {
+  pub fn simplex(&self, id: SimplexId) -> &ManifoldSimplex {
     self.simplicies[id.0].get_index(id.1).unwrap()
   }
-  pub fn facet(&self, id: DSimplexId) -> &MeshSimplex {
-    self.simplicies[self.dim_intrinsic() - 1]
-      .get_index(id)
-      .unwrap()
+  pub fn facet(&self, id: DSimplexId) -> &ManifoldSimplex {
+    self.simplicies[self.dim() - 1].get_index(id).unwrap()
   }
 
   /// The mesh width $h$, which is the largest diameter of all cells.
@@ -103,15 +91,15 @@ impl SimplicialMesh {
 }
 
 // constructors
-impl SimplicialMesh {
-  pub fn from_cells(nodes: Rc<MeshNodes>, cells: Vec<RawSimplex>) -> Rc<Self> {
+impl SimplicialManifold {
+  pub fn from_cells(cells: Vec<RawSimplex>) -> Rc<Self> {
     Rc::new_cyclic(|this| {
       let dim_intrinsic = cells[0].len() - 1;
       let mut simplicies = vec![IndexSet::new(); dim_intrinsic + 1];
 
       // add 0-simplicies (vertices)
       simplicies[0] = (0..nodes.len())
-        .map(|ivertex| MeshSimplex {
+        .map(|ivertex| ManifoldSimplex {
           vertices: vec![ivertex],
           sorted_vertices: vec![ivertex],
           sort_orientation: Orientation::Pos,
@@ -130,7 +118,7 @@ impl SimplicialMesh {
           let mut sorted_vertices = vertices.clone();
           let nswaps = sort_count_swaps(&mut sorted_vertices);
           let orientation = Orientation::from_permutation_parity(nswaps);
-          MeshSimplex {
+          ManifoldSimplex {
             vertices,
             sorted_vertices,
             sort_orientation: orientation,
@@ -163,7 +151,7 @@ impl SimplicialMesh {
               Orientation::from_permutation_parity(sort_count_swaps(&mut sorted_vertices));
 
             // TODO: can we avoid constructing this, before checking that this simplex already exists?
-            let sub_simp = MeshSimplex {
+            let sub_simp = ManifoldSimplex {
               vertices,
               sorted_vertices,
               sort_orientation,
@@ -188,41 +176,13 @@ impl SimplicialMesh {
   }
 }
 
-/// The nodes that can be used for building meshes.
-#[derive(Debug, Clone)]
-pub struct MeshNodes {
-  /// The coordinates of the nodes in the columns of a matrix.
-  coords: na::DMatrix<f64>,
-}
-impl MeshNodes {
-  pub fn new(coords: na::DMatrix<f64>) -> Rc<Self> {
-    Rc::new(Self { coords })
-  }
-  pub fn dim(&self) -> Dim {
-    self.coords.nrows()
-  }
-  pub fn len(&self) -> usize {
-    self.coords.ncols()
-  }
-  pub fn is_empty(&self) -> bool {
-    self.len() == 0
-  }
-  pub fn coords(&self) -> &na::DMatrix<f64> {
-    &self.coords
-  }
-  pub fn coord(&self, inode: NodeId) -> na::DVectorView<f64> {
-    self.coords.column(inode)
-  }
-}
-
 /// A mesh entity of a simplicial mesh.
 /// Defines the simplex based on its vertices and contains topological
 /// information (incidence).
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
-pub struct MeshSimplex {
+pub struct ManifoldSimplex {
   /// Verticies defining the simplex.
-  /// The verticies are stored as (column) indicies into the node mesh.
   vertices: Vec<NodeId>,
   /// The same as [`verticies`] but sorted. Used for comparing simplicies.
   sorted_vertices: Vec<NodeId>,
@@ -237,11 +197,11 @@ pub struct MeshSimplex {
   /// ID identifiying this simplex in the d-th dimension of the mesh
   id: DSimplexId,
   /// The mesh this simplex lives in.
-  mesh: rc::Weak<SimplicialMesh>,
+  mesh: rc::Weak<SimplicialManifold>,
 }
 
 /// Functionality methods.
-impl MeshSimplex {
+impl ManifoldSimplex {
   pub fn dim_intrinsic(&self) -> Dim {
     self.vertices.len() - 1
   }
@@ -284,13 +244,13 @@ impl MeshSimplex {
 /// Two simplicies are considered the same, if they are made out of the same
 /// vertices. The only thing that might still be different is the orientation,
 /// depending on the actual order of the vertices.
-impl PartialEq for MeshSimplex {
+impl PartialEq for ManifoldSimplex {
   fn eq(&self, other: &Self) -> bool {
     self.sorted_vertices == other.sorted_vertices
   }
 }
-impl Eq for MeshSimplex {}
-impl Hash for MeshSimplex {
+impl Eq for ManifoldSimplex {}
+impl Hash for ManifoldSimplex {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     self.sorted_vertices.hash(state)
   }

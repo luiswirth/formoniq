@@ -1,14 +1,14 @@
 use std::collections::HashSet;
 
-use super::{CellId, NodeId, SimplexId, SimplicialMesh};
+use super::{CellId, NodeId, SimplexId, SimplicialManifold};
 
-impl SimplicialMesh {
+impl SimplicialManifold {
   /// For a d-mesh computes the boundary, which consists of (d-1)-simplicies.
   /// The boundary simplicies are characterized by the fact that they
   /// only have 1 super entity.
   pub fn boundary(&self) -> Vec<SimplexId> {
     let mut boundary = Vec::new();
-    let boundary_dim = self.dim_intrinsic() - 1;
+    let boundary_dim = self.dim() - 1;
     for simp in self.dsimplicies(boundary_dim) {
       if simp.supers.len() == 1 {
         boundary.push(simp.simplex_id());

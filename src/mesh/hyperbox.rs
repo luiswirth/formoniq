@@ -1,4 +1,4 @@
-use super::{MeshNodes, NodeId, RawSimplex, SimplicialMesh};
+use super::{MeshNodes, NodeId, RawSimplex, SimplicialManifold};
 use crate::{
   assemble::DofCoeffMap,
   combinatorics::{factorial, Permutations},
@@ -143,7 +143,7 @@ impl HyperBoxMeshInfo {
 pub struct HyperBoxMesh {
   info: HyperBoxMeshInfo,
   nodes: Rc<MeshNodes>,
-  mesh: Rc<SimplicialMesh>,
+  mesh: Rc<SimplicialManifold>,
 }
 
 // constructors
@@ -179,7 +179,7 @@ impl HyperBoxMesh {
   pub fn nodes(&self) -> &Rc<MeshNodes> {
     &self.nodes
   }
-  pub fn mesh(&self) -> &Rc<SimplicialMesh> {
+  pub fn mesh(&self) -> &Rc<SimplicialManifold> {
     &self.mesh
   }
 
@@ -225,7 +225,7 @@ impl HyperBoxMesh {
     MeshNodes::new(nodes)
   }
 
-  fn compute_mesh(info: &HyperBoxMeshInfo, nodes: Rc<MeshNodes>) -> Rc<SimplicialMesh> {
+  fn compute_mesh(info: &HyperBoxMeshInfo, nodes: Rc<MeshNodes>) -> Rc<SimplicialManifold> {
     let dim = info.dim();
     let nsimplicies = factorial(dim) * info.nboxes();
     let mut simplicies: Vec<RawSimplex> = Vec::with_capacity(nsimplicies);
@@ -270,7 +270,7 @@ impl HyperBoxMesh {
       simplicies.extend(cube_simplicies);
     }
 
-    SimplicialMesh::from_cells(nodes, simplicies)
+    SimplicialManifold::from_cells(nodes, simplicies)
   }
 }
 

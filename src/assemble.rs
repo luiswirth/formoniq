@@ -125,9 +125,7 @@ pub fn fix_dof_coeffs_alt<F>(
   galmat.set_zero(|r, c| dof_coeffs[r].is_some());
 
   for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
-    if coeff.is_some() {
-      galmat.push(i, i, 1.0);
-    }
+    galmat.push(i, i, 1.0);
   }
 }
 

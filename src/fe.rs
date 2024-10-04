@@ -1,6 +1,6 @@
 use crate::{
   assemble::DofCoeffMap,
-  mesh::{CellId, SimplicialMesh},
+  mesh::{CellId, SimplicialManifold},
   space::{DofId, FeSpace},
 };
 
@@ -45,112 +45,25 @@ pub fn lumped_mass_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
   na::DMatrix::from_diagonal_element(n, n, v)
 }
 
-/// The Element Matrix for the linear advection bilinar form,
-/// computed using upwind quadrature.
-pub struct UpwindAdvectionElmat<V>
-where
-  V: Fn(na::DVectorView<f64>) -> na::DVector<f64>,
-{
-  advection_vel: V,
-  vertex_masses: Vec<f64>,
-}
-impl<V> UpwindAdvectionElmat<V>
-where
-  V: Fn(na::DVectorView<f64>) -> na::DVector<f64>,
-{
-  pub fn new(advection_vel: V, mesh: &SimplicialMesh) -> Self {
-    let mut vertex_masses = vec![0.0; mesh.nnodes()];
-
-    for (icell, cell) in mesh.cells().iter().enumerate() {
-      let cell_geo = mesh.cell(icell).geometry_simplex();
-      let vol = cell_geo.vol();
-      for &ivertex in cell.vertices() {
-        vertex_masses[ivertex] += vol / cell.nvertices() as f64;
-      }
-    }
-
-    Self {
-      advection_vel,
-      vertex_masses,
-    }
-  }
-}
-impl<V> ElmatProvider for UpwindAdvectionElmat<V>
-where
-  V: Fn(na::DVectorView<f64>) -> na::DVector<f64>,
-{
-  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
-    let cell = space.mesh().cell(icell);
-    let nvertices = cell.nvertices();
-    let vertices = cell.vertices();
-    let facets = cell
-      .subs()
-      .iter()
-      .map(|&f| space.mesh().facet(f))
-      .collect::<Vec<_>>();
-    let cell_geo = space.mesh().cell(icell).geometry_simplex();
-    let bary_grads = cell_geo.barycentric_functions_grad();
-    let normals = cell_geo.face_normals();
-
-    let mut elmat = na::DMatrix::zeros(nvertices, nvertices);
-    for (ivertex, &vertex) in vertices.iter().enumerate() {
-      let advection_vel = (self.advection_vel)(cell_geo.vertices().column(ivertex));
-      let normals_at_vertex: Vec<_> = facets
-        .iter()
-        .zip(normals.column_iter())
-        .filter_map(|(f, n)| f.vertices().contains(&vertex).then_some(n))
-        .collect();
-
-      let dots: Vec<_> = normals_at_vertex
-        .iter()
-        .map(|n| advection_vel.dot(n))
-        .collect();
-      let is_upwind = dots.iter().all(|&dot| dot >= 0.0);
-      let upwind_share_count = dots.iter().filter(|&&dot| dot == 0.0).count();
-
-      if is_upwind {
-        let mass = self.vertex_masses[vertex];
-        let mut row = mass * advection_vel.transpose() * &bary_grads;
-        if upwind_share_count > 0 {
-          row /= upwind_share_count as f64;
-        }
-        elmat.row_mut(ivertex).copy_from(&row);
-      }
-    }
-    elmat
-  }
-}
-
 // Element vector for scalar load function, computed using trapezoidal rule.
-pub struct LoadElvec<F>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
-  load_fn: F,
+pub struct LoadElvec {
+  value: f64,
 }
-impl<F> ElvecProvider for LoadElvec<F>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
+impl ElvecProvider for LoadElvec {
   fn eval(&self, space: &FeSpace, icell: CellId) -> na::DVector<f64> {
     let cell_geo = space.mesh().cell(icell).geometry_simplex();
     let nverts = cell_geo.nvertices();
-    let verts = cell_geo.vertices();
-    cell_geo.vol() / nverts as f64
-      * na::DVector::from_iterator(nverts, verts.column_iter().map(|v| (self.load_fn)(v)))
+    cell_geo.vol() / nverts as f64 * na::DVector::from_element(nverts, self.value)
   }
 }
-impl<F> LoadElvec<F>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
-  pub fn new(load_fn: F) -> Self {
-    Self { load_fn }
+impl LoadElvec {
+  pub fn new(value: f64) -> Self {
+    Self { value }
   }
 }
 
 // NOTE: In general this should depend on the FE Space and not just the mesh.
-pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialMesh) -> f64 {
+pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm = 0.0;
   for (icell, cell) in mesh.cells().iter().enumerate() {
     let mut sum = 0.0;
