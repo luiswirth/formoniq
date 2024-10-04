@@ -1,4 +1,6 @@
-use super::{MeshNodes, NodeId, RawSimplex, SimplicialMesh};
+use super::{
+  coordinates::MeshNodeCoords, EdgeBetweenVertices, NodeId, RawSimplex, SimplicialManifold,
+};
 use crate::{
   assemble::DofCoeffMap,
   combinatorics::{factorial, Permutations},
@@ -7,7 +9,7 @@ use crate::{
   Dim,
 };
 
-use std::rc::Rc;
+use std::{collections::HashMap, rc::Rc};
 
 pub struct HyperBox {
   min: na::DVector<f64>,
@@ -142,8 +144,8 @@ impl HyperBoxMeshInfo {
 
 pub struct HyperBoxMesh {
   info: HyperBoxMeshInfo,
-  nodes: Rc<MeshNodes>,
-  mesh: Rc<SimplicialMesh>,
+  nodes: Rc<MeshNodeCoords>,
+  mesh: Rc<SimplicialManifold>,
 }
 
 // constructors
@@ -162,7 +164,7 @@ impl HyperBoxMesh {
   }
 
   pub fn from_info(info: HyperBoxMeshInfo) -> Self {
-    let nodes = Self::compute_mesh_nodes(&info);
+    let nodes = Self::compute_nodes(&info);
     let mesh = Self::compute_mesh(&info, nodes.clone());
     Self { info, nodes, mesh }
   }
@@ -176,10 +178,10 @@ impl HyperBoxMesh {
   pub fn info(&self) -> &HyperBoxMeshInfo {
     &self.info
   }
-  pub fn nodes(&self) -> &Rc<MeshNodes> {
+  pub fn nodes(&self) -> &Rc<MeshNodeCoords> {
     &self.nodes
   }
-  pub fn mesh(&self) -> &Rc<SimplicialMesh> {
+  pub fn mesh(&self) -> &Rc<SimplicialManifold> {
     &self.mesh
   }
 
@@ -217,18 +219,22 @@ impl HyperBoxMesh {
 
 // construction helpers
 impl HyperBoxMesh {
-  fn compute_mesh_nodes(info: &HyperBoxMeshInfo) -> Rc<MeshNodes> {
+  fn compute_nodes(info: &HyperBoxMeshInfo) -> Rc<MeshNodeCoords> {
     let mut nodes = na::DMatrix::zeros(info.dim(), info.nnodes());
     for (inode, mut coord) in nodes.column_iter_mut().enumerate() {
       coord.copy_from(&info.node_pos(inode));
     }
-    MeshNodes::new(nodes)
+    MeshNodeCoords::new(nodes)
   }
 
-  fn compute_mesh(info: &HyperBoxMeshInfo, nodes: Rc<MeshNodes>) -> Rc<SimplicialMesh> {
+  fn compute_mesh(
+    info: &HyperBoxMeshInfo,
+    node_coords: Rc<MeshNodeCoords>,
+  ) -> Rc<SimplicialManifold> {
     let dim = info.dim();
     let nsimplicies = factorial(dim) * info.nboxes();
     let mut simplicies: Vec<RawSimplex> = Vec::with_capacity(nsimplicies);
+    let mut edge_lenghts = HashMap::new();
 
     // iterate through all boxes that make up the mesh
     for icube in 0..info.nboxes() {
@@ -242,35 +248,44 @@ impl HyperBoxMesh {
       // each permutation of the basis directions (dimensions) gives rise to one simplex
       let basisdirs = (0..dim).collect();
 
-      let cube_simplicies = Permutations::new(basisdirs)
-        .enumerate()
-        .map(|(iperm, basisdirs)| {
-          // construct simplex by adding all shifted vertices
-          let mut simplex: RawSimplex = vec![ivertex_origin];
+      let cube_simplicies = Permutations::new(basisdirs).map(|basisdirs| {
+        // construct simplex by adding all shifted vertices
+        let mut simplex: RawSimplex = vec![ivertex_origin];
 
-          // add every shift (according to permutation) to vertex iteratively
-          // every shift step gives us one vertex
-          let mut vertex_icart = vertex_icart_origin.clone();
-          for basisdir in basisdirs {
-            vertex_icart[basisdir] += 1;
+        // add every shift (according to permutation) to vertex iteratively
+        // every shift step gives us one vertex
+        let mut vertex_icart = vertex_icart_origin.clone();
+        for basisdir in basisdirs {
+          vertex_icart[basisdir] += 1;
 
-            let ivertex = cartesian_index2linear_index(vertex_icart.clone(), info.nnodes_per_dim());
-            simplex.push(ivertex);
+          let ivertex = cartesian_index2linear_index(vertex_icart.clone(), info.nnodes_per_dim());
+          simplex.push(ivertex);
+        }
+
+        for &v0 in &simplex {
+          for &v1 in &simplex {
+            if v0 < v1 {
+              edge_lenghts.insert(
+                EdgeBetweenVertices::new(v0, v1),
+                (node_coords.coord(v1) - node_coords.coord(v0)).norm(),
+              );
+            }
           }
+        }
 
-          // TODO: do we want this?
-          // force positive orientation
-          if iperm % 2 == 1 {
-            //simplex.swap(0, 1);
-          }
+        // TODO: do we want this?
+        // force positive orientation
+        //if iperm % 2 == 1 {
+        //  simplex.swap(0, 1);
+        //}
 
-          simplex
-        });
+        simplex
+      });
 
       simplicies.extend(cube_simplicies);
     }
 
-    SimplicialMesh::from_cells(nodes, simplicies)
+    SimplicialManifold::from_cells(node_coords.len(), simplicies, edge_lenghts)
   }
 }
 
