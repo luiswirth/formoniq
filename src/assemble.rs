@@ -45,7 +45,7 @@ where
 
 /// Modifies supplied galerkin matrix and galerkin vector,
 /// such that the FE solution has the optionally given coefficents on the dofs.
-/// Is primarly used the enforce essential boundary conditions.
+/// Is primarly used the enforce essential dirichlet boundary conditions.
 ///
 /// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
 pub fn fix_dof_coeffs<F>(

@@ -1,7 +1,6 @@
 use crate::{
-  assemble::DofCoeffMap,
-  mesh::{CellId, SimplicialManifold},
-  space::{DofId, FeSpace},
+  mesh::{data::NodeData, CellId, SimplicialManifold},
+  space::FeSpace,
 };
 
 pub trait ElmatProvider {
@@ -32,8 +31,18 @@ where
 /// The exact Element Matrix for the negative laplacian in linear lagrangian FE.
 pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
   let cell_geo = space.mesh().cell(icell).geometry_simplex();
-  let m = cell_geo.barycentric_functions_grad();
-  cell_geo.vol() * m.transpose() * m
+  let dim = cell_geo.dim();
+  let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
+  for i in 0..dim {
+    reference_gradbarys[(i, 0)] = -1.0;
+  }
+  for i in 0..dim {
+    reference_gradbarys[(i, i + 1)] = 1.0;
+  }
+  let metric = cell_geo.metric_tensor();
+  let vol = cell_geo.vol();
+
+  vol * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
 /// Approximated Element Matrix for mass bilinear form,
@@ -47,18 +56,23 @@ pub fn lumped_mass_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
 
 // Element vector for scalar load function, computed using trapezoidal rule.
 pub struct LoadElvec {
-  value: f64,
+  dof_data: NodeData<f64>,
 }
 impl ElvecProvider for LoadElvec {
   fn eval(&self, space: &FeSpace, icell: CellId) -> na::DVector<f64> {
-    let cell_geo = space.mesh().cell(icell).geometry_simplex();
+    let cell = space.mesh().cell(icell);
+    let cell_geo = cell.geometry_simplex();
     let nverts = cell_geo.nvertices();
-    cell_geo.vol() / nverts as f64 * na::DVector::from_element(nverts, self.value)
+    cell_geo.vol() / nverts as f64
+      * na::DVector::from_iterator(
+        nverts,
+        cell.vertices().iter().copied().map(|iv| self.dof_data[iv]),
+      )
   }
 }
 impl LoadElvec {
-  pub fn new(value: f64) -> Self {
-    Self { value }
+  pub fn new(dof_data: NodeData<f64>) -> Self {
+    Self { dof_data }
   }
 }
 
@@ -77,39 +91,6 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   norm.sqrt()
 }
 
-pub struct DirichletBcMap {
-  dirichlet_coeffs: Vec<Option<f64>>,
-}
-impl DofCoeffMap for DirichletBcMap {
-  fn eval(&self, idof: DofId) -> Option<f64> {
-    self.dirichlet_coeffs[idof]
-  }
-}
-impl DirichletBcMap {
-  pub fn new<F>(space: &FeSpace, dirichlet_data: F) -> Self
-  where
-    F: Fn(na::DVectorView<f64>) -> f64,
-  {
-    let mut dirichlet_coeffs = vec![None; space.ndofs()];
-    let boundary_dofs = space.mesh().boundary_nodes();
-    for idof in boundary_dofs {
-      let pos = space.mesh().node_coords().column(idof);
-      let dof_value = dirichlet_data(pos);
-      dirichlet_coeffs[idof] = Some(dof_value);
-    }
-    Self { dirichlet_coeffs }
-  }
-}
-
-pub struct DirichletInflowBcMap {
-  dirichlet_coeffs: Vec<Option<f64>>,
-}
-impl DofCoeffMap for DirichletInflowBcMap {
-  fn eval(&self, idof: DofId) -> Option<f64> {
-    self.dirichlet_coeffs[idof]
-  }
-}
-
 #[cfg(test)]
 mod test {
   use super::laplacian_neg_elmat;
@@ -118,11 +99,7 @@ mod test {
   fn check_elmat_refd(d: usize, expected_elmat: na::DMatrixView<f64>) {
     let space = FeSpace::new(GeometrySimplex::new_ref(d).into_singleton_mesh());
     let computed_elmat = laplacian_neg_elmat(&space, 0);
-    assert_eq!(computed_elmat, expected_elmat);
-
-    let space = FeSpace::new(GeometrySimplex::new_ref_embedded(d, d + 1).into_singleton_mesh());
-    let computed_elmat = laplacian_neg_elmat(&space, 0);
-    assert!((computed_elmat - expected_elmat).norm_squared() < f64::EPSILON);
+    assert!((computed_elmat - expected_elmat).norm() < 10.0 * f64::EPSILON);
   }
 
   #[test]

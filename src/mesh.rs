@@ -6,7 +6,7 @@
 //! found in the geometry module.
 
 pub mod boundary;
-pub mod gmsh;
+pub mod data;
 pub mod hyperbox;
 
 use crate::{
@@ -21,10 +21,25 @@ use std::{
 };
 
 pub type NodeId = usize;
-pub type EdgeId = usize; // Or should this be (usize, usize)?
 pub type CellId = usize;
 pub type DSimplexId = usize;
 pub type SimplexId = (Dim, DSimplexId);
+
+pub type RawSimplex = Vec<NodeId>;
+
+/// Helper struct that ensures that edges don't have an orientation.
+/// Always use `Self::new` never construct tuple directly.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct EdgeId(NodeId, NodeId);
+impl EdgeId {
+  pub fn new(a: NodeId, b: NodeId) -> Self {
+    if a < b {
+      Self(a, b)
+    } else {
+      Self(b, a)
+    }
+  }
+}
 
 // A simplicial manifold is a piecewiese-linear manifold.
 #[derive(Debug)]
@@ -34,7 +49,7 @@ pub struct SimplicialManifold {
   /// topology
   simplicies: Vec<IndexSet<ManifoldSimplex>>,
   /// geometry
-  edge_lengths: HashMap<(NodeId, NodeId), f64>,
+  edge_lengths: HashMap<EdgeId, f64>,
 }
 
 // getters
@@ -92,13 +107,17 @@ impl SimplicialManifold {
 
 // constructors
 impl SimplicialManifold {
-  pub fn from_cells(cells: Vec<RawSimplex>) -> Rc<Self> {
+  pub fn from_cells(
+    nnodes: usize,
+    cells: Vec<RawSimplex>,
+    edge_lengths: HashMap<EdgeId, f64>,
+  ) -> Rc<Self> {
     Rc::new_cyclic(|this| {
       let dim_intrinsic = cells[0].len() - 1;
       let mut simplicies = vec![IndexSet::new(); dim_intrinsic + 1];
 
       // add 0-simplicies (vertices)
-      simplicies[0] = (0..nodes.len())
+      simplicies[0] = (0..nnodes)
         .map(|ivertex| ManifoldSimplex {
           vertices: vec![ivertex],
           sorted_vertices: vec![ivertex],
@@ -171,7 +190,11 @@ impl SimplicialManifold {
         }
       }
 
-      Self { nodes, simplicies }
+      Self {
+        nnodes,
+        simplicies,
+        edge_lengths,
+      }
     })
   }
 }
@@ -202,7 +225,7 @@ pub struct ManifoldSimplex {
 
 /// Functionality methods.
 impl ManifoldSimplex {
-  pub fn dim_intrinsic(&self) -> Dim {
+  pub fn dim(&self) -> Dim {
     self.vertices.len() - 1
   }
   pub fn nvertices(&self) -> usize {
@@ -215,7 +238,7 @@ impl ManifoldSimplex {
     self.id
   }
   pub fn simplex_id(&self) -> SimplexId {
-    (self.dim_intrinsic(), self.id)
+    (self.dim(), self.id)
   }
 
   pub fn subs_with_orientation(&self) -> &[(DSimplexId, Orientation)] {
@@ -233,11 +256,15 @@ impl ManifoldSimplex {
 
   pub fn geometry_simplex(&self) -> GeometrySimplex {
     let mesh = &self.mesh.upgrade().unwrap();
-    let mut vertices = na::DMatrix::zeros(mesh.dim_ambient(), self.nvertices());
-    for (i, &v) in self.vertices.iter().enumerate() {
-      vertices.column_mut(i).copy_from(&mesh.nodes.coord(v));
+    let mut edge_lengths = Vec::new();
+    for &v0 in &self.vertices {
+      for &v1 in &self.vertices {
+        if v0 < v1 {
+          edge_lengths.push(mesh.edge_lengths[&EdgeId::new(v0, v1)]);
+        }
+      }
     }
-    GeometrySimplex::new(vertices)
+    GeometrySimplex::new(self.dim(), edge_lengths)
   }
 }
 

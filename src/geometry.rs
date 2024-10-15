@@ -1,14 +1,16 @@
-use std::{
-  cmp::{max, min},
-  f64::consts::SQRT_2,
-};
+use std::{collections::HashMap, f64::consts::SQRT_2, rc::Rc};
 
 use num_integer::binomial;
 
-use crate::{combinatorics::factorial, orientation::Orientation, Dim};
+use crate::{
+  combinatorics::factorial,
+  mesh::{EdgeId, SimplicialManifold},
+  orientation::Orientation,
+  Dim,
+};
 
 fn nedges(dim: Dim) -> usize {
-  binomial(dim, 2)
+  binomial(dim + 1, 2)
 }
 
 #[derive(Debug, Clone)]
@@ -17,23 +19,27 @@ pub struct GeometrySimplex {
   /// Order of edges is lexicographical in vertex tuples.
   /// E.g. For a 3-simplex the edges are sorted as (0,1),(0,2),(0,3),(1,2),(1,3),(2,3)
   dim: Dim,
-  edge_lengths: na::DVector<f64>,
+  edge_lengths: Vec<f64>,
 }
 impl GeometrySimplex {
-  pub fn new(dim: Dim, edge_lengths: na::DVector<f64>) -> Self {
+  pub fn new(dim: Dim, edge_lengths: Vec<f64>) -> Self {
     assert!(edge_lengths.len() == nedges(dim));
     Self { dim, edge_lengths }
+  }
+
+  pub fn edge_lengths(&self) -> &[f64] {
+    &self.edge_lengths
   }
 
   /// Constructs a reference simplex in `dim` dimensions.
   pub fn new_ref(dim: Dim) -> Self {
     let nedges = nedges(dim);
-    let mut edge_lengths = na::DVector::zeros(nedges);
-    for i in 0..dim {
-      edge_lengths[i] = 1.0;
+    let mut edge_lengths = vec![0.0; nedges];
+    for l in edge_lengths.iter_mut().take(dim) {
+      *l = 1.0;
     }
-    for i in dim..nedges {
-      edge_lengths[i] = SQRT_2;
+    for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
+      *l = SQRT_2;
     }
     Self { dim, edge_lengths }
   }
@@ -50,7 +56,7 @@ impl GeometrySimplex {
 
   /// The determinate (signed volume) of the simplex.
   pub fn det(&self) -> f64 {
-    (factorial(self.dim()) as f64).recip() * self.metric_tensor().determinant().sqrt()
+    ref_vol(self.dim) * self.metric_tensor().determinant().sqrt()
   }
 
   /// The (unsigned) volume of the simplex.
@@ -80,20 +86,28 @@ impl GeometrySimplex {
   /// Returns the result of the Regge metric on the
   /// edge vectors (tangent vectors) i and j.
   /// This is the entry $G_(i j)$ of the metric tensor $G$.
-  pub fn metric(&self, i: usize, j: usize) -> f64 {
-    if i == j {
-      self.edge_lengths[i].powi(2)
+  pub fn metric(&self, mut ei: usize, mut ej: usize) -> f64 {
+    if ei == ej {
+      self.edge_lengths[ei].powi(2)
     } else {
-      let ei = min(i, j);
-      let ej = max(i, j);
-      // TODO: make index computation more intuitive
-      let eij = self.dim + ei * self.dim - ei * (ei - 1) / 2 + (ej - ei - 1);
+      if ei > ej {
+        std::mem::swap(&mut ei, &mut ej);
+      }
 
       let l0i = self.edge_lengths[ei];
       let l0j = self.edge_lengths[ej];
+
+      // TODO: improve index computation
+      let vi = ei + 1;
+      let vj = ej + 1;
+      let mut eij = 0;
+      for i in 0..vi {
+        eij += self.nvertices() - i - 1;
+      }
+      eij += (vj - vi) - 1;
       let lij = self.edge_lengths[eij];
 
-      0.5 * l0i.powi(2) + l0j.powi(2) - lij.powi(2)
+      0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2))
     }
   }
 
@@ -103,7 +117,7 @@ impl GeometrySimplex {
       for j in i..self.dim {
         let v = self.metric(i, j);
         mat[(i, j)] = v;
-        mat[(i, self.dim - 1 - j)] = v;
+        mat[(j, i)] = v;
       }
     }
     mat
@@ -114,9 +128,20 @@ impl GeometrySimplex {
     self.diameter().powi(self.dim() as i32) / self.vol()
   }
 
-  /// Constant gradients of barycentric coordinate functions.
-  pub fn barycentric_functions_grad(&self) -> na::DMatrix<f64> {
-    todo!()
+  pub fn into_singleton_mesh(&self) -> Rc<SimplicialManifold> {
+    let mut edge_lengths = HashMap::new();
+    let mut idx = 0;
+    for i in 0..self.nvertices() {
+      for j in (i + 1)..self.nvertices() {
+        edge_lengths.insert(EdgeId::new(i, j), self.edge_lengths[idx]);
+        idx += 1;
+      }
+    }
+    SimplicialManifold::from_cells(
+      self.nvertices(),
+      vec![(0..self.nvertices()).collect()],
+      edge_lengths,
+    )
   }
 }
 
@@ -129,20 +154,17 @@ mod test {
   use super::*;
 
   #[test]
+  fn reference_transform() {
+    let refsimp = GeometrySimplex::new_ref(3);
+    let simp = GeometrySimplex::new(3, vec![1.0, 1.0, 1.0, SQRT_2, SQRT_2, SQRT_2]);
+    assert_eq!(refsimp.edge_lengths, simp.edge_lengths);
+  }
+
+  #[test]
   fn ref_vol_test() {
     for d in 0..=8 {
       let simp = GeometrySimplex::new_ref(d);
       assert_eq!(simp.det(), ref_vol(d));
     }
-  }
-
-  #[test]
-  fn reference_transform() {
-    let refsimp = GeometrySimplex::new_ref(3);
-    let simp = GeometrySimplex::new(
-      3,
-      na::DVector::from_column_slice(&[1.0, 1.0, 1.0, SQRT_2, SQRT_2, SQRT_2]),
-    );
-    assert_eq!(refsimp.edge_lengths, simp.edge_lengths);
   }
 }

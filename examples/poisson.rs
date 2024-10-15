@@ -8,12 +8,11 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{l2_norm, laplacian_neg_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::hyperbox::HyperBoxMesh,
+  mesh::{data::NodeData, hyperbox::HyperBoxMesh},
   space::FeSpace,
 };
 
 use std::fmt::Write;
-use std::rc::Rc;
 
 fn main() {
   tracing_subscriber::fmt::init();
@@ -69,10 +68,10 @@ fn main() {
     let shape_regularity = mesh.mesh().shape_regularity_measure();
 
     // Create FE space.
-    let space = Rc::new(FeSpace::new(mesh.mesh().clone()));
+    let space = FeSpace::new(mesh.mesh().clone());
 
     // Compute Galerkin solution to manufactored poisson problem.
-    let galsol = solve_poisson(space, analytic_sol, analytic_laplacian);
+    let galsol = solve_poisson(&mesh, &space, analytic_sol, analytic_laplacian);
 
     if k == kend {
       let mut file = std::fs::File::create("out/galsol.txt").unwrap();
@@ -113,7 +112,8 @@ fn main() {
 }
 
 fn solve_poisson<F, G>(
-  space: Rc<FeSpace>,
+  mesh: &HyperBoxMesh,
+  space: &FeSpace,
   analytic_sol: F,
   analytic_laplacian: G,
 ) -> na::DVector<f64>
@@ -121,12 +121,16 @@ where
   F: Fn(na::DVectorView<f64>) -> f64,
   G: Fn(na::DVectorView<f64>) -> f64,
 {
-  let mesh = space.mesh().clone();
-  let d = mesh.dim_ambient();
+  let d = mesh.dim();
 
   // Assemble galerkin matrix and galerkin vector.
-  let mut galmat = assemble_galmat(&space, laplacian_neg_elmat);
-  let mut galvec = assemble_galvec(&space, LoadElvec::new(|x| -analytic_laplacian(x)));
+  let mut galmat = assemble_galmat(space, laplacian_neg_elmat);
+  let mut galvec = assemble_galvec(
+    space,
+    LoadElvec::new(NodeData::from_coords_map(mesh.nodes(), |x| {
+      -analytic_laplacian(x)
+    })),
+  );
 
   // Enforce homogeneous Dirichlet boundary conditions
   // by fixing dofs on boundary.

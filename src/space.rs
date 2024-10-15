@@ -26,8 +26,4 @@ impl FeSpace {
     let vertices = self.mesh.cell(icell).vertices();
     vertices.to_vec()
   }
-
-  pub fn dof_pos(&self, idof: DofId) -> na::DVector<f64> {
-    self.mesh.node_coords().column(idof).into()
-  }
 }
