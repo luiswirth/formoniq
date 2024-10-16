@@ -6,6 +6,7 @@
 //! found in the geometry module.
 
 pub mod boundary;
+pub mod coordinates;
 pub mod data;
 pub mod hyperbox;
 
@@ -21,6 +22,7 @@ use std::{
 };
 
 pub type NodeId = usize;
+pub type EdgeId = usize;
 pub type CellId = usize;
 pub type DSimplexId = usize;
 pub type SimplexId = (Dim, DSimplexId);
@@ -30,8 +32,8 @@ pub type RawSimplex = Vec<NodeId>;
 /// Helper struct that ensures that edges don't have an orientation.
 /// Always use `Self::new` never construct tuple directly.
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct EdgeId(NodeId, NodeId);
-impl EdgeId {
+pub struct EdgeBetweenVertices(NodeId, NodeId);
+impl EdgeBetweenVertices {
   pub fn new(a: NodeId, b: NodeId) -> Self {
     if a < b {
       Self(a, b)
@@ -49,7 +51,7 @@ pub struct SimplicialManifold {
   /// topology
   simplicies: Vec<IndexSet<ManifoldSimplex>>,
   /// geometry
-  edge_lengths: HashMap<EdgeId, f64>,
+  edge_lengths: HashMap<EdgeBetweenVertices, f64>,
 }
 
 // getters
@@ -110,7 +112,7 @@ impl SimplicialManifold {
   pub fn from_cells(
     nnodes: usize,
     cells: Vec<RawSimplex>,
-    edge_lengths: HashMap<EdgeId, f64>,
+    edge_lengths: HashMap<EdgeBetweenVertices, f64>,
   ) -> Rc<Self> {
     Rc::new_cyclic(|this| {
       let dim_intrinsic = cells[0].len() - 1;
@@ -260,7 +262,7 @@ impl ManifoldSimplex {
     for &v0 in &self.vertices {
       for &v1 in &self.vertices {
         if v0 < v1 {
-          edge_lengths.push(mesh.edge_lengths[&EdgeId::new(v0, v1)]);
+          edge_lengths.push(mesh.edge_lengths[&EdgeBetweenVertices::new(v0, v1)]);
         }
       }
     }

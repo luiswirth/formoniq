@@ -4,7 +4,7 @@ use num_integer::binomial;
 
 use crate::{
   combinatorics::factorial,
-  mesh::{EdgeId, SimplicialManifold},
+  mesh::{EdgeBetweenVertices, SimplicialManifold},
   orientation::Orientation,
   Dim,
 };
@@ -133,7 +133,7 @@ impl GeometrySimplex {
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert(EdgeId::new(i, j), self.edge_lengths[idx]);
+        edge_lengths.insert(EdgeBetweenVertices::new(i, j), self.edge_lengths[idx]);
         idx += 1;
       }
     }

@@ -1,8 +1,9 @@
-use super::{EdgeId, NodeId, RawSimplex, SimplicialManifold};
+use super::{
+  coordinates::MeshNodeCoords, EdgeBetweenVertices, NodeId, RawSimplex, SimplicialManifold,
+};
 use crate::{
   assemble::DofCoeffMap,
   combinatorics::{factorial, Permutations},
-  coordinates::MeshNodeCoords,
   space::DofId,
   util::{cartesian_index2linear_index, linear_index2cartesian_index},
   Dim,
@@ -265,7 +266,7 @@ impl HyperBoxMesh {
           for &v1 in &simplex {
             if v0 < v1 {
               edge_lenghts.insert(
-                EdgeId::new(v0, v1),
+                EdgeBetweenVertices::new(v0, v1),
                 (node_coords.coord(v1) - node_coords.coord(v0)).norm(),
               );
             }

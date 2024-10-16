@@ -1,15 +1,4 @@
-use crate::coordinates::MeshNodeCoords;
-
-use super::NodeId;
-
-/// This is generic data associated with each simplex of some particular dimension.
-/// If the dimension matches the form rank, then this can be seen as DOF data.
-/// It can be used for storing the boundary data.
-// TODO!
-//pub struct MeshData<T> {
-//  dim: Dim,
-//  data: Vec<T>,
-//}
+use super::{coordinates::MeshNodeCoords, NodeId};
 
 pub struct NodeData<T> {
   data: Vec<T>,
