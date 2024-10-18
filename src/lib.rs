@@ -12,3 +12,4 @@ pub mod space;
 pub mod util;
 
 pub type Dim = usize;
+pub type Codim = usize;

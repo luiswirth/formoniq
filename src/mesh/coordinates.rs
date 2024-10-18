@@ -1,4 +1,4 @@
-use crate::{mesh::NodeId, Dim};
+use crate::{mesh::VertexIdx, Dim};
 
 use std::rc::Rc;
 
@@ -23,7 +23,7 @@ impl MeshNodeCoords {
   pub fn coords(&self) -> &na::DMatrix<f64> {
     &self.coords
   }
-  pub fn coord(&self, inode: NodeId) -> na::DVectorView<f64> {
+  pub fn coord(&self, inode: VertexIdx) -> na::DVectorView<f64> {
     self.coords.column(inode)
   }
 }
