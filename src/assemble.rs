@@ -10,8 +10,20 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
   let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
   for icell in 0..space.mesh().ncells() {
     let elmat = elmat.eval(space, icell);
-    for (ilocal, iglobal) in space.dof_indices_global(icell).into_iter().enumerate() {
-      for (jlocal, jglobal) in space.dof_indices_global(icell).into_iter().enumerate() {
+    for (ilocal, iglobal) in space
+      .dof_handler()
+      .local2global(icell)
+      .iter()
+      .copied()
+      .enumerate()
+    {
+      for (jlocal, jglobal) in space
+        .dof_handler()
+        .local2global(icell)
+        .iter()
+        .copied()
+        .enumerate()
+      {
         galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
       }
     }
@@ -24,7 +36,13 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
   let mut galvec = na::DVector::zeros(space.ndofs());
   for icell in 0..space.mesh().ncells() {
     let elvec = elvec.eval(space, icell);
-    for (ilocal, iglobal) in space.dof_indices_global(icell).into_iter().enumerate() {
+    for (ilocal, iglobal) in space
+      .dof_handler()
+      .local2global(icell)
+      .iter()
+      .copied()
+      .enumerate()
+    {
       galvec[iglobal] += elvec[ilocal];
     }
   }

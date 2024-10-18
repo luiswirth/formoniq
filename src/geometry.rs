@@ -10,7 +10,8 @@ use crate::{
 };
 
 fn nedges(dim: Dim) -> usize {
-  binomial(dim + 1, 2)
+  let nvertices = dim + 1;
+  binomial(nvertices, 2)
 }
 
 #[derive(Debug, Clone)]

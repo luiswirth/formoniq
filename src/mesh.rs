@@ -15,26 +15,95 @@ use crate::{
 };
 
 use indexmap::{set::MutableValues, IndexSet};
+use itertools::Itertools as _;
 use std::{
-  collections::HashMap,
+  collections::{HashMap, HashSet},
   hash::Hash,
+  ops::Deref,
   rc::{self, Rc},
 };
 
-pub type NodeId = usize;
-pub type EdgeId = usize;
-pub type CellId = usize;
-pub type DSimplexId = usize;
-pub type SimplexId = (Dim, DSimplexId);
+pub type VertexIdx = usize;
 
-pub type RawSimplex = Vec<NodeId>;
+/// Fat pointer to simplex.
+pub struct SimplexHandle {
+  mesh: Rc<SimplicialManifold>,
+  id: usize,
+}
+impl Deref for SimplexHandle {
+  type Target = ManifoldSimplex;
+
+  fn deref(&self) -> &Self::Target {
+    self.mesh.simplex(self.id)
+  }
+}
+
+/// Contains the minimal amount of topological information required to define a simplex meaningfully
+/// and potentially further precomputed topological properties.
+pub struct SimplexTopology {
+  /// Verticies defining the simplex.
+  vertices: Vec<VertexIdx>,
+  /// The same as [`verticies`] but sorted. Used for comparing simplicies.
+  sorted_vertices: Vec<VertexIdx>,
+  /// The relative orientation between `vertices` and `sorted_vertices`.
+  sort_orientation: Orientation,
+}
+
+/// A enum for managing different levels of precomputed
+/// topological qualities of a simplex.
+/// At least [`MinTopology`] must always be given for topological properties
+/// to be meaningfully defined. All others can be derived from them.
+pub enum PrecomputedTopology {
+  DirectTopology(DirectTopology),
+  FullTopology(FullTopology),
+}
+
+/// Topology information only one level in both directions.
+pub struct DirectTopology {
+  /// The sub entities of this simplex, which are all the direct (only 1
+  /// dimension difference) faces of this simplex.
+  children: Vec<(DSimplexId, Orientation)>,
+  /// The super entities of this simplex, which are all the simplicies that
+  /// directly (only 1 dimension difference) contain this simplex as a face.
+  parents: Vec<(DSimplexId, Orientation)>,
+}
+
+/// Full topological information for a simplex.
+/// All descendants of the simplex are stored.
+/// This is usually used for Cells.
+pub struct FullTopology {
+  /// The sub entities of this simplex, which are all the direct (only 1
+  /// dimension difference) faces of this simplex.
+  descendants: Vec<(DSimplexId, Orientation)>,
+  /// The super entities of this simplex, which are all the simplicies that
+  /// directly (only 1 dimension difference) contain this simplex as a face.
+  ancestors: Vec<(DSimplexId, Orientation)>,
+}
+
+pub type Length = f64;
+
+pub struct RawSimplexTopology {
+  vertices: Vec<VertexIdx>,
+}
+pub struct RawSimplexGeometry {
+  edge_lengths: Vec<Length>,
+}
+
+pub struct RawManifoldGeometry {
+  edge_lengths: HashMap<EdgeBetweenVertices, Length>,
+}
+
+pub struct RawSimplicialManifold {
+  cell_topologies: Vec<RawSimplexTopology>,
+  geometry: RawManifoldGeometry,
+}
 
 /// Helper struct that ensures that edges don't have an orientation.
 /// Always use `Self::new` never construct tuple directly.
 #[derive(Debug, PartialEq, Eq, Hash)]
-pub struct EdgeBetweenVertices(NodeId, NodeId);
+pub struct EdgeBetweenVertices(VertexIdx, VertexIdx);
 impl EdgeBetweenVertices {
-  pub fn new(a: NodeId, b: NodeId) -> Self {
+  pub fn new(a: VertexIdx, b: VertexIdx) -> Self {
     if a < b {
       Self(a, b)
     } else {
@@ -43,12 +112,16 @@ impl EdgeBetweenVertices {
   }
 }
 
-// A simplicial manifold is a piecewiese-linear manifold.
+/// A container for simplicies of common dimension.
+pub struct Skeleton {
+  simplicies: Vec<ManifoldSimplex>,
+}
+
+// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
 pub struct SimplicialManifold {
-  /// All simplicies of the mesh, from 0-simplicies (vertices) to d-simplicies (cells).
   nnodes: usize,
-  /// topology
+  /// All simplicies of the mesh, from 0-simplicies (vertices) to d-simplicies (cells).
   simplicies: Vec<IndexSet<ManifoldSimplex>>,
   /// geometry
   edge_lengths: HashMap<EdgeBetweenVertices, f64>,
@@ -78,7 +151,7 @@ impl SimplicialManifold {
     &self.simplicies[d]
   }
   pub fn simplex(&self, id: SimplexId) -> &ManifoldSimplex {
-    self.simplicies[id.0].get_index(id.1).unwrap()
+    self.simplicies[id.dim].get_index(id.idx).unwrap()
   }
   pub fn facet(&self, id: DSimplexId) -> &ManifoldSimplex {
     self.simplicies[self.dim() - 1].get_index(id).unwrap()
@@ -111,7 +184,7 @@ impl SimplicialManifold {
 impl SimplicialManifold {
   pub fn from_cells(
     nnodes: usize,
-    cells: Vec<RawSimplex>,
+    cells: Vec<RawSimplexTopology>,
     edge_lengths: HashMap<EdgeBetweenVertices, f64>,
   ) -> Rc<Self> {
     Rc::new_cyclic(|this| {
@@ -126,7 +199,7 @@ impl SimplicialManifold {
           sort_orientation: Orientation::Pos,
           subs: Vec::new(),
           supers: Vec::new(),
-          id: ivertex,
+          idx: ivertex,
           mesh: this.clone(),
         })
         .collect();
@@ -145,7 +218,7 @@ impl SimplicialManifold {
             sort_orientation: orientation,
             subs: Vec::new(),
             supers: Vec::new(),
-            id: icell,
+            idx: icell,
             mesh: this.clone(),
           }
         })
@@ -178,7 +251,7 @@ impl SimplicialManifold {
               sort_orientation,
               subs: Vec::new(),
               supers: vec![(isuper_simp, super_orientation)],
-              id: sub_simps.len(),
+              idx: sub_simps.len(),
               mesh: this.clone(),
             };
 
@@ -208,9 +281,9 @@ impl SimplicialManifold {
 #[derive(Debug, Clone)]
 pub struct ManifoldSimplex {
   /// Verticies defining the simplex.
-  vertices: Vec<NodeId>,
+  vertices: Vec<VertexIdx>,
   /// The same as [`verticies`] but sorted. Used for comparing simplicies.
-  sorted_vertices: Vec<NodeId>,
+  sorted_vertices: Vec<VertexIdx>,
   /// The relative orientation between `vertices` and `sorted_vertices`.
   sort_orientation: Orientation,
   /// The sub entities of this simplex, which are all the direct (only 1
@@ -220,7 +293,7 @@ pub struct ManifoldSimplex {
   /// directly (only 1 dimension difference) contain this simplex as a face.
   supers: Vec<(DSimplexId, Orientation)>,
   /// ID identifiying this simplex in the d-th dimension of the mesh
-  id: DSimplexId,
+  idx: DSimplexId,
   /// The mesh this simplex lives in.
   mesh: rc::Weak<SimplicialManifold>,
 }
@@ -233,14 +306,11 @@ impl ManifoldSimplex {
   pub fn nvertices(&self) -> usize {
     self.vertices.len()
   }
-  pub fn vertices(&self) -> &[NodeId] {
+  pub fn vertices(&self) -> &[VertexIdx] {
     &self.vertices
   }
-  pub fn dsimplex_id(&self) -> DSimplexId {
-    self.id
-  }
   pub fn simplex_id(&self) -> SimplexId {
-    (self.dim(), self.id)
+    SimplexId::new(self.dim(), self.idx)
   }
 
   pub fn subs_with_orientation(&self) -> &[(DSimplexId, Orientation)] {
@@ -254,6 +324,28 @@ impl ManifoldSimplex {
   }
   pub fn supers(&self) -> Vec<DSimplexId> {
     self.supers.iter().map(|s| s.0).collect()
+  }
+  // TODO: optimize! We need a different data representation
+  pub fn descendants(&self, dim_diff: Dim) -> Vec<DSimplexId> {
+    if dim_diff == 0 {
+      return vec![self.idx];
+    }
+    self
+      .subs()
+      .iter()
+      .flat_map(|&s| {
+        self
+          .mesh
+          .upgrade()
+          .unwrap()
+          .simplex(SimplexId::new(self.dim() - 1, s))
+          .descendants(dim_diff - 1)
+          .into_iter()
+      })
+      .collect::<HashSet<_>>()
+      .into_iter()
+      .sorted()
+      .collect()
   }
 
   pub fn geometry_simplex(&self) -> GeometrySimplex {
@@ -287,10 +379,12 @@ impl Hash for ManifoldSimplex {
 
 #[cfg(test)]
 mod test {
+  use itertools::Itertools;
+
   use crate::{geometry::GeometrySimplex, orientation::Orientation as O};
 
   #[test]
-  fn incidence_check_1d() {
+  fn incidence_check_2d() {
     let mesh = GeometrySimplex::new_ref(2).into_singleton_mesh();
     let vertices = &mesh.simplicies[0];
     let edges = &mesh.simplicies[1];
@@ -301,7 +395,7 @@ mod test {
     assert_eq!(cells.len(), 1);
 
     for (i, v) in vertices.iter().enumerate() {
-      assert!(v.id == i);
+      assert!(v.idx == i);
       assert!(v.subs.is_empty());
     }
     assert_eq!(vertices[0].supers, vec![(1, O::Neg), (2, O::Neg)]);
@@ -309,7 +403,7 @@ mod test {
     assert_eq!(vertices[2].supers, vec![(0, O::Pos), (1, O::Pos)]);
 
     for (i, e) in edges.iter().enumerate() {
-      assert!(e.id == i);
+      assert!(e.idx == i);
     }
     assert_eq!(edges[0].subs, vec![(2, O::Pos), (1, O::Neg)]);
     assert_eq!(edges[1].subs, vec![(2, O::Pos), (0, O::Neg)]);
@@ -318,11 +412,35 @@ mod test {
     assert_eq!(edges[1].supers, vec![(0, O::Neg)]);
     assert_eq!(edges[2].supers, vec![(0, O::Pos)]);
 
-    assert!(cells[0].id == 0);
+    assert!(cells[0].idx == 0);
     assert_eq!(cells[0].subs, vec![(0, O::Pos), (1, O::Neg), (2, O::Pos)]);
     assert!(cells[0].supers.is_empty());
 
-    assert_eq!(mesh.boundary(), vec![(1, 0), (1, 1), (1, 2)]);
+    assert_eq!(cells[0].descendants(0), vec![cells[0].idx]);
+    assert_eq!(
+      cells[0]
+        .descendants(1)
+        .into_iter()
+        .sorted()
+        .collect::<Vec<_>>(),
+      vec![edges[0].idx, edges[1].idx, edges[2].idx]
+    );
+    assert_eq!(
+      cells[0]
+        .descendants(2)
+        .into_iter()
+        .sorted()
+        .collect::<Vec<_>>(),
+      vec![vertices[0].idx, vertices[1].idx, vertices[2].idx]
+    );
+
+    assert_eq!(
+      mesh.boundary(),
+      vec![(1, 0), (1, 1), (1, 2)]
+        .into_iter()
+        .map(From::from)
+        .collect::<Vec<_>>()
+    );
 
     let mut boundary_nodes = mesh.boundary_nodes();
     boundary_nodes.sort_unstable();

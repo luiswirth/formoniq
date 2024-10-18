@@ -1,4 +1,4 @@
-use super::{coordinates::MeshNodeCoords, NodeId};
+use super::{coordinates::MeshNodeCoords, VertexIdx};
 
 pub struct NodeData<T> {
   data: Vec<T>,
@@ -12,15 +12,15 @@ impl<T> NodeData<T> {
     Self { data }
   }
 }
-impl<T> std::ops::Index<NodeId> for NodeData<T> {
+impl<T> std::ops::Index<VertexIdx> for NodeData<T> {
   type Output = T;
 
-  fn index(&self, index: NodeId) -> &Self::Output {
+  fn index(&self, index: VertexIdx) -> &Self::Output {
     &self.data[index]
   }
 }
-impl<T> std::ops::IndexMut<NodeId> for NodeData<T> {
-  fn index_mut(&mut self, index: NodeId) -> &mut Self::Output {
+impl<T> std::ops::IndexMut<VertexIdx> for NodeData<T> {
+  fn index_mut(&mut self, index: VertexIdx) -> &mut Self::Output {
     &mut self.data[index]
   }
 }
