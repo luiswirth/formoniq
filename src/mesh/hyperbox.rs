@@ -1,5 +1,6 @@
 use super::{
-  coordinates::MeshNodeCoords, EdgeBetweenVertices, NodeId, RawSimplex, SimplicialManifold,
+  coordinates::MeshNodeCoords, EdgeBetweenVertices, RawSimplexTopology, SimplicialManifold,
+  VertexIdx,
 };
 use crate::{
   assemble::DofCoeffMap,
@@ -108,23 +109,23 @@ impl HyperBoxMeshInfo {
   pub fn nnodes(&self) -> usize {
     self.nnodes_per_dim().pow(self.dim() as u32)
   }
-  pub fn node_cart_idx(&self, inode: NodeId) -> na::DVector<usize> {
+  pub fn node_cart_idx(&self, inode: VertexIdx) -> na::DVector<usize> {
     linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim())
   }
-  pub fn node_pos(&self, inode: NodeId) -> na::DVector<f64> {
+  pub fn node_pos(&self, inode: VertexIdx) -> na::DVector<f64> {
     (self.node_cart_idx(inode).cast::<f64>() / (self.nnodes_per_dim() - 1) as f64)
       .component_mul(&self.side_lengths())
       + self.min()
   }
 
-  pub fn is_node_on_boundary(&self, node: NodeId) -> bool {
+  pub fn is_node_on_boundary(&self, node: VertexIdx) -> bool {
     let coords = linear_index2cartesian_index(node, self.nnodes_per_dim(), self.hyperbox.dim());
     coords
       .iter()
       .any(|&c| c == 0 || c == self.nnodes_per_dim() - 1)
   }
 
-  pub fn boundary_nodes(&self) -> Vec<NodeId> {
+  pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
       let nnodes_boundary_face = self.nnodes_per_dim().pow(self.dim() as u32 - 1);
@@ -209,10 +210,10 @@ impl HyperBoxMesh {
   pub fn nboxes(&self) -> usize {
     self.info.nboxes()
   }
-  pub fn is_node_on_boundary(&self, node: NodeId) -> bool {
+  pub fn is_node_on_boundary(&self, node: VertexIdx) -> bool {
     self.info.is_node_on_boundary(node)
   }
-  pub fn boundary_nodes(&self) -> Vec<NodeId> {
+  pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
     self.info.boundary_nodes()
   }
 }
@@ -233,7 +234,7 @@ impl HyperBoxMesh {
   ) -> Rc<SimplicialManifold> {
     let dim = info.dim();
     let nsimplicies = factorial(dim) * info.nboxes();
-    let mut simplicies: Vec<RawSimplex> = Vec::with_capacity(nsimplicies);
+    let mut simplicies: Vec<RawSimplexTopology> = Vec::with_capacity(nsimplicies);
     let mut edge_lenghts = HashMap::new();
 
     // iterate through all boxes that make up the mesh
@@ -250,7 +251,7 @@ impl HyperBoxMesh {
 
       let cube_simplicies = Permutations::new(basisdirs).map(|basisdirs| {
         // construct simplex by adding all shifted vertices
-        let mut simplex: RawSimplex = vec![ivertex_origin];
+        let mut simplex: RawSimplexTopology = vec![ivertex_origin];
 
         // add every shift (according to permutation) to vertex iteratively
         // every shift step gives us one vertex

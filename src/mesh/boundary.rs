@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use super::{CellId, NodeId, SimplexId, SimplicialManifold};
+use super::{CellId, SimplexId, SimplicialManifold, VertexIdx};
 
 impl SimplicialManifold {
   /// For a d-mesh computes the boundary, which consists of (d-1)-simplicies.
@@ -19,7 +19,7 @@ impl SimplicialManifold {
 
   /// The nodes that lie on the boundary of the mesh.
   /// No particular order of nodes.
-  pub fn boundary_nodes(&self) -> Vec<NodeId> {
+  pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
     let mut boundary_nodes = HashSet::new();
     let boundary = self.boundary();
     for boundary_simp in boundary {
