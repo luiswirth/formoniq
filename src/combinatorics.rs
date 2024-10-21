@@ -1,5 +1,14 @@
+use num_integer::binomial;
+
+use crate::Dim;
+
 pub fn factorial(num: usize) -> usize {
   (1..=num).product()
+}
+
+pub fn simplex_nedges(dim: Dim) -> usize {
+  let nvertices = dim + 1;
+  binomial(nvertices, 2)
 }
 
 /// performs a bubble sort and counts the number of swaps

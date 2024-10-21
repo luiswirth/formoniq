@@ -277,7 +277,6 @@ dependencies = [
  "nalgebra-sparse",
  "num-integer",
  "once_cell",
- "simpfold",
  "thiserror",
  "tracing",
  "tracing-subscriber",
@@ -1054,10 +1053,6 @@ dependencies = [
  "paste",
  "wide",
 ]
-
-[[package]]
-name = "simpfold"
-version = "0.1.0"
 
 [[package]]
 name = "smallvec"
