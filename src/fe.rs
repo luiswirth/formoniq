@@ -1,36 +1,35 @@
 use crate::{
-  mesh::{data::NodeData, CellId, SimplicialManifold},
+  geometry::GeometrySimplex,
+  mesh::{util::NodeData, CellIdx, SimplicialManifold},
   space::FeSpace,
 };
 
 pub trait ElmatProvider {
-  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64>;
+  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64>;
 }
 
 impl<F> ElmatProvider for F
 where
-  F: Fn(&FeSpace, CellId) -> na::DMatrix<f64>,
+  F: Fn(&FeSpace, CellIdx) -> na::DMatrix<f64>,
 {
-  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
+  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
     self(space, icell)
   }
 }
 
 pub trait ElvecProvider {
-  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DVector<f64>;
+  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64>;
 }
 impl<F> ElvecProvider for F
 where
-  F: Fn(&FeSpace, CellId) -> na::DVector<f64>,
+  F: Fn(&FeSpace, CellIdx) -> na::DVector<f64>,
 {
-  fn eval(&self, space: &FeSpace, icell: CellId) -> nalgebra::DVector<f64> {
+  fn eval(&self, space: &FeSpace, icell: CellIdx) -> nalgebra::DVector<f64> {
     self(space, icell)
   }
 }
 
-/// The exact Element Matrix for the negative laplacian in linear lagrangian FE.
-pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cell(icell).geometry_simplex();
+pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
   let dim = cell_geo.dim();
   let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
   for i in 0..dim {
@@ -45,13 +44,10 @@ pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
   vol * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
-/// Approximated Element Matrix for mass bilinear form,
-/// obtained through trapezoidal quadrature rule.
-pub fn lumped_mass_elmat(space: &FeSpace, icell: CellId) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cell(icell).geometry_simplex();
-  let n = cell_geo.nvertices();
-  let v = cell_geo.vol() / n as f64;
-  na::DMatrix::from_diagonal_element(n, n, v)
+/// The exact Element Matrix for the negative laplacian in linear lagrangian FE.
+pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
+  let cell_geo = space.mesh().cells().get(icell).geometry_simplex();
+  laplacian_neg_elmat_geo(&cell_geo)
 }
 
 // Element vector for scalar load function, computed using trapezoidal rule.
@@ -59,10 +55,11 @@ pub struct LoadElvec {
   dof_data: NodeData<f64>,
 }
 impl ElvecProvider for LoadElvec {
-  fn eval(&self, space: &FeSpace, icell: CellId) -> na::DVector<f64> {
-    let cell = space.mesh().cell(icell);
+  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64> {
+    let cell = space.mesh().cells().get(icell);
     let cell_geo = cell.geometry_simplex();
     let nverts = cell_geo.nvertices();
+
     cell_geo.vol() / nverts as f64
       * na::DVector::from_iterator(
         nverts,
@@ -78,14 +75,15 @@ impl LoadElvec {
 
 // NOTE: In general this should depend on the FE Space and not just the mesh.
 pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
-  let mut norm = 0.0;
-  for (icell, cell) in mesh.cells().iter().enumerate() {
+  let mut norm: f64 = 0.0;
+  for cell in mesh.cells().iter() {
     let mut sum = 0.0;
     for &ivertex in cell.vertices() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
-    let vol = mesh.cell(icell).geometry_simplex().vol();
+    let cell_geo = cell.geometry_simplex();
+    let vol = cell_geo.vol();
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
@@ -93,13 +91,20 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
 
 #[cfg(test)]
 mod test {
-  use super::laplacian_neg_elmat;
-  use crate::{geometry::GeometrySimplex, space::FeSpace};
+  use crate::{fe, geometry::GeometrySimplex, space::FeSpace};
+  use std::rc::Rc;
 
   fn check_elmat_refd(d: usize, expected_elmat: na::DMatrixView<f64>) {
-    let space = FeSpace::new(GeometrySimplex::new_ref(d).into_singleton_mesh());
-    let computed_elmat = laplacian_neg_elmat(&space, 0);
-    assert!((computed_elmat - expected_elmat).norm() < 10.0 * f64::EPSILON);
+    let ref_geo = GeometrySimplex::new_ref(d);
+
+    let geo_elmat = fe::laplacian_neg_elmat_geo(&ref_geo);
+    println!("{geo_elmat:.3}");
+    assert!((geo_elmat - expected_elmat).norm() < 10.0 * f64::EPSILON);
+
+    let space = FeSpace::new(Rc::new(ref_geo.into_singleton_mesh()));
+    let mesh_elmat = fe::laplacian_neg_elmat(&space, 0);
+    println!("{mesh_elmat:.3}");
+    assert!((mesh_elmat - expected_elmat).norm() < 10.0 * f64::EPSILON);
   }
 
   #[test]

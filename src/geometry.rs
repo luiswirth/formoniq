@@ -1,30 +1,29 @@
-use std::{collections::HashMap, f64::consts::SQRT_2, rc::Rc};
-
-use num_integer::binomial;
-
 use crate::{
-  combinatorics::factorial,
-  mesh::{EdgeBetweenVertices, SimplicialManifold},
-  orientation::Orientation,
-  Dim,
+  combinatorics::{factorial, simplex_nedges},
+  mesh::{
+    raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplexTopology, RawSimplicialManifold},
+    SimplexBetweenVertices, SimplicialManifold,
+  },
+  Dim, Orientation,
 };
 
-fn nedges(dim: Dim) -> usize {
-  let nvertices = dim + 1;
-  binomial(nvertices, 2)
-}
+use std::{collections::HashMap, f64::consts::SQRT_2};
 
 #[derive(Debug, Clone)]
 pub struct GeometrySimplex {
+  /// dimension of the simplex
+  /// could be reverse computed from edge_lengths, but hard.
+  dim: Dim,
   /// Lengths of all edges in simplex
   /// Order of edges is lexicographical in vertex tuples.
   /// E.g. For a 3-simplex the edges are sorted as (0,1),(0,2),(0,3),(1,2),(1,3),(2,3)
-  dim: Dim,
+  /// This is very natural, since the first dim edge lengths correspond to
+  /// the lengths of the tangent vectors, which are the sqrts of the diagonal entries of the metric tensor.
   edge_lengths: Vec<f64>,
 }
 impl GeometrySimplex {
   pub fn new(dim: Dim, edge_lengths: Vec<f64>) -> Self {
-    assert!(edge_lengths.len() == nedges(dim));
+    assert_eq!(edge_lengths.len(), simplex_nedges(dim));
     Self { dim, edge_lengths }
   }
 
@@ -34,7 +33,7 @@ impl GeometrySimplex {
 
   /// Constructs a reference simplex in `dim` dimensions.
   pub fn new_ref(dim: Dim) -> Self {
-    let nedges = nedges(dim);
+    let nedges = simplex_nedges(dim);
     let mut edge_lengths = vec![0.0; nedges];
     for l in edge_lengths.iter_mut().take(dim) {
       *l = 1.0;
@@ -129,20 +128,24 @@ impl GeometrySimplex {
     self.diameter().powi(self.dim() as i32) / self.vol()
   }
 
-  pub fn into_singleton_mesh(&self) -> Rc<SimplicialManifold> {
+  pub fn into_singleton_mesh(&self) -> SimplicialManifold {
+    let vertices = (0..self.nvertices()).collect();
+
     let mut edge_lengths = HashMap::new();
+
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert(EdgeBetweenVertices::new(i, j), self.edge_lengths[idx]);
+        edge_lengths.insert(SimplexBetweenVertices::edge(i, j), self.edge_lengths[idx]);
         idx += 1;
       }
     }
-    SimplicialManifold::from_cells(
+
+    SimplicialManifold::from_raw(RawSimplicialManifold::new(
       self.nvertices(),
-      vec![(0..self.nvertices()).collect()],
-      edge_lengths,
-    )
+      RawManifoldTopology::new(vec![RawSimplexTopology::new(vertices)]),
+      RawManifoldGeometry::new(edge_lengths),
+    ))
   }
 }
 

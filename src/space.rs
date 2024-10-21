@@ -1,5 +1,5 @@
 use crate::{
-  mesh::{CellId, SimplicialManifold},
+  mesh::{CellIdx, SimplicialManifold},
   Dim,
 };
 
@@ -7,7 +7,7 @@ use std::rc::Rc;
 
 pub type DofId = usize;
 
-/// A Finite Element Space of piecewiese linear differential forms.
+/// A Finite Element Space of piecewiese (over cells) linear differential forms.
 /// The basis of which are Whitney forms.
 pub struct FeSpace {
   /// The rank of the differential form.
@@ -22,16 +22,17 @@ pub struct DofHandler {
   local2global_idx: Vec<Vec<DofId>>,
 }
 impl DofHandler {
-  pub fn new(rank: Dim, mesh: &SimplicialManifold) -> Self {
-    let local2global_idx = mesh
-      .cells()
-      .iter()
-      .map(|c| c.descendants(mesh.dim() - rank))
-      .collect();
+  pub fn new(_rank: Dim, mesh: &SimplicialManifold) -> Self {
+    //let local2global_idx = mesh
+    //  .cells()
+    //  .simplicies()
+    //  .map(|c| c.descendants_of_dim(rank))
+    //  .collect();
+    let local2global_idx = mesh.cells().iter().map(|c| c.vertices().to_vec()).collect();
     Self { local2global_idx }
   }
 
-  pub fn local2global(&self, cell: CellId) -> &[DofId] {
+  pub fn local2global(&self, cell: CellIdx) -> &[DofId] {
     &self.local2global_idx[cell]
   }
 }
@@ -56,7 +57,7 @@ impl FeSpace {
   }
 
   pub fn ndofs(&self) -> usize {
-    self.mesh.nnodes()
+    self.mesh.skeleton(self.rank).len()
   }
 
   pub fn dof_handler(&self) -> &DofHandler {

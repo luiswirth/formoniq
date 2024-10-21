@@ -1,16 +1,13 @@
 use super::{
-  coordinates::MeshNodeCoords, EdgeBetweenVertices, RawSimplexTopology, SimplicialManifold,
-  VertexIdx,
+  coordinates::{CoordManifold, MeshNodeCoords},
+  raw::{RawSimplexTopology, RawSimplicialManifold},
+  SimplicialManifold, VertexIdx,
 };
 use crate::{
-  assemble::DofCoeffMap,
   combinatorics::{factorial, Permutations},
-  space::DofId,
   util::{cartesian_index2linear_index, linear_index2cartesian_index},
   Dim,
 };
-
-use std::{collections::HashMap, rc::Rc};
 
 pub struct HyperBox {
   min: na::DVector<f64>,
@@ -143,107 +140,29 @@ impl HyperBoxMeshInfo {
   }
 }
 
-pub struct HyperBoxMesh {
-  info: HyperBoxMeshInfo,
-  nodes: Rc<MeshNodeCoords>,
-  mesh: Rc<SimplicialManifold>,
-}
-
-// constructors
-impl HyperBoxMesh {
-  pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>, nboxes_per_dim: usize) -> Self {
-    let info = HyperBoxMeshInfo::new_min_max(min, max, nboxes_per_dim);
-    Self::from_info(info)
-  }
-  pub fn new_unit(dim: Dim, nboxes_per_dim: usize) -> Self {
-    let info = HyperBoxMeshInfo::new_unit(dim, nboxes_per_dim);
-    Self::from_info(info)
-  }
-  pub fn new_unit_scaled(dim: Dim, scale: f64, nboxes_per_dim: usize) -> Self {
-    let info = HyperBoxMeshInfo::new_unit_scaled(dim, scale, nboxes_per_dim);
-    Self::from_info(info)
-  }
-
-  pub fn from_info(info: HyperBoxMeshInfo) -> Self {
-    let nodes = Self::compute_nodes(&info);
-    let mesh = Self::compute_mesh(&info, nodes.clone());
-    Self { info, nodes, mesh }
-  }
-}
-
-// getters
-impl HyperBoxMesh {
-  pub fn hyperbox(&self) -> &HyperBox {
-    self.info.hyperbox()
-  }
-  pub fn info(&self) -> &HyperBoxMeshInfo {
-    &self.info
-  }
-  pub fn nodes(&self) -> &Rc<MeshNodeCoords> {
-    &self.nodes
-  }
-  pub fn mesh(&self) -> &Rc<SimplicialManifold> {
-    &self.mesh
-  }
-
-  pub fn dim(&self) -> usize {
-    self.info.dim()
-  }
-  pub fn min(&self) -> na::DVector<f64> {
-    self.info.min()
-  }
-  pub fn max(&self) -> na::DVector<f64> {
-    self.info.max()
-  }
-  pub fn side_lengths(&self) -> na::DVector<f64> {
-    self.info.side_lengths()
-  }
-  pub fn nboxes_per_dim(&self) -> usize {
-    self.info.nboxes_per_dim()
-  }
-  pub fn nnodes_per_dim(&self) -> usize {
-    self.info.nnodes_per_dim()
-  }
-  pub fn nnodes(&self) -> usize {
-    self.info.nnodes()
-  }
-  pub fn nboxes(&self) -> usize {
-    self.info.nboxes()
-  }
-  pub fn is_node_on_boundary(&self, node: VertexIdx) -> bool {
-    self.info.is_node_on_boundary(node)
-  }
-  pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
-    self.info.boundary_nodes()
-  }
-}
-
-// construction helpers
-impl HyperBoxMesh {
-  fn compute_nodes(info: &HyperBoxMeshInfo) -> Rc<MeshNodeCoords> {
-    let mut nodes = na::DMatrix::zeros(info.dim(), info.nnodes());
+impl HyperBoxMeshInfo {
+  pub fn compute_node_coords(&self) -> MeshNodeCoords {
+    let mut nodes = na::DMatrix::zeros(self.dim(), self.nnodes());
     for (inode, mut coord) in nodes.column_iter_mut().enumerate() {
-      coord.copy_from(&info.node_pos(inode));
+      coord.copy_from(&self.node_pos(inode));
     }
     MeshNodeCoords::new(nodes)
   }
 
-  fn compute_mesh(
-    info: &HyperBoxMeshInfo,
-    node_coords: Rc<MeshNodeCoords>,
-  ) -> Rc<SimplicialManifold> {
-    let dim = info.dim();
-    let nsimplicies = factorial(dim) * info.nboxes();
-    let mut simplicies: Vec<RawSimplexTopology> = Vec::with_capacity(nsimplicies);
-    let mut edge_lenghts = HashMap::new();
+  pub fn compute_coord_manifold(&self) -> CoordManifold {
+    let node_coords = self.compute_node_coords();
+
+    let dim = self.dim();
+    let ncells = factorial(dim) * self.nboxes();
+    let mut cells: Vec<RawSimplexTopology> = Vec::with_capacity(ncells);
 
     // iterate through all boxes that make up the mesh
-    for icube in 0..info.nboxes() {
-      let cube_icart = linear_index2cartesian_index(icube, info.nboxes_per_dim, info.dim());
+    for icube in 0..self.nboxes() {
+      let cube_icart = linear_index2cartesian_index(icube, self.nboxes_per_dim, self.dim());
 
       let vertex_icart_origin = cube_icart;
       let ivertex_origin =
-        cartesian_index2linear_index(vertex_icart_origin.clone(), info.nnodes_per_dim());
+        cartesian_index2linear_index(vertex_icart_origin.clone(), self.nnodes_per_dim());
 
       // construct all $d!$ simplicies that make up the current box
       // each permutation of the basis directions (dimensions) gives rise to one simplex
@@ -251,7 +170,7 @@ impl HyperBoxMesh {
 
       let cube_simplicies = Permutations::new(basisdirs).map(|basisdirs| {
         // construct simplex by adding all shifted vertices
-        let mut simplex: RawSimplexTopology = vec![ivertex_origin];
+        let mut simplex = vec![ivertex_origin];
 
         // add every shift (according to permutation) to vertex iteratively
         // every shift step gives us one vertex
@@ -259,75 +178,39 @@ impl HyperBoxMesh {
         for basisdir in basisdirs {
           vertex_icart[basisdir] += 1;
 
-          let ivertex = cartesian_index2linear_index(vertex_icart.clone(), info.nnodes_per_dim());
+          let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nnodes_per_dim());
           simplex.push(ivertex);
         }
 
-        for &v0 in &simplex {
-          for &v1 in &simplex {
-            if v0 < v1 {
-              edge_lenghts.insert(
-                EdgeBetweenVertices::new(v0, v1),
-                (node_coords.coord(v1) - node_coords.coord(v0)).norm(),
-              );
-            }
-          }
-        }
-
-        // TODO: do we want this?
-        // force positive orientation
+        // TODO: do we want to have all cells positively oriented
         //if iperm % 2 == 1 {
         //  simplex.swap(0, 1);
         //}
 
-        simplex
+        RawSimplexTopology::new(simplex)
       });
 
-      simplicies.extend(cube_simplicies);
+      cells.extend(cube_simplicies);
     }
 
-    SimplicialManifold::from_cells(node_coords.len(), simplicies, edge_lenghts)
+    CoordManifold::new(cells, node_coords)
   }
-}
 
-#[derive(Clone)]
-pub struct HyperBoxDirichletBcMap<'a, F>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
-  mesh: &'a HyperBoxMesh,
-  dirichlet_data: F,
-}
-impl<F> DofCoeffMap for HyperBoxDirichletBcMap<'_, F>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
-  fn eval(&self, idof: DofId) -> Option<f64> {
-    self.mesh.is_node_on_boundary(idof).then(|| {
-      let pos = self.mesh.nodes.coord(idof);
-      (self.dirichlet_data)(pos)
-    })
+  pub fn compute_raw_manifold(&self) -> RawSimplicialManifold {
+    self.compute_coord_manifold().into_raw_manifold()
   }
-}
-impl<'a, F> HyperBoxDirichletBcMap<'a, F>
-where
-  F: Fn(na::DVectorView<f64>) -> f64,
-{
-  pub fn new(mesh: &'a HyperBoxMesh, dirichlet_data: F) -> Self {
-    Self {
-      dirichlet_data,
-      mesh,
-    }
+  pub fn compute_manifold(&self) -> SimplicialManifold {
+    SimplicialManifold::from_raw(self.compute_raw_manifold())
   }
 }
 
 #[cfg(test)]
 mod test {
-  use super::HyperBoxMesh;
+  use super::HyperBoxMeshInfo;
 
   #[test]
   fn unit_cube_mesh_1sub() {
-    let mesh = HyperBoxMesh::new_unit(3, 1);
+    let mesh = HyperBoxMeshInfo::new_unit(3, 1).compute_coord_manifold();
     #[rustfmt::skip]
     let expected_nodes = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,
@@ -339,7 +222,7 @@ mod test {
       0., 1., 1.,
       1., 1., 1.,
     ]);
-    let computed_nodes = mesh.nodes().coords();
+    let computed_nodes = mesh.node_coords().coords();
     assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 3, 7],
@@ -349,13 +232,13 @@ mod test {
       &[0, 2, 6, 7],
       &[0, 2, 3, 7],
     ];
-    let computed_simplicies: Vec<_> = mesh.mesh().cells().iter().map(|c| c.vertices()).collect();
+    let computed_simplicies: Vec<_> = mesh.cells().iter().map(|c| c.vertices()).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 
   #[test]
   fn unit_square_mesh_2sub() {
-    let mesh = HyperBoxMesh::new_unit(2, 2);
+    let mesh = HyperBoxMeshInfo::new_unit(2, 2).compute_coord_manifold();
     #[rustfmt::skip]
     let expected_nodes = na::DMatrix::from_column_slice(2, 9, &[
       0.0, 0.0,
@@ -368,7 +251,7 @@ mod test {
       0.5, 1.0,
       1.0, 1.0,
     ]);
-    let computed_nodes = mesh.nodes().coords();
+    let computed_nodes = mesh.node_coords().coords();
     assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 4],
@@ -380,7 +263,7 @@ mod test {
       &[4, 5, 8],
       &[4, 7, 8],
     ];
-    let computed_simplicies: Vec<_> = mesh.mesh().cells().iter().map(|c| c.vertices()).collect();
+    let computed_simplicies: Vec<_> = mesh.cells().iter().map(|c| c.vertices()).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 }
