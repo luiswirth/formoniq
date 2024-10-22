@@ -1,30 +1,39 @@
 # formoniq
 
 This library is being developed as part of the
-[bachelor thesis](https://github.com/luiswirth/bsc-thesis)
-of Luis Wirth at ETH Zurich.
+[Bachelor's thesis](https://github.com/luiswirth/bsc-thesis)
+of Luis Wirth at ETH Zurich under the supervision of Prof. Dr. Ralf Hiptmair.
 
-Formoniq is a Rust implementation of the Finite Element Method (FEM) for solving
-partial differential equations (PDEs) in arbitrarily high spatial dimensions,
-using the theory of Exterior Calculus of Differential Forms.
+Formoniq is a Rust Implementation of a Finite Element (FEM) Library based on
+the principles of Finite Element Extieror Calculus (FEEC) to solve partial
+differential equations (PDEs) formulated in terms of differential forms over
+simplicial manifolds using an intrinsic, coordinate-free approach.
 
-This particular formulation of FEM is known as Finite Element Exterior Calculus
-(FEEC). It allows for a unified treatment of scalar- and vector-valued PDEs by
-treating general differential k-forms as solutions.
+The focus is on solving elliptic Hodge-Laplace problems with the
+piecewiese-linear (first-order) Whitney basis.
 
-This framework unifies multiple Finite Element Spaces (Lagrangian,
-Raviart-Thomas, and Nédélec) into one: the FE space of Whitney forms, by
-identifying scalar and vector fields through Hodge duality. Additionally, it
-extends these spaces from 3D to higher dimensions.
+## Background
 
-Our primary focus is solving elliptic Hodge-Laplace problems on simplicial
-meshes with first-order Whitney forms.
+Finite Element Exterior Calculus (FEEC) provides a unified framework that
+extends the finite element method using the language of differential geometry
+and algebraic topology. By employing differential forms and (co-)chain
+complexes, FEEC offers a robust approach for preserving key topological and
+structural features in the solution of PDEs. This framework is particularly
+well-suited for problems such as the Hodge-Laplace equation and Maxwell’s
+equations.
 
-# Visualizations
+Traditional finite element methods rely on explicit coordinate representations
+of the computational domain. However, a coordinate-free formulation aligns more
+naturally with the intrinsic nature of differential geometry. By representing
+the computational domain as a simplicial manifold with an associated Riemannian
+metric, we can define geometric quantities (such as lengths, areas, and volumes)
+intrinsically, without explicit coordinates. This metric is an inner product
+on the tangent spaces and defines operators like the Hodge star, which are
+essential in the formulation of the Hodge-Laplace operator.
 
-The following plots and animations show finite element solutions of various PDEs computed using formoniq.
-
-<img src="https://github.com/luiswirth/formoniq/assets/37505890/450e2cd0-ffeb-48ef-8b0a-64de5d75b557" width="33%">
-<img src="https://github.com/user-attachments/assets/bcc88a07-907d-4eb4-b18c-3235a6f5b787" width="66%">
-
-
+Rust was chosen for its strong guarantees in memory safety, performance, and
+modern language features, making it ideal for high-performance computing tasks
+like finite elements. The Rust ownership model, borrow checker, and type system
+act as a proof system to ensure there are no memory bugs, race conditions, or
+similar undefined behaviors in any program, while achieving performance levels
+comparable to C/C++.
