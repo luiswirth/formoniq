@@ -5,7 +5,7 @@ use crate::{
   util::{faervec2navec, navec2faervec},
 };
 
-/// Assembly algorithm for the Galerkin Matrix in Lagrangian (0-form) FE.
+/// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
   for icell in 0..space.mesh().topology().ncells() {
@@ -31,7 +31,7 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
   galmat
 }
 
-/// Assembly algorithm for the Galerkin Vector in Lagrangian (0-form) FE.
+/// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mut galvec = na::DVector::zeros(space.ndofs());
   for icell in 0..space.mesh().topology().ncells() {
@@ -61,10 +61,12 @@ where
   }
 }
 
-/// Modifies supplied galerkin matrix and galerkin vector,
-/// such that the FE solution has the optionally given coefficents on the dofs.
+/// Fix DOFs of FE solution.
+///
 /// Is primarly used the enforce essential dirichlet boundary conditions.
 ///
+/// Modifies supplied galerkin matrix and galerkin vector,
+/// such that the FE solution has the optionally given coefficents on the dofs.
 /// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
 pub fn fix_dof_coeffs<F>(
   coefficent_map: F,
@@ -111,10 +113,6 @@ pub fn fix_dof_coeffs<F>(
   }
 }
 
-/// Modifies supplied galerkin matrix and galerkin vector,
-/// such that the FE solution has the optionally given coefficents on the dofs.
-/// Is primarly used the enforce essential boundary conditions.
-///
 /// $mat(A_0, A_(0 diff); 0, I) vec(mu_0, mu_diff) = vec(phi, gamma)$
 #[allow(unused_variables, unreachable_code)]
 pub fn fix_dof_coeffs_alt<F>(

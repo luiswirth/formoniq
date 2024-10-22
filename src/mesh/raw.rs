@@ -1,9 +1,9 @@
+//! Module for creating simplicial manifolds
+//!
 //! This module is concerned with the "raw" data required to fully specify and
 //! define a coordinate-free simplicial Riemannian manifold.
 //! The structs in this module try to be minimal in the sense that they don't
 //! include any information that is redundant or can be derived from other fields.
-//!
-//! A focus is made on separating topological and geometrical data.
 
 use super::{
   Length, ManifoldGeometry, ManifoldTopology, SimplexBetweenVertices, SimplexTopology,
@@ -90,7 +90,6 @@ impl RawSimplexTopology {
 
 /// The data defining the geometric structure of the manifold.
 pub struct RawManifoldGeometry {
-  /// A mapping [`EdgeBetweenVertices`] -> [`Length`]
   /// Defining the lengths of all edges of the manifold.
   pub edge_lengths: HashMap<SimplexBetweenVertices, Length>,
 }

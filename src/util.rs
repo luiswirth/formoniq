@@ -1,3 +1,5 @@
+/// converts linear index to cartesian index
+///
 /// converts linear index in 0..dim_len^d to cartesian index in (0)^d..(dim_len)^d
 pub fn linear_index2cartesian_index(
   mut lin_idx: usize,
@@ -12,6 +14,8 @@ pub fn linear_index2cartesian_index(
   cart_idx
 }
 
+/// converts cartesian index to linear index
+///
 /// converts cartesian index in (0)^d..(dim_len)^d to linear index in 0..dim_len^d
 pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize) -> usize {
   let dim = cart_idx.len();

@@ -44,13 +44,15 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
   vol * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
-/// The exact Element Matrix for the negative laplacian in linear lagrangian FE.
+/// The Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
   let cell_geo = space.mesh().cells().get(icell).geometry_simplex();
   laplacian_neg_elmat_geo(&cell_geo)
 }
 
-// Element vector for scalar load function, computed using trapezoidal rule.
+/// Element Vector Provider for scalar load function.
+///
+/// Computed using trapezoidal rule.
 pub struct LoadElvec {
   dof_data: NodeData<f64>,
 }

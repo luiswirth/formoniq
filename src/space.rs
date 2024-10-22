@@ -7,14 +7,15 @@ use std::rc::Rc;
 
 pub type DofId = usize;
 
-/// A Finite Element Space of piecewiese (over cells) linear differential forms.
-/// The basis of which are Whitney forms.
+/// A Finite Element Space of piecewiese-linear differential forms.
+///
+/// Uses the Whitney basis.
 pub struct FeSpace {
   /// The rank of the differential form.
   rank: Dim,
   /// The underlying mesh of the space.
   mesh: Rc<SimplicialManifold>,
-
+  /// Degrees-of-Freedom handler
   dof_handler: DofHandler,
 }
 
