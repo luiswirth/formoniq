@@ -184,29 +184,6 @@ impl SimplicialManifold {
       }
     }
 
-    // set edges of simplicies
-    #[allow(clippy::needless_range_loop)]
-    for d in 1..=dim {
-      for icell in 0..skeletons[d].len() {
-        let vertices = skeletons[d].get_index(icell).unwrap().1.vertices.clone();
-        let nvertices = vertices.len();
-        for i in 0..nvertices {
-          let vi = vertices[i];
-          for j in (i + 1)..nvertices {
-            let vj = vertices[j];
-            let edge = SimplexBetweenVertices::edge(vi, vj);
-            let iedge = skeletons[1].get_full(&edge).unwrap().0;
-            skeletons[d]
-              .get_index_mut(icell)
-              .unwrap()
-              .1
-              .edges
-              .push(iedge);
-          }
-        }
-      }
-    }
-
     // set edge lengths of mesh
     let mut edge_lengths = Vec::new();
     for edge in skeletons[1].values() {
