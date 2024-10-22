@@ -12,6 +12,7 @@ pub mod util;
 
 use crate::{geometry::GeometrySimplex, matrix::SparseMatrix, Dim, Length, Orientation};
 
+use indexmap::IndexMap;
 use std::hash::Hash;
 
 pub type VertexIdx = usize;
@@ -80,7 +81,7 @@ impl ManifoldTopology {
 }
 
 /// A container for topological simplicies of common dimension.
-pub type SkeletonTopology = Vec<SimplexTopology>;
+pub type SkeletonTopology = IndexMap<SimplexBetweenVertices, SimplexTopology>;
 
 pub struct ManifoldGeometry {
   /// mapping [`EdgeIdx`] -> [`Length`]
@@ -203,6 +204,9 @@ impl SimplexBetweenVertices {
   pub fn new(mut vertices: Vec<VertexIdx>) -> Self {
     vertices.sort();
     Self(vertices)
+  }
+  pub fn vertex(v: VertexIdx) -> SimplexBetweenVertices {
+    Self(vec![v])
   }
   pub fn edge(a: VertexIdx, b: VertexIdx) -> Self {
     if a < b {
