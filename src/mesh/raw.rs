@@ -7,7 +7,7 @@
 
 use super::{
   Length, ManifoldGeometry, ManifoldTopology, SimplexBetweenVertices, SimplexTopology,
-  SimplicialManifold, SkeletonTopology, VertexIdx,
+  SimplicialManifold, VertexIdx,
 };
 use crate::{combinatorics::sort_count_swaps, matrix::SparseMatrix, Dim, Orientation};
 
@@ -115,7 +115,12 @@ impl SimplicialManifold {
 
     // add 0-simplicies (vertices)
     skeletons[0] = (0..nnodes)
-      .map(|ivertex| (vec![ivertex], SimplexTopology::stub(vec![ivertex])))
+      .map(|ivertex| {
+        (
+          SimplexBetweenVertices::vertex(ivertex),
+          SimplexTopology::stub(vec![ivertex]),
+        )
+      })
       .collect();
 
     // add d-simplicies (cells)
@@ -125,9 +130,10 @@ impl SimplicialManifold {
       .into_iter()
       .map(|c| c.into_vertices())
       .map(|v| {
-        let mut sorted = v.clone();
-        sorted.sort();
-        (sorted, SimplexTopology::stub(v))
+        (
+          SimplexBetweenVertices::new(v.clone()),
+          SimplexTopology::stub(v),
+        )
       })
       .collect();
 
@@ -137,69 +143,66 @@ impl SimplicialManifold {
       let sub_dim = super_dim - 1;
       let incidence = &mut incidences[sub_dim];
 
-      let ([.., sub_skel], [super_skel, ..]) = skeletons.split_at_mut(super_dim) else {
+      let ([.., subs], [sups, ..]) = skeletons.split_at_mut(super_dim) else {
         unreachable!()
       };
 
-      for isuper_simp in 0..super_skel.len() {
-        let super_simp = super_skel.get_index_mut(isuper_simp).unwrap().1;
-        for ivertex in 0..super_simp.vertices.len() {
+      for isup in 0..sups.len() {
+        let (_, sup) = sups.get_index_mut(isup).unwrap();
+        for ivertex in 0..sup.vertices.len() {
           let mut rel_orientation = Orientation::from_permutation_parity(ivertex);
 
-          let mut sub_simp = super_simp.vertices.clone();
-          sub_simp.remove(ivertex);
+          let mut sub = sup.vertices.clone();
+          sub.remove(ivertex);
+          let sub_sorted = SimplexBetweenVertices::new(sub.clone());
 
-          let (isub_simp, sub_simp) = match sub_skel.get_full_mut(&sub_simp) {
-            Some((i, _, simp)) => {
+          let (isub, sub) = match subs.get_full_mut(&sub_sorted) {
+            Some((existing_isub, _, existing_sub)) => {
+              // TODO: make this orientation code more intuitive
               // check if existing simp has different orientation from generated simp
-              let mut actual_vertices = simp.vertices.clone();
-              let mut this_vertices = sub_simp;
+              let mut actual_vertices = existing_sub.vertices.clone();
+              let mut this_vertices = sub.clone();
               let actual_swaps = sort_count_swaps(&mut actual_vertices);
               let this_swaps = sort_count_swaps(&mut this_vertices);
               let is_different_orientation = ((actual_swaps - this_swaps) % 2) == 1;
               if is_different_orientation {
                 rel_orientation.switch();
               }
-              (i, simp)
+              (existing_isub, existing_sub)
             }
             None => {
-              let sub_simp = SimplexTopology::stub(sub_simp);
-              let i = sub_skel.insert_full(sub_simp.vertices.clone(), sub_simp).0;
-              let simp = sub_skel.get_index_mut(i).unwrap().1;
-              (i, simp)
+              let sub = SimplexTopology::stub(sub);
+              let i = subs.insert_full(sub_sorted, sub).0;
+              let sub = subs.get_index_mut(i).unwrap().1;
+              (i, sub)
             }
           };
-          super_simp.subs.push((isub_simp, rel_orientation));
-          sub_simp.supers.push((isuper_simp, rel_orientation));
+          sup.subs.push((isub, rel_orientation));
+          sub.supers.push((isup, rel_orientation));
 
-          incidence.push((isuper_simp, isub_simp, rel_orientation.as_f64()));
+          incidence.push((isup, isub, rel_orientation.as_f64()));
         }
       }
     }
 
-    let edges_between_vertices: HashMap<_, _> = skeletons[1]
-      .values()
-      .enumerate()
-      .map(|(iedge, edge)| {
-        let edge = edge.vertices.clone();
-        let edge = SimplexBetweenVertices::new(edge);
-        (edge, iedge)
-      })
-      .collect();
-
     // set edges of simplicies
     #[allow(clippy::needless_range_loop)]
-    for skeleton in skeletons.iter_mut().skip(1) {
-      for icell in 0..skeleton.len() {
-        let vertices = skeleton.get_index(icell).unwrap().1.vertices.clone();
+    for d in 1..=dim {
+      for icell in 0..skeletons[d].len() {
+        let vertices = skeletons[d].get_index(icell).unwrap().1.vertices.clone();
         let nvertices = vertices.len();
         for i in 0..nvertices {
           let vi = vertices[i];
           for j in (i + 1)..nvertices {
             let vj = vertices[j];
             let edge = SimplexBetweenVertices::edge(vi, vj);
-            let iedge = edges_between_vertices[&edge];
-            skeleton.get_index_mut(icell).unwrap().1.edges.push(iedge);
+            let iedge = skeletons[1].get_full(&edge).unwrap().0;
+            skeletons[d]
+              .get_index_mut(icell)
+              .unwrap()
+              .1
+              .edges
+              .push(iedge);
           }
         }
       }
@@ -213,12 +216,6 @@ impl SimplicialManifold {
       let length = raw.geometry.edge_lengths[&edge];
       edge_lengths.push(length);
     }
-
-    // finalize skeletons
-    let skeletons: Vec<SkeletonTopology> = skeletons
-      .into_iter()
-      .map(|skel| skel.into_values().collect())
-      .collect();
 
     // finalize incidence matrices
     let incidence_matrices = incidences
