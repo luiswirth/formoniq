@@ -23,13 +23,12 @@ pub struct DofHandler {
   local2global_idx: Vec<Vec<DofId>>,
 }
 impl DofHandler {
-  pub fn new(_rank: Dim, mesh: &SimplicialManifold) -> Self {
-    //let local2global_idx = mesh
-    //  .cells()
-    //  .simplicies()
-    //  .map(|c| c.descendants_of_dim(rank))
-    //  .collect();
-    let local2global_idx = mesh.cells().iter().map(|c| c.vertices().to_vec()).collect();
+  pub fn new(rank: Dim, mesh: &SimplicialManifold) -> Self {
+    let local2global_idx = mesh
+      .cells()
+      .iter()
+      .map(|c| c.descendants(rank).map(|d| d.kidx()).collect())
+      .collect();
     Self { local2global_idx }
   }
 

@@ -15,6 +15,7 @@ pub mod util;
 use crate::{geometry::GeometrySimplex, matrix::SparseMatrix, Dim, Length, Orientation};
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use std::hash::Hash;
 
 pub type VertexIdx = usize;
@@ -33,6 +34,30 @@ pub struct ManifoldTopology {
   skeletons: Vec<SkeletonTopology>,
   incidence_matrices: Vec<IncidenceMatrix>,
 }
+
+/// A container for topological simplicies of common dimension.
+pub type SkeletonTopology = IndexMap<SimplexBetweenVertices, SimplexTopology>;
+
+/// Topological information of the simplex.
+#[derive(Debug, Clone)]
+pub struct SimplexTopology {
+  /// The vertices of the simplex.
+  vertices: Vec<VertexIdx>,
+  /// The supersimplicies that are one layer above this simplex
+  /// together with their relative orientation.
+  /// Ordered in spirit of simplex boundary operator formula.
+  supers: Vec<(KSimplexIdx, Orientation)>,
+  /// The subsimplicies that are one layer below this simplex
+  /// together with their relative orientation.
+  /// Ordered in spirit of simplex boundary operator formula.
+  subs: Vec<(KSimplexIdx, Orientation)>,
+}
+
+pub struct ManifoldGeometry {
+  /// mapping [`EdgeIdx`] -> [`Length`]
+  edge_lengths: Vec<Length>,
+}
+
 impl ManifoldTopology {
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
@@ -80,14 +105,6 @@ impl ManifoldTopology {
   pub fn incidence_matrices(&self) -> &[IncidenceMatrix] {
     &self.incidence_matrices
   }
-}
-
-/// A container for topological simplicies of common dimension.
-pub type SkeletonTopology = IndexMap<SimplexBetweenVertices, SimplexTopology>;
-
-pub struct ManifoldGeometry {
-  /// mapping [`EdgeIdx`] -> [`Length`]
-  edge_lengths: Vec<Length>,
 }
 
 // getters
@@ -141,41 +158,20 @@ impl SimplicialManifold {
   }
 }
 
-/// Topological information of the simplex.
-#[derive(Debug, Clone)]
-pub struct SimplexTopology {
-  /// The vertices of the simplex.
-  /// The ordering is arbitrary (?)
-  vertices: Vec<VertexIdx>,
-  /// The edges of the simplex.
-  /// These are ordered lexicographically w.r.t.
-  /// the local vertex indices.
-  /// E.g. For 3-simplex: (0,1),(0,2),(0,3),(1,2),(1,3),(2,3)
-  edges: Vec<EdgeIdx>,
-  /// The supersimplicies that are one layer above this simplex
-  /// together with their relative orientation.
-  supers: Vec<(KSimplexIdx, Orientation)>,
-  /// The subsimplicies that are one layer below this simplex
-  /// together with their relative orientation.
-  subs: Vec<(KSimplexIdx, Orientation)>,
-}
-
 impl SimplexTopology {
   fn new(
     vertices: Vec<VertexIdx>,
-    edges: Vec<EdgeIdx>,
     supers: Vec<(KSimplexIdx, Orientation)>,
     subs: Vec<(KSimplexIdx, Orientation)>,
   ) -> Self {
     Self {
       vertices,
-      edges,
       supers,
       subs,
     }
   }
   fn stub(vertices: Vec<VertexIdx>) -> Self {
-    Self::new(vertices, Vec::new(), Vec::new(), Vec::new())
+    Self::new(vertices, Vec::new(), Vec::new())
   }
 }
 
@@ -259,12 +255,8 @@ impl<'m> SimplexHandle<'m> {
   pub fn nvertices(&self) -> usize {
     self.vertices().len()
   }
-  pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> {
-    self
-      .topology()
-      .edges
-      .iter()
-      .map(|&idx| SimplexHandle::new(self.mesh, (1, idx)))
+  pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+    self.descendants(1)
   }
   fn edge_lengths(&self) -> Vec<f64> {
     let edge_lengths = self
@@ -297,8 +289,26 @@ impl<'m> SimplexHandle<'m> {
     }
     Chain::new(self.mesh, self.dim() + 1, idxs, coeffs)
   }
-  pub fn boundary(&self) -> Chain<'m> {
-    self.subs()
+
+  /// The descendant simplicies of this simplex.
+  ///
+  /// These are ordered lexicographically w.r.t.
+  /// the local vertex indices.
+  /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
+  pub fn descendants(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+    self
+      .vertices()
+      .iter()
+      .copied()
+      // TODO: don't rely on internals of itertools for ordering -> use own implementation
+      .combinations(dim + 1)
+      .map(move |sub| {
+        let sub = SimplexBetweenVertices::new(sub);
+        let sub = self.mesh().topology.skeletons[dim]
+          .get_index_of(&sub)
+          .unwrap();
+        SimplexHandle::new(self.mesh(), (dim, sub))
+      })
   }
 }
 impl PartialEq for SimplexHandle<'_> {
@@ -374,3 +384,35 @@ impl<'m> Chain<'m> {
 
 /// entries are one of {0,-1,+1}
 pub type IncidenceMatrix = SparseMatrix;
+
+#[cfg(test)]
+mod test {
+  use crate::geometry::GeometrySimplex;
+
+  #[test]
+  fn descendants_ref3d() {
+    let mesh = GeometrySimplex::new_ref(3).into_singleton_mesh();
+    let cell = mesh.cells().get(0);
+    let vertices: Vec<_> = cell.descendants(0).map(|s| s.vertices()).collect();
+    let edges: Vec<_> = cell.descendants(1).map(|s| s.vertices()).collect();
+    let faces: Vec<_> = cell.descendants(2).map(|s| s.vertices()).collect();
+    let cells: Vec<_> = cell.descendants(3).map(|s| s.vertices()).collect();
+    assert_eq!(vertices, vec![vec![0], vec![1], vec![2], vec![3]]);
+    assert_eq!(
+      edges,
+      vec![
+        vec![0, 1],
+        vec![0, 2],
+        vec![0, 3],
+        vec![1, 2],
+        vec![1, 3],
+        vec![2, 3],
+      ]
+    );
+    assert_eq!(
+      faces,
+      vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]]
+    );
+    assert_eq!(cells, vec![vec![0, 1, 2, 3]]);
+  }
+}
