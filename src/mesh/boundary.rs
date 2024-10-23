@@ -7,7 +7,11 @@ impl SimplicialManifold {
   /// The boundary simplicies are characterized by the fact that they
   /// only have 1 super entity.
   pub fn boundary_faces(&self) -> Vec<SimplexHandle> {
-    self.faces().iter().filter(|f| f.nsupers() == 1).collect()
+    self
+      .faces()
+      .iter()
+      .filter(|f| f.supers().len() == 1)
+      .collect()
   }
 
   /// The nodes that lie on the boundary of the mesh.

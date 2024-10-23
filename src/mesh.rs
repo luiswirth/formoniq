@@ -13,8 +13,7 @@ pub mod raw;
 pub mod util;
 
 use crate::{
-  combinatorics::SortedSimplex, geometry::GeometrySimplex, matrix::SparseMatrix, Dim, Length,
-  Orientation, VertexIdx,
+  combinatorics::SortedSimplex, geometry::GeometrySimplex, Dim, Length, Orientation, VertexIdx,
 };
 
 use indexmap::IndexMap;
@@ -26,14 +25,15 @@ pub type KSimplexIdx = usize;
 pub type SimplexIdx = (Dim, KSimplexIdx);
 
 /// A simplicial manifold with both topological and geometric information.
+#[derive(Debug)]
 pub struct SimplicialManifold {
   topology: ManifoldTopology,
   geometry: ManifoldGeometry,
 }
 
+#[derive(Debug)]
 pub struct ManifoldTopology {
   skeletons: Vec<SkeletonTopology>,
-  incidence_matrices: Vec<IncidenceMatrix>,
 }
 
 /// A container for topological simplicies of common dimension.
@@ -44,23 +44,13 @@ pub type SkeletonTopology = IndexMap<SortedSimplex, SimplexTopology>;
 pub struct SimplexTopology {
   /// The vertices of the simplex.
   vertices: Vec<VertexIdx>,
-  /// The sorted vertices.
-  /// Important as key for searching for simplicies in the mesh.
-  sorted: SortedSimplex,
-  /// The supersimplicies that are one layer above this simplex
-  /// together with their relative orientation.
-  /// Ordered in spirit of simplex boundary operator formula.
-  supers: Vec<(KSimplexIdx, Orientation)>,
-  /// The subsimplicies that are one layer below this simplex
-  /// together with their relative orientation.
-  /// Ordered in spirit of simplex boundary operator formula.
-  subs: Vec<(KSimplexIdx, Orientation)>,
   /// The cells that this simplex is part of.
   /// This information is crucial for computing ancestor simplicies.
   /// Ordered increasing in [`CellIdx`].
   cells: Vec<CellIdx>,
 }
 
+#[derive(Debug)]
 pub struct ManifoldGeometry {
   /// mapping [`EdgeIdx`] -> [`Length`]
   edge_lengths: Vec<Length>,
@@ -108,10 +98,6 @@ impl ManifoldTopology {
   }
   pub fn nvertices(&self) -> usize {
     self.skeleton(0).len()
-  }
-
-  pub fn incidence_matrices(&self) -> &[IncidenceMatrix] {
-    &self.incidence_matrices
   }
 }
 
@@ -166,26 +152,8 @@ impl SimplicialManifold {
 }
 
 impl SimplexTopology {
-  fn new(
-    vertices: Vec<VertexIdx>,
-    supers: Vec<(KSimplexIdx, Orientation)>,
-    subs: Vec<(KSimplexIdx, Orientation)>,
-    cells: Vec<CellIdx>,
-  ) -> Self {
-    let sorted = SortedSimplex::new(vertices.clone());
-    Self {
-      vertices,
-      sorted,
-      supers,
-      subs,
-      cells,
-    }
-  }
-  fn stub(vertices: Vec<VertexIdx>) -> Self {
-    Self::stub_with_cells(vertices, Vec::new())
-  }
-  fn stub_with_cells(vertices: Vec<VertexIdx>, cells: Vec<CellIdx>) -> Self {
-    Self::new(vertices, Vec::new(), Vec::new(), cells)
+  fn new(vertices: Vec<VertexIdx>, cells: Vec<CellIdx>) -> Self {
+    Self { vertices, cells }
   }
 }
 
@@ -242,28 +210,30 @@ impl<'m> SimplexHandle<'m> {
     self.vertices().len()
   }
   pub fn vertices_sorted(&self) -> &SortedSimplex {
-    &self.topology().sorted
+    self.mesh.topology.skeletons[self.idx.0]
+      .get_index(self.idx.1)
+      .unwrap()
+      .0
   }
-  pub fn nsupers(&self) -> usize {
-    self.topology().supers.len()
-  }
+  // TODO: check if this gives the right orientation
   pub fn supers(&self) -> Chain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for sup in &self.topology().supers {
-      idxs.push(sup.0);
-      coeffs.push(sup.1.as_i32());
+    for (isup, sup) in self.ancestors(self.dim() + 1).enumerate() {
+      idxs.push(sup.kidx());
+      coeffs.push(Orientation::from_permutation_parity(isup).as_i32());
     }
     Chain::new(self.mesh, self.dim() + 1, idxs, coeffs)
   }
+  // TODO: check if this gives the right orientation
   pub fn subs(&self) -> Chain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for sub in &self.topology().subs {
-      idxs.push(sub.0);
-      coeffs.push(sub.1.as_i32());
+    for (isup, sup) in self.descendants(self.dim() - 1).enumerate() {
+      idxs.push(sup.kidx());
+      coeffs.push(Orientation::from_permutation_parity(isup).as_i32());
     }
-    Chain::new(self.mesh, self.dim() + 1, idxs, coeffs)
+    Chain::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
   pub fn cells(&self) -> impl Iterator<Item = SimplexHandle<'m>> {
     self
@@ -298,6 +268,10 @@ impl<'m> SimplexHandle<'m> {
       .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
   }
 
+  /// The ancestor simplicies of this simplex.
+  ///
+  /// These are ordered first by cell index and then by lexicographically w.r.t.
+  /// the local vertex indices.
   pub fn ancestors(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self.cells().flat_map(move |c| {
       c.vertices_sorted()
@@ -387,10 +361,13 @@ impl<'m> Chain<'m> {
   pub fn coeffs(&self) -> &[i32] {
     &self.coeffs
   }
+  pub fn len(&self) -> usize {
+    self.idxs.len()
+  }
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
 }
-
-/// entries are one of {0,-1,+1}
-pub type IncidenceMatrix = SparseMatrix;
 
 #[cfg(test)]
 mod test {
@@ -413,25 +390,10 @@ mod test {
     for dim_sub in 0..=dim {
       let skeleton = mesh.skeleton(dim_sub);
       for simp in skeleton.iter() {
-        // supers and ancestors same elements and order
-        assert!(
-          simp.supers().idxs
-            == simp
-              .ancestors(dim_sub + 1)
-              .map(|s| s.idx.1)
-              .collect::<Vec<_>>()
-        );
-        // subs and descendants same elements and order
-        if dim_sub >= 1 {
-          assert!(
-            simp.subs().idxs
-              == simp
-                .descendants(dim_sub - 1)
-                .map(|s| s.idx.1)
-                .collect::<Vec<_>>()
-          );
-        }
+        let simp_vertices = simp.vertices();
+        print!("{simp_vertices:?},");
       }
+      println!();
     }
 
     for dim_sub in 0..=dim {
