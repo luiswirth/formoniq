@@ -9,7 +9,7 @@ use super::{
   Length, ManifoldGeometry, ManifoldTopology, SimplexTopology, SimplicialManifold, SortedSimplex,
   VertexIdx,
 };
-use crate::{combinatorics::sort_count_swaps, matrix::SparseMatrix, Dim, Orientation};
+use crate::Dim;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -108,97 +108,25 @@ impl SimplicialManifold {
   /// from the raw defining data.
   pub fn from_raw(raw: RawSimplicialManifold) -> Self {
     let dim = raw.dim();
-    let nnodes = raw.nnodes();
 
     let mut skeletons = vec![IndexMap::new(); dim + 1];
-    let mut incidences = vec![Vec::new(); dim];
-
-    // add 0-simplicies (vertices)
-    skeletons[0] = (0..nnodes)
-      .map(|ivertex| {
+    skeletons[0] = (0..raw.nnodes)
+      .map(|v| {
         (
-          SortedSimplex::vertex(ivertex),
-          // cells are unknown at this point
-          SimplexTopology::stub(vec![ivertex]),
+          SortedSimplex::vertex(v),
+          SimplexTopology::new(vec![v], Vec::new()),
         )
       })
       .collect();
 
-    // add d-simplicies (cells)
-    skeletons[dim] = raw
-      .topology
-      .cells
-      .into_iter()
-      .map(|c| c.into_vertices())
-      .enumerate()
-      .map(|(icell, v)| {
-        (
-          SortedSimplex::new(v.clone()),
-          SimplexTopology::stub_with_cells(v, vec![icell]),
-        )
-      })
-      .collect();
-
-    // TODO: consider generating all k-subs using `combinatorics::Combinations(k + 1)` directly
-    // instead of doing combinations of only one dim down always
-    // This probably would allow us to automatically generate the right vertex order
-
-    // add all other simplicies in between vertices and cells
-    // and store the incidence
-    for super_dim in (1..=dim).rev() {
-      let sub_dim = super_dim - 1;
-      let incidence = &mut incidences[sub_dim];
-
-      let ([.., subs], [sups, ..]) = skeletons.split_at_mut(super_dim) else {
-        unreachable!()
-      };
-
-      for isup in 0..sups.len() {
-        let (_, sup) = sups.get_index_mut(isup).unwrap();
-
-        for (icomb, sub) in sup
-          .vertices
-          .iter()
-          .copied()
-          // TODO: avoid itertools
-          .combinations(sub_dim + 1)
-          .enumerate()
-        {
-          let mut rel_orientation = Orientation::from_permutation_parity(icomb);
-
-          let sub_sorted = SortedSimplex::new(sub.clone());
-
-          let (isub, sub) = match subs.get_full_mut(&sub_sorted) {
-            Some((existing_isub, _, existing_sub)) => {
-              // TODO: make this orientation code more intuitive
-              // check if existing simp has different orientation from generated simp
-              let mut actual_vertices = existing_sub.vertices.clone();
-              let mut this_vertices = sub.clone();
-              let actual_swaps = sort_count_swaps(&mut actual_vertices);
-              let this_swaps = sort_count_swaps(&mut this_vertices);
-              let is_different_orientation = ((actual_swaps - this_swaps) % 2) == 1;
-              if is_different_orientation {
-                rel_orientation.switch();
-              }
-              (existing_isub, existing_sub)
-            }
-            None => {
-              let sub = SimplexTopology::stub(sub);
-              let i = subs.insert_full(sub_sorted, sub).0;
-              let sub = subs.get_index_mut(i).unwrap().1;
-              (i, sub)
-            }
-          };
-
-          sup.subs.push((isub, rel_orientation));
-          sub.supers.push((isup, rel_orientation));
-
-          // TODO: optimize
-          sub.cells.extend_from_slice(&sup.cells);
-          sub.cells.sort_unstable();
-          sub.cells.dedup();
-
-          incidence.push((isup, isub, rel_orientation.as_f64()));
+    for (icell, cell) in raw.topology.cells.into_iter().enumerate() {
+      for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
+        for sub in cell.vertices.iter().copied().combinations(sub_dim + 1) {
+          let sorted = SortedSimplex::new(sub.clone());
+          let sub = subs
+            .entry(sorted)
+            .or_insert(SimplexTopology::new(sub, Vec::new()));
+          sub.cells.push(icell);
         }
       }
     }
@@ -212,20 +140,8 @@ impl SimplicialManifold {
       edge_lengths.push(length);
     }
 
-    // finalize incidence matrices
-    let incidence_matrices = incidences
-      .into_iter()
-      .enumerate()
-      .map(|(k, triplets)| {
-        SparseMatrix::from_triplets(skeletons[k + 1].len(), skeletons[k].len(), triplets)
-      })
-      .collect();
-
     Self {
-      topology: ManifoldTopology {
-        skeletons,
-        incidence_matrices,
-      },
+      topology: ManifoldTopology { skeletons },
       geometry: ManifoldGeometry { edge_lengths },
     }
   }
