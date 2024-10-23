@@ -15,6 +15,8 @@ pub type Codim = usize;
 
 pub type Length = f64;
 
+pub type VertexIdx = usize;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Orientation {
   #[default]

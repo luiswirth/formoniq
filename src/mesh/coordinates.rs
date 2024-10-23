@@ -1,6 +1,6 @@
 use super::{
   raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplexTopology, RawSimplicialManifold},
-  SimplexBetweenVertices, SimplicialManifold,
+  SimplicialManifold, SortedSimplex,
 };
 use crate::{mesh::VertexIdx, Dim};
 
@@ -49,7 +49,7 @@ impl CoordManifold {
     for cell in &self.cells {
       for &v0 in &cell.vertices {
         for &v1 in &cell.vertices {
-          let edge = SimplexBetweenVertices::edge(v0, v1);
+          let edge = SortedSimplex::edge(v0, v1);
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
             let length = (self.node_coords.coord(v1) - self.node_coords.coord(v0)).norm();
             e.insert(length);
