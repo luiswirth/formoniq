@@ -12,13 +12,14 @@ pub mod hyperbox;
 pub mod raw;
 pub mod util;
 
-use crate::{geometry::GeometrySimplex, matrix::SparseMatrix, Dim, Length, Orientation};
+use crate::{
+  combinatorics::SortedSimplex, geometry::GeometrySimplex, matrix::SparseMatrix, Dim, Length,
+  Orientation, VertexIdx,
+};
 
 use indexmap::IndexMap;
-use itertools::Itertools;
 use std::hash::Hash;
 
-pub type VertexIdx = usize;
 pub type EdgeIdx = usize;
 pub type CellIdx = usize;
 pub type KSimplexIdx = usize;
@@ -36,13 +37,16 @@ pub struct ManifoldTopology {
 }
 
 /// A container for topological simplicies of common dimension.
-pub type SkeletonTopology = IndexMap<SimplexBetweenVertices, SimplexTopology>;
+pub type SkeletonTopology = IndexMap<SortedSimplex, SimplexTopology>;
 
 /// Topological information of the simplex.
 #[derive(Debug, Clone)]
 pub struct SimplexTopology {
   /// The vertices of the simplex.
   vertices: Vec<VertexIdx>,
+  /// The sorted vertices.
+  /// Important as key for searching for simplicies in the mesh.
+  sorted: SortedSimplex,
   /// The supersimplicies that are one layer above this simplex
   /// together with their relative orientation.
   /// Ordered in spirit of simplex boundary operator formula.
@@ -51,6 +55,10 @@ pub struct SimplexTopology {
   /// together with their relative orientation.
   /// Ordered in spirit of simplex boundary operator formula.
   subs: Vec<(KSimplexIdx, Orientation)>,
+  /// The cells that this simplex is part of.
+  /// This information is crucial for computing ancestor simplicies.
+  /// Ordered increasing in [`CellIdx`].
+  cells: Vec<CellIdx>,
 }
 
 pub struct ManifoldGeometry {
@@ -121,7 +129,6 @@ impl SimplicialManifold {
   pub fn geometry(&self) -> &ManifoldGeometry {
     &self.geometry
   }
-
   pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
     SkeletonHandle::new(self, dim)
   }
@@ -141,7 +148,7 @@ impl SimplicialManifold {
     self
       .cells()
       .iter()
-      .map(|cell| cell.geometry_simplex().diameter())
+      .map(|cell| cell.geometry().diameter())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -152,7 +159,7 @@ impl SimplicialManifold {
     self
       .cells()
       .iter()
-      .map(|cell| cell.geometry_simplex().shape_reguarity_measure())
+      .map(|cell| cell.geometry().shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -163,15 +170,22 @@ impl SimplexTopology {
     vertices: Vec<VertexIdx>,
     supers: Vec<(KSimplexIdx, Orientation)>,
     subs: Vec<(KSimplexIdx, Orientation)>,
+    cells: Vec<CellIdx>,
   ) -> Self {
+    let sorted = SortedSimplex::new(vertices.clone());
     Self {
       vertices,
+      sorted,
       supers,
       subs,
+      cells,
     }
   }
   fn stub(vertices: Vec<VertexIdx>) -> Self {
-    Self::new(vertices, Vec::new(), Vec::new())
+    Self::stub_with_cells(vertices, Vec::new())
+  }
+  fn stub_with_cells(vertices: Vec<VertexIdx>, cells: Vec<CellIdx>) -> Self {
+    Self::new(vertices, Vec::new(), Vec::new(), cells)
   }
 }
 
@@ -193,34 +207,6 @@ impl PartialEq for SimplexTopology {
   }
 }
 impl Eq for SimplexTopology {}
-
-/// Unoriented Edge
-/// Unorientedness emphasized through word "Between".
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SimplexBetweenVertices(Vec<VertexIdx>);
-impl SimplexBetweenVertices {
-  pub fn new(mut vertices: Vec<VertexIdx>) -> Self {
-    vertices.sort();
-    Self(vertices)
-  }
-  pub fn vertex(v: VertexIdx) -> SimplexBetweenVertices {
-    Self(vec![v])
-  }
-  pub fn edge(a: VertexIdx, b: VertexIdx) -> Self {
-    if a < b {
-      Self(vec![a, b])
-    } else {
-      Self(vec![b, a])
-    }
-  }
-
-  pub fn nvertices(&self) -> usize {
-    self.0.len()
-  }
-  pub fn dim(&self) -> Dim {
-    self.nvertices() - 1
-  }
-}
 
 /// Fat pointer to simplex.
 pub struct SimplexHandle<'m> {
@@ -255,18 +241,8 @@ impl<'m> SimplexHandle<'m> {
   pub fn nvertices(&self) -> usize {
     self.vertices().len()
   }
-  pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
-    self.descendants(1)
-  }
-  fn edge_lengths(&self) -> Vec<f64> {
-    let edge_lengths = self
-      .edges()
-      .map(|e| self.mesh.geometry.edge_lengths[e.idx.1])
-      .collect();
-    edge_lengths
-  }
-  pub fn geometry_simplex(&self) -> GeometrySimplex {
-    GeometrySimplex::new(self.idx.0, self.edge_lengths())
+  pub fn vertices_sorted(&self) -> &SortedSimplex {
+    &self.topology().sorted
   }
   pub fn nsupers(&self) -> usize {
     self.topology().supers.len()
@@ -289,6 +265,26 @@ impl<'m> SimplexHandle<'m> {
     }
     Chain::new(self.mesh, self.dim() + 1, idxs, coeffs)
   }
+  pub fn cells(&self) -> impl Iterator<Item = SimplexHandle<'m>> {
+    self
+      .topology()
+      .cells
+      .iter()
+      .map(|&c| SimplexHandle::new(self.mesh, (self.mesh.dim(), c)))
+  }
+  pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+    self.descendants(1)
+  }
+  fn edge_lengths(&self) -> Vec<f64> {
+    let edge_lengths = self
+      .edges()
+      .map(|e| self.mesh.geometry.edge_lengths[e.idx.1])
+      .collect();
+    edge_lengths
+  }
+  pub fn geometry(&self) -> GeometrySimplex {
+    GeometrySimplex::new(self.idx.0, self.edge_lengths())
+  }
 
   /// The descendant simplicies of this simplex.
   ///
@@ -297,18 +293,22 @@ impl<'m> SimplexHandle<'m> {
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
   pub fn descendants(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .vertices()
-      .iter()
-      .copied()
-      // TODO: don't rely on internals of itertools for ordering -> use own implementation
-      .combinations(dim + 1)
-      .map(move |sub| {
-        let sub = SimplexBetweenVertices::new(sub);
-        let sub = self.mesh().topology.skeletons[dim]
-          .get_index_of(&sub)
-          .unwrap();
-        SimplexHandle::new(self.mesh(), (dim, sub))
-      })
+      .vertices_sorted()
+      .subsimplicies(dim)
+      .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
+  }
+
+  pub fn ancestors(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+    self.cells().flat_map(move |c| {
+      c.vertices_sorted()
+        .subsimplicies(dim)
+        .filter(|a| self.vertices_sorted() <= a)
+        .map(move |a| self.mesh.topology.skeletons[dim].get_index_of(&a).unwrap())
+        .map(move |a| Self::new(self.mesh, (dim, a)))
+        // TODO: can we avoid this collect?
+        .collect::<Vec<_>>()
+        .into_iter()
+    })
   }
 }
 impl PartialEq for SimplexHandle<'_> {
@@ -334,8 +334,11 @@ impl<'m> SkeletonHandle<'m> {
   }
 }
 impl SkeletonHandle<'_> {
+  pub fn topology(&self) -> &SkeletonTopology {
+    &self.mesh.topology.skeletons[self.dim]
+  }
   pub fn len(&self) -> usize {
-    self.mesh.topology.skeletons[self.dim].len()
+    self.topology().len()
   }
   pub fn is_empty(&self) -> bool {
     self.len() == 0
@@ -343,7 +346,11 @@ impl SkeletonHandle<'_> {
 }
 
 impl<'m> SkeletonHandle<'m> {
-  pub fn get(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
+  pub fn get_idx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
+    SimplexHandle::new(self.mesh, (self.dim, idx))
+  }
+  pub fn get_key(&self, key: &SortedSimplex) -> SimplexHandle<'m> {
+    let idx = self.topology().get_full(key).unwrap().0;
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
 }
@@ -387,32 +394,71 @@ pub type IncidenceMatrix = SparseMatrix;
 
 #[cfg(test)]
 mod test {
-  use crate::geometry::GeometrySimplex;
+
+  use crate::{
+    combinatorics::{nsubsimplicies, SortedSimplex},
+    geometry::GeometrySimplex,
+  };
 
   #[test]
-  fn descendants_ref3d() {
-    let mesh = GeometrySimplex::new_ref(3).into_singleton_mesh();
-    let cell = mesh.cells().get(0);
-    let vertices: Vec<_> = cell.descendants(0).map(|s| s.vertices()).collect();
-    let edges: Vec<_> = cell.descendants(1).map(|s| s.vertices()).collect();
-    let faces: Vec<_> = cell.descendants(2).map(|s| s.vertices()).collect();
-    let cells: Vec<_> = cell.descendants(3).map(|s| s.vertices()).collect();
-    assert_eq!(vertices, vec![vec![0], vec![1], vec![2], vec![3]]);
-    assert_eq!(
-      edges,
-      vec![
-        vec![0, 1],
-        vec![0, 2],
-        vec![0, 3],
-        vec![1, 2],
-        vec![1, 3],
-        vec![2, 3],
-      ]
-    );
-    assert_eq!(
-      faces,
-      vec![vec![0, 1, 2], vec![0, 1, 3], vec![0, 2, 3], vec![1, 2, 3]]
-    );
-    assert_eq!(cells, vec![vec![0, 1, 2, 3]]);
+  fn incidence() {
+    let dim = 3;
+    let mesh = GeometrySimplex::new_ref(dim).into_singleton_mesh();
+
+    let cell = mesh.cells().get_idx(0);
+
+    let cell_vertices = SortedSimplex::new_unchecked((0..(dim + 1)).collect());
+    assert_eq!(cell.vertices_sorted(), &cell_vertices);
+
+    for dim_sub in 0..=dim {
+      let skeleton = mesh.skeleton(dim_sub);
+      for simp in skeleton.iter() {
+        // supers and ancestors same elements and order
+        assert!(
+          simp.supers().idxs
+            == simp
+              .ancestors(dim_sub + 1)
+              .map(|s| s.idx.1)
+              .collect::<Vec<_>>()
+        );
+        // subs and descendants same elements and order
+        if dim_sub >= 1 {
+          assert!(
+            simp.subs().idxs
+              == simp
+                .descendants(dim_sub - 1)
+                .map(|s| s.idx.1)
+                .collect::<Vec<_>>()
+          );
+        }
+      }
+    }
+
+    for dim_sub in 0..=dim {
+      let subs: Vec<_> = cell.descendants(dim_sub).collect();
+      assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
+      let subs_vertices: Vec<_> = cell_vertices.subsimplicies(dim_sub).collect();
+      assert_eq!(
+        subs
+          .iter()
+          .map(|sub| sub.vertices_sorted().clone())
+          .collect::<Vec<_>>(),
+        subs_vertices
+      );
+
+      for (isub, sub) in subs.iter().enumerate() {
+        let sub_vertices = &subs_vertices[isub];
+        for dim_sup in dim_sub..dim {
+          let sups: Vec<_> = sub.ancestors(dim_sup).collect();
+          let sups_vertices = sups
+            .iter()
+            .map(|sub| sub.vertices_sorted().clone())
+            .collect::<Vec<_>>();
+          sups_vertices
+            .iter()
+            .all(|sup| sub_vertices <= sup && sup <= &cell_vertices);
+        }
+      }
+    }
   }
 }

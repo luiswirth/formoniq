@@ -46,7 +46,7 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
 
 /// The Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cells().get(icell).geometry_simplex();
+  let cell_geo = space.mesh().cells().get_idx(icell).geometry();
   laplacian_neg_elmat_geo(&cell_geo)
 }
 
@@ -58,8 +58,8 @@ pub struct LoadElvec {
 }
 impl ElvecProvider for LoadElvec {
   fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64> {
-    let cell = space.mesh().cells().get(icell);
-    let cell_geo = cell.geometry_simplex();
+    let cell = space.mesh().cells().get_idx(icell);
+    let cell_geo = cell.geometry();
     let nverts = cell_geo.nvertices();
 
     cell_geo.vol() / nverts as f64
@@ -84,7 +84,7 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
-    let cell_geo = cell.geometry_simplex();
+    let cell_geo = cell.geometry();
     let vol = cell_geo.vol();
     norm += (vol / nvertices as f64) * sum;
   }

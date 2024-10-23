@@ -6,12 +6,13 @@
 //! include any information that is redundant or can be derived from other fields.
 
 use super::{
-  Length, ManifoldGeometry, ManifoldTopology, SimplexBetweenVertices, SimplexTopology,
-  SimplicialManifold, VertexIdx,
+  Length, ManifoldGeometry, ManifoldTopology, SimplexTopology, SimplicialManifold, SortedSimplex,
+  VertexIdx,
 };
 use crate::{combinatorics::sort_count_swaps, matrix::SparseMatrix, Dim, Orientation};
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use std::collections::HashMap;
 
 /// The data defining a simplicial Riemanninan manifold.
@@ -91,13 +92,13 @@ impl RawSimplexTopology {
 /// The data defining the geometric structure of the manifold.
 pub struct RawManifoldGeometry {
   /// Defining the lengths of all edges of the manifold.
-  pub edge_lengths: HashMap<SimplexBetweenVertices, Length>,
+  pub edge_lengths: HashMap<SortedSimplex, Length>,
 }
 impl RawManifoldGeometry {
-  pub fn new(edge_lengths: HashMap<SimplexBetweenVertices, Length>) -> Self {
+  pub fn new(edge_lengths: HashMap<SortedSimplex, Length>) -> Self {
     Self { edge_lengths }
   }
-  pub fn into_edge_lengths(self) -> HashMap<SimplexBetweenVertices, Length> {
+  pub fn into_edge_lengths(self) -> HashMap<SortedSimplex, Length> {
     self.edge_lengths
   }
 }
@@ -116,7 +117,8 @@ impl SimplicialManifold {
     skeletons[0] = (0..nnodes)
       .map(|ivertex| {
         (
-          SimplexBetweenVertices::vertex(ivertex),
+          SortedSimplex::vertex(ivertex),
+          // cells are unknown at this point
           SimplexTopology::stub(vec![ivertex]),
         )
       })
@@ -128,13 +130,18 @@ impl SimplicialManifold {
       .cells
       .into_iter()
       .map(|c| c.into_vertices())
-      .map(|v| {
+      .enumerate()
+      .map(|(icell, v)| {
         (
-          SimplexBetweenVertices::new(v.clone()),
-          SimplexTopology::stub(v),
+          SortedSimplex::new(v.clone()),
+          SimplexTopology::stub_with_cells(v, vec![icell]),
         )
       })
       .collect();
+
+    // TODO: consider generating all k-subs using `combinatorics::Combinations(k + 1)` directly
+    // instead of doing combinations of only one dim down always
+    // This probably would allow us to automatically generate the right vertex order
 
     // add all other simplicies in between vertices and cells
     // and store the incidence
@@ -148,12 +155,18 @@ impl SimplicialManifold {
 
       for isup in 0..sups.len() {
         let (_, sup) = sups.get_index_mut(isup).unwrap();
-        for ivertex in 0..sup.vertices.len() {
-          let mut rel_orientation = Orientation::from_permutation_parity(ivertex);
 
-          let mut sub = sup.vertices.clone();
-          sub.remove(ivertex);
-          let sub_sorted = SimplexBetweenVertices::new(sub.clone());
+        for (icomb, sub) in sup
+          .vertices
+          .iter()
+          .copied()
+          // TODO: avoid itertools
+          .combinations(sub_dim + 1)
+          .enumerate()
+        {
+          let mut rel_orientation = Orientation::from_permutation_parity(icomb);
+
+          let sub_sorted = SortedSimplex::new(sub.clone());
 
           let (isub, sub) = match subs.get_full_mut(&sub_sorted) {
             Some((existing_isub, _, existing_sub)) => {
@@ -176,8 +189,14 @@ impl SimplicialManifold {
               (i, sub)
             }
           };
+
           sup.subs.push((isub, rel_orientation));
           sub.supers.push((isup, rel_orientation));
+
+          // TODO: optimize
+          sub.cells.extend_from_slice(&sup.cells);
+          sub.cells.sort_unstable();
+          sub.cells.dedup();
 
           incidence.push((isup, isub, rel_orientation.as_f64()));
         }
@@ -188,7 +207,7 @@ impl SimplicialManifold {
     let mut edge_lengths = Vec::new();
     for edge in skeletons[1].values() {
       let edge = edge.vertices.clone();
-      let edge = SimplexBetweenVertices::new(edge);
+      let edge = SortedSimplex::new(edge);
       let length = raw.geometry.edge_lengths[&edge];
       edge_lengths.push(length);
     }

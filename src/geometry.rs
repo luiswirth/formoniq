@@ -1,8 +1,8 @@
 use crate::{
-  combinatorics::{factorial, simplex_nedges},
+  combinatorics::{factorial, nsubedges, SortedSimplex},
   mesh::{
     raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplexTopology, RawSimplicialManifold},
-    SimplexBetweenVertices, SimplicialManifold,
+    SimplicialManifold,
   },
   Dim, Orientation,
 };
@@ -23,7 +23,7 @@ pub struct GeometrySimplex {
 }
 impl GeometrySimplex {
   pub fn new(dim: Dim, edge_lengths: Vec<f64>) -> Self {
-    assert_eq!(edge_lengths.len(), simplex_nedges(dim));
+    assert_eq!(edge_lengths.len(), nsubedges(dim));
     Self { dim, edge_lengths }
   }
 
@@ -33,7 +33,7 @@ impl GeometrySimplex {
 
   /// Constructs a reference simplex in `dim` dimensions.
   pub fn new_ref(dim: Dim) -> Self {
-    let nedges = simplex_nedges(dim);
+    let nedges = nsubedges(dim);
     let mut edge_lengths = vec![0.0; nedges];
     for l in edge_lengths.iter_mut().take(dim) {
       *l = 1.0;
@@ -136,7 +136,7 @@ impl GeometrySimplex {
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert(SimplexBetweenVertices::edge(i, j), self.edge_lengths[idx]);
+        edge_lengths.insert(SortedSimplex::edge(i, j), self.edge_lengths[idx]);
         idx += 1;
       }
     }
