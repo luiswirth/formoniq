@@ -35,7 +35,7 @@ impl SortedSimplex {
     &self.0
   }
 
-  pub fn subsimplicies(&self, dim: Dim) -> impl Iterator<Item = Self> + '_ {
+  pub fn subs(&self, dim: Dim) -> impl Iterator<Item = Self> + '_ {
     // TODO: don't rely on internals of itertools for ordering -> use own implementation
     self
       .0
@@ -43,6 +43,16 @@ impl SortedSimplex {
       .copied()
       .combinations(dim + 1)
       .map(Self::new_unchecked)
+  }
+  pub fn sups<'a>(
+    &'a self,
+    dim: Dim,
+    cells: impl Iterator<Item = &'a Self> + 'a,
+  ) -> impl Iterator<Item = Self> + 'a {
+    cells
+      .flat_map(move |c| c.subs(dim))
+      .filter(move |s| self <= s)
+      .unique()
   }
 }
 /// Implements the subsimplex/subset partial order relation.
@@ -219,9 +229,9 @@ mod test {
       let nvertices = dim + 1;
       let simp = SortedSimplex::new((0..nvertices).collect());
       for sub_dim in 0..dim {
-        assert!(simp.subsimplicies(sub_dim).all(|sub| sub < simp));
+        assert!(simp.subs(sub_dim).all(|sub| sub < simp));
       }
-      assert!(simp.subsimplicies(dim).all(|sub| sub == simp));
+      assert!(simp.subs(dim).all(|sub| sub == simp));
     }
   }
 
