@@ -27,7 +27,7 @@ impl DofHandler {
     let local2global_idx = mesh
       .cells()
       .iter()
-      .map(|c| c.descendants(rank).map(|d| d.kidx()).collect())
+      .map(|c| c.subs(rank).map(|d| d.kidx()).collect())
       .collect();
     Self { local2global_idx }
   }

@@ -8,6 +8,7 @@
 
 pub mod boundary;
 pub mod coordinates;
+pub mod gmsh;
 pub mod hyperbox;
 pub mod raw;
 pub mod util;
@@ -209,27 +210,27 @@ impl<'m> SimplexHandle<'m> {
   pub fn nvertices(&self) -> usize {
     self.vertices().len()
   }
-  pub fn vertices_sorted(&self) -> &SortedSimplex {
+  pub fn vertices_sorted(&self) -> &'m SortedSimplex {
     self.mesh.topology.skeletons[self.idx.0]
       .get_index(self.idx.1)
       .unwrap()
       .0
   }
   // TODO: check if this gives the right orientation
-  pub fn supers(&self) -> Chain<'m> {
+  pub fn antiboundary(&self) -> Chain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for (isup, sup) in self.ancestors(self.dim() + 1).enumerate() {
+    for (isup, sup) in self.sups(self.dim() + 1).enumerate() {
       idxs.push(sup.kidx());
       coeffs.push(Orientation::from_permutation_parity(isup).as_i32());
     }
     Chain::new(self.mesh, self.dim() + 1, idxs, coeffs)
   }
   // TODO: check if this gives the right orientation
-  pub fn subs(&self) -> Chain<'m> {
+  pub fn boundary(&self) -> Chain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for (isup, sup) in self.descendants(self.dim() - 1).enumerate() {
+    for (isup, sup) in self.subs(self.dim() - 1).enumerate() {
       idxs.push(sup.kidx());
       coeffs.push(Orientation::from_permutation_parity(isup).as_i32());
     }
@@ -243,7 +244,7 @@ impl<'m> SimplexHandle<'m> {
       .map(|&c| SimplexHandle::new(self.mesh, (self.mesh.dim(), c)))
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
-    self.descendants(1)
+    self.subs(1)
   }
   fn edge_lengths(&self) -> Vec<f64> {
     let edge_lengths = self
@@ -256,33 +257,28 @@ impl<'m> SimplexHandle<'m> {
     GeometrySimplex::new(self.idx.0, self.edge_lengths())
   }
 
-  /// The descendant simplicies of this simplex.
+  /// The dim-subsimplicies of this simplex.
   ///
   /// These are ordered lexicographically w.r.t.
   /// the local vertex indices.
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
-  pub fn descendants(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+  pub fn subs(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
       .vertices_sorted()
-      .subsimplicies(dim)
+      .subs(dim)
       .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
   }
 
-  /// The ancestor simplicies of this simplex.
+  /// The dim-supersimplicies of this simplex.
   ///
-  /// These are ordered first by cell index and then by lexicographically w.r.t.
-  /// the local vertex indices.
-  pub fn ancestors(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
-    self.cells().flat_map(move |c| {
-      c.vertices_sorted()
-        .subsimplicies(dim)
-        .filter(|a| self.vertices_sorted() <= a)
-        .map(move |a| self.mesh.topology.skeletons[dim].get_index_of(&a).unwrap())
-        .map(move |a| Self::new(self.mesh, (dim, a)))
-        // TODO: can we avoid this collect?
-        .collect::<Vec<_>>()
-        .into_iter()
-    })
+  /// These are ordered first by cell index and then
+  /// by lexicographically w.r.t. the local vertex indices.
+  pub fn sups(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+    self
+      .vertices_sorted()
+      .sups(dim, self.cells().map(move |c| c.vertices_sorted()))
+      .map(move |a| self.mesh.skeleton(dim).get_key(&a).idx)
+      .map(move |a| Self::new(self.mesh, a))
   }
 }
 impl PartialEq for SimplexHandle<'_> {
@@ -397,9 +393,9 @@ mod test {
     }
 
     for dim_sub in 0..=dim {
-      let subs: Vec<_> = cell.descendants(dim_sub).collect();
+      let subs: Vec<_> = cell.subs(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
-      let subs_vertices: Vec<_> = cell_vertices.subsimplicies(dim_sub).collect();
+      let subs_vertices: Vec<_> = cell_vertices.subs(dim_sub).collect();
       assert_eq!(
         subs
           .iter()
@@ -411,7 +407,7 @@ mod test {
       for (isub, sub) in subs.iter().enumerate() {
         let sub_vertices = &subs_vertices[isub];
         for dim_sup in dim_sub..dim {
-          let sups: Vec<_> = sub.ancestors(dim_sup).collect();
+          let sups: Vec<_> = sub.sups(dim_sup).collect();
           let sups_vertices = sups
             .iter()
             .map(|sub| sub.vertices_sorted().clone())
