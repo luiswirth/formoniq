@@ -1,6 +1,6 @@
 use crate::mesh::{
-  coordinates::{CoordManifold, MeshNodeCoords},
-  raw::RawSimplexTopology,
+  coordinates::{CoordManifold, NodeCoords},
+  raw::SimplexVertices,
 };
 use tracing::warn;
 
@@ -15,7 +15,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
     .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]))
     .collect();
   let mesh_nodes = na::DMatrix::from_columns(&mesh_nodes);
-  let mesh_nodes = MeshNodeCoords::new(mesh_nodes);
+  let mesh_nodes = NodeCoords::new(mesh_nodes);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();
@@ -37,7 +37,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
     };
     for e in block.elements {
       let simplex = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      simplex_acc.push(RawSimplexTopology::new(simplex));
+      simplex_acc.push(SimplexVertices::new(simplex));
     }
   }
 

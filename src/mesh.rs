@@ -247,14 +247,14 @@ impl<'m> SimplexHandle<'m> {
     self.subs(1)
   }
   fn edge_lengths(&self) -> Vec<f64> {
-    let edge_lengths = self
+    self
       .edges()
       .map(|e| self.mesh.geometry.edge_lengths[e.idx.1])
-      .collect();
-    edge_lengths
+      .collect()
   }
   pub fn geometry(&self) -> GeometrySimplex {
-    GeometrySimplex::new(self.idx.0, self.edge_lengths())
+    // TODO: pass orientation correctly!!!
+    GeometrySimplex::new(self.idx.0, self.edge_lengths(), Orientation::Pos)
   }
 
   /// The dim-subsimplicies of this simplex.

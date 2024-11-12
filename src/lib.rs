@@ -25,6 +25,15 @@ pub enum Orientation {
 }
 
 impl Orientation {
+  pub fn from_det(det: f64) -> Self {
+    Self::from_bool(det > 0.0)
+  }
+  pub fn from_bool(b: bool) -> Self {
+    match b {
+      true => Self::Pos,
+      false => Self::Neg,
+    }
+  }
   /// Simplex orientation might change when permuting the vertices.
   /// This depends on the parity of the number of swaps.
   /// Even permutations preserve the orientation.
@@ -53,6 +62,13 @@ impl Orientation {
   }
   pub fn as_f64(self) -> f64 {
     self as i32 as f64
+  }
+
+  pub fn is_pos(self) -> bool {
+    self == Self::Pos
+  }
+  pub fn is_neg(self) -> bool {
+    self == Self::Neg
   }
 }
 impl std::ops::Neg for Orientation {

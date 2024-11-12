@@ -52,14 +52,22 @@ impl SparseMatrix {
     }
   }
 
-  pub fn to_nalgebra(&self) -> nas::CscMatrix<f64> {
+  pub fn to_nalgebra_coo(&self) -> nas::CooMatrix<f64> {
     let rows = self.triplets.iter().map(|t| t.0).collect();
     let cols = self.triplets.iter().map(|t| t.1).collect();
     let vals = self.triplets.iter().map(|t| t.2).collect();
-    (&nas::CooMatrix::try_from_triplets(self.nrows, self.ncols, rows, cols, vals).unwrap()).into()
+    nas::CooMatrix::try_from_triplets(self.nrows, self.ncols, rows, cols, vals).unwrap()
   }
 
-  pub fn to_faer(&self) -> faer::sparse::SparseColMat<usize, f64> {
+  pub fn to_nalgebra_csc(&self) -> nas::CscMatrix<f64> {
+    (&self.to_nalgebra_coo()).into()
+  }
+
+  pub fn to_nalgebra_dense(&self) -> na::DMatrix<f64> {
+    (&self.to_nalgebra_coo()).into()
+  }
+
+  pub fn to_faer_csc(&self) -> faer::sparse::SparseColMat<usize, f64> {
     faer::sparse::SparseColMat::try_new_from_triplets(self.nrows, self.ncols, &self.triplets)
       .unwrap()
   }

@@ -21,7 +21,7 @@ fn main() {
   println!("Poisson in {dim}D");
 
   let kstart = 0;
-  let kend = 10;
+  let kend = 8;
   let klen = kend - kstart + 1;
 
   // Define analytic solution.

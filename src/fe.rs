@@ -31,6 +31,9 @@ where
 
 pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
   let dim = cell_geo.dim();
+  let metric = cell_geo.metric_tensor();
+  let vol = cell_geo.vol();
+
   let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
   for i in 0..dim {
     reference_gradbarys[(i, 0)] = -1.0;
@@ -38,8 +41,6 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
   for i in 0..dim {
     reference_gradbarys[(i, i + 1)] = 1.0;
   }
-  let metric = cell_geo.metric_tensor();
-  let vol = cell_geo.vol();
 
   vol * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
@@ -93,7 +94,9 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
 
 #[cfg(test)]
 mod test {
-  use crate::{fe, geometry::GeometrySimplex, space::FeSpace};
+  use crate::{
+    assemble, fe, geometry::GeometrySimplex, mesh::hyperbox::HyperBoxMeshInfo, space::FeSpace,
+  };
   use std::rc::Rc;
 
   fn check_elmat_refd(d: usize, expected_elmat: na::DMatrixView<f64>) {
@@ -141,5 +144,55 @@ mod test {
       -a, 0., 0., a
     ]);
     check_elmat_refd(3, expected_elmat.as_view());
+  }
+
+  fn check_galmat_unitd(d: usize, expected_galmat: na::DMatrixView<f64>) {
+    let box_mesh = HyperBoxMeshInfo::new_unit(d, 1);
+    let coord_mesh = box_mesh.compute_coord_manifold();
+    let mesh = Rc::new(coord_mesh.into_manifold());
+
+    let space = FeSpace::new(mesh);
+    let computed_galmat = assemble::assemble_galmat(&space, fe::laplacian_neg_elmat);
+    let computed_galmat: na::DMatrix<f64> = computed_galmat.to_nalgebra_dense();
+    println!("{computed_galmat:.3}");
+    assert!((computed_galmat - expected_galmat).norm() < 10.0 * f64::EPSILON);
+  }
+
+  #[test]
+  fn laplacian_galmat_unit1d() {
+    #[rustfmt::skip]
+    let expected_elmat = na::DMatrix::from_row_slice(2, 2, &[
+      1.0, -1.0,
+      -1.0, 1.0,
+    ]);
+    check_galmat_unitd(1, expected_elmat.as_view());
+  }
+
+  #[test]
+  fn laplacian_galmat_unit2d() {
+    #[rustfmt::skip]
+    let expected_elmat = na::DMatrix::from_row_slice(4, 4, &[
+      1.0, -0.5, -0.5, 0.0,
+      -0.5, 1.0, 0.0, -0.5,
+      -0.5, 0.0, 1.0, -0.5,
+      0.0, -0.5, -0.5, 1.0,
+    ]);
+    check_galmat_unitd(2, expected_elmat.as_view());
+  }
+
+  #[test]
+  fn laplacian_galmat_unit3d() {
+    #[rustfmt::skip]
+    let expected_elmat = na::DMatrix::from_row_slice(8, 8, &[
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+      0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+    ]);
+    check_galmat_unitd(3, expected_elmat.as_view());
   }
 }

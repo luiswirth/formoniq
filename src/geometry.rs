@@ -1,7 +1,7 @@
 use crate::{
   combinatorics::{factorial, nsubedges, SortedSimplex},
   mesh::{
-    raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplexTopology, RawSimplicialManifold},
+    raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplicialManifold, SimplexVertices},
     SimplicialManifold,
   },
   Dim, Orientation,
@@ -9,7 +9,7 @@ use crate::{
 
 use std::{collections::HashMap, f64::consts::SQRT_2};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GeometrySimplex {
   /// dimension of the simplex
   /// could be reverse computed from edge_lengths, but hard.
@@ -20,15 +20,18 @@ pub struct GeometrySimplex {
   /// This is very natural, since the first dim edge lengths correspond to
   /// the lengths of the tangent vectors, which are the sqrts of the diagonal entries of the metric tensor.
   edge_lengths: Vec<f64>,
+  /// Even though orientation is a topological feature, it is still necessary for geometry.
+  /// It gives the determinant it's sign.
+  orientation: Orientation,
 }
 impl GeometrySimplex {
-  pub fn new(dim: Dim, edge_lengths: Vec<f64>) -> Self {
+  pub fn new(dim: Dim, edge_lengths: Vec<f64>, orientation: Orientation) -> Self {
     assert_eq!(edge_lengths.len(), nsubedges(dim));
-    Self { dim, edge_lengths }
-  }
-
-  pub fn edge_lengths(&self) -> &[f64] {
-    &self.edge_lengths
+    Self {
+      dim,
+      edge_lengths,
+      orientation,
+    }
   }
 
   /// Constructs a reference simplex in `dim` dimensions.
@@ -41,11 +44,22 @@ impl GeometrySimplex {
     for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
       *l = SQRT_2;
     }
-    Self { dim, edge_lengths }
+    let orientation = Orientation::Pos;
+    Self {
+      dim,
+      edge_lengths,
+      orientation,
+    }
   }
 
   pub fn dim(&self) -> Dim {
     self.dim
+  }
+  pub fn edge_lengths(&self) -> &[f64] {
+    &self.edge_lengths
+  }
+  pub fn orientation(&self) -> Orientation {
+    self.orientation
   }
   pub fn nvertices(&self) -> usize {
     self.dim + 1
@@ -54,22 +68,14 @@ impl GeometrySimplex {
     self.edge_lengths.len()
   }
 
-  /// The determinate (signed volume) of the simplex.
-  pub fn det(&self) -> f64 {
+  /// The (unsigned) volume of the simplex.
+  pub fn vol(&self) -> f64 {
     ref_vol(self.dim) * self.metric_tensor().determinant().sqrt()
   }
 
-  /// The (unsigned) volume of the simplex.
-  pub fn vol(&self) -> f64 {
-    self.det().abs()
-  }
-
-  /// The orientation of the simplex.
-  pub fn orientation(&self) -> Orientation {
-    match self.det().is_sign_positive() {
-      true => Orientation::Pos,
-      false => Orientation::Neg,
-    }
+  /// The determinate (signed volume) of the simplex.
+  pub fn det(&self) -> f64 {
+    self.orientation.as_f64() * self.vol()
   }
 
   /// The diameter of the simplex.
@@ -143,7 +149,7 @@ impl GeometrySimplex {
 
     SimplicialManifold::from_raw(RawSimplicialManifold::new(
       self.nvertices(),
-      RawManifoldTopology::new(vec![RawSimplexTopology::new(vertices)]),
+      RawManifoldTopology::new(vec![SimplexVertices::new(vertices)]),
       RawManifoldGeometry::new(edge_lengths),
     ))
   }
@@ -160,7 +166,11 @@ mod test {
   #[test]
   fn reference_transform() {
     let refsimp = GeometrySimplex::new_ref(3);
-    let simp = GeometrySimplex::new(3, vec![1.0, 1.0, 1.0, SQRT_2, SQRT_2, SQRT_2]);
+    let simp = GeometrySimplex::new(
+      3,
+      vec![1.0, 1.0, 1.0, SQRT_2, SQRT_2, SQRT_2],
+      Orientation::Pos,
+    );
     assert_eq!(refsimp.edge_lengths, simp.edge_lengths);
   }
 

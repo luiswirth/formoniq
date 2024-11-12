@@ -1,10 +1,10 @@
-use super::{coordinates::MeshNodeCoords, VertexIdx};
+use super::{coordinates::NodeCoords, VertexIdx};
 
 pub struct NodeData<T> {
   data: Vec<T>,
 }
 impl<T> NodeData<T> {
-  pub fn from_coords_map<F>(coords: &MeshNodeCoords, map: F) -> Self
+  pub fn from_coords_map<F>(coords: &NodeCoords, map: F) -> Self
   where
     F: FnMut(na::DVectorView<f64>) -> T,
   {

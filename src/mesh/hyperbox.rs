@@ -1,8 +1,8 @@
 use itertools::Itertools;
 
 use super::{
-  coordinates::{CoordManifold, MeshNodeCoords},
-  raw::{RawSimplexTopology, RawSimplicialManifold},
+  coordinates::{CoordManifold, NodeCoords},
+  raw::{RawSimplicialManifold, SimplexVertices},
   SimplicialManifold, VertexIdx,
 };
 use crate::{
@@ -143,12 +143,12 @@ impl HyperBoxMeshInfo {
 }
 
 impl HyperBoxMeshInfo {
-  pub fn compute_node_coords(&self) -> MeshNodeCoords {
+  pub fn compute_node_coords(&self) -> NodeCoords {
     let mut nodes = na::DMatrix::zeros(self.dim(), self.nnodes());
     for (inode, mut coord) in nodes.column_iter_mut().enumerate() {
       coord.copy_from(&self.node_pos(inode));
     }
-    MeshNodeCoords::new(nodes)
+    NodeCoords::new(nodes)
   }
 
   pub fn compute_coord_manifold(&self) -> CoordManifold {
@@ -156,7 +156,7 @@ impl HyperBoxMeshInfo {
 
     let dim = self.dim();
     let ncells = factorial(dim) * self.nboxes();
-    let mut cells: Vec<RawSimplexTopology> = Vec::with_capacity(ncells);
+    let mut cells: Vec<SimplexVertices> = Vec::with_capacity(ncells);
 
     // iterate through all boxes that make up the mesh
     for icube in 0..self.nboxes() {
@@ -169,15 +169,15 @@ impl HyperBoxMeshInfo {
       let basisdirs: Vec<_> = (0..dim).collect();
 
       // construct all $d!$ simplicies that make up the current box
-      // each permutation of the basis directions (dimensions) gives rise to one simplex
-      let cube_simplicies = basisdirs
+      // each permutation of the basis directions (dimensions) gives rise to one simplicial cell
+      let cube_cells = basisdirs
         .iter()
         .copied()
         // TODO: replace itertools with custom impl
         .permutations(basisdirs.len())
         .map(|basisdirs| {
           // construct simplex by adding all shifted vertices
-          let mut simplex = vec![ivertex_origin];
+          let mut cell = SimplexVertices::new(vec![ivertex_origin]);
 
           // add every shift (according to permutation) to vertex iteratively
           // every shift step gives us one vertex
@@ -186,14 +186,20 @@ impl HyperBoxMeshInfo {
             vertex_icart[basisdir] += 1;
 
             let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nnodes_per_dim());
-            simplex.push(ivertex);
+            cell.push(ivertex);
           }
 
-          // TODO: do we want to have all cells positively oriented
-          RawSimplexTopology::new(simplex)
+          // Ensure consistent positive orientation of cells.
+          let coord_cell = node_coords.coord_simplex(&cell);
+          if coord_cell.orientation().is_neg() {
+            // TODO: is this the best adjustment we can do?
+            cell.swap(1, 2);
+          }
+
+          cell
         });
 
-      cells.extend(cube_simplicies);
+      cells.extend(cube_cells);
     }
 
     CoordManifold::new(cells, node_coords)
@@ -229,13 +235,13 @@ mod test {
     assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 3, 7],
-      &[0, 1, 5, 7],
-      &[0, 2, 3, 7],
+      &[0, 5, 1, 7],
+      &[0, 3, 2, 7],
       &[0, 2, 6, 7],
       &[0, 4, 5, 7],
-      &[0, 4, 6, 7],
+      &[0, 6, 4, 7],
     ];
-    let computed_simplicies: Vec<_> = mesh.cells().iter().map(|c| c.vertices()).collect();
+    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.0).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 
@@ -258,15 +264,15 @@ mod test {
     assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 4],
-      &[0, 3, 4],
+      &[0, 4, 3],
       &[1, 2, 5],
-      &[1, 4, 5],
+      &[1, 5, 4],
       &[3, 4, 7],
-      &[3, 6, 7],
+      &[3, 7, 6],
       &[4, 5, 8],
-      &[4, 7, 8],
+      &[4, 8, 7],
     ];
-    let computed_simplicies: Vec<_> = mesh.cells().iter().map(|c| c.vertices()).collect();
+    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.0).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 }
