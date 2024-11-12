@@ -1,5 +1,5 @@
 use super::{
-  raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplicialManifold, SimplexVertices},
+  raw::{RawSimplicialManifold, SimplexVertices},
   SimplicialManifold, SortedSimplex,
 };
 use crate::{mesh::VertexIdx, Dim, Orientation};
@@ -77,11 +77,7 @@ impl CoordManifold {
       }
     }
 
-    RawSimplicialManifold::new(
-      self.node_coords.nnodes(),
-      RawManifoldTopology::new(self.cells),
-      RawManifoldGeometry::new(edge_lengths),
-    )
+    RawSimplicialManifold::new(self.node_coords.nnodes(), self.cells, edge_lengths)
   }
 
   pub fn into_manifold(self) -> SimplicialManifold {

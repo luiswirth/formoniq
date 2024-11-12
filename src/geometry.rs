@@ -1,7 +1,7 @@
 use crate::{
   combinatorics::{factorial, nsubedges, SortedSimplex},
   mesh::{
-    raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplicialManifold, SimplexVertices},
+    raw::{RawSimplicialManifold, SimplexVertices},
     SimplicialManifold,
   },
   Dim, Orientation,
@@ -149,8 +149,8 @@ impl GeometrySimplex {
 
     SimplicialManifold::from_raw(RawSimplicialManifold::new(
       self.nvertices(),
-      RawManifoldTopology::new(vec![SimplexVertices::new(vertices)]),
-      RawManifoldGeometry::new(edge_lengths),
+      vec![SimplexVertices::new(vertices)],
+      edge_lengths,
     ))
   }
 }

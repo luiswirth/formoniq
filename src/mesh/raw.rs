@@ -19,46 +19,28 @@ use std::collections::HashMap;
 pub struct RawSimplicialManifold {
   nnodes: usize,
   /// The data defining the topological structure of the manifold.
-  topology: RawManifoldTopology,
+  /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
+  /// Defines connectivity, orientation and global numbering of cells.
+  cells: Vec<SimplexVertices>,
   /// The data defining the geometric structure of the manifold.
-  geometry: RawManifoldGeometry,
+  /// Defining the lengths of all edges of the manifold.
+  edge_lengths: HashMap<SortedSimplex, Length>,
 }
 impl RawSimplicialManifold {
-  pub fn new(nnodes: usize, topology: RawManifoldTopology, geometry: RawManifoldGeometry) -> Self {
+  pub fn new(
+    nnodes: usize,
+    cells: Vec<SimplexVertices>,
+    edge_lengths: HashMap<SortedSimplex, Length>,
+  ) -> Self {
     Self {
       nnodes,
-      topology,
-      geometry,
+      cells,
+      edge_lengths,
     }
   }
   pub fn nnodes(&self) -> usize {
     self.nnodes
   }
-  pub fn dim(&self) -> Dim {
-    self.topology.dim()
-  }
-}
-
-/// The data defining the topological structure of the manifold.
-pub struct RawManifoldTopology {
-  /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
-  /// Defining the toplogy of the cells and
-  /// inducing a global numbering of the cells.
-  cells: Vec<SimplexVertices>,
-}
-impl RawManifoldTopology {
-  pub fn new(cells: Vec<SimplexVertices>) -> Self {
-    assert!(!cells.is_empty());
-
-    if cfg!(debug_assertions) {
-      let dim = cells[0].dim();
-      for c in &cells {
-        debug_assert_eq!(c.dim(), dim);
-      }
-    }
-    Self { cells }
-  }
-
   pub fn dim(&self) -> Dim {
     self.cells[0].dim()
   }
@@ -121,7 +103,7 @@ impl SimplicialManifold {
       })
       .collect();
 
-    for (icell, cell) in raw.topology.cells.into_iter().enumerate() {
+    for (icell, cell) in raw.cells.into_iter().enumerate() {
       for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
         for sub in cell.iter().copied().combinations(sub_dim + 1) {
           let sorted = SortedSimplex::new(sub.clone());
@@ -138,7 +120,7 @@ impl SimplicialManifold {
     for edge in skeletons[1].values() {
       let edge = edge.vertices.clone();
       let edge = SortedSimplex::new(edge);
-      let length = raw.geometry.edge_lengths[&edge];
+      let length = raw.edge_lengths[&edge];
       edge_lengths.push(length);
     }
 
