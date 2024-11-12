@@ -5,12 +5,12 @@ use formoniq::{
   assemble::{self, assemble_galmat, assemble_galvec},
   fe::{laplacian_neg_elmat, LoadElvec},
   matrix::FaerCholesky,
-  mesh::{coordinates::MeshNodeCoords, util::NodeData},
+  mesh::{coordinates::NodeCoords, util::NodeData},
   space::FeSpace,
 };
 
 pub fn solve_manufactured_poisson<F, G>(
-  nodes: &MeshNodeCoords,
+  nodes: &NodeCoords,
   space: &FeSpace,
   analytic_sol: F,
   analytic_laplacian: G,
@@ -48,7 +48,7 @@ where
     &mut galvec,
   );
 
-  let galmat = galmat.to_nalgebra();
+  let galmat = galmat.to_nalgebra_csc();
 
   // Obtain Galerkin solution by solving LSE.
   let galsol = FaerCholesky::new(galmat).solve(&galvec).column(0).into();

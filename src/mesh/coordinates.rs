@@ -1,17 +1,17 @@
 use super::{
-  raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplexTopology, RawSimplicialManifold},
+  raw::{RawManifoldGeometry, RawManifoldTopology, RawSimplicialManifold, SimplexVertices},
   SimplicialManifold, SortedSimplex,
 };
-use crate::{mesh::VertexIdx, Dim};
+use crate::{mesh::VertexIdx, Dim, Orientation};
 
 use std::collections::{hash_map, HashMap};
 
 #[derive(Debug, Clone)]
-pub struct MeshNodeCoords {
+pub struct NodeCoords {
   /// The coordinates of the nodes in the columns of a matrix.
   coords: na::DMatrix<f64>,
 }
-impl MeshNodeCoords {
+impl NodeCoords {
   pub fn new(coords: na::DMatrix<f64>) -> Self {
     Self { coords }
   }
@@ -21,37 +21,56 @@ impl MeshNodeCoords {
   pub fn nnodes(&self) -> usize {
     self.coords.ncols()
   }
-  pub fn is_empty(&self) -> bool {
-    self.nnodes() == 0
-  }
   pub fn coords(&self) -> &na::DMatrix<f64> {
     &self.coords
   }
   pub fn coord(&self, inode: VertexIdx) -> na::DVectorView<f64> {
     self.coords.column(inode)
   }
+
+  pub fn coord_simplex(&self, simp: &SimplexVertices) -> CoordSimplex {
+    let mut vert_coords = na::DMatrix::zeros(simp.dim(), simp.nvertices());
+    for (i, &v) in simp.iter().enumerate() {
+      vert_coords.set_column(i, &self.coord(v));
+    }
+    CoordSimplex::new(vert_coords)
+  }
 }
 
 pub struct CoordManifold {
   /// topology
-  cells: Vec<RawSimplexTopology>,
+  cells: Vec<SimplexVertices>,
   /// geometry
-  node_coords: MeshNodeCoords,
+  node_coords: NodeCoords,
 }
 impl CoordManifold {
-  pub fn new(cells: Vec<RawSimplexTopology>, node_coords: MeshNodeCoords) -> Self {
+  pub fn new(cells: Vec<SimplexVertices>, node_coords: NodeCoords) -> Self {
+    if cfg!(debug_assertions) {
+      for cell in &cells {
+        let cell = node_coords.coord_simplex(cell);
+        debug_assert!(
+          cell.orientation().is_pos(),
+          "Cells must be positively oriented."
+        );
+      }
+    }
+
     Self { cells, node_coords }
   }
 
   pub fn into_raw_manifold(self) -> RawSimplicialManifold {
     let mut edge_lengths = HashMap::new();
 
+    // TODO: can we optimize this and avoid iterating over all cells?
+    // this would require already knowing all edges
     for cell in &self.cells {
-      for &v0 in &cell.vertices {
-        for &v1 in &cell.vertices {
-          let edge = SortedSimplex::edge(v0, v1);
+      for i in 0..cell.len() {
+        let vi = cell[i];
+        for j in (i + 1)..cell.len() {
+          let vj = cell[j];
+          let edge = SortedSimplex::edge(vi, vj);
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
-            let length = (self.node_coords.coord(v1) - self.node_coords.coord(v0)).norm();
+            let length = (self.node_coords.coord(vj) - self.node_coords.coord(vi)).norm();
             e.insert(length);
           }
         }
@@ -71,10 +90,47 @@ impl CoordManifold {
 }
 
 impl CoordManifold {
-  pub fn cells(&self) -> &[RawSimplexTopology] {
+  pub fn cells(&self) -> &[SimplexVertices] {
     &self.cells
   }
-  pub fn node_coords(&self) -> &MeshNodeCoords {
+  pub fn node_coords(&self) -> &NodeCoords {
     &self.node_coords
+  }
+}
+
+pub struct CoordSimplex {
+  vertices: na::DMatrix<f64>,
+}
+impl CoordSimplex {
+  pub fn new(vertices: na::DMatrix<f64>) -> Self {
+    Self { vertices }
+  }
+}
+impl CoordSimplex {
+  pub fn nvertices(&self) -> usize {
+    self.vertices.ncols()
+  }
+  pub fn dim(&self) -> Dim {
+    self.nvertices() - 1
+  }
+
+  pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
+    let dim = self.dim();
+    let mut mat = na::DMatrix::zeros(dim, dim);
+    let v0 = self.vertices.column(0);
+    for (i, vi) in self.vertices.column_iter().skip(1).enumerate() {
+      let v0i = vi - v0;
+      mat.set_column(i, &v0i);
+    }
+    mat
+  }
+  pub fn det(&self) -> f64 {
+    self.spanning_vectors().determinant()
+  }
+  pub fn vol(&self) -> f64 {
+    self.det().abs()
+  }
+  pub fn orientation(&self) -> Orientation {
+    Orientation::from_det(self.det())
   }
 }

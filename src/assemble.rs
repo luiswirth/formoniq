@@ -89,7 +89,7 @@ pub fn fix_dof_coeffs<F>(
     .enumerate()
     .for_each(|(i, v)| dof_coeffs_zeroed[(i, 0)] = v);
 
-  let galmat_faer = galmat.to_faer();
+  let galmat_faer = galmat.to_faer_csc();
   let mut galvec_faer = navec2faervec(galvec);
 
   galvec_faer -= galmat_faer * dof_coeffs_zeroed;

@@ -44,10 +44,10 @@ pub struct RawManifoldTopology {
   /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
   /// Defining the toplogy of the cells and
   /// inducing a global numbering of the cells.
-  cells: Vec<RawSimplexTopology>,
+  cells: Vec<SimplexVertices>,
 }
 impl RawManifoldTopology {
-  pub fn new(cells: Vec<RawSimplexTopology>) -> Self {
+  pub fn new(cells: Vec<SimplexVertices>) -> Self {
     assert!(!cells.is_empty());
 
     if cfg!(debug_assertions) {
@@ -66,26 +66,28 @@ impl RawManifoldTopology {
 
 /// The data defining the topological structure of a simplex.
 /// The only relevant information is which vertices compose the simplex.
-#[derive(Clone)]
-pub struct RawSimplexTopology {
-  /// The indices of the vertices that form the simplex.
-  pub vertices: Vec<VertexIdx>,
-}
-impl RawSimplexTopology {
+#[derive(Debug, Clone)]
+pub struct SimplexVertices(pub Vec<VertexIdx>);
+impl SimplexVertices {
   pub fn new(vertices: Vec<VertexIdx>) -> Self {
-    Self { vertices }
-  }
-  pub fn vertices(&self) -> &[VertexIdx] {
-    &self.vertices
+    Self(vertices)
   }
   pub fn nvertices(&self) -> usize {
-    self.vertices.len()
+    self.0.len()
   }
   pub fn dim(&self) -> Dim {
-    self.vertices().len() - 1
+    self.0.len() - 1
   }
-  pub fn into_vertices(self) -> Vec<VertexIdx> {
-    self.vertices
+}
+impl std::ops::Deref for SimplexVertices {
+  type Target = Vec<VertexIdx>;
+  fn deref(&self) -> &Self::Target {
+    &self.0
+  }
+}
+impl std::ops::DerefMut for SimplexVertices {
+  fn deref_mut(&mut self) -> &mut Self::Target {
+    &mut self.0
   }
 }
 
@@ -121,7 +123,7 @@ impl SimplicialManifold {
 
     for (icell, cell) in raw.topology.cells.into_iter().enumerate() {
       for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
-        for sub in cell.vertices.iter().copied().combinations(sub_dim + 1) {
+        for sub in cell.iter().copied().combinations(sub_dim + 1) {
           let sorted = SortedSimplex::new(sub.clone());
           let sub = subs
             .entry(sorted)
