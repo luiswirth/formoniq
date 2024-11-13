@@ -2,11 +2,11 @@ use itertools::Itertools;
 
 use super::{
   coordinates::{CoordManifold, NodeCoords},
-  raw::{RawSimplicialManifold, SimplexVertices},
+  raw::RawSimplicialManifold,
   SimplicialManifold, VertexIdx,
 };
 use crate::{
-  combinatorics::factorial,
+  combinatorics::{factorial, OrderedSimplex, OrientedSimplex},
   util::{cartesian_index2linear_index, linear_index2cartesian_index},
   Dim,
 };
@@ -156,7 +156,7 @@ impl HyperBoxMeshInfo {
 
     let dim = self.dim();
     let ncells = factorial(dim) * self.nboxes();
-    let mut cells: Vec<SimplexVertices> = Vec::with_capacity(ncells);
+    let mut cells: Vec<OrientedSimplex> = Vec::with_capacity(ncells);
 
     // iterate through all boxes that make up the mesh
     for icube in 0..self.nboxes() {
@@ -177,7 +177,7 @@ impl HyperBoxMeshInfo {
         .permutations(basisdirs.len())
         .map(|basisdirs| {
           // construct simplex by adding all shifted vertices
-          let mut cell = SimplexVertices::new(vec![ivertex_origin]);
+          let mut cell = vec![ivertex_origin];
 
           // add every shift (according to permutation) to vertex iteratively
           // every shift step gives us one vertex
@@ -189,14 +189,13 @@ impl HyperBoxMeshInfo {
             cell.push(ivertex);
           }
 
-          // Ensure consistent positive orientation of cells.
-          let coord_cell = node_coords.coord_simplex(&cell);
-          if coord_cell.orientation().is_neg() {
-            // TODO: is this the best adjustment we can do?
-            cell.swap(1, 2);
-          }
+          let cell = OrderedSimplex::new(cell);
 
-          cell
+          // Ensure consistent positive orientation of cells.
+          // TODO: avoid computing orientation using coordinates / determinant.
+          let orientation = node_coords.coord_simplex(&cell).orientation();
+
+          OrientedSimplex::new(cell, orientation)
         });
 
       cells.extend(cube_cells);
@@ -209,7 +208,7 @@ impl HyperBoxMeshInfo {
     self.compute_coord_manifold().into_raw_manifold()
   }
   pub fn compute_manifold(&self) -> SimplicialManifold {
-    SimplicialManifold::from_raw(self.compute_raw_manifold())
+    SimplicialManifold::new(self.compute_raw_manifold())
   }
 }
 
@@ -235,13 +234,18 @@ mod test {
     assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 3, 7],
-      &[0, 5, 1, 7],
-      &[0, 3, 2, 7],
+      &[0, 1, 5, 7],
+      &[0, 2, 3, 7],
       &[0, 2, 6, 7],
       &[0, 4, 5, 7],
-      &[0, 6, 4, 7],
+      &[0, 4, 6, 7],
     ];
-    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.0).collect();
+    let computed_simplicies: Vec<_> = mesh
+      .cells()
+      .iter()
+      .cloned()
+      .map(|c| c.into_vertices())
+      .collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 
@@ -264,15 +268,20 @@ mod test {
     assert_eq!(*computed_nodes, expected_nodes);
     let expected_simplicies = vec![
       &[0, 1, 4],
-      &[0, 4, 3],
+      &[0, 3, 4],
       &[1, 2, 5],
-      &[1, 5, 4],
+      &[1, 4, 5],
       &[3, 4, 7],
-      &[3, 7, 6],
+      &[3, 6, 7],
       &[4, 5, 8],
-      &[4, 8, 7],
+      &[4, 7, 8],
     ];
-    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.0).collect();
+    let computed_simplicies: Vec<_> = mesh
+      .cells()
+      .iter()
+      .cloned()
+      .map(|c| c.into_vertices())
+      .collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 }

@@ -1,13 +1,14 @@
 use crate::{
-  combinatorics::{factorial, nsubedges, SortedSimplex},
-  mesh::{
-    raw::{RawSimplicialManifold, SimplexVertices},
-    SimplicialManifold,
+  combinatorics::{
+    factorial, nsubedges, OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex,
   },
-  Dim, Orientation,
+  mesh::{raw::RawSimplicialManifold, SimplicialManifold},
+  Dim,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2};
+
+pub type Length = f64;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct GeometrySimplex {
@@ -134,8 +135,8 @@ impl GeometrySimplex {
     self.diameter().powi(self.dim() as i32) / self.vol()
   }
 
-  pub fn into_singleton_mesh(&self) -> SimplicialManifold {
-    let vertices = (0..self.nvertices()).collect();
+  pub fn to_singleton_mesh(&self) -> SimplicialManifold {
+    let vertices = OrderedSimplex::new((0..self.nvertices()).collect());
 
     let mut edge_lengths = HashMap::new();
 
@@ -147,9 +148,9 @@ impl GeometrySimplex {
       }
     }
 
-    SimplicialManifold::from_raw(RawSimplicialManifold::new(
+    SimplicialManifold::new(RawSimplicialManifold::new(
       self.nvertices(),
-      vec![SimplexVertices::new(vertices)],
+      vec![OrientedSimplex::new(vertices, self.orientation)],
       edge_lengths,
     ))
   }

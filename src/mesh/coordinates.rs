@@ -1,8 +1,9 @@
-use super::{
-  raw::{RawSimplicialManifold, SimplexVertices},
-  SimplicialManifold, SortedSimplex,
+use super::{raw::RawSimplicialManifold, SimplicialManifold, SortedSimplex};
+use crate::{
+  combinatorics::{OrderedSimplex, Orientation, OrientedSimplex},
+  mesh::VertexIdx,
+  Dim,
 };
-use crate::{mesh::VertexIdx, Dim, Orientation};
 
 use std::collections::{hash_map, HashMap};
 
@@ -28,7 +29,7 @@ impl NodeCoords {
     self.coords.column(inode)
   }
 
-  pub fn coord_simplex(&self, simp: &SimplexVertices) -> CoordSimplex {
+  pub fn coord_simplex(&self, simp: &OrderedSimplex) -> CoordSimplex {
     let mut vert_coords = na::DMatrix::zeros(simp.dim(), simp.nvertices());
     for (i, &v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &self.coord(v));
@@ -39,17 +40,17 @@ impl NodeCoords {
 
 pub struct CoordManifold {
   /// topology
-  cells: Vec<SimplexVertices>,
+  cells: Vec<OrientedSimplex>,
   /// geometry
   node_coords: NodeCoords,
 }
 impl CoordManifold {
-  pub fn new(cells: Vec<SimplexVertices>, node_coords: NodeCoords) -> Self {
+  pub fn new(cells: Vec<OrientedSimplex>, node_coords: NodeCoords) -> Self {
     if cfg!(debug_assertions) {
       for cell in &cells {
-        let cell = node_coords.coord_simplex(cell);
+        let coord_cell = node_coords.coord_simplex(cell.ordered());
         debug_assert!(
-          cell.orientation().is_pos(),
+          coord_cell.orientation() * cell.orientation() == Orientation::Pos,
           "Cells must be positively oriented."
         );
       }
@@ -64,9 +65,9 @@ impl CoordManifold {
     // TODO: can we optimize this and avoid iterating over all cells?
     // this would require already knowing all edges
     for cell in &self.cells {
-      for i in 0..cell.len() {
+      for i in 0..cell.nvertices() {
         let vi = cell[i];
-        for j in (i + 1)..cell.len() {
+        for j in (i + 1)..cell.nvertices() {
           let vj = cell[j];
           let edge = SortedSimplex::edge(vi, vj);
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
@@ -81,12 +82,12 @@ impl CoordManifold {
   }
 
   pub fn into_manifold(self) -> SimplicialManifold {
-    SimplicialManifold::from_raw(self.into_raw_manifold())
+    SimplicialManifold::new(self.into_raw_manifold())
   }
 }
 
 impl CoordManifold {
-  pub fn cells(&self) -> &[SimplexVertices] {
+  pub fn cells(&self) -> &[OrientedSimplex] {
     &self.cells
   }
   pub fn node_coords(&self) -> &NodeCoords {

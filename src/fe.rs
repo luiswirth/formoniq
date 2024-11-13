@@ -81,7 +81,7 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells().iter() {
     let mut sum = 0.0;
-    for &ivertex in cell.vertices() {
+    for &ivertex in cell.vertices().iter() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
@@ -106,7 +106,7 @@ mod test {
     println!("{geo_elmat:.3}");
     assert!((geo_elmat - expected_elmat).norm() < 10.0 * f64::EPSILON);
 
-    let space = FeSpace::new(Rc::new(ref_geo.into_singleton_mesh()));
+    let space = FeSpace::new(Rc::new(ref_geo.to_singleton_mesh()));
     let mesh_elmat = fe::laplacian_neg_elmat(&space, 0);
     println!("{mesh_elmat:.3}");
     assert!((mesh_elmat - expected_elmat).norm() < 10.0 * f64::EPSILON);
