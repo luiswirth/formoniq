@@ -1,105 +1,12 @@
-use crate::{Dim, VertexIdx};
+pub mod orientation;
+pub mod simplex;
 
-use itertools::Itertools;
+pub use orientation::Orientation;
+pub use simplex::{OrientedSimplex, OrderedSimplex, SortedSimplex};
+
+use crate::Dim;
+
 use num_integer::binomial;
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SortedSimplex(Vec<VertexIdx>);
-impl SortedSimplex {
-  pub fn new(mut vertices: Vec<VertexIdx>) -> Self {
-    vertices.sort();
-    Self(vertices)
-  }
-  pub fn new_unchecked(vertices: Vec<VertexIdx>) -> Self {
-    debug_assert!(vertices.is_sorted());
-    Self(vertices)
-  }
-  pub fn vertex(v: VertexIdx) -> SortedSimplex {
-    Self(vec![v])
-  }
-  pub fn edge(a: VertexIdx, b: VertexIdx) -> Self {
-    if a < b {
-      Self(vec![a, b])
-    } else {
-      Self(vec![b, a])
-    }
-  }
-
-  pub fn dim(&self) -> Dim {
-    self.nvertices() - 1
-  }
-  pub fn nvertices(&self) -> usize {
-    self.0.len()
-  }
-  pub fn vertices(&self) -> &[VertexIdx] {
-    &self.0
-  }
-
-  pub fn subs(&self, dim: Dim) -> impl Iterator<Item = Self> + '_ {
-    // TODO: don't rely on internals of itertools for ordering -> use own implementation
-    self
-      .0
-      .iter()
-      .copied()
-      .combinations(dim + 1)
-      .map(Self::new_unchecked)
-  }
-  pub fn sups<'a>(
-    &'a self,
-    dim: Dim,
-    cells: impl Iterator<Item = &'a Self> + 'a,
-  ) -> impl Iterator<Item = Self> + 'a {
-    cells
-      .flat_map(move |c| c.subs(dim))
-      .filter(move |s| self <= s)
-      .unique()
-  }
-}
-/// Implements the subsimplex/subset partial order relation.
-///
-/// This implementation is efficent, since it can rely on the fact that the
-/// vertices are sorted.
-impl PartialOrd for SortedSimplex {
-  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    use std::cmp::Ordering as O;
-    let mut is_le = true;
-    let mut is_ge = true;
-
-    let mut this = self.0.iter().peekable();
-    let mut other = other.0.iter().peekable();
-    while let (Some(self_v), Some(other_v)) = (this.peek(), other.peek()) {
-      match self_v.cmp(other_v) {
-        O::Equal => {
-          this.next();
-          other.next();
-        }
-        O::Less => {
-          is_le = false;
-          this.next();
-        }
-        O::Greater => {
-          is_ge = false;
-          other.next();
-        }
-      }
-    }
-
-    // Check if we have remaining elements.
-    if this.next().is_some() {
-      is_le = false;
-    }
-    if other.next().is_some() {
-      is_ge = false;
-    }
-
-    match (is_le, is_ge) {
-      (true, true) => Some(O::Equal),
-      (true, false) => Some(O::Less),
-      (false, true) => Some(O::Greater),
-      _ => None,
-    }
-  }
-}
 
 pub fn factorial(num: usize) -> usize {
   (1..=num).product()
@@ -221,7 +128,20 @@ impl std::ops::Neg for Dir {
 
 #[cfg(test)]
 mod test {
-  use super::{sort_count_swaps, Permutations, SortedSimplex};
+  use super::{simplex::SortedSimplex, sort_count_swaps, Permutations};
+
+  #[test]
+  fn subs_order() {
+    let dim = 2;
+    let nvertices = dim + 1;
+    let simp = SortedSimplex::new((0..nvertices).collect());
+    let subs: Vec<_> = simp
+      .subs(1)
+      .into_iter()
+      .map(|s| s.into_vertices())
+      .collect();
+    assert_eq!(subs, vec![&[0, 1], &[0, 2], &[1, 2]]);
+  }
 
   #[test]
   fn sorted_simplex() {
@@ -229,9 +149,9 @@ mod test {
       let nvertices = dim + 1;
       let simp = SortedSimplex::new((0..nvertices).collect());
       for sub_dim in 0..dim {
-        assert!(simp.subs(sub_dim).all(|sub| sub < simp));
+        assert!(simp.subs(sub_dim).into_iter().all(|sub| sub < simp));
       }
-      assert!(simp.subs(dim).all(|sub| sub == simp));
+      assert!(simp.subs(dim).into_iter().all(|sub| sub == simp));
     }
   }
 
