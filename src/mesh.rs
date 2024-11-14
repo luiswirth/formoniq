@@ -14,7 +14,7 @@ pub mod raw;
 pub mod util;
 
 use crate::{
-  combinatorics::{Orientation, OrientedSimplex, SortedSimplex},
+  combinatorics::{OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex},
   geometry::{GeometrySimplex, Length},
   Dim, VertexIdx,
 };
@@ -22,123 +22,58 @@ use crate::{
 use indexmap::IndexMap;
 use std::hash::Hash;
 
-pub type EdgeIdx = usize;
-pub type CellIdx = usize;
-pub type KSimplexIdx = usize;
-pub type SimplexIdx = (Dim, KSimplexIdx);
-
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
 pub struct SimplicialManifold {
-  topology: ManifoldTopology,
-  geometry: ManifoldGeometry,
-}
+  cells: Vec<OrientedSimplex>,
+  skeletons: Vec<Skeleton>,
 
-#[derive(Debug)]
-pub struct ManifoldTopology {
-  skeletons: Vec<ManifoldSkeleton>,
-}
-
-/// A container for topological simplicies of common dimension.
-pub type ManifoldSkeleton = IndexMap<SortedSimplex, ManifoldSimplex>;
-
-/// Topological information of the simplex.
-#[derive(Debug, Clone)]
-pub struct ManifoldSimplex {
-  /// The vertices of the simplex.
-  vertices: OrientedSimplex,
-  /// The cells that this simplex is part of.
-  /// This information is crucial for computing ancestor simplicies.
-  /// Ordered increasing in [`CellIdx`].
-  cells: Vec<CellIdx>,
-}
-
-#[derive(Debug)]
-pub struct ManifoldGeometry {
   /// mapping [`EdgeIdx`] -> [`Length`]
   edge_lengths: Vec<Length>,
 }
 
-impl ManifoldTopology {
+// getters
+impl SimplicialManifold {
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
-  pub fn nskeletons(&self) -> usize {
-    self.skeletons().len()
+
+  pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
+    SkeletonHandle::new(self, dim)
   }
-  pub fn skeletons(&self) -> &[ManifoldSkeleton] {
-    &self.skeletons
-  }
-  pub fn skeleton(&self, d: Dim) -> &ManifoldSkeleton {
-    &self.skeletons()[d]
-  }
-  pub fn simplex(&self, idx: SimplexIdx) -> &ManifoldSimplex {
-    &self.skeleton(idx.0)[idx.1]
+
+  pub fn cells(&self) -> SkeletonHandle {
+    self.skeleton(self.dim())
   }
   pub fn ncells(&self) -> usize {
     self.cells().len()
   }
-  pub fn cells(&self) -> &ManifoldSkeleton {
-    self.skeleton(self.dim())
+  pub fn vertices(&self) -> SkeletonHandle {
+    self.skeleton(0)
   }
-  pub fn cell(&self, idx: CellIdx) -> &ManifoldSimplex {
-    &self.cells()[idx]
+  pub fn nvertices(&self) -> usize {
+    self.vertices().len()
   }
-  pub fn faces(&self) -> &ManifoldSkeleton {
-    self.skeleton(self.dim() - 1)
-  }
-  pub fn face(&self, idx: KSimplexIdx) -> &ManifoldSimplex {
-    &self.faces()[idx]
+  pub fn edges(&self) -> SkeletonHandle {
+    self.skeleton(1)
   }
   pub fn nedges(&self) -> usize {
     self.edges().len()
   }
-  pub fn edges(&self) -> &ManifoldSkeleton {
-    self.skeleton(1)
-  }
-  pub fn edge(&self, idx: EdgeIdx) -> &ManifoldSimplex {
-    &self.edges()[idx]
-  }
-  pub fn nvertices(&self) -> usize {
-    self.skeleton(0).len()
-  }
-}
-
-// getters
-impl SimplicialManifold {
-  pub fn nvertices(&self) -> usize {
-    self.skeleton(0).len()
-  }
-  pub fn dim(&self) -> Dim {
-    self.topology.dim()
-  }
-  pub fn topology(&self) -> &ManifoldTopology {
-    &self.topology
-  }
-  pub fn geometry(&self) -> &ManifoldGeometry {
-    &self.geometry
-  }
-  pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
-    SkeletonHandle::new(self, dim)
-  }
-  pub fn cells(&self) -> SkeletonHandle {
-    self.skeleton(self.dim())
-  }
-  pub fn faces(&self) -> SkeletonHandle {
+  pub fn facets(&self) -> SkeletonHandle {
     self.skeleton(self.dim() - 1)
   }
-
-  pub fn simplex(&self, idx: SimplexIdx) -> SimplexHandle {
-    SimplexHandle::new(self, idx)
+  pub fn nfacets(&self) -> usize {
+    self.facets().len()
   }
 
   /// The mesh width $h$, which is the largest diameter of all cells.
   pub fn mesh_width(&self) -> f64 {
     self
-      .cells()
+      .edge_lengths
       .iter()
-      .map(|cell| cell.geometry().diameter())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .copied()
       .unwrap()
   }
 
@@ -154,83 +89,99 @@ impl SimplicialManifold {
   }
 }
 
-impl ManifoldSimplex {
-  fn new(vertices: OrientedSimplex, cells: Vec<CellIdx>) -> Self {
-    Self { vertices, cells }
+/// A container for topological simplicies of common dimension.
+#[derive(Debug, Clone, Default)]
+pub struct Skeleton {
+  simplicies: IndexMap<SortedSimplex, SimplexData>,
+}
+impl Skeleton {
+  pub fn new() -> Self {
+    let simplicies = IndexMap::new();
+    Self { simplicies }
   }
 }
 
-/// Functionality methods.
-impl ManifoldSimplex {
-  pub fn dim(&self) -> Dim {
-    self.vertices.dim()
-  }
-  pub fn nvertices(&self) -> usize {
-    self.vertices.nvertices()
-  }
-  pub fn vertices(&self) -> &OrientedSimplex {
-    &self.vertices
+/// Topological information of the simplex.
+#[derive(Debug, Clone)]
+pub struct SimplexData {
+  /// The cells that this simplex is part of.
+  /// This information is crucial for computing ancestor simplicies.
+  /// Ordered increasing in [`CellIdx`].
+  parent_cells: Vec<CellIdx>,
+}
+
+impl SimplexData {
+  pub fn stub() -> Self {
+    let parent_cells = Vec::new();
+    Self { parent_cells }
   }
 }
-impl PartialEq for ManifoldSimplex {
-  fn eq(&self, other: &Self) -> bool {
-    self.vertices == other.vertices
-  }
-}
-impl Eq for ManifoldSimplex {}
 
 /// Fat pointer to simplex.
 pub struct SimplexHandle<'m> {
-  mesh: &'m SimplicialManifold,
   idx: SimplexIdx,
+  mesh: &'m SimplicialManifold,
 }
 impl<'m> SimplexHandle<'m> {
-  fn new(mesh: &'m SimplicialManifold, idx: SimplexIdx) -> Self {
+  pub fn new(mesh: &'m SimplicialManifold, idx: impl Into<SimplexIdx>) -> Self {
+    let idx = idx.into();
+    idx.assert_valid(mesh);
     Self { mesh, idx }
   }
-}
 
-impl<'m> SimplexHandle<'m> {
-  pub fn dim(&self) -> Dim {
-    self.nvertices() - 1
-  }
-  pub fn mesh(&self) -> &'m SimplicialManifold {
-    self.mesh
-  }
   pub fn idx(&self) -> SimplexIdx {
     self.idx
   }
+  pub fn dim(&self) -> Dim {
+    self.idx.dim
+  }
   pub fn kidx(&self) -> KSimplexIdx {
-    self.idx.1
+    self.idx.kidx
   }
-  pub fn topology(&self) -> &'m ManifoldSimplex {
-    &self.mesh.topology.skeletons[self.idx.0][self.idx.1]
+
+  pub fn mesh(&self) -> &'m SimplicialManifold {
+    self.mesh
   }
-  pub fn vertices(&self) -> &'m OrientedSimplex {
-    &self.topology().vertices
+  pub fn skeleton(&self) -> SkeletonHandle<'m> {
+    self.mesh.skeleton(self.dim())
   }
-  pub fn nvertices(&self) -> usize {
-    self.vertices().nvertices()
+
+  pub fn is_cell(&self) -> bool {
+    self.dim() == self.mesh.dim()
   }
-  pub fn vertices_sorted(&self) -> &'m SortedSimplex {
-    self.mesh.topology.skeletons[self.idx.0]
-      .get_index(self.idx.1)
+
+  pub fn sorted_vertices(&self) -> &'m SortedSimplex {
+    self.mesh.skeletons[self.dim()]
+      .simplicies
+      .get_index(self.kidx())
       .unwrap()
       .0
   }
-  #[allow(unreachable_code)]
-  pub fn antiboundary(&self) -> ChainHandle<'m> {
-    // TODO: check if this gives the right orientation
-    unimplemented!("potentially wrong orientation");
-
-    let mut idxs = Vec::new();
-    let mut coeffs = Vec::new();
-    for (isup, sup) in self.sups(self.dim() + 1).enumerate() {
-      idxs.push(sup.kidx());
-      coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isup).as_i32());
-    }
-    ChainHandle::new(self.mesh, self.dim() + 1, idxs, coeffs)
+  pub fn simplex_data(&self) -> &SimplexData {
+    self.mesh.skeletons[self.dim()]
+      .simplicies
+      .get_index(self.kidx())
+      .unwrap()
+      .1
   }
+
+  pub fn oriented_vertices(&self) -> &'m OrientedSimplex {
+    assert!(self.is_cell(), "Only Cells are oriented.");
+    &self.mesh.cells[self.kidx()]
+  }
+  pub fn ordered_vertices(&self) -> &'m OrderedSimplex {
+    assert!(self.is_cell(), "Only Cells are ordered.");
+    self.oriented_vertices().ordered()
+  }
+
+  pub fn nvertices(&self) -> usize {
+    self.sorted_vertices().nvertices()
+  }
+
+  pub fn antiboundary(&self) -> ChainHandle<'m> {
+    todo!("potentially wrong orientation");
+  }
+
   pub fn boundary(&self) -> ChainHandle<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
@@ -240,12 +191,13 @@ impl<'m> SimplexHandle<'m> {
     }
     ChainHandle::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
-  pub fn cells(&self) -> impl Iterator<Item = SimplexHandle<'m>> {
+
+  pub fn parent_cells(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .topology()
-      .cells
+      .simplex_data()
+      .parent_cells
       .iter()
-      .map(|&c| SimplexHandle::new(self.mesh, (self.mesh.dim(), c)))
+      .map(|&cell_kidx| SimplexHandle::new(self.mesh, (self.mesh.dim(), cell_kidx)))
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self.subs(1)
@@ -253,12 +205,16 @@ impl<'m> SimplexHandle<'m> {
   fn edge_lengths(&self) -> Vec<f64> {
     self
       .edges()
-      .map(|e| self.mesh.geometry.edge_lengths[e.idx.1])
+      .map(|e| self.mesh.edge_lengths[e.idx.kidx])
       .collect()
   }
   pub fn geometry(&self) -> GeometrySimplex {
-    // TODO: pass orientation correctly!!!
-    GeometrySimplex::new(self.idx.0, self.edge_lengths(), Orientation::Pos)
+    if !self.is_cell() {
+      tracing::warn!(
+        "Geometry Simplex with unmeaningful orientation has been created, because it's not a cell."
+      );
+    }
+    GeometrySimplex::new(self.idx.dim, self.edge_lengths(), Orientation::Pos)
   }
 
   /// The dim-subsimplicies of this simplex.
@@ -268,7 +224,7 @@ impl<'m> SimplexHandle<'m> {
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
   pub fn subs(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .vertices_sorted()
+      .sorted_vertices()
       .subs(dim)
       .into_iter()
       .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
@@ -280,19 +236,21 @@ impl<'m> SimplexHandle<'m> {
   /// by lexicographically w.r.t. the local vertex indices.
   pub fn sups(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .vertices_sorted()
-      .sups(dim, self.cells().map(move |c| c.vertices_sorted()))
+      .sorted_vertices()
+      .sups(dim, self.parent_cells().map(move |c| c.sorted_vertices()))
       .into_iter()
       .map(move |a| self.mesh.skeleton(dim).get_key(&a).idx)
       .map(move |a| Self::new(self.mesh, a))
   }
 }
+
 impl PartialEq for SimplexHandle<'_> {
   fn eq(&self, other: &Self) -> bool {
     std::ptr::eq(self.mesh, other.mesh) && self.idx == other.idx
   }
 }
 impl Eq for SimplexHandle<'_> {}
+
 impl Hash for SimplexHandle<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     (self.mesh as *const SimplicialManifold).hash(state);
@@ -304,37 +262,37 @@ pub struct SkeletonHandle<'m> {
   mesh: &'m SimplicialManifold,
   dim: Dim,
 }
-impl<'m> SkeletonHandle<'m> {
-  fn new(mesh: &'m SimplicialManifold, dim: Dim) -> Self {
-    Self { mesh, dim }
+
+impl<'m> std::ops::Deref for SkeletonHandle<'m> {
+  type Target = Skeleton;
+  fn deref(&self) -> &Self::Target {
+    &self.mesh.skeletons[self.dim]
   }
 }
-impl SkeletonHandle<'_> {
-  pub fn topology(&self) -> &ManifoldSkeleton {
-    &self.mesh.topology.skeletons[self.dim]
+
+impl<'m> SkeletonHandle<'m> {
+  pub fn new(mesh: &'m SimplicialManifold, dim: Dim) -> Self {
+    assert!(dim <= mesh.dim(), "Invalid Skeleton Dimension");
+    Self { mesh, dim }
   }
+
   pub fn len(&self) -> usize {
-    self.topology().len()
+    self.simplicies.len()
   }
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
-}
 
-impl<'m> SkeletonHandle<'m> {
-  pub fn get_idx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
+  pub fn get_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
   pub fn get_key(&self, key: &SortedSimplex) -> SimplexHandle<'m> {
-    let idx = self.topology().get_full(key).unwrap().0;
+    let idx = self.simplicies.get_full(key).unwrap().0;
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
-}
 
-impl<'m> SkeletonHandle<'m> {
   pub fn iter(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
-    (0..self.mesh.topology.skeletons[self.dim].len())
-      .map(|idx| SimplexHandle::new(self.mesh, (self.dim, idx)))
+    (0..self.len()).map(|idx| SimplexHandle::new(self.mesh, (self.dim, idx)))
   }
 }
 
@@ -371,6 +329,29 @@ impl<'m> ChainHandle<'m> {
   }
 }
 
+pub type EdgeIdx = usize;
+pub type CellIdx = usize;
+pub type KSimplexIdx = usize;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SimplexIdx {
+  dim: Dim,
+  kidx: KSimplexIdx,
+}
+impl From<(Dim, KSimplexIdx)> for SimplexIdx {
+  fn from((dim, kidx): (Dim, KSimplexIdx)) -> Self {
+    Self { dim, kidx }
+  }
+}
+impl SimplexIdx {
+  pub fn is_valid(self, mesh: &SimplicialManifold) -> bool {
+    self.dim <= mesh.dim() && self.kidx < mesh.skeleton(self.dim).len()
+  }
+  pub fn assert_valid(self, mesh: &SimplicialManifold) {
+    assert!(self.is_valid(mesh), "Not a valid simplex index.");
+  }
+}
+
 #[cfg(test)]
 mod test {
 
@@ -384,15 +365,15 @@ mod test {
     let dim = 3;
     let mesh = GeometrySimplex::new_ref(dim).to_singleton_mesh();
 
-    let cell = mesh.cells().get_idx(0);
+    let cell = mesh.cells().get_kidx(0);
 
     let cell_vertices = SortedSimplex::new_unchecked((0..(dim + 1)).collect());
-    assert_eq!(cell.vertices_sorted(), &cell_vertices);
+    assert_eq!(cell.sorted_vertices(), &cell_vertices);
 
     for dim_sub in 0..=dim {
       let skeleton = mesh.skeleton(dim_sub);
       for simp in skeleton.iter() {
-        let simp_vertices = simp.vertices();
+        let simp_vertices = simp.sorted_vertices();
         print!("{simp_vertices:?},");
       }
       println!();
@@ -405,7 +386,7 @@ mod test {
       assert_eq!(
         subs
           .iter()
-          .map(|sub| sub.vertices_sorted().clone())
+          .map(|sub| sub.sorted_vertices().clone())
           .collect::<Vec<_>>(),
         subs_vertices
       );
@@ -416,7 +397,7 @@ mod test {
           let sups: Vec<_> = sub.sups(dim_sup).collect();
           let sups_vertices = sups
             .iter()
-            .map(|sub| sub.vertices_sorted().clone())
+            .map(|sub| sub.sorted_vertices().clone())
             .collect::<Vec<_>>();
           sups_vertices
             .iter()

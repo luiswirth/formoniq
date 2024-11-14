@@ -1,6 +1,6 @@
-use super::{raw::RawSimplicialManifold, SimplicialManifold, SortedSimplex};
+use super::{raw::RawSimplicialManifold, SimplicialManifold};
 use crate::{
-  combinatorics::{OrderedSimplex, Orientation, OrientedSimplex},
+  combinatorics::{OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex},
   mesh::VertexIdx,
   Dim,
 };

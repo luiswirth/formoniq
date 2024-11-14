@@ -137,9 +137,13 @@ impl OrientedSimplex {
     self.ordered.into_vertices()
   }
 
+  pub fn total_orientation(&self) -> Orientation {
+    self.orientation * self.sort_orientation
+  }
+
   pub fn orientation_eq(&self, other: &Self) -> Option<bool> {
     if self.sorted == other.sorted {
-      Some(self.orientation == other.orientation && self.sort_orientation == other.sort_orientation)
+      Some(self.total_orientation() == other.total_orientation())
     } else {
       None
     }
@@ -152,7 +156,7 @@ impl OrientedSimplex {
       .boundary()
       .into_iter()
       .map(|mut s| {
-        s.orientation.switch();
+        s.orientation *= self.orientation;
         s
       })
       .collect()
@@ -243,6 +247,10 @@ impl SortedSimplex {
       .filter(move |s| self <= s)
       .unique()
       .collect()
+  }
+
+  pub fn iter(&self) -> std::slice::Iter<'_, VertexIdx> {
+    self.0.iter()
   }
 }
 impl From<Vec<VertexIdx>> for SortedSimplex {
