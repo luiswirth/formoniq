@@ -8,7 +8,7 @@ use crate::{
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
-  for icell in 0..space.mesh().topology().ncells() {
+  for icell in 0..space.mesh().ncells() {
     let elmat = elmat.eval(space, icell);
     for (ilocal, iglobal) in space
       .dof_handler()
@@ -34,7 +34,7 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mut galvec = na::DVector::zeros(space.ndofs());
-  for icell in 0..space.mesh().topology().ncells() {
+  for icell in 0..space.mesh().ncells() {
     let elvec = elvec.eval(space, icell);
     for (ilocal, iglobal) in space
       .dof_handler()

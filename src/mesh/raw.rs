@@ -6,12 +6,12 @@
 //! The structs in this module try to be minimal in the sense that they don't
 //! include any information that is redundant or can be derived from other fields.
 
-use super::{
-  Length, ManifoldGeometry, ManifoldSimplex, ManifoldTopology, SimplicialManifold, SortedSimplex,
+use super::{Length, SimplexData, SimplicialManifold, Skeleton};
+use crate::{
+  combinatorics::{OrientedSimplex, SortedSimplex},
+  Dim,
 };
-use crate::{combinatorics::OrientedSimplex, Dim};
 
-use indexmap::IndexMap;
 use std::collections::HashMap;
 
 /// The data defining a simplicial Riemanninan manifold.
@@ -51,52 +51,71 @@ impl SimplicialManifold {
   pub fn new(raw: RawSimplicialManifold) -> Self {
     let dim = raw.dim();
 
-    let mut skeletons = vec![IndexMap::new(); dim + 1];
-    skeletons[0] = (0..raw.nnodes)
-      .map(|v| {
-        (
-          SortedSimplex::vertex(v),
-          ManifoldSimplex::new(OrientedSimplex::vertex(v), Vec::new()),
-        )
-      })
+    let cells = raw.cells;
+
+    let mut skeletons = vec![Skeleton::new(); dim + 1];
+    skeletons[0].simplicies = (0..raw.nnodes)
+      .map(|v| (SortedSimplex::vertex(v), SimplexData::stub()))
       .collect();
 
-    for (icell, cell) in raw.cells.into_iter().enumerate() {
-      for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
-        // TODO: this shouldn't be boundary but `cell.sub(sub_dim)`.
-        panic!();
-        for sub in cell.boundary() {
-          let sorted = SortedSimplex::from(sub.ordered().clone());
-          let sub = subs
-            .entry(sorted)
-            .and_modify(|existent_sub| {
-              // Assert consistent orientation of cells.
-              // The orientation is consistent if a shared face is oriented
-              // opposite as viewed from the two adjacent cells.
-              let is_face = sub_dim == dim - 1;
-              if is_face {
-                assert!(!existent_sub.vertices.orientation_eq(&sub).unwrap());
-              }
-            })
-            .or_insert(ManifoldSimplex::new(sub, Vec::new()));
-          sub.cells.push(icell);
+    for (icell, cell) in cells.iter().enumerate() {
+      let cell = SortedSimplex::from(cell.clone());
+      for (sub_dim, Skeleton { simplicies: subs }) in skeletons.iter_mut().enumerate() {
+        for sub in cell.subs(sub_dim) {
+          let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
+          sub.parent_cells.push(icell);
         }
       }
     }
 
-    dbg!(&skeletons);
+    // Assert consistent orientation of cells.
+    // The orientation of two adjacent cells is consistent if the shared facet
+    // has opposing orientations.
+    for (facet, facet_data) in &skeletons[dim - 1].simplicies {
+      let oriented_facets = &facet_data
+        .parent_cells
+        .iter()
+        .map(|&cell_kidx| &cells[cell_kidx])
+        .map(|cell| {
+          cell
+            .boundary()
+            .into_iter()
+            .find(|b| b.sorted() == facet)
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+
+      let is_boundary_facet = oriented_facets.len() == 1;
+      if is_boundary_facet {
+        continue;
+      }
+
+      assert!(
+        oriented_facets.len() == 2,
+        "Each cell has exactly two facets."
+      );
+      assert!(
+        !oriented_facets[0]
+          .orientation_eq(&oriented_facets[1])
+          .unwrap(),
+        "Manifold cells must be consistently oriented."
+      );
+    }
+    //if is_face {
+    //assert!(!existent_sub.sorted_vertices.orientation_eq(&sub).unwrap());
+    //}
 
     // set edge lengths of mesh
     let mut edge_lengths = Vec::new();
-    for edge in skeletons[1].values() {
-      let edge = edge.vertices().sorted();
+    for edge in skeletons[1].simplicies.keys() {
       let length = raw.edge_lengths[edge];
       edge_lengths.push(length);
     }
 
     Self {
-      topology: ManifoldTopology { skeletons },
-      geometry: ManifoldGeometry { edge_lengths },
+      cells,
+      skeletons,
+      edge_lengths,
     }
   }
 }

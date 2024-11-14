@@ -47,7 +47,7 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
 
 /// The Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cells().get_idx(icell).geometry();
+  let cell_geo = space.mesh().cells().get_kidx(icell).geometry();
   laplacian_neg_elmat_geo(&cell_geo)
 }
 
@@ -59,14 +59,18 @@ pub struct LoadElvec {
 }
 impl ElvecProvider for LoadElvec {
   fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64> {
-    let cell = space.mesh().cells().get_idx(icell);
+    let cell = space.mesh().cells().get_kidx(icell);
     let cell_geo = cell.geometry();
     let nverts = cell_geo.nvertices();
 
-    cell_geo.vol() / nverts as f64
+    cell_geo.det() / nverts as f64
       * na::DVector::from_iterator(
         nverts,
-        cell.vertices().iter().copied().map(|iv| self.dof_data[iv]),
+        cell
+          .ordered_vertices()
+          .iter()
+          .copied()
+          .map(|iv| self.dof_data[iv]),
       )
   }
 }
@@ -81,7 +85,7 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells().iter() {
     let mut sum = 0.0;
-    for &ivertex in cell.vertices().iter() {
+    for &ivertex in cell.ordered_vertices().iter() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();

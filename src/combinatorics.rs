@@ -2,7 +2,7 @@ pub mod orientation;
 pub mod simplex;
 
 pub use orientation::Orientation;
-pub use simplex::{OrientedSimplex, OrderedSimplex, SortedSimplex};
+pub use simplex::{OrderedSimplex, OrientedSimplex, SortedSimplex};
 
 use crate::Dim;
 
@@ -128,7 +128,9 @@ impl std::ops::Neg for Dir {
 
 #[cfg(test)]
 mod test {
-  use super::{simplex::SortedSimplex, sort_count_swaps, Permutations};
+  use crate::combinatorics::simplex::SortedSimplex;
+
+  use super::{sort_count_swaps, Permutations};
 
   #[test]
   fn subs_order() {
