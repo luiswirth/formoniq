@@ -6,6 +6,27 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 fn main() {
+  let t0 = [0, 1, 3];
+  let t1 = [0, 2, 3];
+  #[rustfmt::skip]
+  let elmat = na::DMatrix::from_row_slice(3, 3, &[
+     1, -1,  0,
+    -1,  2, -1,
+     0, -1,  1,
+  ]).cast() * 0.5;
+
+  let mut galmat = na::DMatrix::<f64>::zeros(4, 4);
+  for t in [t0, t1] {
+    for (ilocal, &iglobal) in t.iter().enumerate() {
+      for (jlocal, &jglobal) in t.iter().enumerate() {
+        galmat[(iglobal, jglobal)] += elmat[(ilocal, jlocal)];
+      }
+    }
+  }
+  println!("{galmat}");
+}
+
+fn lol() {
   let vertices = vec![
     na::DVector::from_column_slice(&[0.0, 0.0, 0.0]),
     na::DVector::from_column_slice(&[1.0, 0.0, 0.0]),

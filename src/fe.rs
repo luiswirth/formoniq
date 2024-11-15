@@ -30,6 +30,7 @@ where
 }
 
 pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
+  dbg!(&cell_geo);
   let dim = cell_geo.dim();
   let metric = cell_geo.metric_tensor();
   let det = cell_geo.det();

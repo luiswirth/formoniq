@@ -10,6 +10,7 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
   let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
   for icell in 0..space.mesh().ncells() {
     let elmat = elmat.eval(space, icell);
+    println!("{elmat:.3}");
 
     for (ilocal, iglobal) in space
       .dof_handler()

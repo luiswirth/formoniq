@@ -111,3 +111,40 @@ fn matrix_from_diagonals(
 
   matrix
 }
+
+#[test]
+fn galmat_paper_and_pen() {
+  // This list of galmats can be trusted.
+  // It was verified thorougly.
+  // The mesh nodes are ordered lexicographically.
+  #[rustfmt::skip]
+  let expected_galmats = [
+    na::DMatrix::from_row_slice(2, 2, &[
+       1, -1,
+      -1,  1
+    ]).cast(),
+    na::DMatrix::from_row_slice(4, 4, &[
+       2, -1, -1, -0, 
+      -1,  2, -0, -1, 
+      -1, -0,  2, -1, 
+       0, -1, -1,  2,
+    ]).cast() / 2.0,
+  ];
+
+  for (i, expected) in expected_galmats.iter().enumerate() {
+    let dim = i + 1;
+    let box_mesh = HyperBoxMeshInfo::new_unit(dim, 1);
+    let coord_mesh = box_mesh.compute_coord_manifold();
+    let mesh = Rc::new(coord_mesh.into_manifold());
+    let space = FeSpace::new(mesh);
+    let computed = assemble::assemble_galmat(&space, fe::laplacian_neg_elmat).to_nalgebra_dense();
+    let diff = &computed - expected;
+    println!("computed:\n{computed:.3}");
+    println!("expected:\n{expected:.3}");
+    println!("diff:\n{diff:.3}");
+    assert!(
+      diff.norm() <= 10.0 * f64::EPSILON,
+      "FE and handcomputed disagree in d={dim}"
+    );
+  }
+}

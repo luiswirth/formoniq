@@ -12,6 +12,8 @@ fn check_elmat_refd() {
     let nvertices = dim + 1;
     let ndofs = nvertices;
 
+    // This expected element matrix has been verified over and over.
+    // It should be correct.
     let mut expected_elmat = na::DMatrix::zeros(ndofs, ndofs);
     expected_elmat[(0, 0)] = dim as i32;
     for i in 1..ndofs {
