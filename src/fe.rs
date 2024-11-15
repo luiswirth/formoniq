@@ -32,7 +32,7 @@ where
 pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
   let dim = cell_geo.dim();
   let metric = cell_geo.metric_tensor();
-  let vol = cell_geo.vol();
+  let det = cell_geo.det();
 
   let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
   for i in 0..dim {
@@ -42,7 +42,7 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
     reference_gradbarys[(i, i + 1)] = 1.0;
   }
 
-  vol * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
+  det * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
 /// The Element Matrix Provider for the negative Laplacian.
