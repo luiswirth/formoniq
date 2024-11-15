@@ -16,7 +16,7 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   // Spatial dimension of the problem.
-  let dim: usize = 2;
+  let dim: usize = 1;
 
   println!("Poisson in {dim}D");
 
