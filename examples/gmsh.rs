@@ -21,8 +21,8 @@ fn main() {
   let dim = mesh.dim();
   let mesh_width = mesh.mesh_width();
   let shape_regularity = mesh.shape_regularity_measure();
-  dbg!(mesh_width);
-  dbg!(shape_regularity);
+  println!("h={mesh_width}");
+  println!("rho={shape_regularity}");
 
   // Define analytic solution.
   // $u = exp(x_1 x_2 dots x_n)$
@@ -57,5 +57,5 @@ fn main() {
 
   // Compute L2 error and convergence rate.
   let error = l2_norm(analytical_sol - galsol, &mesh);
-  dbg!(error);
+  println!("error={error}");
 }
