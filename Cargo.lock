@@ -276,6 +276,7 @@ dependencies = [
  "nalgebra",
  "nalgebra-sparse",
  "num-integer",
+ "num-traits",
  "once_cell",
  "thiserror",
  "tracing",

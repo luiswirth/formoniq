@@ -5,12 +5,27 @@ use crate::{
   util::{faervec2navec, navec2faervec},
 };
 
+pub fn assemble_galmat_raw(
+  ndofs: usize,
+  elmat: na::DMatrix<f64>,
+  cells_dofs: &[Vec<DofId>],
+) -> SparseMatrix {
+  let mut galmat = SparseMatrix::new(ndofs, ndofs);
+  for cell_dofs in cells_dofs {
+    for (ilocal, &iglobal) in cell_dofs.iter().enumerate() {
+      for (jlocal, &jglobal) in cell_dofs.iter().enumerate() {
+        galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
+      }
+    }
+  }
+  galmat
+}
+
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
   for icell in 0..space.mesh().ncells() {
     let elmat = elmat.eval(space, icell);
-    println!("{elmat:.3}");
 
     for (ilocal, iglobal) in space
       .dof_handler()

@@ -71,7 +71,7 @@ impl HyperBoxMeshInfo {
       nboxes_per_dim,
     }
   }
-  pub fn new_unit_scaled(dim: Dim, scale: f64, nboxes_per_dim: usize) -> Self {
+  pub fn new_unit_scaled(dim: Dim, nboxes_per_dim: usize, scale: f64) -> Self {
     let hyperbox = HyperBox::new_unit_scaled(dim, scale);
     Self {
       hyperbox,
@@ -127,13 +127,13 @@ impl HyperBoxMeshInfo {
   pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
-      let nnodes_boundary_face = self.nnodes_per_dim().pow(self.dim() as u32 - 1);
-      for inode in 0..nnodes_boundary_face {
+      let nnodes_boundary_facet = self.nnodes_per_dim().pow(self.dim() as u32 - 1);
+      for inode in 0..nnodes_boundary_facet {
         let node_icart = linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim() - 1);
         let low_boundary = node_icart.clone().insert_row(d, 0);
         let high_boundary = node_icart.insert_row(d, self.nnodes_per_dim() - 1);
-        let low_boundary = cartesian_index2linear_index(low_boundary, self.dim());
-        let high_boundary = cartesian_index2linear_index(high_boundary, self.dim());
+        let low_boundary = cartesian_index2linear_index(low_boundary, self.nnodes_per_dim());
+        let high_boundary = cartesian_index2linear_index(high_boundary, self.nnodes_per_dim());
         r.push(low_boundary);
         r.push(high_boundary);
       }
