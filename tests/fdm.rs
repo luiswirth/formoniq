@@ -150,9 +150,8 @@ fn feec_vs_fdm_interior() {
     for dim in 1..=4 {
       let nnodes_per_dim = nboxes_per_dim + 1;
       let feec = feec_galmat_interior(dim, nboxes_per_dim);
-      let fdm =
-        ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nnodes_per_dim; dim]).cast();
-      compare_galmats(&feec, &fdm);
+      let fdm = ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nnodes_per_dim; dim]);
+      compare_system_matrics(feec, fdm);
     }
   }
 }
@@ -162,8 +161,8 @@ fn feec_vs_fdm_interior() {
 fn feec_vs_fdm_boundary() {
   for dim in 1..=3 {
     let feec = feec_galmat_boundary(dim);
-    let fdm = ndimensionalize_operator(|_| laplace_matrix_1d_boundary(), &vec![1; dim]).cast();
-    compare_galmats(&feec, &fdm);
+    let fdm = ndimensionalize_operator(|_| laplace_matrix_1d_boundary(), &vec![1; dim]);
+    compare_system_matrics(feec, fdm);
   }
 }
 
@@ -173,9 +172,9 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> na::DMatrix<f64>
 
   let full_galmat = feec_galmat_full(dim, nboxes_per_dim);
 
+  // TODO: optimize!
   let removable_nodes =
     HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64).boundary_nodes();
-
   full_galmat
     .remove_columns_at(&removable_nodes)
     .remove_rows_at(&removable_nodes)
@@ -208,16 +207,15 @@ fn normalize_galerkin_lse(galmat: &mut na::DMatrix<f64>, galvec: &mut na::DVecto
   }
 }
 
-fn compare_galmats(feec: &na::DMatrix<f64>, fdm: &na::DMatrix<f64>) {
-  let diff = feec - fdm;
-  let error = diff.norm();
-  let equal = error <= 10e-9;
+fn compare_system_matrics(feec: na::DMatrix<f64>, fdm: na::DMatrix<i32>) {
+  feec.iter().all(|e| e.fract() < f64::EPSILON);
+  let feec = feec.try_cast().unwrap();
+  let diff = &feec - &fdm;
+  let equal = diff.iter().all(|&e| e == 0);
   if !equal {
-    let quotient = feec.component_div(fdm);
-    println!("FEEC:\n{feec:.2}");
-    println!("FDM:\n{fdm:.2}");
-    println!("diff:\n{diff:.2}");
-    println!("quotient:\n{quotient:.2}");
+    println!("FEEC:\n{feec}");
+    println!("FDM:\n{fdm}");
+    println!("diff:\n{diff}");
     panic!("FEEC and FDM disagree.");
   }
 }
