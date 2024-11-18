@@ -1,7 +1,7 @@
 //! Verify scalar FEEC Galerkin Matrices for negative Laplacian
 //! on tensor product meshes by comparing to Finite Difference Method (FDM).
 //!
-//! We look at the model problem $-Delta u = 1$ on $[0,n]^d$,
+//! We look at the homogeneous Neumann problem $-Delta u = 1$ on $[0,n]^d$.
 //! We discretize this problem on a tensor-product mesh with $n$ subdivisions,
 //! resulting in $h=1$, making $h$-scaling irrelevant.
 //! The Mesh nodes are ordered lexicographically.
@@ -146,28 +146,34 @@ fn laplace_matrix_1d_interior(nnodes: usize) -> na::DMatrix<i32> {
 
 #[test]
 fn feec_vs_fdm_interior() {
+  let mut equal = true;
+  // TODO: increase numbers, once performance allows
   for nboxes_per_dim in 1..=2 {
     for dim in 1..=4 {
       let nnodes_per_dim = nboxes_per_dim + 1;
       let feec = feec_galmat_interior(dim, nboxes_per_dim);
       let fdm = ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nnodes_per_dim; dim]);
-      compare_system_matrics(feec, fdm);
+      equal &= compare_system_matrics(&feec, &fdm);
     }
   }
+  assert!(equal);
 }
 
 // TODO: get this right!
 #[test]
 fn feec_vs_fdm_boundary() {
+  let mut equal = true;
   for dim in 1..=3 {
     let feec = feec_galmat_boundary(dim);
+    let feec = cast_int(feec);
     let fdm = ndimensionalize_operator(|_| laplace_matrix_1d_boundary(), &vec![1; dim]);
-    compare_system_matrics(feec, fdm);
+    equal &= compare_system_matrics(&feec, &fdm);
   }
+  assert!(equal);
 }
 
 /// Galmat from normalized LSE, where RHS galvec would be constant 1.
-fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> na::DMatrix<f64> {
+fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> na::DMatrix<i32> {
   nboxes_per_dim += 2;
 
   let full_galmat = feec_galmat_full(dim, nboxes_per_dim);
@@ -175,9 +181,11 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> na::DMatrix<f64>
   // TODO: optimize!
   let removable_nodes =
     HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64).boundary_nodes();
-  full_galmat
+  let galmat = full_galmat
     .remove_columns_at(&removable_nodes)
-    .remove_rows_at(&removable_nodes)
+    .remove_rows_at(&removable_nodes);
+
+  cast_int(galmat)
 }
 
 /// Galmat from normalized LSE, where RHS galvec would be constant 1.
@@ -207,15 +215,24 @@ fn normalize_galerkin_lse(galmat: &mut na::DMatrix<f64>, galvec: &mut na::DVecto
   }
 }
 
-fn compare_system_matrics(feec: na::DMatrix<f64>, fdm: na::DMatrix<i32>) {
-  feec.iter().all(|e| e.fract() < f64::EPSILON);
-  let feec = feec.try_cast().unwrap();
-  let diff = &feec - &fdm;
+#[must_use]
+fn compare_system_matrics(feec: &na::DMatrix<i32>, fdm: &na::DMatrix<i32>) -> bool {
+  let diff = feec - fdm;
   let equal = diff.iter().all(|&e| e == 0);
   if !equal {
     println!("FEEC:\n{feec}");
     println!("FDM:\n{fdm}");
     println!("diff:\n{diff}");
-    panic!("FEEC and FDM disagree.");
+    return false;
   }
+  true
+}
+
+fn cast_int(mat: na::DMatrix<f64>) -> na::DMatrix<i32> {
+  const TOL: f64 = 10e-12;
+  assert!(
+    mat.iter().all(|e| (e - e.round()).abs() <= TOL),
+    "Failed to round matrix:\n{mat:.2}"
+  );
+  mat.try_cast().unwrap()
 }
