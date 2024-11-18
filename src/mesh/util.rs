@@ -4,6 +4,9 @@ pub struct NodeData<T> {
   data: Vec<T>,
 }
 impl<T> NodeData<T> {
+  pub fn new(data: Vec<T>) -> Self {
+    Self { data }
+  }
   pub fn from_coords_map<F>(coords: &NodeCoords, map: F) -> Self
   where
     F: FnMut(na::DVectorView<f64>) -> T,

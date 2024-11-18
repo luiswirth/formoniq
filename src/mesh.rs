@@ -37,6 +37,9 @@ impl SimplicialManifold {
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
+  pub fn nnodes(&self) -> usize {
+    self.nvertices()
+  }
 
   pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
     SkeletonHandle::new(self, dim)
