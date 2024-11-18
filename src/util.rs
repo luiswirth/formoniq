@@ -110,3 +110,9 @@ where
 
   matrix
 }
+
+// TODO: do it for sparse matrices directly, by computing the ratio between the
+// largest and smallest eigenvalue.
+pub fn condition_number(mat: na::DMatrix<f64>) -> f64 {
+  mat.norm() * mat.try_inverse().unwrap().norm()
+}
