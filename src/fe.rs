@@ -53,9 +53,15 @@ pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> 
 
 /// Element Vector Provider for scalar load function.
 ///
-/// Computed using trapezoidal rule.
+/// Computed using trapezoidal quadrature rule.
+/// Exact for constant load.
 pub struct LoadElvec {
   dof_data: NodeData<f64>,
+}
+impl LoadElvec {
+  pub fn new(dof_data: NodeData<f64>) -> Self {
+    Self { dof_data }
+  }
 }
 impl ElvecProvider for LoadElvec {
   fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64> {
@@ -72,11 +78,6 @@ impl ElvecProvider for LoadElvec {
           .copied()
           .map(|iv| self.dof_data[iv]),
       )
-  }
-}
-impl LoadElvec {
-  pub fn new(dof_data: NodeData<f64>) -> Self {
-    Self { dof_data }
   }
 }
 
