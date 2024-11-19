@@ -3,6 +3,10 @@ use super::{CellIdx, SimplexHandle, SimplicialManifold, VertexIdx};
 use itertools::Itertools;
 
 impl SimplicialManifold {
+  pub fn has_boundary(&self) -> bool {
+    !self.boundary_facets().is_empty()
+  }
+
   /// For a d-mesh computes the boundary, which consists of facets ((d-1)-faces).
   ///
   /// The boundary facets are characterized by the fact that they

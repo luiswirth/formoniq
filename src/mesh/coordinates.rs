@@ -2,6 +2,7 @@ use super::{raw::RawSimplicialManifold, SimplicialManifold};
 use crate::{
   combinatorics::{OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex},
   mesh::VertexIdx,
+  util::gram_det_sqrt,
   Dim,
 };
 
@@ -30,14 +31,25 @@ impl NodeCoords {
   }
 
   pub fn coord_simplex(&self, simp: &OrderedSimplex) -> CoordSimplex {
-    let mut vert_coords = na::DMatrix::zeros(simp.dim(), simp.nvertices());
+    let mut vert_coords = na::DMatrix::zeros(self.dim(), simp.nvertices());
     for (i, &v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &self.coord(v));
     }
     CoordSimplex::new(vert_coords)
   }
+
+  pub fn into_inner(self) -> na::DMatrix<f64> {
+    self.coords
+  }
+
+  fn embed_flat(mut self, dim: usize) -> NodeCoords {
+    let old_dim = self.coords.nrows();
+    self.coords = self.coords.insert_rows(old_dim, dim - old_dim, 0.0);
+    self
+  }
 }
 
+#[derive(Debug, Clone)]
 pub struct CoordManifold {
   /// topology
   cells: Vec<OrientedSimplex>,
@@ -47,7 +59,9 @@ pub struct CoordManifold {
 impl CoordManifold {
   pub fn new(cells: Vec<OrientedSimplex>, node_coords: NodeCoords) -> Self {
     if cfg!(debug_assertions) {
+      let dim_intrinsic = cells[0].dim();
       for cell in &cells {
+        debug_assert!(cell.dim() == dim_intrinsic, "Inconsistent cell dimension.");
         let coord_cell = node_coords.coord_simplex(cell.ordered());
         debug_assert!(
           coord_cell.orientation() * cell.orientation() == Orientation::Pos,
@@ -57,6 +71,17 @@ impl CoordManifold {
     }
 
     Self { cells, node_coords }
+  }
+
+  pub fn dim_embedded(&self) -> Dim {
+    self.node_coords.dim()
+  }
+  pub fn dim_intrinsic(&self) -> Dim {
+    self.cells[0].dim()
+  }
+
+  pub fn into_parts(self) -> (Vec<OrientedSimplex>, NodeCoords) {
+    (self.cells, self.node_coords)
   }
 
   pub fn into_raw_manifold(self) -> RawSimplicialManifold {
@@ -84,6 +109,11 @@ impl CoordManifold {
   pub fn into_manifold(self) -> SimplicialManifold {
     SimplicialManifold::new(self.into_raw_manifold())
   }
+
+  pub fn embed_flat(mut self, dim: Dim) -> CoordManifold {
+    self.node_coords = self.node_coords.embed_flat(dim);
+    self
+  }
 }
 
 impl CoordManifold {
@@ -107,13 +137,20 @@ impl CoordSimplex {
   pub fn nvertices(&self) -> usize {
     self.vertices.ncols()
   }
-  pub fn dim(&self) -> Dim {
+  pub fn dim_intrinsic(&self) -> Dim {
     self.nvertices() - 1
+  }
+  pub fn dim_embedded(&self) -> Dim {
+    self.vertices.nrows()
+  }
+
+  // TODO: is this a good name?
+  pub fn is_euclidean(&self) -> bool {
+    self.dim_intrinsic() == self.dim_embedded()
   }
 
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
-    let dim = self.dim();
-    let mut mat = na::DMatrix::zeros(dim, dim);
+    let mut mat = na::DMatrix::zeros(self.dim_embedded(), self.dim_intrinsic());
     let v0 = self.vertices.column(0);
     for (i, vi) in self.vertices.column_iter().skip(1).enumerate() {
       let v0i = vi - v0;
@@ -122,7 +159,11 @@ impl CoordSimplex {
     mat
   }
   pub fn det(&self) -> f64 {
-    self.spanning_vectors().determinant()
+    if self.is_euclidean() {
+      self.spanning_vectors().determinant()
+    } else {
+      gram_det_sqrt(&self.spanning_vectors())
+    }
   }
   pub fn vol(&self) -> f64 {
     self.det().abs()

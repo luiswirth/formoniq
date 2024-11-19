@@ -151,7 +151,7 @@ impl HyperBoxMeshInfo {
     NodeCoords::new(nodes)
   }
 
-  pub fn compute_coord_manifold(&self) -> CoordManifold {
+  pub fn to_coord_manifold(&self) -> CoordManifold {
     let node_coords = self.compute_node_coords();
 
     let dim = self.dim();
@@ -205,7 +205,7 @@ impl HyperBoxMeshInfo {
   }
 
   pub fn compute_raw_manifold(&self) -> RawSimplicialManifold {
-    self.compute_coord_manifold().into_raw_manifold()
+    self.to_coord_manifold().into_raw_manifold()
   }
   pub fn compute_manifold(&self) -> SimplicialManifold {
     SimplicialManifold::new(self.compute_raw_manifold())
@@ -218,7 +218,7 @@ mod test {
 
   #[test]
   fn unit_cube_mesh() {
-    let mesh = HyperBoxMeshInfo::new_unit(3, 1).compute_coord_manifold();
+    let mesh = HyperBoxMeshInfo::new_unit(3, 1).to_coord_manifold();
     #[rustfmt::skip]
     let expected_nodes = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,
@@ -251,7 +251,7 @@ mod test {
 
   #[test]
   fn unit_square_mesh() {
-    let mesh = HyperBoxMeshInfo::new_unit(2, 2).compute_coord_manifold();
+    let mesh = HyperBoxMeshInfo::new_unit(2, 2).to_coord_manifold();
     #[rustfmt::skip]
     let expected_nodes = na::DMatrix::from_column_slice(2, 9, &[
       0.0, 0.0,

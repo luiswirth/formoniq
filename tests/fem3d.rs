@@ -109,7 +109,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
 
 fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = HyperBoxMeshInfo::new_unit(DIM, nboxes_per_dim);
-  let coord_mesh = box_mesh.compute_coord_manifold();
+  let coord_mesh = box_mesh.to_coord_manifold();
   let mesh = Rc::new(coord_mesh.into_manifold());
   let space = FeSpace::new(mesh.clone());
   assemble::assemble_galmat(&space, fe::laplacian_neg_elmat).to_nalgebra_dense()

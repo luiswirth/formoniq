@@ -8,17 +8,17 @@ use formoniq::{
   assemble,
   fe::{self, l2_norm},
   matrix::FaerCholesky,
-  mesh::{hyperbox::HyperBoxMeshInfo, util::NodeData},
+  mesh::{dim3::TriangleSurface3D, hyperbox::HyperBoxMeshInfo, util::NodeData},
   space::FeSpace,
   Dim,
 };
 
-use std::rc::Rc;
+use std::{f64::consts::TAU, rc::Rc};
 
 fn main() {
   tracing_subscriber::fmt::init();
 
-  let dim = 3;
+  let dim = 2;
 
   // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
   let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
@@ -27,12 +27,9 @@ fn main() {
   manufactured_poisson_convergence(dim, &anal_sol, &anal_lapl);
 }
 
-fn manufactured_poisson_convergence<F, G>(
-  dim: Dim,
-  anal_sol: &F,
-  // negative Laplacian
-  anal_lapl: &G,
-) where
+/// Supply analytic solution and analytic (negative) Laplacian
+fn manufactured_poisson_convergence<F, G>(dim: Dim, anal_sol: &F, anal_lapl: &G)
+where
   F: Fn(na::DVectorView<f64>) -> f64,
   G: Fn(na::DVectorView<f64>) -> f64,
 {
@@ -59,11 +56,10 @@ fn manufactured_poisson_convergence<F, G>(
     let expk = 2usize.pow(k as u32);
     let nboxes_per_dim = expk;
 
-    // Create mesh of unit hypercube $[0, 1]^d$.
-    let box_mesh = HyperBoxMeshInfo::new_unit(dim, nboxes_per_dim);
-    let coord_mesh = box_mesh.compute_coord_manifold();
-    let nodes = coord_mesh.node_coords().clone();
-    let mesh = Rc::new(coord_mesh.into_manifold());
+    // Create mesh of unit hypercube $[0, tau]^d$.
+    let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
+    let coord_mesh = box_mesh.to_coord_manifold();
+    let mesh = Rc::new(coord_mesh.clone().into_manifold());
     let mesh_width = mesh.mesh_width();
     let shape_regularity = mesh.shape_regularity_measure();
 
@@ -75,7 +71,10 @@ fn manufactured_poisson_convergence<F, G>(
     let mut galmat = assemble::assemble_galmat(&space, elmat);
 
     // Assemble Galerkin vector.
-    let elvec = fe::LoadElvec::new(NodeData::from_coords_map(&nodes, anal_lapl));
+    let elvec = fe::LoadElvec::new(NodeData::from_coords_map(
+      coord_mesh.node_coords(),
+      anal_lapl,
+    ));
     let mut galvec = assemble::assemble_galvec(&space, elvec);
 
     // Enforce Dirichlet boundary conditions by fixing dofs on boundary.
@@ -93,11 +92,27 @@ fn manufactured_poisson_convergence<F, G>(
     let galmat = galmat.to_nalgebra_csc();
 
     // Obtain Galerkin solution by solving LSE.
-    let galsol: na::DVector<f64> = FaerCholesky::new(galmat).solve(&galvec).column(0).into();
+    let galsol = FaerCholesky::new(galmat).solve(&galvec);
+
+    if dim == 2 {
+      let mut surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_flat(3));
+      surface.displace_normal(galsol.as_slice());
+      std::fs::write(
+        format!("out/sol_subdivision{nboxes_per_dim}.obj"),
+        surface.to_obj_string().as_bytes(),
+      )
+      .unwrap();
+    }
 
     // Compute analytical solution on mesh nodes.
-    let analytical_sol =
-      na::DVector::from_iterator(nodes.nnodes(), nodes.coords().column_iter().map(anal_sol));
+    let analytical_sol = na::DVector::from_iterator(
+      coord_mesh.node_coords().nnodes(),
+      coord_mesh
+        .node_coords()
+        .coords()
+        .column_iter()
+        .map(anal_sol),
+    );
 
     // Compute L2 error and convergence rate.
     let error = l2_norm(analytical_sol - galsol, &mesh);
