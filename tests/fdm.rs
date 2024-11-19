@@ -197,7 +197,7 @@ fn feec_galmat_boundary(dim: Dim) -> na::DMatrix<f64> {
 /// Galmat from normalized LSE, where RHS galvec would be constant 1.
 fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64);
-  let coord_mesh = box_mesh.compute_coord_manifold();
+  let coord_mesh = box_mesh.to_coord_manifold();
   let mesh = Rc::new(coord_mesh.into_manifold());
   let space = FeSpace::new(mesh.clone());
   let mut galmat = assemble::assemble_galmat(&space, fe::laplacian_neg_elmat).to_nalgebra_dense();

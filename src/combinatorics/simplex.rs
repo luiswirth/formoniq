@@ -73,6 +73,11 @@ impl From<Vec<VertexIdx>> for OrderedSimplex {
     Self(value)
   }
 }
+impl From<[VertexIdx; 3]> for OrderedSimplex {
+  fn from(value: [VertexIdx; 3]) -> Self {
+    Self(value.to_vec())
+  }
+}
 impl OrderedSimplex {
   pub fn iter(&self) -> std::slice::Iter<'_, VertexIdx> {
     self.0.iter()

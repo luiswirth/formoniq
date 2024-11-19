@@ -8,9 +8,11 @@
 
 pub mod boundary;
 pub mod coordinates;
+pub mod dim3;
 pub mod gmsh;
 pub mod hyperbox;
 pub mod raw;
+pub mod sphere_surface;
 pub mod util;
 
 use crate::{
@@ -182,7 +184,7 @@ impl<'m> SimplexHandle<'m> {
   }
 
   pub fn antiboundary(&self) -> ChainHandle<'m> {
-    todo!("potentially wrong orientation");
+    unimplemented!()
   }
 
   pub fn boundary(&self) -> ChainHandle<'m> {
