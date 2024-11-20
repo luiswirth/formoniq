@@ -1,3 +1,5 @@
+use std::path::Path;
+
 pub fn indicies_to_flags(indicies: &[usize], len: usize) -> Vec<bool> {
   let mut flags = vec![false; len];
   indicies.iter().for_each(|&i| flags[i] = true);
@@ -143,4 +145,13 @@ where
 // largest and smallest eigenvalue.
 pub fn condition_number(mat: na::DMatrix<f64>) -> f64 {
   mat.norm() * mat.try_inverse().unwrap().norm()
+}
+
+pub fn save_vector(mu: &na::DVector<f64>, path: impl AsRef<Path>) -> std::io::Result<()> {
+  use std::io::Write;
+  let mut file = std::fs::File::create(path).unwrap();
+  for v in mu.iter() {
+    writeln!(file, "{v}")?;
+  }
+  Ok(())
 }
