@@ -1,6 +1,6 @@
 use crate::{
   geometry::GeometrySimplex,
-  mesh::{util::NodeData, CellIdx, SimplicialManifold},
+  mesh::{CellIdx, SimplicialManifold},
   space::FeSpace,
 };
 
@@ -56,10 +56,10 @@ pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> 
 /// Computed using trapezoidal quadrature rule.
 /// Exact for constant load.
 pub struct LoadElvec {
-  dof_data: NodeData<f64>,
+  dof_data: na::DVector<f64>,
 }
 impl LoadElvec {
-  pub fn new(dof_data: NodeData<f64>) -> Self {
+  pub fn new(dof_data: na::DVector<f64>) -> Self {
     Self { dof_data }
   }
 }

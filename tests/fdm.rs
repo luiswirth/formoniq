@@ -25,7 +25,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble,
   fe::{self, LoadElvec},
-  mesh::{hyperbox::HyperBoxMeshInfo, util::NodeData},
+  mesh::hyperbox::HyperBoxMeshInfo,
   space::FeSpace,
   util::{kronecker_sum, matrix_from_const_diagonals},
   Dim,
@@ -203,7 +203,7 @@ fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let mut galmat = assemble::assemble_galmat(&space, fe::laplacian_neg_elmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
     &space,
-    LoadElvec::new(NodeData::new(vec![1.0; mesh.nnodes()])),
+    LoadElvec::new(na::DVector::from_element(mesh.nnodes(), 1.0)),
   );
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat
