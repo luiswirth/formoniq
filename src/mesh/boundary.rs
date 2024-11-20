@@ -1,3 +1,5 @@
+use crate::util;
+
 use super::{CellIdx, SimplexHandle, SimplicialManifold, VertexIdx};
 
 use itertools::Itertools;
@@ -31,12 +33,7 @@ impl SimplicialManifold {
   }
 
   pub fn flag_boundary_nodes(&self) -> Vec<bool> {
-    let mut flags = vec![false; self.nnodes()];
-    self
-      .boundary_nodes()
-      .into_iter()
-      .for_each(|n| flags[n] = true);
-    flags
+    util::indicies_to_flags(&self.boundary_nodes(), self.nnodes())
   }
 
   pub fn boundary_cells(&self) -> Vec<CellIdx> {

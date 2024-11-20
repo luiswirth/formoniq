@@ -2,14 +2,13 @@ use crate::{
   fe::{ElmatProvider, ElvecProvider},
   matrix::SparseMatrix,
   mesh::SimplicialManifold,
-  space::{DofId, FeSpace},
-  util::{faervec2navec, navec2faervec},
+  space::{DofIdx, FeSpace},
 };
 
 pub fn assemble_galmat_raw(
   ndofs: usize,
   elmat: na::DMatrix<f64>,
-  cells_dofs: &[Vec<DofId>],
+  cells_dofs: &[Vec<DofIdx>],
 ) -> SparseMatrix {
   let mut galmat = SparseMatrix::new(ndofs, ndofs);
   for cell_dofs in cells_dofs {
@@ -67,127 +66,30 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
   galvec
 }
 
-pub fn enforce_dirichlet_bc<F>(
-  mesh: &SimplicialManifold,
-  boundary_coeff_map: F,
-  galmat: &mut SparseMatrix,
-  galvec: &mut na::DVector<f64>,
-) where
-  F: Fn(DofId) -> f64,
-{
-  let boundary_flags = mesh.flag_boundary_nodes();
-  fix_dof_coeffs(
-    |inode: usize| boundary_flags[inode].then(|| boundary_coeff_map(inode)),
-    galmat,
-    galvec,
-  );
+pub fn drop_boundary_dofs_galmat(mesh: &SimplicialManifold, galmat: &mut SparseMatrix) {
+  drop_dofs_galmat(&mesh.boundary_nodes(), galmat);
 }
 
-/// Fix DOFs of FE solution.
-///
-/// Is primarly used the enforce essential dirichlet boundary conditions.
-///
-/// Modifies supplied galerkin matrix and galerkin vector,
-/// such that the FE solution has the optionally given coefficents on the dofs.
-/// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
-pub fn fix_dof_coeffs<F>(coeff_map: F, galmat: &mut SparseMatrix, galvec: &mut na::DVector<f64>)
-where
-  F: Fn(DofId) -> Option<f64>,
-{
-  let ndofs = galmat.ncols();
-
-  // create vec of all (possibly missing) coefficents
-  let dof_coeffs: Vec<_> = (0..ndofs).map(coeff_map).collect();
-
-  // zero out missing coefficents
-  let mut dof_coeffs_zeroed = faer::Mat::zeros(ndofs, 1);
-  dof_coeffs
-    .iter()
-    .copied()
-    .map(|v| v.unwrap_or(0.0))
-    .enumerate()
-    .for_each(|(i, v)| dof_coeffs_zeroed[(i, 0)] = v);
-
-  let galmat_faer = galmat.to_faer_csc();
-  let mut galvec_faer = navec2faervec(galvec);
-
-  galvec_faer -= galmat_faer * dof_coeffs_zeroed;
-  *galvec = faervec2navec(&galvec_faer);
-
-  // set galvec to prescribed coefficents
-  dof_coeffs
-    .iter()
-    .copied()
-    .enumerate()
-    .filter_map(|(i, v)| v.map(|v| (i, v)))
-    .for_each(|(i, v)| galvec[i] = v);
-
-  // Set entires zero that share a (row or column) index with a fixed dof.
-  galmat.set_zero(|r, c| dof_coeffs[r].is_some() || dof_coeffs[c].is_some());
-
-  for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
-    if coeff.is_some() {
-      galmat.push(i, i, 1.0);
-    }
-  }
-}
-
-/// $mat(A_0, A_(0 diff); 0, I) vec(mu_0, mu_diff) = vec(phi, gamma)$
-#[allow(unused_variables, unreachable_code)]
-pub fn fix_dof_coeffs_alt<F>(
-  coefficent_map: F,
-  galmat: &mut SparseMatrix,
-  galvec: &mut na::DVector<f64>,
-) where
-  F: Fn(DofId) -> Option<f64>,
-{
-  panic!("DOES NOT WORK");
-
-  let ndofs = galmat.ncols();
-
-  // create vec of all (possibly missing) coefficents
-  let dof_coeffs: Vec<_> = (0..ndofs).map(coefficent_map).collect();
-
-  // set galvec to prescribed coefficents
-  dof_coeffs
-    .iter()
-    .copied()
-    .enumerate()
-    .filter_map(|(i, v)| v.map(|v| (i, v)))
-    .for_each(|(i, v)| galvec[i] = v);
-
-  // Set entires zero that share a row index with a fixed dof.
-  galmat.set_zero(|r, c| dof_coeffs[r].is_some());
-
-  for (i, coeff) in dof_coeffs.iter().copied().enumerate() {
-    galmat.push(i, i, 1.0);
-  }
-}
-
-pub fn drop_dofs_galmat<F>(drop_map: F, galmat: &mut SparseMatrix)
-where
-  F: Fn(DofId) -> bool,
-{
+pub fn drop_dofs_galmat(dofs: &[DofIdx], galmat: &mut SparseMatrix) {
   let ndofs_old = galmat.ncols();
-
-  let drop_ids: Vec<_> = (0..ndofs_old).filter(|idof| drop_map(*idof)).collect();
-  let ndofs_new = ndofs_old - drop_ids.len();
+  let ndofs_new = ndofs_old - dofs.len();
 
   let mut triplets = std::mem::take(galmat).to_triplets();
-  for (ndrops, mut drop_id) in drop_ids.iter().copied().enumerate() {
-    drop_id -= ndrops;
+  for (ndrops, mut idof) in dofs.iter().copied().enumerate() {
+    idof -= ndrops;
     let mut itriplet = 0;
     while itriplet < triplets.len() {
       let mut triplet = triplets[itriplet];
       let r = &mut triplet.0;
       let c = &mut triplet.1;
-      if *r == drop_id || *c == drop_id {
+
+      if *r == idof || *c == idof {
         triplets.remove(itriplet);
       } else {
-        if *r > drop_id {
+        if *r > idof {
           *r -= 1;
         }
-        if *c > drop_id {
+        if *c > idof {
           *c -= 1;
         }
 
@@ -195,15 +97,10 @@ where
       }
     }
   }
+
   *galmat = SparseMatrix::from_triplets(ndofs_new, ndofs_new, triplets);
 }
 
-pub fn drop_dofs_galvec<F>(drop_map: F, galvec: &mut na::DVector<f64>)
-where
-  F: Fn(DofId) -> bool,
-{
-  let ndofs_old = galvec.ncols();
-  let drop_ids: Vec<_> = (0..ndofs_old).filter(|idof| drop_map(*idof)).collect();
-  let galvec_new = std::mem::replace(galvec, na::DVector::zeros(1));
-  *galvec = galvec_new.remove_rows_at(&drop_ids);
+pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut na::DVector<f64>) {
+  *galvec = std::mem::replace(galvec, na::DVector::zeros(0)).remove_rows_at(dofs);
 }

@@ -6,8 +6,8 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::l2_norm,
+  lse,
   mesh::{hyperbox::HyperBoxMeshInfo, SimplicialManifold},
-  solve_poisson,
 };
 
 use std::{f64::consts::TAU, rc::Rc};
@@ -15,34 +15,36 @@ use std::{f64::consts::TAU, rc::Rc};
 fn main() {
   tracing_subscriber::fmt::init();
 
-  let dim = 2;
+  for dim in 1_usize..=3 {
+    println!("Solving Poisson in {dim}d.");
+    let nrefinements = 20 / dim;
+    let setups = (0..nrefinements)
+      .map(|refinement| {
+        let nboxes_per_dim = 2usize.pow(refinement as u32);
 
-  let setups = (0..8)
-    .map(|refinement| {
-      let nboxes_per_dim = 2usize.pow(refinement);
+        // Mesh of hypercube $[0, tau]^d$.
+        let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
+        let coord_mesh = box_mesh.to_coord_manifold();
 
-      // Mesh of hypercube $[0, tau]^d$.
-      let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
-      let coord_mesh = box_mesh.to_coord_manifold();
+        // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
+        let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
+        let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
 
-      // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
-      let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
-      let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
+        let anal_sol = coord_mesh.node_coords().eval_coord_fn(anal_sol);
+        let anal_lapl = coord_mesh.node_coords().eval_coord_fn(anal_lapl);
 
-      let anal_sol = coord_mesh.node_coords().eval_coord_fn(anal_sol);
-      let anal_lapl = coord_mesh.node_coords().eval_coord_fn(anal_lapl);
+        let mesh = Rc::new(coord_mesh.into_manifold());
 
-      let mesh = Rc::new(coord_mesh.into_manifold());
+        PoissonWithSol {
+          mesh,
+          solution_exact: anal_sol,
+          load_data: anal_lapl,
+        }
+      })
+      .collect();
 
-      PoissonWithSol {
-        mesh,
-        solution_exact: anal_sol,
-        load_data: anal_lapl,
-      }
-    })
-    .collect();
-
-  measure_convergence(setups);
+    measure_convergence(setups);
+  }
 }
 
 struct PoissonWithSol {
@@ -54,14 +56,14 @@ struct PoissonWithSol {
 /// Supply analytic solution and analytic (negative) Laplacian
 fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
   fn print_seperator() {
-    let nchar = 78;
+    let nchar = 56;
     println!("{}", "-".repeat(nchar));
   }
 
   print_seperator();
   println!(
-    "| {:>2} | {:>10} | {:>16} | {:>9} | {:>9} |",
-    "k", "mesh width", "shape regularity", "L2 error", "conv rate"
+    "| {:>2} | {:>10} | {:>10} | {:>9} | {:>9} |",
+    "k", "mesh width", "regularity", "L2 error", "conv rate"
   );
   print_seperator();
 
@@ -74,7 +76,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     } = setup;
 
     let boundary_data = |inode| solution_exact[inode];
-    let galsol = solve_poisson(&mesh, load_data, boundary_data);
+    let galsol = lse::solve_poisson(&mesh, load_data, boundary_data);
 
     // Compute L2 error and convergence rate.
     let error = l2_norm(solution_exact - galsol, &mesh);
@@ -90,7 +92,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     let shape_regularity = mesh.shape_regularity_measure();
 
     println!(
-      "| {:>2} | {:>10.3e} | {:>16.3e} | {:>9.3e} | {:>9.2} |",
+      "| {:>2} | {:>10.3e} | {:>10.3e} | {:>9.3e} | {:>9.2} |",
       refinement_level, mesh_width, shape_regularity, error, conv_rate
     );
   }

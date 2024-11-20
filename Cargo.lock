@@ -266,10 +266,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "faer-ext"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fa0b66079aff3caae4e41177b37487914cbcb377651e86a838d6a2088fb4b666"
+dependencies = [
+ "faer",
+ "num-complex 0.4.6",
+]
+
+[[package]]
 name = "formoniq"
 version = "0.1.0"
 dependencies = [
  "faer",
+ "faer-ext",
  "indexmap",
  "itertools",
  "mshio",
