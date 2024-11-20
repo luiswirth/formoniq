@@ -29,6 +29,16 @@ impl NodeCoords {
   pub fn coord(&self, inode: VertexIdx) -> na::DVectorView<f64> {
     self.coords.column(inode)
   }
+  pub fn into_inner(self) -> na::DMatrix<f64> {
+    self.coords
+  }
+
+  pub fn eval_coord_fn<F>(&self, f: F) -> na::DVector<f64>
+  where
+    F: FnMut(na::DVectorView<f64>) -> f64,
+  {
+    na::DVector::from_iterator(self.nnodes(), self.coords.column_iter().map(f))
+  }
 
   pub fn coord_simplex(&self, simp: &OrderedSimplex) -> CoordSimplex {
     let mut vert_coords = na::DMatrix::zeros(self.dim(), simp.nvertices());
@@ -38,11 +48,7 @@ impl NodeCoords {
     CoordSimplex::new(vert_coords)
   }
 
-  pub fn into_inner(self) -> na::DMatrix<f64> {
-    self.coords
-  }
-
-  fn embed_flat(mut self, dim: usize) -> NodeCoords {
+  pub fn embed_flat(mut self, dim: usize) -> NodeCoords {
     let old_dim = self.coords.nrows();
     self.coords = self.coords.insert_rows(old_dim, dim - old_dim, 0.0);
     self

@@ -12,8 +12,6 @@ pub mod dim3;
 pub mod gmsh;
 pub mod hyperbox;
 pub mod raw;
-pub mod sphere_surface;
-pub mod util;
 
 use crate::{
   combinatorics::{OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex},
@@ -184,15 +182,22 @@ impl<'m> SimplexHandle<'m> {
   }
 
   pub fn antiboundary(&self) -> ChainHandle<'m> {
-    unimplemented!()
+    let mut idxs = Vec::new();
+    let mut coeffs = Vec::new();
+    for (isup, sup) in self.sups(self.dim() + 1).enumerate() {
+      idxs.push(sup.kidx());
+      // TODO: check this orientation
+      coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isup).as_i32());
+    }
+    ChainHandle::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
 
   pub fn boundary(&self) -> ChainHandle<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for (isup, sup) in self.subs(self.dim() - 1).enumerate() {
-      idxs.push(sup.kidx());
-      coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isup).as_i32());
+    for (isub, sub) in self.subs(self.dim() - 1).enumerate() {
+      idxs.push(sub.kidx());
+      coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isub).as_i32());
     }
     ChainHandle::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }

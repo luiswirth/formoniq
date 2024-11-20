@@ -1,6 +1,7 @@
 use crate::{
   fe::{ElmatProvider, ElvecProvider},
   matrix::SparseMatrix,
+  mesh::SimplicialManifold,
   space::{DofId, FeSpace},
   util::{faervec2navec, navec2faervec},
 };
@@ -66,16 +67,20 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
   galvec
 }
 
-pub trait DofCoeffMap {
-  fn eval(&self, idof: DofId) -> Option<f64>;
-}
-impl<F> DofCoeffMap for F
-where
-  F: Fn(DofId) -> Option<f64>,
+pub fn enforce_dirichlet_bc<F>(
+  mesh: &SimplicialManifold,
+  boundary_coeff_map: F,
+  galmat: &mut SparseMatrix,
+  galvec: &mut na::DVector<f64>,
+) where
+  F: Fn(DofId) -> f64,
 {
-  fn eval(&self, idof: DofId) -> Option<f64> {
-    self(idof)
-  }
+  let boundary_flags = mesh.flag_boundary_nodes();
+  fix_dof_coeffs(
+    |inode: usize| boundary_flags[inode].then(|| boundary_coeff_map(inode)),
+    galmat,
+    galvec,
+  );
 }
 
 /// Fix DOFs of FE solution.
@@ -85,17 +90,14 @@ where
 /// Modifies supplied galerkin matrix and galerkin vector,
 /// such that the FE solution has the optionally given coefficents on the dofs.
 /// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
-pub fn fix_dof_coeffs<F>(
-  coefficent_map: F,
-  galmat: &mut SparseMatrix,
-  galvec: &mut na::DVector<f64>,
-) where
-  F: DofCoeffMap,
+pub fn fix_dof_coeffs<F>(coeff_map: F, galmat: &mut SparseMatrix, galvec: &mut na::DVector<f64>)
+where
+  F: Fn(DofId) -> Option<f64>,
 {
   let ndofs = galmat.ncols();
 
   // create vec of all (possibly missing) coefficents
-  let dof_coeffs: Vec<_> = (0..ndofs).map(|idof| coefficent_map.eval(idof)).collect();
+  let dof_coeffs: Vec<_> = (0..ndofs).map(coeff_map).collect();
 
   // zero out missing coefficents
   let mut dof_coeffs_zeroed = faer::Mat::zeros(ndofs, 1);

@@ -30,6 +30,15 @@ impl SimplicialManifold {
       .collect()
   }
 
+  pub fn flag_boundary_nodes(&self) -> Vec<bool> {
+    let mut flags = vec![false; self.nnodes()];
+    self
+      .boundary_nodes()
+      .into_iter()
+      .for_each(|n| flags[n] = true);
+    flags
+  }
+
   pub fn boundary_cells(&self) -> Vec<CellIdx> {
     self
       .boundary_facets()
