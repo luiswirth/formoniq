@@ -5,7 +5,7 @@ use crate::{
 
 use std::rc::Rc;
 
-pub type DofId = usize;
+pub type DofIdx = usize;
 
 /// A Finite Element Space of piecewiese-linear differential forms.
 ///
@@ -20,7 +20,7 @@ pub struct FeSpace {
 }
 
 pub struct DofHandler {
-  local2global_idx: Vec<Vec<DofId>>,
+  local2global_idx: Vec<Vec<DofIdx>>,
 }
 impl DofHandler {
   pub fn new(rank: Dim, mesh: &SimplicialManifold) -> Self {
@@ -32,7 +32,7 @@ impl DofHandler {
     Self { local2global_idx }
   }
 
-  pub fn local2global(&self, cell: CellIdx) -> &[DofId] {
+  pub fn local2global(&self, cell: CellIdx) -> &[DofIdx] {
     &self.local2global_idx[cell]
   }
 }

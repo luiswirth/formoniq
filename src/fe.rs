@@ -45,12 +45,20 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
   det * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
-/// The Element Matrix Provider for the negative Laplacian.
+/// Exact Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
   let cell_geo = space.mesh().cells().get_kidx(icell).geometry();
   laplacian_neg_elmat_geo(&cell_geo)
 }
 
+/// Approximated Element Matrix Provider for mass bilinear form,
+/// obtained through trapezoidal quadrature rule.
+pub fn lumped_mass_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
+  let cell_geo = space.mesh().cells().get_kidx(icell).geometry();
+  let n = cell_geo.nvertices();
+  let v = cell_geo.vol() / n as f64;
+  na::DMatrix::from_diagonal_element(n, n, v)
+}
 /// Element Vector Provider for scalar load function.
 ///
 /// Computed using trapezoidal quadrature rule.
@@ -81,7 +89,6 @@ impl ElvecProvider for LoadElvec {
   }
 }
 
-// NOTE: In general this should depend on the FE Space and not just the mesh.
 pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells().iter() {
