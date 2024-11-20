@@ -62,6 +62,7 @@ impl TriangleSurface3D {
   pub fn to_obj_string(&self) -> String {
     let mut string = String::new();
     for v in self.node_coords.column_iter() {
+      //writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.z, -v.y).unwrap();
       writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
     }
     for t in &self.triangles {
@@ -71,7 +72,7 @@ impl TriangleSurface3D {
     string
   }
 
-  pub fn displace_normal(&mut self, displacements: &[f64]) {
+  pub fn displace_normal(&mut self, displacements: &na::DVector<f64>) {
     let mut vertex_normals = vec![na::Vector3::zeros(); self.node_coords.ncols()];
     let mut vertex_triangle_counts = vec![0; self.node_coords.ncols()];
     for ivs in &self.triangles {
@@ -98,6 +99,38 @@ impl TriangleSurface3D {
   }
 }
 
+pub fn write_mdd_file(
+  filename: &str,
+  frames: &Vec<Vec<[f32; 3]>>,
+  times: &[f32],
+) -> std::io::Result<()> {
+  use std::io::Write as _;
+
+  let mut file = std::fs::File::create(filename)?;
+
+  let nframes = frames.len() as u32;
+  let nvertices = frames[0].len() as u32;
+
+  // header
+  file.write_all(&nframes.to_be_bytes())?;
+  file.write_all(&nvertices.to_be_bytes())?;
+  for &time in times {
+    file.write_all(&time.to_be_bytes())?;
+  }
+
+  // frame data
+  for vertices in frames {
+    for &vertex in vertices {
+      //let vertex = [vertex[0], vertex[2], -vertex[1]];
+      let vertex = [vertex[0], vertex[1], vertex[2]];
+      for comp in vertex {
+        file.write_all(&comp.to_be_bytes())?;
+      }
+    }
+  }
+
+  Ok(())
+}
 /// Geodesic sphere from subdividing a icosahedron
 pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
   let triangles = ICOSAHEDRON_SURFACE.triangles().to_vec();

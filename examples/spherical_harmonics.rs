@@ -23,7 +23,7 @@ fn main() {
     let eigenval = eigenval.round();
 
     let mut graph = triangle_mesh.clone();
-    graph.displace_normal(eigenfunc.as_slice());
+    graph.displace_normal(&eigenfunc);
 
     std::fs::write(
       format!("out/spherical_harmonic{eigenval}.obj"),
