@@ -6,26 +6,31 @@ use formoniq::{
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
   lse,
   matrix::FaerCholesky,
-  mesh::{dim3, hyperbox::HyperBoxMeshInfo},
+  mesh::dim3,
   space::FeSpace,
 };
 
-use std::{f64::consts::TAU, rc::Rc};
+#[allow(unused_imports)]
+use std::f64::consts::{PI, TAU};
 
-// $u(x, t) = sin(x_1) sin(x_2) ... sin(x_d) cos(sqrt(d) t)$
+use std::rc::Rc;
 
 fn main() {
   tracing_subscriber::fmt::init();
 
   let dim: usize = 2;
-  let nboxes_per_dim = 50;
-  let domain_length = TAU;
-  let mesh_width = domain_length / nboxes_per_dim as f64;
 
-  let final_time = TAU / (dim as f64).sqrt();
+  let surface = dim3::mesh_sphere_surface(7);
+  std::fs::write("out/wave_sphere_mesh.obj", surface.to_obj_string()).unwrap();
 
-  // CFL condition (with 5% margin)
-  let mut timestep = 0.95 * mesh_width / (dim as f64).sqrt();
+  let coord_mesh = surface.clone().into_coord_manifold();
+  let mesh = Rc::new(coord_mesh.clone().into_manifold());
+
+  let final_time = 2.0 * TAU;
+
+  // TODO: fix CFL condition. Proper calculation for any mesh!
+  // CFL condition (with 20% margin)
+  let mut timestep = 0.80 * mesh.mesh_width() / (dim as f64).sqrt();
   let mut nsteps = (final_time / timestep).ceil() as usize;
 
   let anim_fps = 30;
@@ -36,18 +41,6 @@ fn main() {
     timestep = final_time / nsteps as f64;
   }
 
-  let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, domain_length);
-  let coord_mesh = box_mesh.to_coord_manifold();
-
-  let mut surface = None;
-  if dim == 2 {
-    let surface = surface.insert(dim3::TriangleSurface3D::from_coord_manifold(
-      coord_mesh.clone().embed_flat(3),
-    ));
-    std::fs::write("out/wave_domain_mesh.obj", surface.to_obj_string()).unwrap();
-  }
-
-  let mesh = Rc::new(coord_mesh.clone().into_manifold());
   let space = FeSpace::new(Rc::clone(&mesh));
 
   let mut galmat_laplacian = assemble::assemble_galmat(&space, laplacian_neg_elmat);
@@ -56,6 +49,7 @@ fn main() {
   let load = na::DVector::zeros(mesh.nnodes());
   let mut galvec = assemble::assemble_galvec(&space, LoadElvec::new(load));
 
+  assert!(!mesh.has_boundary());
   lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut galmat_laplacian, &mut galvec);
   lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut galmat_mass, &mut galvec);
 
@@ -64,16 +58,20 @@ fn main() {
 
   let galmat_mass_cholesky = FaerCholesky::new(galmat_mass.clone());
 
-  let mut mu = coord_mesh
-    .node_coords()
-    .eval_coord_fn(|p| (0..dim).map(|idim| p[idim].sin()).product());
+  let mut mu = coord_mesh.node_coords().eval_coord_fn(|p| {
+    let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
+    #[allow(unused_variables)]
+    let [r, theta, phi] = dim3::cartesian2spherical(p);
+    (-theta.powi(2) * 100.0).exp()
+  });
   let mut nu = na::DVector::zeros(space.ndofs());
 
   let mut times = Vec::new();
   let mut mdd_frames: Vec<Vec<[f32; 3]>> = Vec::new();
 
+  let last_step = nsteps - 1;
   for istep in 0..nsteps {
-    println!("Step={istep}/{nsteps}...");
+    println!("Step={istep}/{last_step}...");
 
     let t = istep as f64 / (nsteps - 1) as f64 * final_time;
     times.push(t as f32);
@@ -84,19 +82,18 @@ fn main() {
 
     //util::save_vector(&mu, format!("out/wavesol_step{istep}.txt")).unwrap();
 
-    if dim == 2 {
-      let mut surface = surface.as_ref().unwrap().clone();
-      surface.displace_normal(&mu);
+    let mut surface = surface.clone();
+    surface.displace_normal(&mu);
 
-      let frame_coords: Vec<[f32; 3]> = surface
-        .node_coords()
-        .column_iter()
-        .map(|col| [col.x as f32, col.y as f32, col.z as f32])
-        .collect();
+    let frame_coords: Vec<[f32; 3]> = surface
+      .node_coords()
+      .column_iter()
+      .map(|col| [col.x as f32, col.y as f32, col.z as f32])
+      .collect();
 
-      mdd_frames.push(frame_coords);
-    }
+    mdd_frames.push(frame_coords);
   }
 
-  dim3::write_mdd_file("out/wavesol_anim.mdd", &mdd_frames, &times).unwrap();
+  println!("Writing animation into `.mdd` file.");
+  dim3::write_mdd_file("out/wave_sphere_sol.mdd", &mdd_frames, &times).unwrap();
 }

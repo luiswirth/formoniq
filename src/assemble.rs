@@ -10,7 +10,7 @@ pub fn assemble_galmat_raw(
   elmat: na::DMatrix<f64>,
   cells_dofs: &[Vec<DofIdx>],
 ) -> SparseMatrix {
-  let mut galmat = SparseMatrix::new(ndofs, ndofs);
+  let mut galmat = SparseMatrix::zeros(ndofs, ndofs);
   for cell_dofs in cells_dofs {
     for (ilocal, &iglobal) in cell_dofs.iter().enumerate() {
       for (jlocal, &jglobal) in cell_dofs.iter().enumerate() {
@@ -23,7 +23,7 @@ pub fn assemble_galmat_raw(
 
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
-  let mut galmat = SparseMatrix::new(space.ndofs(), space.ndofs());
+  let mut galmat = SparseMatrix::zeros(space.ndofs(), space.ndofs());
   for icell in 0..space.mesh().ncells() {
     let elmat = elmat.eval(space, icell);
 
@@ -71,10 +71,11 @@ pub fn drop_boundary_dofs_galmat(mesh: &SimplicialManifold, galmat: &mut SparseM
 }
 
 pub fn drop_dofs_galmat(dofs: &[DofIdx], galmat: &mut SparseMatrix) {
+  assert!(galmat.nrows() == galmat.ncols());
   let ndofs_old = galmat.ncols();
   let ndofs_new = ndofs_old - dofs.len();
 
-  let mut triplets = std::mem::take(galmat).to_triplets();
+  let (_, _, mut triplets) = std::mem::take(galmat).into_parts();
   for (ndrops, mut idof) in dofs.iter().copied().enumerate() {
     idof -= ndrops;
     let mut itriplet = 0;
@@ -98,7 +99,7 @@ pub fn drop_dofs_galmat(dofs: &[DofIdx], galmat: &mut SparseMatrix) {
     }
   }
 
-  *galmat = SparseMatrix::from_triplets(ndofs_new, ndofs_new, triplets);
+  *galmat = SparseMatrix::new(ndofs_new, ndofs_new, triplets);
 }
 
 pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut na::DVector<f64>) {

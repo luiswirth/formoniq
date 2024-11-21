@@ -181,7 +181,7 @@ impl<'m> SimplexHandle<'m> {
     self.sorted_vertices().nvertices()
   }
 
-  pub fn antiboundary(&self) -> ChainHandle<'m> {
+  pub fn antiboundary(&self) -> SparseChain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
     for (isup, sup) in self.sups(self.dim() + 1).enumerate() {
@@ -189,17 +189,17 @@ impl<'m> SimplexHandle<'m> {
       // TODO: check this orientation
       coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isup).as_i32());
     }
-    ChainHandle::new(self.mesh, self.dim() - 1, idxs, coeffs)
+    SparseChain::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
 
-  pub fn boundary(&self) -> ChainHandle<'m> {
+  pub fn boundary(&self) -> SparseChain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
     for (isub, sub) in self.subs(self.dim() - 1).enumerate() {
       idxs.push(sub.kidx());
       coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isub).as_i32());
     }
-    ChainHandle::new(self.mesh, self.dim() - 1, idxs, coeffs)
+    SparseChain::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
 
   pub fn parent_cells(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
@@ -306,13 +306,13 @@ impl<'m> SkeletonHandle<'m> {
   }
 }
 
-pub struct ChainHandle<'m> {
+pub struct SparseChain<'m> {
   mesh: &'m SimplicialManifold,
   dim: Dim,
   idxs: Vec<KSimplexIdx>,
   coeffs: Vec<i32>,
 }
-impl<'m> ChainHandle<'m> {
+impl<'m> SparseChain<'m> {
   fn new(mesh: &'m SimplicialManifold, dim: Dim, idxs: Vec<KSimplexIdx>, coeffs: Vec<i32>) -> Self {
     Self {
       mesh,
@@ -337,6 +337,24 @@ impl<'m> ChainHandle<'m> {
   pub fn is_empty(&self) -> bool {
     self.len() == 0
   }
+}
+
+/// A simplicial k-cochain is a function assigning a number to each k-simplex of
+/// a simplicial complex.
+///
+/// Whitney forms are isomorphic to simplicial cochains.
+///
+/// De Rham map: Differential k-form integrated over all k-simplicies gives
+/// k-cochain, isomorphism on cohomology.
+///
+/// Whitney Interpolation: Inverse of de Rham map. k-cochain to differential k-form.
+/// This induces a strong connection between FDM/DEC and FEEC.
+#[allow(dead_code)]
+pub struct SparseCochain<'m> {
+  mesh: &'m SimplicialManifold,
+  dim: Dim,
+  idxs: Vec<KSimplexIdx>,
+  coeffs: Vec<i32>,
 }
 
 pub type EdgeIdx = usize;

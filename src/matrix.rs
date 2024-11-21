@@ -8,11 +8,10 @@ pub struct SparseMatrix {
 }
 
 impl SparseMatrix {
-  pub fn new(nrows: usize, ncols: usize) -> Self {
-    Self::from_triplets(nrows, ncols, Vec::new())
+  pub fn zeros(nrows: usize, ncols: usize) -> Self {
+    Self::new(nrows, ncols, Vec::new())
   }
-
-  pub fn from_triplets(nrows: usize, ncols: usize, triplets: Vec<(usize, usize, f64)>) -> Self {
+  pub fn new(nrows: usize, ncols: usize, triplets: Vec<(usize, usize, f64)>) -> Self {
     Self {
       nrows,
       ncols,
@@ -26,13 +25,18 @@ impl SparseMatrix {
   pub fn ncols(&self) -> usize {
     self.ncols
   }
+  pub fn triplets(&self) -> &[(usize, usize, f64)] {
+    &self.triplets
+  }
 
-  pub fn ntriplets(&self) -> usize {
-    self.triplets.len()
+  pub fn into_parts(self) -> (usize, usize, Vec<(usize, usize, f64)>) {
+    (self.nrows, self.ncols, self.triplets)
   }
 
   pub fn push(&mut self, r: usize, c: usize, v: f64) {
-    self.triplets.push((r, c, v));
+    if v != 0.0 {
+      self.triplets.push((r, c, v));
+    }
   }
 
   pub fn set_zero<F>(&mut self, predicate: F)
@@ -72,8 +76,30 @@ impl SparseMatrix {
       .unwrap()
   }
 
-  pub fn to_triplets(self) -> Vec<(usize, usize, f64)> {
-    self.triplets
+  /// Returns `None` if matrix is not diagonal.
+  pub fn try_into_diagonal(self) -> Option<na::DVector<f64>> {
+    let mut diagonal = na::DVector::zeros(self.nrows.max(self.ncols));
+    for (r, c, v) in self.triplets {
+      if r == c {
+        diagonal[r] += v;
+      } else {
+        println!("not diag ({r},{c})");
+        return None;
+      }
+    }
+    Some(diagonal)
+  }
+
+  pub fn mul_left_by_diagonal(&self, diagonal: &na::DVector<f64>) -> Self {
+    let triplets = self
+      .triplets
+      .iter()
+      .map(|&(r, c, mut v)| {
+        v *= diagonal[r];
+        (r, c, v)
+      })
+      .collect();
+    Self::new(self.nrows, self.ncols, triplets)
   }
 }
 
