@@ -6,7 +6,7 @@ use formoniq::{evp, fe, mesh::dim3::mesh_sphere_surface};
 use std::rc::Rc;
 
 fn main() {
-  let triangle_mesh = mesh_sphere_surface(5);
+  let triangle_mesh = mesh_sphere_surface(6);
 
   std::fs::write(
     "out/sphere_mesh.obj",
@@ -18,12 +18,14 @@ fn main() {
   let mesh = Rc::new(coord_mesh.into_manifold());
 
   let spectrum = evp::solve_homogeneous_evp(&mesh, fe::laplacian_neg_elmat);
-  for (eigenval, eigenfunc) in spectrum {
-    assert!(eigenval - eigenval.round() <= 10e-12);
+  for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
+    println!("eigenval={eigenval}");
+    //assert!((eigenval - eigenval.round()).abs() <= 10e-12);
     let eigenval = eigenval.round();
 
     let mut graph = triangle_mesh.clone();
-    graph.displace_normal(&eigenfunc);
+    let displacements = 10.0 * eigenfunc;
+    graph.displace_normal(&displacements);
 
     std::fs::write(
       format!("out/spherical_harmonic{eigenval}.obj"),

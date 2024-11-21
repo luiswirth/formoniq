@@ -72,7 +72,9 @@ impl TriangleSurface3D {
     string
   }
 
-  pub fn displace_normal(&mut self, displacements: &na::DVector<f64>) {
+  pub fn displace_normal<'a>(&mut self, displacements: impl Into<na::DVectorView<'a, f64>>) {
+    let displacements = displacements.into();
+
     let mut vertex_normals = vec![na::Vector3::zeros(); self.node_coords.ncols()];
     let mut vertex_triangle_counts = vec![0; self.node_coords.ncols()];
     for ivs in &self.triangles {
@@ -99,6 +101,24 @@ impl TriangleSurface3D {
   }
 }
 
+/// Returns $[r, theta, phi]$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
+pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
+  let r = p.norm();
+  let theta = (p.z / r).acos(); // [0,pi]
+  let phi = p.y.atan2(p.x); // [0,tau]
+  [r, theta, phi]
+}
+
+// x = r sin ⁡ θ cos ⁡ φ , y = r sin ⁡ θ sin ⁡ φ , z = r cos ⁡ θ
+
+/// Takes $(r, theta, phi)$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
+pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
+  let x = r * theta.sin() * phi.cos();
+  let y = r * theta.sin() * phi.sin();
+  let z = r * theta.cos();
+  na::Vector3::new(x, y, z)
+}
+
 pub fn write_mdd_file(
   filename: &str,
   frames: &Vec<Vec<[f32; 3]>>,
@@ -106,16 +126,17 @@ pub fn write_mdd_file(
 ) -> std::io::Result<()> {
   use std::io::Write as _;
 
-  let mut file = std::fs::File::create(filename)?;
+  let file = std::fs::File::create(filename)?;
+  let mut writer = std::io::BufWriter::new(file);
 
   let nframes = frames.len() as u32;
   let nvertices = frames[0].len() as u32;
 
   // header
-  file.write_all(&nframes.to_be_bytes())?;
-  file.write_all(&nvertices.to_be_bytes())?;
+  writer.write_all(&nframes.to_be_bytes())?;
+  writer.write_all(&nvertices.to_be_bytes())?;
   for &time in times {
-    file.write_all(&time.to_be_bytes())?;
+    writer.write_all(&time.to_be_bytes())?;
   }
 
   // frame data
@@ -124,7 +145,7 @@ pub fn write_mdd_file(
       //let vertex = [vertex[0], vertex[2], -vertex[1]];
       let vertex = [vertex[0], vertex[1], vertex[2]];
       for comp in vertex {
-        file.write_all(&comp.to_be_bytes())?;
+        writer.write_all(&comp.to_be_bytes())?;
       }
     }
   }
