@@ -1,8 +1,9 @@
 use crate::{
   combinatorics::{
-    factorial, nsubedges, CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex,
+    factorial, nsubedges, nsubsimplicies, CanonicalVertplex, OrderedVertplex, Orientation,
+    OrientedVertplex,
   },
-  mesh::{raw::RawSimplicialManifold, SimplicialManifold},
+  mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
   Dim,
 };
 
@@ -11,32 +12,27 @@ use std::{collections::HashMap, f64::consts::SQRT_2};
 pub type Length = f64;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct GeometrySimplex {
-  /// dimension of the simplex
-  /// could be reverse computed from edge_lengths, but hard.
-  dim: Dim,
-  /// Lengths of all edges in simplex
-  /// Order of edges is lexicographical in vertex tuples.
-  /// E.g. For a 3-simplex the edges are sorted as (0,1),(0,2),(0,3),(1,2),(1,3),(2,3)
-  /// This is very natural, since the first dim edge lengths correspond to
-  /// the lengths of the tangent vectors, which are the sqrts of the diagonal entries of the metric tensor.
-  edge_lengths: Vec<f64>,
-  /// Even though orientation is a topological feature, it is still necessary for geometry.
-  /// It gives the determinant it's sign.
+pub struct CellSimplex {
+  faces: Vec<Vec<KSimplexIdx>>,
   orientation: Orientation,
+  edge_lengths: Vec<f64>,
 }
-impl GeometrySimplex {
-  pub fn new(dim: Dim, edge_lengths: Vec<f64>, orientation: Orientation) -> Self {
-    assert_eq!(edge_lengths.len(), nsubedges(dim));
-    Self {
-      dim,
-      edge_lengths,
-      orientation,
-    }
+impl CellSimplex {
+  pub fn new() -> Self {
+    todo!()
   }
 
   /// Constructs a reference simplex in `dim` dimensions.
   pub fn new_ref(dim: Dim) -> Self {
+    let faces = (0..=dim)
+      .map(|sub_dim| {
+        let num_ksubs = nsubsimplicies(dim, sub_dim);
+        (0..num_ksubs).collect()
+      })
+      .collect();
+
+    let orientation = Orientation::default();
+
     let nedges = nsubedges(dim);
     let mut edge_lengths = vec![0.0; nedges];
     for l in edge_lengths.iter_mut().take(dim) {
@@ -45,33 +41,31 @@ impl GeometrySimplex {
     for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
       *l = SQRT_2;
     }
-    let orientation = Orientation::Pos;
+
     Self {
-      dim,
-      edge_lengths,
+      faces,
       orientation,
+      edge_lengths,
     }
   }
 
   pub fn dim(&self) -> Dim {
-    self.dim
+    self.faces.len() - 1
   }
+  pub fn nvertices(&self) -> usize {
+    self.faces[0].len()
+  }
+
   pub fn edge_lengths(&self) -> &[f64] {
     &self.edge_lengths
   }
   pub fn orientation(&self) -> Orientation {
     self.orientation
   }
-  pub fn nvertices(&self) -> usize {
-    self.dim + 1
-  }
-  pub fn nedges(&self) -> usize {
-    self.edge_lengths.len()
-  }
 
   /// The (unsigned) volume of the simplex.
   pub fn vol(&self) -> f64 {
-    ref_vol(self.dim) * self.metric_tensor().determinant().sqrt()
+    ref_vol(self.dim()) * self.metric_tensor().determinant().sqrt()
   }
 
   /// The determinate (signed volume) of the simplex.
@@ -105,6 +99,8 @@ impl GeometrySimplex {
       let l0j = self.edge_lengths[ej];
 
       // TODO: improve index computation
+      todo!("use combinatorics::rank_of_combination");
+
       let vi = ei + 1;
       let vj = ej + 1;
       let mut eij = 0;
@@ -119,9 +115,9 @@ impl GeometrySimplex {
   }
 
   pub fn metric_tensor(&self) -> na::DMatrix<f64> {
-    let mut mat = na::DMatrix::zeros(self.dim, self.dim);
-    for i in 0..self.dim {
-      for j in i..self.dim {
+    let mut mat = na::DMatrix::zeros(self.dim(), self.dim());
+    for i in 0..self.dim() {
+      for j in i..self.dim() {
         let v = self.metric(i, j);
         mat[(i, j)] = v;
         mat[(j, i)] = v;
@@ -165,20 +161,9 @@ mod test {
   use super::*;
 
   #[test]
-  fn reference_transform() {
-    let refsimp = GeometrySimplex::new_ref(3);
-    let simp = GeometrySimplex::new(
-      3,
-      vec![1.0, 1.0, 1.0, SQRT_2, SQRT_2, SQRT_2],
-      Orientation::Pos,
-    );
-    assert_eq!(refsimp.edge_lengths, simp.edge_lengths);
-  }
-
-  #[test]
-  fn ref_vol_test() {
+  fn refcell_vol() {
     for d in 0..=8 {
-      let simp = GeometrySimplex::new_ref(d);
+      let simp = CellSimplex::new_ref(d);
       assert_eq!(simp.det(), ref_vol(d));
     }
   }

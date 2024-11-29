@@ -43,6 +43,66 @@ pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
   nswaps
 }
 
+/// Computes the lexicographic rank of a k-combination of {0,...,n-1}, where k = `combination.len()`.
+pub fn rank_of_combination(combination: &[usize], n: usize) -> usize {
+  let k = combination.len();
+
+  let mut rank = 0;
+  let mut iprefix = 0;
+  for (i, &v) in combination.iter().enumerate() {
+    for j in iprefix..v {
+      rank += binomial(n - 1 - j, k - 1 - i);
+    }
+    iprefix = v + 1;
+  }
+  rank
+}
+
+/// Get the k-combination of {0,...,n-1} from its lexicographic rank.
+pub fn combination_of_rank(mut rank: usize, n: usize, k: usize) -> Vec<usize> {
+  let mut combination = Vec::with_capacity(k);
+  let mut curr = 0;
+  for i in 0..k {
+    while rank >= binomial(n - 1 - curr, k - 1 - i) {
+      rank -= binomial(n - 1 - curr, k - 1 - i);
+      curr += 1;
+    }
+    combination.push(curr);
+    curr += 1;
+  }
+  combination
+}
+
+pub fn generate_combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
+  let mut combinations = Vec::new();
+  let mut combination: Vec<usize> = (0..k).collect(); // Start with the first k indices
+
+  loop {
+    combinations.push(combination.clone());
+
+    // Find the rightmost element that can be incremented
+    let mut i = k;
+    while i > 0 && combination[i - 1] == n - k + i - 1 {
+      i -= 1;
+    }
+
+    // If all elements are at their maximum, we're done
+    if i == 0 {
+      break;
+    }
+
+    // Increment the current element
+    combination[i - 1] += 1;
+
+    // Reset the subsequent elements
+    for j in i..k {
+      combination[j] = combination[j - 1] + 1;
+    }
+  }
+
+  combinations
+}
+
 /// Iterator implementation of the Steinhaus–Johnson–Trotter algorithm.
 ///
 /// This iterator produces all permutations of a `Vec<T>`, where two consecutive
@@ -128,7 +188,9 @@ impl std::ops::Neg for Dir {
 
 #[cfg(test)]
 mod test {
-  use crate::combinatorics::vertplex::CanonicalVertplex;
+  use crate::combinatorics::{
+    combination_of_rank, generate_combinations, rank_of_combination, vertplex::CanonicalVertplex,
+  };
 
   use super::{sort_count_swaps, Permutations};
 
@@ -175,6 +237,21 @@ mod test {
         assert_eq!(max_nswaps, n * (n - 1) / 2);
       } else {
         assert_eq!(max_nswaps, 0);
+      }
+    }
+  }
+
+  #[test]
+  fn lexicographical_rank() {
+    for n in 0..=5 {
+      for k in 0..=n {
+        let combinations = generate_combinations(n, k);
+        for (rank, combination) in combinations.into_iter().enumerate() {
+          let other_rank = rank_of_combination(&combination, n);
+          assert_eq!(rank, other_rank);
+          let other_combination = combination_of_rank(rank, n, k);
+          assert_eq!(combination, other_combination);
+        }
       }
     }
   }
