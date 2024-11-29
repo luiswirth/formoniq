@@ -1,5 +1,5 @@
 use crate::{
-  geometry::GeometrySimplex,
+  geometry::CellSimplex,
   mesh::{CellIdx, SimplicialManifold},
   space::FeSpace,
 };
@@ -29,7 +29,7 @@ where
   }
 }
 
-pub fn laplacian_neg_elmat_geo(cell_geo: &GeometrySimplex) -> na::DMatrix<f64> {
+pub fn laplacian_neg_elmat_geo(cell_geo: &CellSimplex) -> na::DMatrix<f64> {
   let dim = cell_geo.dim();
   let metric = cell_geo.metric_tensor();
   let det = cell_geo.det();

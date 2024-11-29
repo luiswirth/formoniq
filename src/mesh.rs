@@ -15,7 +15,7 @@ pub mod raw;
 
 use crate::{
   combinatorics::{CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex},
-  geometry::{GeometrySimplex, Length},
+  geometry::{CellSimplex, Length},
   Dim, VertexIdx,
 };
 
@@ -218,13 +218,13 @@ impl<'m> SimplexHandle<'m> {
       .map(|e| self.mesh.edge_lengths[e.idx.kidx])
       .collect()
   }
-  pub fn geometry(&self) -> GeometrySimplex {
+  pub fn geometry(&self) -> CellSimplex {
     if !self.is_cell() {
       tracing::warn!(
         "Geometry Simplex with unmeaningful orientation has been created, because it's not a cell."
       );
     }
-    GeometrySimplex::new(self.idx.dim, self.edge_lengths(), Orientation::Pos)
+    todo!()
   }
 
   /// The dim-subsimplicies of this simplex.
@@ -385,13 +385,13 @@ mod test {
 
   use crate::{
     combinatorics::{nsubsimplicies, CanonicalVertplex},
-    geometry::GeometrySimplex,
+    geometry::CellSimplex,
   };
 
   #[test]
   fn incidence() {
     let dim = 3;
-    let mesh = GeometrySimplex::new_ref(dim).to_singleton_mesh();
+    let mesh = CellSimplex::new_ref(dim).to_singleton_mesh();
 
     let cell = mesh.cells().get_kidx(0);
 
