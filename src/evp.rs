@@ -40,5 +40,7 @@ pub fn solve_homogeneous_evp(
     .column_iter_mut()
     .for_each(|mut c| c.component_mul_assign(&mass_diagonal_inv));
 
+  assemble::reintroduce_zeroed_boundary_dofs_galsols(mesh, &mut eigenfuncs);
+
   (eigenvals, eigenfuncs)
 }

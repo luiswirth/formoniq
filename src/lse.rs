@@ -112,7 +112,6 @@ pub fn fix_dofs_coeff_alt(
   let dof_coeffs_opt = util::sparse_to_dense_data(dof_coeffs.to_vec(), ndofs);
 
   // Set entires zero that share a row index with a fixed dof.
-  // TODO: maybe also cols?
   galmat.set_zero(|r, _| dof_coeffs_opt[r].is_some());
 
   // Set galmat diagonal for dofs to one.
