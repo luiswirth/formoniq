@@ -1,6 +1,6 @@
 use crate::{
   combinatorics::{
-    factorial, nsubedges, OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex,
+    factorial, nsubedges, CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex,
   },
   mesh::{raw::RawSimplicialManifold, SimplicialManifold},
   Dim,
@@ -136,21 +136,21 @@ impl GeometrySimplex {
   }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {
-    let vertices = OrderedSimplex::new((0..self.nvertices()).collect());
+    let vertices = OrderedVertplex::new((0..self.nvertices()).collect());
 
     let mut edge_lengths = HashMap::new();
 
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert(SortedSimplex::edge(i, j), self.edge_lengths[idx]);
+        edge_lengths.insert(CanonicalVertplex::edge(i, j), self.edge_lengths[idx]);
         idx += 1;
       }
     }
 
     SimplicialManifold::new(RawSimplicialManifold::new(
       self.nvertices(),
-      vec![OrientedSimplex::new(vertices, self.orientation)],
+      vec![OrientedVertplex::new(vertices, self.orientation)],
       edge_lengths,
     ))
   }

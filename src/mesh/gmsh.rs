@@ -1,5 +1,5 @@
 use crate::{
-  combinatorics::{OrderedSimplex, Orientation, OrientedSimplex},
+  combinatorics::{OrderedVertplex, Orientation, OrientedVertplex},
   mesh::coordinates::{CoordManifold, NodeCoords},
 };
 use tracing::warn;
@@ -37,10 +37,10 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
     };
     for e in block.elements {
       let simplex = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      let simplex = OrderedSimplex::new(simplex);
+      let simplex = OrderedVertplex::new(simplex);
       // NOTE: gmsh always produces positively oriented cells
       // TODO: only assume Pos for cells(!) not all simplicies.
-      let simplex = OrientedSimplex::new(simplex, Orientation::Pos);
+      let simplex = OrientedVertplex::new(simplex, Orientation::Pos);
       simplex_acc.push(simplex);
     }
   }

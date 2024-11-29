@@ -14,7 +14,7 @@ pub mod hyperbox;
 pub mod raw;
 
 use crate::{
-  combinatorics::{OrderedSimplex, Orientation, OrientedSimplex, SortedSimplex},
+  combinatorics::{CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex},
   geometry::{GeometrySimplex, Length},
   Dim, VertexIdx,
 };
@@ -25,7 +25,7 @@ use std::hash::Hash;
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
 pub struct SimplicialManifold {
-  cells: Vec<OrientedSimplex>,
+  cells: Vec<OrientedVertplex>,
   skeletons: Vec<Skeleton>,
 
   /// mapping [`EdgeIdx`] -> [`Length`]
@@ -95,7 +95,7 @@ impl SimplicialManifold {
 /// A container for topological simplicies of common dimension.
 #[derive(Debug, Clone, Default)]
 pub struct Skeleton {
-  simplicies: IndexMap<SortedSimplex, SimplexData>,
+  simplicies: IndexMap<CanonicalVertplex, SimplexData>,
 }
 impl Skeleton {
   pub fn new() -> Self {
@@ -153,7 +153,7 @@ impl<'m> SimplexHandle<'m> {
     self.dim() == self.mesh.dim()
   }
 
-  pub fn sorted_vertices(&self) -> &'m SortedSimplex {
+  pub fn sorted_vertices(&self) -> &'m CanonicalVertplex {
     self.mesh.skeletons[self.dim()]
       .simplicies
       .get_index(self.kidx())
@@ -168,13 +168,13 @@ impl<'m> SimplexHandle<'m> {
       .1
   }
 
-  pub fn oriented_vertices(&self) -> &'m OrientedSimplex {
+  pub fn oriented_vertices(&self) -> &'m OrientedVertplex {
     assert!(self.is_cell(), "Only Cells are oriented.");
     &self.mesh.cells[self.kidx()]
   }
-  pub fn ordered_vertices(&self) -> &'m OrderedSimplex {
+  pub fn ordered_vertices(&self) -> &'m OrderedVertplex {
     assert!(self.is_cell(), "Only Cells are ordered.");
-    self.oriented_vertices().ordered()
+    self.oriented_vertices().as_ordered()
   }
 
   pub fn nvertices(&self) -> usize {
@@ -296,7 +296,7 @@ impl<'m> SkeletonHandle<'m> {
   pub fn get_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
-  pub fn get_key(&self, key: &SortedSimplex) -> SimplexHandle<'m> {
+  pub fn get_key(&self, key: &CanonicalVertplex) -> SimplexHandle<'m> {
     let idx = self.simplicies.get_full(key).unwrap().0;
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
@@ -384,7 +384,7 @@ impl SimplexIdx {
 mod test {
 
   use crate::{
-    combinatorics::{nsubsimplicies, SortedSimplex},
+    combinatorics::{nsubsimplicies, CanonicalVertplex},
     geometry::GeometrySimplex,
   };
 
@@ -395,7 +395,7 @@ mod test {
 
     let cell = mesh.cells().get_kidx(0);
 
-    let cell_vertices = SortedSimplex::new_unchecked((0..(dim + 1)).collect());
+    let cell_vertices = CanonicalVertplex::new_unchecked((0..(dim + 1)).collect());
     assert_eq!(cell.sorted_vertices(), &cell_vertices);
 
     for dim_sub in 0..=dim {
