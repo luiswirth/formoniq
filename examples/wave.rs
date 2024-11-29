@@ -62,7 +62,7 @@ fn main() {
     let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
     #[allow(unused_variables)]
     let [r, theta, phi] = dim3::cartesian2spherical(p);
-    (-theta.powi(2) * 100.0).exp()
+    2.0 * (-theta.powi(2) * 50.0).exp()
   });
   let mut nu = na::DVector::zeros(space.ndofs());
 
