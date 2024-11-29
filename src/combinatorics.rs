@@ -1,8 +1,8 @@
-pub mod orientation;
-pub mod simplex;
+mod orientation;
+mod vertplex;
 
 pub use orientation::Orientation;
-pub use simplex::{OrderedSimplex, OrientedSimplex, SortedSimplex};
+pub use vertplex::*;
 
 use crate::Dim;
 
@@ -128,7 +128,7 @@ impl std::ops::Neg for Dir {
 
 #[cfg(test)]
 mod test {
-  use crate::combinatorics::simplex::SortedSimplex;
+  use crate::combinatorics::vertplex::CanonicalVertplex;
 
   use super::{sort_count_swaps, Permutations};
 
@@ -136,12 +136,8 @@ mod test {
   fn subs_order() {
     let dim = 2;
     let nvertices = dim + 1;
-    let simp = SortedSimplex::new((0..nvertices).collect());
-    let subs: Vec<_> = simp
-      .subs(1)
-      .into_iter()
-      .map(|s| s.into_vertices())
-      .collect();
+    let simp = CanonicalVertplex::new((0..nvertices).collect());
+    let subs: Vec<_> = simp.subs(1).into_iter().map(|s| s.into_vec()).collect();
     assert_eq!(subs, vec![&[0, 1], &[0, 2], &[1, 2]]);
   }
 
@@ -149,7 +145,7 @@ mod test {
   fn sorted_simplex() {
     for dim in 0..5 {
       let nvertices = dim + 1;
-      let simp = SortedSimplex::new((0..nvertices).collect());
+      let simp = CanonicalVertplex::new((0..nvertices).collect());
       for sub_dim in 0..dim {
         assert!(simp.subs(sub_dim).into_iter().all(|sub| sub < simp));
       }

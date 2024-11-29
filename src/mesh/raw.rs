@@ -8,7 +8,7 @@
 
 use super::{Length, SimplexData, SimplicialManifold, Skeleton};
 use crate::{
-  combinatorics::{OrientedSimplex, SortedSimplex},
+  combinatorics::{CanonicalVertplex, OrientedVertplex},
   Dim,
 };
 
@@ -20,16 +20,16 @@ pub struct RawSimplicialManifold {
   nnodes: usize,
   /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
   /// Defines topology (connectivity + orientation) and global numbering/order of cells.
-  cells: Vec<OrientedSimplex>,
+  cells: Vec<OrientedVertplex>,
   /// A mapping [`SortedSimplex`] -> [`Length`].
   /// Defines geometry of the manifold through the lengths of all edges.
-  edge_lengths: HashMap<SortedSimplex, Length>,
+  edge_lengths: HashMap<CanonicalVertplex, Length>,
 }
 impl RawSimplicialManifold {
   pub fn new(
     nnodes: usize,
-    cells: Vec<OrientedSimplex>,
-    edge_lengths: HashMap<SortedSimplex, Length>,
+    cells: Vec<OrientedVertplex>,
+    edge_lengths: HashMap<CanonicalVertplex, Length>,
   ) -> Self {
     Self {
       nnodes,
@@ -55,11 +55,11 @@ impl SimplicialManifold {
 
     let mut skeletons = vec![Skeleton::new(); dim + 1];
     skeletons[0].simplicies = (0..raw.nnodes)
-      .map(|v| (SortedSimplex::vertex(v), SimplexData::stub()))
+      .map(|v| (CanonicalVertplex::vertex(v), SimplexData::stub()))
       .collect();
 
     for (icell, cell) in cells.iter().enumerate() {
-      let cell = SortedSimplex::from(cell.clone());
+      let cell = cell.clone().into_canonical();
       for (sub_dim, Skeleton { simplicies: subs }) in skeletons.iter_mut().enumerate() {
         for sub in cell.subs(sub_dim) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
@@ -80,7 +80,7 @@ impl SimplicialManifold {
           cell
             .boundary()
             .into_iter()
-            .find(|b| b.sorted() == facet)
+            .find(|b| b.as_canonical() == facet)
             .unwrap()
         })
         .collect::<Vec<_>>();

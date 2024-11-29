@@ -6,7 +6,7 @@ use super::{
   SimplicialManifold, VertexIdx,
 };
 use crate::{
-  combinatorics::{factorial, OrderedSimplex, OrientedSimplex},
+  combinatorics::{factorial, OrderedVertplex, OrientedVertplex},
   util::{cartesian_index2linear_index, linear_index2cartesian_index},
   Dim,
 };
@@ -156,7 +156,7 @@ impl HyperBoxMeshInfo {
 
     let dim = self.dim();
     let ncells = factorial(dim) * self.nboxes();
-    let mut cells: Vec<OrientedSimplex> = Vec::with_capacity(ncells);
+    let mut cells: Vec<OrientedVertplex> = Vec::with_capacity(ncells);
 
     // iterate through all boxes that make up the mesh
     for icube in 0..self.nboxes() {
@@ -189,13 +189,13 @@ impl HyperBoxMeshInfo {
             cell.push(ivertex);
           }
 
-          let cell = OrderedSimplex::new(cell);
+          let cell = OrderedVertplex::new(cell);
 
           // Ensure consistent positive orientation of cells.
           // TODO: avoid computing orientation using coordinates / determinant.
           let orientation = node_coords.coord_simplex(&cell).orientation();
 
-          OrientedSimplex::new(cell, orientation)
+          OrientedVertplex::new(cell, orientation)
         });
 
       cells.extend(cube_cells);
@@ -240,12 +240,7 @@ mod test {
       &[0, 4, 5, 7],
       &[0, 4, 6, 7],
     ];
-    let computed_simplicies: Vec<_> = mesh
-      .cells()
-      .iter()
-      .cloned()
-      .map(|c| c.into_vertices())
-      .collect();
+    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.into_vec()).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 
@@ -276,12 +271,7 @@ mod test {
       &[4, 5, 8],
       &[4, 7, 8],
     ];
-    let computed_simplicies: Vec<_> = mesh
-      .cells()
-      .iter()
-      .cloned()
-      .map(|c| c.into_vertices())
-      .collect();
+    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.into_vec()).collect();
     assert_eq!(computed_simplicies, expected_simplicies);
   }
 }
