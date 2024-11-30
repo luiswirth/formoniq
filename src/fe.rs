@@ -1,5 +1,5 @@
 use crate::{
-  geometry::CellSimplex,
+  cell::StandaloneCell,
   mesh::{CellIdx, SimplicialManifold},
   space::FeSpace,
 };
@@ -29,7 +29,7 @@ where
   }
 }
 
-pub fn laplacian_neg_elmat_geo(cell_geo: &CellSimplex) -> na::DMatrix<f64> {
+pub fn laplacian_neg_elmat_geo(cell_geo: &StandaloneCell) -> na::DMatrix<f64> {
   let dim = cell_geo.dim();
   let metric = cell_geo.metric_tensor();
   let det = cell_geo.det();
@@ -47,14 +47,14 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &CellSimplex) -> na::DMatrix<f64> {
 
 /// Exact Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cells().get_kidx(icell).geometry();
+  let cell_geo = space.mesh().cells().get_kidx(icell).as_standalone_cell();
   laplacian_neg_elmat_geo(&cell_geo)
 }
 
 /// Approximated Element Matrix Provider for mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
 pub fn lumped_mass_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cells().get_kidx(icell).geometry();
+  let cell_geo = space.mesh().cells().get_kidx(icell).as_standalone_cell();
   let n = cell_geo.nvertices();
   let v = cell_geo.vol() / n as f64;
   na::DMatrix::from_diagonal_element(n, n, v)
@@ -74,14 +74,14 @@ impl LoadElvec {
 impl ElvecProvider for LoadElvec {
   fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64> {
     let cell = space.mesh().cells().get_kidx(icell);
-    let cell_geo = cell.geometry();
+    let cell_geo = cell.as_standalone_cell();
     let nverts = cell_geo.nvertices();
 
     cell_geo.det() / nverts as f64
       * na::DVector::from_iterator(
         nverts,
         cell
-          .ordered_vertices()
+          .ordered_vertplex()
           .iter()
           .copied()
           .map(|iv| self.dof_data[iv]),
@@ -93,11 +93,11 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells().iter() {
     let mut sum = 0.0;
-    for &ivertex in cell.ordered_vertices().iter() {
+    for &ivertex in cell.ordered_vertplex().iter() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
-    let cell_geo = cell.geometry();
+    let cell_geo = cell.as_standalone_cell();
     let vol = cell_geo.vol();
     norm += (vol / nvertices as f64) * sum;
   }

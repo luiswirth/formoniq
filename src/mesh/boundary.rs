@@ -27,7 +27,7 @@ impl SimplicialManifold {
     self
       .boundary_facets()
       .into_iter()
-      .flat_map(|face| face.sorted_vertices().iter().copied())
+      .flat_map(|face| face.canonical_vertplex().iter().copied())
       .unique()
       .collect()
   }

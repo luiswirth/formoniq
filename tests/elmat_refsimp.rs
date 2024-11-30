@@ -2,15 +2,14 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  fe,
-  geometry::{ref_vol, CellSimplex},
-  Dim,
+  cell::{ref_vol, StandaloneCell},
+  fe, Dim,
 };
 
 #[test]
 fn elmat_refsimp() {
   for dim in 1..=10 {
-    let ref_simp = CellSimplex::new_ref(dim);
+    let ref_simp = StandaloneCell::new_ref(dim);
     let computed_elmat = fe::laplacian_neg_elmat_geo(&ref_simp);
 
     let reference_elmat = ref_elmat(dim);

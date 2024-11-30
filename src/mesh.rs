@@ -14,8 +14,8 @@ pub mod hyperbox;
 pub mod raw;
 
 use crate::{
+  cell::{Length, StandaloneCell},
   combinatorics::{CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex},
-  geometry::{CellSimplex, Length},
   Dim, VertexIdx,
 };
 
@@ -86,7 +86,7 @@ impl SimplicialManifold {
     self
       .cells()
       .iter()
-      .map(|cell| cell.geometry().shape_reguarity_measure())
+      .map(|cell| cell.as_standalone_cell().shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -148,18 +148,6 @@ impl<'m> SimplexHandle<'m> {
   pub fn skeleton(&self) -> SkeletonHandle<'m> {
     self.mesh.skeleton(self.dim())
   }
-
-  pub fn is_cell(&self) -> bool {
-    self.dim() == self.mesh.dim()
-  }
-
-  pub fn sorted_vertices(&self) -> &'m CanonicalVertplex {
-    self.mesh.skeletons[self.dim()]
-      .simplicies
-      .get_index(self.kidx())
-      .unwrap()
-      .0
-  }
   pub fn simplex_data(&self) -> &SimplexData {
     self.mesh.skeletons[self.dim()]
       .simplicies
@@ -168,17 +156,27 @@ impl<'m> SimplexHandle<'m> {
       .1
   }
 
-  pub fn oriented_vertices(&self) -> &'m OrientedVertplex {
-    assert!(self.is_cell(), "Only Cells are oriented.");
-    &self.mesh.cells[self.kidx()]
-  }
-  pub fn ordered_vertices(&self) -> &'m OrderedVertplex {
-    assert!(self.is_cell(), "Only Cells are ordered.");
-    self.oriented_vertices().as_ordered()
+  pub fn is_cell(&self) -> bool {
+    self.dim() == self.mesh.dim()
   }
 
   pub fn nvertices(&self) -> usize {
-    self.sorted_vertices().nvertices()
+    self.canonical_vertplex().nvertices()
+  }
+  pub fn canonical_vertplex(&self) -> &'m CanonicalVertplex {
+    self.mesh.skeletons[self.dim()]
+      .simplicies
+      .get_index(self.kidx())
+      .unwrap()
+      .0
+  }
+  pub fn ordered_vertplex(&self) -> &'m OrderedVertplex {
+    assert!(self.is_cell(), "Only Cells are ordered.");
+    self.oriented_vertplex().as_ordered()
+  }
+  pub fn oriented_vertplex(&self) -> &'m OrientedVertplex {
+    assert!(self.is_cell(), "Only Cells are oriented.");
+    &self.mesh.cells[self.kidx()]
   }
 
   pub fn antiboundary(&self) -> SparseChain<'m> {
@@ -218,13 +216,15 @@ impl<'m> SimplexHandle<'m> {
       .map(|e| self.mesh.edge_lengths[e.idx.kidx])
       .collect()
   }
-  pub fn geometry(&self) -> CellSimplex {
-    if !self.is_cell() {
-      tracing::warn!(
-        "Geometry Simplex with unmeaningful orientation has been created, because it's not a cell."
-      );
-    }
-    todo!()
+  pub fn as_standalone_cell(&self) -> StandaloneCell {
+    assert!(self.is_cell(), "Simplex is not a cell.");
+
+    let faces = (0..=self.dim())
+      .map(|k| self.subs(k).map(|s| s.kidx()).collect())
+      .collect();
+    let orientation = Orientation::Pos;
+    let edge_lengths = self.edge_lengths();
+    StandaloneCell::new(faces, orientation, edge_lengths)
   }
 
   /// The dim-subsimplicies of this simplex.
@@ -234,7 +234,7 @@ impl<'m> SimplexHandle<'m> {
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
   pub fn subs(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .sorted_vertices()
+      .canonical_vertplex()
       .subs(dim)
       .into_iter()
       .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
@@ -246,8 +246,11 @@ impl<'m> SimplexHandle<'m> {
   /// by lexicographically w.r.t. the local vertex indices.
   pub fn sups(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .sorted_vertices()
-      .sups(dim, self.parent_cells().map(move |c| c.sorted_vertices()))
+      .canonical_vertplex()
+      .sups(
+        dim,
+        self.parent_cells().map(move |c| c.canonical_vertplex()),
+      )
       .into_iter()
       .map(move |a| self.mesh.skeleton(dim).get_key(&a).idx)
       .map(move |a| Self::new(self.mesh, a))
@@ -384,24 +387,24 @@ impl SimplexIdx {
 mod test {
 
   use crate::{
+    cell::StandaloneCell,
     combinatorics::{nsubsimplicies, CanonicalVertplex},
-    geometry::CellSimplex,
   };
 
   #[test]
   fn incidence() {
     let dim = 3;
-    let mesh = CellSimplex::new_ref(dim).to_singleton_mesh();
+    let mesh = StandaloneCell::new_ref(dim).to_singleton_mesh();
 
     let cell = mesh.cells().get_kidx(0);
 
     let cell_vertices = CanonicalVertplex::new_unchecked((0..(dim + 1)).collect());
-    assert_eq!(cell.sorted_vertices(), &cell_vertices);
+    assert_eq!(cell.canonical_vertplex(), &cell_vertices);
 
     for dim_sub in 0..=dim {
       let skeleton = mesh.skeleton(dim_sub);
       for simp in skeleton.iter() {
-        let simp_vertices = simp.sorted_vertices();
+        let simp_vertices = simp.canonical_vertplex();
         print!("{simp_vertices:?},");
       }
       println!();
@@ -414,7 +417,7 @@ mod test {
       assert_eq!(
         subs
           .iter()
-          .map(|sub| sub.sorted_vertices().clone())
+          .map(|sub| sub.canonical_vertplex().clone())
           .collect::<Vec<_>>(),
         subs_vertices
       );
@@ -425,7 +428,7 @@ mod test {
           let sups: Vec<_> = sub.sups(dim_sup).collect();
           let sups_vertices = sups
             .iter()
-            .map(|sub| sub.sorted_vertices().clone())
+            .map(|sub| sub.canonical_vertplex().clone())
             .collect::<Vec<_>>();
           sups_vertices
             .iter()

@@ -75,7 +75,7 @@ pub fn combination_of_rank(mut rank: usize, n: usize, k: usize) -> Vec<usize> {
 
 pub fn generate_combinations(n: usize, k: usize) -> Vec<Vec<usize>> {
   let mut combinations = Vec::new();
-  let mut combination: Vec<usize> = (0..k).collect(); // Start with the first k indices
+  let mut combination: Vec<_> = (0..k).collect();
 
   loop {
     combinations.push(combination.clone());
@@ -242,7 +242,22 @@ mod test {
   }
 
   #[test]
-  fn lexicographical_rank() {
+  fn combinations_of_4() {
+    let n = 4;
+    let combinations: [&[&[usize]]; 5] = [
+      &[&[]],
+      &[&[0], &[1], &[2], &[3]],
+      &[&[0, 1], &[0, 2], &[0, 3], &[1, 2], &[1, 3], &[2, 3]],
+      &[&[0, 1, 2], &[0, 1, 3], &[0, 2, 3], &[1, 2, 3]],
+      &[&[0, 1, 2, 3]],
+    ];
+    for (k, &kcombinations) in combinations.iter().enumerate() {
+      assert_eq!(generate_combinations(n, k), kcombinations);
+    }
+  }
+
+  #[test]
+  fn lexicographic_rank() {
     for n in 0..=5 {
       for k in 0..=n {
         let combinations = generate_combinations(n, k);
