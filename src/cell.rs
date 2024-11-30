@@ -1,7 +1,7 @@
 use crate::{
   combinatorics::{
-    factorial, nsubedges, nsubsimplicies, CanonicalVertplex, OrderedVertplex, Orientation,
-    OrientedVertplex,
+    factorial, nsubedges, nsubsimplicies, rank_of_combination, CanonicalVertplex, OrderedVertplex,
+    Orientation, OrientedVertplex,
   },
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
   Dim,
@@ -12,17 +12,25 @@ use std::{collections::HashMap, f64::consts::SQRT_2};
 pub type Length = f64;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CellSimplex {
+pub struct StandaloneCell {
   faces: Vec<Vec<KSimplexIdx>>,
   orientation: Orientation,
   edge_lengths: Vec<f64>,
 }
-impl CellSimplex {
-  pub fn new() -> Self {
-    todo!()
+impl StandaloneCell {
+  pub fn new(
+    faces: Vec<Vec<KSimplexIdx>>,
+    orientation: Orientation,
+    edge_lengths: Vec<f64>,
+  ) -> Self {
+    Self {
+      faces,
+      orientation,
+      edge_lengths,
+    }
   }
 
-  /// Constructs a reference simplex in `dim` dimensions.
+  /// Constructs a reference cell in `dim` dimensions.
   pub fn new_ref(dim: Dim) -> Self {
     let faces = (0..=dim)
       .map(|sub_dim| {
@@ -63,18 +71,22 @@ impl CellSimplex {
     self.orientation
   }
 
-  /// The (unsigned) volume of the simplex.
+  pub fn faces(&self) -> &[Vec<KSimplexIdx>] {
+    &self.faces
+  }
+
+  /// The (unsigned) volume of this cell.
   pub fn vol(&self) -> f64 {
     ref_vol(self.dim()) * self.metric_tensor().determinant().sqrt()
   }
 
-  /// The determinate (signed volume) of the simplex.
+  /// The determinate (signed volume) of this cell.
   pub fn det(&self) -> f64 {
     self.orientation.as_f64() * self.vol()
   }
 
-  /// The diameter of the simplex.
-  /// This is the maximum distance of two points inside the simplex.
+  /// The diameter of this cell.
+  /// This is the maximum distance of two points inside the cell.
   pub fn diameter(&self) -> f64 {
     self
       .edge_lengths
@@ -98,16 +110,9 @@ impl CellSimplex {
       let l0i = self.edge_lengths[ei];
       let l0j = self.edge_lengths[ej];
 
-      // TODO: improve index computation
-      todo!("use combinatorics::rank_of_combination");
-
       let vi = ei + 1;
       let vj = ej + 1;
-      let mut eij = 0;
-      for i in 0..vi {
-        eij += self.nvertices() - i - 1;
-      }
-      eij += (vj - vi) - 1;
+      let eij = rank_of_combination(&[vi, vj], self.nvertices());
       let lij = self.edge_lengths[eij];
 
       0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2))
@@ -126,7 +131,7 @@ impl CellSimplex {
     mat
   }
 
-  /// The shape regularity measure of the simplex.
+  /// The shape regularity measure of this cell.
   pub fn shape_reguarity_measure(&self) -> f64 {
     self.diameter().powi(self.dim() as i32) / self.vol()
   }
@@ -163,7 +168,7 @@ mod test {
   #[test]
   fn refcell_vol() {
     for d in 0..=8 {
-      let simp = CellSimplex::new_ref(d);
+      let simp = StandaloneCell::new_ref(d);
       assert_eq!(simp.det(), ref_vol(d));
     }
   }
