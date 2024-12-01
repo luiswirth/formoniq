@@ -1,4 +1,8 @@
-use crate::{cell::StandaloneCell, mesh::SimplicialManifold};
+use crate::{
+  cell::{StandaloneCell, REFCELLS},
+  mesh::SimplicialManifold,
+  Dim, Rank,
+};
 
 pub trait ElmatProvider {
   fn eval(&self, cell: &StandaloneCell) -> na::DMatrix<f64>;
@@ -25,11 +29,22 @@ where
   }
 }
 
+/// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
+pub fn kexterior_derivative_local(cell_dim: Dim, k: Rank) -> na::DMatrix<f64> {
+  REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
+}
+
+/// $star_k: cal(W) Lambda^k -> cal(W) Lambda^(n-k)$
+pub fn hodge_star(_cell: &StandaloneCell, _k: Rank) -> na::DMatrix<f64> {
+  // solve LSE involving metric tensor
+  todo!()
+}
+
 /// Exact Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
   let dim = cell.dim();
   let metric = cell.metric_tensor();
-  let det = cell.det();
+  let det = cell.vol();
 
   let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
   for i in 0..dim {
@@ -75,7 +90,7 @@ impl ElvecProvider for LoadElvec {
   fn eval(&self, cell: &StandaloneCell) -> na::DVector<f64> {
     let nverts = cell.nvertices();
 
-    cell.det() / nverts as f64
+    cell.vol() / nverts as f64
       * na::DVector::from_iterator(
         nverts,
         cell.vertices().iter().copied().map(|iv| self.dof_data[iv]),

@@ -208,7 +208,7 @@ impl HyperBoxMeshInfo {
     self.to_coord_manifold().into_raw_manifold()
   }
   pub fn compute_manifold(&self) -> SimplicialManifold {
-    SimplicialManifold::new(self.compute_raw_manifold())
+    self.compute_raw_manifold().build()
   }
 }
 

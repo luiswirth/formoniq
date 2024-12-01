@@ -1,5 +1,8 @@
 use super::{OrderedVertplex, OrientedVertplex};
-use crate::{combinatorics::sort_count_swaps, Dim, VertexIdx};
+use crate::{
+  combinatorics::{sort_count_swaps, Orientation},
+  Dim, VertexIdx,
+};
 
 use itertools::Itertools as _;
 
@@ -57,6 +60,19 @@ impl CanonicalVertplex {
       .into_iter()
       // subs of canonical are still canonical
       .map(|s| Self::new_unchecked(s.into_vec()))
+      .collect()
+  }
+
+  pub fn boundary(&self) -> Vec<(CanonicalVertplex, Orientation)> {
+    self
+      .subs(self.dim() - 1)
+      .into_iter()
+      .enumerate()
+      .map(|(i, sub)| {
+        let parity = self.nvertices() - 1 - i;
+        let orientation = Orientation::from_permutation_parity(parity);
+        (sub, orientation)
+      })
       .collect()
   }
 

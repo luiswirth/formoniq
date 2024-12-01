@@ -17,4 +17,6 @@ pub mod util;
 pub type Dim = usize;
 pub type Codim = usize;
 
+pub type Rank = usize;
+
 pub type VertexIdx = usize;

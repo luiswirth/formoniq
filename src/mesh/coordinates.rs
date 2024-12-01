@@ -113,7 +113,7 @@ impl CoordManifold {
   }
 
   pub fn into_manifold(self) -> SimplicialManifold {
-    SimplicialManifold::new(self.into_raw_manifold())
+    self.into_raw_manifold().build()
   }
 
   pub fn embed_flat(mut self, dim: Dim) -> CoordManifold {

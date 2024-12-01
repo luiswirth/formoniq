@@ -222,7 +222,7 @@ impl<'m> SimplexHandle<'m> {
     let faces = (0..=self.dim())
       .map(|k| self.subs(k).map(|s| s.kidx()).collect())
       .collect();
-    let orientation = Orientation::Pos;
+    let orientation = self.oriented_vertplex().superimposed_orient();
     let edge_lengths = self.edge_lengths();
     StandaloneCell::new(faces, orientation, edge_lengths)
   }
@@ -387,14 +387,14 @@ impl SimplexIdx {
 mod test {
 
   use crate::{
-    cell::StandaloneCell,
+    cell::ReferenceCell,
     combinatorics::{nsubsimplicies, CanonicalVertplex},
   };
 
   #[test]
   fn incidence() {
     let dim = 3;
-    let mesh = StandaloneCell::new_ref(dim).to_singleton_mesh();
+    let mesh = ReferenceCell::new(dim).to_singleton_mesh();
 
     let cell = mesh.cells().get_kidx(0);
 
