@@ -3,15 +3,21 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   cell::{ref_vol, StandaloneCell},
-  fe, Dim,
+  fe::{self, ElmatProvider},
+  Dim,
 };
 
-#[test]
-fn elmat_refcell() {
+fn check_ref_elmat<F>(elmat: impl ElmatProvider, ref_elmat: F)
+where
+  F: Fn(Dim) -> Option<na::DMatrix<f64>>,
+{
   for dim in 1..=10 {
+    let Some(expected_elmat) = ref_elmat(dim) else {
+      continue;
+    };
+
     let refcell = StandaloneCell::new_ref(dim);
-    let computed_elmat = fe::laplacian_neg_elmat(&refcell);
-    let expected_elmat = ref_elmat(dim);
+    let computed_elmat = elmat.eval(&refcell);
 
     let diff = &computed_elmat - &expected_elmat;
     let error = diff.norm();
@@ -25,7 +31,11 @@ fn elmat_refcell() {
   }
 }
 
-fn ref_elmat(dim: Dim) -> na::DMatrix<f64> {
+#[test]
+fn laplacian_refcell() {
+  check_ref_elmat(fe::laplacian_neg_elmat, ref_laplacian);
+}
+fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
   let ndofs = dim + 1;
   let mut expected_elmat = na::DMatrix::zeros(ndofs, ndofs);
   expected_elmat[(0, 0)] = dim as i32;
@@ -35,5 +45,42 @@ fn ref_elmat(dim: Dim) -> na::DMatrix<f64> {
     expected_elmat[(i, i)] = 1;
   }
 
-  expected_elmat.cast::<f64>() * ref_vol(dim)
+  Some(expected_elmat.cast::<f64>() * ref_vol(dim))
+}
+
+#[test]
+fn mass_refcell() {
+  check_ref_elmat(fe::mass_elmat, ref_mass);
+}
+fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
+  #[rustfmt::skip]
+  let mats = [
+    na::dmatrix![1.0],
+    na::dmatrix![
+      1.0/3.0, 1.0/6.0;
+      1.0/6.0, 1.0/3.0;
+    ],
+    na::dmatrix![
+      1.0/12.0, 1.0/24.0, 1.0/24.0;
+      1.0/24.0, 1.0/12.0, 1.0/24.0;
+      1.0/24.0, 1.0/24.0, 1.0/12.0;
+    ],
+    na::dmatrix![
+      1.0/60.0, 1.0/120.0, 1.0/120.0, 1.0/120.0;
+      1.0/120.0, 1.0/60.0, 1.0/120.0, 1.0/120.0;
+      1.0/120.0, 1.0/120.0, 1.0/60.0, 1.0/120.0;
+      1.0/120.0, 1.0/120.0, 1.0/120.0, 1.0/60.0;
+    ],
+  ];
+  mats.get(dim).cloned()
+}
+
+#[test]
+fn lumped_mass_refcell() {
+  check_ref_elmat(fe::lumped_mass_elmat, ref_lumped_mass);
+}
+fn ref_lumped_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
+  let nvertices = dim + 1;
+  let ndofs = nvertices;
+  Some(ref_vol(dim) / ndofs as f64 * na::DMatrix::identity(ndofs, ndofs))
 }

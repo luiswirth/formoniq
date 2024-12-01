@@ -42,6 +42,16 @@ pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
   det * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
+/// Exact Element Matrix Provider for mass bilinear form.
+pub fn mass_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+  let ndofs = cell.nvertices();
+  let dim = cell.dim();
+  let v = cell.vol() / ((dim + 1) * (dim + 2)) as f64;
+  let mut elmat = na::DMatrix::from_element(ndofs, ndofs, v);
+  elmat.fill_diagonal(2.0 * v);
+  elmat
+}
+
 /// Approximated Element Matrix Provider for mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
 pub fn lumped_mass_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
