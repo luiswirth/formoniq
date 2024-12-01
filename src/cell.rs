@@ -4,7 +4,7 @@ use crate::{
     Orientation, OrientedVertplex,
   },
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
-  Dim,
+  Dim, VertexIdx,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2};
@@ -62,6 +62,9 @@ impl StandaloneCell {
   }
   pub fn nvertices(&self) -> usize {
     self.faces[0].len()
+  }
+  pub fn vertices(&self) -> &[VertexIdx] {
+    &self.faces[0]
   }
 
   pub fn edge_lengths(&self) -> &[f64] {

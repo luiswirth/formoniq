@@ -7,19 +7,18 @@ use formoniq::{
 };
 
 #[test]
-fn elmat_refsimp() {
+fn elmat_refcell() {
   for dim in 1..=10 {
-    let ref_simp = StandaloneCell::new_ref(dim);
-    let computed_elmat = fe::laplacian_neg_elmat_geo(&ref_simp);
+    let refcell = StandaloneCell::new_ref(dim);
+    let computed_elmat = fe::laplacian_neg_elmat(&refcell);
+    let expected_elmat = ref_elmat(dim);
 
-    let reference_elmat = ref_elmat(dim);
-
-    let diff = &computed_elmat - &reference_elmat;
+    let diff = &computed_elmat - &expected_elmat;
     let error = diff.norm();
     let equal = error < 10e-12;
     if !equal {
       println!("Computed:\n{computed_elmat:.3}");
-      println!("Expected:\n{reference_elmat:.3}");
+      println!("Expected:\n{expected_elmat:.3}");
       println!("Difference:\n{diff:.3}");
       panic!("Wrong reference elmat.");
     }

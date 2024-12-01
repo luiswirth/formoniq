@@ -24,23 +24,13 @@ pub fn assemble_galmat_raw(
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::zeros(space.ndofs(), space.ndofs());
-  for icell in 0..space.mesh().ncells() {
-    let elmat = elmat.eval(space, icell);
+  for cell in space.mesh().cells().iter() {
+    let cell = cell.as_standalone_cell();
+    let elmat = elmat.eval(&cell);
+    let dof_faces = &cell.faces()[space.rank()];
 
-    for (ilocal, iglobal) in space
-      .dof_handler()
-      .local2global(icell)
-      .iter()
-      .copied()
-      .enumerate()
-    {
-      for (jlocal, jglobal) in space
-        .dof_handler()
-        .local2global(icell)
-        .iter()
-        .copied()
-        .enumerate()
-      {
+    for (ilocal, iglobal) in dof_faces.iter().copied().enumerate() {
+      for (jlocal, jglobal) in dof_faces.iter().copied().enumerate() {
         galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
       }
     }
@@ -51,15 +41,11 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mut galvec = na::DVector::zeros(space.ndofs());
-  for icell in 0..space.mesh().ncells() {
-    let elvec = elvec.eval(space, icell);
-    for (ilocal, iglobal) in space
-      .dof_handler()
-      .local2global(icell)
-      .iter()
-      .copied()
-      .enumerate()
-    {
+  for cell in space.mesh().cells().iter() {
+    let cell = cell.as_standalone_cell();
+    let elvec = elvec.eval(&cell);
+    let dof_faces = &cell.faces()[space.rank()];
+    for (ilocal, iglobal) in dof_faces.iter().copied().enumerate() {
       galvec[iglobal] += elvec[ilocal];
     }
   }
