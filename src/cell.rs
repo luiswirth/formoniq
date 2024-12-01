@@ -1,13 +1,10 @@
 use crate::{
-  combinatorics::{
-    factorial, nsubedges, nsubsimplicies, rank_of_combination, CanonicalVertplex, OrderedVertplex,
-    Orientation, OrientedVertplex,
-  },
+  combinatorics::{factorial, nsubedges, rank_of_combination, CanonicalVertplex, Orientation},
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
-  Dim, VertexIdx,
+  Dim, Rank, VertexIdx,
 };
 
-use std::{collections::HashMap, f64::consts::SQRT_2};
+use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
 
 pub type Length = f64;
 
@@ -30,33 +27,6 @@ impl StandaloneCell {
     }
   }
 
-  /// Constructs a reference cell in `dim` dimensions.
-  pub fn new_ref(dim: Dim) -> Self {
-    let faces = (0..=dim)
-      .map(|sub_dim| {
-        let num_ksubs = nsubsimplicies(dim, sub_dim);
-        (0..num_ksubs).collect()
-      })
-      .collect();
-
-    let orientation = Orientation::default();
-
-    let nedges = nsubedges(dim);
-    let mut edge_lengths = vec![0.0; nedges];
-    for l in edge_lengths.iter_mut().take(dim) {
-      *l = 1.0;
-    }
-    for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
-      *l = SQRT_2;
-    }
-
-    Self {
-      faces,
-      orientation,
-      edge_lengths,
-    }
-  }
-
   pub fn dim(&self) -> Dim {
     self.faces.len() - 1
   }
@@ -66,26 +36,20 @@ impl StandaloneCell {
   pub fn vertices(&self) -> &[VertexIdx] {
     &self.faces[0]
   }
-
-  pub fn edge_lengths(&self) -> &[f64] {
-    &self.edge_lengths
-  }
   pub fn orientation(&self) -> Orientation {
     self.orientation
   }
-
   pub fn faces(&self) -> &[Vec<KSimplexIdx>] {
     &self.faces
   }
 
-  /// The (unsigned) volume of this cell.
-  pub fn vol(&self) -> f64 {
-    ref_vol(self.dim()) * self.metric_tensor().determinant().sqrt()
+  pub fn edge_lengths(&self) -> &[f64] {
+    &self.edge_lengths
   }
 
-  /// The determinate (signed volume) of this cell.
-  pub fn det(&self) -> f64 {
-    self.orientation.as_f64() * self.vol()
+  /// The volume of this cell.
+  pub fn vol(&self) -> f64 {
+    ref_vol(self.dim()) * self.metric_tensor().determinant().sqrt()
   }
 
   /// The diameter of this cell.
@@ -138,12 +102,84 @@ impl StandaloneCell {
   pub fn shape_reguarity_measure(&self) -> f64 {
     self.diameter().powi(self.dim() as i32) / self.vol()
   }
+}
+
+// TODO: find better solution
+pub static REFCELLS: LazyLock<Vec<ReferenceCell>> =
+  LazyLock::new(|| (0..=4).map(ReferenceCell::new).collect());
+
+pub struct ReferenceCell {
+  faces: Vec<Vec<CanonicalVertplex>>,
+  edge_lengths: Vec<f64>,
+}
+impl ReferenceCell {
+  /// Constructs a reference cell in `dim` dimensions.
+  pub fn new(dim: Dim) -> Self {
+    let nvertices = dim + 1;
+    let cell = CanonicalVertplex::new((0..nvertices).collect());
+
+    let faces = (0..=dim).map(|face_dim| cell.subs(face_dim)).collect();
+
+    let nedges = nsubedges(dim);
+    let mut edge_lengths = vec![0.0; nedges];
+    for l in edge_lengths.iter_mut().take(dim) {
+      *l = 1.0;
+    }
+    for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
+      *l = SQRT_2;
+    }
+
+    Self {
+      faces,
+      edge_lengths,
+    }
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.nvertices() - 1
+  }
+  pub fn nvertices(&self) -> usize {
+    self.num_kfaces(0)
+  }
+  pub fn num_kfaces(&self, k: Dim) -> usize {
+    self.faces[k].len()
+  }
+
+  pub fn as_vertplex(&self) -> &CanonicalVertplex {
+    &self.faces[self.dim()][0]
+  }
+
+  /// $diff^k: Delta_k -> Delta_(k-1)$
+  pub fn kboundary_operator(&self, k: Rank) -> na::DMatrix<f64> {
+    let sups = &self.faces[k];
+    let subs = &self.faces[k - 1];
+    let mut mat = na::DMatrix::zeros(subs.len(), sups.len());
+    for (isup, sup) in sups.iter().enumerate() {
+      let sup_subs = sup.boundary();
+      for (sub, orientation) in sup_subs {
+        let isub = subs.iter().position(|other| sub == *other).unwrap();
+        mat[(isub, isup)] = orientation.as_f64();
+      }
+    }
+    mat
+  }
+
+  pub fn to_standalone_cell(&self) -> StandaloneCell {
+    let faces = self
+      .faces
+      .iter()
+      .map(|fs| (0..fs.len()).collect())
+      .collect();
+    let orientation = Orientation::Pos;
+    let edge_lengths = self.edge_lengths.clone();
+    StandaloneCell::new(faces, orientation, edge_lengths)
+  }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {
-    let vertices = OrderedVertplex::new((0..self.nvertices()).collect());
+    let nnodes = self.nvertices();
+    let cells = vec![self.as_vertplex().clone().into_oriented()];
 
     let mut edge_lengths = HashMap::new();
-
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
@@ -152,27 +188,10 @@ impl StandaloneCell {
       }
     }
 
-    SimplicialManifold::new(RawSimplicialManifold::new(
-      self.nvertices(),
-      vec![OrientedVertplex::new(vertices, self.orientation)],
-      edge_lengths,
-    ))
+    RawSimplicialManifold::new(nnodes, cells, edge_lengths).build()
   }
 }
 
 pub fn ref_vol(dim: Dim) -> f64 {
   (factorial(dim) as f64).recip()
-}
-
-#[cfg(test)]
-mod test {
-  use super::*;
-
-  #[test]
-  fn refcell_vol() {
-    for d in 0..=8 {
-      let simp = StandaloneCell::new_ref(d);
-      assert_eq!(simp.det(), ref_vol(d));
-    }
-  }
 }

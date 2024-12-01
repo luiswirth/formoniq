@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  cell::{ref_vol, StandaloneCell},
+  cell::{ref_vol, ReferenceCell},
   fe::{self, ElmatProvider},
   Dim,
 };
@@ -16,7 +16,7 @@ where
       continue;
     };
 
-    let refcell = StandaloneCell::new_ref(dim);
+    let refcell = ReferenceCell::new(dim).to_standalone_cell();
     let computed_elmat = elmat.eval(&refcell);
 
     let diff = &computed_elmat - &expected_elmat;

@@ -45,16 +45,15 @@ impl RawSimplicialManifold {
   }
 }
 
-impl SimplicialManifold {
+impl RawSimplicialManifold {
   /// Function building the actual mesh data structure
   /// from the raw defining data.
-  pub fn new(raw: RawSimplicialManifold) -> Self {
-    let dim = raw.dim();
-
-    let cells = raw.cells;
+  pub fn build(self) -> SimplicialManifold {
+    let dim = self.dim();
+    let cells = self.cells;
 
     let mut skeletons = vec![Skeleton::new(); dim + 1];
-    skeletons[0].simplicies = (0..raw.nnodes)
+    skeletons[0].simplicies = (0..self.nnodes)
       .map(|v| (CanonicalVertplex::vertex(v), SimplexData::stub()))
       .collect();
 
@@ -108,11 +107,11 @@ impl SimplicialManifold {
     // set edge lengths of mesh
     let mut edge_lengths = Vec::new();
     for edge in skeletons[1].simplicies.keys() {
-      let length = raw.edge_lengths[edge];
+      let length = self.edge_lengths[edge];
       edge_lengths.push(length);
     }
 
-    Self {
+    SimplicialManifold {
       cells,
       skeletons,
       edge_lengths,
