@@ -1,38 +1,35 @@
-use crate::{
-  cell::StandaloneCell,
-  mesh::{CellIdx, SimplicialManifold},
-  space::FeSpace,
-};
+use crate::{cell::StandaloneCell, mesh::SimplicialManifold};
 
 pub trait ElmatProvider {
-  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64>;
+  fn eval(&self, cell: &StandaloneCell) -> na::DMatrix<f64>;
 }
 
 impl<F> ElmatProvider for F
 where
-  F: Fn(&FeSpace, CellIdx) -> na::DMatrix<f64>,
+  F: Fn(&StandaloneCell) -> na::DMatrix<f64>,
 {
-  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-    self(space, icell)
+  fn eval(&self, cell: &StandaloneCell) -> na::DMatrix<f64> {
+    self(cell)
   }
 }
 
 pub trait ElvecProvider {
-  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64>;
+  fn eval(&self, cell: &StandaloneCell) -> na::DVector<f64>;
 }
 impl<F> ElvecProvider for F
 where
-  F: Fn(&FeSpace, CellIdx) -> na::DVector<f64>,
+  F: Fn(&StandaloneCell) -> na::DVector<f64>,
 {
-  fn eval(&self, space: &FeSpace, icell: CellIdx) -> nalgebra::DVector<f64> {
-    self(space, icell)
+  fn eval(&self, cell: &StandaloneCell) -> nalgebra::DVector<f64> {
+    self(cell)
   }
 }
 
-pub fn laplacian_neg_elmat_geo(cell_geo: &StandaloneCell) -> na::DMatrix<f64> {
-  let dim = cell_geo.dim();
-  let metric = cell_geo.metric_tensor();
-  let det = cell_geo.det();
+/// Exact Element Matrix Provider for the negative Laplacian.
+pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+  let dim = cell.dim();
+  let metric = cell.metric_tensor();
+  let det = cell.det();
 
   let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
   for i in 0..dim {
@@ -45,18 +42,11 @@ pub fn laplacian_neg_elmat_geo(cell_geo: &StandaloneCell) -> na::DMatrix<f64> {
   det * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
 }
 
-/// Exact Element Matrix Provider for the negative Laplacian.
-pub fn laplacian_neg_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cells().get_kidx(icell).as_standalone_cell();
-  laplacian_neg_elmat_geo(&cell_geo)
-}
-
 /// Approximated Element Matrix Provider for mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
-pub fn lumped_mass_elmat(space: &FeSpace, icell: CellIdx) -> na::DMatrix<f64> {
-  let cell_geo = space.mesh().cells().get_kidx(icell).as_standalone_cell();
-  let n = cell_geo.nvertices();
-  let v = cell_geo.vol() / n as f64;
+pub fn lumped_mass_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+  let n = cell.nvertices();
+  let v = cell.vol() / n as f64;
   na::DMatrix::from_diagonal_element(n, n, v)
 }
 /// Element Vector Provider for scalar load function.
@@ -72,19 +62,13 @@ impl LoadElvec {
   }
 }
 impl ElvecProvider for LoadElvec {
-  fn eval(&self, space: &FeSpace, icell: CellIdx) -> na::DVector<f64> {
-    let cell = space.mesh().cells().get_kidx(icell);
-    let cell_geo = cell.as_standalone_cell();
-    let nverts = cell_geo.nvertices();
+  fn eval(&self, cell: &StandaloneCell) -> na::DVector<f64> {
+    let nverts = cell.nvertices();
 
-    cell_geo.det() / nverts as f64
+    cell.det() / nverts as f64
       * na::DVector::from_iterator(
         nverts,
-        cell
-          .ordered_vertplex()
-          .iter()
-          .copied()
-          .map(|iv| self.dof_data[iv]),
+        cell.vertices().iter().copied().map(|iv| self.dof_data[iv]),
       )
   }
 }
