@@ -5,7 +5,6 @@ use formoniq::{
   assemble,
   fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
   lse,
-  matrix::FaerCholesky,
   mesh::dim3,
   space::FeSpace,
 };
@@ -43,20 +42,21 @@ fn main() {
 
   let space = FeSpace::new(Rc::clone(&mesh));
 
-  let mut galmat_laplacian = assemble::assemble_galmat(&space, laplacian_neg_elmat);
-  let mut galmat_mass = assemble::assemble_galmat(&space, lumped_mass_elmat);
+  let mut laplacian_galmat = assemble::assemble_galmat(&space, laplacian_neg_elmat);
+  let mut mass_galmat = assemble::assemble_galmat(&space, lumped_mass_elmat);
 
   let load = na::DVector::zeros(mesh.nnodes());
   let mut galvec = assemble::assemble_galvec(&space, LoadElvec::new(load));
 
   assert!(!mesh.has_boundary());
-  lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut galmat_laplacian, &mut galvec);
-  lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut galmat_mass, &mut galvec);
+  lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut laplacian_galmat, &mut galvec);
+  lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut mass_galmat, &mut galvec);
 
-  let galmat_laplacian = galmat_laplacian.to_nalgebra_csc();
-  let galmat_mass = galmat_mass.to_nalgebra_csc();
+  let galmat_laplacian = laplacian_galmat.to_nalgebra_csc();
+  let galmat_mass = mass_galmat.to_nalgebra_csc();
 
-  let galmat_mass_cholesky = FaerCholesky::new(galmat_mass.clone());
+  let mass_diagonal = mass_galmat.try_into_diagonal().unwrap();
+  let mass_diagonal_inv = mass_diagonal.map(|x| x.recip());
 
   let mut mu = coord_mesh.node_coords().eval_coord_fn(|p| {
     let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
@@ -77,7 +77,7 @@ fn main() {
     times.push(t as f32);
 
     let rhs = &galmat_mass * nu + timestep * (&galvec - &galmat_laplacian * &mu);
-    nu = galmat_mass_cholesky.solve(&rhs);
+    nu = mass_diagonal_inv.component_mul(&rhs);
     mu += timestep * &nu;
 
     //util::save_vector(&mu, format!("out/wavesol_step{istep}.txt")).unwrap();
