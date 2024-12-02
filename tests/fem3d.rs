@@ -1,7 +1,9 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{assemble, fe, mesh::hyperbox::HyperBoxMeshInfo, space::FeSpace, Dim};
+use formoniq::{
+  assemble, fe, mesh::hyperbox::HyperBoxMeshInfo, space::FeSpace, util::assert_mat_eq, Dim,
+};
 
 use std::rc::Rc;
 
@@ -12,10 +14,7 @@ fn feec_vs_fem3d() {
   for nboxes_per_dim in 1..=10 {
     let feec = feec_galmat(nboxes_per_dim);
     let fem = fem3d_galmat(nboxes_per_dim);
-    let diff = feec - fem;
-    let error = diff.norm();
-    println!("{error}");
-    assert!(error <= 10e-12);
+    assert_mat_eq(&feec, &fem);
   }
 }
 
