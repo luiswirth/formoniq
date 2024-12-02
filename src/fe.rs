@@ -51,8 +51,8 @@ pub fn khodge_star_local(_cell: &StandaloneCell, _k: Rank) -> na::DMatrix<f64> {
   todo!()
 }
 
+// TODO: Can we reasonably avoid the inverse?
 // WARN: UNSTABLE
-// TODO: how to avoid unstable inverse?
 /// Inner product on covectors / 1-forms.
 ///
 /// Represented as gram matrix on covector standard basis.
@@ -104,9 +104,8 @@ pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
     reference_gradbarys[(i, i + 1)] = 1.0;
   }
 
-  let vector_gramian = cell.metric_tensor();
-  let covector_gramian = vector_gramian.cholesky().unwrap();
-  cell.vol() * reference_gradbarys.transpose() * covector_gramian.solve(&reference_gradbarys)
+  let covector_gramian = covector_gramian(cell);
+  cell.vol() * reference_gradbarys.transpose() * covector_gramian * reference_gradbarys
 }
 
 /// Exact Element Matrix Provider for mass bilinear form.
