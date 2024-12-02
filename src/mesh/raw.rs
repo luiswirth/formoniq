@@ -50,16 +50,17 @@ impl RawSimplicialManifold {
   /// from the raw defining data.
   pub fn build(self) -> SimplicialManifold {
     let dim = self.dim();
+
     let cells = self.cells;
 
     let mut skeletons = vec![Skeleton::new(); dim + 1];
-    skeletons[0].simplicies = (0..self.nnodes)
+    skeletons[0] = (0..self.nnodes)
       .map(|v| (CanonicalVertplex::vertex(v), SimplexData::stub()))
       .collect();
 
     for (icell, cell) in cells.iter().enumerate() {
       let cell = cell.clone().into_canonical();
-      for (sub_dim, Skeleton { simplicies: subs }) in skeletons.iter_mut().enumerate() {
+      for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
         for sub in cell.subs(sub_dim) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
           sub.parent_cells.push(icell);
@@ -68,13 +69,14 @@ impl RawSimplicialManifold {
     }
 
     // Assert consistent orientation of cells.
-    // The orientation of two adjacent cells is consistent if the shared facet
-    // has opposing orientations.
-    for (facet, facet_data) in &skeletons[dim - 1].simplicies {
-      let oriented_facets = &facet_data
-        .parent_cells
-        .iter()
-        .map(|&cell_kidx| &cells[cell_kidx])
+    // Two adjacent cells are consistently oriented if their shared facet appears
+    // with opposite orientations from each cell's perspective.
+    let facets = &skeletons[dim - 1];
+    for (facet, SimplexData { parent_cells }) in facets {
+      let parent_cells = parent_cells.iter().map(|&cell_kidx| &cells[cell_kidx]);
+
+      // The same facet, but as seen from the 1 or 2 adjacent cells.
+      let cells_facet = parent_cells
         .map(|cell| {
           cell
             .boundary()
@@ -84,29 +86,19 @@ impl RawSimplicialManifold {
         })
         .collect::<Vec<_>>();
 
-      let is_boundary_facet = oriented_facets.len() == 1;
-      if is_boundary_facet {
-        continue;
+      let is_boundary_facet = cells_facet.len() == 1;
+      if !is_boundary_facet {
+        assert!(cells_facet.len() == 2);
+        assert!(
+          !cells_facet[0].orientation_eq(&cells_facet[1]).unwrap(),
+          "Manifold cells must be consistently oriented."
+        );
       }
-
-      assert!(
-        oriented_facets.len() == 2,
-        "Each cell has exactly two facets."
-      );
-      assert!(
-        !oriented_facets[0]
-          .orientation_eq(&oriented_facets[1])
-          .unwrap(),
-        "Manifold cells must be consistently oriented."
-      );
     }
-    //if is_face {
-    //assert!(!existent_sub.sorted_vertices.orientation_eq(&sub).unwrap());
-    //}
 
-    // set edge lengths of mesh
     let mut edge_lengths = Vec::new();
-    for edge in skeletons[1].simplicies.keys() {
+    let edges = skeletons[1].keys();
+    for edge in edges {
       let length = self.edge_lengths[edge];
       edge_lengths.push(length);
     }
