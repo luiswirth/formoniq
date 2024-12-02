@@ -155,3 +155,16 @@ pub fn save_vector(mu: &na::DVector<f64>, path: impl AsRef<Path>) -> std::io::Re
   }
   Ok(())
 }
+
+pub fn assert_mat_eq(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) {
+  const TOL: f64 = 10e-12;
+  let diff = a - b;
+  let error = diff.norm();
+  let equal = error <= TOL;
+  if !equal {
+    println!("Matrix a={a:.3}");
+    println!("Matrix b={b:.3}");
+    println!("a-b={diff:.3}");
+    panic!("Matrices not equal.");
+  }
+}

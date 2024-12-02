@@ -4,6 +4,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   cell::{ref_vol, ReferenceCell},
   fe::{self, ElmatProvider},
+  util::assert_mat_eq,
   Dim,
 };
 
@@ -19,15 +20,7 @@ where
     let refcell = ReferenceCell::new(dim).to_standalone_cell();
     let computed_elmat = elmat.eval(&refcell);
 
-    let diff = &computed_elmat - &expected_elmat;
-    let error = diff.norm();
-    let equal = error < 10e-12;
-    if !equal {
-      println!("Computed:\n{computed_elmat:.3}");
-      println!("Expected:\n{expected_elmat:.3}");
-      println!("Difference:\n{diff:.3}");
-      panic!("Wrong reference elmat.");
-    }
+    assert_mat_eq(&computed_elmat, &expected_elmat);
   }
 }
 

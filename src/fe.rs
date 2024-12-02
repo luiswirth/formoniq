@@ -1,5 +1,6 @@
 use crate::{
   cell::{StandaloneCell, REFCELLS},
+  combinatorics::generate_combinations,
   mesh::SimplicialManifold,
   Dim, Rank,
 };
@@ -38,11 +39,11 @@ pub fn kexterior_derivative_local(cell_dim: Dim, k: Rank) -> na::DMatrix<f64> {
 /// Hodge adjoint of exterior derivative.
 pub fn kcodifferential_local(cell: &StandaloneCell, k: Rank) -> na::DMatrix<f64> {
   let n = cell.dim();
+
   (-1f64).powi((n * (k + 1) + 1) as i32)
     * khodge_star_local(cell, n - k + 1)
-      .lu()
-      .solve(&(kexterior_derivative_local(cell.dim(), n - k) * khodge_star_local(cell, k)))
-      .unwrap()
+    * kexterior_derivative_local(cell.dim(), n - k)
+    * khodge_star_local(cell, k)
 }
 
 /// $star_k: cal(W) Lambda^k -> cal(W) Lambda^(n-k)$
@@ -50,11 +51,50 @@ pub fn khodge_star_local(_cell: &StandaloneCell, _k: Rank) -> na::DMatrix<f64> {
   todo!()
 }
 
+// WARN: UNSTABLE
+// TODO: how to avoid unstable inverse?
+/// Inner product on covectors / 1-forms.
+///
+/// Represented as gram matrix on covector standard basis.
+pub fn covector_gramian(cell: &StandaloneCell) -> na::DMatrix<f64> {
+  let vector_gramian = cell.metric_tensor();
+  vector_gramian.try_inverse().unwrap()
+}
+
+/// Inner product on k-forms
+///
+/// Represented as gram matrix on lexicographically ordered standard k-form standard basis.
+pub fn kform_gramian(cell: &StandaloneCell, k: Rank) -> na::DMatrix<f64> {
+  let n = cell.dim();
+  let combinations = generate_combinations(n, k);
+  let covector_gramian = covector_gramian(cell);
+
+  let mut kform_gramian = na::DMatrix::zeros(combinations.len(), combinations.len());
+  let mut kbasis_mat = na::DMatrix::zeros(k, k);
+
+  for icomb in 0..combinations.len() {
+    let combi = &combinations[icomb];
+    for jcomb in icomb..combinations.len() {
+      let combj = &combinations[jcomb];
+
+      for iicomb in 0..k {
+        let combii = combi[iicomb];
+        for jjcomb in 0..k {
+          let combjj = combj[jjcomb];
+          kbasis_mat[(iicomb, jjcomb)] = covector_gramian[(combii, combjj)];
+        }
+      }
+      let det = kbasis_mat.determinant();
+      kform_gramian[(icomb, jcomb)] = det;
+      kform_gramian[(jcomb, icomb)] = det;
+    }
+  }
+  kform_gramian
+}
+
 /// Exact Element Matrix Provider for the negative Laplacian.
 pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
   let dim = cell.dim();
-  let metric = cell.metric_tensor();
-  let det = cell.vol();
 
   let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
   for i in 0..dim {
@@ -64,7 +104,9 @@ pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
     reference_gradbarys[(i, i + 1)] = 1.0;
   }
 
-  det * reference_gradbarys.transpose() * metric.lu().solve(&reference_gradbarys).unwrap()
+  let vector_gramian = cell.metric_tensor();
+  let covector_gramian = vector_gramian.cholesky().unwrap();
+  cell.vol() * reference_gradbarys.transpose() * covector_gramian.solve(&reference_gradbarys)
 }
 
 /// Exact Element Matrix Provider for mass bilinear form.
@@ -121,4 +163,26 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
+}
+
+#[cfg(test)]
+mod test {
+  use num_integer::binomial;
+
+  use crate::{cell::ReferenceCell, util::assert_mat_eq};
+
+  use super::kform_gramian;
+
+  #[test]
+  fn kform_gramian_refcell() {
+    for n in 0..=3 {
+      let cell = ReferenceCell::new(n).to_standalone_cell();
+      for k in 0..=n {
+        let binom = binomial(n, k);
+        let expected_gram = na::DMatrix::identity(binom, binom);
+        let computed_gram = kform_gramian(&cell, k);
+        assert_mat_eq(&computed_gram, &expected_gram);
+      }
+    }
+  }
 }
