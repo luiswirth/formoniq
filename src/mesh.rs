@@ -93,16 +93,7 @@ impl SimplicialManifold {
 }
 
 /// A container for topological simplicies of common dimension.
-#[derive(Debug, Clone, Default)]
-pub struct Skeleton {
-  simplicies: IndexMap<CanonicalVertplex, SimplexData>,
-}
-impl Skeleton {
-  pub fn new() -> Self {
-    let simplicies = IndexMap::new();
-    Self { simplicies }
-  }
-}
+pub type Skeleton = IndexMap<CanonicalVertplex, SimplexData>;
 
 /// Topological information of the simplex.
 #[derive(Debug, Clone)]
@@ -150,7 +141,6 @@ impl<'m> SimplexHandle<'m> {
   }
   pub fn simplex_data(&self) -> &SimplexData {
     self.mesh.skeletons[self.dim()]
-      .simplicies
       .get_index(self.kidx())
       .unwrap()
       .1
@@ -165,7 +155,6 @@ impl<'m> SimplexHandle<'m> {
   }
   pub fn canonical_vertplex(&self) -> &'m CanonicalVertplex {
     self.mesh.skeletons[self.dim()]
-      .simplicies
       .get_index(self.kidx())
       .unwrap()
       .0
@@ -276,21 +265,18 @@ pub struct SkeletonHandle<'m> {
   dim: Dim,
 }
 
-impl<'m> std::ops::Deref for SkeletonHandle<'m> {
-  type Target = Skeleton;
-  fn deref(&self) -> &Self::Target {
-    &self.mesh.skeletons[self.dim]
-  }
-}
-
 impl<'m> SkeletonHandle<'m> {
   pub fn new(mesh: &'m SimplicialManifold, dim: Dim) -> Self {
     assert!(dim <= mesh.dim(), "Invalid Skeleton Dimension");
     Self { mesh, dim }
   }
 
+  pub fn raw(&self) -> &Skeleton {
+    &self.mesh.skeletons[self.dim]
+  }
+
   pub fn len(&self) -> usize {
-    self.simplicies.len()
+    self.raw().len()
   }
   pub fn is_empty(&self) -> bool {
     self.len() == 0
@@ -300,7 +286,7 @@ impl<'m> SkeletonHandle<'m> {
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
   pub fn get_key(&self, key: &CanonicalVertplex) -> SimplexHandle<'m> {
-    let idx = self.simplicies.get_full(key).unwrap().0;
+    let idx = self.raw().get_full(key).unwrap().0;
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
 

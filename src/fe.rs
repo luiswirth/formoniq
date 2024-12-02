@@ -34,9 +34,19 @@ pub fn kexterior_derivative_local(cell_dim: Dim, k: Rank) -> na::DMatrix<f64> {
   REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
 }
 
+/// $delta^k: cal(W) Lambda^k -> cal(W) Lambda^(k-1)$
+/// Hodge adjoint of exterior derivative.
+pub fn kcodifferential_local(cell: &StandaloneCell, k: Rank) -> na::DMatrix<f64> {
+  let n = cell.dim();
+  (-1f64).powi((n * (k + 1) + 1) as i32)
+    * khodge_star_local(cell, n - k + 1)
+      .lu()
+      .solve(&(kexterior_derivative_local(cell.dim(), n - k) * khodge_star_local(cell, k)))
+      .unwrap()
+}
+
 /// $star_k: cal(W) Lambda^k -> cal(W) Lambda^(n-k)$
-pub fn hodge_star(_cell: &StandaloneCell, _k: Rank) -> na::DMatrix<f64> {
-  // solve LSE involving metric tensor
+pub fn khodge_star_local(_cell: &StandaloneCell, _k: Rank) -> na::DMatrix<f64> {
   todo!()
 }
 
