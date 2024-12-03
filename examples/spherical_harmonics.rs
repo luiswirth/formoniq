@@ -17,7 +17,7 @@ fn main() {
   let coord_mesh = triangle_mesh.clone().into_coord_manifold();
   let mesh = Rc::new(coord_mesh.into_manifold());
 
-  let spectrum = evp::solve_homogeneous_evp(&mesh, fe::laplacian_neg_elmat);
+  let spectrum = evp::solve_homogeneous_evp(&mesh, fe::laplace_beltrami_elmat);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
     println!("eigenval={eigenval}");
     assert!((eigenval - eigenval.round()).abs() <= 10e-12);

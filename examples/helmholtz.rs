@@ -20,7 +20,7 @@ fn main() {
   std::fs::write("out/helmholtz_mesh.obj", surface.to_obj_string().as_bytes()).unwrap();
   let mesh = Rc::new(coord_mesh.into_manifold());
 
-  let spectrum = evp::solve_homogeneous_evp(&mesh, fe::laplacian_neg_elmat);
+  let spectrum = evp::solve_homogeneous_evp(&mesh, fe::laplace_beltrami_elmat);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
     println!("eigenval={eigenval}");
     assert!((eigenval - eigenval.round()).abs() <= 10e-12);

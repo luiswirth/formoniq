@@ -1,6 +1,11 @@
+use itertools::Itertools;
+use num_integer::binomial;
+
 use crate::{
   cell::{StandaloneCell, REFCELLS},
-  combinatorics::generate_combinations,
+  combinatorics::{
+    factorial, generate_combinations, parity_sign, rank_of_combination, sort_count_swaps,
+  },
   mesh::SimplicialManifold,
   Dim, Rank,
 };
@@ -92,20 +97,68 @@ pub fn kform_gramian(cell: &StandaloneCell, k: Rank) -> na::DMatrix<f64> {
   kform_gramian
 }
 
-/// Exact Element Matrix Provider for the negative Laplacian.
-pub fn laplacian_neg_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
-  let dim = cell.dim();
-
-  let mut reference_gradbarys = na::DMatrix::zeros(dim, dim + 1);
-  for i in 0..dim {
-    reference_gradbarys[(i, 0)] = -1.0;
+/// The constant exterior drivatives of the reference barycentric coordinate
+/// functions, given in the 1-form standard basis.
+pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
+  let mut ref_difbarys = na::DMatrix::zeros(n, n + 1);
+  for i in 0..n {
+    ref_difbarys[(i, 0)] = -1.0;
+    ref_difbarys[(i, i + 1)] = 1.0;
   }
-  for i in 0..dim {
-    reference_gradbarys[(i, i + 1)] = 1.0;
-  }
+  ref_difbarys
+}
 
+/// The constant exterior derivatives of the reference Whitney forms, given in
+/// the k-form standard basis.
+pub fn ref_difwhitneys(n: Dim, k: Rank) -> na::DMatrix<f64> {
+  let difk = k + 1;
+  let difk_factorial = factorial(difk) as f64;
+
+  let whitney_basis_size = binomial(n + 1, k + 1);
+  let kform_basis_size = binomial(n, difk);
+
+  let mut ref_difwhitneys = na::DMatrix::zeros(kform_basis_size, whitney_basis_size);
+  for (whitney_comb_rank, whitney_comb) in
+    generate_combinations(n + 1, k + 1).into_iter().enumerate()
+  {
+    if whitney_comb[0] == 0 {
+      let kform_comb = whitney_comb.iter().skip(1).map(|c| *c - 1).collect_vec();
+      for i in 0..n {
+        let mut kform_comb = kform_comb.clone();
+        kform_comb.insert(0, i);
+        let sign = parity_sign(sort_count_swaps(&mut kform_comb)) as f64;
+        kform_comb.dedup();
+        if kform_comb.len() != difk {
+          continue;
+        };
+        let kform_comb_rank = rank_of_combination(&kform_comb, n);
+        ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign * difk_factorial;
+      }
+    } else {
+      let kform_comb = whitney_comb.iter().map(|c| *c - 1).collect_vec();
+      let kform_comb_rank = rank_of_combination(&kform_comb, n);
+      ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = difk_factorial;
+    }
+  }
+  ref_difwhitneys
+}
+
+/// Exact Element Matrix Provider for the Laplace-Beltrami operator.
+///
+/// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
+pub fn laplace_beltrami_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+  let ref_difbarys = ref_difbarys(cell.dim());
   let covector_gramian = covector_gramian(cell);
-  cell.vol() * reference_gradbarys.transpose() * covector_gramian * reference_gradbarys
+  cell.vol() * ref_difbarys.transpose() * covector_gramian * ref_difbarys
+}
+
+/// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
+///
+/// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
+pub fn hodge_laplace_dif_elmat(cell: &StandaloneCell, k: Rank) -> na::DMatrix<f64> {
+  let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
+  let kform_gramian = kform_gramian(cell, k);
+  cell.vol() * ref_difwhitneys.transpose() * kform_gramian * ref_difwhitneys
 }
 
 /// Exact Element Matrix Provider for mass bilinear form.
@@ -166,11 +219,31 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
 
 #[cfg(test)]
 mod test {
-  use num_integer::binomial;
-
+  use super::{kform_gramian, ref_difbarys, ref_difwhitneys};
   use crate::{cell::ReferenceCell, util::assert_mat_eq};
 
-  use super::kform_gramian;
+  use num_integer::binomial;
+
+  #[test]
+  fn difwhitney0_is_difbary_ref() {
+    for n in 0..=5 {
+      let whitneys = ref_difwhitneys(n, 0);
+      let barys = ref_difbarys(n);
+      assert_mat_eq(&whitneys, &barys)
+    }
+  }
+  #[test]
+  fn difwhitneyn_is_zero() {
+    for n in 0..=5 {
+      println!("n={n}");
+      let whitneys = ref_difwhitneys(n, n);
+      let zero = na::DMatrix::zeros(0, 1);
+      assert_mat_eq(&whitneys, &zero)
+    }
+  }
+
+  #[test]
+  fn difwhitney_3dref() {}
 
   #[test]
   fn kform_gramian_refcell() {

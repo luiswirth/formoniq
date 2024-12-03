@@ -26,7 +26,7 @@ where
 
 #[test]
 fn laplacian_refcell() {
-  check_ref_elmat(fe::laplacian_neg_elmat, ref_laplacian);
+  check_ref_elmat(fe::laplace_beltrami_elmat, ref_laplacian);
 }
 fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
   let ndofs = dim + 1;

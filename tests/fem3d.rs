@@ -111,5 +111,5 @@ fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let coord_mesh = box_mesh.to_coord_manifold();
   let mesh = Rc::new(coord_mesh.into_manifold());
   let space = FeSpace::new(mesh.clone());
-  assemble::assemble_galmat(&space, fe::laplacian_neg_elmat).to_nalgebra_dense()
+  assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat).to_nalgebra_dense()
 }

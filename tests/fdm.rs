@@ -200,7 +200,8 @@ fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let coord_mesh = box_mesh.to_coord_manifold();
   let mesh = Rc::new(coord_mesh.into_manifold());
   let space = FeSpace::new(mesh.clone());
-  let mut galmat = assemble::assemble_galmat(&space, fe::laplacian_neg_elmat).to_nalgebra_dense();
+  let mut galmat =
+    assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
     &space,
     LoadElvec::new(na::DVector::from_element(mesh.nnodes(), 1.0)),
