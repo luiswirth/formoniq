@@ -1,13 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{
-  assemble,
-  fe::{laplacian_neg_elmat, lumped_mass_elmat, LoadElvec},
-  lse,
-  mesh::dim3,
-  space::FeSpace,
-};
+use formoniq::{assemble, fe, lse, mesh::dim3, space::FeSpace};
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -42,11 +36,11 @@ fn main() {
 
   let space = FeSpace::new(Rc::clone(&mesh));
 
-  let mut laplacian_galmat = assemble::assemble_galmat(&space, laplacian_neg_elmat);
-  let mut mass_galmat = assemble::assemble_galmat(&space, lumped_mass_elmat);
+  let mut laplacian_galmat = assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat);
+  let mut mass_galmat = assemble::assemble_galmat(&space, fe::lumped_mass_elmat);
 
   let load = na::DVector::zeros(mesh.nnodes());
-  let mut galvec = assemble::assemble_galvec(&space, LoadElvec::new(load));
+  let mut galvec = assemble::assemble_galvec(&space, fe::LoadElvec::new(load));
 
   assert!(!mesh.has_boundary());
   lse::enforce_homogeneous_dirichlet_bc(&mesh, &mut laplacian_galmat, &mut galvec);

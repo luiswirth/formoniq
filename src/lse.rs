@@ -18,7 +18,7 @@ where
 {
   let space = FeSpace::new(Rc::clone(mesh));
 
-  let elmat = fe::laplacian_neg_elmat;
+  let elmat = fe::laplace_beltrami_elmat;
   let mut galmat = assemble::assemble_galmat(&space, elmat);
 
   let elvec = fe::LoadElvec::new(load_data);

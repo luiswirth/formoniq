@@ -21,6 +21,14 @@ pub fn nsubedges(dim: Dim) -> usize {
   nsubsimplicies(dim, 1)
 }
 
+pub fn parity_sign(n: usize) -> i32 {
+  match n % 2 {
+    0 => 1,
+    1 => -1,
+    _ => unreachable!(),
+  }
+}
+
 /// performs a bubble sort and counts the number of swaps
 pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
   let mut nswaps = 0;
