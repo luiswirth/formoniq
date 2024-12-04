@@ -1,17 +1,25 @@
-pub fn gramian(m: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-  m.transpose() * m
+pub trait DMatrixExt {
+  fn gramian(&self) -> Self;
+  fn gram_det(&self) -> f64;
+  fn gram_det_sqrt(&self) -> f64;
+  fn condition_number(self) -> f64;
 }
-pub fn gram_det(m: &na::DMatrix<f64>) -> f64 {
-  gramian(m).determinant()
-}
-pub fn gram_det_sqrt(m: &na::DMatrix<f64>) -> f64 {
-  gram_det(m).sqrt()
-}
+impl DMatrixExt for na::DMatrix<f64> {
+  fn gramian(&self) -> Self {
+    self.transpose() * self
+  }
+  fn gram_det(&self) -> f64 {
+    self.gramian().determinant()
+  }
+  fn gram_det_sqrt(&self) -> f64 {
+    self.gram_det().sqrt()
+  }
 
-// TODO: support sparse matrices directly, by computing the ratio between the
-// largest and smallest eigenvalue.
-pub fn condition_number(mat: na::DMatrix<f64>) -> f64 {
-  mat.norm() * mat.try_inverse().unwrap().norm()
+  // TODO: also support sparse matrices
+  // but by computing the ratio between the largest and smallest eigenvalue.
+  fn condition_number(self) -> f64 {
+    self.norm() * self.try_inverse().unwrap().norm()
+  }
 }
 
 pub fn kronecker_sum<T>(mats: &[na::DMatrix<T>]) -> na::DMatrix<T>

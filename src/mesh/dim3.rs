@@ -1,6 +1,6 @@
 use super::coordinates::{CoordManifold, NodeCoords};
 use crate::{
-  combinatorics::{Sign, OrientedVertplex},
+  combo::{Sign, OrientedVertplex},
   VertexIdx,
 };
 

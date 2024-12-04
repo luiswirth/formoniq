@@ -1,5 +1,5 @@
 use crate::{
-  combinatorics::{OrderedVertplex, Sign, OrientedVertplex},
+  combo::{OrderedVertplex, OrientedVertplex, Sign},
   mesh::coordinates::{CoordManifold, NodeCoords},
 };
 use tracing::warn;
