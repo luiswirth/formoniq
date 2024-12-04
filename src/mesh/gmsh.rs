@@ -1,5 +1,5 @@
 use crate::{
-  combinatorics::{OrderedVertplex, Orientation, OrientedVertplex},
+  combinatorics::{OrderedVertplex, Sign, OrientedVertplex},
   mesh::coordinates::{CoordManifold, NodeCoords},
 };
 use tracing::warn;
@@ -40,7 +40,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
       let simplex = OrderedVertplex::new(simplex);
       // NOTE: gmsh always produces positively oriented cells
       // TODO: only assume Pos for cells(!) not all simplicies.
-      let simplex = OrientedVertplex::new(simplex, Orientation::Pos);
+      let simplex = OrientedVertplex::new(simplex, Sign::Pos);
       simplex_acc.push(simplex);
     }
   }

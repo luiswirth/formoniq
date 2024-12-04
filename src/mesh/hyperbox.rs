@@ -7,9 +7,37 @@ use super::{
 };
 use crate::{
   combinatorics::{factorial, OrderedVertplex, OrientedVertplex},
-  util::{cartesian_index2linear_index, linear_index2cartesian_index},
   Dim,
 };
+
+/// converts linear index to cartesian index
+///
+/// converts linear index in 0..dim_len^d to cartesian index in (0)^d..(dim_len)^d
+pub fn linear_index2cartesian_index(
+  mut lin_idx: usize,
+  dim_len: usize,
+  dim: usize,
+) -> na::DVector<usize> {
+  let mut cart_idx = na::DVector::zeros(dim);
+  for icomp in 0..dim {
+    cart_idx[icomp] = lin_idx % dim_len;
+    lin_idx /= dim_len;
+  }
+  cart_idx
+}
+
+/// converts cartesian index to linear index
+///
+/// converts cartesian index in (0)^d..(dim_len)^d to linear index in 0..dim_len^d
+pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize) -> usize {
+  let dim = cart_idx.len();
+  let mut lin_idx = 0;
+  for icomp in (0..dim).rev() {
+    lin_idx *= dim_len;
+    lin_idx += cart_idx[icomp];
+  }
+  lin_idx
+}
 
 pub struct HyperBox {
   min: na::DVector<f64>,

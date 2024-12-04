@@ -1,72 +1,25 @@
 use std::path::Path;
 
-pub fn indicies_to_flags(indicies: &[usize], len: usize) -> Vec<bool> {
-  let mut flags = vec![false; len];
-  indicies.iter().for_each(|&i| flags[i] = true);
-  flags
+pub trait VecInto<S> {
+  fn vec_into(self) -> Vec<S>;
 }
 
-pub fn flags_to_indicies(flags: &[bool]) -> Vec<usize> {
-  flags
-    .iter()
-    .enumerate()
-    .filter_map(|(i, &flag)| flag.then_some(i))
-    .collect()
-}
-
-pub fn sparse_to_dense_data<T>(sparse: Vec<(usize, T)>, len: usize) -> Vec<Option<T>> {
-  let mut dense = Vec::from_iter((0..len).map(|_| None));
-  sparse.into_iter().for_each(|(i, t)| dense[i] = Some(t));
-  dense
-}
-
-pub fn dense_to_sparse_data<T>(dense: Vec<Option<T>>) -> Vec<(usize, T)> {
-  dense
-    .into_iter()
-    .enumerate()
-    .filter_map(|(i, o)| o.map(|v| (i, v)))
-    .collect()
-}
-
-/// converts linear index to cartesian index
-///
-/// converts linear index in 0..dim_len^d to cartesian index in (0)^d..(dim_len)^d
-pub fn linear_index2cartesian_index(
-  mut lin_idx: usize,
-  dim_len: usize,
-  dim: usize,
-) -> na::DVector<usize> {
-  let mut cart_idx = na::DVector::zeros(dim);
-  for icomp in 0..dim {
-    cart_idx[icomp] = lin_idx % dim_len;
-    lin_idx /= dim_len;
+impl<T, S> VecInto<S> for Vec<T>
+where
+  T: Into<S>,
+{
+  fn vec_into(self) -> Vec<S> {
+    self.into_iter().map(|v| v.into()).collect()
   }
-  cart_idx
 }
 
-/// converts cartesian index to linear index
-///
-/// converts cartesian index in (0)^d..(dim_len)^d to linear index in 0..dim_len^d
-pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize) -> usize {
-  let dim = cart_idx.len();
-  let mut lin_idx = 0;
-  for icomp in (0..dim).rev() {
-    lin_idx *= dim_len;
-    lin_idx += cart_idx[icomp];
+pub fn save_vector(mu: &na::DVector<f64>, path: impl AsRef<Path>) -> std::io::Result<()> {
+  use std::io::Write;
+  let mut file = std::fs::File::create(path).unwrap();
+  for v in mu.iter() {
+    writeln!(file, "{v}")?;
   }
-  lin_idx
-}
-
-pub fn gram(m: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-  m.transpose() * m
-}
-
-pub fn gram_det(m: &na::DMatrix<f64>) -> f64 {
-  gram(m).determinant()
-}
-
-pub fn gram_det_sqrt(m: &na::DMatrix<f64>) -> f64 {
-  gram_det(m).sqrt()
+  Ok(())
 }
 
 pub fn faervec2navec(faer: &faer::Mat<f64>) -> na::DVector<f64> {
@@ -82,89 +35,54 @@ pub fn navec2faervec(na: &na::DVector<f64>) -> faer::Mat<f64> {
   faer
 }
 
-pub fn kronecker_sum<T>(mats: &[na::DMatrix<T>]) -> na::DMatrix<T>
-where
-  T: na::Scalar + num_traits::Zero + num_traits::One + na::ClosedMulAssign + na::ClosedAddAssign,
-{
-  assert!(!mats.is_empty());
-  assert!(mats.iter().all(|m| m.nrows() == m.ncols()));
+type SparseMatrixFaer = faer::sparse::SparseColMat<usize, f64>;
 
-  let eyes: Vec<_> = mats
-    .iter()
-    .map(|m| na::DMatrix::identity(m.nrows(), m.nrows()))
-    .collect();
+pub fn nalgebra2faer(m: nas::CscMatrix<f64>) -> SparseMatrixFaer {
+  let nrows = m.nrows();
+  let ncols = m.ncols();
+  let (col_ptrs, row_indices, values) = m.disassemble();
 
-  let kron_size = mats.iter().map(|mat| mat.nrows()).product::<usize>();
-  let mut kron_sum = na::DMatrix::zeros(kron_size, kron_size);
-  for (dim, mat) in mats.iter().enumerate() {
-    let eyes_before = eyes[..dim]
-      .iter()
-      .fold(na::DMatrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
-    let eyes_after = eyes[dim + 1..]
-      .iter()
-      .fold(na::DMatrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
+  let symbolic =
+    faer::sparse::SymbolicSparseColMat::new_checked(nrows, ncols, col_ptrs, None, row_indices);
+  faer::sparse::SparseColMat::new(symbolic, values)
+}
 
-    let kron_prod = eyes_before.kronecker(mat).kronecker(&eyes_after);
-    kron_sum += kron_prod;
+pub fn faer2nalgebra(m: SparseMatrixFaer) -> nas::CscMatrix<f64> {
+  let (symbolic, values) = m.into_parts();
+  let (nrows, ncols, col_ptrs, _, row_indices) = symbolic.into_parts();
+  nas::CscMatrix::try_from_csc_data(nrows, ncols, col_ptrs, row_indices, values).unwrap()
+}
+
+pub struct FaerLu {
+  raw: faer::sparse::linalg::solvers::Lu<usize, f64>,
+}
+impl FaerLu {
+  pub fn new(a: nas::CscMatrix<f64>) -> Self {
+    let raw = nalgebra2faer(a).sp_lu().unwrap();
+    Self { raw }
   }
 
-  kron_sum
+  pub fn solve(&self, b: &na::DVector<f64>) -> na::DVector<f64> {
+    use faer::solvers::SpSolver as _;
+
+    let b = faer::col::from_slice(b.as_slice());
+    na::DVector::from_vec(self.raw.solve(b).as_slice().to_vec())
+  }
 }
 
-pub fn matrix_from_const_diagonals<T>(
-  values: &[T],
-  offsets: &[isize],
-  nrows: usize,
-  ncols: usize,
-) -> na::DMatrix<T>
-where
-  T: num_traits::Zero + na::Scalar + Copy,
-{
-  let mut matrix = na::DMatrix::zeros(nrows, ncols);
-
-  for (idiag, &offset) in offsets.iter().enumerate() {
-    let [start_row, start_col] = if offset >= 0 {
-      [0, offset as usize]
-    } else {
-      [(-offset) as usize, 0]
-    };
-
-    let mut r = start_row;
-    let mut c = start_col;
-    while r < nrows && c < ncols {
-      matrix[(r, c)] = values[idiag];
-      r += 1;
-      c += 1;
-    }
+pub struct FaerCholesky {
+  raw: faer::sparse::linalg::solvers::Cholesky<usize, f64>,
+}
+impl FaerCholesky {
+  pub fn new(a: nas::CscMatrix<f64>) -> Self {
+    let raw = nalgebra2faer(a).sp_cholesky(faer::Side::Upper).unwrap();
+    Self { raw }
   }
 
-  matrix
-}
+  pub fn solve(&self, b: &na::DVector<f64>) -> na::DVector<f64> {
+    use faer::solvers::SpSolver as _;
 
-// TODO: do it for sparse matrices directly, by computing the ratio between the
-// largest and smallest eigenvalue.
-pub fn condition_number(mat: na::DMatrix<f64>) -> f64 {
-  mat.norm() * mat.try_inverse().unwrap().norm()
-}
-
-pub fn save_vector(mu: &na::DVector<f64>, path: impl AsRef<Path>) -> std::io::Result<()> {
-  use std::io::Write;
-  let mut file = std::fs::File::create(path).unwrap();
-  for v in mu.iter() {
-    writeln!(file, "{v}")?;
-  }
-  Ok(())
-}
-
-pub fn assert_mat_eq(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>) {
-  const TOL: f64 = 10e-12;
-  let diff = a - b;
-  let error = diff.norm();
-  let equal = error <= TOL;
-  if !equal {
-    println!("Matrix a={a:.3}");
-    println!("Matrix b={b:.3}");
-    println!("a-b={diff:.3}");
-    panic!("Matrices not equal.");
+    let b = faer::col::from_slice(b.as_slice());
+    na::DVector::from_vec(self.raw.solve(b).as_slice().to_vec())
   }
 }

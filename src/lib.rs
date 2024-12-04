@@ -11,12 +11,13 @@ pub mod space;
 pub mod evp;
 pub mod lse;
 
-pub mod matrix;
+pub mod linalg;
+pub mod sparse;
 pub mod util;
 
 pub type Dim = usize;
 pub type Codim = usize;
 
-pub type Rank = usize;
+pub type FormRank = usize;
 
 pub type VertexIdx = usize;

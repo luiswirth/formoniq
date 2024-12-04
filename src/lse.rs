@@ -1,8 +1,8 @@
 use crate::{
   assemble, fe,
-  matrix::{FaerCholesky, SparseMatrix},
   mesh::SimplicialManifold,
   space::{DofIdx, FeSpace},
+  sparse::{FaerCholesky, SparseMatrix},
   util,
 };
 

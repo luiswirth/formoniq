@@ -1,8 +1,8 @@
 use crate::{
   fe::{ElmatProvider, ElvecProvider},
-  matrix::SparseMatrix,
   mesh::SimplicialManifold,
   space::{DofIdx, FeSpace},
+  sparse::SparseMatrix,
 };
 
 pub fn assemble_galmat_raw(
