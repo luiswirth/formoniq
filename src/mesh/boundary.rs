@@ -17,7 +17,7 @@ impl SimplicialManifold {
     self
       .facets()
       .iter()
-      .filter(|f| f.antiboundary().len() == 1)
+      .filter(|f| f.anti_boundary().len() == 1)
       .collect()
   }
 
@@ -27,7 +27,7 @@ impl SimplicialManifold {
     self
       .boundary_facets()
       .into_iter()
-      .flat_map(|face| face.canonical_vertplex().iter().copied())
+      .flat_map(|face| face.combinatorial_simplex().iter().copied())
       .unique()
       .collect()
   }
@@ -41,7 +41,7 @@ impl SimplicialManifold {
       .boundary_facets()
       .into_iter()
       // the boundary has only one super by definition
-      .map(|face| face.antiboundary().iter().next().unwrap())
+      .map(|face| face.anti_boundary().iter().next().unwrap())
       .map(|cell| cell.kidx())
       .unique()
       .collect()

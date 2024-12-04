@@ -1,5 +1,5 @@
 use crate::{
-  combinatorics::{factorial, IndexSet, Sign},
+  combo::{factorial, IndexSet, Sign},
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
   Dim, VertexIdx,
 };
@@ -9,12 +9,12 @@ use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
 pub type Length = f64;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct StandaloneCell {
+pub struct CellComplex {
   faces: Vec<Vec<KSimplexIdx>>,
   orientation: Sign,
   edge_lengths: Vec<f64>,
 }
-impl StandaloneCell {
+impl CellComplex {
   pub fn new(faces: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
     Self {
       faces,
@@ -157,7 +157,7 @@ impl ReferenceCell {
     mat
   }
 
-  pub fn to_standalone_cell(&self) -> StandaloneCell {
+  pub fn to_standalone_cell(&self) -> CellComplex {
     let faces = self
       .faces
       .iter()
@@ -165,7 +165,7 @@ impl ReferenceCell {
       .collect();
     let orientation = Sign::Pos;
     let edge_lengths = self.edge_lengths.clone();
-    StandaloneCell::new(faces, orientation, edge_lengths)
+    CellComplex::new(faces, orientation, edge_lengths)
   }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {

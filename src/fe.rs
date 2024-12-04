@@ -1,36 +1,33 @@
-use itertools::Itertools;
 use num_integer::binomial;
 
 use crate::{
-  cell::{StandaloneCell, REFCELLS},
-  combinatorics::{
-    canonical_combinations, factorial, parity_signf, rank_of_combination, sort_count_swaps,
-  },
+  cell::{CellComplex, REFCELLS},
+  combo::{factorial, sort_count_swaps},
   mesh::SimplicialManifold,
   Dim, FormRank,
 };
 
 pub trait ElmatProvider {
-  fn eval(&self, cell: &StandaloneCell) -> na::DMatrix<f64>;
+  fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64>;
 }
 
 impl<F> ElmatProvider for F
 where
-  F: Fn(&StandaloneCell) -> na::DMatrix<f64>,
+  F: Fn(&CellComplex) -> na::DMatrix<f64>,
 {
-  fn eval(&self, cell: &StandaloneCell) -> na::DMatrix<f64> {
+  fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64> {
     self(cell)
   }
 }
 
 pub trait ElvecProvider {
-  fn eval(&self, cell: &StandaloneCell) -> na::DVector<f64>;
+  fn eval(&self, cell: &CellComplex) -> na::DVector<f64>;
 }
 impl<F> ElvecProvider for F
 where
-  F: Fn(&StandaloneCell) -> na::DVector<f64>,
+  F: Fn(&CellComplex) -> na::DVector<f64>,
 {
-  fn eval(&self, cell: &StandaloneCell) -> nalgebra::DVector<f64> {
+  fn eval(&self, cell: &CellComplex) -> nalgebra::DVector<f64> {
     self(cell)
   }
 }
@@ -42,7 +39,7 @@ pub fn kexterior_derivative_local(cell_dim: Dim, k: FormRank) -> na::DMatrix<f64
 
 /// $delta^k: cal(W) Lambda^k -> cal(W) Lambda^(k-1)$
 /// Hodge adjoint of exterior derivative.
-pub fn kcodifferential_local(cell: &StandaloneCell, k: FormRank) -> na::DMatrix<f64> {
+pub fn kcodifferential_local(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64> {
   let n = cell.dim();
 
   (-1f64).powi((n * (k + 1) + 1) as i32)
@@ -52,7 +49,7 @@ pub fn kcodifferential_local(cell: &StandaloneCell, k: FormRank) -> na::DMatrix<
 }
 
 /// $star_k: cal(W) Lambda^k -> cal(W) Lambda^(n-k)$
-pub fn khodge_star_local(_cell: &StandaloneCell, _k: FormRank) -> na::DMatrix<f64> {
+pub fn khodge_star_local(_cell: &CellComplex, _k: FormRank) -> na::DMatrix<f64> {
   todo!()
 }
 
@@ -61,7 +58,7 @@ pub fn khodge_star_local(_cell: &StandaloneCell, _k: FormRank) -> na::DMatrix<f6
 /// Inner product on covectors / 1-forms.
 ///
 /// Represented as gram matrix on covector standard basis.
-pub fn covector_gramian(cell: &StandaloneCell) -> na::DMatrix<f64> {
+pub fn covector_gramian(cell: &CellComplex) -> na::DMatrix<f64> {
   let vector_gramian = cell.metric_tensor();
   vector_gramian.try_inverse().unwrap()
 }
@@ -69,7 +66,7 @@ pub fn covector_gramian(cell: &StandaloneCell) -> na::DMatrix<f64> {
 /// Inner product on k-forms
 ///
 /// Represented as gram matrix on lexicographically ordered standard k-form standard basis.
-pub fn kform_gramian(cell: &StandaloneCell, k: FormRank) -> na::DMatrix<f64> {
+pub fn kform_gramian(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64> {
   let n = cell.dim();
   let combinations = canonical_combinations(n, k);
   let covector_gramian = covector_gramian(cell);
@@ -146,7 +143,7 @@ pub fn ref_difwhitneys(n: Dim, k: FormRank) -> na::DMatrix<f64> {
 /// Exact Element Matrix Provider for the Laplace-Beltrami operator.
 ///
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
-pub fn laplace_beltrami_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   let ref_difbarys = ref_difbarys(cell.dim());
   let covector_gramian = covector_gramian(cell);
   cell.vol() * ref_difbarys.transpose() * covector_gramian * ref_difbarys
@@ -155,14 +152,14 @@ pub fn laplace_beltrami_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
 /// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
 ///
 /// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_dif_elmat(cell: &StandaloneCell, k: FormRank) -> na::DMatrix<f64> {
+pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64> {
   let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
   let kform_gramian = kform_gramian(cell, k);
   cell.vol() * ref_difwhitneys.transpose() * kform_gramian * ref_difwhitneys
 }
 
 /// Exact Element Matrix Provider for mass bilinear form.
-pub fn mass_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+pub fn mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   let ndofs = cell.nvertices();
   let dim = cell.dim();
   let v = cell.vol() / ((dim + 1) * (dim + 2)) as f64;
@@ -173,7 +170,7 @@ pub fn mass_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
 
 /// Approximated Element Matrix Provider for mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
-pub fn lumped_mass_elmat(cell: &StandaloneCell) -> na::DMatrix<f64> {
+pub fn lumped_mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   let n = cell.nvertices();
   let v = cell.vol() / n as f64;
   na::DMatrix::from_diagonal_element(n, n, v)
@@ -191,7 +188,7 @@ impl LoadElvec {
   }
 }
 impl ElvecProvider for LoadElvec {
-  fn eval(&self, cell: &StandaloneCell) -> na::DVector<f64> {
+  fn eval(&self, cell: &CellComplex) -> na::DVector<f64> {
     let nverts = cell.nvertices();
 
     cell.vol() / nverts as f64
@@ -245,7 +242,7 @@ pub fn ref_whitney(
 #[cfg(test)]
 mod test {
   use super::{kform_gramian, ref_difbarys, ref_difwhitneys};
-  use crate::{cell::ReferenceCell, util::assert_mat_eq};
+  use crate::cell::ReferenceCell;
 
   use num_integer::binomial;
 

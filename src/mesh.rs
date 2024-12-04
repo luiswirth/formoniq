@@ -14,8 +14,8 @@ pub mod hyperbox;
 pub mod raw;
 
 use crate::{
-  cell::{Length, StandaloneCell},
-  combinatorics::{CanonicalVertplex, OrderedVertplex, OrientedVertplex, Sign},
+  cell::{CellComplex, Length},
+  combo::{MeshContainerCell, MeshContainerSimplex},
   Dim, VertexIdx,
 };
 
@@ -25,12 +25,15 @@ use std::hash::Hash;
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
 pub struct SimplicialManifold {
-  cells: Vec<OrientedVertplex>,
+  cells: Vec<MeshContainerCell>,
   skeletons: Vec<Skeleton>,
 
   /// mapping [`EdgeIdx`] -> [`Length`]
   edge_lengths: Vec<Length>,
 }
+
+/// A container for simplicies of common dimension.
+pub type Skeleton = IndexMap<MeshContainerSimplex, SimplexData>;
 
 // getters
 impl SimplicialManifold {
@@ -45,11 +48,11 @@ impl SimplicialManifold {
     SkeletonHandle::new(self, dim)
   }
 
-  pub fn cells(&self) -> SkeletonHandle {
-    self.skeleton(self.dim())
+  pub fn cells(&self) -> impl Iterator<Item = CellHandle> {
+    (0..self.ncells()).map(|icell| CellHandle::new(self, icell))
   }
   pub fn ncells(&self) -> usize {
-    self.cells().len()
+    self.cells.len()
   }
   pub fn vertices(&self) -> SkeletonHandle {
     self.skeleton(0)
@@ -85,15 +88,11 @@ impl SimplicialManifold {
   pub fn shape_regularity_measure(&self) -> f64 {
     self
       .cells()
-      .iter()
-      .map(|cell| cell.as_standalone_cell().shape_reguarity_measure())
+      .map(|cell| cell.as_cell_complex().shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
 }
-
-/// A container for topological simplicies of common dimension.
-pub type Skeleton = IndexMap<CanonicalVertplex, SimplexData>;
 
 /// Topological information of the simplex.
 #[derive(Debug, Clone)]
@@ -108,6 +107,39 @@ impl SimplexData {
   pub fn stub() -> Self {
     let parent_cells = Vec::new();
     Self { parent_cells }
+  }
+}
+
+/// Fat pointer to simplex.
+pub struct CellHandle<'m> {
+  idx: CellIdx,
+  mesh: &'m SimplicialManifold,
+}
+impl<'m> CellHandle<'m> {
+  pub fn new(mesh: &'m SimplicialManifold, idx: CellIdx) -> Self {
+    Self { mesh, idx }
+  }
+  pub fn dim(&self) -> Dim {
+    self.mesh.dim()
+  }
+
+  pub fn as_simplex(&self) -> SimplexHandle {
+    SimplexHandle::new(self.mesh, (self.mesh.dim(), self.idx))
+  }
+
+  pub fn combinatorial_simplex(&self) -> &'m MeshContainerCell {
+    &self.mesh.cells[self.idx]
+  }
+
+  pub fn as_cell_complex(&self) -> CellComplex {
+    let combinatorial = self.combinatorial_simplex();
+    let simplex = self.as_simplex();
+    let faces = (0..=self.dim())
+      .map(|k| simplex.subs(k).map(|s| s.kidx()).collect())
+      .collect();
+    let sign = combinatorial.sign();
+    let edge_lengths = simplex.edge_lengths();
+    CellComplex::new(faces, sign, edge_lengths)
   }
 }
 
@@ -146,55 +178,72 @@ impl<'m> SimplexHandle<'m> {
       .1
   }
 
-  pub fn is_cell(&self) -> bool {
-    self.dim() == self.mesh.dim()
+  pub fn try_as_cell(&self) -> Option<CellHandle> {
+    if self.dim() == self.mesh.dim() {
+      Some(CellHandle::new(self.mesh, self.kidx()))
+    } else {
+      None
+    }
   }
 
   pub fn nvertices(&self) -> usize {
-    self.canonical_vertplex().nvertices()
+    self.combinatorial_simplex().k()
   }
-  pub fn canonical_vertplex(&self) -> &'m CanonicalVertplex {
+  pub fn combinatorial_simplex(&self) -> &'m MeshContainerSimplex {
     self.mesh.skeletons[self.dim()]
       .get_index(self.kidx())
       .unwrap()
       .0
   }
-  pub fn ordered_vertplex(&self) -> &'m OrderedVertplex {
-    assert!(self.is_cell(), "Only Cells are ordered.");
-    self.oriented_vertplex().as_ordered()
-  }
-  pub fn oriented_vertplex(&self) -> &'m OrientedVertplex {
-    assert!(self.is_cell(), "Only Cells are oriented.");
-    &self.mesh.cells[self.kidx()]
+
+  pub fn anti_boundary(&self) -> Vec<SimplexHandle> {
+    self
+      .parent_cells()
+      .flat_map(|parent_cell| {
+        self
+          .combinatorial_simplex()
+          .clone()
+          .with_global_base(
+            parent_cell
+              .combinatorial_simplex()
+              .clone()
+              .into_global_base(),
+          )
+          .anti_boundary()
+          .map(|sub| {
+            let idx = self
+              .mesh
+              .skeleton(self.dim() - 1)
+              .get_key(&sub.forget_base())
+              .idx();
+            SimplexHandle::new(self.mesh, idx)
+          })
+      })
+      .collect()
   }
 
-  pub fn antiboundary(&self) -> SparseChain<'m> {
+  pub fn boundary_chain(&self) -> SparseChain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for (isup, sup) in self.sups(self.dim() + 1).enumerate() {
-      idxs.push(sup.kidx());
-      // TODO: check this orientation
-      coeffs.push(Sign::from_parity(self.nvertices() - 1 - isup).as_i32());
+    for sub in self.combinatorial_simplex().signed_boundary() {
+      let coeff = sub.sign().as_i32();
+      let idx = self
+        .mesh
+        .skeleton(self.dim() - 1)
+        .get_key(&sub.forget_sign())
+        .kidx();
+      idxs.push(idx);
+      coeffs.push(coeff);
     }
     SparseChain::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
 
-  pub fn boundary(&self) -> SparseChain<'m> {
-    let mut idxs = Vec::new();
-    let mut coeffs = Vec::new();
-    for (isub, sub) in self.subs(self.dim() - 1).enumerate() {
-      idxs.push(sub.kidx());
-      coeffs.push(Sign::from_parity(self.nvertices() - 1 - isub).as_i32());
-    }
-    SparseChain::new(self.mesh, self.dim() - 1, idxs, coeffs)
-  }
-
-  pub fn parent_cells(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+  pub fn parent_cells(&self) -> impl Iterator<Item = CellHandle<'m>> + '_ {
     self
       .simplex_data()
       .parent_cells
       .iter()
-      .map(|&cell_kidx| SimplexHandle::new(self.mesh, (self.mesh.dim(), cell_kidx)))
+      .map(|&cell_idx| CellHandle::new(self.mesh, cell_idx))
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self.subs(1)
@@ -205,16 +254,6 @@ impl<'m> SimplexHandle<'m> {
       .map(|e| self.mesh.edge_lengths[e.idx.kidx])
       .collect()
   }
-  pub fn as_standalone_cell(&self) -> StandaloneCell {
-    assert!(self.is_cell(), "Simplex is not a cell.");
-
-    let faces = (0..=self.dim())
-      .map(|k| self.subs(k).map(|s| s.kidx()).collect())
-      .collect();
-    let orientation = self.oriented_vertplex().superimposed_orient();
-    let edge_lengths = self.edge_lengths();
-    StandaloneCell::new(faces, orientation, edge_lengths)
-  }
 
   /// The dim-subsimplicies of this simplex.
   ///
@@ -223,9 +262,8 @@ impl<'m> SimplexHandle<'m> {
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
   pub fn subs(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .canonical_vertplex()
+      .combinatorial_simplex()
       .subs(dim)
-      .into_iter()
       .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
   }
 
@@ -233,16 +271,24 @@ impl<'m> SimplexHandle<'m> {
   ///
   /// These are ordered first by cell index and then
   /// by lexicographically w.r.t. the local vertex indices.
-  pub fn sups(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
+  pub fn sups(&self, dim: Dim) -> Vec<SimplexHandle> {
     self
-      .canonical_vertplex()
-      .sups(
-        dim,
-        self.parent_cells().map(move |c| c.canonical_vertplex()),
-      )
-      .into_iter()
-      .map(move |a| self.mesh.skeleton(dim).get_key(&a).idx)
-      .map(move |a| Self::new(self.mesh, a))
+      .parent_cells()
+      .flat_map(|parent_cell| {
+        self
+          .combinatorial_simplex()
+          .clone()
+          .with_global_base(
+            parent_cell
+              .combinatorial_simplex()
+              .clone()
+              .into_global_base(),
+          )
+          .sups(dim)
+          .map(move |a| self.mesh.skeleton(dim).get_key(&a.forget_base()).idx)
+          .map(move |a| Self::new(self.mesh, a))
+      })
+      .collect()
   }
 }
 
@@ -285,7 +331,7 @@ impl<'m> SkeletonHandle<'m> {
   pub fn get_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
-  pub fn get_key(&self, key: &CanonicalVertplex) -> SimplexHandle<'m> {
+  pub fn get_key(&self, key: &MeshContainerSimplex) -> SimplexHandle<'m> {
     let idx = self.raw().get_full(key).unwrap().0;
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
@@ -374,23 +420,24 @@ mod test {
 
   use crate::{
     cell::ReferenceCell,
-    combinatorics::{nsubsimplicies, CanonicalVertplex},
+    combo::{MeshContainerCell, Sign, SimplexFace},
   };
 
   #[test]
   fn incidence() {
     let dim = 3;
     let mesh = ReferenceCell::new(dim).to_singleton_mesh();
+    let cell = mesh.cells().next().unwrap();
 
-    let cell = mesh.cells().get_kidx(0);
-
-    let cell_vertices = CanonicalVertplex::new_unchecked((0..(dim + 1)).collect());
-    assert_eq!(cell.canonical_vertplex(), &cell_vertices);
+    let cell_vertices = SimplexFace::counting(dim + 1)
+      .forget_sorted()
+      .with_sign(Sign::Pos);
+    assert_eq!(cell.combinatorial_simplex(), &cell_vertices);
 
     for dim_sub in 0..=dim {
       let skeleton = mesh.skeleton(dim_sub);
       for simp in skeleton.iter() {
-        let simp_vertices = simp.canonical_vertplex();
+        let simp_vertices = simp.combinatorial_simplex();
         print!("{simp_vertices:?},");
       }
       println!();
@@ -403,7 +450,7 @@ mod test {
       assert_eq!(
         subs
           .iter()
-          .map(|sub| sub.canonical_vertplex().clone())
+          .map(|sub| sub.combinatorial_simplex().clone())
           .collect::<Vec<_>>(),
         subs_vertices
       );
@@ -414,7 +461,7 @@ mod test {
           let sups: Vec<_> = sub.sups(dim_sup).collect();
           let sups_vertices = sups
             .iter()
-            .map(|sub| sub.canonical_vertplex().clone())
+            .map(|sub| sub.combinatorial_simplex().clone())
             .collect::<Vec<_>>();
           sups_vertices
             .iter()

@@ -1,10 +1,5 @@
 use super::{raw::RawSimplicialManifold, SimplicialManifold};
-use crate::{
-  combinatorics::{CanonicalVertplex, OrderedVertplex, OrientedVertplex, Sign},
-  mesh::VertexIdx,
-  util::gram_det_sqrt,
-  Dim,
-};
+use crate::{mesh::VertexIdx, Dim};
 
 use std::collections::{hash_map, HashMap};
 

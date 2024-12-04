@@ -24,7 +24,7 @@ pub fn assemble_galmat_raw(
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::zeros(space.ndofs(), space.ndofs());
-  for cell in space.mesh().cells().iter() {
+  for cell in space.mesh().cells() {
     let cell = cell.as_standalone_cell();
     let elmat = elmat.eval(&cell);
     let dof_faces = &cell.faces()[space.rank()];

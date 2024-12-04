@@ -1,12 +1,10 @@
-use itertools::Itertools;
-
 use super::{
   coordinates::{CoordManifold, NodeCoords},
   raw::RawSimplicialManifold,
   SimplicialManifold, VertexIdx,
 };
 use crate::{
-  combinatorics::{factorial, OrderedVertplex, OrientedVertplex},
+  combo::{factorial, IndexSet},
   Dim,
 };
 
@@ -194,37 +192,32 @@ impl HyperBoxMeshInfo {
       let ivertex_origin =
         cartesian_index2linear_index(vertex_icart_origin.clone(), self.nnodes_per_dim());
 
-      let basisdirs: Vec<_> = (0..dim).collect();
+      let basisdirs = IndexSet::counting(dim);
 
       // construct all $d!$ simplicies that make up the current box
       // each permutation of the basis directions (dimensions) gives rise to one simplicial cell
-      let cube_cells = basisdirs
-        .iter()
-        .copied()
-        // TODO: replace itertools with custom impl
-        .permutations(basisdirs.len())
-        .map(|basisdirs| {
-          // construct simplex by adding all shifted vertices
-          let mut cell = vec![ivertex_origin];
+      let cube_cells = basisdirs.permutations().map(|basisdirs| {
+        // construct simplex by adding all shifted vertices
+        let mut cell = vec![ivertex_origin];
 
-          // add every shift (according to permutation) to vertex iteratively
-          // every shift step gives us one vertex
-          let mut vertex_icart = vertex_icart_origin.clone();
-          for basisdir in basisdirs {
-            vertex_icart[basisdir] += 1;
+        // add every shift (according to permutation) to vertex iteratively
+        // every shift step gives us one vertex
+        let mut vertex_icart = vertex_icart_origin.clone();
+        for &basisdir in basisdirs.iter() {
+          vertex_icart[basisdir] += 1;
 
-            let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nnodes_per_dim());
-            cell.push(ivertex);
-          }
+          let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nnodes_per_dim());
+          cell.push(ivertex);
+        }
 
-          let cell = OrderedVertplex::new(cell);
+        let cell = OrderedVertplex::new(cell);
 
-          // Ensure consistent positive orientation of cells.
-          // TODO: avoid computing orientation using coordinates / determinant.
-          let orientation = node_coords.coord_simplex(&cell).orientation();
+        // Ensure consistent positive orientation of cells.
+        // TODO: avoid computing orientation using coordinates / determinant.
+        let orientation = node_coords.coord_simplex(&cell).orientation();
 
-          OrientedVertplex::new(cell, orientation)
-        });
+        OrientedVertplex::new(cell, orientation)
+      });
 
       cells.extend(cube_cells);
     }
