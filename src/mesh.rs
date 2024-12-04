@@ -15,7 +15,7 @@ pub mod raw;
 
 use crate::{
   cell::{Length, StandaloneCell},
-  combinatorics::{CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex},
+  combinatorics::{CanonicalVertplex, OrderedVertplex, OrientedVertplex, Sign},
   Dim, VertexIdx,
 };
 
@@ -174,7 +174,7 @@ impl<'m> SimplexHandle<'m> {
     for (isup, sup) in self.sups(self.dim() + 1).enumerate() {
       idxs.push(sup.kidx());
       // TODO: check this orientation
-      coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isup).as_i32());
+      coeffs.push(Sign::from_parity(self.nvertices() - 1 - isup).as_i32());
     }
     SparseChain::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }
@@ -184,7 +184,7 @@ impl<'m> SimplexHandle<'m> {
     let mut coeffs = Vec::new();
     for (isub, sub) in self.subs(self.dim() - 1).enumerate() {
       idxs.push(sub.kidx());
-      coeffs.push(Orientation::from_permutation_parity(self.nvertices() - 1 - isub).as_i32());
+      coeffs.push(Sign::from_parity(self.nvertices() - 1 - isub).as_i32());
     }
     SparseChain::new(self.mesh, self.dim() - 1, idxs, coeffs)
   }

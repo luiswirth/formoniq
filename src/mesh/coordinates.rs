@@ -1,6 +1,6 @@
 use super::{raw::RawSimplicialManifold, SimplicialManifold};
 use crate::{
-  combinatorics::{CanonicalVertplex, OrderedVertplex, Orientation, OrientedVertplex},
+  combinatorics::{CanonicalVertplex, OrderedVertplex, OrientedVertplex, Sign},
   mesh::VertexIdx,
   util::gram_det_sqrt,
   Dim,
@@ -70,7 +70,7 @@ impl CoordManifold {
         debug_assert!(cell.dim() == dim_intrinsic, "Inconsistent cell dimension.");
         let coord_cell = node_coords.coord_simplex(cell.as_ordered());
         debug_assert!(
-          coord_cell.orientation() * cell.superimposed_orient() == Orientation::Pos,
+          coord_cell.orientation() * cell.superimposed_orient() == Sign::Pos,
           "Cells must be positively oriented."
         );
       }
@@ -174,7 +174,7 @@ impl CoordSimplex {
   pub fn vol(&self) -> f64 {
     self.det().abs()
   }
-  pub fn orientation(&self) -> Orientation {
-    Orientation::from_det(self.det())
+  pub fn orientation(&self) -> Sign {
+    Sign::from_f64(self.det())
   }
 }

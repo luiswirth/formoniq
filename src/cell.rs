@@ -1,7 +1,7 @@
 use crate::{
-  combinatorics::{factorial, nsubedges, rank_of_combination, CanonicalVertplex, Orientation},
+  combinatorics::{factorial, IndexSet, Sign},
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
-  Dim, Rank, VertexIdx,
+  Dim, VertexIdx,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
@@ -11,15 +11,11 @@ pub type Length = f64;
 #[derive(Debug, Clone, PartialEq)]
 pub struct StandaloneCell {
   faces: Vec<Vec<KSimplexIdx>>,
-  orientation: Orientation,
+  orientation: Sign,
   edge_lengths: Vec<f64>,
 }
 impl StandaloneCell {
-  pub fn new(
-    faces: Vec<Vec<KSimplexIdx>>,
-    orientation: Orientation,
-    edge_lengths: Vec<f64>,
-  ) -> Self {
+  pub fn new(faces: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
     Self {
       faces,
       orientation,
@@ -36,7 +32,7 @@ impl StandaloneCell {
   pub fn vertices(&self) -> &[VertexIdx] {
     &self.faces[0]
   }
-  pub fn orientation(&self) -> Orientation {
+  pub fn orientation(&self) -> Sign {
     self.orientation
   }
   pub fn faces(&self) -> &[Vec<KSimplexIdx>] {
@@ -79,7 +75,10 @@ impl StandaloneCell {
 
       let vi = ei + 1;
       let vj = ej + 1;
-      let eij = rank_of_combination(&[vi, vj], self.nvertices());
+      let eij = IndexSet::from([vi, vj])
+        .assume_sorted()
+        .with_local_base(self.nvertices())
+        .rank();
       let lij = self.edge_lengths[eij];
 
       0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2))
@@ -109,26 +108,20 @@ pub static REFCELLS: LazyLock<Vec<ReferenceCell>> =
   LazyLock::new(|| (0..=4).map(ReferenceCell::new).collect());
 
 pub struct ReferenceCell {
-  faces: Vec<Vec<CanonicalVertplex>>,
+  faces: Vec<Vec<ReferenceVertplex>>,
   edge_lengths: Vec<f64>,
 }
 impl ReferenceCell {
   /// Constructs a reference cell in `dim` dimensions.
   pub fn new(dim: Dim) -> Self {
     let nvertices = dim + 1;
-    let cell = CanonicalVertplex::new((0..nvertices).collect());
+    let faces = ncombinations(nvertices);
 
-    let faces = (0..=dim).map(|face_dim| cell.subs(face_dim)).collect();
-
-    let nedges = nsubedges(dim);
-    let mut edge_lengths = vec![0.0; nedges];
-    for l in edge_lengths.iter_mut().take(dim) {
-      *l = 1.0;
-    }
-    for l in edge_lengths.iter_mut().take(nedges).skip(dim) {
-      *l = SQRT_2;
-    }
-
+    let nedges = faces[1].len();
+    let edge_lengths: Vec<f64> = (0..dim)
+      .map(|_| 1.0)
+      .chain((dim..nedges).map(|_| SQRT_2))
+      .collect();
     Self {
       faces,
       edge_lengths,
@@ -145,17 +138,17 @@ impl ReferenceCell {
     self.faces[k].len()
   }
 
-  pub fn as_vertplex(&self) -> &CanonicalVertplex {
+  pub fn as_vertplex(&self) -> &ReferenceVertplex {
     &self.faces[self.dim()][0]
   }
 
   /// $diff^k: Delta_k -> Delta_(k-1)$
-  pub fn kboundary_operator(&self, k: Rank) -> na::DMatrix<f64> {
+  pub fn kboundary_operator(&self, k: Dim) -> na::DMatrix<f64> {
     let sups = &self.faces[k];
     let subs = &self.faces[k - 1];
     let mut mat = na::DMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.iter().enumerate() {
-      let sup_subs = sup.boundary();
+      let sup_subs = sup.signed_boundary();
       for (sub, orientation) in sup_subs {
         let isub = subs.iter().position(|other| sub == *other).unwrap();
         mat[(isub, isup)] = orientation.as_f64();
@@ -170,20 +163,20 @@ impl ReferenceCell {
       .iter()
       .map(|fs| (0..fs.len()).collect())
       .collect();
-    let orientation = Orientation::Pos;
+    let orientation = Sign::Pos;
     let edge_lengths = self.edge_lengths.clone();
     StandaloneCell::new(faces, orientation, edge_lengths)
   }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {
     let nnodes = self.nvertices();
-    let cells = vec![self.as_vertplex().clone().into_oriented()];
+    let cells = vec![self.as_vertplex().clone().into_signed()];
 
     let mut edge_lengths = HashMap::new();
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert(CanonicalVertplex::edge(i, j), self.edge_lengths[idx]);
+        edge_lengths.insert([i, j].into(), self.edge_lengths[idx]);
         idx += 1;
       }
     }
