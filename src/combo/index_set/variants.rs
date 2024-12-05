@@ -29,7 +29,7 @@ impl From<usize> for Local {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Global(Vec<usize>);
+pub struct Global(pub Vec<usize>);
 impl Base for Global {}
 impl Specified for Global {
   fn n(&self) -> usize {
@@ -98,6 +98,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
       signedness: self.signedness,
     }
   }
+
   pub fn forget_base(self) -> IndexSet<Unspecified, O, S> {
     IndexSet {
       indices: self.indices,

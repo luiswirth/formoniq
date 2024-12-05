@@ -34,7 +34,7 @@ impl Sign {
       Sign::Neg => Sign::Pos,
     }
   }
-  pub fn switch(&mut self) {
+  pub fn flip(&mut self) {
     *self = self.other()
   }
 

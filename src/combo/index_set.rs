@@ -1,6 +1,15 @@
+//! Combinatorics with sets of indicies
+//!
+//! Consider turning this into it's own crate.
+//! Possible names: indexalgebra, permutic
+
 pub mod aliases;
+pub mod combinators;
 pub mod variants;
 
+use combinators::{
+  IndexAntiBoundarySets, IndexBoundarySets, IndexPermutations, IndexSubsets, IndexSupsets,
+};
 use variants::*;
 
 use super::{binomial, Sign};
@@ -55,49 +64,16 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
       .then_with(|| self.pure_lexicographical_cmp(other))
   }
 
-  /// All signed permutations of `self` in lexicographical order.
-  pub fn permutations(&self) -> impl Iterator<Item = IndexSet<B, Ordered, Signed>> {
-    let self_sign = self.signedness.get_or_default();
-    let base = self.base.clone();
-
-    // TODO: stop relying on implementation details of itertools
-    itertools::Itertools::permutations(self.indices.clone().into_iter(), self.k())
-      .enumerate()
-      .map(move |(ipermut, indices)| {
-        let permutation_sign = Sign::from_parity(ipermut);
-        let sign = self_sign * permutation_sign;
-        IndexSet {
-          indices,
-          base: base.clone(),
-          order: Ordered,
-          signedness: Signed(sign),
-        }
-      })
+  pub fn permutations(&self) -> IndexPermutations<B, O, S> {
+    IndexPermutations::new(self.clone())
   }
 
-  /// All unsigned subcombinations of length `ksub` in lexicographical order.
-  pub fn subs(&self, ksub: usize) -> impl Iterator<Item = IndexSet<B, O, Unsigned>> {
-    let base = self.base.clone();
-    let ord = self.order;
-    let indices = self.indices.clone().into_iter();
-    // TODO: stop relying on implementation details of itertools
-    itertools::Itertools::combinations(indices, ksub).map(move |indices| IndexSet {
-      indices,
-      base: base.clone(),
-      order: ord,
-      signedness: Unsigned,
-    })
+  pub fn subsets(&self, ksub: usize) -> IndexSubsets<B, O> {
+    IndexSubsets::new(self.clone(), ksub)
   }
 
-  /// All signed boundary subcombinations.
-  pub fn boundary(&self) -> impl Iterator<Item = IndexSet<B, O, Signed>> {
-    let k = self.k();
-    let self_sign = self.signedness.get_or_default();
-    self.subs(k - 1).enumerate().map(move |(i, sub)| {
-      let boundary_sign = Sign::from_parity(k - 1 - i);
-      let sign = boundary_sign * self_sign;
-      sub.with_sign(sign)
-    })
+  pub fn boundary(&self) -> IndexBoundarySets<B, O, S> {
+    IndexBoundarySets::new(self.clone())
   }
 }
 
@@ -179,26 +155,12 @@ impl<B: Base, O: Order> IndexSet<B, O, Signed> {
 
 /// Only Base + Sorted
 impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
-  pub fn sups(&self, ksup: usize) -> impl Iterator<Item = IndexSet<B, Sorted, Unsigned>> {
-    let base = Self {
-      indices: self.base.indices(),
-      base: self.base.clone(),
-      order: Sorted,
-      signedness: self.signedness,
-    };
-    let this = self.clone();
-    base.subs(ksup).filter(move |sup| this.is_subset_of(sup))
+  pub fn sups(&self, ksup: usize) -> IndexSupsets<B, S> {
+    IndexSupsets::new(self.clone(), ksup)
   }
 
-  /// All signed anti-boundary supcombinations.
-  pub fn anti_boundary(&self) -> impl Iterator<Item = IndexSet<B, Sorted, Signed>> {
-    let k = self.k();
-    let self_sign = self.signedness.get_or_default();
-    self.sups(k + 1).enumerate().map(move |(i, sub)| {
-      let boundary_sign = Sign::from_parity(k - 1 - i);
-      let sign = boundary_sign * self_sign;
-      sub.with_sign(sign)
-    })
+  pub fn anti_boundary(&self) -> IndexAntiBoundarySets<B, S> {
+    IndexAntiBoundarySets::new(self.clone())
   }
 }
 
@@ -293,3 +255,6 @@ impl<const N: usize> From<[usize; N]> for IndexSet<Unspecified, Ordered, Unsigne
     Self::new(value.to_vec())
   }
 }
+
+#[cfg(test)]
+mod test {}

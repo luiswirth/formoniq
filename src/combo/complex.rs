@@ -14,7 +14,7 @@ impl NKComplex<Local, Sorted> {
   /// Combinations of canonical base {0,...,n-1}
   pub fn canonical(n: usize) -> Self {
     let graded_sets = (0..=n)
-      .map(|k| IndexSet::counting(n).subs(k).collect())
+      .map(|k| IndexSet::counting(n).subsets(k).collect())
       .collect();
     Self {
       graded_sets,
