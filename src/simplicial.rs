@@ -1,7 +1,8 @@
 use crate::{
   combo::{factorial, IndexSet, Sign},
-  mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
-  Dim, VertexIdx,
+  //mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
+  Dim,
+  VertexIdx,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
@@ -9,34 +10,34 @@ use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
 pub type Length = f64;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct CellComplex {
-  faces: Vec<Vec<KSimplexIdx>>,
+pub struct LocalComplex {
+  subs: Vec<Vec<KSimplexIdx>>,
   orientation: Sign,
   edge_lengths: Vec<f64>,
 }
-impl CellComplex {
+impl LocalComplex {
   pub fn new(faces: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
     Self {
-      faces,
+      subs: faces,
       orientation,
       edge_lengths,
     }
   }
 
   pub fn dim(&self) -> Dim {
-    self.faces.len() - 1
+    self.subs.len() - 1
   }
   pub fn nvertices(&self) -> usize {
-    self.faces[0].len()
+    self.subs[0].len()
   }
   pub fn vertices(&self) -> &[VertexIdx] {
-    &self.faces[0]
+    &self.subs[0]
   }
   pub fn orientation(&self) -> Sign {
     self.orientation
   }
   pub fn faces(&self) -> &[Vec<KSimplexIdx>] {
-    &self.faces
+    &self.subs
   }
 
   pub fn edge_lengths(&self) -> &[f64] {
@@ -157,7 +158,7 @@ impl ReferenceCell {
     mat
   }
 
-  pub fn to_standalone_cell(&self) -> CellComplex {
+  pub fn to_standalone_cell(&self) -> LocalComplex {
     let faces = self
       .faces
       .iter()
@@ -165,7 +166,7 @@ impl ReferenceCell {
       .collect();
     let orientation = Sign::Pos;
     let edge_lengths = self.edge_lengths.clone();
-    CellComplex::new(faces, orientation, edge_lengths)
+    LocalComplex::new(faces, orientation, edge_lengths)
   }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {

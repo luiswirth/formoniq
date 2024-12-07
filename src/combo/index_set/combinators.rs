@@ -2,65 +2,76 @@ use crate::combo::Sign;
 
 use super::{variants::*, IndexSet};
 
-/// All signed permutations of `self` in lexicographical order relative to
-/// set order (not absolute).
+/// All signed permutations of `self` in lexicographical order.
+///
+/// It's lexicographical relative to the original set order.
+/// It's only absolutly lexicographical, if the original set was sorted.
 pub struct IndexPermutations<B: Base, O: Order, S: Signedness> {
   state: itertools::Permutations<std::vec::IntoIter<usize>>,
-  permutation_sign: Sign,
-  base: B,
-  /// Sorted <=> Absolutely lexicographical, not only relative.
-  order: O,
-  signedness: S,
+  set: IndexSet<B, O, S>,
 }
 
 impl<B: Base, O: Order, S: Signedness> IndexPermutations<B, O, S> {
   pub fn new(set: IndexSet<B, O, S>) -> Self {
     let k = set.k();
-    let state = itertools::Itertools::permutations(set.indices.into_iter(), k);
-    let permutation_sign = Sign::Pos;
-    let base = set.base;
-    let order = set.order;
-    let signedness = set.signedness;
+    let indices = set.indices.clone().into_iter();
+    let state = itertools::Itertools::permutations(indices, k);
 
-    Self {
-      state,
-      permutation_sign,
-      base,
-      order,
-      signedness,
-    }
+    Self { state, set }
   }
-
-  pub fn base(&self) -> &B {
-    &self.base
-  }
-  pub fn order(&self) -> O {
-    self.order
-  }
-  pub fn signedness(&self) -> S {
-    self.signedness
+}
+impl IndexPermutations<Local, Sorted, Unsigned> {
+  pub fn canonical(n: usize) -> Self {
+    let set = IndexSet::canonical_full(n);
+    Self::new(set)
   }
 }
 
 impl<B: Base, O: Order, S: Signedness> Iterator for IndexPermutations<B, O, S> {
   type Item = IndexSet<B, Ordered, Signed>;
   fn next(&mut self) -> Option<Self::Item> {
-    let self_sign = self.signedness.get_or_default();
-    let sign = self_sign * self.permutation_sign;
-    self.permutation_sign.flip();
-
     let indices = self.state.next()?;
+    let sorted = IndexSet::new(indices.clone())
+      .with_sign(self.set.signedness.get_or_default())
+      .sort_sign();
     let next = IndexSet {
-      indices,
-      base: self.base.clone(),
+      indices: indices.clone(),
+      base: self.set.base.clone(),
       order: Ordered,
-      signedness: Signed(sign),
+      signedness: sorted.signedness,
     };
+
     Some(next)
   }
 }
 
-// How about graded on top?
+pub struct GradedIndexSubsets<B: Base, O: Order> {
+  set: IndexSet<B, O, Unsigned>,
+  k: usize,
+}
+impl<B: Base, O: Order> GradedIndexSubsets<B, O> {
+  pub fn new<S: Signedness>(set: IndexSet<B, O, S>) -> Self {
+    let set = set.forget_sign();
+    let k = 0;
+    Self { set, k }
+  }
+}
+impl GradedIndexSubsets<Local, Sorted> {
+  pub fn canonical(n: usize) -> Self {
+    let set = IndexSet::canonical_full(n);
+    Self::new(set)
+  }
+}
+impl<B: Base, O: Order> Iterator for GradedIndexSubsets<B, O> {
+  type Item = IndexSubsets<B, O>;
+  fn next(&mut self) -> Option<Self::Item> {
+    (self.k <= self.set.k()).then(|| {
+      let next = IndexSubsets::new(self.set.clone(), self.k);
+      self.k += 1;
+      next
+    })
+  }
+}
 
 pub struct IndexSubsets<B: Base, O: Order> {
   subsets: itertools::Combinations<std::vec::IntoIter<usize>>,
@@ -78,6 +89,12 @@ impl<B: Base, O: Order> IndexSubsets<B, O> {
       base,
       order,
     }
+  }
+}
+impl IndexSubsets<Local, Sorted> {
+  pub fn canonical(n: usize, k: usize) -> Self {
+    let set = IndexSet::canonical_full(n);
+    Self::new(set, k)
   }
 }
 
@@ -133,12 +150,12 @@ impl<B: Base, O: Order, S: Signedness> Iterator for IndexBoundarySets<B, O, S> {
   }
 }
 
-pub struct IndexSupsets<B: Specified, S: Signedness> {
+pub struct IndexSupsets<B: Specified> {
   base_subsets: IndexSubsets<B, Sorted>,
-  set: IndexSet<B, Sorted, S>,
+  set: IndexSet<B, Sorted, Unsigned>,
 }
-impl<B: Specified, S: Signedness> IndexSupsets<B, S> {
-  pub fn new(set: IndexSet<B, Sorted, S>, k: usize) -> Self {
+impl<B: Specified> IndexSupsets<B> {
+  pub fn new<S: Signedness>(set: IndexSet<B, Sorted, S>, k: usize) -> Self {
     let base_set = IndexSet {
       indices: set.base.indices(),
       base: set.base.clone(),
@@ -146,10 +163,11 @@ impl<B: Specified, S: Signedness> IndexSupsets<B, S> {
       signedness: Unsigned,
     };
     let base_subsets = IndexSubsets::new(base_set, k);
+    let set = set.forget_sign();
     Self { base_subsets, set }
   }
 }
-impl<B: Specified, S: Signedness> Iterator for IndexSupsets<B, S> {
+impl<B: Specified> Iterator for IndexSupsets<B> {
   type Item = IndexSet<B, Sorted, Unsigned>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.base_subsets.next()?;
@@ -162,7 +180,7 @@ impl<B: Specified, S: Signedness> Iterator for IndexSupsets<B, S> {
 }
 
 pub struct IndexAntiBoundarySets<B: Specified, S: Signedness> {
-  supsets: IndexSupsets<B, S>,
+  supsets: IndexSupsets<B>,
   signedness: S,
   boundary_sign: Sign,
 }
@@ -196,5 +214,78 @@ impl<B: Specified, S: Signedness> Iterator for IndexAntiBoundarySets<B, S> {
       signedness: Signed(sign),
     };
     Some(next)
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use crate::combo::IndexSet;
+
+  use super::{GradedIndexSubsets, IndexPermutations};
+
+  #[test]
+  fn canonical_permutations() {
+    for n in 0..=8 {
+      let permuts: Vec<_> = IndexPermutations::canonical(n).collect();
+      for win in permuts.windows(2) {
+        let [a, b] = win else { unreachable!() };
+        assert!(a.lexicographical_cmp(b).is_lt());
+      }
+      for permut in permuts {
+        dbg!(&permut);
+        let computed_sign = permut.sign();
+        let expected_sign = permut.forget_sign().sort_sign().sign();
+        assert_eq!(computed_sign, expected_sign);
+      }
+    }
+  }
+
+  #[test]
+  fn canonical_subsets() {
+    for n in 0..=8 {
+      let graded_subsets: Vec<Vec<_>> = GradedIndexSubsets::canonical(n)
+        .map(|s| s.collect())
+        .collect();
+
+      for subsets in graded_subsets.iter() {
+        for win in subsets.windows(2) {
+          let [a, b] = win else { unreachable!() };
+          assert!(a.lexicographical_cmp(b).is_lt());
+        }
+        for subset in subsets {
+          assert!(subset.indices.is_sorted());
+        }
+      }
+      let linearized: Vec<_> = graded_subsets
+        .into_iter()
+        .flat_map(|s| s.into_iter())
+        .collect();
+      for win in linearized.windows(2) {
+        let [a, b] = win else { unreachable!() };
+        assert!(a.graded_lexicographical_cmp(b).is_lt());
+      }
+      for (rank, subset) in linearized.iter().enumerate() {
+        assert_eq!(subset.rank(), rank);
+        assert_eq!(IndexSet::from_rank(n, subset.k(), rank), *subset);
+      }
+    }
+  }
+
+  #[test]
+  fn complex4() {
+    let n = 4;
+    let computed: Vec<Vec<_>> = GradedIndexSubsets::canonical(n)
+      .map(|s| s.map(|s| s.indices).collect())
+      .collect();
+
+    let expected: [&[&[usize]]; 5] = [
+      &[&[]],
+      &[&[0], &[1], &[2], &[3]],
+      &[&[0, 1], &[0, 2], &[0, 3], &[1, 2], &[1, 3], &[2, 3]],
+      &[&[0, 1, 2], &[0, 1, 3], &[0, 2, 3], &[1, 2, 3]],
+      &[&[0, 1, 2, 3]],
+    ];
+
+    assert_eq!(computed, expected);
   }
 }

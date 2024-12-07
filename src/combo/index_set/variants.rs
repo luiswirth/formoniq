@@ -138,12 +138,12 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn with_sign(self, sign: impl Into<Signed>) -> IndexSet<B, O, Signed> {
+  pub fn with_sign(self, sign: impl Into<Sign>) -> IndexSet<B, O, Signed> {
     IndexSet {
       indices: self.indices,
       base: self.base,
       order: self.order,
-      signedness: sign.into(),
+      signedness: Signed(sign.into()),
     }
   }
   pub fn forget_sign(self) -> IndexSet<B, O, Unsigned> {
