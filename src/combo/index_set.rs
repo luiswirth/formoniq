@@ -155,7 +155,7 @@ impl<B: Base, O: Order> IndexSet<B, O, Signed> {
 
 /// Only Base + Sorted
 impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
-  pub fn sups(&self, ksup: usize) -> IndexSupsets<B, S> {
+  pub fn sups(&self, ksup: usize) -> IndexSupsets<B> {
     IndexSupsets::new(self.clone(), ksup)
   }
 
@@ -167,22 +167,26 @@ impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
 /// Only Local + Sorted + Unsigned
 impl IndexSet<Local, Sorted, Unsigned> {
   pub fn from_rank(n: usize, k: usize, mut rank: usize) -> Self {
-    let nlast = n - 1;
-    let klast = k - 1;
+    for s in 0..k {
+      rank -= binomial(n, s);
+    }
 
     let mut indices = Vec::with_capacity(k);
-    let mut curr_idx = 0;
+    let mut start = 0;
+
+    // Rank now corresponds to the lexicographical rank of k-subsets.
     for i in 0..k {
-      loop {
-        let binom = binomial(nlast - curr_idx, klast - i);
-        if rank < binom {
+      let remaining = k - i;
+      for x in start..=n - remaining {
+        let c = binomial(n - x - 1, remaining - 1);
+        if rank < c {
+          indices.push(x);
+          start = x + 1;
           break;
+        } else {
+          rank -= c;
         }
-        rank -= binom;
-        curr_idx += 1;
       }
-      indices.push(curr_idx);
-      curr_idx += 1;
     }
 
     Self {
@@ -196,14 +200,16 @@ impl IndexSet<Local, Sorted, Unsigned> {
   pub fn rank(&self) -> usize {
     let n = self.n();
     let k = self.k();
-
     let mut rank = 0;
-    let mut icurr = 0;
-    for (i, &v) in self.iter().enumerate() {
-      for j in icurr..v {
-        rank += binomial(n - 1 - j, k - 1 - i);
+
+    for s in 0..k {
+      rank += binomial(n, s);
+    }
+    for (j, &i_j) in self.iter().enumerate() {
+      let start = if j == 0 { 0 } else { self[j - 1] + 1 };
+      for s in start..i_j {
+        rank += binomial(n - s - 1, k - j - 1);
       }
-      icurr = v + 1;
     }
     rank
   }
@@ -227,6 +233,17 @@ impl IndexSet<Unspecified, Sorted, Unsigned> {
   }
   pub fn counting(n: usize) -> Self {
     IndexSet::new((0..n).collect()).assume_sorted()
+  }
+}
+
+impl IndexSet<Local, Sorted, Unsigned> {
+  pub fn canonical_full(n: usize) -> Self {
+    IndexSet {
+      indices: (0..n).collect(),
+      base: Local(n),
+      order: Sorted,
+      signedness: Unsigned,
+    }
   }
 }
 
@@ -255,6 +272,3 @@ impl<const N: usize> From<[usize; N]> for IndexSet<Unspecified, Ordered, Unsigne
     Self::new(value.to_vec())
   }
 }
-
-#[cfg(test)]
-mod test {}
