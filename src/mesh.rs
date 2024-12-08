@@ -14,7 +14,7 @@ pub mod hyperbox;
 pub mod raw;
 
 use crate::{
-  combo::simplicial::{MeshCellVertplexInner, MeshVertplexInner},
+  combo::simplicial::{OrientedVertplex, SortedVertplex},
   simplicial::CellComplex,
   Dim, Length, VertexIdx,
 };
@@ -25,7 +25,7 @@ use std::hash::Hash;
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
 pub struct SimplicialManifold {
-  cells: Vec<MeshCellVertplexInner>,
+  cells: Vec<OrientedVertplex>,
   skeletons: Vec<Skeleton>,
 
   /// mapping [`EdgeIdx`] -> [`Length`]
@@ -33,7 +33,7 @@ pub struct SimplicialManifold {
 }
 
 /// A container for simplicies of common dimension.
-pub type Skeleton = IndexMap<MeshVertplexInner, SimplexData>;
+pub type Skeleton = IndexMap<SortedVertplex, SimplexData>;
 
 // getters
 impl SimplicialManifold {
@@ -130,12 +130,12 @@ impl<'m> CellHandle<'m> {
     SimplexHandle::new(self.mesh, (self.mesh.dim(), self.idx))
   }
 
-  pub fn vertplex(&self) -> &'m MeshCellVertplexInner {
+  pub fn oriented_vertplex(&self) -> &'m OrientedVertplex {
     &self.mesh.cells[self.idx]
   }
 
   pub fn as_cell_complex(&self) -> CellComplex {
-    let combinatorial = self.vertplex();
+    let combinatorial = self.oriented_vertplex();
     let simplex = self.as_simplex();
     let faces = (0..=self.dim())
       .map(|k| simplex.subs(k).map(|s| s.kidx()).collect())
@@ -190,9 +190,9 @@ impl<'m> SimplexHandle<'m> {
   }
 
   pub fn nvertices(&self) -> usize {
-    self.vertplex().k()
+    self.sorted_vertplex().len()
   }
-  pub fn vertplex(&self) -> &'m MeshVertplexInner {
+  pub fn sorted_vertplex(&self) -> &'m SortedVertplex {
     self.mesh.skeletons[self.dim()]
       .get_index(self.kidx())
       .unwrap()
@@ -204,16 +204,16 @@ impl<'m> SimplexHandle<'m> {
     let mut coeffs = Vec::new();
     for parent_cell in self.parent_cells() {
       for sup in self
-        .vertplex()
+        .sorted_vertplex()
         .clone()
-        .with_global_base(parent_cell.vertplex().clone().into_global_base())
+        .with_global_base(parent_cell.oriented_vertplex().clone().into_global_base())
         .anti_boundary()
       {
         let coeff = sup.sign().as_i32();
         let idx = self
           .mesh
           .skeleton(self.dim() - 1)
-          .get_key(&sup.forget_sign().forget_base())
+          .get_by_vertplex(&sup.forget_sign().forget_base())
           .kidx();
 
         idxs.push(idx);
@@ -226,12 +226,12 @@ impl<'m> SimplexHandle<'m> {
   pub fn boundary_chain(&self) -> SparseChain<'m> {
     let mut idxs = Vec::new();
     let mut coeffs = Vec::new();
-    for sub in self.vertplex().boundary() {
+    for sub in self.sorted_vertplex().boundary() {
       let coeff = sub.sign().as_i32();
       let idx = self
         .mesh
         .skeleton(self.dim() - 1)
-        .get_key(&sub.forget_sign())
+        .get_by_vertplex(&sub.forget_sign())
         .kidx();
       idxs.push(idx);
       coeffs.push(coeff);
@@ -263,9 +263,9 @@ impl<'m> SimplexHandle<'m> {
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
   pub fn subs(&self, dim: Dim) -> impl Iterator<Item = SimplexHandle<'m>> + '_ {
     self
-      .vertplex()
+      .sorted_vertplex()
       .subs(dim + 1)
-      .map(move |sub| self.mesh.skeleton(dim).get_key(&sub))
+      .map(move |sub| self.mesh.skeleton(dim).get_by_vertplex(&sub))
   }
 
   /// The dim-supersimplicies of this simplex.
@@ -277,11 +277,17 @@ impl<'m> SimplexHandle<'m> {
       .parent_cells()
       .flat_map(|parent_cell| {
         self
-          .vertplex()
+          .sorted_vertplex()
           .clone()
-          .with_global_base(parent_cell.vertplex().clone().into_global_base())
+          .with_global_base(parent_cell.oriented_vertplex().clone().into_global_base())
           .sups(dim + 1)
-          .map(move |a| self.mesh.skeleton(dim).get_key(&a.forget_base()).idx)
+          .map(move |a| {
+            self
+              .mesh
+              .skeleton(dim)
+              .get_by_vertplex(&a.forget_base())
+              .idx
+          })
           .map(move |a| Self::new(self.mesh, a))
       })
       .collect()
@@ -324,10 +330,10 @@ impl<'m> SkeletonHandle<'m> {
     self.len() == 0
   }
 
-  pub fn get_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
+  pub fn get_by_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
-  pub fn get_key(&self, key: &MeshVertplexInner) -> SimplexHandle<'m> {
+  pub fn get_by_vertplex(&self, key: &SortedVertplex) -> SimplexHandle<'m> {
     let idx = self.raw().get_full(key).unwrap().0;
     SimplexHandle::new(self.mesh, (self.dim, idx))
   }
@@ -372,14 +378,6 @@ impl<'m> SparseChain<'m> {
 
 /// A simplicial k-cochain is a function assigning a number to each k-simplex of
 /// a simplicial complex.
-///
-/// Whitney forms are isomorphic to simplicial cochains.
-///
-/// De Rham map: Differential k-form integrated over all k-simplicies gives
-/// k-cochain, isomorphism on cohomology.
-///
-/// Whitney Interpolation: Inverse of de Rham map. k-cochain to differential k-form.
-/// This induces a strong connection between FDM/DEC and FEEC.
 #[allow(dead_code)]
 pub struct SparseCochain<'m> {
   mesh: &'m SimplicialManifold,
@@ -413,52 +411,56 @@ impl SimplexIdx {
 
 #[cfg(test)]
 mod test {
-  // TODO: repair test
-  //#[test]
-  //fn incidence() {
-  //  let dim = 3;
-  //  let mesh = ReferenceCell::new(dim).to_singleton_mesh();
-  //  let cell = mesh.cells().next().unwrap();
+  use crate::{
+    combo::{
+      simplicial::{nsubsimplicies, Vertplex},
+      Sign,
+    },
+    simplicial::ReferenceCell,
+  };
 
-  //  let cell_vertplex = Vertplex::counting(dim + 1)
-  //    .forget_sorted()
-  //    .with_sign(Sign::Pos);
-  //  assert_eq!(cell.vertplex(), &cell_vertplex);
+  #[test]
+  fn incidence() {
+    let dim = 3;
+    let mesh = ReferenceCell::new(dim).to_singleton_mesh();
+    let cell = mesh.cells().next().unwrap();
 
-  //  for dim_sub in 0..=dim {
-  //    let skeleton = mesh.skeleton(dim_sub);
-  //    for simp in skeleton.iter() {
-  //      let simp_vertices = simp.vertplex();
-  //      print!("{simp_vertices:?},");
-  //    }
-  //    println!();
-  //  }
+    // print
+    for dim_sub in 0..=dim {
+      let skeleton = mesh.skeleton(dim_sub);
+      for simp in skeleton.iter() {
+        let simp_vertices = simp.sorted_vertplex();
+        print!("{simp_vertices:?},");
+      }
+      println!();
+    }
 
-  //  for dim_sub in 0..=dim {
-  //    let subs: Vec<_> = cell.as_simplex().subs(dim_sub).collect();
-  //    assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
-  //    let subs_vertices: Vec<_> = cell_vertplex.subs(dim_sub).collect();
-  //    assert_eq!(
-  //      subs
-  //        .iter()
-  //        .map(|sub| sub.vertplex().clone())
-  //        .collect::<Vec<_>>(),
-  //      subs_vertices
-  //    );
+    let cell_vertplex = Vertplex::counting(dim + 1).with_sign(Sign::Pos);
+    for dim_sub in 0..=dim {
+      let subs: Vec<_> = cell.as_simplex().subs(dim_sub).collect();
+      assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
+      let subs_vertices: Vec<_> = cell_vertplex.subs(dim_sub + 1).collect();
+      assert_eq!(
+        subs
+          .iter()
+          .map(|sub| sub.sorted_vertplex().clone())
+          .collect::<Vec<_>>(),
+        subs_vertices
+      );
 
-  //    for (isub, sub) in subs.iter().enumerate() {
-  //      let sub_vertices = &subs_vertices[isub];
-  //      for dim_sup in dim_sub..dim {
-  //        let sups: Vec<_> = sub.sups(dim_sup).collect();
-  //        let sups_vertices = sups
-  //          .iter()
-  //          .map(|sub| sub.combinatorial_simplex().clone())
-  //          .collect::<Vec<_>>();
-  //        sups_vertices
-  //          .iter()
-  //          .all(|sup| sub_vertices <= sup && sup <= &cell_vertplex);
-  //      }
-  //    }
-  //  }
-  //}
+      for (isub, sub) in subs.iter().enumerate() {
+        let sub_vertices = &subs_vertices[isub];
+        for dim_sup in dim_sub..dim {
+          let sups: Vec<_> = sub.sups(dim_sup);
+          let sups_vertices = sups
+            .iter()
+            .map(|sub| sub.sorted_vertplex().clone())
+            .collect::<Vec<_>>();
+          sups_vertices
+            .iter()
+            .all(|sup| sub_vertices.is_sub_of(sup) && sup.is_sub_of(&cell_vertplex));
+        }
+      }
+    }
+  }
 }

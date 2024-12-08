@@ -8,10 +8,7 @@
 
 use super::{Length, SimplexData, SimplicialManifold, Skeleton};
 use crate::{
-  combo::{
-    simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
-    variants::Unspecified,
-  },
+  combo::simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
   Dim,
 };
 
@@ -23,16 +20,16 @@ pub struct RawSimplicialManifold {
   nnodes: usize,
   /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
   /// Defines topology (connectivity + orientation) and global numbering/order of cells.
-  cells: Vec<OrientedVertplex<Unspecified>>,
+  cells: Vec<OrientedVertplex>,
   /// A mapping [`SortedSimplex`] -> [`Length`].
   /// Defines geometry of the manifold through the lengths of all edges.
-  edge_lengths: HashMap<SortedVertplex<Unspecified>, Length>,
+  edge_lengths: HashMap<SortedVertplex, Length>,
 }
 impl RawSimplicialManifold {
   pub fn new(
     nnodes: usize,
-    cells: Vec<OrientedVertplex<Unspecified>>,
-    edge_lengths: HashMap<SortedVertplex<Unspecified>, Length>,
+    cells: Vec<OrientedVertplex>,
+    edge_lengths: HashMap<SortedVertplex, Length>,
   ) -> Self {
     Self {
       nnodes,
@@ -62,7 +59,7 @@ impl RawSimplicialManifold {
       .collect();
 
     for (icell, cell) in cells.iter().enumerate() {
-      let cell = cell.clone().sort_sign();
+      let cell = cell.clone().into_sorted();
       for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
         for sub in cell.subs(sub_dim + 1) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
@@ -83,7 +80,7 @@ impl RawSimplicialManifold {
         .map(|cell| {
           cell
             .boundary()
-            .find(|b| b.clone().sort_sign().forget_sign() == *face)
+            .find(|b| b.clone().into_sorted().forget_sign() == *face)
             .unwrap()
         })
         .collect::<Vec<_>>();

@@ -2,7 +2,6 @@ use super::{raw::RawSimplicialManifold, SimplicialManifold};
 use crate::{
   combo::{
     simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt as _, Vertplex},
-    variants::Unspecified,
     Sign,
   },
   linalg::DMatrixExt as _,
@@ -44,8 +43,8 @@ impl NodeCoords {
     na::DVector::from_iterator(self.nnodes(), self.coords.column_iter().map(f))
   }
 
-  pub fn coord_simplex(&self, simp: &OrderedVertplex<Unspecified>) -> CoordSimplex {
-    let mut vert_coords = na::DMatrix::zeros(self.dim(), simp.k());
+  pub fn coord_simplex(&self, simp: &OrderedVertplex) -> CoordSimplex {
+    let mut vert_coords = na::DMatrix::zeros(self.dim(), simp.len());
     for (i, &v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &self.coord(v));
     }
@@ -62,12 +61,12 @@ impl NodeCoords {
 #[derive(Debug, Clone)]
 pub struct CoordManifold {
   /// topology
-  cells: Vec<OrientedVertplex<Unspecified>>,
+  cells: Vec<OrientedVertplex>,
   /// geometry
   node_coords: NodeCoords,
 }
 impl CoordManifold {
-  pub fn new(cells: Vec<OrientedVertplex<Unspecified>>, node_coords: NodeCoords) -> Self {
+  pub fn new(cells: Vec<OrientedVertplex>, node_coords: NodeCoords) -> Self {
     if cfg!(debug_assertions) {
       let dim_intrinsic = cells[0].dim();
       for cell in &cells {
@@ -90,7 +89,7 @@ impl CoordManifold {
     self.cells[0].dim()
   }
 
-  pub fn into_parts(self) -> (Vec<OrientedVertplex<Unspecified>>, NodeCoords) {
+  pub fn into_parts(self) -> (Vec<OrientedVertplex>, NodeCoords) {
     (self.cells, self.node_coords)
   }
 
@@ -127,7 +126,7 @@ impl CoordManifold {
 }
 
 impl CoordManifold {
-  pub fn cells(&self) -> &[OrientedVertplex<Unspecified>] {
+  pub fn cells(&self) -> &[OrientedVertplex] {
     &self.cells
   }
   pub fn node_coords(&self) -> &NodeCoords {

@@ -25,7 +25,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   pub fn indices(&self) -> &[usize] {
     &self.indices
   }
-  pub fn k(&self) -> usize {
+  pub fn len(&self) -> usize {
     self.indices.len()
   }
 
@@ -43,7 +43,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   }
   // Compares indicies lexicographically, only when lengths are equal.
   pub fn partial_lexicographical_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    if self.k() == other.k() {
+    if self.len() == other.len() {
       Some(self.pure_lexicographical_cmp(other))
     } else {
       None
@@ -53,14 +53,18 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   pub fn lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
     self
       .pure_lexicographical_cmp(other)
-      .then(self.k().cmp(&other.k()))
+      .then(self.len().cmp(&other.len()))
   }
   /// First compares lengths, then indicies lexicographically.
   pub fn graded_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
     self
-      .k()
-      .cmp(&other.k())
+      .len()
+      .cmp(&other.len())
       .then_with(|| self.pure_lexicographical_cmp(other))
+  }
+
+  pub fn remove(&mut self, i: usize) -> usize {
+    self.indices.remove(i)
   }
 
   pub fn permutations(&self) -> IndexPermutations<B, O, S> {
@@ -80,16 +84,6 @@ impl<B: Base, O: Order, S: Signedness> std::ops::Index<usize> for IndexSet<B, O,
   type Output = usize;
   fn index(&self, index: usize) -> &Self::Output {
     &self.indices[index]
-  }
-}
-
-/// Only Base
-impl<B: Specified, O: Order, S: Signedness> IndexSet<B, O, S> {
-  pub fn n(&self) -> usize {
-    self.base.n()
-  }
-  pub fn base_indices(&self) -> Vec<usize> {
-    self.base.indices()
   }
 }
 
@@ -154,8 +148,8 @@ impl<B: Base, O: Order> IndexSet<B, O, Signed> {
 
 /// Only Base + Sorted
 impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
-  pub fn sups(&self, ksup: usize) -> IndexSupsets<B> {
-    IndexSupsets::new(self.clone(), ksup)
+  pub fn sups(&self, len_sup: usize) -> IndexSupsets<B> {
+    IndexSupsets::new(self.clone(), len_sup)
   }
 
   pub fn anti_boundary(&self) -> IndexAntiBoundarySets<B, S> {
@@ -203,8 +197,8 @@ impl IndexSet<Local, Sorted, Unsigned> {
   }
 
   pub fn lex_rank(&self) -> usize {
-    let n = self.n();
-    let k = self.k();
+    let n = self.base.len();
+    let k = self.len();
 
     let mut rank = 0;
     for (i, &index) in self.iter().enumerate() {
@@ -217,8 +211,8 @@ impl IndexSet<Local, Sorted, Unsigned> {
   }
 
   pub fn graded_lex_rank(&self) -> usize {
-    let n = self.n();
-    let k = self.k();
+    let n = self.base.len();
+    let k = self.len();
     Self::graded_lex_rank_offset(n, k) + self.lex_rank()
   }
 

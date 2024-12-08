@@ -11,7 +11,6 @@ use crate::{
 
 use std::rc::Rc;
 
-// TODO: fix this
 pub fn solve_homogeneous_evp(
   mesh: &Rc<SimplicialManifold>,
   operator_elmat: impl ElmatProvider,

@@ -1,3 +1,5 @@
+#![allow(clippy::len_without_is_empty)]
+
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
@@ -15,10 +17,9 @@ pub mod linalg;
 pub mod sparse;
 pub mod util;
 
-pub type ExteriorRank = usize;
-
-pub type VertexIdx = usize;
 pub type Dim = usize;
 pub type Codim = usize;
+
+pub type VertexIdx = usize;
 
 pub type Length = f64;

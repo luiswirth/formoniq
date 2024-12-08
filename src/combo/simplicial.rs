@@ -5,17 +5,11 @@ use crate::Dim;
 
 pub type Vertplex<B, O, S> = IndexSet<B, O, S>;
 
-pub type SortedVertplex<B> = Vertplex<B, Sorted, Unsigned>;
-pub type OrderedVertplex<B> = Vertplex<B, Ordered, Unsigned>;
-pub type OrientedVertplex<B> = Vertplex<B, Ordered, Signed>;
+pub type SortedVertplex = Vertplex<Unspecified, Sorted, Unsigned>;
+pub type OrderedVertplex = Vertplex<Unspecified, Ordered, Unsigned>;
+pub type OrientedVertplex = Vertplex<Unspecified, Ordered, Signed>;
 
 pub type RefVertplex = Vertplex<Local, Sorted, Unsigned>;
-
-pub type MeshVertplex = Vertplex<Global, Sorted, Unsigned>;
-pub type MeshCellVertplex = Vertplex<Global, Ordered, Signed>;
-
-pub type MeshVertplexInner = Vertplex<Unspecified, Sorted, Unsigned>;
-pub type MeshCellVertplexInner = Vertplex<Unspecified, Ordered, Signed>;
 
 pub fn nsubsimplicies(dim: Dim, dim_sub: Dim) -> usize {
   let nverts = dim + 1;
@@ -36,9 +30,9 @@ pub trait SimplexExt {
 }
 impl<B: Base, O: Order, S: Signedness> SimplexExt for Vertplex<B, O, S> {
   fn dim(&self) -> Dim {
-    self.k() - 1
+    self.len() - 1
   }
   fn nvertices(&self) -> Dim {
-    self.k()
+    self.len()
   }
 }

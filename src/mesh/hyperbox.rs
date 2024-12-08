@@ -7,7 +7,6 @@ use crate::{
   combo::{
     factorial,
     simplicial::{OrderedVertplex, OrientedVertplex},
-    variants::Unspecified,
     IndexSet,
   },
   Dim,
@@ -187,7 +186,7 @@ impl HyperBoxMeshInfo {
 
     let dim = self.dim();
     let ncells = factorial(dim) * self.nboxes();
-    let mut cells: Vec<OrientedVertplex<Unspecified>> = Vec::with_capacity(ncells);
+    let mut cells: Vec<OrientedVertplex> = Vec::with_capacity(ncells);
 
     // iterate through all boxes that make up the mesh
     for icube in 0..self.nboxes() {
