@@ -25,9 +25,9 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   assemble,
   fe::{self, LoadElvec},
+  linalg::{kronecker_sum, matrix_from_const_diagonals},
   mesh::hyperbox::HyperBoxMeshInfo,
   space::FeSpace,
-  util::{kronecker_sum, matrix_from_const_diagonals},
   Dim,
 };
 

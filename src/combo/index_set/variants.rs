@@ -138,6 +138,15 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
+  pub fn into_ordered(self) -> IndexSet<B, Ordered, S> {
+    IndexSet {
+      indices: self.indices,
+      base: self.base,
+      order: Ordered,
+      signedness: self.signedness,
+    }
+  }
+
   pub fn with_sign(self, sign: impl Into<Sign>) -> IndexSet<B, O, Signed> {
     IndexSet {
       indices: self.indices,
@@ -153,5 +162,20 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
       order: self.order,
       signedness: Unsigned,
     }
+  }
+
+  pub fn into_oriented(self) -> IndexSet<B, Ordered, Signed> {
+    IndexSet {
+      indices: self.indices,
+      base: self.base,
+      order: Ordered,
+      signedness: Signed(Sign::Pos),
+    }
+  }
+}
+
+impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
+  pub fn into_global_base(self) -> Global {
+    Global(self.indices)
   }
 }

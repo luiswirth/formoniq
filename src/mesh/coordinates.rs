@@ -1,5 +1,14 @@
 use super::{raw::RawSimplicialManifold, SimplicialManifold};
-use crate::{mesh::VertexIdx, Dim};
+use crate::{
+  combo::{
+    simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt as _, Vertplex},
+    variants::Unspecified,
+    Sign,
+  },
+  linalg::DMatrixExt as _,
+  mesh::VertexIdx,
+  Dim,
+};
 
 use std::collections::{hash_map, HashMap};
 
@@ -35,8 +44,8 @@ impl NodeCoords {
     na::DVector::from_iterator(self.nnodes(), self.coords.column_iter().map(f))
   }
 
-  pub fn coord_simplex(&self, simp: &OrderedVertplex) -> CoordSimplex {
-    let mut vert_coords = na::DMatrix::zeros(self.dim(), simp.nvertices());
+  pub fn coord_simplex(&self, simp: &OrderedVertplex<Unspecified>) -> CoordSimplex {
+    let mut vert_coords = na::DMatrix::zeros(self.dim(), simp.k());
     for (i, &v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &self.coord(v));
     }
@@ -53,19 +62,19 @@ impl NodeCoords {
 #[derive(Debug, Clone)]
 pub struct CoordManifold {
   /// topology
-  cells: Vec<OrientedVertplex>,
+  cells: Vec<OrientedVertplex<Unspecified>>,
   /// geometry
   node_coords: NodeCoords,
 }
 impl CoordManifold {
-  pub fn new(cells: Vec<OrientedVertplex>, node_coords: NodeCoords) -> Self {
+  pub fn new(cells: Vec<OrientedVertplex<Unspecified>>, node_coords: NodeCoords) -> Self {
     if cfg!(debug_assertions) {
       let dim_intrinsic = cells[0].dim();
       for cell in &cells {
-        debug_assert!(cell.dim() == dim_intrinsic, "Inconsistent cell dimension.");
-        let coord_cell = node_coords.coord_simplex(cell.as_ordered());
-        debug_assert!(
-          coord_cell.orientation() * cell.superimposed_orient() == Sign::Pos,
+        assert!(cell.dim() == dim_intrinsic, "Inconsistent cell dimension.");
+        let coord_cell = node_coords.coord_simplex(&cell.clone().forget_sign());
+        assert!(
+          coord_cell.orientation() * cell.sign() == Sign::Pos,
           "Cells must be positively oriented."
         );
       }
@@ -81,7 +90,7 @@ impl CoordManifold {
     self.cells[0].dim()
   }
 
-  pub fn into_parts(self) -> (Vec<OrientedVertplex>, NodeCoords) {
+  pub fn into_parts(self) -> (Vec<OrientedVertplex<Unspecified>>, NodeCoords) {
     (self.cells, self.node_coords)
   }
 
@@ -95,7 +104,7 @@ impl CoordManifold {
         let vi = cell[i];
         for j in (i + 1)..cell.nvertices() {
           let vj = cell[j];
-          let edge = CanonicalVertplex::edge(vi, vj);
+          let edge = Vertplex::from([vi, vj]).assume_sorted();
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
             let length = (self.node_coords.coord(vj) - self.node_coords.coord(vi)).norm();
             e.insert(length);
@@ -118,7 +127,7 @@ impl CoordManifold {
 }
 
 impl CoordManifold {
-  pub fn cells(&self) -> &[OrientedVertplex] {
+  pub fn cells(&self) -> &[OrientedVertplex<Unspecified>] {
     &self.cells
   }
   pub fn node_coords(&self) -> &NodeCoords {
@@ -163,7 +172,7 @@ impl CoordSimplex {
     if self.is_euclidean() {
       self.spanning_vectors().determinant()
     } else {
-      gram_det_sqrt(&self.spanning_vectors())
+      self.spanning_vectors().gram_det_sqrt()
     }
   }
   pub fn vol(&self) -> f64 {

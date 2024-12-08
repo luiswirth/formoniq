@@ -2,9 +2,9 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  cell::{ref_vol, ReferenceCell},
   fe::{self, ElmatProvider},
-  util::assert_mat_eq,
+  linalg::assert_mat_eq,
+  simplicial::{ref_vol, ReferenceCell},
   Dim,
 };
 
@@ -17,7 +17,7 @@ where
       continue;
     };
 
-    let refcell = ReferenceCell::new(dim).to_standalone_cell();
+    let refcell = ReferenceCell::new(dim).to_cell_complex();
     let computed_elmat = elmat.eval(&refcell);
 
     assert_mat_eq(&computed_elmat, &expected_elmat);

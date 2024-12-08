@@ -8,7 +8,10 @@
 
 use super::{Length, SimplexData, SimplicialManifold, Skeleton};
 use crate::{
-  combo::{CanonicalVertplex, OrientedVertplex},
+  combo::{
+    simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
+    variants::Unspecified,
+  },
   Dim,
 };
 
@@ -20,16 +23,16 @@ pub struct RawSimplicialManifold {
   nnodes: usize,
   /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
   /// Defines topology (connectivity + orientation) and global numbering/order of cells.
-  cells: Vec<OrientedVertplex>,
+  cells: Vec<OrientedVertplex<Unspecified>>,
   /// A mapping [`SortedSimplex`] -> [`Length`].
   /// Defines geometry of the manifold through the lengths of all edges.
-  edge_lengths: HashMap<CanonicalVertplex, Length>,
+  edge_lengths: HashMap<SortedVertplex<Unspecified>, Length>,
 }
 impl RawSimplicialManifold {
   pub fn new(
     nnodes: usize,
-    cells: Vec<OrientedVertplex>,
-    edge_lengths: HashMap<CanonicalVertplex, Length>,
+    cells: Vec<OrientedVertplex<Unspecified>>,
+    edge_lengths: HashMap<SortedVertplex<Unspecified>, Length>,
   ) -> Self {
     Self {
       nnodes,
@@ -55,13 +58,13 @@ impl RawSimplicialManifold {
 
     let mut skeletons = vec![Skeleton::new(); dim + 1];
     skeletons[0] = (0..self.nnodes)
-      .map(|v| (CanonicalVertplex::vertex(v), SimplexData::stub()))
+      .map(|v| (SortedVertplex::single(v), SimplexData::stub()))
       .collect();
 
     for (icell, cell) in cells.iter().enumerate() {
-      let cell = cell.clone().into_canonical();
+      let cell = cell.clone().sort_sign();
       for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
-        for sub in cell.subs(sub_dim) {
+        for sub in cell.subs(sub_dim + 1) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
           sub.parent_cells.push(icell);
         }
@@ -69,28 +72,27 @@ impl RawSimplicialManifold {
     }
 
     // Assert consistent orientation of cells.
-    // Two adjacent cells are consistently oriented if their shared facet appears
+    // Two adjacent cells are consistently oriented if their shared face appears
     // with opposite orientations from each cell's perspective.
-    let facets = &skeletons[dim - 1];
-    for (facet, SimplexData { parent_cells }) in facets {
+    let faces = &skeletons[dim - 1];
+    for (face, SimplexData { parent_cells }) in faces {
       let parent_cells = parent_cells.iter().map(|&cell_kidx| &cells[cell_kidx]);
 
-      // The same facet, but as seen from the 1 or 2 adjacent cells.
-      let cells_facet = parent_cells
+      // The same face, but as seen from the 1 or 2 adjacent cells.
+      let cells_face = parent_cells
         .map(|cell| {
           cell
             .boundary()
-            .into_iter()
-            .find(|b| b.as_canonical() == facet)
+            .find(|b| b.clone().sort_sign().forget_sign() == *face)
             .unwrap()
         })
         .collect::<Vec<_>>();
 
-      let is_boundary_facet = cells_facet.len() == 1;
-      if !is_boundary_facet {
-        assert!(cells_facet.len() == 2);
+      let is_boundary_face = cells_face.len() == 1;
+      if !is_boundary_face {
+        assert!(cells_face.len() == 2);
         assert!(
-          !cells_facet[0].orientation_eq(&cells_facet[1]).unwrap(),
+          !cells_face[0].orientation_eq(&cells_face[1]),
           "Manifold cells must be consistently oriented."
         );
       }

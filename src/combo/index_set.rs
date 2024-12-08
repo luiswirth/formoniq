@@ -3,7 +3,6 @@
 //! Consider turning this into it's own crate.
 //! Possible names: indexalgebra, permutic
 
-pub mod aliases;
 pub mod combinators;
 pub mod variants;
 
@@ -68,7 +67,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     IndexPermutations::new(self.clone())
   }
 
-  pub fn subsets(&self, ksub: usize) -> IndexSubsets<B, O> {
+  pub fn subs(&self, ksub: usize) -> IndexSubsets<B, O> {
     IndexSubsets::new(self.clone(), ksub)
   }
 
@@ -96,14 +95,14 @@ impl<B: Specified, O: Order, S: Signedness> IndexSet<B, O, S> {
 
 // Only Sorted
 impl<B: Base, S: Signedness> IndexSet<B, Sorted, S> {
-  pub fn is_subset_of<B1: Base, S1: Signedness>(&self, other: &IndexSet<B1, Sorted, S1>) -> bool {
-    self.subset_cmp(other).map(|o| o.is_le()).unwrap_or(false)
+  pub fn is_sub_of<B1: Base, S1: Signedness>(&self, other: &IndexSet<B1, Sorted, S1>) -> bool {
+    self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
   }
-  pub fn is_superset_of<B1: Base, S1: Signedness>(&self, other: &IndexSet<B1, Sorted, S1>) -> bool {
-    self.subset_cmp(other).map(|o| o.is_ge()).unwrap_or(false)
+  pub fn is_sup_of<B1: Base, S1: Signedness>(&self, other: &IndexSet<B1, Sorted, S1>) -> bool {
+    self.sub_cmp(other).map(|o| o.is_ge()).unwrap_or(false)
   }
   /// Subset partial order relation.
-  pub fn subset_cmp<B1: Base, S1: Signedness>(
+  pub fn sub_cmp<B1: Base, S1: Signedness>(
     &self,
     other: &IndexSet<B1, Sorted, S1>,
   ) -> Option<std::cmp::Ordering> {
@@ -164,20 +163,21 @@ impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
   }
 }
 
+/// Oriented == Sorted + Signed
+impl<B: Base> IndexSet<B, Ordered, Signed> {
+  pub fn orientation_eq(&self, other: &Self) -> bool {
+    self.indices == other.indices && self.sign() == other.sign()
+  }
+}
+
 /// Only Local + Sorted + Unsigned
 impl IndexSet<Local, Sorted, Unsigned> {
-  pub fn from_rank(n: usize, k: usize, mut rank: usize) -> Self {
-    for s in 0..k {
-      rank -= binomial(n, s);
-    }
-
+  pub fn from_lex_rank(n: usize, k: usize, mut rank: usize) -> Self {
     let mut indices = Vec::with_capacity(k);
     let mut start = 0;
-
-    // Rank now corresponds to the lexicographical rank of k-subsets.
     for i in 0..k {
       let remaining = k - i;
-      for x in start..=n - remaining {
+      for x in start..=(n - remaining) {
         let c = binomial(n - x - 1, remaining - 1);
         if rank < c {
           indices.push(x);
@@ -197,21 +197,33 @@ impl IndexSet<Local, Sorted, Unsigned> {
     }
   }
 
-  pub fn rank(&self) -> usize {
+  pub fn from_graded_lex_rank(n: usize, k: usize, mut rank: usize) -> Self {
+    rank -= Self::graded_lex_rank_offset(n, k);
+    Self::from_lex_rank(n, k, rank)
+  }
+
+  pub fn lex_rank(&self) -> usize {
     let n = self.n();
     let k = self.k();
-    let mut rank = 0;
 
-    for s in 0..k {
-      rank += binomial(n, s);
-    }
-    for (j, &i_j) in self.iter().enumerate() {
-      let start = if j == 0 { 0 } else { self[j - 1] + 1 };
-      for s in start..i_j {
-        rank += binomial(n - s - 1, k - j - 1);
+    let mut rank = 0;
+    for (i, &index) in self.iter().enumerate() {
+      let start = if i == 0 { 0 } else { self[i - 1] + 1 };
+      for s in start..index {
+        rank += binomial(n - s - 1, k - i - 1);
       }
     }
     rank
+  }
+
+  pub fn graded_lex_rank(&self) -> usize {
+    let n = self.n();
+    let k = self.k();
+    Self::graded_lex_rank_offset(n, k) + self.lex_rank()
+  }
+
+  fn graded_lex_rank_offset(n: usize, k: usize) -> usize {
+    (0..k).map(|s| binomial(n, s)).sum()
   }
 }
 

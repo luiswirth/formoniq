@@ -1,10 +1,11 @@
+use itertools::Itertools;
 use num_integer::binomial;
 
 use crate::{
-  cell::{CellComplex, REFCELLS},
-  combo::{factorial, sort_count_swaps},
+  combo::{combinators::IndexSubsets, factorial, sort_signed, IndexSet},
   mesh::SimplicialManifold,
-  Dim, FormRank,
+  simplicial::{CellComplex, REFCELLS},
+  Dim, ExteriorRank,
 };
 
 pub trait ElmatProvider {
@@ -33,13 +34,13 @@ where
 }
 
 /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-pub fn kexterior_derivative_local(cell_dim: Dim, k: FormRank) -> na::DMatrix<f64> {
+pub fn kexterior_derivative_local(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
 }
 
 /// $delta^k: cal(W) Lambda^k -> cal(W) Lambda^(k-1)$
 /// Hodge adjoint of exterior derivative.
-pub fn kcodifferential_local(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64> {
+pub fn kcodifferential_local(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let n = cell.dim();
 
   (-1f64).powi((n * (k + 1) + 1) as i32)
@@ -49,7 +50,7 @@ pub fn kcodifferential_local(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64
 }
 
 /// $star_k: cal(W) Lambda^k -> cal(W) Lambda^(n-k)$
-pub fn khodge_star_local(_cell: &CellComplex, _k: FormRank) -> na::DMatrix<f64> {
+pub fn khodge_star_local(_cell: &CellComplex, _k: ExteriorRank) -> na::DMatrix<f64> {
   todo!()
 }
 
@@ -66,9 +67,9 @@ pub fn covector_gramian(cell: &CellComplex) -> na::DMatrix<f64> {
 /// Inner product on k-forms
 ///
 /// Represented as gram matrix on lexicographically ordered standard k-form standard basis.
-pub fn kform_gramian(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64> {
+pub fn kform_gramian(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let n = cell.dim();
-  let combinations = canonical_combinations(n, k);
+  let combinations: Vec<_> = IndexSubsets::canonical(n, k).collect();
   let covector_gramian = covector_gramian(cell);
 
   let mut kform_gramian = na::DMatrix::zeros(combinations.len(), combinations.len());
@@ -107,7 +108,7 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
 
 /// The constant exterior derivatives of the reference Whitney forms, given in
 /// the k-form standard basis.
-pub fn ref_difwhitneys(n: Dim, k: FormRank) -> na::DMatrix<f64> {
+pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   let difk = k + 1;
   let difk_factorial = factorial(difk) as f64;
 
@@ -115,25 +116,29 @@ pub fn ref_difwhitneys(n: Dim, k: FormRank) -> na::DMatrix<f64> {
   let kform_basis_size = binomial(n, difk);
 
   let mut ref_difwhitneys = na::DMatrix::zeros(kform_basis_size, whitney_basis_size);
-  for (whitney_comb_rank, whitney_comb) in
-    canonical_combinations(n + 1, k + 1).into_iter().enumerate()
-  {
+  for (whitney_comb_rank, whitney_comb) in IndexSubsets::canonical(n + 1, k + 1).enumerate() {
     if whitney_comb[0] == 0 {
       let kform_comb = whitney_comb.iter().skip(1).map(|c| *c - 1).collect_vec();
       for i in 0..n {
         let mut kform_comb = kform_comb.clone();
         kform_comb.insert(0, i);
-        let sign = parity_signf(sort_count_swaps(&mut kform_comb));
+        let sign = sort_signed(&mut kform_comb);
         kform_comb.dedup();
         if kform_comb.len() != difk {
           continue;
         };
-        let kform_comb_rank = rank_of_combination(&kform_comb, n);
-        ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign * difk_factorial;
+        let kform_comb = IndexSet::from(kform_comb)
+          .assume_sorted()
+          .with_local_base(n);
+        let kform_comb_rank = kform_comb.lex_rank();
+        ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign.as_f64() * difk_factorial;
       }
     } else {
       let kform_comb = whitney_comb.iter().map(|c| *c - 1).collect_vec();
-      let kform_comb_rank = rank_of_combination(&kform_comb, n);
+      let kform_comb = IndexSet::from(kform_comb)
+        .assume_sorted()
+        .with_local_base(n);
+      let kform_comb_rank = kform_comb.lex_rank();
       ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = difk_factorial;
     }
   }
@@ -152,7 +157,7 @@ pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
 /// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
 ///
 /// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: FormRank) -> na::DMatrix<f64> {
+pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
   let kform_gramian = kform_gramian(cell, k);
   cell.vol() * ref_difwhitneys.transpose() * kform_gramian * ref_difwhitneys
@@ -201,13 +206,13 @@ impl ElvecProvider for LoadElvec {
 
 pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm: f64 = 0.0;
-  for cell in mesh.cells().iter() {
+  for cell in mesh.cells() {
     let mut sum = 0.0;
-    for &ivertex in cell.ordered_vertplex().iter() {
+    for &ivertex in cell.vertplex().iter() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
-    let cell_geo = cell.as_standalone_cell();
+    let cell_geo = cell.as_cell_complex();
     let vol = cell_geo.vol();
     norm += (vol / nvertices as f64) * sum;
   }
@@ -225,24 +230,24 @@ pub fn ref_bary(n: Dim, ibary: usize, x: na::DVector<f64>) -> f64 {
   }
 }
 
-pub fn ref_whitney(
-  n: Dim,
-  k: FormRank,
-  iwhitney: &[usize],
-  x: na::DVector<f64>,
-) -> na::DVector<f64> {
-  let form_basis_size = binomial(n, k);
-  let coeffs = na::DVector::zeros(form_basis_size);
-  for l in 0..=k {
-    let coeff = parity_signf(l) * ref_bary(n, l, x);
-  }
-  factorial(k) * coeffs
-}
+//pub fn ref_whitney(
+//  n: Dim,
+//  k: ExteriorRank,
+//  iwhitney: &[usize],
+//  x: na::DVector<f64>,
+//) -> na::DVector<f64> {
+//  let form_basis_size = binomial(n, k);
+//  let coeffs = na::DVector::zeros(form_basis_size);
+//  for l in 0..=k {
+//    let coeff = Sign::from_parity(l).as_f64() * ref_bary(n, l, x);
+//  }
+//  factorial(k) as f64 * coeffs
+//}
 
 #[cfg(test)]
 mod test {
   use super::{kform_gramian, ref_difbarys, ref_difwhitneys};
-  use crate::cell::ReferenceCell;
+  use crate::{linalg::assert_mat_eq, simplicial::ReferenceCell};
 
   use num_integer::binomial;
 
@@ -267,7 +272,7 @@ mod test {
   #[test]
   fn kform_gramian_refcell() {
     for n in 0..=3 {
-      let cell = ReferenceCell::new(n).to_standalone_cell();
+      let cell = ReferenceCell::new(n).to_cell_complex();
       for k in 0..=n {
         let binom = binomial(n, k);
         let expected_gram = na::DMatrix::identity(binom, binom);

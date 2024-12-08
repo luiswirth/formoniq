@@ -25,7 +25,7 @@ pub fn assemble_galmat_raw(
 pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::zeros(space.ndofs(), space.ndofs());
   for cell in space.mesh().cells() {
-    let cell = cell.as_standalone_cell();
+    let cell = cell.as_cell_complex();
     let elmat = elmat.eval(&cell);
     let dof_faces = &cell.faces()[space.rank()];
 
@@ -41,8 +41,8 @@ pub fn assemble_galmat(space: &FeSpace, elmat: impl ElmatProvider) -> SparseMatr
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mut galvec = na::DVector::zeros(space.ndofs());
-  for cell in space.mesh().cells().iter() {
-    let cell = cell.as_standalone_cell();
+  for cell in space.mesh().cells() {
+    let cell = cell.as_cell_complex();
     let elvec = elvec.eval(&cell);
     let dof_faces = &cell.faces()[space.rank()];
     for (ilocal, iglobal) in dof_faces.iter().copied().enumerate() {
