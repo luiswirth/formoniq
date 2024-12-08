@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  assemble, fe, mesh::hyperbox::HyperBoxMeshInfo, space::FeSpace, util::assert_mat_eq, Dim,
+  assemble, fe, linalg::assert_mat_eq, mesh::hyperbox::HyperBoxMeshInfo, space::FeSpace, Dim,
 };
 
 use std::rc::Rc;

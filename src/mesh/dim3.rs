@@ -1,6 +1,6 @@
 use super::coordinates::{CoordManifold, NodeCoords};
 use crate::{
-  combo::{Sign, OrientedVertplex},
+  combo::{simplicial::Vertplex, Sign},
   VertexIdx,
 };
 
@@ -37,7 +37,7 @@ impl TriangleSurface3D {
       .into_iter()
       .map(|c| {
         let mut vs: [VertexIdx; 3] = c.as_slice().to_vec().try_into().unwrap();
-        if c.superimposed_orient().is_neg() {
+        if c.sign().is_neg() {
           vs.swap(0, 1);
         }
         vs
@@ -54,7 +54,7 @@ impl TriangleSurface3D {
     let cells = self
       .triangles
       .into_iter()
-      .map(|t| OrientedVertplex::new(t.into(), Sign::Pos))
+      .map(|t| Vertplex::from(t).with_sign(Sign::Pos))
       .collect();
     CoordManifold::new(cells, node_coords)
   }

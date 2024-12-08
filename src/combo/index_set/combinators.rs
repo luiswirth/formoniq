@@ -171,7 +171,7 @@ impl<B: Specified> Iterator for IndexSupsets<B> {
   type Item = IndexSet<B, Sorted, Unsigned>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.base_subsets.next()?;
-    if self.set.is_subset_of(&next) {
+    if self.set.is_sub_of(&next) {
       Some(next)
     } else {
       None
@@ -219,9 +219,8 @@ impl<B: Specified, S: Signedness> Iterator for IndexAntiBoundarySets<B, S> {
 
 #[cfg(test)]
 mod test {
-  use crate::combo::IndexSet;
-
   use super::{GradedIndexSubsets, IndexPermutations};
+  use crate::combo::IndexSet;
 
   #[test]
   fn canonical_permutations() {
@@ -232,7 +231,6 @@ mod test {
         assert!(a.lexicographical_cmp(b).is_lt());
       }
       for permut in permuts {
-        dbg!(&permut);
         let computed_sign = permut.sign();
         let expected_sign = permut.forget_sign().sort_sign().sign();
         assert_eq!(computed_sign, expected_sign);
@@ -265,8 +263,8 @@ mod test {
         assert!(a.graded_lexicographical_cmp(b).is_lt());
       }
       for (rank, subset) in linearized.iter().enumerate() {
-        assert_eq!(subset.rank(), rank);
-        assert_eq!(IndexSet::from_rank(n, subset.k(), rank), *subset);
+        assert_eq!(subset.graded_lex_rank(), rank);
+        assert_eq!(IndexSet::from_graded_lex_rank(n, subset.k(), rank), *subset);
       }
     }
   }

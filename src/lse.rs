@@ -2,8 +2,8 @@ use crate::{
   assemble, fe,
   mesh::SimplicialManifold,
   space::{DofIdx, FeSpace},
-  sparse::{FaerCholesky, SparseMatrix},
-  util,
+  sparse::SparseMatrix,
+  util::{self, FaerCholesky},
 };
 
 use std::rc::Rc;

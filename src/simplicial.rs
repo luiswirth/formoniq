@@ -1,8 +1,11 @@
 use crate::{
-  combo::{factorial, IndexSet, Sign},
-  //mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
-  Dim,
-  VertexIdx,
+  combo::{
+    factorial,
+    simplicial::{nsubsimplicies, subvertplexes, OrderedVertplex, RefVertplex},
+    Sign,
+  },
+  mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
+  Dim, VertexIdx,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
@@ -10,15 +13,15 @@ use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
 pub type Length = f64;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LocalComplex {
+pub struct CellComplex {
   subs: Vec<Vec<KSimplexIdx>>,
   orientation: Sign,
   edge_lengths: Vec<f64>,
 }
-impl LocalComplex {
-  pub fn new(faces: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
+impl CellComplex {
+  pub fn new(subs: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
     Self {
-      subs: faces,
+      subs,
       orientation,
       edge_lengths,
     }
@@ -28,7 +31,7 @@ impl LocalComplex {
     self.subs.len() - 1
   }
   pub fn nvertices(&self) -> usize {
-    self.subs[0].len()
+    self.vertices().len()
   }
   pub fn vertices(&self) -> &[VertexIdx] {
     &self.subs[0]
@@ -64,6 +67,7 @@ impl LocalComplex {
   /// edge vectors (tangent vectors) i and j.
   /// This is the entry $G_(i j)$ of the metric tensor $G$.
   pub fn metric(&self, mut ei: usize, mut ej: usize) -> f64 {
+    assert!(ei < self.dim() && ej < self.dim());
     if ei == ej {
       self.edge_lengths[ei].powi(2)
     } else {
@@ -76,10 +80,10 @@ impl LocalComplex {
 
       let vi = ei + 1;
       let vj = ej + 1;
-      let eij = IndexSet::from([vi, vj])
+      let eij = OrderedVertplex::from([vi, vj])
         .assume_sorted()
         .with_local_base(self.nvertices())
-        .rank();
+        .lex_rank();
       let lij = self.edge_lengths[eij];
 
       0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2))
@@ -109,16 +113,15 @@ pub static REFCELLS: LazyLock<Vec<ReferenceCell>> =
   LazyLock::new(|| (0..=4).map(ReferenceCell::new).collect());
 
 pub struct ReferenceCell {
-  faces: Vec<Vec<ReferenceVertplex>>,
+  faces: Vec<Vec<RefVertplex>>,
   edge_lengths: Vec<f64>,
 }
 impl ReferenceCell {
   /// Constructs a reference cell in `dim` dimensions.
   pub fn new(dim: Dim) -> Self {
-    let nvertices = dim + 1;
-    let faces = ncombinations(nvertices);
+    let faces = subvertplexes(dim);
 
-    let nedges = faces[1].len();
+    let nedges = nsubsimplicies(dim, 1);
     let edge_lengths: Vec<f64> = (0..dim)
       .map(|_| 1.0)
       .chain((dim..nedges).map(|_| SQRT_2))
@@ -139,7 +142,7 @@ impl ReferenceCell {
     self.faces[k].len()
   }
 
-  pub fn as_vertplex(&self) -> &ReferenceVertplex {
+  pub fn as_vertplex(&self) -> &RefVertplex {
     &self.faces[self.dim()][0]
   }
 
@@ -149,16 +152,19 @@ impl ReferenceCell {
     let subs = &self.faces[k - 1];
     let mut mat = na::DMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.iter().enumerate() {
-      let sup_subs = sup.signed_boundary();
-      for (sub, orientation) in sup_subs {
-        let isub = subs.iter().position(|other| sub == *other).unwrap();
-        mat[(isub, isup)] = orientation.as_f64();
+      let sup_subs = sup.boundary();
+      for sub in sup_subs {
+        let isub = subs
+          .iter()
+          .position(|other| sub.clone().forget_sign() == *other)
+          .unwrap();
+        mat[(isub, isup)] = sub.sign().as_f64();
       }
     }
     mat
   }
 
-  pub fn to_standalone_cell(&self) -> LocalComplex {
+  pub fn to_cell_complex(&self) -> CellComplex {
     let faces = self
       .faces
       .iter()
@@ -166,18 +172,21 @@ impl ReferenceCell {
       .collect();
     let orientation = Sign::Pos;
     let edge_lengths = self.edge_lengths.clone();
-    LocalComplex::new(faces, orientation, edge_lengths)
+    CellComplex::new(faces, orientation, edge_lengths)
   }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {
     let nnodes = self.nvertices();
-    let cells = vec![self.as_vertplex().clone().into_signed()];
+    let cells = vec![self.as_vertplex().clone().forget_base().into_oriented()];
 
     let mut edge_lengths = HashMap::new();
     let mut idx = 0;
     for i in 0..self.nvertices() {
       for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert([i, j].into(), self.edge_lengths[idx]);
+        edge_lengths.insert(
+          OrderedVertplex::from([i, j]).assume_sorted(),
+          self.edge_lengths[idx],
+        );
         idx += 1;
       }
     }

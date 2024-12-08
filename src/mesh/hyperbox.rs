@@ -4,7 +4,12 @@ use super::{
   SimplicialManifold, VertexIdx,
 };
 use crate::{
-  combo::{factorial, IndexSet},
+  combo::{
+    factorial,
+    simplicial::{OrderedVertplex, OrientedVertplex},
+    variants::Unspecified,
+    IndexSet,
+  },
   Dim,
 };
 
@@ -153,8 +158,8 @@ impl HyperBoxMeshInfo {
   pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
-      let nnodes_boundary_facet = self.nnodes_per_dim().pow(self.dim() as u32 - 1);
-      for inode in 0..nnodes_boundary_facet {
+      let nnodes_boundary_face = self.nnodes_per_dim().pow(self.dim() as u32 - 1);
+      for inode in 0..nnodes_boundary_face {
         let node_icart = linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim() - 1);
         let low_boundary = node_icart.clone().insert_row(d, 0);
         let high_boundary = node_icart.insert_row(d, self.nnodes_per_dim() - 1);
@@ -182,7 +187,7 @@ impl HyperBoxMeshInfo {
 
     let dim = self.dim();
     let ncells = factorial(dim) * self.nboxes();
-    let mut cells: Vec<OrientedVertplex> = Vec::with_capacity(ncells);
+    let mut cells: Vec<OrientedVertplex<Unspecified>> = Vec::with_capacity(ncells);
 
     // iterate through all boxes that make up the mesh
     for icube in 0..self.nboxes() {
@@ -210,13 +215,13 @@ impl HyperBoxMeshInfo {
           cell.push(ivertex);
         }
 
-        let cell = OrderedVertplex::new(cell);
+        let cell = OrderedVertplex::from(cell);
 
         // Ensure consistent positive orientation of cells.
         // TODO: avoid computing orientation using coordinates / determinant.
         let orientation = node_coords.coord_simplex(&cell).orientation();
 
-        OrientedVertplex::new(cell, orientation)
+        cell.with_sign(orientation)
       });
 
       cells.extend(cube_cells);
