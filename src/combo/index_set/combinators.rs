@@ -13,7 +13,7 @@ pub struct IndexPermutations<B: Base, O: Order, S: Signedness> {
 
 impl<B: Base, O: Order, S: Signedness> IndexPermutations<B, O, S> {
   pub fn new(set: IndexSet<B, O, S>) -> Self {
-    let k = set.k();
+    let k = set.len();
     let indices = set.indices.clone().into_iter();
     let state = itertools::Itertools::permutations(indices, k);
 
@@ -33,7 +33,7 @@ impl<B: Base, O: Order, S: Signedness> Iterator for IndexPermutations<B, O, S> {
     let indices = self.state.next()?;
     let sorted = IndexSet::new(indices.clone())
       .with_sign(self.set.signedness.get_or_default())
-      .sort_sign();
+      .into_sorted();
     let next = IndexSet {
       indices: indices.clone(),
       base: self.set.base.clone(),
@@ -65,7 +65,7 @@ impl GradedIndexSubsets<Local, Sorted> {
 impl<B: Base, O: Order> Iterator for GradedIndexSubsets<B, O> {
   type Item = IndexSubsets<B, O>;
   fn next(&mut self) -> Option<Self::Item> {
-    (self.k <= self.set.k()).then(|| {
+    (self.k <= self.set.len()).then(|| {
       let next = IndexSubsets::new(self.set.clone(), self.k);
       self.k += 1;
       next
@@ -120,7 +120,7 @@ pub struct IndexBoundarySets<B: Base, O: Order, S: Signedness> {
 
 impl<B: Base, O: Order, S: Signedness> IndexBoundarySets<B, O, S> {
   pub fn new(set: IndexSet<B, O, S>) -> Self {
-    let k = set.k() - 1;
+    let k = set.len() - 1;
     let signedness = set.signedness;
     let subsets = IndexSubsets::new(set, k);
     let boundary_sign = Sign::from_parity(k);
@@ -187,7 +187,7 @@ pub struct IndexAntiBoundarySets<B: Specified, S: Signedness> {
 
 impl<B: Specified, S: Signedness> IndexAntiBoundarySets<B, S> {
   pub fn new(set: IndexSet<B, Sorted, S>) -> Self {
-    let k = set.k() - 1;
+    let k = set.len() - 1;
     let signedness = set.signedness;
     let supsets = IndexSupsets::new(set, k);
     let boundary_sign = Sign::from_parity(k);
@@ -232,7 +232,7 @@ mod test {
       }
       for permut in permuts {
         let computed_sign = permut.sign();
-        let expected_sign = permut.forget_sign().sort_sign().sign();
+        let expected_sign = permut.forget_sign().into_sorted().sign();
         assert_eq!(computed_sign, expected_sign);
       }
     }
@@ -264,7 +264,10 @@ mod test {
       }
       for (rank, subset) in linearized.iter().enumerate() {
         assert_eq!(subset.graded_lex_rank(), rank);
-        assert_eq!(IndexSet::from_graded_lex_rank(n, subset.k(), rank), *subset);
+        assert_eq!(
+          IndexSet::from_graded_lex_rank(n, subset.len(), rank),
+          *subset
+        );
       }
     }
   }

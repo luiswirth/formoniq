@@ -3,7 +3,7 @@ use crate::combo::{sort_signed, Sign};
 
 pub trait Base: Clone {}
 pub trait Specified: Base {
-  fn n(&self) -> usize;
+  fn len(&self) -> usize;
   fn indices(&self) -> Vec<usize>;
 }
 
@@ -15,7 +15,7 @@ impl Base for Unspecified {}
 pub struct Local(pub usize);
 impl Base for Local {}
 impl Specified for Local {
-  fn n(&self) -> usize {
+  fn len(&self) -> usize {
     self.0
   }
   fn indices(&self) -> Vec<usize> {
@@ -32,7 +32,7 @@ impl From<usize> for Local {
 pub struct Global(pub Vec<usize>);
 impl Base for Global {}
 impl Specified for Global {
-  fn n(&self) -> usize {
+  fn len(&self) -> usize {
     self.0.len()
   }
   fn indices(&self) -> Vec<usize> {
@@ -45,10 +45,11 @@ impl From<Vec<usize>> for Global {
   }
 }
 
-pub trait Order: Clone + Copy {}
+pub trait Order: Clone + Copy + Eq {}
 impl Order for Sorted {}
 impl Order for Ordered {}
 
+/// Strictly increasing elements! No multiple equal element allowed.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Sorted;
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
@@ -109,7 +110,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   }
 
   pub fn assume_sorted(self) -> IndexSet<B, Sorted, S> {
-    debug_assert!(self.indices.is_sorted());
+    debug_assert!(self.indices.is_sorted_by(|a, b| a < b));
     IndexSet {
       indices: self.indices,
       base: self.base,
@@ -117,18 +118,29 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
       signedness: self.signedness,
     }
   }
-  pub fn sort_sign(self) -> IndexSet<B, Sorted, Signed> {
+
+  pub fn into_sorted(self) -> IndexSet<B, Sorted, Signed> {
+    self.try_into_sorted().unwrap()
+  }
+
+  /// Returns [`None`] if there is a duplicate index.
+  pub fn try_into_sorted(self) -> Option<IndexSet<B, Sorted, Signed>> {
     let mut indices = self.indices;
     let sort_sign = sort_signed(&mut indices);
     let self_sign = self.signedness.get_or_default();
     let sign = self_sign * sort_sign;
-    IndexSet {
+    if indices.windows(2).any(|s| s[0] == s[1]) {
+      return None;
+    }
+
+    Some(IndexSet {
       indices,
       base: self.base,
       order: Sorted,
       signedness: Signed(sign),
-    }
+    })
   }
+
   pub fn forget_sorted(self) -> IndexSet<B, Ordered, S> {
     IndexSet {
       indices: self.indices,

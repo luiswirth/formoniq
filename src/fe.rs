@@ -2,10 +2,10 @@ use itertools::Itertools;
 use num_integer::binomial;
 
 use crate::{
-  combo::{combinators::IndexSubsets, factorial, sort_signed, IndexSet},
+  combo::{combinators::IndexSubsets, exterior::ExteriorRank, factorial, sort_signed, IndexSet},
   mesh::SimplicialManifold,
   simplicial::{CellComplex, REFCELLS},
-  Dim, ExteriorRank,
+  Dim,
 };
 
 pub trait ElmatProvider {
@@ -123,10 +123,12 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
         let mut kform_comb = kform_comb.clone();
         kform_comb.insert(0, i);
         let sign = sort_signed(&mut kform_comb);
+
         kform_comb.dedup();
         if kform_comb.len() != difk {
           continue;
         };
+
         let kform_comb = IndexSet::from(kform_comb)
           .assume_sorted()
           .with_local_base(n);
@@ -208,7 +210,7 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells() {
     let mut sum = 0.0;
-    for &ivertex in cell.vertplex().iter() {
+    for &ivertex in cell.oriented_vertplex().iter() {
       sum += fn_coeffs[ivertex].powi(2);
     }
     let nvertices = cell.nvertices();
