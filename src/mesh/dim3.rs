@@ -29,7 +29,7 @@ impl TriangleSurface3D {
 impl TriangleSurface3D {
   pub fn from_coord_manifold(mesh: CoordManifold) -> Self {
     assert!(mesh.dim_embedded() == 3, "Manifold is not embedded in 3D.");
-    assert!(mesh.dim_intrinsic() == 2, "Manifold is not a surface.");
+    assert!(mesh.dim_intrinsic() == 2, "Manifold is not a 2D surface.");
 
     let (cells, node_coords) = mesh.into_parts();
 
@@ -62,7 +62,6 @@ impl TriangleSurface3D {
   pub fn to_obj_string(&self) -> String {
     let mut string = String::new();
     for v in self.node_coords.column_iter() {
-      //writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.z, -v.y).unwrap();
       writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
     }
     for t in &self.triangles {
@@ -70,6 +69,35 @@ impl TriangleSurface3D {
       writeln!(string, "f {} {} {}", t[0] + 1, t[1] + 1, t[2] + 1).unwrap();
     }
     string
+  }
+
+  pub fn from_obj_string(obj_string: &str) -> Self {
+    let mut node_coords = Vec::new();
+    let mut triangles = Vec::new();
+
+    for line in obj_string.lines() {
+      let line = line.trim();
+
+      if let Some(coords) = line.strip_prefix("v ") {
+        let coords: Vec<f64> = coords
+          .split_whitespace()
+          .map(|x| x.parse::<f64>().unwrap())
+          .collect();
+        assert!(coords.len() == 3);
+        node_coords.push(na::Vector3::new(coords[0], coords[1], coords[2]));
+      } else if let Some(indices) = line.strip_prefix("f ") {
+        let indices: Vec<VertexIdx> = indices
+          .split_whitespace()
+          // .obj uses 1-indexing.
+          .map(|x| x.parse::<usize>().unwrap() - 1)
+          .collect();
+        assert!(indices.len() == 3);
+        triangles.push([indices[0], indices[1], indices[2]]);
+      }
+    }
+
+    let node_coords = na::Matrix3xX::from_columns(&node_coords);
+    Self::new(triangles, node_coords)
   }
 
   pub fn displace_normal<'a>(&mut self, displacements: impl Into<na::DVectorView<'a, f64>>) {
@@ -108,8 +136,6 @@ pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
   let phi = p.y.atan2(p.x); // [0,tau]
   [r, theta, phi]
 }
-
-// x = r sin ⁡ θ cos ⁡ φ , y = r sin ⁡ θ sin ⁡ φ , z = r cos ⁡ θ
 
 /// Takes $(r, theta, phi)$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
 pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {

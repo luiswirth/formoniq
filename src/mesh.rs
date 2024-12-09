@@ -134,6 +134,13 @@ impl<'m> CellHandle<'m> {
     &self.mesh.cells[self.idx]
   }
 
+  pub fn sorted_vertplex(&self) -> SortedVertplex {
+    self.mesh.cells[self.idx]
+      .clone()
+      .into_sorted()
+      .forget_sign()
+  }
+
   pub fn as_cell_complex(&self) -> CellComplex {
     let combinatorial = self.oriented_vertplex();
     let simplex = self.as_simplex();
@@ -151,6 +158,15 @@ pub struct SimplexHandle<'m> {
   idx: SimplexIdx,
   mesh: &'m SimplicialManifold,
 }
+impl<'m> std::fmt::Debug for SimplexHandle<'m> {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    f.debug_struct("SimplexHandle")
+      .field("idx", &self.idx)
+      .field("mesh", &(self.mesh as *const SimplicialManifold))
+      .finish()
+  }
+}
+
 impl<'m> SimplexHandle<'m> {
   pub fn new(mesh: &'m SimplicialManifold, idx: impl Into<SimplexIdx>) -> Self {
     let idx = idx.into();
@@ -206,7 +222,7 @@ impl<'m> SimplexHandle<'m> {
       for sup in self
         .sorted_vertplex()
         .clone()
-        .with_global_base(parent_cell.oriented_vertplex().clone().into_global_base())
+        .with_global_base(parent_cell.sorted_vertplex().into_global_base())
         .anti_boundary()
       {
         let coeff = sup.sign().as_i32();

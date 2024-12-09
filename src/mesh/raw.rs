@@ -60,8 +60,9 @@ impl RawSimplicialManifold {
 
     for (icell, cell) in cells.iter().enumerate() {
       let cell = cell.clone().into_sorted();
-      for (sub_dim, subs) in skeletons.iter_mut().enumerate() {
-        for sub in cell.subs(sub_dim + 1) {
+      for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
+        let nvertices_sub = dim_sub + 1;
+        for sub in cell.subs(nvertices_sub) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
           sub.parent_cells.push(icell);
         }
@@ -87,7 +88,11 @@ impl RawSimplicialManifold {
 
       let is_boundary_face = cells_face.len() == 1;
       if !is_boundary_face {
-        assert!(cells_face.len() == 2);
+        assert_eq!(
+          cells_face.len(),
+          2,
+          "Non-manifold topology at face {face:?}."
+        );
         assert!(
           !cells_face[0].orientation_eq(&cells_face[1]),
           "Manifold cells must be consistently oriented."
