@@ -103,7 +103,7 @@ impl CoordManifold {
         let vi = cell[i];
         for j in (i + 1)..cell.nvertices() {
           let vj = cell[j];
-          let edge = Vertplex::from([vi, vj]).assume_sorted();
+          let edge = Vertplex::from([vi, vj]).into_sorted().forget_sign();
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
             let length = (self.node_coords.coord(vj) - self.node_coords.coord(vi)).norm();
             e.insert(length);

@@ -1,7 +1,11 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{assemble, fe, lse, mesh::dim3, space::FeSpace};
+use formoniq::{
+  assemble, fe, lse,
+  mesh::dim3::{self, TriangleSurface3D},
+  space::FeSpace,
+};
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -13,8 +17,19 @@ fn main() {
 
   let dim: usize = 2;
 
-  let surface = dim3::mesh_sphere_surface(7);
-  std::fs::write("out/wave_sphere_mesh.obj", surface.to_obj_string()).unwrap();
+  let surface = if let Some(obj_string) = std::env::var("FORMONIQ_OBJ_PATH")
+    .ok()
+    .and_then(|path| std::fs::read_to_string(path).ok())
+  {
+    println!("Using specified OBJ file.");
+    TriangleSurface3D::from_obj_string(&obj_string)
+  } else {
+    println!("Specify your own boundaryless OBJ file using the envvar `FORMONIQ_OBJ_PATH`.");
+    println!("Using sphere mesh now.");
+    let surface = dim3::mesh_sphere_surface(7);
+    std::fs::write("out/wave_sphere_mesh.obj", surface.to_obj_string()).unwrap();
+    surface
+  };
 
   let coord_mesh = surface.clone().into_coord_manifold();
   let mesh = Rc::new(coord_mesh.clone().into_manifold());
