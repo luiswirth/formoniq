@@ -1,4 +1,4 @@
-//! Verify scalar FEEC Galerkin Matrices for negative Laplacian
+//! Verify FEEC Galerkin Matrices for scalar (negative) Laplacian
 //! on tensor product meshes by comparing to Finite Difference Method (FDM).
 //!
 //! We look at the homogeneous Neumann problem $-Delta u = 1$ on $[0,n]^d$.
@@ -10,8 +10,8 @@
 //! The LSE rows might be scaled differently between the two,
 //! so we convert the LSE into a canonical normalized form,
 //! where the RHS is constantly one. This makes the system matrices
-//! (Laplacian matrix / galmat) be the same for FEM and FDM.
-//! FDM is already in normalized form. FEM needs to be normalized.
+//! be the same for FEM and FDM. FDM is already in normalized form.
+//! FEM needs to be normalized.
 
 // NOTE: h-scaling for FDM and FEM (irrelevant, since $h=1$)
 // FD: $1/h^2 P u = h f_p$ (independent of dimension)

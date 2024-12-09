@@ -1,5 +1,14 @@
 use std::path::Path;
 
+pub trait SubType<Sup> {
+  /// hallucinating conversion
+  fn into_sup_type(self) -> Sup;
+}
+pub trait SupType<Sub> {
+  /// forgetful conversion
+  fn into_sub_type(self) -> Sub;
+}
+
 pub fn indicies_to_flags(indicies: &[usize], len: usize) -> Vec<bool> {
   let mut flags = vec![false; len];
   indicies.iter().for_each(|&i| flags[i] = true);

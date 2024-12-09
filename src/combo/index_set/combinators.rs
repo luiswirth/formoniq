@@ -187,7 +187,7 @@ pub struct IndexAntiBoundarySets<B: Specified, S: Signedness> {
 
 impl<B: Specified, S: Signedness> IndexAntiBoundarySets<B, S> {
   pub fn new(set: IndexSet<B, Sorted, S>) -> Self {
-    let k = set.len() - 1;
+    let k = set.len() + 1;
     let signedness = set.signedness;
     let supsets = IndexSupsets::new(set, k);
     let boundary_sign = Sign::from_parity(k);

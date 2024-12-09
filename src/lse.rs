@@ -27,6 +27,7 @@ where
   enforce_dirichlet_bc(mesh, boundary_data, &mut galmat, &mut galvec);
 
   let galmat = galmat.to_nalgebra_csc();
+
   FaerCholesky::new(galmat).solve(&galvec)
 }
 
