@@ -1,12 +1,13 @@
-use itertools::Itertools;
-use num_integer::binomial;
-
 use crate::{
-  combo::{combinators::IndexSubsets, exterior::ExteriorRank, factorial, sort_signed, IndexSet},
+  combo::{
+    binomial, combinators::IndexSubsets, exterior::ExteriorRank, factorial, sort_signed, IndexSet,
+  },
   mesh::SimplicialManifold,
   simplicial::{CellComplex, REFCELLS},
   Dim,
 };
+
+use itertools::Itertools;
 
 pub trait ElmatProvider {
   fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64>;
@@ -161,11 +162,11 @@ pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
 /// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
 pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
-  let kform_gramian = kform_gramian(cell, k);
-  cell.vol() * ref_difwhitneys.transpose() * kform_gramian * ref_difwhitneys
+  let form_gramian = kform_gramian(cell, k + 1);
+  cell.vol() * ref_difwhitneys.transpose() * form_gramian * ref_difwhitneys
 }
 
-/// Exact Element Matrix Provider for mass bilinear form.
+/// Exact Element Matrix Provider for scalar mass bilinear form.
 pub fn mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   let ndofs = cell.nvertices();
   let dim = cell.dim();
@@ -175,7 +176,7 @@ pub fn mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   elmat
 }
 
-/// Approximated Element Matrix Provider for mass bilinear form,
+/// Approximated Element Matrix Provider for scalar mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
 pub fn lumped_mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   let n = cell.nvertices();
@@ -248,7 +249,9 @@ pub fn ref_bary(n: Dim, ibary: usize, x: na::DVector<f64>) -> f64 {
 
 #[cfg(test)]
 mod test {
-  use super::{kform_gramian, ref_difbarys, ref_difwhitneys};
+  use super::{
+    hodge_laplace_dif_elmat, kform_gramian, laplace_beltrami_elmat, ref_difbarys, ref_difwhitneys,
+  };
   use crate::{linalg::assert_mat_eq, simplicial::ReferenceCell};
 
   use num_integer::binomial;
@@ -281,6 +284,16 @@ mod test {
         let computed_gram = kform_gramian(&cell, k);
         assert_mat_eq(&computed_gram, &expected_gram);
       }
+    }
+  }
+
+  #[test]
+  fn hodge_laplace0_is_laplace_beltrami_refcell() {
+    for n in 0..=3 {
+      let cell = ReferenceCell::new(n).to_cell_complex();
+      let laplace_beltrami = laplace_beltrami_elmat(&cell);
+      let hodge_laplace = hodge_laplace_dif_elmat(&cell, 0);
+      assert_mat_eq(&hodge_laplace, &laplace_beltrami);
     }
   }
 }
