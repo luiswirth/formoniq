@@ -212,7 +212,7 @@ impl<'m> SimplexHandle<'m> {
         let coeff = sup.sign().as_i32();
         let idx = self
           .mesh
-          .skeleton(self.dim() - 1)
+          .skeleton(self.dim() + 1)
           .get_by_vertplex(&sup.forget_sign().forget_base())
           .kidx();
 

@@ -1,4 +1,4 @@
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct SparseMatrix {
   nrows: usize,
   ncols: usize,
