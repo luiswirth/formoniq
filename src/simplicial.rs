@@ -4,6 +4,7 @@ use crate::{
     simplicial::{nsubsimplicies, subvertplexes, OrderedVertplex, RefVertplex},
     Sign,
   },
+  geometry::RiemannianMetric,
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
   Dim, VertexIdx,
 };
@@ -12,18 +13,22 @@ use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
 
 pub type Length = f64;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct CellComplex {
   subs: Vec<Vec<KSimplexIdx>>,
   orientation: Sign,
   edge_lengths: Vec<f64>,
+  metric: RiemannianMetric,
 }
 impl CellComplex {
   pub fn new(subs: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
+    let dim = subs.len() - 1;
+    let metric = RiemannianMetric::regge(dim, &edge_lengths);
     Self {
       subs,
       orientation,
       edge_lengths,
+      metric,
     }
   }
 
@@ -47,9 +52,13 @@ impl CellComplex {
     &self.edge_lengths
   }
 
+  pub fn metric(&self) -> &RiemannianMetric {
+    &self.metric
+  }
+
   /// The volume of this cell.
   pub fn vol(&self) -> f64 {
-    ref_vol(self.dim()) * self.metric_tensor().determinant().sqrt()
+    ref_vol(self.dim()) * self.metric().det_sqrt()
   }
 
   /// The diameter of this cell.
@@ -61,45 +70,6 @@ impl CellComplex {
       .copied()
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
-  }
-
-  /// Returns the result of the Regge metric on the
-  /// edge vectors (tangent vectors) i and j.
-  /// This is the entry $G_(i j)$ of the metric tensor $G$.
-  pub fn metric(&self, mut ei: usize, mut ej: usize) -> f64 {
-    assert!(ei < self.dim() && ej < self.dim());
-    if ei == ej {
-      self.edge_lengths[ei].powi(2)
-    } else {
-      if ei > ej {
-        std::mem::swap(&mut ei, &mut ej);
-      }
-
-      let l0i = self.edge_lengths[ei];
-      let l0j = self.edge_lengths[ej];
-
-      let vi = ei + 1;
-      let vj = ej + 1;
-      let eij = OrderedVertplex::from([vi, vj])
-        .assume_sorted()
-        .with_local_base(self.nvertices())
-        .lex_rank();
-      let lij = self.edge_lengths[eij];
-
-      0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2))
-    }
-  }
-
-  pub fn metric_tensor(&self) -> na::DMatrix<f64> {
-    let mut mat = na::DMatrix::zeros(self.dim(), self.dim());
-    for i in 0..self.dim() {
-      for j in i..self.dim() {
-        let v = self.metric(i, j);
-        mat[(i, j)] = v;
-        mat[(j, i)] = v;
-      }
-    }
-    mat
   }
 
   /// The shape regularity measure of this cell.

@@ -1,7 +1,6 @@
 use crate::{
-  combo::{
-    binomial, combinators::IndexSubsets, exterior::ExteriorRank, factorial, sort_signed, IndexSet,
-  },
+  combo::{binomial, combinators::IndexSubsets, factorial, sort_signed, IndexSet},
+  exterior::ExteriorRank,
   mesh::SimplicialManifold,
   simplicial::{CellComplex, REFCELLS},
   Dim,
@@ -53,47 +52,6 @@ pub fn kcodifferential_local(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix
 /// $star_k: cal(W) Lambda^k -> cal(W) Lambda^(n-k)$
 pub fn khodge_star_local(_cell: &CellComplex, _k: ExteriorRank) -> na::DMatrix<f64> {
   todo!()
-}
-
-// TODO: Can we reasonably avoid the inverse?
-// WARN: UNSTABLE
-/// Inner product on covectors / 1-forms.
-///
-/// Represented as gram matrix on covector standard basis.
-pub fn covector_gramian(cell: &CellComplex) -> na::DMatrix<f64> {
-  let vector_gramian = cell.metric_tensor();
-  vector_gramian.try_inverse().unwrap()
-}
-
-/// Inner product on k-forms
-///
-/// Represented as gram matrix on lexicographically ordered standard k-form standard basis.
-pub fn kform_gramian(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let n = cell.dim();
-  let combinations: Vec<_> = IndexSubsets::canonical(n, k).collect();
-  let covector_gramian = covector_gramian(cell);
-
-  let mut kform_gramian = na::DMatrix::zeros(combinations.len(), combinations.len());
-  let mut kbasis_mat = na::DMatrix::zeros(k, k);
-
-  for icomb in 0..combinations.len() {
-    let combi = &combinations[icomb];
-    for jcomb in icomb..combinations.len() {
-      let combj = &combinations[jcomb];
-
-      for iicomb in 0..k {
-        let combii = combi[iicomb];
-        for jjcomb in 0..k {
-          let combjj = combj[jjcomb];
-          kbasis_mat[(iicomb, jjcomb)] = covector_gramian[(combii, combjj)];
-        }
-      }
-      let det = kbasis_mat.determinant();
-      kform_gramian[(icomb, jcomb)] = det;
-      kform_gramian[(jcomb, icomb)] = det;
-    }
-  }
-  kform_gramian
 }
 
 /// The constant exterior drivatives of the reference barycentric coordinate
@@ -153,7 +111,7 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
   let ref_difbarys = ref_difbarys(cell.dim());
-  let covector_gramian = covector_gramian(cell);
+  let covector_gramian = cell.metric().covector_gramian();
   cell.vol() * ref_difbarys.transpose() * covector_gramian * ref_difbarys
 }
 
@@ -162,7 +120,7 @@ pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
 /// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
 pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
-  let form_gramian = kform_gramian(cell, k + 1);
+  let form_gramian = cell.metric().kform_gramian(k + 1);
   cell.vol() * ref_difwhitneys.transpose() * form_gramian * ref_difwhitneys
 }
 
@@ -249,9 +207,7 @@ pub fn ref_bary(n: Dim, ibary: usize, x: na::DVector<f64>) -> f64 {
 
 #[cfg(test)]
 mod test {
-  use super::{
-    hodge_laplace_dif_elmat, kform_gramian, laplace_beltrami_elmat, ref_difbarys, ref_difwhitneys,
-  };
+  use super::{hodge_laplace_dif_elmat, laplace_beltrami_elmat, ref_difbarys, ref_difwhitneys};
   use crate::{linalg::assert_mat_eq, simplicial::ReferenceCell};
 
   use num_integer::binomial;
@@ -281,7 +237,7 @@ mod test {
       for k in 0..=n {
         let binom = binomial(n, k);
         let expected_gram = na::DMatrix::identity(binom, binom);
-        let computed_gram = kform_gramian(&cell, k);
+        let computed_gram = cell.metric().kform_gramian(k);
         assert_mat_eq(&computed_gram, &expected_gram);
       }
     }
