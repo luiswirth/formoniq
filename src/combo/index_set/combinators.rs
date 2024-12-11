@@ -92,6 +92,7 @@ impl<B: Base, O: Order> IndexSubsets<B, O> {
   }
 }
 impl IndexSubsets<Local, Sorted> {
+  /// Sorted subsets of {1,...,n}
   pub fn canonical(n: usize, k: usize) -> Self {
     let set = IndexSet::canonical_full(n);
     Self::new(set, k)

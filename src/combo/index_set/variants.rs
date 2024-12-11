@@ -1,7 +1,7 @@
 use super::IndexSet;
 use crate::combo::{sort_signed, Sign};
 
-pub trait Base: Clone {}
+pub trait Base: Clone + Eq {}
 pub trait Specified: Base {
   fn len(&self) -> usize;
   fn indices(&self) -> Vec<usize>;

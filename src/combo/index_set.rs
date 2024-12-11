@@ -28,6 +28,9 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   pub fn len(&self) -> usize {
     self.indices.len()
   }
+  pub fn base(&self) -> &B {
+    &self.base
+  }
 
   // Ignores differing k and only compares indicies lexicographically.
   pub fn pure_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
