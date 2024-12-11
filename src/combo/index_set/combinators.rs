@@ -14,6 +14,10 @@ pub struct IndexPermutations<B: Base, O: Order, S: Signedness> {
 impl<B: Base, O: Order, S: Signedness> IndexPermutations<B, O, S> {
   pub fn new(set: IndexSet<B, O, S>) -> Self {
     let k = set.len();
+    Self::new_sub(set, k)
+  }
+
+  pub fn new_sub(set: IndexSet<B, O, S>, k: usize) -> Self {
     let indices = set.indices.clone().into_iter();
     let state = itertools::Itertools::permutations(indices, k);
 
@@ -22,8 +26,12 @@ impl<B: Base, O: Order, S: Signedness> IndexPermutations<B, O, S> {
 }
 impl IndexPermutations<Local, Sorted, Unsigned> {
   pub fn canonical(n: usize) -> Self {
+    Self::canonical_sub(n, n)
+  }
+
+  pub fn canonical_sub(n: usize, k: usize) -> Self {
     let set = IndexSet::canonical_full(n);
-    Self::new(set)
+    Self::new_sub(set, k)
   }
 }
 

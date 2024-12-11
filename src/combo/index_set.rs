@@ -31,6 +31,9 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   pub fn base(&self) -> &B {
     &self.base
   }
+  pub fn signedness(&self) -> S {
+    self.signedness
+  }
 
   // Ignores differing k and only compares indicies lexicographically.
   pub fn pure_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
@@ -146,6 +149,24 @@ impl<B: Base, S: Signedness> IndexSet<B, Sorted, S> {
 impl<B: Base, O: Order> IndexSet<B, O, Signed> {
   pub fn sign(&self) -> Sign {
     self.signedness.0
+  }
+}
+
+/// Only Unsigned
+impl<B: Base, O: Order> IndexSet<B, O, Unsigned> {
+  pub fn union<O1: Order>(
+    self,
+    mut other: IndexSet<B, O1, Unsigned>,
+  ) -> IndexSet<B, Ordered, Unsigned> {
+    assert_eq!(self.base, other.base);
+    let mut indices = self.indices;
+    indices.append(&mut other.indices);
+    IndexSet {
+      indices,
+      base: self.base,
+      order: Ordered,
+      signedness: Unsigned,
+    }
   }
 }
 

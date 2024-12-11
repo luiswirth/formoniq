@@ -6,6 +6,7 @@ use crate::{
 
 #[derive(Debug, Clone)]
 pub struct RiemannianMetric {
+  // TODO: consider making sparse?
   metric_tensor: na::DMatrix<f64>,
   inverse_metric_tensor: na::DMatrix<f64>,
 }
