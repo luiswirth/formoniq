@@ -1,7 +1,5 @@
 use crate::{
-  combo::{combinators::IndexSubsets, simplicial::OrderedVertplex},
-  exterior::ExteriorRank,
-  Dim,
+  combo::combinators::IndexSubsets, exterior::ExteriorRank, simplicial::OrderedVertplex, Dim,
 };
 
 #[derive(Debug, Clone)]
@@ -84,10 +82,14 @@ impl RiemannianMetric {
   pub fn vector_gramian(&self) -> &na::DMatrix<f64> {
     &self.metric_tensor
   }
-  pub fn vector_inner_product(&self, v: &na::DVector<f64>, w: &na::DVector<f64>) -> f64 {
-    (v.transpose() * self.vector_gramian() * w).x
+  pub fn vector_inner_product(
+    &self,
+    v: &na::DMatrix<f64>,
+    w: &na::DMatrix<f64>,
+  ) -> na::DMatrix<f64> {
+    v.transpose() * self.vector_gramian() * w
   }
-  pub fn vector_norm(&self, v: &na::DVector<f64>) -> f64 {
+  pub fn vector_norm_sqr(&self, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
     self.vector_inner_product(v, v)
   }
 
@@ -95,10 +97,14 @@ impl RiemannianMetric {
   pub fn covector_gramian(&self) -> &na::DMatrix<f64> {
     &self.inverse_metric_tensor
   }
-  pub fn covector_inner_product(&self, v: &na::DVector<f64>, w: &na::DVector<f64>) -> f64 {
-    (v.transpose() * self.covector_gramian() * w).x
+  pub fn covector_inner_product(
+    &self,
+    v: &na::DMatrix<f64>,
+    w: &na::DMatrix<f64>,
+  ) -> na::DMatrix<f64> {
+    v.transpose() * self.covector_gramian() * w
   }
-  pub fn covector_norm(&self, v: &na::DVector<f64>) -> f64 {
+  pub fn covector_norm_sqr(&self, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
     self.covector_inner_product(v, v)
   }
 
@@ -134,12 +140,31 @@ impl RiemannianMetric {
   pub fn kform_inner_product(
     &self,
     k: ExteriorRank,
-    v: &na::DVector<f64>,
-    w: &na::DVector<f64>,
-  ) -> f64 {
-    (v.transpose() * self.kform_gramian(k) * w).x
+    v: &na::DMatrix<f64>,
+    w: &na::DMatrix<f64>,
+  ) -> na::DMatrix<f64> {
+    v.transpose() * self.kform_gramian(k) * w
   }
-  pub fn kform_norm(&self, k: ExteriorRank, v: &na::DVector<f64>) -> f64 {
+  pub fn kform_norm_sqr(&self, k: ExteriorRank, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
     self.kform_inner_product(k, v, v)
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::RiemannianMetric;
+  use crate::{combo::binomial, linalg::assert_mat_eq};
+
+  #[test]
+  fn kform_gramian_euclidean() {
+    for n in 0..=3 {
+      let metric = RiemannianMetric::euclidean(n);
+      for k in 0..=n {
+        let binomial = binomial(n, k);
+        let expected_gram = na::DMatrix::identity(binomial, binomial);
+        let computed_gram = metric.kform_gramian(k);
+        assert_mat_eq(&computed_gram, &expected_gram);
+      }
+    }
   }
 }

@@ -1,11 +1,9 @@
 use super::{raw::RawSimplicialManifold, SimplicialManifold};
 use crate::{
-  combo::{
-    simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt as _, Vertplex},
-    Sign,
-  },
+  combo::Sign,
   linalg::DMatrixExt as _,
   mesh::VertexIdx,
+  simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt as _, Vertplex},
   Dim,
 };
 

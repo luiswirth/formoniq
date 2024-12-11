@@ -69,6 +69,7 @@ impl<O: Order, S: Signedness> ExteriorTerm<Local, O, S> {
 }
 
 impl<S: Signedness> ExteriorTerm<Local, Sorted, S> {
+  // TODO: is there a more efficent implementation?
   pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement<Local, Sorted, Sorted> {
     let n = self.n();
     let k = self.k();
@@ -88,7 +89,6 @@ impl<S: Signedness> ExteriorTerm<Local, Sorted, S> {
           // Levi-Civita symbol is zero.
           continue;
         };
-        // Levi-Civita symbol
         let sign = full_dual_index.sign().as_f64();
 
         let metric_prod: f64 = (0..k)

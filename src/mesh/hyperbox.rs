@@ -4,11 +4,8 @@ use super::{
   SimplicialManifold, VertexIdx,
 };
 use crate::{
-  combo::{
-    factorial,
-    simplicial::{OrderedVertplex, OrientedVertplex},
-    IndexSet,
-  },
+  combo::{factorial, IndexSet},
+  simplicial::{OrderedVertplex, OrientedVertplex},
   Dim,
 };
 

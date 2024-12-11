@@ -14,8 +14,7 @@ pub mod hyperbox;
 pub mod raw;
 
 use crate::{
-  combo::simplicial::{OrientedVertplex, SortedVertplex},
-  simplicial::CellComplex,
+  simplicial::{CellComplex, OrientedVertplex, SortedVertplex},
   Dim, Length, VertexIdx,
 };
 
@@ -428,11 +427,8 @@ impl SimplexIdx {
 #[cfg(test)]
 mod test {
   use crate::{
-    combo::{
-      simplicial::{nsubsimplicies, Vertplex},
-      Sign,
-    },
-    simplicial::ReferenceCell,
+    combo::Sign,
+    simplicial::{nsubsimplicies, ReferenceCell, Vertplex},
   };
 
   #[test]

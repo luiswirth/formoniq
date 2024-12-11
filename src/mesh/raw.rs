@@ -8,7 +8,7 @@
 
 use super::{Length, SimplexData, SimplicialManifold, Skeleton};
 use crate::{
-  combo::simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
+  simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
   Dim,
 };
 
