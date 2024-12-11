@@ -1,8 +1,5 @@
 use super::coordinates::{CoordManifold, NodeCoords};
-use crate::{
-  combo::{simplicial::Vertplex, Sign},
-  VertexIdx,
-};
+use crate::{combo::Sign, simplicial::Vertplex, VertexIdx};
 
 use std::{collections::HashMap, fmt::Write, sync::LazyLock};
 

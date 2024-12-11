@@ -4,8 +4,6 @@ mod sign;
 pub use index_set::*;
 pub use sign::*;
 
-pub mod simplicial;
-
 pub fn binomial(n: usize, k: usize) -> usize {
   num_integer::binomial(n, k)
 }
