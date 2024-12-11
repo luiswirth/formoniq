@@ -44,7 +44,9 @@ impl RiemannianMetric {
         let lij = edge_lengths[eij];
 
         let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));
+
         metric_tensor[(i, j)] = val;
+        metric_tensor[(j, i)] = val;
       }
     }
     Self::new(metric_tensor)
