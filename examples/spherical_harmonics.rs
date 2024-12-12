@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{mesh::dim3::mesh_sphere_surface, problems::helmholtz};
+use formoniq::{mesh::gen::dim3::mesh_sphere_surface, problems::helmholtz};
 
 fn main() {
   let triangle_mesh = mesh_sphere_surface(6);

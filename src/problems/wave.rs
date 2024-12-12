@@ -1,8 +1,8 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
 use crate::{
-  assemble, fe, linalg::quadratic_form_sparse, mesh::SimplicialManifold, util::FaerCholesky,
-  whitney::DofIdx,
+  assemble, fe, fe::DofIdx, linalg::quadratic_form_sparse, mesh::SimplicialManifold,
+  util::FaerCholesky,
 };
 
 pub struct WaveState {

@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  mesh::dim3,
+  mesh::gen::dim3,
   problems::wave::{self, WaveState},
 };
 

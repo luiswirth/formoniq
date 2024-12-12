@@ -1,11 +1,11 @@
-use super::{
+use crate::mesh::{
   coordinates::{CoordManifold, VertexCoords},
   raw::RawSimplicialManifold,
+  simplicial::{OrderedVertplex, OrientedVertplex},
   SimplicialManifold, VertexIdx,
 };
 use crate::{
   combo::{factorial, IndexSet},
-  simplicial::{OrderedVertplex, OrientedVertplex},
   Dim,
 };
 

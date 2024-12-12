@@ -1,5 +1,11 @@
-use super::coordinates::{CoordManifold, VertexCoords};
-use crate::{combo::Sign, simplicial::Vertplex, VertexIdx};
+use crate::{
+  combo::Sign,
+  mesh::{
+    coordinates::{CoordManifold, VertexCoords},
+    simplicial::Vertplex,
+  },
+  VertexIdx,
+};
 
 use std::{collections::HashMap, fmt::Write, sync::LazyLock};
 

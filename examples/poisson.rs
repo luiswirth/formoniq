@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::l2_norm,
-  mesh::{cartesian::CartesianMesh, SimplicialManifold},
+  mesh::{gen::cartesian::CartesianMesh, SimplicialManifold},
   problems::poisson,
 };
 

@@ -1,16 +1,16 @@
-use std::{
-  collections::HashMap,
-  ops::{Deref, DerefMut},
-};
-
 use crate::{
   combo::{
     combinators::{IndexPermutations, IndexSubsets},
     variants::*,
     IndexSet,
   },
-  geometry::RiemannianMetric,
+  mesh::geometry::RiemannianMetric,
   Dim,
+};
+
+use std::{
+  collections::HashMap,
+  ops::{Deref, DerefMut},
 };
 
 pub type ExteriorRank = usize;
