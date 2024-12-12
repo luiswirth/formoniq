@@ -1,12 +1,9 @@
 use crate::{
   combo::{binomial, combinators::IndexSubsets, factorial, sort_signed, IndexSet},
   exterior::ExteriorRank,
-  mesh::KSimplexIdx,
-  simplicial::REFCELLS,
+  mesh::simplicial::REFCELLS,
   Dim,
 };
-
-pub type DofIdx = KSimplexIdx;
 
 /// The constant exterior drivatives of the reference barycentric coordinate
 /// functions, given in the 1-form standard basis.

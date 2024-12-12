@@ -1,7 +1,9 @@
 use crate::{
   combo::Sign,
-  mesh::coordinates::{CoordManifold, VertexCoords},
-  simplicial::Vertplex,
+  mesh::{
+    coordinates::{CoordManifold, VertexCoords},
+    simplicial::Vertplex,
+  },
 };
 use tracing::warn;
 

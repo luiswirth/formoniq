@@ -4,7 +4,7 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   fe::{self, ElmatProvider},
   linalg::assert_mat_eq,
-  simplicial::{ref_vol, ReferenceCell},
+  mesh::simplicial::{ref_vol, ReferenceCell},
   Dim,
 };
 

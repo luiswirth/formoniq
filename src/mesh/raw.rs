@@ -8,8 +8,10 @@
 
 use super::{SimplexData, SimplicialManifold, Skeleton};
 use crate::{
-  geometry::EdgeLengths,
-  simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
+  mesh::{
+    geometry::EdgeLengths,
+    simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
+  },
   Dim,
 };
 

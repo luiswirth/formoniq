@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{assemble, fe, linalg::assert_mat_eq, mesh::cartesian::CartesianMesh, Dim};
+use formoniq::{assemble, fe, linalg::assert_mat_eq, mesh::gen::cartesian::CartesianMesh, Dim};
 
 const DIM: Dim = 3;
 

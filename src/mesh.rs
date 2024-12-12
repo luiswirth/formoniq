@@ -6,18 +6,17 @@
 //! - Topological Information (Incidence)
 //! - Geometrical information (Lengths, Volumes)
 
-pub mod cartesian;
 pub mod coordinates;
-pub mod gmsh;
+pub mod geometry;
 pub mod raw;
+pub mod simplicial;
 
-pub mod dim3;
+pub mod gen;
 
-use crate::{
-  geometry::EdgeLengths,
-  simplicial::{CellComplex, OrientedVertplex, SortedVertplex},
-  util, Dim, VertexIdx,
-};
+use geometry::EdgeLengths;
+use simplicial::{CellComplex, OrientedVertplex, SortedVertplex};
+
+use crate::{util, Dim, VertexIdx};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -36,6 +35,13 @@ pub type Skeleton = IndexMap<SortedVertplex, SimplexData>;
 
 // getters
 impl SimplicialManifold {
+  pub fn edge_lengths(&self) -> &EdgeLengths {
+    &self.edge_lengths
+  }
+  pub fn edge_lengths_mut(&mut self) -> &mut EdgeLengths {
+    &mut self.edge_lengths
+  }
+
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
@@ -474,10 +480,8 @@ impl SimplexIdx {
 
 #[cfg(test)]
 mod test {
-  use crate::{
-    combo::Sign,
-    simplicial::{nsubsimplicies, ReferenceCell, Vertplex},
-  };
+  use super::simplicial::{ReferenceCell, Vertplex};
+  use crate::{combo::Sign, mesh::simplicial::nsubsimplicies};
 
   #[test]
   fn incidence() {

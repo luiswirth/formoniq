@@ -4,7 +4,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  mesh::{cartesian::CartesianMesh, dim3},
+  mesh::gen::{cartesian::CartesianMesh, dim3::TriangleSurface3D},
   problems::helmholtz,
 };
 
@@ -14,7 +14,7 @@ fn main() {
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.to_coord_manifold();
 
-  let surface = dim3::TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
+  let surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
   std::fs::write("out/helmholtz_mesh.obj", surface.to_obj_string().as_bytes()).unwrap();
   let mesh = coord_mesh.into_intrinsic();
 

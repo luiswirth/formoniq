@@ -1,6 +1,11 @@
 //! Module for the (Heat) Diffussion Equation, the prototypical parabolic PDE.
 
-use crate::{assemble, fe, mesh::SimplicialManifold, util::FaerCholesky, whitney::DofIdx};
+use crate::{
+  assemble,
+  fe::{self, DofIdx},
+  mesh::SimplicialManifold,
+  util::FaerCholesky,
+};
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_diffusion<F>(

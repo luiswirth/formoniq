@@ -7,12 +7,9 @@ pub mod problems;
 
 pub mod assemble;
 pub mod fe;
-pub mod whitney;
 
 pub mod exterior;
-pub mod geometry;
 pub mod mesh;
-pub mod simplicial;
 
 pub mod combo;
 pub mod linalg;

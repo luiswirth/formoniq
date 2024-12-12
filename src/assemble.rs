@@ -1,9 +1,8 @@
 use crate::{
-  fe::{ElmatProvider, ElvecProvider},
+  fe::{DofIdx, ElmatProvider, ElvecProvider},
   mesh::SimplicialManifold,
   sparse::SparseMatrix,
   util,
-  whitney::DofIdx,
 };
 
 // TODO: generalize to k-forms

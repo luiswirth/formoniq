@@ -1,4 +1,11 @@
-use crate::{exterior::ExteriorRank, mesh::SimplicialManifold, simplicial::CellComplex, whitney};
+pub mod whitney;
+
+use crate::{
+  exterior::ExteriorRank,
+  mesh::{simplicial::CellComplex, KSimplexIdx, SimplicialManifold},
+};
+
+pub type DofIdx = KSimplexIdx;
 
 pub trait ElmatProvider {
   fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64>;
@@ -113,7 +120,7 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
 #[cfg(test)]
 mod test {
   use super::{hodge_laplace_dif_elmat, laplace_beltrami_elmat};
-  use crate::{linalg::assert_mat_eq, simplicial::ReferenceCell};
+  use crate::{linalg::assert_mat_eq, mesh::simplicial::ReferenceCell};
 
   #[test]
   fn hodge_laplace0_is_laplace_beltrami_refcell() {

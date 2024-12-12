@@ -1,11 +1,9 @@
-use super::{raw::RawSimplicialManifold, SimplicialManifold};
-use crate::{
-  combo::Sign,
-  linalg::DMatrixExt as _,
-  mesh::VertexIdx,
-  simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt as _, Vertplex},
-  Dim,
+use super::{
+  raw::RawSimplicialManifold,
+  simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt, Vertplex},
+  SimplicialManifold,
 };
+use crate::{combo::Sign, linalg::DMatrixExt as _, mesh::VertexIdx, Dim};
 
 use std::collections::{hash_map, HashMap};
 
@@ -138,6 +136,9 @@ impl CoordManifold {
   }
   pub fn vertex_coords(&self) -> &VertexCoords {
     &self.vertex_coords
+  }
+  pub fn vertex_coords_mut(&mut self) -> &mut VertexCoords {
+    &mut self.vertex_coords
   }
 }
 

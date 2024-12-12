@@ -26,7 +26,7 @@ use formoniq::{
   assemble,
   fe::{self, LoadElvec},
   linalg::{kronecker_sum, matrix_from_const_diagonals},
-  mesh::cartesian::CartesianMesh,
+  mesh::gen::cartesian::CartesianMesh,
   Dim,
 };
 

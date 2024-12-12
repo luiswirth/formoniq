@@ -1,11 +1,12 @@
 use crate::{
   combo::{binomial, combinators::GradedIndexSubsets, factorial, variants::*, IndexSet, Sign},
-  geometry::RiemannianMetric,
   mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
   Dim, VertexIdx,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
+
+use super::geometry::RiemannianMetric;
 
 pub type Vertplex<B, O, S> = IndexSet<B, O, S>;
 
