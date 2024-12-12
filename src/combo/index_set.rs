@@ -261,13 +261,10 @@ impl IndexSet<Unspecified, Sorted, Unsigned> {
   pub fn single(index: usize) -> Self {
     IndexSet::new(vec![index]).assume_sorted()
   }
-  pub fn counting(n: usize) -> Self {
-    IndexSet::new((0..n).collect()).assume_sorted()
-  }
 }
 
 impl IndexSet<Local, Sorted, Unsigned> {
-  pub fn canonical_full(n: usize) -> Self {
+  pub fn increasing(n: usize) -> Self {
     IndexSet {
       indices: (0..n).collect(),
       base: Local(n),

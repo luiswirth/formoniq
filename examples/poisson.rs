@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::l2_norm,
-  mesh::{hyperbox::HyperBoxMeshInfo, SimplicialManifold},
+  mesh::{cartesian::CartesianMesh, SimplicialManifold},
   problems::poisson,
 };
 
@@ -23,7 +23,7 @@ fn main() {
         let nboxes_per_dim = 2usize.pow(refinement as u32);
 
         // Mesh of hypercube $[0, tau]^d$.
-        let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
+        let box_mesh = CartesianMesh::new_unit_scaled(dim, nboxes_per_dim, TAU);
         let coord_mesh = box_mesh.to_coord_manifold();
 
         // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
