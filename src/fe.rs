@@ -1,4 +1,4 @@
-use crate::{exterior::ExteriorRank, mesh::SimplicialManifold, simplicial::CellComplex, space};
+use crate::{exterior::ExteriorRank, mesh::SimplicialManifold, simplicial::CellComplex, whitney};
 
 pub trait ElmatProvider {
   fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64>;
@@ -29,7 +29,7 @@ where
 ///
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
-  let ref_difbarys = space::ref_difbarys(cell.dim());
+  let ref_difbarys = whitney::ref_difbarys(cell.dim());
   cell.vol() * cell.metric().covector_norm_sqr(&ref_difbarys)
 }
 
@@ -37,7 +37,7 @@ pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
 ///
 /// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
 pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let ref_difwhitneys = space::ref_difwhitneys(cell.dim(), k);
+  let ref_difwhitneys = whitney::ref_difwhitneys(cell.dim(), k);
   cell.vol() * cell.metric().kform_norm_sqr(k, &ref_difwhitneys)
 }
 
@@ -45,7 +45,7 @@ pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatr
 ///
 /// $A = [inner(delta lambda_tau, delta lambda_sigma)_(L^2 Lambda^(k-1) (K))]_(sigma,tau in Delta_k (K))$
 pub fn hodge_laplace_codif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let ref_codifwhitneys = space::ref_codifwhitneys(cell.dim(), k);
+  let ref_codifwhitneys = whitney::ref_codifwhitneys(cell.dim(), k);
   cell.vol() * cell.metric().kform_norm_sqr(k, &ref_codifwhitneys)
 }
 

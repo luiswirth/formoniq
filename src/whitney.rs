@@ -1,40 +1,12 @@
 use crate::{
   combo::{binomial, combinators::IndexSubsets, factorial, sort_signed, IndexSet},
   exterior::ExteriorRank,
-  mesh::SimplicialManifold,
+  mesh::KSimplexIdx,
   simplicial::REFCELLS,
   Dim,
 };
 
-use std::rc::Rc;
-
-pub type DofIdx = usize;
-
-/// The Whitney Form Finite Element Space.
-pub struct FeSpace {
-  /// The rank of the Whitney form.
-  rank: ExteriorRank,
-  /// The underlying mesh of the space.
-  mesh: Rc<SimplicialManifold>,
-}
-
-impl FeSpace {
-  pub fn new(mesh: Rc<SimplicialManifold>) -> Self {
-    let rank = 0;
-    Self { mesh, rank }
-  }
-
-  pub fn rank(&self) -> Dim {
-    self.rank
-  }
-  pub fn mesh(&self) -> &Rc<SimplicialManifold> {
-    &self.mesh
-  }
-
-  pub fn ndofs(&self) -> usize {
-    self.mesh.skeleton(self.rank).len()
-  }
-}
+pub type DofIdx = KSimplexIdx;
 
 /// The constant exterior drivatives of the reference barycentric coordinate
 /// functions, given in the 1-form standard basis.

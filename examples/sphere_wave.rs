@@ -3,10 +3,8 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   mesh::dim3,
-  wave::{self, cfl_dt, WaveState},
+  problems::wave::{self, WaveState},
 };
-
-use std::rc::Rc;
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -21,11 +19,11 @@ fn main() {
   std::fs::write("out/sphere_wave.obj", surface.to_obj_string()).unwrap();
 
   let coord_mesh = surface.clone().into_coord_manifold();
-  let mesh = Rc::new(coord_mesh.clone().into_manifold());
+  let mesh = coord_mesh.clone().into_intrinsic();
 
   let final_time = 2.0 * TAU;
   // TODO: fix CFL conditions!!!
-  let mut dt = 0.3 * cfl_dt(&mesh, 1.0);
+  let mut dt = 0.3 * wave::cfl_dt(&mesh, 1.0);
   let mut nsteps = (final_time / dt) as usize;
 
   let anim_time = 5;

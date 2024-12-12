@@ -1,15 +1,9 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
 use crate::{
-  assemble, fe,
-  linalg::quadratic_form_sparse,
-  lse,
-  mesh::SimplicialManifold,
-  space::{DofIdx, FeSpace},
-  util::FaerCholesky,
+  assemble, fe, linalg::quadratic_form_sparse, mesh::SimplicialManifold, util::FaerCholesky,
+  whitney::DofIdx,
 };
-
-use std::rc::Rc;
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
@@ -28,7 +22,7 @@ impl WaveState {
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
-  mesh: &Rc<SimplicialManifold>,
+  mesh: &SimplicialManifold,
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
@@ -37,14 +31,12 @@ pub fn solve_wave<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let space = FeSpace::new(mesh.clone());
+  let mut laplace = assemble::assemble_galmat(mesh, fe::laplace_beltrami_elmat);
+  let mut mass = assemble::assemble_galmat(mesh, fe::mass_elmat);
+  let mut force = assemble::assemble_galvec(mesh, fe::LoadElvec::new(force_data));
 
-  let mut laplace = assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat);
-  let mut mass = assemble::assemble_galmat(&space, fe::mass_elmat);
-  let mut force = assemble::assemble_galvec(&space, fe::LoadElvec::new(force_data));
-
-  lse::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut force);
-  lse::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut force);
+  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut force);
+  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut force);
 
   let laplace = laplace.to_nalgebra_csc();
   let mass = mass.to_nalgebra_csc();

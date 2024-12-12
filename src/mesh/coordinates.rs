@@ -122,7 +122,7 @@ impl CoordManifold {
     RawSimplicialManifold::new(self.vertex_coords.nvertices(), self.cells, edge_lengths)
   }
 
-  pub fn into_manifold(self) -> SimplicialManifold {
+  pub fn into_intrinsic(self) -> SimplicialManifold {
     self.into_raw_manifold().build()
   }
 

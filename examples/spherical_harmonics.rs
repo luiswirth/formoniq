@@ -1,9 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{helmholtz, mesh::dim3::mesh_sphere_surface};
-
-use std::rc::Rc;
+use formoniq::{mesh::dim3::mesh_sphere_surface, problems::helmholtz};
 
 fn main() {
   let triangle_mesh = mesh_sphere_surface(6);
@@ -15,7 +13,7 @@ fn main() {
   .unwrap();
 
   let coord_mesh = triangle_mesh.clone().into_coord_manifold();
-  let mesh = Rc::new(coord_mesh.into_manifold());
+  let mesh = coord_mesh.into_intrinsic();
 
   let spectrum = helmholtz::solve_helmholtz_homogeneous(&mesh);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {

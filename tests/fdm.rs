@@ -27,11 +27,10 @@ use formoniq::{
   fe::{self, LoadElvec},
   linalg::{kronecker_sum, matrix_from_const_diagonals},
   mesh::hyperbox::HyperBoxMeshInfo,
-  space::FeSpace,
   Dim,
 };
 
-use std::{rc::Rc, sync::LazyLock};
+use std::sync::LazyLock;
 
 /// Handchecked integer (graph) Laplacian matrices on interior of mesh.
 ///
@@ -202,12 +201,10 @@ fn feec_galmat_boundary(dim: Dim) -> na::DMatrix<f64> {
 fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64);
   let coord_mesh = box_mesh.to_coord_manifold();
-  let mesh = Rc::new(coord_mesh.into_manifold());
-  let space = FeSpace::new(mesh.clone());
-  let mut galmat =
-    assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat).to_nalgebra_dense();
+  let mesh = coord_mesh.into_intrinsic();
+  let mut galmat = assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
-    &space,
+    &mesh,
     LoadElvec::new(na::DVector::from_element(mesh.nvertices(), 1.0)),
   );
   normalize_galerkin_lse(&mut galmat, &mut galvec);
