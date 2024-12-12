@@ -12,12 +12,17 @@ pub mod mesh;
 pub mod simplicial;
 pub mod space;
 
-pub mod evp;
-pub mod lse;
-
 pub mod linalg;
 pub mod sparse;
 pub mod util;
+
+pub mod lse;
+
+pub mod helmholtz;
+pub mod poisson;
+
+pub mod diffusion;
+pub mod wave;
 
 pub type Dim = usize;
 pub type Codim = usize;

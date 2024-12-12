@@ -72,12 +72,23 @@ impl SimplicialManifold {
     self.faces().len()
   }
 
-  /// The mesh width $h$, which is the largest diameter of all cells.
-  pub fn mesh_width(&self) -> f64 {
+  /// The mesh width $h_max$, equal to the largest diameter of all cells.
+  pub fn mesh_width_max(&self) -> f64 {
     self
       .edge_lengths
       .iter()
       .max_by(|a, b| a.partial_cmp(b).unwrap())
+      .copied()
+      .unwrap()
+  }
+
+  /// By convexity the smallest length of a line inside a simplex is the length
+  /// one of the edges.
+  pub fn mesh_width_min(&self) -> f64 {
+    self
+      .edge_lengths
+      .iter()
+      .min_by(|a, b| a.partial_cmp(b).unwrap())
       .copied()
       .unwrap()
   }
