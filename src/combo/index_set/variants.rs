@@ -121,12 +121,16 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn into_sorted(self) -> IndexSet<B, Sorted, Signed> {
-    self.try_into_sorted().unwrap()
+  pub fn sort(self) -> IndexSet<B, Sorted, Unsigned> {
+    self.sort_signed().forget_sign()
+  }
+
+  pub fn sort_signed(self) -> IndexSet<B, Sorted, Signed> {
+    self.try_sort_signed().unwrap()
   }
 
   /// Returns [`None`] if there is a duplicate index.
-  pub fn try_into_sorted(self) -> Option<IndexSet<B, Sorted, Signed>> {
+  pub fn try_sort_signed(self) -> Option<IndexSet<B, Sorted, Signed>> {
     let mut indices = self.indices;
     let sort_sign = sort_signed(&mut indices);
     let self_sign = self.signedness.get_or_default();

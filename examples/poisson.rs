@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::l2_norm,
-  mesh::{gen::cartesian::CartesianMesh, SimplicialManifold},
+  mesh::{gen::cartesian::CartesianMesh, Manifold},
   problems::poisson,
 };
 
@@ -48,7 +48,7 @@ fn main() {
 }
 
 struct PoissonWithSol {
-  mesh: SimplicialManifold,
+  mesh: Manifold,
   load_data: na::DVector<f64>,
   solution_exact: na::DVector<f64>,
 }

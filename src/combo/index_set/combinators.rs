@@ -41,7 +41,7 @@ impl<B: Base, O: Order, S: Signedness> Iterator for IndexPermutations<B, O, S> {
     let indices = self.state.next()?;
     let sorted = IndexSet::new(indices.clone())
       .with_sign(self.set.signedness.get_or_default())
-      .into_sorted();
+      .sort_signed();
     let next = IndexSet {
       indices: indices.clone(),
       base: self.set.base.clone(),
@@ -241,7 +241,7 @@ mod test {
       }
       for permut in permuts {
         let computed_sign = permut.sign();
-        let expected_sign = permut.forget_sign().into_sorted().sign();
+        let expected_sign = permut.forget_sign().sort_signed().sign();
         assert_eq!(computed_sign, expected_sign);
       }
     }

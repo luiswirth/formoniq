@@ -1,13 +1,13 @@
 use crate::{
   fe::{DofIdx, ElmatProvider, ElvecProvider},
-  mesh::SimplicialManifold,
+  mesh::Manifold,
   sparse::SparseMatrix,
   util,
 };
 
 // TODO: generalize to k-forms
 /// Assembly algorithm for the Galerkin Matrix.
-pub fn assemble_galmat(mesh: &SimplicialManifold, elmat: impl ElmatProvider) -> SparseMatrix {
+pub fn assemble_galmat(mesh: &Manifold, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::zeros(mesh.nvertices(), mesh.nvertices());
   for cell in mesh.cells() {
     let cell = cell.as_cell_complex();
@@ -25,7 +25,7 @@ pub fn assemble_galmat(mesh: &SimplicialManifold, elmat: impl ElmatProvider) -> 
 
 // TODO: generalize to k-forms
 /// Assembly algorithm for the Galerkin Vector.
-pub fn assemble_galvec(mesh: &SimplicialManifold, elvec: impl ElvecProvider) -> na::DVector<f64> {
+pub fn assemble_galvec(mesh: &Manifold, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mut galvec = na::DVector::zeros(mesh.nvertices());
   for cell in mesh.cells() {
     let cell = cell.as_cell_complex();
@@ -38,7 +38,7 @@ pub fn assemble_galvec(mesh: &SimplicialManifold, elvec: impl ElvecProvider) -> 
   galvec
 }
 
-pub fn drop_boundary_dofs_galmat(mesh: &SimplicialManifold, galmat: &mut SparseMatrix) {
+pub fn drop_boundary_dofs_galmat(mesh: &Manifold, galmat: &mut SparseMatrix) {
   drop_dofs_galmat(&mesh.boundary_vertices(), galmat)
 }
 
@@ -79,7 +79,7 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut na::DVector<f64>) {
 }
 
 pub fn reintroduce_zeroed_boundary_dofs_galsols(
-  mesh: &SimplicialManifold,
+  mesh: &Manifold,
   galsols: &mut na::DMatrix<f64>,
 ) {
   reintroduce_zeroed_dofs_galsols(&mesh.boundary_vertices(), galsols)
@@ -94,7 +94,7 @@ pub fn reintroduce_zeroed_dofs_galsols(dofs: &[DofIdx], galsols: &mut na::DMatri
 }
 
 pub fn enforce_homogeneous_dirichlet_bc(
-  mesh: &SimplicialManifold,
+  mesh: &Manifold,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) {
@@ -103,7 +103,7 @@ pub fn enforce_homogeneous_dirichlet_bc(
 }
 
 pub fn enforce_dirichlet_bc<F>(
-  mesh: &SimplicialManifold,
+  mesh: &Manifold,
   boundary_coeff_map: F,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,

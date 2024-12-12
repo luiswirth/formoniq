@@ -85,7 +85,7 @@ impl<S: Signedness> ExteriorTerm<Local, Sorted, S> {
       for sum_index in IndexPermutations::canonical_sub(n, k) {
         let sum_index = sum_index.forget_sign();
         let full_dual_index = sum_index.clone().union(dual_index.clone());
-        let Some(full_dual_index) = full_dual_index.clone().try_into_sorted() else {
+        let Some(full_dual_index) = full_dual_index.clone().try_sort_signed() else {
           // Levi-Civita symbol is zero.
           continue;
         };
@@ -154,7 +154,7 @@ impl<B: Base, O: Order> ScaledExteriorTerm<B, O> {
   }
 
   pub fn into_canonical(self) -> ScaledExteriorTerm<B, Sorted> {
-    let term = self.term.index_set.into_sorted();
+    let term = self.term.index_set.sort_signed();
     let coeff = self.coeff * term.sign().as_f64();
     let term = term.forget_sign().ext();
     ScaledExteriorTerm { coeff, term }
