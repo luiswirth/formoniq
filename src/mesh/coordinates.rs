@@ -10,35 +10,34 @@ use crate::{
 use std::collections::{hash_map, HashMap};
 
 #[derive(Debug, Clone)]
-pub struct NodeCoords {
-  /// The coordinates of the nodes in the columns of a matrix.
-  coords: na::DMatrix<f64>,
+pub struct VertexCoords {
+  /// The vertex coordinates in the columns of a matrix.
+  matrix: na::DMatrix<f64>,
 }
-impl NodeCoords {
-  pub fn new(coords: na::DMatrix<f64>) -> Self {
-    Self { coords }
-  }
-  pub fn dim(&self) -> Dim {
-    self.coords.nrows()
-  }
-  pub fn nnodes(&self) -> usize {
-    self.coords.ncols()
-  }
-  pub fn coords(&self) -> &na::DMatrix<f64> {
-    &self.coords
-  }
-  pub fn coord(&self, inode: VertexIdx) -> na::DVectorView<f64> {
-    self.coords.column(inode)
-  }
-  pub fn into_inner(self) -> na::DMatrix<f64> {
-    self.coords
+impl VertexCoords {
+  pub fn new(matrix: na::DMatrix<f64>) -> Self {
+    Self { matrix }
   }
 
-  pub fn eval_coord_fn<F>(&self, f: F) -> na::DVector<f64>
-  where
-    F: FnMut(na::DVectorView<f64>) -> f64,
-  {
-    na::DVector::from_iterator(self.nnodes(), self.coords.column_iter().map(f))
+  pub fn dim(&self) -> Dim {
+    self.matrix.nrows()
+  }
+  pub fn nvertices(&self) -> usize {
+    self.matrix.ncols()
+  }
+
+  pub fn coord(&self, ivertex: VertexIdx) -> na::DVectorView<f64> {
+    self.matrix.column(ivertex)
+  }
+
+  pub fn matrix(&self) -> &na::DMatrix<f64> {
+    &self.matrix
+  }
+  pub fn matrix_mut(&mut self) -> &mut na::DMatrix<f64> {
+    &mut self.matrix
+  }
+  pub fn into_matrix(self) -> na::DMatrix<f64> {
+    self.matrix
   }
 
   pub fn coord_simplex(&self, simp: &OrderedVertplex) -> CoordSimplex {
@@ -49,9 +48,16 @@ impl NodeCoords {
     CoordSimplex::new(vert_coords)
   }
 
-  pub fn embed_flat(mut self, dim: usize) -> NodeCoords {
-    let old_dim = self.coords.nrows();
-    self.coords = self.coords.insert_rows(old_dim, dim - old_dim, 0.0);
+  pub fn eval_coord_fn<F>(&self, f: F) -> na::DVector<f64>
+  where
+    F: FnMut(na::DVectorView<f64>) -> f64,
+  {
+    na::DVector::from_iterator(self.nvertices(), self.matrix.column_iter().map(f))
+  }
+
+  pub fn embed_euclidean(mut self, dim: Dim) -> VertexCoords {
+    let old_dim = self.matrix.nrows();
+    self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self
   }
 }
@@ -61,15 +67,15 @@ pub struct CoordManifold {
   /// topology
   cells: Vec<OrientedVertplex>,
   /// geometry
-  node_coords: NodeCoords,
+  vertex_coords: VertexCoords,
 }
 impl CoordManifold {
-  pub fn new(cells: Vec<OrientedVertplex>, node_coords: NodeCoords) -> Self {
+  pub fn new(cells: Vec<OrientedVertplex>, vertex_coords: VertexCoords) -> Self {
     if cfg!(debug_assertions) {
       let dim_intrinsic = cells[0].dim();
       for cell in &cells {
         assert!(cell.dim() == dim_intrinsic, "Inconsistent cell dimension.");
-        let coord_cell = node_coords.coord_simplex(&cell.clone().forget_sign());
+        let coord_cell = vertex_coords.coord_simplex(&cell.clone().forget_sign());
         assert!(
           coord_cell.orientation() * cell.sign() == Sign::Pos,
           "Cells must be positively oriented."
@@ -77,18 +83,21 @@ impl CoordManifold {
       }
     }
 
-    Self { cells, node_coords }
+    Self {
+      cells,
+      vertex_coords,
+    }
   }
 
   pub fn dim_embedded(&self) -> Dim {
-    self.node_coords.dim()
+    self.vertex_coords.dim()
   }
   pub fn dim_intrinsic(&self) -> Dim {
     self.cells[0].dim()
   }
 
-  pub fn into_parts(self) -> (Vec<OrientedVertplex>, NodeCoords) {
-    (self.cells, self.node_coords)
+  pub fn into_parts(self) -> (Vec<OrientedVertplex>, VertexCoords) {
+    (self.cells, self.vertex_coords)
   }
 
   pub fn into_raw_manifold(self) -> RawSimplicialManifold {
@@ -103,22 +112,22 @@ impl CoordManifold {
           let vj = cell[j];
           let edge = Vertplex::from([vi, vj]).into_sorted().forget_sign();
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
-            let length = (self.node_coords.coord(vj) - self.node_coords.coord(vi)).norm();
+            let length = (self.vertex_coords.coord(vj) - self.vertex_coords.coord(vi)).norm();
             e.insert(length);
           }
         }
       }
     }
 
-    RawSimplicialManifold::new(self.node_coords.nnodes(), self.cells, edge_lengths)
+    RawSimplicialManifold::new(self.vertex_coords.nvertices(), self.cells, edge_lengths)
   }
 
   pub fn into_manifold(self) -> SimplicialManifold {
     self.into_raw_manifold().build()
   }
 
-  pub fn embed_flat(mut self, dim: Dim) -> CoordManifold {
-    self.node_coords = self.node_coords.embed_flat(dim);
+  pub fn embed_euclidean(mut self, dim: Dim) -> CoordManifold {
+    self.vertex_coords = self.vertex_coords.embed_euclidean(dim);
     self
   }
 }
@@ -127,8 +136,8 @@ impl CoordManifold {
   pub fn cells(&self) -> &[OrientedVertplex] {
     &self.cells
   }
-  pub fn node_coords(&self) -> &NodeCoords {
-    &self.node_coords
+  pub fn vertex_coords(&self) -> &VertexCoords {
+    &self.vertex_coords
   }
 }
 

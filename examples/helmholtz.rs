@@ -16,7 +16,7 @@ fn main() {
   let box_mesh = HyperBoxMeshInfo::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.to_coord_manifold();
 
-  let surface = dim3::TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_flat(3));
+  let surface = dim3::TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
   std::fs::write("out/helmholtz_mesh.obj", surface.to_obj_string().as_bytes()).unwrap();
   let mesh = Rc::new(coord_mesh.into_manifold());
 

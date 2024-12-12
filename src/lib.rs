@@ -28,5 +28,3 @@ pub type Dim = usize;
 pub type Codim = usize;
 
 pub type VertexIdx = usize;
-
-pub type Length = f64;

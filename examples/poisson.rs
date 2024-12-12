@@ -30,8 +30,8 @@ fn main() {
         let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
         let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
 
-        let anal_sol = coord_mesh.node_coords().eval_coord_fn(anal_sol);
-        let anal_lapl = coord_mesh.node_coords().eval_coord_fn(anal_lapl);
+        let anal_sol = coord_mesh.vertex_coords().eval_coord_fn(anal_sol);
+        let anal_lapl = coord_mesh.vertex_coords().eval_coord_fn(anal_lapl);
 
         let mesh = Rc::new(coord_mesh.into_manifold());
 
@@ -75,7 +75,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
       solution_exact,
     } = setup;
 
-    let boundary_data = |inode| solution_exact[inode];
+    let boundary_data = |ivertex| solution_exact[ivertex];
     let galsol = poisson::solve_poisson(&mesh, load_data, boundary_data);
 
     // Compute L2 error and convergence rate.

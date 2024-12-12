@@ -1,4 +1,4 @@
-use super::coordinates::{CoordManifold, NodeCoords};
+use super::coordinates::{CoordManifold, VertexCoords};
 use crate::{combo::Sign, simplicial::Vertplex, VertexIdx};
 
 use std::{collections::HashMap, fmt::Write, sync::LazyLock};
@@ -22,20 +22,20 @@ pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
 #[derive(Debug, Clone)]
 pub struct TriangleSurface3D {
   triangles: Vec<[VertexIdx; 3]>,
-  node_coords: na::Matrix3xX<f64>,
+  vertex_coords: na::Matrix3xX<f64>,
 }
 impl TriangleSurface3D {
-  pub fn new(triangles: Vec<[VertexIdx; 3]>, node_coords: na::Matrix3xX<f64>) -> Self {
+  pub fn new(triangles: Vec<[VertexIdx; 3]>, vertex_coords: na::Matrix3xX<f64>) -> Self {
     Self {
       triangles,
-      node_coords,
+      vertex_coords,
     }
   }
   pub fn triangles(&self) -> &[[VertexIdx; 3]] {
     &self.triangles
   }
-  pub fn node_coords(&self) -> &na::Matrix3xX<f64> {
-    &self.node_coords
+  pub fn vertex_coords(&self) -> &na::Matrix3xX<f64> {
+    &self.vertex_coords
   }
 }
 
@@ -44,7 +44,7 @@ impl TriangleSurface3D {
     assert!(mesh.dim_embedded() == 3, "Manifold is not embedded in 3D.");
     assert!(mesh.dim_intrinsic() == 2, "Manifold is not a 2D surface.");
 
-    let (cells, node_coords) = mesh.into_parts();
+    let (cells, vertex_coords) = mesh.into_parts();
 
     let triangles = cells
       .into_iter()
@@ -57,24 +57,24 @@ impl TriangleSurface3D {
       })
       .collect();
 
-    let node_coords = na::try_convert(node_coords.into_inner()).unwrap();
+    let vertex_coords = na::try_convert(vertex_coords.into_matrix()).unwrap();
 
-    Self::new(triangles, node_coords)
+    Self::new(triangles, vertex_coords)
   }
 
   pub fn into_coord_manifold(self) -> CoordManifold {
-    let node_coords = NodeCoords::new(na::convert(self.node_coords));
+    let vertex_coords = VertexCoords::new(na::convert(self.vertex_coords));
     let cells = self
       .triangles
       .into_iter()
       .map(|t| Vertplex::from(t).with_sign(Sign::Pos))
       .collect();
-    CoordManifold::new(cells, node_coords)
+    CoordManifold::new(cells, vertex_coords)
   }
 
   pub fn to_obj_string(&self) -> String {
     let mut string = String::new();
-    for v in self.node_coords.column_iter() {
+    for v in self.vertex_coords.column_iter() {
       writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
     }
     for t in &self.triangles {
@@ -85,7 +85,7 @@ impl TriangleSurface3D {
   }
 
   pub fn from_obj_string(obj_string: &str) -> Self {
-    let mut node_coords = Vec::new();
+    let mut vertex_coords = Vec::new();
     let mut triangles = Vec::new();
 
     for line in obj_string.lines() {
@@ -97,7 +97,7 @@ impl TriangleSurface3D {
           .map(|x| x.parse::<f64>().unwrap())
           .collect();
         assert!(coords.len() == 3);
-        node_coords.push(na::Vector3::new(coords[0], coords[1], coords[2]));
+        vertex_coords.push(na::Vector3::new(coords[0], coords[1], coords[2]));
       } else if let Some(indices) = line.strip_prefix("f ") {
         let indices: Vec<VertexIdx> = indices
           .split_whitespace()
@@ -109,17 +109,17 @@ impl TriangleSurface3D {
       }
     }
 
-    let node_coords = na::Matrix3xX::from_columns(&node_coords);
-    Self::new(triangles, node_coords)
+    let vertex_coords = na::Matrix3xX::from_columns(&vertex_coords);
+    Self::new(triangles, vertex_coords)
   }
 
   pub fn displace_normal<'a>(&mut self, displacements: impl Into<na::DVectorView<'a, f64>>) {
     let displacements = displacements.into();
 
-    let mut vertex_normals = vec![na::Vector3::zeros(); self.node_coords.ncols()];
-    let mut vertex_triangle_counts = vec![0; self.node_coords.ncols()];
+    let mut vertex_normals = vec![na::Vector3::zeros(); self.vertex_coords.ncols()];
+    let mut vertex_triangle_counts = vec![0; self.vertex_coords.ncols()];
     for ivs in &self.triangles {
-      let vs = ivs.map(|i| self.node_coords.column(i));
+      let vs = ivs.map(|i| self.vertex_coords.column(i));
       let e0 = vs[1] - vs[0];
       let e1 = vs[2] - vs[0];
       let triangle_normal = e0.cross(&e1).normalize();
@@ -132,7 +132,7 @@ impl TriangleSurface3D {
       *vertex_normal /= count as f64;
     }
     for ((mut v, n), &d) in self
-      .node_coords
+      .vertex_coords
       .column_iter_mut()
       .zip(vertex_normals)
       .zip(displacements)
@@ -176,26 +176,26 @@ pub fn write_mdd_file(
 /// Geodesic sphere from subdividing a icosahedron
 pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
   let triangles = ICOSAHEDRON_SURFACE.triangles().to_vec();
-  let node_coords = ICOSAHEDRON_SURFACE
-    .node_coords()
+  let vertex_coords = ICOSAHEDRON_SURFACE
+    .vertex_coords()
     .column_iter()
     .map(|c| c.into_owned())
     .collect();
 
-  let (triangles, node_coords) = subdivide(triangles, node_coords, nsubdivisions);
+  let (triangles, vertex_coords) = subdivide(triangles, vertex_coords, nsubdivisions);
 
-  let node_coords = na::Matrix3xX::from_columns(&node_coords);
+  let vertex_coords = na::Matrix3xX::from_columns(&vertex_coords);
 
-  TriangleSurface3D::new(triangles, node_coords)
+  TriangleSurface3D::new(triangles, vertex_coords)
 }
 
 fn subdivide(
   triangles: Vec<[VertexIdx; 3]>,
-  mut node_coords: Vec<na::Vector3<f64>>,
+  mut vertex_coords: Vec<na::Vector3<f64>>,
   depth: usize,
 ) -> (Vec<[VertexIdx; 3]>, Vec<na::Vector3<f64>>) {
   if depth == 0 {
-    return (triangles, node_coords);
+    return (triangles, vertex_coords);
   }
 
   let mut midpoints = HashMap::new();
@@ -203,9 +203,9 @@ fn subdivide(
   let triangles = triangles
     .into_iter()
     .flat_map(|[v0, v1, v2]| {
-      let v01 = get_midpoint(v0, v1, &mut node_coords, &mut midpoints);
-      let v12 = get_midpoint(v1, v2, &mut node_coords, &mut midpoints);
-      let v20 = get_midpoint(v2, v0, &mut node_coords, &mut midpoints);
+      let v01 = get_midpoint(v0, v1, &mut vertex_coords, &mut midpoints);
+      let v12 = get_midpoint(v1, v2, &mut vertex_coords, &mut midpoints);
+      let v20 = get_midpoint(v2, v0, &mut vertex_coords, &mut midpoints);
 
       [
         [v0, v01, v20],
@@ -216,7 +216,7 @@ fn subdivide(
     })
     .collect();
 
-  subdivide(triangles, node_coords, depth - 1)
+  subdivide(triangles, vertex_coords, depth - 1)
 }
 
 fn get_midpoint(
@@ -260,7 +260,7 @@ static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
     .into_iter()
     .map(|v| na::Vector3::new(v[0], v[1], v[2]).normalize())
     .collect();
-  let node_coords = na::Matrix3xX::from_columns(&vertices);
+  let vertex_coords = na::Matrix3xX::from_columns(&vertices);
 
   let triangles = vec![
     [0, 11, 5],
@@ -285,5 +285,5 @@ static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
     [9, 8, 1],
   ];
 
-  TriangleSurface3D::new(triangles, node_coords)
+  TriangleSurface3D::new(triangles, vertex_coords)
 });

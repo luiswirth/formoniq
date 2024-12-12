@@ -21,9 +21,9 @@ impl SimplicialManifold {
       .collect()
   }
 
-  /// The nodes that lie on the boundary of the mesh.
-  /// No particular order of nodes.
-  pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
+  /// The vertices that lie on the boundary of the mesh.
+  /// No particular order of vertices.
+  pub fn boundary_vertices(&self) -> Vec<VertexIdx> {
     self
       .boundary_faces()
       .into_iter()
@@ -32,8 +32,8 @@ impl SimplicialManifold {
       .collect()
   }
 
-  pub fn flag_boundary_nodes(&self) -> Vec<bool> {
-    util::indicies_to_flags(&self.boundary_nodes(), self.nnodes())
+  pub fn flag_boundary_vertices(&self) -> Vec<bool> {
+    util::indicies_to_flags(&self.boundary_vertices(), self.nvertices())
   }
 
   pub fn boundary_cells(&self) -> Vec<CellIdx> {

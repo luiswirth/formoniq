@@ -1,10 +1,46 @@
 use crate::{
-  combo::combinators::IndexSubsets, exterior::ExteriorRank, simplicial::OrderedVertplex, Dim,
+  combo::combinators::IndexSubsets, exterior::ExteriorRank, mesh::EdgeIdx,
+  simplicial::OrderedVertplex, Dim,
 };
 
 #[derive(Debug, Clone)]
+pub struct EdgeLengths {
+  vector: na::DVector<f64>,
+}
+impl EdgeLengths {
+  pub fn new(vector: na::DVector<f64>) -> Self {
+    Self { vector }
+  }
+  pub fn nedges(&self) -> usize {
+    self.vector.len()
+  }
+  pub fn length(&self, iedge: EdgeIdx) -> f64 {
+    self.vector[iedge]
+  }
+  pub fn vector(&self) -> &na::DVector<f64> {
+    &self.vector
+  }
+  pub fn vector_mut(&mut self) -> &mut na::DVector<f64> {
+    &mut self.vector
+  }
+  pub fn into_vector(self) -> na::DVector<f64> {
+    self.vector
+  }
+  pub fn iter(
+    &self,
+  ) -> na::iter::MatrixIter<
+    '_,
+    f64,
+    na::Dyn,
+    na::Const<1>,
+    na::VecStorage<f64, na::Dyn, na::Const<1>>,
+  > {
+    self.vector.iter()
+  }
+}
+
+#[derive(Debug, Clone)]
 pub struct RiemannianMetric {
-  // TODO: consider making sparse?
   metric_tensor: na::DMatrix<f64>,
   inverse_metric_tensor: na::DMatrix<f64>,
 }

@@ -14,8 +14,9 @@ pub mod hyperbox;
 pub mod raw;
 
 use crate::{
+  geometry::EdgeLengths,
   simplicial::{CellComplex, OrientedVertplex, SortedVertplex},
-  Dim, Length, VertexIdx,
+  Dim, VertexIdx,
 };
 
 use indexmap::IndexMap;
@@ -26,9 +27,7 @@ use std::hash::Hash;
 pub struct SimplicialManifold {
   cells: Vec<OrientedVertplex>,
   skeletons: Vec<Skeleton>,
-
-  /// mapping [`EdgeIdx`] -> [`Length`]
-  edge_lengths: Vec<Length>,
+  edge_lengths: EdgeLengths,
 }
 
 /// A container for simplicies of common dimension.
@@ -39,10 +38,6 @@ impl SimplicialManifold {
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
-  pub fn nnodes(&self) -> usize {
-    self.nvertices()
-  }
-
   pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
     SkeletonHandle::new(self, dim)
   }
@@ -278,7 +273,7 @@ impl<'m> SimplexHandle<'m> {
   fn edge_lengths(&self) -> Vec<f64> {
     self
       .edges()
-      .map(|e| self.mesh.edge_lengths[e.idx.kidx])
+      .map(|e| self.mesh.edge_lengths.length(e.kidx()))
       .collect()
   }
 

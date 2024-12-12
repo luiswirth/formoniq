@@ -41,17 +41,17 @@ fn main() {
   assert!(!mesh.has_boundary());
   let boundary_data = |_| unreachable!();
 
-  let initial_pos = coord_mesh.node_coords().eval_coord_fn(|p| {
+  let initial_pos = coord_mesh.vertex_coords().eval_coord_fn(|p| {
     let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
     #[allow(unused_variables)]
     let [r, theta, phi] = dim3::cartesian2spherical(p);
 
     (-theta.powi(2) * 50.0).exp()
   });
-  let initial_vel = na::DVector::zeros(mesh.nnodes());
+  let initial_vel = na::DVector::zeros(mesh.nvertices());
   let initial_data = WaveState::new(initial_pos, initial_vel);
 
-  let force_data = na::DVector::zeros(mesh.nnodes());
+  let force_data = na::DVector::zeros(mesh.nvertices());
 
   let solution = wave::solve_wave(&mesh, &times, boundary_data, initial_data, force_data);
 
@@ -62,7 +62,7 @@ fn main() {
       surface.displace_normal(&state.pos);
 
       let frame_coords: Vec<[f32; 3]> = surface
-        .node_coords()
+        .vertex_coords()
         .column_iter()
         .map(|col| [col.x as f32, col.y as f32, col.z as f32])
         .collect();

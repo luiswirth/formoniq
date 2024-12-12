@@ -1,6 +1,6 @@
 use crate::{
   combo::Sign,
-  mesh::coordinates::{CoordManifold, NodeCoords},
+  mesh::coordinates::{CoordManifold, VertexCoords},
   simplicial::Vertplex,
 };
 use tracing::warn;
@@ -9,14 +9,14 @@ use tracing::warn;
 pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
-  let mesh_nodes = msh.data.nodes.unwrap().node_blocks;
-  let mesh_nodes: Vec<_> = mesh_nodes
+  let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
+  let mesh_vertices: Vec<_> = mesh_vertices
     .iter()
     .flat_map(|block| block.nodes.iter())
     .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]))
     .collect();
-  let mesh_nodes = na::DMatrix::from_columns(&mesh_nodes);
-  let mesh_nodes = NodeCoords::new(mesh_nodes);
+  let mesh_vertices = na::DMatrix::from_columns(&mesh_vertices);
+  let mesh_vertices = VertexCoords::new(mesh_vertices);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();
@@ -46,13 +46,13 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
   }
 
   if !quads.is_empty() {
-    return CoordManifold::new(quads, mesh_nodes);
+    return CoordManifold::new(quads, mesh_vertices);
   }
   if !trias.is_empty() {
-    return CoordManifold::new(trias, mesh_nodes);
+    return CoordManifold::new(trias, mesh_vertices);
   }
   if !edges.is_empty() {
-    return CoordManifold::new(edges, mesh_nodes);
+    return CoordManifold::new(edges, mesh_vertices);
   }
   panic!("failed to construct Triangulation from gmsh");
 }
