@@ -176,7 +176,7 @@ impl ReferenceCell {
   }
 
   pub fn to_singleton_mesh(&self) -> SimplicialManifold {
-    let nnodes = self.nvertices();
+    let nvertices = self.nvertices();
     let cells = vec![self.as_vertplex().clone().forget_base().into_oriented()];
 
     let mut edge_lengths = HashMap::new();
@@ -191,7 +191,7 @@ impl ReferenceCell {
       }
     }
 
-    RawSimplicialManifold::new(nnodes, cells, edge_lengths).build()
+    RawSimplicialManifold::new(nvertices, cells, edge_lengths).build()
   }
 }
 

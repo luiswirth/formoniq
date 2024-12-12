@@ -1,5 +1,5 @@
 use super::{
-  coordinates::{CoordManifold, NodeCoords},
+  coordinates::{CoordManifold, VertexCoords},
   raw::RawSimplicialManifold,
   SimplicialManifold, VertexIdx,
 };
@@ -126,41 +126,43 @@ impl HyperBoxMeshInfo {
   pub fn nboxes_per_dim(&self) -> usize {
     self.nboxes_per_dim
   }
-  pub fn nnodes_per_dim(&self) -> usize {
+  pub fn nvertices_per_dim(&self) -> usize {
     self.nboxes_per_dim + 1
   }
   pub fn nboxes(&self) -> usize {
     self.nboxes_per_dim.pow(self.dim() as u32)
   }
-  pub fn nnodes(&self) -> usize {
-    self.nnodes_per_dim().pow(self.dim() as u32)
+  pub fn nvertices(&self) -> usize {
+    self.nvertices_per_dim().pow(self.dim() as u32)
   }
-  pub fn node_cart_idx(&self, inode: VertexIdx) -> na::DVector<usize> {
-    linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim())
+  pub fn vertex_cart_idx(&self, ivertex: VertexIdx) -> na::DVector<usize> {
+    linear_index2cartesian_index(ivertex, self.nvertices_per_dim(), self.dim())
   }
-  pub fn node_pos(&self, inode: VertexIdx) -> na::DVector<f64> {
-    (self.node_cart_idx(inode).cast::<f64>() / (self.nnodes_per_dim() - 1) as f64)
+  pub fn vertex_pos(&self, ivertex: VertexIdx) -> na::DVector<f64> {
+    (self.vertex_cart_idx(ivertex).cast::<f64>() / (self.nvertices_per_dim() - 1) as f64)
       .component_mul(&self.side_lengths())
       + self.min()
   }
 
-  pub fn is_node_on_boundary(&self, node: VertexIdx) -> bool {
-    let coords = linear_index2cartesian_index(node, self.nnodes_per_dim(), self.hyperbox.dim());
+  pub fn is_vertex_on_boundary(&self, vertex: VertexIdx) -> bool {
+    let coords =
+      linear_index2cartesian_index(vertex, self.nvertices_per_dim(), self.hyperbox.dim());
     coords
       .iter()
-      .any(|&c| c == 0 || c == self.nnodes_per_dim() - 1)
+      .any(|&c| c == 0 || c == self.nvertices_per_dim() - 1)
   }
 
-  pub fn boundary_nodes(&self) -> Vec<VertexIdx> {
+  pub fn boundary_vertices(&self) -> Vec<VertexIdx> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
-      let nnodes_boundary_face = self.nnodes_per_dim().pow(self.dim() as u32 - 1);
-      for inode in 0..nnodes_boundary_face {
-        let node_icart = linear_index2cartesian_index(inode, self.nnodes_per_dim(), self.dim() - 1);
-        let low_boundary = node_icart.clone().insert_row(d, 0);
-        let high_boundary = node_icart.insert_row(d, self.nnodes_per_dim() - 1);
-        let low_boundary = cartesian_index2linear_index(low_boundary, self.nnodes_per_dim());
-        let high_boundary = cartesian_index2linear_index(high_boundary, self.nnodes_per_dim());
+      let nvertices_boundary_face = self.nvertices_per_dim().pow(self.dim() as u32 - 1);
+      for ivertex in 0..nvertices_boundary_face {
+        let vertex_icart =
+          linear_index2cartesian_index(ivertex, self.nvertices_per_dim(), self.dim() - 1);
+        let low_boundary = vertex_icart.clone().insert_row(d, 0);
+        let high_boundary = vertex_icart.insert_row(d, self.nvertices_per_dim() - 1);
+        let low_boundary = cartesian_index2linear_index(low_boundary, self.nvertices_per_dim());
+        let high_boundary = cartesian_index2linear_index(high_boundary, self.nvertices_per_dim());
         r.push(low_boundary);
         r.push(high_boundary);
       }
@@ -170,16 +172,16 @@ impl HyperBoxMeshInfo {
 }
 
 impl HyperBoxMeshInfo {
-  pub fn compute_node_coords(&self) -> NodeCoords {
-    let mut nodes = na::DMatrix::zeros(self.dim(), self.nnodes());
-    for (inode, mut coord) in nodes.column_iter_mut().enumerate() {
-      coord.copy_from(&self.node_pos(inode));
+  pub fn compute_vertex_coords(&self) -> VertexCoords {
+    let mut vertices = na::DMatrix::zeros(self.dim(), self.nvertices());
+    for (ivertex, mut coord) in vertices.column_iter_mut().enumerate() {
+      coord.copy_from(&self.vertex_pos(ivertex));
     }
-    NodeCoords::new(nodes)
+    VertexCoords::new(vertices)
   }
 
   pub fn to_coord_manifold(&self) -> CoordManifold {
-    let node_coords = self.compute_node_coords();
+    let vertex_coords = self.compute_vertex_coords();
 
     let dim = self.dim();
     let ncells = factorial(dim) * self.nboxes();
@@ -191,7 +193,7 @@ impl HyperBoxMeshInfo {
 
       let vertex_icart_origin = cube_icart;
       let ivertex_origin =
-        cartesian_index2linear_index(vertex_icart_origin.clone(), self.nnodes_per_dim());
+        cartesian_index2linear_index(vertex_icart_origin.clone(), self.nvertices_per_dim());
 
       let basisdirs = IndexSet::counting(dim);
 
@@ -207,7 +209,8 @@ impl HyperBoxMeshInfo {
         for &basisdir in basisdirs.iter() {
           vertex_icart[basisdir] += 1;
 
-          let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nnodes_per_dim());
+          let ivertex =
+            cartesian_index2linear_index(vertex_icart.clone(), self.nvertices_per_dim());
           cell.push(ivertex);
         }
 
@@ -215,7 +218,7 @@ impl HyperBoxMeshInfo {
 
         // Ensure consistent positive orientation of cells.
         // TODO: avoid computing orientation using coordinates / determinant.
-        let orientation = node_coords.coord_simplex(&cell).orientation();
+        let orientation = vertex_coords.coord_simplex(&cell).orientation();
 
         cell.with_sign(orientation)
       });
@@ -223,7 +226,7 @@ impl HyperBoxMeshInfo {
       cells.extend(cube_cells);
     }
 
-    CoordManifold::new(cells, node_coords)
+    CoordManifold::new(cells, vertex_coords)
   }
 
   pub fn compute_raw_manifold(&self) -> RawSimplicialManifold {
@@ -242,7 +245,7 @@ mod test {
   fn unit_cube_mesh() {
     let mesh = HyperBoxMeshInfo::new_unit(3, 1).to_coord_manifold();
     #[rustfmt::skip]
-    let expected_nodes = na::DMatrix::from_column_slice(3, 8, &[
+    let expected_vertices = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,
       1., 0., 0.,
       0., 1., 0.,
@@ -252,8 +255,8 @@ mod test {
       0., 1., 1.,
       1., 1., 1.,
     ]);
-    let computed_nodes = mesh.node_coords().coords();
-    assert_eq!(*computed_nodes, expected_nodes);
+    let computed_vertices = mesh.vertex_coords().matrix();
+    assert_eq!(*computed_vertices, expected_vertices);
     let expected_simplicies = vec![
       &[0, 1, 3, 7],
       &[0, 1, 5, 7],
@@ -270,7 +273,7 @@ mod test {
   fn unit_square_mesh() {
     let mesh = HyperBoxMeshInfo::new_unit(2, 2).to_coord_manifold();
     #[rustfmt::skip]
-    let expected_nodes = na::DMatrix::from_column_slice(2, 9, &[
+    let expected_vertices = na::DMatrix::from_column_slice(2, 9, &[
       0.0, 0.0,
       0.5, 0.0,
       1.0, 0.0,
@@ -281,8 +284,8 @@ mod test {
       0.5, 1.0,
       1.0, 1.0,
     ]);
-    let computed_nodes = mesh.node_coords().coords();
-    assert_eq!(*computed_nodes, expected_nodes);
+    let computed_vertices = mesh.vertex_coords().matrix();
+    assert_eq!(*computed_vertices, expected_vertices);
     let expected_simplicies = vec![
       &[0, 1, 4],
       &[0, 3, 4],

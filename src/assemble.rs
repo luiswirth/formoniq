@@ -53,7 +53,7 @@ pub fn assemble_galvec(space: &FeSpace, elvec: impl ElvecProvider) -> na::DVecto
 }
 
 pub fn drop_boundary_dofs_galmat(mesh: &SimplicialManifold, galmat: &mut SparseMatrix) {
-  drop_dofs_galmat(&mesh.boundary_nodes(), galmat)
+  drop_dofs_galmat(&mesh.boundary_vertices(), galmat)
 }
 
 pub fn drop_dofs_galmat(dofs: &[DofIdx], galmat: &mut SparseMatrix) {
@@ -96,7 +96,7 @@ pub fn reintroduce_zeroed_boundary_dofs_galsols(
   mesh: &SimplicialManifold,
   galsols: &mut na::DMatrix<f64>,
 ) {
-  reintroduce_zeroed_dofs_galsols(&mesh.boundary_nodes(), galsols)
+  reintroduce_zeroed_dofs_galsols(&mesh.boundary_vertices(), galsols)
 }
 
 pub fn reintroduce_zeroed_dofs_galsols(dofs: &[DofIdx], galsols: &mut na::DMatrix<f64>) {

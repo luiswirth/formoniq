@@ -5,8 +5,8 @@ pub fn enforce_homogeneous_dirichlet_bc(
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) {
-  let boundary_nodes = mesh.boundary_nodes();
-  fix_dofs_zero(&boundary_nodes, galmat, galvec);
+  let boundary_vertices = mesh.boundary_vertices();
+  fix_dofs_zero(&boundary_vertices, galmat, galvec);
 }
 
 pub fn enforce_dirichlet_bc<F>(
@@ -17,7 +17,7 @@ pub fn enforce_dirichlet_bc<F>(
 ) where
   F: Fn(DofIdx) -> f64,
 {
-  let boundary_dofs = mesh.boundary_nodes();
+  let boundary_dofs = mesh.boundary_vertices();
   let dof_coeffs: Vec<_> = boundary_dofs
     .into_iter()
     .map(|idof| (idof, boundary_coeff_map(idof)))

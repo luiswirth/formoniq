@@ -6,8 +6,9 @@
 //! The structs in this module try to be minimal in the sense that they don't
 //! include any information that is redundant or can be derived from other fields.
 
-use super::{Length, SimplexData, SimplicialManifold, Skeleton};
+use super::{SimplexData, SimplicialManifold, Skeleton};
 use crate::{
+  geometry::EdgeLengths,
   simplicial::{OrientedVertplex, SimplexExt as _, SortedVertplex},
   Dim,
 };
@@ -16,23 +17,23 @@ use std::collections::HashMap;
 
 /// The data defining a simplicial Riemanninan manifold.
 pub struct RawSimplicialManifold {
-  /// number of nodes
-  nnodes: usize,
+  /// number of vertices
+  nvertices: usize,
   /// A mapping [`CellIdx`] -> [`RawSimplexTopology`].
   /// Defines topology (connectivity + orientation) and global numbering/order of cells.
   cells: Vec<OrientedVertplex>,
   /// A mapping [`SortedSimplex`] -> [`Length`].
   /// Defines geometry of the manifold through the lengths of all edges.
-  edge_lengths: HashMap<SortedVertplex, Length>,
+  edge_lengths: HashMap<SortedVertplex, f64>,
 }
 impl RawSimplicialManifold {
   pub fn new(
-    nnodes: usize,
+    nvertices: usize,
     cells: Vec<OrientedVertplex>,
-    edge_lengths: HashMap<SortedVertplex, Length>,
+    edge_lengths: HashMap<SortedVertplex, f64>,
   ) -> Self {
     Self {
-      nnodes,
+      nvertices,
       cells,
       edge_lengths,
     }
@@ -40,8 +41,8 @@ impl RawSimplicialManifold {
   pub fn dim(&self) -> Dim {
     self.cells[0].dim()
   }
-  pub fn nnodes(&self) -> usize {
-    self.nnodes
+  pub fn nvertices(&self) -> usize {
+    self.nvertices
   }
 }
 
@@ -54,7 +55,7 @@ impl RawSimplicialManifold {
     let cells = self.cells;
 
     let mut skeletons = vec![Skeleton::new(); dim + 1];
-    skeletons[0] = (0..self.nnodes)
+    skeletons[0] = (0..self.nvertices)
       .map(|v| (SortedVertplex::single(v), SimplexData::stub()))
       .collect();
 
@@ -100,12 +101,10 @@ impl RawSimplicialManifold {
       }
     }
 
-    let mut edge_lengths = Vec::new();
     let edges = skeletons[1].keys();
-    for edge in edges {
-      let length = self.edge_lengths[edge];
-      edge_lengths.push(length);
-    }
+    let edge_lengths =
+      na::DVector::from_iterator(edges.len(), edges.map(|edge| self.edge_lengths[edge]));
+    let edge_lengths = EdgeLengths::new(edge_lengths);
 
     SimplicialManifold {
       cells,

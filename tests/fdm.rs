@@ -4,9 +4,9 @@
 //! We look at the homogeneous Neumann problem $-Delta u = 1$ on $[0,n]^d$.
 //! We discretize this problem on a tensor-product mesh with $n$ subdivisions,
 //! resulting in $h=1$, making $h$-scaling irrelevant.
-//! The Mesh nodes are ordered lexicographically.
+//! The Mesh vertices are ordered lexicographically.
 //! Piecewise-linear FEM and FDM should give rise to the same LSE,
-//! since both are solving for values at the mesh nodes.
+//! since both are solving for values at the mesh vertices.
 //! The LSE rows might be scaled differently between the two,
 //! so we convert the LSE into a canonical normalized form,
 //! where the RHS is constantly one. This makes the system matrices
@@ -116,11 +116,14 @@ fn fdm_vs_handchecked_boundary() {
   }
 }
 
-fn ndimensionalize_operator<F>(f: F, node_counts: &[usize]) -> na::DMatrix<i32>
+fn ndimensionalize_operator<F>(f: F, vertex_counts: &[usize]) -> na::DMatrix<i32>
 where
   F: Fn(usize) -> na::DMatrix<i32>,
 {
-  let lapls: Vec<_> = node_counts.iter().map(|&nnodes| f(nnodes)).collect();
+  let lapls: Vec<_> = vertex_counts
+    .iter()
+    .map(|&nvertices| f(nvertices))
+    .collect();
   kronecker_sum(&lapls)
 }
 
@@ -129,19 +132,19 @@ fn laplace_matrix_1d_boundary() -> na::DMatrix<i32> {
 }
 
 /// Graph Laplacian for tensor-product mesh/graph.
-fn laplace_matrix_1d_full(nnodes: usize) -> na::DMatrix<i32> {
-  assert!(nnodes >= 2);
-  let mut mat = laplace_matrix_1d_interior(nnodes);
+fn laplace_matrix_1d_full(nvertices: usize) -> na::DMatrix<i32> {
+  assert!(nvertices >= 2);
+  let mut mat = laplace_matrix_1d_interior(nvertices);
   mat[(0, 0)] = 1;
   mat[(0, 1)] = -1;
-  mat[(nnodes - 1, nnodes - 2)] = -1;
-  mat[(nnodes - 1, nnodes - 1)] = 1;
+  mat[(nvertices - 1, nvertices - 2)] = -1;
+  mat[(nvertices - 1, nvertices - 1)] = 1;
   mat
 }
 
-fn laplace_matrix_1d_interior(nnodes: usize) -> na::DMatrix<i32> {
+fn laplace_matrix_1d_interior(nvertices: usize) -> na::DMatrix<i32> {
   let stencil = [-1, 2, -1];
-  matrix_from_const_diagonals(&stencil[..], &[-1, 0, 1], nnodes, nnodes)
+  matrix_from_const_diagonals(&stencil[..], &[-1, 0, 1], nvertices, nvertices)
 }
 
 #[test]
@@ -150,9 +153,9 @@ fn feec_vs_fdm_interior() {
   // TODO: increase numbers, once performance allows
   for nboxes_per_dim in 1..=2 {
     for dim in 1..=4 {
-      let nnodes_per_dim = nboxes_per_dim + 1;
+      let nvertices_per_dim = nboxes_per_dim + 1;
       let feec = feec_galmat_interior(dim, nboxes_per_dim);
-      let fdm = ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nnodes_per_dim; dim]);
+      let fdm = ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nvertices_per_dim; dim]);
       equal &= compare_system_matrics(&feec, &fdm);
     }
   }
@@ -180,11 +183,12 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> na::DMatrix<i32>
   let full_galmat = feec_galmat_full(dim, nboxes_per_dim);
 
   // TODO: optimize!
-  let removable_nodes =
-    HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64).boundary_nodes();
+  let removable_vertices =
+    HyperBoxMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64)
+      .boundary_vertices();
   let galmat = full_galmat
-    .remove_columns_at(&removable_nodes)
-    .remove_rows_at(&removable_nodes);
+    .remove_columns_at(&removable_vertices)
+    .remove_rows_at(&removable_vertices);
 
   cast_int(galmat)
 }
@@ -204,7 +208,7 @@ fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
     assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
     &space,
-    LoadElvec::new(na::DVector::from_element(mesh.nnodes(), 1.0)),
+    LoadElvec::new(na::DVector::from_element(mesh.nvertices(), 1.0)),
   );
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat
