@@ -1,17 +1,10 @@
 //! Module for the (Heat) Diffussion Equation, the prototypical parabolic PDE.
 
-use std::rc::Rc;
-
-use crate::{
-  assemble, fe, lse,
-  mesh::SimplicialManifold,
-  space::{DofIdx, FeSpace},
-  util::FaerCholesky,
-};
+use crate::{assemble, fe, mesh::SimplicialManifold, util::FaerCholesky, whitney::DofIdx};
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_diffusion<F>(
-  mesh: &Rc<SimplicialManifold>,
+  mesh: &SimplicialManifold,
   nsteps: usize,
   dt: f64,
   boundary_data: F,
@@ -22,14 +15,12 @@ pub fn solve_diffusion<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let space = FeSpace::new(mesh.clone());
+  let mut laplace = assemble::assemble_galmat(mesh, fe::laplace_beltrami_elmat);
+  let mut mass = assemble::assemble_galmat(mesh, fe::mass_elmat);
+  let mut source = assemble::assemble_galvec(mesh, fe::LoadElvec::new(source_data));
 
-  let mut laplace = assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat);
-  let mut mass = assemble::assemble_galmat(&space, fe::mass_elmat);
-  let mut source = assemble::assemble_galvec(&space, fe::LoadElvec::new(source_data));
-
-  lse::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut source);
-  lse::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut source);
+  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut source);
+  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut source);
 
   let laplace = laplace.to_nalgebra_csc();
   let mass = mass.to_nalgebra_csc();

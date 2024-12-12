@@ -4,11 +4,9 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  helmholtz,
   mesh::{dim3, hyperbox::HyperBoxMeshInfo},
+  problems::helmholtz,
 };
-
-use std::rc::Rc;
 
 fn main() {
   let dim = 2;
@@ -18,7 +16,7 @@ fn main() {
 
   let surface = dim3::TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
   std::fs::write("out/helmholtz_mesh.obj", surface.to_obj_string().as_bytes()).unwrap();
-  let mesh = Rc::new(coord_mesh.into_manifold());
+  let mesh = coord_mesh.into_intrinsic();
 
   let spectrum = helmholtz::solve_helmholtz_homogeneous(&mesh);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {

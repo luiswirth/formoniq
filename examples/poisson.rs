@@ -7,10 +7,10 @@ extern crate nalgebra_sparse as nas;
 use formoniq::{
   fe::l2_norm,
   mesh::{hyperbox::HyperBoxMeshInfo, SimplicialManifold},
-  poisson,
+  problems::poisson,
 };
 
-use std::{f64::consts::TAU, rc::Rc};
+use std::f64::consts::TAU;
 
 fn main() {
   tracing_subscriber::fmt::init();
@@ -33,7 +33,7 @@ fn main() {
         let anal_sol = coord_mesh.vertex_coords().eval_coord_fn(anal_sol);
         let anal_lapl = coord_mesh.vertex_coords().eval_coord_fn(anal_lapl);
 
-        let mesh = Rc::new(coord_mesh.into_manifold());
+        let mesh = coord_mesh.into_intrinsic();
 
         PoissonWithSol {
           mesh,
@@ -48,7 +48,7 @@ fn main() {
 }
 
 struct PoissonWithSol {
-  mesh: Rc<SimplicialManifold>,
+  mesh: SimplicialManifold,
   load_data: na::DVector<f64>,
   solution_exact: na::DVector<f64>,
 }
