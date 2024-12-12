@@ -1,7 +1,7 @@
 use super::{
   raw::RawSimplicialManifold,
   simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt, Vertplex},
-  SimplicialManifold,
+  Manifold,
 };
 use crate::{combo::Sign, linalg::DMatrixExt as _, mesh::VertexIdx, Dim};
 
@@ -108,7 +108,7 @@ impl CoordManifold {
         let vi = cell[i];
         for j in (i + 1)..cell.nvertices() {
           let vj = cell[j];
-          let edge = Vertplex::from([vi, vj]).into_sorted().forget_sign();
+          let edge = Vertplex::from([vi, vj]).sort_signed().forget_sign();
           if let hash_map::Entry::Vacant(e) = edge_lengths.entry(edge) {
             let length = (self.vertex_coords.coord(vj) - self.vertex_coords.coord(vi)).norm();
             e.insert(length);
@@ -120,7 +120,7 @@ impl CoordManifold {
     RawSimplicialManifold::new(self.vertex_coords.nvertices(), self.cells, edge_lengths)
   }
 
-  pub fn into_intrinsic(self) -> SimplicialManifold {
+  pub fn into_intrinsic(self) -> Manifold {
     self.into_raw_manifold().build()
   }
 

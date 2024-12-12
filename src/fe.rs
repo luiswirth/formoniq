@@ -2,32 +2,32 @@ pub mod whitney;
 
 use crate::{
   exterior::ExteriorRank,
-  mesh::{simplicial::CellComplex, KSimplexIdx, SimplicialManifold},
+  mesh::{complex::KSimplexIdx, simplicial::LocalComplex, Manifold},
 };
 
 pub type DofIdx = KSimplexIdx;
 
 pub trait ElmatProvider {
-  fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64>;
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64>;
 }
 
 impl<F> ElmatProvider for F
 where
-  F: Fn(&CellComplex) -> na::DMatrix<f64>,
+  F: Fn(&LocalComplex) -> na::DMatrix<f64>,
 {
-  fn eval(&self, cell: &CellComplex) -> na::DMatrix<f64> {
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
     self(cell)
   }
 }
 
 pub trait ElvecProvider {
-  fn eval(&self, cell: &CellComplex) -> na::DVector<f64>;
+  fn eval(&self, cell: &LocalComplex) -> na::DVector<f64>;
 }
 impl<F> ElvecProvider for F
 where
-  F: Fn(&CellComplex) -> na::DVector<f64>,
+  F: Fn(&LocalComplex) -> na::DVector<f64>,
 {
-  fn eval(&self, cell: &CellComplex) -> nalgebra::DVector<f64> {
+  fn eval(&self, cell: &LocalComplex) -> nalgebra::DVector<f64> {
     self(cell)
   }
 }
@@ -35,7 +35,7 @@ where
 /// Exact Element Matrix Provider for the Laplace-Beltrami operator.
 ///
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
-pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
+pub fn laplace_beltrami_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
   let ref_difbarys = whitney::ref_difbarys(cell.dim());
   cell.vol() * cell.metric().covector_norm_sqr(&ref_difbarys)
 }
@@ -43,7 +43,7 @@ pub fn laplace_beltrami_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
 /// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
 ///
 /// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+pub fn hodge_laplace_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let ref_difwhitneys = whitney::ref_difwhitneys(cell.dim(), k);
   cell.vol() * cell.metric().kform_norm_sqr(k, &ref_difwhitneys)
 }
@@ -51,18 +51,18 @@ pub fn hodge_laplace_dif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatr
 /// Exact Element Matrix Provider for the codifferential part of Hodge-Laplace operator.
 ///
 /// $A = [inner(delta lambda_tau, delta lambda_sigma)_(L^2 Lambda^(k-1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_codif_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+pub fn hodge_laplace_codif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   let ref_codifwhitneys = whitney::ref_codifwhitneys(cell.dim(), k);
   cell.vol() * cell.metric().kform_norm_sqr(k, &ref_codifwhitneys)
 }
 
 /// Exact Element Matrix Provider for the full Hodge-Laplace operator.
-pub fn hodge_laplace_elmat(cell: &CellComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+pub fn hodge_laplace_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
   hodge_laplace_dif_elmat(cell, k) + hodge_laplace_codif_elmat(cell, k)
 }
 
 /// Exact Element Matrix Provider for scalar mass bilinear form.
-pub fn mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
+pub fn mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
   let ndofs = cell.nvertices();
   let dim = cell.dim();
   let v = cell.vol() / ((dim + 1) * (dim + 2)) as f64;
@@ -73,7 +73,7 @@ pub fn mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
 
 /// Approximated Element Matrix Provider for scalar mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
-pub fn lumped_mass_elmat(cell: &CellComplex) -> na::DMatrix<f64> {
+pub fn lumped_mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
   let n = cell.nvertices();
   let v = cell.vol() / n as f64;
   na::DMatrix::from_diagonal_element(n, n, v)
@@ -91,7 +91,7 @@ impl LoadElvec {
   }
 }
 impl ElvecProvider for LoadElvec {
-  fn eval(&self, cell: &CellComplex) -> na::DVector<f64> {
+  fn eval(&self, cell: &LocalComplex) -> na::DVector<f64> {
     let nverts = cell.nvertices();
 
     cell.vol() / nverts as f64
@@ -102,7 +102,7 @@ impl ElvecProvider for LoadElvec {
   }
 }
 
-pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &SimplicialManifold) -> f64 {
+pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &Manifold) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells() {
     let mut sum = 0.0;

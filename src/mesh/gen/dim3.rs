@@ -1,10 +1,10 @@
 use crate::{
   combo::Sign,
   mesh::{
+    complex::VertexIdx,
     coordinates::{CoordManifold, VertexCoords},
     simplicial::Vertplex,
   },
-  VertexIdx,
 };
 
 use std::{collections::HashMap, fmt::Write, sync::LazyLock};

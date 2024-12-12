@@ -1,12 +1,14 @@
+use super::{
+  complex::{KSimplexIdx, VertexIdx},
+  geometry::RiemannianMetric,
+};
 use crate::{
   combo::{binomial, combinators::GradedIndexSubsets, factorial, variants::*, IndexSet, Sign},
-  mesh::{raw::RawSimplicialManifold, KSimplexIdx, SimplicialManifold},
-  Dim, VertexIdx,
+  mesh::{raw::RawSimplicialManifold, Manifold},
+  Dim,
 };
 
 use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
-
-use super::geometry::RiemannianMetric;
 
 pub type Vertplex<B, O, S> = IndexSet<B, O, S>;
 
@@ -42,16 +44,14 @@ impl<B: Base, O: Order, S: Signedness> SimplexExt for Vertplex<B, O, S> {
   }
 }
 
-pub type Length = f64;
-
 #[derive(Debug, Clone)]
-pub struct CellComplex {
+pub struct LocalComplex {
   subs: Vec<Vec<KSimplexIdx>>,
   orientation: Sign,
   edge_lengths: Vec<f64>,
   metric: RiemannianMetric,
 }
-impl CellComplex {
+impl LocalComplex {
   pub fn new(subs: Vec<Vec<KSimplexIdx>>, orientation: Sign, edge_lengths: Vec<f64>) -> Self {
     let dim = subs.len() - 1;
     let metric = RiemannianMetric::regge(dim, &edge_lengths);
@@ -165,7 +165,7 @@ impl ReferenceCell {
     mat
   }
 
-  pub fn to_cell_complex(&self) -> CellComplex {
+  pub fn to_cell_complex(&self) -> LocalComplex {
     let faces = self
       .faces
       .iter()
@@ -173,10 +173,10 @@ impl ReferenceCell {
       .collect();
     let orientation = Sign::Pos;
     let edge_lengths = self.edge_lengths.clone();
-    CellComplex::new(faces, orientation, edge_lengths)
+    LocalComplex::new(faces, orientation, edge_lengths)
   }
 
-  pub fn to_singleton_mesh(&self) -> SimplicialManifold {
+  pub fn to_singleton_mesh(&self) -> Manifold {
     let nvertices = self.nvertices();
     let cells = vec![self.as_vertplex().clone().forget_base().into_oriented()];
 

@@ -1,6 +1,6 @@
 use crate::{
-  combo::combinators::IndexSubsets, exterior::ExteriorRank, mesh::simplicial::OrderedVertplex,
-  mesh::EdgeIdx, Dim,
+  combo::combinators::IndexSubsets, exterior::ExteriorRank, mesh::complex::EdgeIdx,
+  mesh::simplicial::OrderedVertplex, Dim,
 };
 
 #[derive(Debug, Clone)]

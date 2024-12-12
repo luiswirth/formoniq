@@ -1,10 +1,10 @@
-use crate::{assemble, fe, mesh::SimplicialManifold};
+use crate::{assemble, fe, mesh::Manifold};
 
 use lanczos::Hermitian;
 
 /// Eigenvalue problem of Laplace operator.
 pub fn solve_helmholtz_homogeneous(
-  mesh: &SimplicialManifold,
+  mesh: &Manifold,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   let mut laplacian_glamat = assemble::assemble_galmat(mesh, fe::laplace_beltrami_elmat);
   let mut mass_galmat = assemble::assemble_galmat(mesh, fe::lumped_mass_elmat);

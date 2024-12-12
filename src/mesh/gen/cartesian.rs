@@ -2,7 +2,7 @@ use crate::mesh::{
   coordinates::{CoordManifold, VertexCoords},
   raw::RawSimplicialManifold,
   simplicial::{OrderedVertplex, OrientedVertplex},
-  SimplicialManifold, VertexIdx,
+  Manifold, VertexIdx,
 };
 use crate::{
   combo::{factorial, IndexSet},
@@ -219,7 +219,7 @@ impl CartesianMesh {
   pub fn compute_raw_manifold(&self) -> RawSimplicialManifold {
     self.to_coord_manifold().into_raw_manifold()
   }
-  pub fn compute_manifold(&self) -> SimplicialManifold {
+  pub fn compute_manifold(&self) -> Manifold {
     self.compute_raw_manifold().build()
   }
 }

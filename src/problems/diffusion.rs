@@ -3,13 +3,13 @@
 use crate::{
   assemble,
   fe::{self, DofIdx},
-  mesh::SimplicialManifold,
+  mesh::Manifold,
   util::FaerCholesky,
 };
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_diffusion<F>(
-  mesh: &SimplicialManifold,
+  mesh: &Manifold,
   nsteps: usize,
   dt: f64,
   boundary_data: F,

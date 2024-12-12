@@ -6,6 +6,7 @@
 //! - Topological Information (Incidence)
 //! - Geometrical information (Lengths, Volumes)
 
+pub mod complex;
 pub mod coordinates;
 pub mod geometry;
 pub mod raw;
@@ -13,28 +14,25 @@ pub mod simplicial;
 
 pub mod gen;
 
+use complex::{Complex, FacetIdx, KSimplexIdx, SimplexData, SimplexIdx, Skeleton, VertexIdx};
 use geometry::EdgeLengths;
-use simplicial::{CellComplex, OrientedVertplex, SortedVertplex};
+use simplicial::{LocalComplex, OrientedVertplex, SortedVertplex};
 
-use crate::{util, Dim, VertexIdx};
+use crate::{util, Dim};
 
-use indexmap::IndexMap;
 use itertools::Itertools;
 use std::hash::Hash;
 
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
-pub struct SimplicialManifold {
-  cells: Vec<OrientedVertplex>,
-  skeletons: Vec<Skeleton>,
+pub struct Manifold {
+  facets: Vec<OrientedVertplex>,
+  complex: Complex,
   edge_lengths: EdgeLengths,
 }
 
-/// A container for simplicies of common dimension.
-pub type Skeleton = IndexMap<SortedVertplex, SimplexData>;
-
 // getters
-impl SimplicialManifold {
+impl Manifold {
   pub fn edge_lengths(&self) -> &EdgeLengths {
     &self.edge_lengths
   }
@@ -43,7 +41,7 @@ impl SimplicialManifold {
   }
 
   pub fn dim(&self) -> Dim {
-    self.skeletons.len() - 1
+    self.complex.dim()
   }
   pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
     SkeletonHandle::new(self, dim)
@@ -53,7 +51,7 @@ impl SimplicialManifold {
     (0..self.ncells()).map(|icell| CellHandle::new(self, icell))
   }
   pub fn ncells(&self) -> usize {
-    self.cells.len()
+    self.facets.len()
   }
   pub fn vertices(&self) -> SkeletonHandle {
     self.skeleton(0)
@@ -136,7 +134,7 @@ impl SimplicialManifold {
     util::indicies_to_flags(&self.boundary_vertices(), self.nvertices())
   }
 
-  pub fn boundary_cells(&self) -> Vec<CellIdx> {
+  pub fn boundary_cells(&self) -> Vec<FacetIdx> {
     self
       .boundary_faces()
       .into_iter()
@@ -147,29 +145,13 @@ impl SimplicialManifold {
   }
 }
 
-/// Topological information of the simplex.
-#[derive(Debug, Clone)]
-pub struct SimplexData {
-  /// The cells that this simplex is part of.
-  /// This information is crucial for computing ancestor simplicies.
-  /// Ordered increasing in [`CellIdx`].
-  parent_cells: Vec<CellIdx>,
-}
-
-impl SimplexData {
-  pub fn stub() -> Self {
-    let parent_cells = Vec::new();
-    Self { parent_cells }
-  }
-}
-
 /// Fat pointer to simplex.
 pub struct CellHandle<'m> {
-  idx: CellIdx,
-  mesh: &'m SimplicialManifold,
+  idx: FacetIdx,
+  mesh: &'m Manifold,
 }
 impl<'m> CellHandle<'m> {
-  pub fn new(mesh: &'m SimplicialManifold, idx: CellIdx) -> Self {
+  pub fn new(mesh: &'m Manifold, idx: FacetIdx) -> Self {
     Self { mesh, idx }
   }
   pub fn dim(&self) -> Dim {
@@ -184,17 +166,14 @@ impl<'m> CellHandle<'m> {
   }
 
   pub fn oriented_vertplex(&self) -> &'m OrientedVertplex {
-    &self.mesh.cells[self.idx]
+    &self.mesh.facets[self.idx]
   }
 
   pub fn sorted_vertplex(&self) -> SortedVertplex {
-    self.mesh.cells[self.idx]
-      .clone()
-      .into_sorted()
-      .forget_sign()
+    self.mesh.facets[self.idx].clone().sort()
   }
 
-  pub fn as_cell_complex(&self) -> CellComplex {
+  pub fn as_cell_complex(&self) -> LocalComplex {
     let combinatorial = self.oriented_vertplex();
     let simplex = self.as_simplex();
     let faces = (0..=self.dim())
@@ -202,28 +181,28 @@ impl<'m> CellHandle<'m> {
       .collect();
     let sign = combinatorial.sign();
     let edge_lengths = simplex.edge_lengths();
-    CellComplex::new(faces, sign, edge_lengths)
+    LocalComplex::new(faces, sign, edge_lengths)
   }
 }
 
 /// Fat pointer to simplex.
 pub struct SimplexHandle<'m> {
   idx: SimplexIdx,
-  mesh: &'m SimplicialManifold,
+  mesh: &'m Manifold,
 }
 impl<'m> std::fmt::Debug for SimplexHandle<'m> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)
-      .field("mesh", &(self.mesh as *const SimplicialManifold))
+      .field("mesh", &(self.mesh as *const Manifold))
       .finish()
   }
 }
 
 impl<'m> SimplexHandle<'m> {
-  pub fn new(mesh: &'m SimplicialManifold, idx: impl Into<SimplexIdx>) -> Self {
+  pub fn new(mesh: &'m Manifold, idx: impl Into<SimplexIdx>) -> Self {
     let idx = idx.into();
-    idx.assert_valid(mesh);
+    idx.assert_valid(&mesh.complex);
     Self { mesh, idx }
   }
 
@@ -237,14 +216,17 @@ impl<'m> SimplexHandle<'m> {
     self.idx.kidx
   }
 
-  pub fn mesh(&self) -> &'m SimplicialManifold {
+  pub fn mesh(&self) -> &'m Manifold {
     self.mesh
   }
   pub fn skeleton(&self) -> SkeletonHandle<'m> {
     self.mesh.skeleton(self.dim())
   }
   pub fn simplex_data(&self) -> &SimplexData {
-    self.mesh.skeletons[self.dim()]
+    self
+      .mesh
+      .complex
+      .skeleton(self.dim())
       .get_index(self.kidx())
       .unwrap()
       .1
@@ -262,7 +244,10 @@ impl<'m> SimplexHandle<'m> {
     self.sorted_vertplex().len()
   }
   pub fn sorted_vertplex(&self) -> &'m SortedVertplex {
-    self.mesh.skeletons[self.dim()]
+    self
+      .mesh
+      .complex
+      .skeleton(self.dim())
       .get_index(self.kidx())
       .unwrap()
       .0
@@ -311,7 +296,7 @@ impl<'m> SimplexHandle<'m> {
   pub fn parent_cells(&self) -> impl Iterator<Item = CellHandle<'m>> + '_ {
     self
       .simplex_data()
-      .parent_cells
+      .parent_facets
       .iter()
       .map(|&cell_idx| CellHandle::new(self.mesh, cell_idx))
   }
@@ -372,24 +357,24 @@ impl Eq for SimplexHandle<'_> {}
 
 impl Hash for SimplexHandle<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.mesh as *const SimplicialManifold).hash(state);
+    (self.mesh as *const Manifold).hash(state);
     self.idx.hash(state);
   }
 }
 
 pub struct SkeletonHandle<'m> {
-  mesh: &'m SimplicialManifold,
+  mesh: &'m Manifold,
   dim: Dim,
 }
 
 impl<'m> SkeletonHandle<'m> {
-  pub fn new(mesh: &'m SimplicialManifold, dim: Dim) -> Self {
+  pub fn new(mesh: &'m Manifold, dim: Dim) -> Self {
     assert!(dim <= mesh.dim(), "Invalid Skeleton Dimension");
     Self { mesh, dim }
   }
 
   pub fn raw(&self) -> &Skeleton {
-    &self.mesh.skeletons[self.dim]
+    self.mesh.complex.skeleton(self.dim)
   }
 
   pub fn len(&self) -> usize {
@@ -413,13 +398,13 @@ impl<'m> SkeletonHandle<'m> {
 }
 
 pub struct SparseChain<'m> {
-  mesh: &'m SimplicialManifold,
+  mesh: &'m Manifold,
   dim: Dim,
   idxs: Vec<KSimplexIdx>,
   coeffs: Vec<i32>,
 }
 impl<'m> SparseChain<'m> {
-  fn new(mesh: &'m SimplicialManifold, dim: Dim, idxs: Vec<KSimplexIdx>, coeffs: Vec<i32>) -> Self {
+  fn new(mesh: &'m Manifold, dim: Dim, idxs: Vec<KSimplexIdx>, coeffs: Vec<i32>) -> Self {
     Self {
       mesh,
       dim,
@@ -449,33 +434,10 @@ impl<'m> SparseChain<'m> {
 /// a simplicial complex.
 #[allow(dead_code)]
 pub struct SparseCochain<'m> {
-  mesh: &'m SimplicialManifold,
+  mesh: &'m Manifold,
   dim: Dim,
   idxs: Vec<KSimplexIdx>,
   coeffs: Vec<i32>,
-}
-
-pub type EdgeIdx = usize;
-pub type CellIdx = usize;
-pub type KSimplexIdx = usize;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SimplexIdx {
-  dim: Dim,
-  kidx: KSimplexIdx,
-}
-impl From<(Dim, KSimplexIdx)> for SimplexIdx {
-  fn from((dim, kidx): (Dim, KSimplexIdx)) -> Self {
-    Self { dim, kidx }
-  }
-}
-impl SimplexIdx {
-  pub fn is_valid(self, mesh: &SimplicialManifold) -> bool {
-    self.dim <= mesh.dim() && self.kidx < mesh.skeleton(self.dim).len()
-  }
-  pub fn assert_valid(self, mesh: &SimplicialManifold) {
-    assert!(self.is_valid(mesh), "Not a valid simplex index.");
-  }
 }
 
 #[cfg(test)]
