@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{assemble, fe, linalg::assert_mat_eq, mesh::hyperbox::HyperBoxMeshInfo, Dim};
+use formoniq::{assemble, fe, linalg::assert_mat_eq, mesh::cartesian::CartesianMesh, Dim};
 
 const DIM: Dim = 3;
 
@@ -104,7 +104,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
 }
 
 fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
-  let box_mesh = HyperBoxMeshInfo::new_unit(DIM, nboxes_per_dim);
+  let box_mesh = CartesianMesh::new_unit(DIM, nboxes_per_dim);
   let coord_mesh = box_mesh.to_coord_manifold();
   let mesh = coord_mesh.into_intrinsic();
   assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat).to_nalgebra_dense()

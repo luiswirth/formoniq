@@ -382,7 +382,7 @@ mod test {
 
       let dual = primal.hodge_star(&metric);
 
-      let expected_dual = IndexSet::canonical_full(dim).ext();
+      let expected_dual = IndexSet::increasing(dim).ext();
       let expected_dual = ExteriorElement::new(vec![1.0 * expected_dual]).assume_canonical();
       assert!(dual.eq_epsilon(&expected_dual, 10e-12));
     }

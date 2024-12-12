@@ -38,131 +38,116 @@ pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize
   lin_idx
 }
 
-pub struct HyperBox {
+pub struct Rect {
   min: na::DVector<f64>,
   max: na::DVector<f64>,
 }
 
-// constructors
-impl HyperBox {
+impl Rect {
   pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>) -> Self {
     assert!(min.len() == max.len());
     Self { min, max }
   }
-  pub fn new_unit(dim: Dim) -> Self {
+  pub fn new_unit_cube(dim: Dim) -> Self {
     let min = na::DVector::zeros(dim);
     let max = na::DVector::from_element(dim, 1.0);
     Self { min, max }
   }
-  pub fn new_unit_scaled(dim: Dim, scale: f64) -> Self {
+  pub fn new_scaled_cube(dim: Dim, scale: f64) -> Self {
     let min = na::DVector::zeros(dim);
     let max = na::DVector::from_element(dim, scale);
     Self { min, max }
   }
-}
 
-// getters
-impl HyperBox {
   pub fn dim(&self) -> usize {
     self.min.len()
   }
-  pub fn min(&self) -> na::DVector<f64> {
-    self.min.clone()
+  pub fn min(&self) -> &na::DVector<f64> {
+    &self.min
   }
-  pub fn max(&self) -> na::DVector<f64> {
-    self.max.clone()
+  pub fn max(&self) -> &na::DVector<f64> {
+    &self.max
   }
   pub fn side_lengths(&self) -> na::DVector<f64> {
     &self.max - &self.min
   }
 }
 
-/// helper struct
-pub struct HyperBoxMeshInfo {
-  hyperbox: HyperBox,
-  nboxes_per_dim: usize,
+pub struct CartesianMesh {
+  rect: Rect,
+  ncells_axis: usize,
 }
 // constructors
-impl HyperBoxMeshInfo {
-  pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>, nboxes_per_dim: usize) -> Self {
-    let hyperbox = HyperBox::new_min_max(min, max);
-    Self {
-      hyperbox,
-      nboxes_per_dim,
-    }
+impl CartesianMesh {
+  pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>, ncells_axis: usize) -> Self {
+    let rect = Rect::new_min_max(min, max);
+    Self { rect, ncells_axis }
   }
-  pub fn new_unit(dim: Dim, nboxes_per_dim: usize) -> Self {
-    let hyperbox = HyperBox::new_unit(dim);
-    Self {
-      hyperbox,
-      nboxes_per_dim,
-    }
+  pub fn new_unit(dim: Dim, ncells_axis: usize) -> Self {
+    let rect = Rect::new_unit_cube(dim);
+    Self { rect, ncells_axis }
   }
-  pub fn new_unit_scaled(dim: Dim, nboxes_per_dim: usize, scale: f64) -> Self {
-    let hyperbox = HyperBox::new_unit_scaled(dim, scale);
-    Self {
-      hyperbox,
-      nboxes_per_dim,
-    }
+  pub fn new_unit_scaled(dim: Dim, ncells_axis: usize, scale: f64) -> Self {
+    let rect = Rect::new_scaled_cube(dim, scale);
+    Self { rect, ncells_axis }
   }
 }
 // getters
-impl HyperBoxMeshInfo {
-  pub fn hyperbox(&self) -> &HyperBox {
-    &self.hyperbox
+impl CartesianMesh {
+  pub fn rect(&self) -> &Rect {
+    &self.rect
   }
   pub fn dim(&self) -> usize {
-    self.hyperbox.dim()
+    self.rect.dim()
   }
-  pub fn min(&self) -> na::DVector<f64> {
-    self.hyperbox.min()
+  pub fn min(&self) -> &na::DVector<f64> {
+    self.rect.min()
   }
-  pub fn max(&self) -> na::DVector<f64> {
-    self.hyperbox.max()
+  pub fn max(&self) -> &na::DVector<f64> {
+    self.rect.max()
   }
   pub fn side_lengths(&self) -> na::DVector<f64> {
-    self.hyperbox.side_lengths()
+    self.rect.side_lengths()
   }
-  pub fn nboxes_per_dim(&self) -> usize {
-    self.nboxes_per_dim
+  pub fn ncells_axis(&self) -> usize {
+    self.ncells_axis
   }
-  pub fn nvertices_per_dim(&self) -> usize {
-    self.nboxes_per_dim + 1
+  pub fn nvertices_axis(&self) -> usize {
+    self.ncells_axis + 1
   }
-  pub fn nboxes(&self) -> usize {
-    self.nboxes_per_dim.pow(self.dim() as u32)
+  pub fn ncells(&self) -> usize {
+    self.ncells_axis.pow(self.dim() as u32)
   }
   pub fn nvertices(&self) -> usize {
-    self.nvertices_per_dim().pow(self.dim() as u32)
+    self.nvertices_axis().pow(self.dim() as u32)
   }
   pub fn vertex_cart_idx(&self, ivertex: VertexIdx) -> na::DVector<usize> {
-    linear_index2cartesian_index(ivertex, self.nvertices_per_dim(), self.dim())
+    linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim())
   }
   pub fn vertex_pos(&self, ivertex: VertexIdx) -> na::DVector<f64> {
-    (self.vertex_cart_idx(ivertex).cast::<f64>() / (self.nvertices_per_dim() - 1) as f64)
+    (self.vertex_cart_idx(ivertex).cast::<f64>() / (self.nvertices_axis() - 1) as f64)
       .component_mul(&self.side_lengths())
       + self.min()
   }
 
   pub fn is_vertex_on_boundary(&self, vertex: VertexIdx) -> bool {
-    let coords =
-      linear_index2cartesian_index(vertex, self.nvertices_per_dim(), self.hyperbox.dim());
+    let coords = linear_index2cartesian_index(vertex, self.nvertices_axis(), self.rect.dim());
     coords
       .iter()
-      .any(|&c| c == 0 || c == self.nvertices_per_dim() - 1)
+      .any(|&c| c == 0 || c == self.nvertices_axis() - 1)
   }
 
   pub fn boundary_vertices(&self) -> Vec<VertexIdx> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
-      let nvertices_boundary_face = self.nvertices_per_dim().pow(self.dim() as u32 - 1);
+      let nvertices_boundary_face = self.nvertices_axis().pow(self.dim() as u32 - 1);
       for ivertex in 0..nvertices_boundary_face {
         let vertex_icart =
-          linear_index2cartesian_index(ivertex, self.nvertices_per_dim(), self.dim() - 1);
+          linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim() - 1);
         let low_boundary = vertex_icart.clone().insert_row(d, 0);
-        let high_boundary = vertex_icart.insert_row(d, self.nvertices_per_dim() - 1);
-        let low_boundary = cartesian_index2linear_index(low_boundary, self.nvertices_per_dim());
-        let high_boundary = cartesian_index2linear_index(high_boundary, self.nvertices_per_dim());
+        let high_boundary = vertex_icart.insert_row(d, self.nvertices_axis() - 1);
+        let low_boundary = cartesian_index2linear_index(low_boundary, self.nvertices_axis());
+        let high_boundary = cartesian_index2linear_index(high_boundary, self.nvertices_axis());
         r.push(low_boundary);
         r.push(high_boundary);
       }
@@ -171,7 +156,7 @@ impl HyperBoxMeshInfo {
   }
 }
 
-impl HyperBoxMeshInfo {
+impl CartesianMesh {
   pub fn compute_vertex_coords(&self) -> VertexCoords {
     let mut vertices = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in vertices.column_iter_mut().enumerate() {
@@ -183,50 +168,52 @@ impl HyperBoxMeshInfo {
   pub fn to_coord_manifold(&self) -> CoordManifold {
     let vertex_coords = self.compute_vertex_coords();
 
+    let nboxes = self.ncells();
+    let nboxes_axis = self.ncells_axis();
+
     let dim = self.dim();
-    let ncells = factorial(dim) * self.nboxes();
-    let mut cells: Vec<OrientedVertplex> = Vec::with_capacity(ncells);
+    let nsimplicies = factorial(dim) * nboxes;
+    let mut simplicies: Vec<OrientedVertplex> = Vec::with_capacity(nsimplicies);
 
     // iterate through all boxes that make up the mesh
-    for icube in 0..self.nboxes() {
-      let cube_icart = linear_index2cartesian_index(icube, self.nboxes_per_dim, self.dim());
+    for ibox in 0..nboxes {
+      let cube_icart = linear_index2cartesian_index(ibox, nboxes_axis, self.dim());
 
       let vertex_icart_origin = cube_icart;
       let ivertex_origin =
-        cartesian_index2linear_index(vertex_icart_origin.clone(), self.nvertices_per_dim());
+        cartesian_index2linear_index(vertex_icart_origin.clone(), self.nvertices_axis());
 
-      let basisdirs = IndexSet::counting(dim);
+      let basisdirs = IndexSet::increasing(dim);
 
-      // construct all $d!$ simplicies that make up the current box
-      // each permutation of the basis directions (dimensions) gives rise to one simplicial cell
-      let cube_cells = basisdirs.permutations().map(|basisdirs| {
-        // construct simplex by adding all shifted vertices
-        let mut cell = vec![ivertex_origin];
+      // Construct all $d!$ simplexes that make up the current box.
+      // Each permutation of the basis directions (dimensions) gives rise to one simplex.
+      let cube_simplicies = basisdirs.permutations().map(|basisdirs| {
+        // Construct simplex by adding all shifted vertices.
+        let mut vertplex = vec![ivertex_origin];
 
-        // add every shift (according to permutation) to vertex iteratively
-        // every shift step gives us one vertex
+        // Add every shift (according to permutation) to vertex iteratively.
+        // Every shift step gives us one vertex.
         let mut vertex_icart = vertex_icart_origin.clone();
         for &basisdir in basisdirs.iter() {
           vertex_icart[basisdir] += 1;
 
-          let ivertex =
-            cartesian_index2linear_index(vertex_icart.clone(), self.nvertices_per_dim());
-          cell.push(ivertex);
+          let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nvertices_axis());
+          vertplex.push(ivertex);
         }
 
-        let cell = OrderedVertplex::from(cell);
+        let vertplex = OrderedVertplex::from(vertplex);
 
         // Ensure consistent positive orientation of cells.
         // TODO: avoid computing orientation using coordinates / determinant.
-        let orientation = vertex_coords.coord_simplex(&cell).orientation();
+        let orientation = vertex_coords.coord_simplex(&vertplex).orientation();
 
-        cell.with_sign(orientation)
+        vertplex.with_sign(orientation)
       });
 
-      cells.extend(cube_cells);
+      simplicies.extend(cube_simplicies);
     }
 
-    CoordManifold::new(cells, vertex_coords)
+    CoordManifold::new(simplicies, vertex_coords)
   }
 
   pub fn compute_raw_manifold(&self) -> RawSimplicialManifold {
@@ -239,11 +226,11 @@ impl HyperBoxMeshInfo {
 
 #[cfg(test)]
 mod test {
-  use super::HyperBoxMeshInfo;
+  use super::CartesianMesh;
 
   #[test]
   fn unit_cube_mesh() {
-    let mesh = HyperBoxMeshInfo::new_unit(3, 1).to_coord_manifold();
+    let mesh = CartesianMesh::new_unit(3, 1).to_coord_manifold();
     #[rustfmt::skip]
     let expected_vertices = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,
@@ -271,7 +258,7 @@ mod test {
 
   #[test]
   fn unit_square_mesh() {
-    let mesh = HyperBoxMeshInfo::new_unit(2, 2).to_coord_manifold();
+    let mesh = CartesianMesh::new_unit(2, 2).to_coord_manifold();
     #[rustfmt::skip]
     let expected_vertices = na::DMatrix::from_column_slice(2, 9, &[
       0.0, 0.0,

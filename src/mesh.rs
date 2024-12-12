@@ -6,20 +6,21 @@
 //! - Topological Information (Incidence)
 //! - Geometrical information (Lengths, Volumes)
 
-pub mod boundary;
+pub mod cartesian;
 pub mod coordinates;
-pub mod dim3;
 pub mod gmsh;
-pub mod hyperbox;
 pub mod raw;
+
+pub mod dim3;
 
 use crate::{
   geometry::EdgeLengths,
   simplicial::{CellComplex, OrientedVertplex, SortedVertplex},
-  Dim, VertexIdx,
+  util, Dim, VertexIdx,
 };
 
 use indexmap::IndexMap;
+use itertools::Itertools;
 use std::hash::Hash;
 
 /// A simplicial manifold with both topological and geometric information.
@@ -96,6 +97,47 @@ impl SimplicialManifold {
       .map(|cell| cell.as_cell_complex().shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
+  }
+
+  pub fn has_boundary(&self) -> bool {
+    !self.boundary_faces().is_empty()
+  }
+
+  /// For a d-mesh computes the boundary, which consists of faces ((d-1)-subs).
+  ///
+  /// The boundary faces are characterized by the fact that they
+  /// only have 1 cell as super entity.
+  pub fn boundary_faces(&self) -> Vec<SimplexHandle> {
+    self
+      .faces()
+      .iter()
+      .filter(|f| f.anti_boundary().len() == 1)
+      .collect()
+  }
+
+  /// The vertices that lie on the boundary of the mesh.
+  /// No particular order of vertices.
+  pub fn boundary_vertices(&self) -> Vec<VertexIdx> {
+    self
+      .boundary_faces()
+      .into_iter()
+      .flat_map(|face| face.sorted_vertplex().iter().copied())
+      .unique()
+      .collect()
+  }
+
+  pub fn flag_boundary_vertices(&self) -> Vec<bool> {
+    util::indicies_to_flags(&self.boundary_vertices(), self.nvertices())
+  }
+
+  pub fn boundary_cells(&self) -> Vec<CellIdx> {
+    self
+      .boundary_faces()
+      .into_iter()
+      // the boundary has only one parent cell by definition
+      .map(|face| face.anti_boundary().idxs[0])
+      .unique()
+      .collect()
   }
 }
 
@@ -453,7 +495,9 @@ mod test {
       println!();
     }
 
-    let cell_vertplex = Vertplex::counting(dim + 1).with_sign(Sign::Pos);
+    let cell_vertplex = Vertplex::increasing(dim + 1)
+      .with_sign(Sign::Pos)
+      .forget_base();
     for dim_sub in 0..=dim {
       let subs: Vec<_> = cell.as_simplex().subs(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));

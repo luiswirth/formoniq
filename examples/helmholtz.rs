@@ -4,14 +4,14 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{
-  mesh::{dim3, hyperbox::HyperBoxMeshInfo},
+  mesh::{cartesian::CartesianMesh, dim3},
   problems::helmholtz,
 };
 
 fn main() {
   let dim = 2;
   let nboxes_per_dim = 100;
-  let box_mesh = HyperBoxMeshInfo::new_unit(dim, nboxes_per_dim);
+  let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.to_coord_manifold();
 
   let surface = dim3::TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));

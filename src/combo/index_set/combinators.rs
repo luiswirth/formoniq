@@ -30,7 +30,7 @@ impl IndexPermutations<Local, Sorted, Unsigned> {
   }
 
   pub fn canonical_sub(n: usize, k: usize) -> Self {
-    let set = IndexSet::canonical_full(n);
+    let set = IndexSet::increasing(n);
     Self::new_sub(set, k)
   }
 }
@@ -66,7 +66,7 @@ impl<B: Base, O: Order> GradedIndexSubsets<B, O> {
 }
 impl GradedIndexSubsets<Local, Sorted> {
   pub fn canonical(n: usize) -> Self {
-    let set = IndexSet::canonical_full(n);
+    let set = IndexSet::increasing(n);
     Self::new(set)
   }
 }
@@ -102,7 +102,7 @@ impl<B: Base, O: Order> IndexSubsets<B, O> {
 impl IndexSubsets<Local, Sorted> {
   /// Sorted subsets of {1,...,n}
   pub fn canonical(n: usize, k: usize) -> Self {
-    let set = IndexSet::canonical_full(n);
+    let set = IndexSet::increasing(n);
     Self::new(set, k)
   }
 }
