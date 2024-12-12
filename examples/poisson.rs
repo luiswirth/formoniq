@@ -6,8 +6,8 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::l2_norm,
-  lse,
   mesh::{hyperbox::HyperBoxMeshInfo, SimplicialManifold},
+  poisson,
 };
 
 use std::{f64::consts::TAU, rc::Rc};
@@ -76,7 +76,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     } = setup;
 
     let boundary_data = |inode| solution_exact[inode];
-    let galsol = lse::solve_poisson(&mesh, load_data, boundary_data);
+    let galsol = poisson::solve_poisson(&mesh, load_data, boundary_data);
 
     // Compute L2 error and convergence rate.
     let error = l2_norm(solution_exact - galsol, &mesh);
@@ -88,7 +88,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     };
     errors.push(error);
 
-    let mesh_width = mesh.mesh_width();
+    let mesh_width = mesh.mesh_width_max();
     let shape_regularity = mesh.shape_regularity_measure();
 
     println!(

@@ -1,33 +1,26 @@
-//! Elliptic Eigenvalue Problems
-
-use lanczos::Hermitian;
-
-use crate::{
-  assemble,
-  fe::{self, ElmatProvider},
-  mesh::SimplicialManifold,
-  space::FeSpace,
-};
+use crate::{assemble, fe, mesh::SimplicialManifold, space::FeSpace};
 
 use std::rc::Rc;
 
-pub fn solve_homogeneous_evp(
+use lanczos::Hermitian;
+
+/// Eigenvalue problem of Laplace operator.
+pub fn solve_helmholtz_homogeneous(
   mesh: &Rc<SimplicialManifold>,
-  operator_elmat: impl ElmatProvider,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   let space = FeSpace::new(Rc::clone(mesh));
 
-  let mut operator_galmat = assemble::assemble_galmat(&space, operator_elmat);
+  let mut laplacian_glamat = assemble::assemble_galmat(&space, fe::laplace_beltrami_elmat);
   let mut mass_galmat = assemble::assemble_galmat(&space, fe::lumped_mass_elmat);
 
-  assemble::drop_boundary_dofs_galmat(mesh, &mut operator_galmat);
+  assemble::drop_boundary_dofs_galmat(mesh, &mut laplacian_glamat);
   assemble::drop_boundary_dofs_galmat(mesh, &mut mass_galmat);
 
   // Convert generalized EVP into standard EVP
   // From $A u = lambda M u$ to $M^(-1) A u = lambda u$
   let mass_diagonal = mass_galmat.try_into_diagonal().unwrap();
   let mass_diagonal_inv = mass_diagonal.map(|x| x.recip());
-  let system_matrix = operator_galmat.mul_left_by_diagonal(&mass_diagonal_inv);
+  let system_matrix = laplacian_glamat.mul_left_by_diagonal(&mass_diagonal_inv);
 
   // Solve standard EVP with Lanczos algorithm
   let system_matrix = system_matrix.to_nalgebra_csc();
