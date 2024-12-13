@@ -36,6 +36,9 @@ impl CoordManifold {
   pub fn coords(&self) -> &VertexCoords {
     &self.coords
   }
+  pub fn coords_mut(&mut self) -> &mut VertexCoords {
+    &mut self.coords
+  }
   pub fn into_parts(self) -> (Vec<OrientedVertplex>, VertexCoords) {
     (self.facets, self.coords)
   }
@@ -45,6 +48,7 @@ impl CoordManifold {
     self
   }
 
+  // TODO: consume vs clone -> make perfect split
   pub fn to_riemannian_complex(&self) -> RiemannianComplex {
     let Self { facets, coords } = self;
     let complex = Complex::new(facets.clone());

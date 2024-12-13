@@ -39,6 +39,9 @@ impl RiemannianComplex {
     }
   }
 
+  pub fn complex(&self) -> &Complex {
+    &self.complex
+  }
   pub fn edge_lengths(&self) -> &EdgeLengths {
     &self.edge_lengths
   }
