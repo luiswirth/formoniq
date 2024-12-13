@@ -4,49 +4,8 @@ use super::simplicial::{OrientedVertplex, SimplexExt, SortedVertplex};
 
 use indexmap::IndexMap;
 
-pub type KSimplexIdx = usize;
-pub type VertexIdx = KSimplexIdx;
-pub type EdgeIdx = KSimplexIdx;
-pub type FaceIdx = KSimplexIdx;
-pub type FacetIdx = KSimplexIdx;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SimplexIdx {
-  pub dim: Dim,
-  pub kidx: KSimplexIdx,
-}
-impl From<(Dim, KSimplexIdx)> for SimplexIdx {
-  fn from((dim, kidx): (Dim, KSimplexIdx)) -> Self {
-    Self { dim, kidx }
-  }
-}
-impl SimplexIdx {
-  pub fn is_valid(self, mesh: &Complex) -> bool {
-    self.dim <= mesh.dim() && self.kidx < mesh.skeleton(self.dim).len()
-  }
-  pub fn assert_valid(self, mesh: &Complex) {
-    assert!(self.is_valid(mesh), "Not a valid simplex index.");
-  }
-}
-
-/// A container for simplicies of common dimension.
-pub type Skeleton = IndexMap<SortedVertplex, SimplexData>;
-
-/// Topological information of the simplex.
-#[derive(Debug, Clone)]
-pub struct SimplexData {
-  pub parent_facets: Vec<FacetIdx>,
-}
-
-impl SimplexData {
-  pub fn stub() -> Self {
-    let parent_facets = Vec::new();
-    Self { parent_facets }
-  }
-}
-
 /// A simplicial complex.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Complex {
   skeletons: Vec<Skeleton>,
 }
@@ -55,23 +14,37 @@ impl Complex {
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
+  pub fn skeletons(&self) -> &[Skeleton] {
+    &self.skeletons
+  }
   pub fn skeleton(&self, dim: Dim) -> &Skeleton {
     &self.skeletons[dim]
   }
-  pub fn skeletons(&self) -> &[Skeleton] {
-    &self.skeletons
+  pub fn vertices(&self) -> &Skeleton {
+    self.skeleton(0)
+  }
+  pub fn edges(&self) -> &Skeleton {
+    self.skeleton(1)
+  }
+  pub fn faces(&self) -> &Skeleton {
+    self.skeleton(self.dim() - 1)
+  }
+  pub fn facets(&self) -> &Skeleton {
+    self.skeleton(self.dim())
   }
 }
 
 impl Complex {
-  pub fn from_facets(facets: Vec<OrientedVertplex>, nvertices: usize) -> Self {
+  pub fn new(facets: Vec<OrientedVertplex>) -> Self {
     let dim = facets[0].dim();
 
-    let mut skeletons = vec![Skeleton::new(); dim + 1];
-    skeletons[0] = (0..nvertices)
-      .map(|v| (SortedVertplex::single(v), SimplexData::stub()))
-      .collect();
+    if cfg!(debug_assertions) {
+      for facet in &facets {
+        assert!(facet.dim() == dim, "Inconsistent facet dimension.");
+      }
+    }
 
+    let mut skeletons = vec![Skeleton::new(); dim + 1];
     for (ifacet, facet) in facets.iter().enumerate() {
       let facet = facet.clone().sort();
 
@@ -83,6 +56,10 @@ impl Complex {
         }
       }
     }
+
+    // TODO: verify correct!
+    // sort vertices
+    skeletons[0].sort_by(|v0, _, v1, _| v0[0].cmp(&v1[0]));
 
     // Topology checks.
     let faces = &skeletons[dim - 1];
@@ -118,5 +95,46 @@ impl Complex {
     }
 
     Self { skeletons }
+  }
+}
+
+/// A container for vertplicies of common dimension.
+pub type Skeleton = IndexMap<SortedVertplex, SimplexData>;
+
+/// Topological information of the simplex.
+#[derive(Debug, Clone)]
+pub struct SimplexData {
+  pub parent_facets: Vec<FacetIdx>,
+}
+
+impl SimplexData {
+  pub fn stub() -> Self {
+    let parent_facets = Vec::new();
+    Self { parent_facets }
+  }
+}
+
+pub type KSimplexIdx = usize;
+pub type VertexIdx = KSimplexIdx;
+pub type EdgeIdx = KSimplexIdx;
+pub type FaceIdx = KSimplexIdx;
+pub type FacetIdx = KSimplexIdx;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct SimplexIdx {
+  pub dim: Dim,
+  pub kidx: KSimplexIdx,
+}
+impl From<(Dim, KSimplexIdx)> for SimplexIdx {
+  fn from((dim, kidx): (Dim, KSimplexIdx)) -> Self {
+    Self { dim, kidx }
+  }
+}
+impl SimplexIdx {
+  pub fn is_valid(self, mesh: &Complex) -> bool {
+    self.dim <= mesh.dim() && self.kidx < mesh.skeleton(self.dim).len()
+  }
+  pub fn assert_valid(self, mesh: &Complex) {
+    assert!(self.is_valid(mesh), "Not a valid simplex index.");
   }
 }

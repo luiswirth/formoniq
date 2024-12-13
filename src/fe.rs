@@ -2,7 +2,7 @@ pub mod whitney;
 
 use crate::{
   exterior::ExteriorRank,
-  mesh::{complex::KSimplexIdx, simplicial::LocalComplex, Manifold},
+  mesh::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex},
 };
 
 pub type DofIdx = KSimplexIdx;
@@ -102,7 +102,7 @@ impl ElvecProvider for LoadElvec {
   }
 }
 
-pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &Manifold) -> f64 {
+pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &RiemannianComplex) -> f64 {
   let mut norm: f64 = 0.0;
   for cell in mesh.cells() {
     let mut sum = 0.0;

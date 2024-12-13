@@ -1,7 +1,8 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
 use crate::{
-  assemble, fe, fe::DofIdx, linalg::quadratic_form_sparse, mesh::Manifold, util::FaerCholesky,
+  assemble, fe, fe::DofIdx, linalg::quadratic_form_sparse, mesh::RiemannianComplex,
+  util::FaerCholesky,
 };
 
 pub struct WaveState {
@@ -21,7 +22,7 @@ impl WaveState {
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
-  mesh: &Manifold,
+  mesh: &RiemannianComplex,
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
@@ -99,7 +100,7 @@ pub fn solve_wave_step(
 /// For explicit time stepping typically Cmax = 1.
 /// Implicit time stepping is usually more lenient, allowing bigger values.
 /// We assume here Cmax = 1, with a 5% safety margin.
-pub fn cfl_dt(mesh: &Manifold, vel: f64) -> f64 {
+pub fn cfl_dt(mesh: &RiemannianComplex, vel: f64) -> f64 {
   const MARGIN: f64 = 0.95;
   MARGIN * mesh.mesh_width_min() / vel
 }

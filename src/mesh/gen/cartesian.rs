@@ -1,8 +1,7 @@
 use crate::mesh::{
   coordinates::{CoordManifold, VertexCoords},
-  raw::RawSimplicialManifold,
   simplicial::{OrderedVertplex, OrientedVertplex},
-  Manifold, VertexIdx,
+  VertexIdx,
 };
 use crate::{
   combo::{factorial, IndexSet},
@@ -157,16 +156,12 @@ impl CartesianMesh {
 }
 
 impl CartesianMesh {
-  pub fn compute_vertex_coords(&self) -> VertexCoords {
-    let mut vertices = na::DMatrix::zeros(self.dim(), self.nvertices());
-    for (ivertex, mut coord) in vertices.column_iter_mut().enumerate() {
+  pub fn compute_coord_manifold(&self) -> CoordManifold {
+    let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
+    for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
     }
-    VertexCoords::new(vertices)
-  }
-
-  pub fn to_coord_manifold(&self) -> CoordManifold {
-    let vertex_coords = self.compute_vertex_coords();
+    let coords = VertexCoords::new(coords);
 
     let nboxes = self.ncells();
     let nboxes_axis = self.ncells_axis();
@@ -204,8 +199,7 @@ impl CartesianMesh {
         let vertplex = OrderedVertplex::from(vertplex);
 
         // Ensure consistent positive orientation of cells.
-        // TODO: avoid computing orientation using coordinates / determinant.
-        let orientation = vertex_coords.coord_simplex(&vertplex).orientation();
+        let orientation = coords.coord_simplex(&vertplex).orientation();
 
         vertplex.with_sign(orientation)
       });
@@ -213,14 +207,7 @@ impl CartesianMesh {
       simplicies.extend(cube_simplicies);
     }
 
-    CoordManifold::new(simplicies, vertex_coords)
-  }
-
-  pub fn compute_raw_manifold(&self) -> RawSimplicialManifold {
-    self.to_coord_manifold().into_raw_manifold()
-  }
-  pub fn compute_manifold(&self) -> Manifold {
-    self.compute_raw_manifold().build()
+    CoordManifold::new(simplicies, coords)
   }
 }
 
@@ -230,9 +217,10 @@ mod test {
 
   #[test]
   fn unit_cube_mesh() {
-    let mesh = CartesianMesh::new_unit(3, 1).to_coord_manifold();
+    let mesh = CartesianMesh::new_unit(3, 1).compute_coord_manifold();
+
     #[rustfmt::skip]
-    let expected_vertices = na::DMatrix::from_column_slice(3, 8, &[
+    let expected_coords = na::DMatrix::from_column_slice(3, 8, &[
       0., 0., 0.,
       1., 0., 0.,
       0., 1., 0.,
@@ -242,9 +230,9 @@ mod test {
       0., 1., 1.,
       1., 1., 1.,
     ]);
-    let computed_vertices = mesh.vertex_coords().matrix();
-    assert_eq!(*computed_vertices, expected_vertices);
-    let expected_simplicies = vec![
+    assert_eq!(*mesh.coords().matrix(), expected_coords);
+
+    let expected_facets = vec![
       &[0, 1, 3, 7],
       &[0, 1, 5, 7],
       &[0, 2, 3, 7],
@@ -252,15 +240,21 @@ mod test {
       &[0, 4, 5, 7],
       &[0, 4, 6, 7],
     ];
-    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.into_vec()).collect();
-    assert_eq!(computed_simplicies, expected_simplicies);
+    let facets: Vec<_> = mesh
+      .facets()
+      .iter()
+      .cloned()
+      .map(|c| c.into_vec())
+      .collect();
+    assert_eq!(facets, expected_facets);
   }
 
   #[test]
   fn unit_square_mesh() {
-    let mesh = CartesianMesh::new_unit(2, 2).to_coord_manifold();
+    let mesh = CartesianMesh::new_unit(2, 2).compute_coord_manifold();
+
     #[rustfmt::skip]
-    let expected_vertices = na::DMatrix::from_column_slice(2, 9, &[
+    let expected_coords = na::DMatrix::from_column_slice(2, 9, &[
       0.0, 0.0,
       0.5, 0.0,
       1.0, 0.0,
@@ -271,8 +265,8 @@ mod test {
       0.5, 1.0,
       1.0, 1.0,
     ]);
-    let computed_vertices = mesh.vertex_coords().matrix();
-    assert_eq!(*computed_vertices, expected_vertices);
+    assert_eq!(*mesh.coords().matrix(), expected_coords);
+
     let expected_simplicies = vec![
       &[0, 1, 4],
       &[0, 3, 4],
@@ -283,7 +277,12 @@ mod test {
       &[4, 5, 8],
       &[4, 7, 8],
     ];
-    let computed_simplicies: Vec<_> = mesh.cells().iter().cloned().map(|c| c.into_vec()).collect();
-    assert_eq!(computed_simplicies, expected_simplicies);
+    let facets: Vec<_> = mesh
+      .facets()
+      .iter()
+      .cloned()
+      .map(|c| c.into_vec())
+      .collect();
+    assert_eq!(facets, expected_simplicies);
   }
 }

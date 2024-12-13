@@ -1,9 +1,9 @@
 //! Module for the Poisson Equation, the prototypical ellipitic PDE.
 
-use crate::{assemble, fe, fe::DofIdx, mesh::Manifold, util::FaerCholesky};
+use crate::{assemble, fe, fe::DofIdx, mesh::RiemannianComplex, util::FaerCholesky};
 
 pub fn solve_poisson<F>(
-  mesh: &Manifold,
+  mesh: &RiemannianComplex,
   load_data: na::DVector<f64>,
   boundary_data: F,
 ) -> na::DVector<f64>

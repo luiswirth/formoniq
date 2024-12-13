@@ -1,14 +1,14 @@
 use super::{
   complex::{KSimplexIdx, VertexIdx},
-  geometry::RiemannianMetric,
+  geometry::{EdgeLengths, RiemannianManifold, RiemannianMetric},
 };
 use crate::{
   combo::{binomial, combinators::GradedIndexSubsets, factorial, variants::*, IndexSet, Sign},
-  mesh::{raw::RawSimplicialManifold, Manifold},
+  mesh::RiemannianComplex,
   Dim,
 };
 
-use std::{collections::HashMap, f64::consts::SQRT_2, sync::LazyLock};
+use std::{f64::consts::SQRT_2, sync::LazyLock};
 
 pub type Vertplex<B, O, S> = IndexSet<B, O, S>;
 
@@ -24,7 +24,7 @@ pub fn nsubsimplicies(dim: Dim, dim_sub: Dim) -> usize {
   binomial(nverts, nverts_sub)
 }
 
-pub fn subvertplexes(dim: Dim) -> Vec<Vec<RefVertplex>> {
+pub fn subvertplicies(dim: Dim) -> Vec<Vec<RefVertplex>> {
   GradedIndexSubsets::canonical(dim + 1)
     .skip(1)
     .map(|subs| subs.collect())
@@ -120,7 +120,7 @@ pub struct ReferenceCell {
 impl ReferenceCell {
   /// Constructs a reference cell in `dim` dimensions.
   pub fn new(dim: Dim) -> Self {
-    let faces = subvertplexes(dim);
+    let faces = subvertplicies(dim);
 
     let nedges = nsubsimplicies(dim, 1);
     let edge_lengths: Vec<f64> = (0..dim)
@@ -176,23 +176,15 @@ impl ReferenceCell {
     LocalComplex::new(faces, orientation, edge_lengths)
   }
 
-  pub fn to_singleton_mesh(&self) -> Manifold {
-    let nvertices = self.nvertices();
-    let cells = vec![self.as_vertplex().clone().forget_base().into_oriented()];
+  pub fn to_singleton_mesh(&self) -> RiemannianComplex {
+    let facets = vec![self.as_vertplex().clone().forget_base().into_oriented()];
+    let edge_lengths = EdgeLengths::new(self.edge_lengths.clone().into());
 
-    let mut edge_lengths = HashMap::new();
-    let mut idx = 0;
-    for i in 0..self.nvertices() {
-      for j in (i + 1)..self.nvertices() {
-        edge_lengths.insert(
-          OrderedVertplex::from([i, j]).assume_sorted(),
-          self.edge_lengths[idx],
-        );
-        idx += 1;
-      }
+    RiemannianManifold {
+      facets,
+      edge_lengths,
     }
-
-    RawSimplicialManifold::new(nvertices, cells, edge_lengths).build()
+    .into_complex()
   }
 }
 
