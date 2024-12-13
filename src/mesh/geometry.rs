@@ -1,7 +1,23 @@
+use super::{complex::Complex, simplicial::OrientedVertplex, RiemannianComplex};
 use crate::{
   combo::combinators::IndexSubsets, exterior::ExteriorRank, mesh::complex::EdgeIdx,
   mesh::simplicial::OrderedVertplex, Dim,
 };
+
+pub struct RiemannianManifold {
+  pub facets: Vec<OrientedVertplex>,
+  pub edge_lengths: EdgeLengths,
+}
+impl RiemannianManifold {
+  pub fn into_complex(self) -> RiemannianComplex {
+    let Self {
+      facets,
+      edge_lengths,
+    } = self;
+    let complex = Complex::new(facets.clone());
+    RiemannianComplex::new(facets, complex, edge_lengths)
+  }
+}
 
 #[derive(Debug, Clone)]
 pub struct EdgeLengths {

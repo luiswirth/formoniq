@@ -28,20 +28,20 @@ pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
 #[derive(Debug, Clone)]
 pub struct TriangleSurface3D {
   triangles: Vec<[VertexIdx; 3]>,
-  vertex_coords: na::Matrix3xX<f64>,
+  coords: na::Matrix3xX<f64>,
 }
 impl TriangleSurface3D {
   pub fn new(triangles: Vec<[VertexIdx; 3]>, vertex_coords: na::Matrix3xX<f64>) -> Self {
     Self {
       triangles,
-      vertex_coords,
+      coords: vertex_coords,
     }
   }
   pub fn triangles(&self) -> &[[VertexIdx; 3]] {
     &self.triangles
   }
   pub fn vertex_coords(&self) -> &na::Matrix3xX<f64> {
-    &self.vertex_coords
+    &self.coords
   }
 }
 
@@ -50,9 +50,9 @@ impl TriangleSurface3D {
     assert!(mesh.dim_embedded() == 3, "Manifold is not embedded in 3D.");
     assert!(mesh.dim_intrinsic() == 2, "Manifold is not a 2D surface.");
 
-    let (cells, vertex_coords) = mesh.into_parts();
+    let (facets, coords) = mesh.into_parts();
 
-    let triangles = cells
+    let triangles = facets
       .into_iter()
       .map(|c| {
         let mut vs: [VertexIdx; 3] = c.as_slice().to_vec().try_into().unwrap();
@@ -62,25 +62,24 @@ impl TriangleSurface3D {
         vs
       })
       .collect();
+    let coords = na::try_convert(coords.into_matrix()).unwrap();
 
-    let vertex_coords = na::try_convert(vertex_coords.into_matrix()).unwrap();
-
-    Self::new(triangles, vertex_coords)
+    Self::new(triangles, coords)
   }
 
   pub fn into_coord_manifold(self) -> CoordManifold {
-    let vertex_coords = VertexCoords::new(na::convert(self.vertex_coords));
-    let cells = self
+    let coords = VertexCoords::new(na::convert(self.coords));
+    let facets = self
       .triangles
       .into_iter()
       .map(|t| Vertplex::from(t).with_sign(Sign::Pos))
       .collect();
-    CoordManifold::new(cells, vertex_coords)
+    CoordManifold::new(facets, coords)
   }
 
   pub fn to_obj_string(&self) -> String {
     let mut string = String::new();
-    for v in self.vertex_coords.column_iter() {
+    for v in self.coords.column_iter() {
       writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
     }
     for t in &self.triangles {
@@ -122,10 +121,10 @@ impl TriangleSurface3D {
   pub fn displace_normal<'a>(&mut self, displacements: impl Into<na::DVectorView<'a, f64>>) {
     let displacements = displacements.into();
 
-    let mut vertex_normals = vec![na::Vector3::zeros(); self.vertex_coords.ncols()];
-    let mut vertex_triangle_counts = vec![0; self.vertex_coords.ncols()];
+    let mut vertex_normals = vec![na::Vector3::zeros(); self.coords.ncols()];
+    let mut vertex_triangle_counts = vec![0; self.coords.ncols()];
     for ivs in &self.triangles {
-      let vs = ivs.map(|i| self.vertex_coords.column(i));
+      let vs = ivs.map(|i| self.coords.column(i));
       let e0 = vs[1] - vs[0];
       let e1 = vs[2] - vs[0];
       let triangle_normal = e0.cross(&e1).normalize();
@@ -138,7 +137,7 @@ impl TriangleSurface3D {
       *vertex_normal /= count as f64;
     }
     for ((mut v, n), &d) in self
-      .vertex_coords
+      .coords
       .column_iter_mut()
       .zip(vertex_normals)
       .zip(displacements)

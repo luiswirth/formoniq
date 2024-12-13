@@ -12,11 +12,11 @@ fn main() {
   let dim = 2;
   let nboxes_per_dim = 100;
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
-  let coord_mesh = box_mesh.to_coord_manifold();
+  let coord_mesh = box_mesh.compute_coord_manifold();
 
   let surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
   std::fs::write("out/helmholtz_mesh.obj", surface.to_obj_string().as_bytes()).unwrap();
-  let mesh = coord_mesh.into_intrinsic();
+  let mesh = coord_mesh.to_riemannian_complex();
 
   let spectrum = helmholtz::solve_helmholtz_homogeneous(&mesh);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {

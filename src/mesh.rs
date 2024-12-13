@@ -9,7 +9,6 @@
 pub mod complex;
 pub mod coordinates;
 pub mod geometry;
-pub mod raw;
 pub mod simplicial;
 
 pub mod gen;
@@ -25,14 +24,21 @@ use std::hash::Hash;
 
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
-pub struct Manifold {
+pub struct RiemannianComplex {
   facets: Vec<OrientedVertplex>,
   complex: Complex,
   edge_lengths: EdgeLengths,
 }
 
-// getters
-impl Manifold {
+impl RiemannianComplex {
+  pub fn new(facets: Vec<OrientedVertplex>, complex: Complex, edge_lengths: EdgeLengths) -> Self {
+    Self {
+      facets,
+      complex,
+      edge_lengths,
+    }
+  }
+
   pub fn edge_lengths(&self) -> &EdgeLengths {
     &self.edge_lengths
   }
@@ -148,10 +154,10 @@ impl Manifold {
 /// Fat pointer to simplex.
 pub struct CellHandle<'m> {
   idx: FacetIdx,
-  mesh: &'m Manifold,
+  mesh: &'m RiemannianComplex,
 }
 impl<'m> CellHandle<'m> {
-  pub fn new(mesh: &'m Manifold, idx: FacetIdx) -> Self {
+  pub fn new(mesh: &'m RiemannianComplex, idx: FacetIdx) -> Self {
     Self { mesh, idx }
   }
   pub fn dim(&self) -> Dim {
@@ -188,19 +194,19 @@ impl<'m> CellHandle<'m> {
 /// Fat pointer to simplex.
 pub struct SimplexHandle<'m> {
   idx: SimplexIdx,
-  mesh: &'m Manifold,
+  mesh: &'m RiemannianComplex,
 }
 impl<'m> std::fmt::Debug for SimplexHandle<'m> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)
-      .field("mesh", &(self.mesh as *const Manifold))
+      .field("mesh", &(self.mesh as *const RiemannianComplex))
       .finish()
   }
 }
 
 impl<'m> SimplexHandle<'m> {
-  pub fn new(mesh: &'m Manifold, idx: impl Into<SimplexIdx>) -> Self {
+  pub fn new(mesh: &'m RiemannianComplex, idx: impl Into<SimplexIdx>) -> Self {
     let idx = idx.into();
     idx.assert_valid(&mesh.complex);
     Self { mesh, idx }
@@ -216,7 +222,7 @@ impl<'m> SimplexHandle<'m> {
     self.idx.kidx
   }
 
-  pub fn mesh(&self) -> &'m Manifold {
+  pub fn mesh(&self) -> &'m RiemannianComplex {
     self.mesh
   }
   pub fn skeleton(&self) -> SkeletonHandle<'m> {
@@ -357,18 +363,18 @@ impl Eq for SimplexHandle<'_> {}
 
 impl Hash for SimplexHandle<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.mesh as *const Manifold).hash(state);
+    (self.mesh as *const RiemannianComplex).hash(state);
     self.idx.hash(state);
   }
 }
 
 pub struct SkeletonHandle<'m> {
-  mesh: &'m Manifold,
+  mesh: &'m RiemannianComplex,
   dim: Dim,
 }
 
 impl<'m> SkeletonHandle<'m> {
-  pub fn new(mesh: &'m Manifold, dim: Dim) -> Self {
+  pub fn new(mesh: &'m RiemannianComplex, dim: Dim) -> Self {
     assert!(dim <= mesh.dim(), "Invalid Skeleton Dimension");
     Self { mesh, dim }
   }
@@ -398,13 +404,13 @@ impl<'m> SkeletonHandle<'m> {
 }
 
 pub struct SparseChain<'m> {
-  mesh: &'m Manifold,
+  mesh: &'m RiemannianComplex,
   dim: Dim,
   idxs: Vec<KSimplexIdx>,
   coeffs: Vec<i32>,
 }
 impl<'m> SparseChain<'m> {
-  fn new(mesh: &'m Manifold, dim: Dim, idxs: Vec<KSimplexIdx>, coeffs: Vec<i32>) -> Self {
+  fn new(mesh: &'m RiemannianComplex, dim: Dim, idxs: Vec<KSimplexIdx>, coeffs: Vec<i32>) -> Self {
     Self {
       mesh,
       dim,
@@ -434,7 +440,7 @@ impl<'m> SparseChain<'m> {
 /// a simplicial complex.
 #[allow(dead_code)]
 pub struct SparseCochain<'m> {
-  mesh: &'m Manifold,
+  mesh: &'m RiemannianComplex,
   dim: Dim,
   idxs: Vec<KSimplexIdx>,
   coeffs: Vec<i32>,

@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::l2_norm,
-  mesh::{gen::cartesian::CartesianMesh, Manifold},
+  mesh::{gen::cartesian::CartesianMesh, RiemannianComplex},
   problems::poisson,
 };
 
@@ -24,16 +24,16 @@ fn main() {
 
         // Mesh of hypercube $[0, tau]^d$.
         let box_mesh = CartesianMesh::new_unit_scaled(dim, nboxes_per_dim, TAU);
-        let coord_mesh = box_mesh.to_coord_manifold();
+        let coord_mesh = box_mesh.compute_coord_manifold();
 
         // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
         let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
         let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
 
-        let anal_sol = coord_mesh.vertex_coords().eval_coord_fn(anal_sol);
-        let anal_lapl = coord_mesh.vertex_coords().eval_coord_fn(anal_lapl);
+        let anal_sol = coord_mesh.coords().eval_coord_fn(anal_sol);
+        let anal_lapl = coord_mesh.coords().eval_coord_fn(anal_lapl);
 
-        let mesh = coord_mesh.into_intrinsic();
+        let mesh = coord_mesh.to_riemannian_complex();
 
         PoissonWithSol {
           mesh,
@@ -48,7 +48,7 @@ fn main() {
 }
 
 struct PoissonWithSol {
-  mesh: Manifold,
+  mesh: RiemannianComplex,
   load_data: na::DVector<f64>,
   solution_exact: na::DVector<f64>,
 }

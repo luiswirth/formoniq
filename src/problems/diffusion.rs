@@ -3,13 +3,13 @@
 use crate::{
   assemble,
   fe::{self, DofIdx},
-  mesh::Manifold,
+  mesh::RiemannianComplex,
   util::FaerCholesky,
 };
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_diffusion<F>(
-  mesh: &Manifold,
+  mesh: &RiemannianComplex,
   nsteps: usize,
   dt: f64,
   boundary_data: F,

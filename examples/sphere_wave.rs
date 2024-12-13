@@ -19,7 +19,7 @@ fn main() {
   std::fs::write("out/sphere_wave.obj", surface.to_obj_string()).unwrap();
 
   let coord_mesh = surface.clone().into_coord_manifold();
-  let mesh = coord_mesh.clone().into_intrinsic();
+  let mesh = coord_mesh.clone().to_riemannian_complex();
 
   let final_time = 2.0 * TAU;
   // TODO: fix CFL conditions!!!
@@ -39,7 +39,7 @@ fn main() {
   assert!(!mesh.has_boundary());
   let boundary_data = |_| unreachable!();
 
-  let initial_pos = coord_mesh.vertex_coords().eval_coord_fn(|p| {
+  let initial_pos = coord_mesh.coords().eval_coord_fn(|p| {
     let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
     #[allow(unused_variables)]
     let [r, theta, phi] = dim3::cartesian2spherical(p);
