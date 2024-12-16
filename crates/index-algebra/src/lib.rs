@@ -24,16 +24,15 @@ pub fn factorial(num: usize) -> usize {
   (1..=num).product()
 }
 
-// TODO: rename to IndexAlgebra
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct IndexSet<B: Base, O: Order, S: Signedness> {
+pub struct IndexAlgebra<B: Base, O: Order, S: Signedness> {
   indices: Vec<usize>,
   base: B,
   order: O,
   signedness: S,
 }
 
-impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
+impl<B: Base, O: Order, S: Signedness> IndexAlgebra<B, O, S> {
   pub fn indices(&self) -> &[usize] {
     &self.indices
   }
@@ -99,7 +98,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   }
 }
 
-impl<B: Base, O: Order, S: Signedness> std::ops::Index<usize> for IndexSet<B, O, S> {
+impl<B: Base, O: Order, S: Signedness> std::ops::Index<usize> for IndexAlgebra<B, O, S> {
   type Output = usize;
   fn index(&self, index: usize) -> &Self::Output {
     &self.indices[index]
@@ -107,17 +106,17 @@ impl<B: Base, O: Order, S: Signedness> std::ops::Index<usize> for IndexSet<B, O,
 }
 
 // Only Sorted
-impl<B: Base, S: Signedness> IndexSet<B, Sorted, S> {
-  pub fn is_sub_of<B1: Base, S1: Signedness>(&self, other: &IndexSet<B1, Sorted, S1>) -> bool {
+impl<B: Base, S: Signedness> IndexAlgebra<B, Sorted, S> {
+  pub fn is_sub_of<B1: Base, S1: Signedness>(&self, other: &IndexAlgebra<B1, Sorted, S1>) -> bool {
     self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
   }
-  pub fn is_sup_of<B1: Base, S1: Signedness>(&self, other: &IndexSet<B1, Sorted, S1>) -> bool {
+  pub fn is_sup_of<B1: Base, S1: Signedness>(&self, other: &IndexAlgebra<B1, Sorted, S1>) -> bool {
     self.sub_cmp(other).map(|o| o.is_ge()).unwrap_or(false)
   }
   /// Subset partial order relation.
   pub fn sub_cmp<B1: Base, S1: Signedness>(
     &self,
-    other: &IndexSet<B1, Sorted, S1>,
+    other: &IndexAlgebra<B1, Sorted, S1>,
   ) -> Option<std::cmp::Ordering> {
     use std::cmp::Ordering as O;
     let mut is_le = true;
@@ -159,22 +158,22 @@ impl<B: Base, S: Signedness> IndexSet<B, Sorted, S> {
 }
 
 /// Only Signed
-impl<B: Base, O: Order> IndexSet<B, O, Signed> {
+impl<B: Base, O: Order> IndexAlgebra<B, O, Signed> {
   pub fn sign(&self) -> Sign {
     self.signedness.0
   }
 }
 
 /// Only Unsigned
-impl<B: Base, O: Order> IndexSet<B, O, Unsigned> {
+impl<B: Base, O: Order> IndexAlgebra<B, O, Unsigned> {
   pub fn union<O1: Order>(
     self,
-    mut other: IndexSet<B, O1, Unsigned>,
-  ) -> IndexSet<B, Ordered, Unsigned> {
+    mut other: IndexAlgebra<B, O1, Unsigned>,
+  ) -> IndexAlgebra<B, Ordered, Unsigned> {
     assert_eq!(self.base, other.base);
     let mut indices = self.indices;
     indices.append(&mut other.indices);
-    IndexSet {
+    IndexAlgebra {
       indices,
       base: self.base,
       order: Ordered,
@@ -184,7 +183,7 @@ impl<B: Base, O: Order> IndexSet<B, O, Unsigned> {
 }
 
 /// Only Base + Sorted
-impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
+impl<B: Specified, S: Signedness> IndexAlgebra<B, Sorted, S> {
   pub fn sups(&self, len_sup: usize) -> IndexSupsets<B> {
     IndexSupsets::new(self.clone(), len_sup)
   }
@@ -195,14 +194,14 @@ impl<B: Specified, S: Signedness> IndexSet<B, Sorted, S> {
 }
 
 /// Oriented == Sorted + Signed
-impl<B: Base> IndexSet<B, Ordered, Signed> {
+impl<B: Base> IndexAlgebra<B, Ordered, Signed> {
   pub fn orientation_eq(&self, other: &Self) -> bool {
     self.indices == other.indices && self.sign() == other.sign()
   }
 }
 
 /// Only Local + Sorted + Unsigned
-impl IndexSet<Local, Sorted, Unsigned> {
+impl IndexAlgebra<Local, Sorted, Unsigned> {
   pub fn from_lex_rank(n: usize, k: usize, mut rank: usize) -> Self {
     let mut indices = Vec::with_capacity(k);
     let mut start = 0;
@@ -259,7 +258,7 @@ impl IndexSet<Local, Sorted, Unsigned> {
 }
 
 // Constructors
-impl IndexSet<Unspecified, Ordered, Unsigned> {
+impl IndexAlgebra<Unspecified, Ordered, Unsigned> {
   pub fn new(indices: Vec<usize>) -> Self {
     Self {
       indices,
@@ -267,18 +266,18 @@ impl IndexSet<Unspecified, Ordered, Unsigned> {
     }
   }
 }
-impl IndexSet<Unspecified, Sorted, Unsigned> {
+impl IndexAlgebra<Unspecified, Sorted, Unsigned> {
   pub fn none() -> Self {
     Self::default()
   }
   pub fn single(index: usize) -> Self {
-    IndexSet::new(vec![index]).assume_sorted()
+    IndexAlgebra::new(vec![index]).assume_sorted()
   }
 }
 
-impl IndexSet<Local, Sorted, Unsigned> {
+impl IndexAlgebra<Local, Sorted, Unsigned> {
   pub fn increasing(n: usize) -> Self {
-    IndexSet {
+    IndexAlgebra {
       indices: (0..n).collect(),
       base: Local(n),
       order: Sorted,
@@ -288,7 +287,7 @@ impl IndexSet<Local, Sorted, Unsigned> {
 }
 
 // Conversions
-impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
+impl<B: Base, O: Order, S: Signedness> IndexAlgebra<B, O, S> {
   pub fn iter(&self) -> std::slice::Iter<usize> {
     self.indices.iter()
   }
@@ -302,12 +301,12 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     self.into_vec().try_into()
   }
 }
-impl From<Vec<usize>> for IndexSet<Unspecified, Ordered, Unsigned> {
+impl From<Vec<usize>> for IndexAlgebra<Unspecified, Ordered, Unsigned> {
   fn from(value: Vec<usize>) -> Self {
     Self::new(value)
   }
 }
-impl<const N: usize> From<[usize; N]> for IndexSet<Unspecified, Ordered, Unsigned> {
+impl<const N: usize> From<[usize; N]> for IndexAlgebra<Unspecified, Ordered, Unsigned> {
   fn from(value: [usize; N]) -> Self {
     Self::new(value.to_vec())
   }

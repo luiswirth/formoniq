@@ -1,7 +1,7 @@
 use crate::{assemble, fe};
 
 use lanczos::Hermitian;
-use manifold_complex::RiemannianComplex;
+use manifold::RiemannianComplex;
 
 /// Eigenvalue problem of Laplace operator.
 pub fn solve_helmholtz_homogeneous(

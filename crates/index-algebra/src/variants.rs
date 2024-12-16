@@ -1,4 +1,4 @@
-use super::IndexSet;
+use super::IndexAlgebra;
 use crate::sign::{sort_signed, Sign};
 
 use std::fmt::Debug;
@@ -82,19 +82,19 @@ impl From<Sign> for Signed {
 }
 
 /// Variant Conversions
-impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
-  pub fn with_local_base(self, local: impl Into<Local>) -> IndexSet<Local, O, S> {
+impl<B: Base, O: Order, S: Signedness> IndexAlgebra<B, O, S> {
+  pub fn with_local_base(self, local: impl Into<Local>) -> IndexAlgebra<Local, O, S> {
     let local = local.into();
     assert!(self.iter().all(|i| *i < local.0));
-    IndexSet {
+    IndexAlgebra {
       indices: self.indices,
       base: local,
       order: self.order,
       signedness: self.signedness,
     }
   }
-  pub fn with_global_base(self, global: impl Into<Global>) -> IndexSet<Global, O, S> {
-    IndexSet {
+  pub fn with_global_base(self, global: impl Into<Global>) -> IndexAlgebra<Global, O, S> {
+    IndexAlgebra {
       indices: self.indices,
       base: global.into(),
       order: self.order,
@@ -102,8 +102,8 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn forget_base(self) -> IndexSet<Unspecified, O, S> {
-    IndexSet {
+  pub fn forget_base(self) -> IndexAlgebra<Unspecified, O, S> {
+    IndexAlgebra {
       indices: self.indices,
       base: Unspecified,
       order: self.order,
@@ -111,9 +111,9 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn assume_sorted(self) -> IndexSet<B, Sorted, S> {
+  pub fn assume_sorted(self) -> IndexAlgebra<B, Sorted, S> {
     debug_assert!(self.indices.is_sorted_by(|a, b| a < b));
-    IndexSet {
+    IndexAlgebra {
       indices: self.indices,
       base: self.base,
       order: Sorted,
@@ -121,16 +121,16 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn sort(self) -> IndexSet<B, Sorted, Unsigned> {
+  pub fn sort(self) -> IndexAlgebra<B, Sorted, Unsigned> {
     self.sort_signed().forget_sign()
   }
 
-  pub fn sort_signed(self) -> IndexSet<B, Sorted, Signed> {
+  pub fn sort_signed(self) -> IndexAlgebra<B, Sorted, Signed> {
     self.try_sort_signed().unwrap()
   }
 
   /// Returns [`None`] if there is a duplicate index.
-  pub fn try_sort_signed(self) -> Option<IndexSet<B, Sorted, Signed>> {
+  pub fn try_sort_signed(self) -> Option<IndexAlgebra<B, Sorted, Signed>> {
     let mut indices = self.indices;
     let sort_sign = sort_signed(&mut indices);
     let self_sign = self.signedness.get_or_default();
@@ -139,7 +139,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
       return None;
     }
 
-    Some(IndexSet {
+    Some(IndexAlgebra {
       indices,
       base: self.base,
       order: Sorted,
@@ -147,8 +147,8 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     })
   }
 
-  pub fn forget_sorted(self) -> IndexSet<B, Ordered, S> {
-    IndexSet {
+  pub fn forget_sorted(self) -> IndexAlgebra<B, Ordered, S> {
+    IndexAlgebra {
       indices: self.indices,
       base: self.base,
       order: Ordered,
@@ -156,8 +156,8 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn into_ordered(self) -> IndexSet<B, Ordered, S> {
-    IndexSet {
+  pub fn into_ordered(self) -> IndexAlgebra<B, Ordered, S> {
+    IndexAlgebra {
       indices: self.indices,
       base: self.base,
       order: Ordered,
@@ -165,16 +165,16 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn with_sign(self, sign: impl Into<Sign>) -> IndexSet<B, O, Signed> {
-    IndexSet {
+  pub fn with_sign(self, sign: impl Into<Sign>) -> IndexAlgebra<B, O, Signed> {
+    IndexAlgebra {
       indices: self.indices,
       base: self.base,
       order: self.order,
       signedness: Signed(sign.into()),
     }
   }
-  pub fn forget_sign(self) -> IndexSet<B, O, Unsigned> {
-    IndexSet {
+  pub fn forget_sign(self) -> IndexAlgebra<B, O, Unsigned> {
+    IndexAlgebra {
       indices: self.indices,
       base: self.base,
       order: self.order,
@@ -182,8 +182,8 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
     }
   }
 
-  pub fn into_oriented(self) -> IndexSet<B, Ordered, Signed> {
-    IndexSet {
+  pub fn into_oriented(self) -> IndexAlgebra<B, Ordered, Signed> {
+    IndexAlgebra {
       indices: self.indices,
       base: self.base,
       order: Ordered,
@@ -192,7 +192,7 @@ impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
   }
 }
 
-impl<B: Base, O: Order, S: Signedness> IndexSet<B, O, S> {
+impl<B: Base, O: Order, S: Signedness> IndexAlgebra<B, O, S> {
   pub fn into_global_base(self) -> Global {
     Global(self.indices)
   }

@@ -1,6 +1,6 @@
 use crate::sign::Sign;
 
-use super::{variants::*, IndexSet};
+use super::{variants::*, IndexAlgebra};
 
 /// All signed permutations of `self` in lexicographical order.
 ///
@@ -8,16 +8,16 @@ use super::{variants::*, IndexSet};
 /// It's only absolutly lexicographical, if the original set was sorted.
 pub struct IndexPermutations<B: Base, O: Order, S: Signedness> {
   state: itertools::Permutations<std::vec::IntoIter<usize>>,
-  set: IndexSet<B, O, S>,
+  set: IndexAlgebra<B, O, S>,
 }
 
 impl<B: Base, O: Order, S: Signedness> IndexPermutations<B, O, S> {
-  pub fn new(set: IndexSet<B, O, S>) -> Self {
+  pub fn new(set: IndexAlgebra<B, O, S>) -> Self {
     let k = set.len();
     Self::new_sub(set, k)
   }
 
-  pub fn new_sub(set: IndexSet<B, O, S>, k: usize) -> Self {
+  pub fn new_sub(set: IndexAlgebra<B, O, S>, k: usize) -> Self {
     let indices = set.indices.clone().into_iter();
     let state = itertools::Itertools::permutations(indices, k);
 
@@ -30,19 +30,19 @@ impl IndexPermutations<Local, Sorted, Unsigned> {
   }
 
   pub fn canonical_sub(n: usize, k: usize) -> Self {
-    let set = IndexSet::increasing(n);
+    let set = IndexAlgebra::increasing(n);
     Self::new_sub(set, k)
   }
 }
 
 impl<B: Base, O: Order, S: Signedness> Iterator for IndexPermutations<B, O, S> {
-  type Item = IndexSet<B, Ordered, Signed>;
+  type Item = IndexAlgebra<B, Ordered, Signed>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.state.next()?;
-    let sorted = IndexSet::new(indices.clone())
+    let sorted = IndexAlgebra::new(indices.clone())
       .with_sign(self.set.signedness.get_or_default())
       .sort_signed();
-    let next = IndexSet {
+    let next = IndexAlgebra {
       indices: indices.clone(),
       base: self.set.base.clone(),
       order: Ordered,
@@ -54,11 +54,11 @@ impl<B: Base, O: Order, S: Signedness> Iterator for IndexPermutations<B, O, S> {
 }
 
 pub struct GradedIndexSubsets<B: Base, O: Order> {
-  set: IndexSet<B, O, Unsigned>,
+  set: IndexAlgebra<B, O, Unsigned>,
   k: usize,
 }
 impl<B: Base, O: Order> GradedIndexSubsets<B, O> {
-  pub fn new<S: Signedness>(set: IndexSet<B, O, S>) -> Self {
+  pub fn new<S: Signedness>(set: IndexAlgebra<B, O, S>) -> Self {
     let set = set.forget_sign();
     let k = 0;
     Self { set, k }
@@ -66,7 +66,7 @@ impl<B: Base, O: Order> GradedIndexSubsets<B, O> {
 }
 impl GradedIndexSubsets<Local, Sorted> {
   pub fn canonical(n: usize) -> Self {
-    let set = IndexSet::increasing(n);
+    let set = IndexAlgebra::increasing(n);
     Self::new(set)
   }
 }
@@ -88,7 +88,7 @@ pub struct IndexSubsets<B: Base, O: Order> {
 }
 
 impl<B: Base, O: Order> IndexSubsets<B, O> {
-  pub fn new<S: Signedness>(set: IndexSet<B, O, S>, k: usize) -> Self {
+  pub fn new<S: Signedness>(set: IndexAlgebra<B, O, S>, k: usize) -> Self {
     let subsets = itertools::Itertools::combinations(set.indices.into_iter(), k);
     let base = set.base;
     let order = set.order;
@@ -102,16 +102,16 @@ impl<B: Base, O: Order> IndexSubsets<B, O> {
 impl IndexSubsets<Local, Sorted> {
   /// Sorted subsets of {1,...,n}
   pub fn canonical(n: usize, k: usize) -> Self {
-    let set = IndexSet::increasing(n);
+    let set = IndexAlgebra::increasing(n);
     Self::new(set, k)
   }
 }
 
 impl<B: Base, O: Order> Iterator for IndexSubsets<B, O> {
-  type Item = IndexSet<B, O, Unsigned>;
+  type Item = IndexAlgebra<B, O, Unsigned>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.subsets.next()?;
-    let next = IndexSet {
+    let next = IndexAlgebra {
       indices,
       base: self.base.clone(),
       order: self.order,
@@ -128,7 +128,7 @@ pub struct IndexBoundarySets<B: Base, O: Order, S: Signedness> {
 }
 
 impl<B: Base, O: Order, S: Signedness> IndexBoundarySets<B, O, S> {
-  pub fn new(set: IndexSet<B, O, S>) -> Self {
+  pub fn new(set: IndexAlgebra<B, O, S>) -> Self {
     let k = set.len() - 1;
     let signedness = set.signedness;
     let subsets = IndexSubsets::new(set, k);
@@ -142,14 +142,14 @@ impl<B: Base, O: Order, S: Signedness> IndexBoundarySets<B, O, S> {
 }
 
 impl<B: Base, O: Order, S: Signedness> Iterator for IndexBoundarySets<B, O, S> {
-  type Item = IndexSet<B, O, Signed>;
+  type Item = IndexAlgebra<B, O, Signed>;
   fn next(&mut self) -> Option<Self::Item> {
     let self_sign = self.signedness.get_or_default();
     let sign = self_sign * self.boundary_sign;
     self.boundary_sign.flip();
 
     let next = self.subsets.next()?;
-    let next = IndexSet {
+    let next = IndexAlgebra {
       indices: next.indices,
       base: next.base,
       order: next.order,
@@ -161,11 +161,11 @@ impl<B: Base, O: Order, S: Signedness> Iterator for IndexBoundarySets<B, O, S> {
 
 pub struct IndexSupsets<B: Specified> {
   base_subsets: IndexSubsets<B, Sorted>,
-  set: IndexSet<B, Sorted, Unsigned>,
+  set: IndexAlgebra<B, Sorted, Unsigned>,
 }
 impl<B: Specified> IndexSupsets<B> {
-  pub fn new<S: Signedness>(set: IndexSet<B, Sorted, S>, k: usize) -> Self {
-    let base_set = IndexSet {
+  pub fn new<S: Signedness>(set: IndexAlgebra<B, Sorted, S>, k: usize) -> Self {
+    let base_set = IndexAlgebra {
       indices: set.base.indices(),
       base: set.base.clone(),
       order: Sorted,
@@ -177,7 +177,7 @@ impl<B: Specified> IndexSupsets<B> {
   }
 }
 impl<B: Specified> Iterator for IndexSupsets<B> {
-  type Item = IndexSet<B, Sorted, Unsigned>;
+  type Item = IndexAlgebra<B, Sorted, Unsigned>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.base_subsets.next()?;
     if self.set.is_sub_of(&next) {
@@ -195,7 +195,7 @@ pub struct IndexAntiBoundarySets<B: Specified, S: Signedness> {
 }
 
 impl<B: Specified, S: Signedness> IndexAntiBoundarySets<B, S> {
-  pub fn new(set: IndexSet<B, Sorted, S>) -> Self {
+  pub fn new(set: IndexAlgebra<B, Sorted, S>) -> Self {
     let k = set.len() + 1;
     let signedness = set.signedness;
     let supsets = IndexSupsets::new(set, k);
@@ -209,14 +209,14 @@ impl<B: Specified, S: Signedness> IndexAntiBoundarySets<B, S> {
 }
 
 impl<B: Specified, S: Signedness> Iterator for IndexAntiBoundarySets<B, S> {
-  type Item = IndexSet<B, Sorted, Signed>;
+  type Item = IndexAlgebra<B, Sorted, Signed>;
   fn next(&mut self) -> Option<Self::Item> {
     let self_sign = self.signedness.get_or_default();
     let sign = self_sign * self.boundary_sign;
     self.boundary_sign.flip();
 
     let next = self.supsets.next()?;
-    let next = IndexSet {
+    let next = IndexAlgebra {
       indices: next.indices,
       base: next.base,
       order: next.order,
@@ -228,7 +228,7 @@ impl<B: Specified, S: Signedness> Iterator for IndexAntiBoundarySets<B, S> {
 
 #[cfg(test)]
 mod test {
-  use crate::IndexSet;
+  use crate::IndexAlgebra;
 
   use super::{GradedIndexSubsets, IndexPermutations};
 
@@ -275,7 +275,7 @@ mod test {
       for (rank, subset) in linearized.iter().enumerate() {
         assert_eq!(subset.graded_lex_rank(), rank);
         assert_eq!(
-          IndexSet::from_graded_lex_rank(n, subset.len(), rank),
+          IndexAlgebra::from_graded_lex_rank(n, subset.len(), rank),
           *subset
         );
       }

@@ -7,7 +7,7 @@ use geometry::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexPermutations, IndexSubsets},
   variants::*,
-  IndexSet,
+  IndexAlgebra,
 };
 
 use std::{
@@ -20,14 +20,14 @@ pub type ExteriorRank = usize;
 pub trait ExteriorTermExt<B: Base, O: Order, S: Signedness> {
   fn ext(self) -> ExteriorTerm<B, O, S>;
 }
-impl<B: Base, O: Order, S: Signedness> ExteriorTermExt<B, O, S> for IndexSet<B, O, S> {
+impl<B: Base, O: Order, S: Signedness> ExteriorTermExt<B, O, S> for IndexAlgebra<B, O, S> {
   fn ext(self) -> ExteriorTerm<B, O, S> {
     ExteriorTerm::new(self)
   }
 }
 
 impl<B: Base, O: Order, S: Signedness> Deref for ExteriorTerm<B, O, S> {
-  type Target = IndexSet<B, O, S>;
+  type Target = IndexAlgebra<B, O, S>;
   fn deref(&self) -> &Self::Target {
     &self.index_set
   }
@@ -37,7 +37,7 @@ impl<B: Base, O: Order, S: Signedness> DerefMut for ExteriorTerm<B, O, S> {
     &mut self.index_set
   }
 }
-impl<B: Base, O: Order, S: Signedness, T: Into<IndexSet<B, O, S>>> From<T>
+impl<B: Base, O: Order, S: Signedness, T: Into<IndexAlgebra<B, O, S>>> From<T>
   for ExteriorTerm<B, O, S>
 {
   fn from(value: T) -> Self {
@@ -47,10 +47,10 @@ impl<B: Base, O: Order, S: Signedness, T: Into<IndexSet<B, O, S>>> From<T>
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExteriorTerm<B: Base, O: Order, S: Signedness> {
-  index_set: IndexSet<B, O, S>,
+  index_set: IndexAlgebra<B, O, S>,
 }
 impl<B: Base, O: Order, S: Signedness> ExteriorTerm<B, O, S> {
-  pub fn new(index_set: IndexSet<B, O, S>) -> Self {
+  pub fn new(index_set: IndexAlgebra<B, O, S>) -> Self {
     Self { index_set }
   }
   pub fn rank(&self) -> ExteriorRank {
@@ -437,14 +437,14 @@ mod test {
     for dim in 0..=3 {
       let metric = RiemannianMetric::euclidean(dim);
 
-      let primal = IndexSet::new(vec![])
+      let primal = IndexAlgebra::new(vec![])
         .assume_sorted()
         .with_local_base(dim)
         .ext();
 
       let dual = primal.hodge_star(&metric);
 
-      let expected_dual = IndexSet::increasing(dim).ext();
+      let expected_dual = IndexAlgebra::increasing(dim).ext();
       let expected_dual = ExteriorElement::new(vec![1.0 * expected_dual]).assume_canonical();
       assert!(dual.eq_epsilon(&expected_dual, 10e-12));
     }

@@ -5,12 +5,12 @@ use crate::{
 
 use geometry::{regge::EdgeLengths, RiemannianMetric};
 use index_algebra::{
-  binomial, combinators::GradedIndexSubsets, factorial, sign::Sign, variants::*, IndexSet,
+  binomial, combinators::GradedIndexSubsets, factorial, sign::Sign, variants::*, IndexAlgebra,
 };
 
 use std::{f64::consts::SQRT_2, sync::LazyLock};
 
-pub type Vertplex<B, O, S> = IndexSet<B, O, S>;
+pub type Vertplex<B, O, S> = IndexAlgebra<B, O, S>;
 
 pub type SortedVertplex = Vertplex<Unspecified, Sorted, Unsigned>;
 pub type OrderedVertplex = Vertplex<Unspecified, Ordered, Unsigned>;

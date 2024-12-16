@@ -1,7 +1,7 @@
 //! Module for the (Heat) Diffussion Equation, the prototypical parabolic PDE.
 
 use common::util::FaerCholesky;
-use manifold_complex::RiemannianComplex;
+use manifold::RiemannianComplex;
 
 use crate::{
   assemble,

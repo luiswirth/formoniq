@@ -1,7 +1,7 @@
 //! Module for the Poisson Equation, the prototypical ellipitic PDE.
 
 use common::util::FaerCholesky;
-use manifold_complex::RiemannianComplex;
+use manifold::RiemannianComplex;
 
 use crate::{assemble, fe, fe::DofIdx};
 

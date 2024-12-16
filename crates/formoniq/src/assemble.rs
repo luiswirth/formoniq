@@ -1,7 +1,7 @@
 use crate::fe::{DofIdx, ElmatProvider, ElvecProvider};
 
 use common::{sparse::SparseMatrix, util};
-use manifold_complex::RiemannianComplex;
+use manifold::RiemannianComplex;
 
 // TODO: generalize to k-forms
 /// Assembly algorithm for the Galerkin Matrix.

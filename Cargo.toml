@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
   "crates/formoniq",
-  "crates/manifold-complex",
+  "crates/manifold",
   "crates/exterior",
   "crates/geometry",
   "crates/index-algebra",

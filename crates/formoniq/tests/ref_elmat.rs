@@ -3,7 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use common::{linalg::assert_mat_eq, Dim};
 use formoniq::fe::{self, ElmatProvider};
-use manifold_complex::simplicial::{ref_vol, ReferenceCell};
+use manifold::simplicial::{ref_vol, ReferenceCell};
 
 fn check_ref_elmat<F>(elmat: impl ElmatProvider, ref_elmat: F)
 where
