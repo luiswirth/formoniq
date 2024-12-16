@@ -33,7 +33,7 @@ fn main() {
         let anal_sol = coord_mesh.coords().eval_coord_fn(anal_sol);
         let anal_lapl = coord_mesh.coords().eval_coord_fn(anal_lapl);
 
-        let mesh = coord_mesh.to_riemannian_complex();
+        let (mesh, _) = coord_mesh.into_riemannian_complex();
 
         PoissonWithSol {
           mesh,

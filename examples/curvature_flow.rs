@@ -7,7 +7,6 @@ use formoniq::{
   assemble, fe,
   mesh::{coordinates::VertexCoords, gen::dim3},
   util::FaerCholesky,
-  Dim,
 };
 
 #[allow(unused_imports)]
@@ -16,8 +15,6 @@ use std::f64::consts::{PI, TAU};
 fn main() {
   tracing_subscriber::fmt::init();
 
-  const EXTRINSIC_DIM: Dim = 3;
-
   let obj_path = std::env::var("FORMONIQ_OBJ_PATH")
     .expect("specify the OBJ file using the envvar `FORMONIQ_OBJ_PATH`");
   let obj_string = std::fs::read_to_string(obj_path).unwrap();
@@ -25,60 +22,35 @@ fn main() {
   std::fs::write("out/curvature_flow.obj", surface.to_obj_string()).unwrap();
 
   let coord_mesh = surface.into_coord_manifold();
-  let mut mesh = coord_mesh.to_riemannian_complex();
+  let (mut mesh, coords) = coord_mesh.into_riemannian_complex();
 
-  let mut coords_list = vec![coord_mesh.coords().clone()];
+  let mut coords_list = vec![coords];
 
   let dt = 1e-3;
   let nsteps = 10;
 
-  if mesh.has_boundary() {
-    let last_step = nsteps - 1;
-    for istep in 0..nsteps {
-      println!("Solving Curvature Flow at step={istep}/{last_step}...");
+  let last_step = nsteps - 1;
+  for istep in 0..nsteps {
+    println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
-      let laplace = assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat);
-      let mass = assemble::assemble_galmat(&mesh, fe::mass_elmat);
-      let source = na::DVector::zeros(mesh.nvertices());
+    let laplace = assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat);
+    let mass = assemble::assemble_galmat(&mesh, fe::mass_elmat);
+    let source = na::DVector::zeros(mesh.nvertices());
 
-      let coords_initial = coords_list.first().unwrap().matrix();
-      let coords_old = coords_list.last().unwrap().matrix();
-      let mut coords_new = na::DMatrix::zeros(EXTRINSIC_DIM, mesh.nvertices());
-      for d in 0..EXTRINSIC_DIM {
-        let comps_initial = coords_initial.row(d).transpose();
-        let comps_old = coords_old.row(d).transpose();
+    let coords_initial = coords_list.first().unwrap();
+    let coords_old = coords_list.last().unwrap();
+    let mut coords_new = na::DMatrix::zeros(coords_initial.dim(), mesh.nvertices());
+    for d in 0..coords_initial.dim() {
+      let comps_initial = coords_initial.matrix().row(d).transpose();
+      let comps_old = coords_old.matrix().row(d).transpose();
 
-        let mut laplace = laplace.clone();
-        let mut mass = mass.clone();
-        let mut source = source.clone();
+      let mut laplace = laplace.clone();
+      let mut mass = mass.clone();
+      let mut source = source.clone();
 
-        let boundary_data = |inode| comps_initial[inode];
-        assemble::enforce_dirichlet_bc(&mesh, boundary_data, &mut laplace, &mut source);
-        assemble::enforce_dirichlet_bc(&mesh, boundary_data, &mut mass, &mut source);
-
-        let laplace = laplace.to_nalgebra_csc();
-        let mass = mass.to_nalgebra_csc();
-
-        let lse_matrix = &mass + dt * &laplace;
-        let lse_cholesky = FaerCholesky::new(lse_matrix);
-
-        let rhs = &mass * comps_old + dt * &source;
-        let comps_new = lse_cholesky.solve(&rhs).transpose();
-        coords_new.row_mut(d).copy_from(&comps_new);
-      }
-
-      let coords_new = VertexCoords::new(coords_new);
-      *mesh.edge_lengths_mut() = coords_new.to_edge_lengths(mesh.complex());
-      coords_list.push(coords_new);
-    }
-  } else {
-    let last_step = nsteps - 1;
-    for istep in 0..nsteps {
-      println!("Solving Curvature Flow at step={istep}/{last_step}...");
-
-      let laplace = assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat);
-      let mass = assemble::assemble_galmat(&mesh, fe::mass_elmat);
-      let source = na::DVector::zeros(mesh.nvertices());
+      let boundary_data = |inode| comps_initial[inode];
+      assemble::enforce_dirichlet_bc(&mesh, boundary_data, &mut laplace, &mut source);
+      assemble::enforce_dirichlet_bc(&mesh, boundary_data, &mut mass, &mut source);
 
       let laplace = laplace.to_nalgebra_csc();
       let mass = mass.to_nalgebra_csc();
@@ -86,20 +58,14 @@ fn main() {
       let lse_matrix = &mass + dt * &laplace;
       let lse_cholesky = FaerCholesky::new(lse_matrix);
 
-      let coords_old = coords_list.last().unwrap().matrix();
-      let mut coords_new = na::DMatrix::zeros(EXTRINSIC_DIM, mesh.nvertices());
-      for d in 0..EXTRINSIC_DIM {
-        let comps_old = coords_old.row(d).transpose();
-
-        let rhs = &mass * comps_old + dt * &source;
-        let comps_new = lse_cholesky.solve(&rhs).transpose();
-        coords_new.row_mut(d).copy_from(&comps_new);
-      }
-
-      let coords_new = VertexCoords::new(coords_new);
-      *mesh.edge_lengths_mut() = coords_new.to_edge_lengths(mesh.complex());
-      coords_list.push(coords_new);
+      let rhs = &mass * comps_old + dt * &source;
+      let comps_new = lse_cholesky.solve(&rhs).transpose();
+      coords_new.row_mut(d).copy_from(&comps_new);
     }
+
+    let coords_new = VertexCoords::new(coords_new);
+    *mesh.edge_lengths_mut() = coords_new.to_edge_lengths(mesh.complex());
+    coords_list.push(coords_new);
   }
 
   let mdd_frames: Vec<Vec<[f32; 3]>> = coords_list

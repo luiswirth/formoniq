@@ -48,12 +48,14 @@ impl CoordManifold {
     self
   }
 
-  // TODO: consume vs clone -> make perfect split
-  pub fn to_riemannian_complex(&self) -> RiemannianComplex {
+  pub fn into_riemannian_complex(self) -> (RiemannianComplex, VertexCoords) {
     let Self { facets, coords } = self;
     let complex = Complex::new(facets.clone());
     let edge_lenghts = coords.to_edge_lengths(&complex);
-    RiemannianComplex::new(facets.clone(), complex, edge_lenghts)
+    (
+      RiemannianComplex::new(facets, complex, edge_lenghts),
+      coords,
+    )
   }
 }
 

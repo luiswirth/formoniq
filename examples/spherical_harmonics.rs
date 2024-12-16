@@ -13,7 +13,7 @@ fn main() {
   .unwrap();
 
   let coord_mesh = triangle_mesh.clone().into_coord_manifold();
-  let mesh = coord_mesh.to_riemannian_complex();
+  let (mesh, _) = coord_mesh.into_riemannian_complex();
 
   let spectrum = helmholtz::solve_helmholtz_homogeneous(&mesh);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
