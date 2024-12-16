@@ -5,7 +5,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{fe::l2_norm, problems::poisson};
-use manifold_complex::{gen::cartesian::CartesianMesh, RiemannianComplex};
+use manifold::{gen::cartesian::CartesianMesh, RiemannianComplex};
 
 use std::f64::consts::TAU;
 

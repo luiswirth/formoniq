@@ -1,7 +1,7 @@
 pub mod whitney;
 
 use exterior::{ExteriorRank, RiemannianMetricExt};
-use manifold_complex::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex};
+use manifold::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex};
 
 pub type DofIdx = KSimplexIdx;
 
@@ -118,7 +118,7 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &RiemannianComplex) -> f64 {
 #[cfg(test)]
 mod test {
   use common::linalg::assert_mat_eq;
-  use manifold_complex::simplicial::ReferenceCell;
+  use manifold::simplicial::ReferenceCell;
 
   use super::{hodge_laplace_dif_elmat, laplace_beltrami_elmat};
 

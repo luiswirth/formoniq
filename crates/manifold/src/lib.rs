@@ -473,7 +473,7 @@ mod test {
   #[test]
   fn incidence() {
     let dim = 3;
-    let mesh = ReferenceCell::new(dim).to_singleton_mesh();
+    let mesh = ReferenceCell::new(dim).into_singleton_mesh();
     let cell = mesh.cells().next().unwrap();
 
     // print

@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::problems::wave::{self, WaveState};
-use manifold_complex::gen::dim3;
+use manifold::gen::dim3;
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};

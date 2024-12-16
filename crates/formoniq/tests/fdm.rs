@@ -30,7 +30,7 @@ use formoniq::{
   assemble,
   fe::{self, LoadElvec},
 };
-use manifold_complex::gen::cartesian::CartesianMesh;
+use manifold::gen::cartesian::CartesianMesh;
 
 use std::sync::LazyLock;
 

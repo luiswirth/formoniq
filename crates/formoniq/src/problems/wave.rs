@@ -1,9 +1,9 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
-use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use manifold_complex::RiemannianComplex;
-
 use crate::{assemble, fe, fe::DofIdx};
+
+use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
+use manifold::RiemannianComplex;
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,

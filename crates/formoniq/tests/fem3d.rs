@@ -3,7 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use common::{linalg::assert_mat_eq, Dim};
 use formoniq::{assemble, fe};
-use manifold_complex::gen::cartesian::CartesianMesh;
+use manifold::gen::cartesian::CartesianMesh;
 
 const DIM: Dim = 3;
 

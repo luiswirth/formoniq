@@ -4,7 +4,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::problems::helmholtz;
-use manifold_complex::gen::{cartesian::CartesianMesh, dim3::TriangleSurface3D};
+use manifold::gen::{cartesian::CartesianMesh, dim3::TriangleSurface3D};
 
 fn main() {
   let dim = 2;

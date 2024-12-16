@@ -1,7 +1,9 @@
 use common::Dim;
 use exterior::ExteriorRank;
-use index_algebra::{binomial, combinators::IndexSubsets, factorial, sign::sort_signed, IndexSet};
-use manifold_complex::simplicial::REFCELLS;
+use index_algebra::{
+  binomial, combinators::IndexSubsets, factorial, sign::sort_signed, IndexAlgebra,
+};
+use manifold::simplicial::REFCELLS;
 
 /// The constant exterior drivatives of the reference barycentric coordinate
 /// functions, given in the 1-form standard basis.
@@ -37,7 +39,7 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
           continue;
         };
 
-        let kform_comb = IndexSet::from(kform_comb)
+        let kform_comb = IndexAlgebra::from(kform_comb)
           .assume_sorted()
           .with_local_base(n);
         let kform_comb_rank = kform_comb.lex_rank();
@@ -45,7 +47,7 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
       }
     } else {
       let kform_comb: Vec<_> = whitney_comb.iter().map(|c| *c - 1).collect();
-      let kform_comb = IndexSet::from(kform_comb)
+      let kform_comb = IndexAlgebra::from(kform_comb)
         .assume_sorted()
         .with_local_base(n);
       let kform_comb_rank = kform_comb.lex_rank();

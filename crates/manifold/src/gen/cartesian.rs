@@ -5,7 +5,7 @@ use crate::{
 };
 
 use geometry::coord::VertexCoords;
-use index_algebra::{factorial, IndexSet};
+use index_algebra::{factorial, IndexAlgebra};
 
 /// converts linear index to cartesian index
 ///
@@ -177,7 +177,7 @@ impl CartesianMesh {
       let ivertex_origin =
         cartesian_index2linear_index(vertex_icart_origin.clone(), self.nvertices_axis());
 
-      let basisdirs = IndexSet::increasing(dim);
+      let basisdirs = IndexAlgebra::increasing(dim);
 
       // Construct all $d!$ simplexes that make up the current box.
       // Each permutation of the basis directions (dimensions) gives rise to one simplex.

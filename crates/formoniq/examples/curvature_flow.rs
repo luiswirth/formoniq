@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 use common::util::FaerCholesky;
 use formoniq::{assemble, fe};
 use geometry::coord::VertexCoords;
-use manifold_complex::gen::dim3;
+use manifold::gen::dim3;
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};

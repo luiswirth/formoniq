@@ -1,5 +1,5 @@
 use formoniq::problems::helmholtz;
-use manifold_complex::gen::dim3::mesh_sphere_surface;
+use manifold::gen::dim3::mesh_sphere_surface;
 
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
