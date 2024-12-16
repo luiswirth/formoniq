@@ -16,7 +16,7 @@ fn main() {
 
   let surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
   std::fs::write("out/helmholtz_mesh.obj", surface.to_obj_string().as_bytes()).unwrap();
-  let mesh = coord_mesh.to_riemannian_complex();
+  let (mesh, _) = coord_mesh.into_riemannian_complex();
 
   let spectrum = helmholtz::solve_helmholtz_homogeneous(&mesh);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
