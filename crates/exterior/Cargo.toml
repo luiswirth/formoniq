@@ -1,0 +1,11 @@
+[package]
+name = "exterior"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+geometry = { path = "../geometry" }
+index-algebra = { path = "../index-algebra" }
+common = { path = "../common" }
+
+nalgebra = "0.33.2"

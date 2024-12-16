@@ -1,0 +1,22 @@
+[package]
+name = "formoniq"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+manifold-complex = { path = "../manifold-complex" }
+exterior = { path = "../exterior" }
+geometry = { path = "../geometry" }
+index-algebra = { path = "../index-algebra" }
+common = { path = "../common" }
+
+nalgebra = "0.33.2"
+nalgebra-sparse = "0.10.0"
+lanczos = "0.2.0"
+
+tracing = "0.1.40"
+
+
+[dev-dependencies]
+tracing-subscriber = "0.3.18"
+#reqwest = { version = "0.12.9", features = ["blocking"] }
