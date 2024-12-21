@@ -101,7 +101,7 @@ impl<S: Signedness> ExteriorTerm<Local, Sorted, S> {
       }
 
       if dual_coeff != 0.0 {
-        dual_terms.push(ScaledExteriorTerm::from_raw(
+        dual_terms.push(ScaledExteriorTerm::new(
           dual_coeff,
           dual_index.clone().forget_base(),
         ));
@@ -125,7 +125,7 @@ pub struct ScaledExteriorTerm<B: Base, O: Order> {
 }
 
 impl<B: Base, O: Order> ScaledExteriorTerm<B, O> {
-  pub fn from_raw(coeff: f64, term: impl Into<ExteriorTerm<B, O, Unsigned>>) -> Self {
+  pub fn new(coeff: f64, term: impl Into<ExteriorTerm<B, O, Unsigned>>) -> Self {
     let term = term.into();
     Self { coeff, term }
   }
@@ -200,7 +200,7 @@ impl<B: Base, O: Order, S: Signedness> std::ops::Mul<ExteriorTerm<B, O, S>> for 
   fn mul(self, term: ExteriorTerm<B, O, S>) -> Self::Output {
     let coeff = self * term.signedness().get_or_default().as_f64();
     let term = term.index_set.forget_sign();
-    ScaledExteriorTerm::from_raw(coeff, term)
+    ScaledExteriorTerm::new(coeff, term)
   }
 }
 
@@ -338,7 +338,7 @@ impl ExteriorElement<Local, Sorted, Ordered> {
     }
     let dual_terms = dual_terms
       .into_iter()
-      .map(|(term, coeff)| ScaledExteriorTerm::from_raw(coeff, term))
+      .map(|(term, coeff)| ScaledExteriorTerm::new(coeff, term))
       .collect();
 
     Self {
@@ -416,15 +416,15 @@ mod test {
     use super::*;
 
     let terms = ExteriorElement::new(vec![
-      ScaledExteriorTerm::from_raw(1.0, vec![2, 0, 1]),
-      ScaledExteriorTerm::from_raw(3.0, vec![1, 3, 2]),
-      ScaledExteriorTerm::from_raw(-2.0, vec![0, 2, 1]),
-      ScaledExteriorTerm::from_raw(3.0, vec![0, 1, 2]),
+      ScaledExteriorTerm::new(1.0, vec![2, 0, 1]),
+      ScaledExteriorTerm::new(3.0, vec![1, 3, 2]),
+      ScaledExteriorTerm::new(-2.0, vec![0, 2, 1]),
+      ScaledExteriorTerm::new(3.0, vec![0, 1, 2]),
     ]);
     let canonical = terms.into_canonical();
     let expected = ExteriorElement::new(vec![
-      ScaledExteriorTerm::from_raw(6.0, vec![0, 1, 2]),
-      ScaledExteriorTerm::from_raw(-3.0, vec![1, 2, 3]),
+      ScaledExteriorTerm::new(6.0, vec![0, 1, 2]),
+      ScaledExteriorTerm::new(-3.0, vec![1, 2, 3]),
     ])
     .assume_canonical();
     assert!(canonical.eq_epsilon(&expected, 10e-12));

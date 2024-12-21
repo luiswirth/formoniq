@@ -1,7 +1,7 @@
 use common::Dim;
-use exterior::ExteriorRank;
+use exterior::{ExteriorElement, ExteriorRank, ExteriorTerm, ScaledExteriorTerm};
 use index_algebra::{
-  binomial, combinators::IndexSubsets, factorial, sign::sort_signed, IndexAlgebra,
+  binomial, combinators::IndexSubsets, factorial, sign::sort_signed, variants::*, IndexAlgebra,
 };
 use manifold::simplicial::REFCELLS;
 
@@ -14,6 +14,10 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
     ref_difbarys[(i, i + 1)] = 1.0;
   }
   ref_difbarys
+}
+
+pub fn ref_difbary_form(n: Dim, i: usize) -> ExteriorElement<Local, Sorted, Sorted> {
+  todo!()
 }
 
 /// The constant exterior derivatives of the reference Whitney forms, given in
@@ -55,6 +59,13 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
     }
   }
   ref_difwhitneys
+}
+
+/// Element Matrix for the weak Hodge star operator / the mass bilinear form on the reference element.
+///
+/// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
+pub fn ref_hodge_star(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
+  todo!()
 }
 
 /// The constant codifferentials of the reference Whitney forms, given in
