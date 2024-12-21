@@ -16,7 +16,9 @@ pub mod simplicial;
 pub mod gen;
 
 use common::{util, Dim};
-use complex::{Complex, FacetIdx, KSimplexIdx, SimplexData, SimplexIdx, Skeleton, VertexIdx};
+use complex::{
+  Complex, ComplexSkeleton, FacetIdx, KSimplexIdx, SimplexData, SimplexIdx, VertexIdx,
+};
 use geometry::regge::EdgeLengths;
 use itertools::Itertools;
 use simplicial::{LocalComplex, OrientedVertplex, SortedVertplex};
@@ -396,7 +398,7 @@ impl<'m> SkeletonHandle<'m> {
     Self { mesh, dim }
   }
 
-  pub fn raw(&self) -> &Skeleton {
+  pub fn raw(&self) -> &ComplexSkeleton {
     self.mesh.complex.skeleton(self.dim)
   }
 

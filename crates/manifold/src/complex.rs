@@ -8,29 +8,36 @@ use indexmap::IndexMap;
 /// A simplicial complex.
 #[derive(Debug, Clone)]
 pub struct Complex {
-  skeletons: Vec<Skeleton>,
+  skeletons: Vec<ComplexSkeleton>,
+}
+
+pub type ComplexSkeleton = IndexMap<SortedVertplex, SimplexData>;
+
+#[derive(Default, Debug, Clone)]
+pub struct SimplexData {
+  pub parent_facets: Vec<FacetIdx>,
 }
 
 impl Complex {
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
-  pub fn skeletons(&self) -> &[Skeleton] {
+  pub fn skeletons(&self) -> &[ComplexSkeleton] {
     &self.skeletons
   }
-  pub fn skeleton(&self, dim: Dim) -> &Skeleton {
+  pub fn skeleton(&self, dim: Dim) -> &ComplexSkeleton {
     &self.skeletons[dim]
   }
-  pub fn vertices(&self) -> &Skeleton {
+  pub fn vertices(&self) -> &ComplexSkeleton {
     self.skeleton(0)
   }
-  pub fn edges(&self) -> &Skeleton {
+  pub fn edges(&self) -> &ComplexSkeleton {
     self.skeleton(1)
   }
-  pub fn faces(&self) -> &Skeleton {
+  pub fn faces(&self) -> &ComplexSkeleton {
     self.skeleton(self.dim() - 1)
   }
-  pub fn facets(&self) -> &Skeleton {
+  pub fn facets(&self) -> &ComplexSkeleton {
     self.skeleton(self.dim())
   }
 }
@@ -45,14 +52,14 @@ impl Complex {
       }
     }
 
-    let mut skeletons = vec![Skeleton::new(); dim + 1];
+    let mut skeletons = vec![ComplexSkeleton::new(); dim + 1];
     for (ifacet, facet) in facets.iter().enumerate() {
       let facet = facet.clone().sort();
 
       for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
         let nvertices_sub = dim_sub + 1;
         for sub in facet.subs(nvertices_sub) {
-          let sub = subs.entry(sub.clone()).or_insert(SimplexData::stub());
+          let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
           sub.parent_facets.push(ifacet);
         }
       }
@@ -96,22 +103,6 @@ impl Complex {
     }
 
     Self { skeletons }
-  }
-}
-
-/// A container for vertplicies of common dimension.
-pub type Skeleton = IndexMap<SortedVertplex, SimplexData>;
-
-/// Topological information of the simplex.
-#[derive(Debug, Clone)]
-pub struct SimplexData {
-  pub parent_facets: Vec<FacetIdx>,
-}
-
-impl SimplexData {
-  pub fn stub() -> Self {
-    let parent_facets = Vec::new();
-    Self { parent_facets }
   }
 }
 
