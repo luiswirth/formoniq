@@ -222,6 +222,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "exterior"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "geometry",
+ "index-algebra",
+ "nalgebra",
+]
+
+[[package]]
 name = "faer"
 version = "0.19.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

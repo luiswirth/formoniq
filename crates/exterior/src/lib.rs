@@ -6,14 +6,15 @@ use common::Dim;
 use geometry::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexPermutations, IndexSubsets},
+  sign::Sign,
   IndexSet,
 };
 
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
 pub type ExteriorRank = usize;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExteriorTerm {
   indices: IndexSet,
   dim: Dim,
@@ -25,63 +26,75 @@ impl ExteriorTerm {
     Self { indices, dim }
   }
 
-  fn rank(&self) -> ExteriorRank {
+  pub fn rank(&self) -> ExteriorRank {
     self.indices.len()
   }
-  fn k(&self) -> ExteriorRank {
+  pub fn k(&self) -> ExteriorRank {
     self.rank()
   }
-  fn dim(&self) -> Dim {
+  pub fn dim(&self) -> Dim {
     self.dim
   }
-  fn n(&self) -> Dim {
+  pub fn n(&self) -> Dim {
     self.dim()
   }
 
+  pub fn canonicalize(&mut self) -> Sign {
+    let mut indices = mem::take(&mut self.indices).signed(Sign::default());
+    indices.sort();
+    self.indices = indices.set;
+    indices.sign
+  }
+
   // TODO: is there a more efficent implementation?
-  fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     let n = self.n();
     let k = self.k();
     let dual_k = n - k;
 
-    let primal_coeff = self.indices.sign().unwrap_or_default().as_f64();
     let primal_index = &self.indices;
+    let primal_coeff = 1.0;
 
     let mut dual_terms = Vec::new();
     for dual_index in IndexSubsets::canonical(n, dual_k) {
       let mut dual_coeff = 0.0;
 
       for sum_index in IndexPermutations::canonical_sub(n, k) {
-        let mut full_dual_index = sum_index.clone().union(dual_index.clone());
+        let sum_index = sum_index.set;
+
+        let full_dual_index = sum_index.clone().union(dual_index.clone());
+        let mut full_dual_index = full_dual_index.signed(Sign::default());
         full_dual_index.sort();
-        if full_dual_index.is_empty() {
+        if full_dual_index.set.is_empty() {
           // Levi-Civita symbol is zero.
           continue;
         };
-        let sign = full_dual_index.sign().unwrap().as_f64();
 
         let metric_prod: f64 = (0..k)
           .map(|iindex| metric.inverse_metric_tensor()[(primal_index[iindex], sum_index[iindex])])
           .product();
 
+        let sign = full_dual_index.sign().as_f64();
         dual_coeff += sign * primal_coeff * metric_prod;
       }
 
       if dual_coeff != 0.0 {
-        dual_terms.push(ScaledExteriorTerm::new(dual_coeff, dual_index));
+        dual_terms.push(ScaledExteriorTerm::new(
+          dual_coeff,
+          Self::new(dual_index, self.dim),
+        ));
       }
     }
 
     let dual_element = ExteriorElement::new(dual_terms);
-
     metric.det_sqrt() * dual_element
   }
 }
 
 #[derive(Debug, Clone)]
 pub struct ScaledExteriorTerm {
-  coeff: f64,
-  term: ExteriorTerm,
+  pub coeff: f64,
+  pub term: ExteriorTerm,
 }
 
 impl ScaledExteriorTerm {
@@ -90,50 +103,13 @@ impl ScaledExteriorTerm {
     Self { coeff, term }
   }
 
-  pub fn coeff(&self) -> f64 {
-    self.coeff
-  }
-  pub fn term(&self) -> &ExteriorTerm {
-    &self.term
-  }
-
-  pub fn rank(&self) -> ExteriorRank {
-    self.term.len()
-  }
-  pub fn k(&self) -> ExteriorRank {
-    self.rank()
-  }
-
-  pub fn into_canonical(self) -> ScaledExteriorTerm {
-    let term = self.term.index_set.sort();
-    let coeff = self.coeff * term.sign().as_f64();
-    let term = term.forget_sign().ext();
-    ScaledExteriorTerm { coeff, term }
-  }
-
-  pub fn assume_canonical(self) -> ScaledExteriorTerm {
-    ScaledExteriorTerm {
-      coeff: self.coeff,
-      term: self.term.index_set.assume_sorted().ext(),
-    }
-  }
-
-  pub fn pure_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
-    self.term.pure_lexicographical_cmp(&other.term)
+  pub fn canonicalize(&mut self) {
+    let sign = self.term.canonicalize();
+    self.coeff *= sign.as_f64();
   }
 
   pub fn eq_epsilon(&self, other: &Self, epsilon: f64) -> bool {
     self.term == other.term && (self.coeff - other.coeff).abs() < epsilon
-  }
-}
-
-/// With Local Base
-impl ScaledExteriorTerm {
-  pub fn dim(&self) -> Dim {
-    self.term.base().len()
-  }
-  pub fn n(&self) -> Dim {
-    self.dim()
   }
 }
 
@@ -147,9 +123,7 @@ impl ScaledExteriorTerm {
 impl std::ops::Mul<ExteriorTerm> for f64 {
   type Output = ScaledExteriorTerm;
   fn mul(self, term: ExteriorTerm) -> Self::Output {
-    let coeff = self * term.signedness().get_or_default().as_f64();
-    let term = term.index_set.forget_sign();
-    ScaledExteriorTerm::new(coeff, term)
+    ScaledExteriorTerm::new(self, term)
   }
 }
 
@@ -179,46 +153,46 @@ impl std::ops::Mul<ExteriorElement> for f64 {
 #[derive(Debug, Clone)]
 pub struct ExteriorElement {
   terms: Vec<ScaledExteriorTerm>,
-  base: B,
-  term_order: OuterO,
+  sorted: bool,
 }
 
 impl ExteriorElement {
   pub fn new(terms: Vec<ScaledExteriorTerm>) -> Self {
-    let base = terms[0].term().base().clone();
-    let rank = terms[0].rank();
-    assert!(terms.iter().all(|term| *term.term().base() == base));
-    assert!(terms.iter().all(|term| term.rank() == rank));
-    let terms = terms.into_iter().map(|t| t.forget_base()).collect();
+    let dim = terms[0].term.dim();
+    let rank = terms[0].term.rank();
+    assert!(terms.iter().all(|term| term.term.dim() == dim));
+    assert!(terms.iter().all(|term| term.term.rank() == rank));
     Self {
       terms,
-      base,
-      term_order: Ordered,
+      sorted: false,
     }
   }
 }
 
 impl ExteriorElement {
+  pub fn dim(&self) -> Dim {
+    self.terms[0].term.dim()
+  }
+  pub fn n(&self) -> Dim {
+    self.dim()
+  }
+
   pub fn rank(&self) -> ExteriorRank {
-    self.terms[0].rank()
+    self.terms[0].term.rank()
   }
   pub fn k(&self) -> ExteriorRank {
     self.rank()
   }
 
-  pub fn term_order(&self) -> OOuter {
-    self.term_order
-  }
-
-  pub fn into_canonical(self) -> ExteriorElement {
-    let Self { terms, .. } = self;
-
-    let mut terms: Vec<_> = terms
-      .into_iter()
-      .map(|term| term.into_canonical())
-      .collect();
-    terms.sort_unstable_by(ScaledExteriorTerm::pure_lexicographical_cmp);
-    terms.dedup_by(|a, b| {
+  pub fn canonicalize(&mut self) {
+    // TODO: remove empty terms
+    for term in &mut self.terms {
+      term.canonicalize();
+    }
+    self
+      .terms
+      .sort_unstable_by(|a, b| a.term.indices.pure_lexicographical_cmp(&b.term.indices));
+    self.terms.dedup_by(|a, b| {
       if a.term == b.term {
         b.coeff += a.coeff;
         true
@@ -227,27 +201,9 @@ impl ExteriorElement {
       }
     });
 
-    ExteriorElement {
-      terms,
-      base: self.base,
-      term_order: Sorted,
-    }
-  }
+    // TODO: remove zero coeff terms
 
-  pub fn assume_canonical(self) -> ExteriorElement {
-    let Self { terms, .. } = self;
-
-    let terms: Vec<_> = terms
-      .into_iter()
-      .map(|term| term.assume_canonical())
-      .collect();
-    assert!(terms.is_sorted_by(|a, b| a.pure_lexicographical_cmp(b).is_lt()));
-
-    ExteriorElement {
-      terms,
-      base: self.base,
-      term_order: Sorted,
-    }
+    self.sorted = true;
   }
 
   pub fn eq_epsilon(&self, other: &Self, epsilon: f64) -> bool {
@@ -257,19 +213,7 @@ impl ExteriorElement {
       .zip(other.terms.iter())
       .all(|(a, b)| a.eq_epsilon(b, epsilon))
   }
-}
 
-/// With Local Base
-impl ExteriorElement {
-  pub fn dim(&self) -> Dim {
-    self.base.len()
-  }
-  pub fn n(&self) -> Dim {
-    self.dim()
-  }
-}
-
-impl ExteriorElement {
   pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     let mut dual_terms = HashMap::new();
     for primal_term in &self.terms {
@@ -368,7 +312,7 @@ mod test {
       ScaledExteriorTerm::new(-2.0, vec![0, 2, 1]),
       ScaledExteriorTerm::new(3.0, vec![0, 1, 2]),
     ]);
-    let canonical = terms.into_canonical();
+    let canonical = terms.canonicalize();
     let expected = ExteriorElement::new(vec![
       ScaledExteriorTerm::new(6.0, vec![0, 1, 2]),
       ScaledExteriorTerm::new(-3.0, vec![1, 2, 3]),

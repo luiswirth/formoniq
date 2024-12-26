@@ -53,15 +53,14 @@ impl IndexSet {
   pub fn is_sorted(&self) -> bool {
     self.is_sorted
   }
+
   pub fn len(&self) -> usize {
     self.indices.len()
   }
   pub fn is_empty(&self) -> bool {
     self.indices.is_empty()
   }
-}
 
-impl IndexSet {
   pub fn iter(&self) -> std::slice::Iter<usize> {
     self.indices.iter()
   }
@@ -74,7 +73,18 @@ impl IndexSet {
   pub fn into_array<const N: usize>(self) -> Result<[usize; N], Vec<usize>> {
     self.into_vec().try_into()
   }
+  pub fn signed(self, sign: impl Into<Sign>) -> SignedIndexSet {
+    SignedIndexSet::new(self, sign)
+  }
 }
+
+impl std::ops::Index<usize> for IndexSet {
+  type Output = usize;
+  fn index(&self, index: usize) -> &Self::Output {
+    &self.indices[index]
+  }
+}
+
 impl From<Vec<usize>> for IndexSet {
   fn from(value: Vec<usize>) -> Self {
     Self::new(value)
@@ -86,128 +96,7 @@ impl<const N: usize> From<[usize; N]> for IndexSet {
   }
 }
 
-impl IndexSet {
-  pub fn signed(self, sign: impl Into<Sign>) -> SignedIndexSet {
-    SignedIndexSet::new(self, sign)
-  }
-}
-
 /// Lexicographical Ordering
-impl IndexSet {
-  // Ignores differing k and only compares indicies lexicographically.
-  pub fn pure_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
-    use std::cmp::Ordering as O;
-    self
-      .iter()
-      .zip(other.iter())
-      .find_map(|(a, b)| match a.cmp(b) {
-        O::Equal => None,
-        non_eq => Some(non_eq),
-      })
-      .unwrap_or(O::Equal)
-  }
-  // Compares indicies lexicographically, only when lengths are equal.
-  pub fn partial_lexicographical_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-    if self.len() == other.len() {
-      Some(self.pure_lexicographical_cmp(other))
-    } else {
-      None
-    }
-  }
-  /// First compares indicies lexicographically, then the lengths.
-  pub fn lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
-    self
-      .pure_lexicographical_cmp(other)
-      .then(self.len().cmp(&other.len()))
-  }
-  /// First compares lengths, then indicies lexicographically.
-  pub fn graded_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
-    self
-      .len()
-      .cmp(&other.len())
-      .then_with(|| self.pure_lexicographical_cmp(other))
-  }
-}
-
-impl IndexSet {
-  pub fn remove(&mut self, i: usize) -> usize {
-    self.indices.remove(i)
-  }
-
-  pub fn subs(&self, ksub: usize) -> IndexSubsets {
-    IndexSubsets::new(self.clone(), ksub)
-  }
-  pub fn sups(&self, len_sup: usize, base: IndexSet) -> IndexSupsets {
-    IndexSupsets::new(self.clone(), len_sup, base)
-  }
-}
-
-impl std::ops::Index<usize> for IndexSet {
-  type Output = usize;
-  fn index(&self, index: usize) -> &Self::Output {
-    &self.indices[index]
-  }
-}
-
-// Only Sorted
-impl IndexSet {
-  pub fn is_sub_of(&self, other: &IndexSet) -> bool {
-    self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
-  }
-  pub fn is_sup_of(&self, other: &IndexSet) -> bool {
-    self.sub_cmp(other).map(|o| o.is_ge()).unwrap_or(false)
-  }
-  /// Subset partial order relation.
-  pub fn sub_cmp(&self, other: &IndexSet) -> Option<std::cmp::Ordering> {
-    assert!(self.is_sorted && other.is_sorted);
-
-    use std::cmp::Ordering as O;
-    let mut is_le = true;
-    let mut is_ge = true;
-
-    let mut this = self.iter().peekable();
-    let mut other = other.iter().peekable();
-    while let (Some(self_v), Some(other_v)) = (this.peek(), other.peek()) {
-      match self_v.cmp(other_v) {
-        O::Equal => {
-          this.next();
-          other.next();
-        }
-        O::Less => {
-          is_le = false;
-          this.next();
-        }
-        O::Greater => {
-          is_ge = false;
-          other.next();
-        }
-      }
-    }
-
-    if this.next().is_some() {
-      is_le = false;
-    }
-    if other.next().is_some() {
-      is_ge = false;
-    }
-
-    match (is_le, is_ge) {
-      (true, true) => Some(O::Equal),
-      (true, false) => Some(O::Less),
-      (false, true) => Some(O::Greater),
-      _ => None,
-    }
-  }
-}
-
-impl IndexSet {
-  pub fn union(self, mut other: IndexSet) -> IndexSet {
-    let mut indices = self.indices;
-    indices.append(&mut other.indices);
-    IndexSet::new(indices)
-  }
-}
-
 impl IndexSet {
   pub fn from_lex_rank(n: usize, k: usize, mut rank: usize) -> Self {
     let mut indices = Vec::with_capacity(k);
@@ -255,6 +144,107 @@ impl IndexSet {
 
   fn graded_lex_rank_offset(n: usize, k: usize) -> usize {
     (0..k).map(|s| binomial(n, s)).sum()
+  }
+
+  // Ignores differing k and only compares indicies lexicographically.
+  pub fn pure_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
+    use std::cmp::Ordering as O;
+    self
+      .iter()
+      .zip(other.iter())
+      .find_map(|(a, b)| match a.cmp(b) {
+        O::Equal => None,
+        non_eq => Some(non_eq),
+      })
+      .unwrap_or(O::Equal)
+  }
+  // Compares indicies lexicographically, only when lengths are equal.
+  pub fn partial_lexicographical_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    if self.len() == other.len() {
+      Some(self.pure_lexicographical_cmp(other))
+    } else {
+      None
+    }
+  }
+  /// First compares indicies lexicographically, then the lengths.
+  pub fn lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self
+      .pure_lexicographical_cmp(other)
+      .then(self.len().cmp(&other.len()))
+  }
+  /// First compares lengths, then indicies lexicographically.
+  pub fn graded_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self
+      .len()
+      .cmp(&other.len())
+      .then_with(|| self.pure_lexicographical_cmp(other))
+  }
+}
+
+impl IndexSet {
+  pub fn remove(&mut self, i: usize) -> usize {
+    self.indices.remove(i)
+  }
+
+  pub fn union(self, mut other: IndexSet) -> IndexSet {
+    let mut indices = self.indices;
+    indices.append(&mut other.indices);
+    IndexSet::new(indices)
+  }
+
+  pub fn subs(&self, ksub: usize) -> IndexSubsets {
+    IndexSubsets::new(self.clone(), ksub)
+  }
+  pub fn sups(&self, len_sup: usize, base: IndexSet) -> IndexSupsets {
+    IndexSupsets::new(self.clone(), len_sup, base)
+  }
+
+  pub fn is_sub_of(&self, other: &IndexSet) -> bool {
+    self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
+  }
+  pub fn is_sup_of(&self, other: &IndexSet) -> bool {
+    self.sub_cmp(other).map(|o| o.is_ge()).unwrap_or(false)
+  }
+  /// Subset partial order relation.
+  pub fn sub_cmp(&self, other: &IndexSet) -> Option<std::cmp::Ordering> {
+    assert!(self.is_sorted && other.is_sorted);
+
+    use std::cmp::Ordering as O;
+    let mut is_le = true;
+    let mut is_ge = true;
+
+    let mut this = self.iter().peekable();
+    let mut other = other.iter().peekable();
+    while let (Some(self_v), Some(other_v)) = (this.peek(), other.peek()) {
+      match self_v.cmp(other_v) {
+        O::Equal => {
+          this.next();
+          other.next();
+        }
+        O::Less => {
+          is_le = false;
+          this.next();
+        }
+        O::Greater => {
+          is_ge = false;
+          other.next();
+        }
+      }
+    }
+
+    if this.next().is_some() {
+      is_le = false;
+    }
+    if other.next().is_some() {
+      is_ge = false;
+    }
+
+    match (is_le, is_ge) {
+      (true, true) => Some(O::Equal),
+      (true, false) => Some(O::Less),
+      (false, true) => Some(O::Greater),
+      _ => None,
+    }
   }
 }
 
