@@ -6,92 +6,59 @@ use common::Dim;
 use geometry::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexPermutations, IndexSubsets},
-  variants::*,
-  IndexAlgebra,
+  IndexSet,
 };
 
-use std::{
-  collections::HashMap,
-  ops::{Deref, DerefMut},
-};
+use std::collections::HashMap;
 
 pub type ExteriorRank = usize;
 
-pub trait ExteriorTermExt<B: Base, O: Order, S: Signedness> {
-  fn ext(self) -> ExteriorTerm<B, O, S>;
+#[derive(Debug, Clone)]
+pub struct ExteriorTerm {
+  indices: IndexSet,
+  dim: Dim,
 }
-impl<B: Base, O: Order, S: Signedness> ExteriorTermExt<B, O, S> for IndexAlgebra<B, O, S> {
-  fn ext(self) -> ExteriorTerm<B, O, S> {
-    ExteriorTerm::new(self)
+impl ExteriorTerm {
+  pub fn new(indices: impl Into<IndexSet>, dim: Dim) -> Self {
+    let indices = indices.into();
+    assert!(indices.len() <= dim);
+    Self { indices, dim }
   }
-}
 
-impl<B: Base, O: Order, S: Signedness> Deref for ExteriorTerm<B, O, S> {
-  type Target = IndexAlgebra<B, O, S>;
-  fn deref(&self) -> &Self::Target {
-    &self.index_set
+  fn rank(&self) -> ExteriorRank {
+    self.indices.len()
   }
-}
-impl<B: Base, O: Order, S: Signedness> DerefMut for ExteriorTerm<B, O, S> {
-  fn deref_mut(&mut self) -> &mut Self::Target {
-    &mut self.index_set
-  }
-}
-impl<B: Base, O: Order, S: Signedness, T: Into<IndexAlgebra<B, O, S>>> From<T>
-  for ExteriorTerm<B, O, S>
-{
-  fn from(value: T) -> Self {
-    Self::new(value.into())
-  }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ExteriorTerm<B: Base, O: Order, S: Signedness> {
-  index_set: IndexAlgebra<B, O, S>,
-}
-impl<B: Base, O: Order, S: Signedness> ExteriorTerm<B, O, S> {
-  pub fn new(index_set: IndexAlgebra<B, O, S>) -> Self {
-    Self { index_set }
-  }
-  pub fn rank(&self) -> ExteriorRank {
-    self.len()
-  }
-  pub fn k(&self) -> ExteriorRank {
+  fn k(&self) -> ExteriorRank {
     self.rank()
   }
-}
-
-impl<O: Order, S: Signedness> ExteriorTerm<Local, O, S> {
-  pub fn dim(&self) -> Dim {
-    self.base().len()
+  fn dim(&self) -> Dim {
+    self.dim
   }
-  pub fn n(&self) -> Dim {
+  fn n(&self) -> Dim {
     self.dim()
   }
-}
 
-impl<S: Signedness> ExteriorTerm<Local, Sorted, S> {
   // TODO: is there a more efficent implementation?
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement<Local, Sorted, Sorted> {
+  fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     let n = self.n();
     let k = self.k();
     let dual_k = n - k;
 
-    let primal_coeff = self.signedness().get_or_default().as_f64();
-    let primal_index = self.index_set.clone().forget_sign();
+    let primal_coeff = self.indices.sign().unwrap_or_default().as_f64();
+    let primal_index = &self.indices;
 
     let mut dual_terms = Vec::new();
     for dual_index in IndexSubsets::canonical(n, dual_k) {
       let mut dual_coeff = 0.0;
 
       for sum_index in IndexPermutations::canonical_sub(n, k) {
-        let sum_index = sum_index.forget_sign();
-        let full_dual_index = sum_index.clone().union(dual_index.clone());
-        let Some(full_dual_index) = full_dual_index.clone().try_sort_signed() else {
+        let mut full_dual_index = sum_index.clone().union(dual_index.clone());
+        full_dual_index.sort();
+        if full_dual_index.is_empty() {
           // Levi-Civita symbol is zero.
           continue;
         };
-        let sign = full_dual_index.sign().as_f64();
+        let sign = full_dual_index.sign().unwrap().as_f64();
 
         let metric_prod: f64 = (0..k)
           .map(|iindex| metric.inverse_metric_tensor()[(primal_index[iindex], sum_index[iindex])])
@@ -101,31 +68,24 @@ impl<S: Signedness> ExteriorTerm<Local, Sorted, S> {
       }
 
       if dual_coeff != 0.0 {
-        dual_terms.push(ScaledExteriorTerm::new(
-          dual_coeff,
-          dual_index.clone().forget_base(),
-        ));
+        dual_terms.push(ScaledExteriorTerm::new(dual_coeff, dual_index));
       }
     }
 
-    let dual_element = ExteriorElement {
-      terms: dual_terms,
-      base: *self.base(),
-      term_order: Sorted,
-    };
+    let dual_element = ExteriorElement::new(dual_terms);
 
     metric.det_sqrt() * dual_element
   }
 }
 
 #[derive(Debug, Clone)]
-pub struct ScaledExteriorTerm<B: Base, O: Order> {
+pub struct ScaledExteriorTerm {
   coeff: f64,
-  term: ExteriorTerm<B, O, Unsigned>,
+  term: ExteriorTerm,
 }
 
-impl<B: Base, O: Order> ScaledExteriorTerm<B, O> {
-  pub fn new(coeff: f64, term: impl Into<ExteriorTerm<B, O, Unsigned>>) -> Self {
+impl ScaledExteriorTerm {
+  pub fn new(coeff: f64, term: impl Into<ExteriorTerm>) -> Self {
     let term = term.into();
     Self { coeff, term }
   }
@@ -133,7 +93,7 @@ impl<B: Base, O: Order> ScaledExteriorTerm<B, O> {
   pub fn coeff(&self) -> f64 {
     self.coeff
   }
-  pub fn term(&self) -> &ExteriorTerm<B, O, Unsigned> {
+  pub fn term(&self) -> &ExteriorTerm {
     &self.term
   }
 
@@ -144,25 +104,14 @@ impl<B: Base, O: Order> ScaledExteriorTerm<B, O> {
     self.rank()
   }
 
-  pub fn with_base(self, n: Dim) -> ScaledExteriorTerm<Local, O> {
-    let coeff = self.coeff;
-    let term = self.term.index_set.with_local_base(n).ext();
-    ScaledExteriorTerm { coeff, term }
-  }
-  pub fn forget_base(self) -> ScaledExteriorTerm<Unspecified, O> {
-    let coeff = self.coeff;
-    let term = self.term.index_set.forget_base().ext();
-    ScaledExteriorTerm { coeff, term }
-  }
-
-  pub fn into_canonical(self) -> ScaledExteriorTerm<B, Sorted> {
-    let term = self.term.index_set.sort_signed();
+  pub fn into_canonical(self) -> ScaledExteriorTerm {
+    let term = self.term.index_set.sort();
     let coeff = self.coeff * term.sign().as_f64();
     let term = term.forget_sign().ext();
     ScaledExteriorTerm { coeff, term }
   }
 
-  pub fn assume_canonical(self) -> ScaledExteriorTerm<B, Sorted> {
+  pub fn assume_canonical(self) -> ScaledExteriorTerm {
     ScaledExteriorTerm {
       coeff: self.coeff,
       term: self.term.index_set.assume_sorted().ext(),
@@ -179,7 +128,7 @@ impl<B: Base, O: Order> ScaledExteriorTerm<B, O> {
 }
 
 /// With Local Base
-impl<O: Order> ScaledExteriorTerm<Local, O> {
+impl ScaledExteriorTerm {
   pub fn dim(&self) -> Dim {
     self.term.base().len()
   }
@@ -189,39 +138,37 @@ impl<O: Order> ScaledExteriorTerm<Local, O> {
 }
 
 /// With Local Base and Sorted
-impl ScaledExteriorTerm<Local, Sorted> {
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement<Local, Sorted, Sorted> {
+impl ScaledExteriorTerm {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     self.coeff * self.term.hodge_star(metric)
   }
 }
 
-impl<B: Base, O: Order, S: Signedness> std::ops::Mul<ExteriorTerm<B, O, S>> for f64 {
-  type Output = ScaledExteriorTerm<B, O>;
-  fn mul(self, term: ExteriorTerm<B, O, S>) -> Self::Output {
+impl std::ops::Mul<ExteriorTerm> for f64 {
+  type Output = ScaledExteriorTerm;
+  fn mul(self, term: ExteriorTerm) -> Self::Output {
     let coeff = self * term.signedness().get_or_default().as_f64();
     let term = term.index_set.forget_sign();
     ScaledExteriorTerm::new(coeff, term)
   }
 }
 
-impl<B: Base, O: Order> std::ops::Mul<ScaledExteriorTerm<B, O>> for f64 {
-  type Output = ScaledExteriorTerm<B, O>;
-  fn mul(self, mut term: ScaledExteriorTerm<B, O>) -> Self::Output {
+impl std::ops::Mul<ScaledExteriorTerm> for f64 {
+  type Output = ScaledExteriorTerm;
+  fn mul(self, mut term: ScaledExteriorTerm) -> Self::Output {
     term.coeff *= self;
     term
   }
 }
-impl<B: Base, O: Order> std::ops::MulAssign<f64> for ScaledExteriorTerm<B, O> {
+impl std::ops::MulAssign<f64> for ScaledExteriorTerm {
   fn mul_assign(&mut self, scalar: f64) {
     self.coeff *= scalar;
   }
 }
 
-impl<B: Base, InnerO: Order, OuterO: Order> std::ops::Mul<ExteriorElement<B, InnerO, OuterO>>
-  for f64
-{
-  type Output = ExteriorElement<B, InnerO, OuterO>;
-  fn mul(self, mut element: ExteriorElement<B, InnerO, OuterO>) -> Self::Output {
+impl std::ops::Mul<ExteriorElement> for f64 {
+  type Output = ExteriorElement;
+  fn mul(self, mut element: ExteriorElement) -> Self::Output {
     for term in &mut element.terms {
       *term *= self;
     }
@@ -230,14 +177,14 @@ impl<B: Base, InnerO: Order, OuterO: Order> std::ops::Mul<ExteriorElement<B, Inn
 }
 
 #[derive(Debug, Clone)]
-pub struct ExteriorElement<B: Base, InnerO: Order, OuterO: Order> {
-  terms: Vec<ScaledExteriorTerm<Unspecified, InnerO>>,
+pub struct ExteriorElement {
+  terms: Vec<ScaledExteriorTerm>,
   base: B,
   term_order: OuterO,
 }
 
-impl<B: Base, OInner: Order> ExteriorElement<B, OInner, Ordered> {
-  pub fn new(terms: Vec<ScaledExteriorTerm<B, OInner>>) -> Self {
+impl ExteriorElement {
+  pub fn new(terms: Vec<ScaledExteriorTerm>) -> Self {
     let base = terms[0].term().base().clone();
     let rank = terms[0].rank();
     assert!(terms.iter().all(|term| *term.term().base() == base));
@@ -251,7 +198,7 @@ impl<B: Base, OInner: Order> ExteriorElement<B, OInner, Ordered> {
   }
 }
 
-impl<B: Base, OInner: Order, OOuter: Order> ExteriorElement<B, OInner, OOuter> {
+impl ExteriorElement {
   pub fn rank(&self) -> ExteriorRank {
     self.terms[0].rank()
   }
@@ -263,7 +210,7 @@ impl<B: Base, OInner: Order, OOuter: Order> ExteriorElement<B, OInner, OOuter> {
     self.term_order
   }
 
-  pub fn into_canonical(self) -> ExteriorElement<B, Sorted, Sorted> {
+  pub fn into_canonical(self) -> ExteriorElement {
     let Self { terms, .. } = self;
 
     let mut terms: Vec<_> = terms
@@ -287,7 +234,7 @@ impl<B: Base, OInner: Order, OOuter: Order> ExteriorElement<B, OInner, OOuter> {
     }
   }
 
-  pub fn assume_canonical(self) -> ExteriorElement<B, Sorted, Sorted> {
+  pub fn assume_canonical(self) -> ExteriorElement {
     let Self { terms, .. } = self;
 
     let terms: Vec<_> = terms
@@ -313,7 +260,7 @@ impl<B: Base, OInner: Order, OOuter: Order> ExteriorElement<B, OInner, OOuter> {
 }
 
 /// With Local Base
-impl<OInner: Order, OOuter: Order> ExteriorElement<Local, OInner, OOuter> {
+impl ExteriorElement {
   pub fn dim(&self) -> Dim {
     self.base.len()
   }
@@ -322,8 +269,8 @@ impl<OInner: Order, OOuter: Order> ExteriorElement<Local, OInner, OOuter> {
   }
 }
 
-impl ExteriorElement<Local, Sorted, Ordered> {
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement<Local, Sorted, Ordered> {
+impl ExteriorElement {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     let mut dual_terms = HashMap::new();
     for primal_term in &self.terms {
       for dual_term in primal_term
@@ -437,14 +384,14 @@ mod test {
     for dim in 0..=3 {
       let metric = RiemannianMetric::euclidean(dim);
 
-      let primal = IndexAlgebra::new(vec![])
+      let primal = ExteriorTerm::new(vec![])
         .assume_sorted()
         .with_local_base(dim)
         .ext();
 
       let dual = primal.hodge_star(&metric);
 
-      let expected_dual = IndexAlgebra::increasing(dim).ext();
+      let expected_dual = ExteriorTerm::increasing(dim).ext();
       let expected_dual = ExteriorElement::new(vec![1.0 * expected_dual]).assume_canonical();
       assert!(dual.eq_epsilon(&expected_dual, 10e-12));
     }
