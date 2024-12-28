@@ -145,16 +145,13 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   ref_difwhitneys
 }
 
-/// The constant codifferentials of the reference Whitney forms, given in
-pub fn ref_bary(n: Dim, ibary: usize, x: na::DVector<f64>) -> f64 {
-  assert!(ibary < n + 1);
-  assert!(x.nrows() == n);
-
-  if ibary == 0 {
-    1.0 - x.sum()
-  } else {
-    x[ibary - 1]
-  }
+/// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
+///
+/// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
+pub fn hodge_laplace_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+  let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
+  println!("n={},k={k}{ref_difwhitneys}", cell.dim());
+  cell.vol() * cell.metric().kform_norm_sqr(k + 1, &ref_difwhitneys)
 }
 
 /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
@@ -164,9 +161,12 @@ pub fn kexterior_derivative_local(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix
 
 #[cfg(test)]
 mod test {
-  use crate::fe::scalar_mass_elmat;
+  use crate::fe::{laplace_beltrami_elmat, scalar_mass_elmat};
 
-  use super::{hodge_mass_elmat, ref_difbarys, ref_difwhitneys};
+  use super::{
+    hodge_laplace_dif_elmat, hodge_mass_elmat, kexterior_derivative_local, ref_difbarys,
+    ref_difwhitneys,
+  };
   use common::linalg::assert_mat_eq;
   use manifold::simplicial::ReferenceCell;
 
@@ -189,12 +189,37 @@ mod test {
   }
 
   #[test]
+  fn hodge_laplace0_is_laplace_beltrami_refcell() {
+    for n in 0..=3 {
+      let cell = ReferenceCell::new(n).to_cell_complex();
+      let laplace_beltrami = laplace_beltrami_elmat(&cell);
+      let hodge_laplace = hodge_laplace_dif_elmat(&cell, 0);
+      assert_mat_eq(&hodge_laplace, &laplace_beltrami);
+    }
+  }
+
+  #[test]
   fn hodge_mass0_is_scalar_mass() {
     for n in 0..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
       let hodge_mass = hodge_mass_elmat(&cell, 0);
       let scalar_mass = scalar_mass_elmat(&cell);
       assert_mat_eq(&hodge_mass, &scalar_mass);
+    }
+  }
+
+  #[test]
+  fn hodge_laplace_dif_with_hodge_mass() {
+    for n in 0..=3 {
+      let cell = ReferenceCell::new(n).to_cell_complex();
+      for k in 0..n {
+        println!("n={n},k={k}");
+        let var0 = kexterior_derivative_local(cell.dim(), k).transpose()
+          * hodge_mass_elmat(&cell, k + 1)
+          * kexterior_derivative_local(cell.dim(), k);
+        let var1 = hodge_laplace_dif_elmat(&cell, k);
+        assert_mat_eq(&var0, &var1);
+      }
     }
   }
 }
