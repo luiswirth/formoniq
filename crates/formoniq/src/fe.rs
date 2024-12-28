@@ -1,6 +1,5 @@
 pub mod whitney;
 
-use exterior::{ExteriorRank, RiemannianMetricExt};
 use manifold::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex};
 
 pub type DofIdx = KSimplexIdx;
@@ -36,14 +35,6 @@ where
 pub fn laplace_beltrami_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
   let ref_difbarys = whitney::ref_difbarys(cell.dim());
   cell.vol() * cell.metric().covector_norm_sqr(&ref_difbarys)
-}
-
-/// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
-///
-/// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let ref_difwhitneys = whitney::ref_difwhitneys(cell.dim(), k);
-  cell.vol() * cell.metric().kform_norm_sqr(k, &ref_difwhitneys)
 }
 
 /// Exact Element Matrix Provider for scalar mass bilinear form.
@@ -100,22 +91,4 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &RiemannianComplex) -> f64 {
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
-}
-
-#[cfg(test)]
-mod test {
-  use common::linalg::assert_mat_eq;
-  use manifold::simplicial::ReferenceCell;
-
-  use super::{hodge_laplace_dif_elmat, laplace_beltrami_elmat};
-
-  #[test]
-  fn hodge_laplace0_is_laplace_beltrami_refcell() {
-    for n in 0..=3 {
-      let cell = ReferenceCell::new(n).to_cell_complex();
-      let laplace_beltrami = laplace_beltrami_elmat(&cell);
-      let hodge_laplace = hodge_laplace_dif_elmat(&cell, 0);
-      assert_mat_eq(&hodge_laplace, &laplace_beltrami);
-    }
-  }
 }

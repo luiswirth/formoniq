@@ -407,6 +407,8 @@ impl RiemannianMetricExt for RiemannianMetric {
     v: &na::DMatrix<f64>,
     w: &na::DMatrix<f64>,
   ) -> na::DMatrix<f64> {
+    println!("{:?}", v.shape());
+    println!("{:?}", self.kform_gramian(k).shape());
     v.transpose() * self.kform_gramian(k) * w
   }
   fn kform_norm_sqr(&self, k: ExteriorRank, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
