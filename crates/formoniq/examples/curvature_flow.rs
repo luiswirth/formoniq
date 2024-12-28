@@ -33,7 +33,7 @@ fn main() {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
     let laplace = assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat);
-    let mass = assemble::assemble_galmat(&mesh, fe::mass_elmat);
+    let mass = assemble::assemble_galmat(&mesh, fe::scalar_mass_elmat);
     let source = na::DVector::zeros(mesh.nvertices());
 
     let coords_initial = coords_list.first().unwrap();

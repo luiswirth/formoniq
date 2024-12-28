@@ -22,7 +22,7 @@ where
   F: Fn(DofIdx) -> f64,
 {
   let mut laplace = assemble::assemble_galmat(mesh, fe::laplace_beltrami_elmat);
-  let mut mass = assemble::assemble_galmat(mesh, fe::mass_elmat);
+  let mut mass = assemble::assemble_galmat(mesh, fe::scalar_mass_elmat);
   let mut source = assemble::assemble_galvec(mesh, fe::LoadElvec::new(source_data));
 
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut source);

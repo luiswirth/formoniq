@@ -162,6 +162,9 @@ impl<B: Base, O: Order> IndexAlgebra<B, O, Signed> {
   pub fn sign(&self) -> Sign {
     self.signedness.0
   }
+  pub fn sign_mut(&mut self) -> &mut Sign {
+    &mut self.signedness.0
+  }
 }
 
 /// Only Unsigned

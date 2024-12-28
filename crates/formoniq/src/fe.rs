@@ -46,21 +46,8 @@ pub fn hodge_laplace_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMat
   cell.vol() * cell.metric().kform_norm_sqr(k, &ref_difwhitneys)
 }
 
-/// Exact Element Matrix Provider for the codifferential part of Hodge-Laplace operator.
-///
-/// $A = [inner(delta lambda_tau, delta lambda_sigma)_(L^2 Lambda^(k-1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_codif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let ref_codifwhitneys = whitney::ref_codifwhitneys(cell.dim(), k);
-  cell.vol() * cell.metric().kform_norm_sqr(k, &ref_codifwhitneys)
-}
-
-/// Exact Element Matrix Provider for the full Hodge-Laplace operator.
-pub fn hodge_laplace_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  hodge_laplace_dif_elmat(cell, k) + hodge_laplace_codif_elmat(cell, k)
-}
-
 /// Exact Element Matrix Provider for scalar mass bilinear form.
-pub fn mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
+pub fn scalar_mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
   let ndofs = cell.nvertices();
   let dim = cell.dim();
   let v = cell.vol() / ((dim + 1) * (dim + 2)) as f64;
@@ -71,7 +58,7 @@ pub fn mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
 
 /// Approximated Element Matrix Provider for scalar mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
-pub fn lumped_mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
+pub fn scalar_lumped_mass_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
   let n = cell.nvertices();
   let v = cell.vol() / n as f64;
   na::DMatrix::from_diagonal_element(n, n, v)

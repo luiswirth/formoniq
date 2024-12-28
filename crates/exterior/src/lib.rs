@@ -350,8 +350,10 @@ impl ExteriorElement<Local, Sorted, Ordered> {
 }
 
 pub trait RiemannianMetricExt {
+  fn kform_inner_product(&self, k: ExteriorRank, v: &na::DVector<f64>, w: &na::DVector<f64>)
+    -> f64;
   fn kform_norm_sqr(&self, k: ExteriorRank, v: &na::DMatrix<f64>) -> na::DMatrix<f64>;
-  fn kform_inner_product(
+  fn kform_inner_product_mat(
     &self,
     k: ExteriorRank,
     v: &na::DMatrix<f64>,
@@ -393,13 +395,22 @@ impl RiemannianMetricExt for RiemannianMetric {
   fn kform_inner_product(
     &self,
     k: ExteriorRank,
+    v: &na::DVector<f64>,
+    w: &na::DVector<f64>,
+  ) -> f64 {
+    (v.transpose() * self.kform_gramian(k) * w).x
+  }
+
+  fn kform_inner_product_mat(
+    &self,
+    k: ExteriorRank,
     v: &na::DMatrix<f64>,
     w: &na::DMatrix<f64>,
   ) -> na::DMatrix<f64> {
     v.transpose() * self.kform_gramian(k) * w
   }
   fn kform_norm_sqr(&self, k: ExteriorRank, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-    self.kform_inner_product(k, v, v)
+    self.kform_inner_product_mat(k, v, v)
   }
 }
 
