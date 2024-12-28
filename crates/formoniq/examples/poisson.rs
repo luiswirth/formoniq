@@ -4,7 +4,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{fe::l2_norm, problems::poisson};
+use formoniq::{fe::l2_norm, problems::laplace_beltrami};
 use manifold::{gen::cartesian::CartesianMesh, RiemannianComplex};
 
 use std::f64::consts::TAU;
@@ -73,7 +73,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     } = setup;
 
     let boundary_data = |ivertex| solution_exact[ivertex];
-    let galsol = poisson::solve_poisson(&mesh, load_data, boundary_data);
+    let galsol = laplace_beltrami::solve_laplace_beltrami_source(&mesh, load_data, boundary_data);
 
     // Compute L2 error and convergence rate.
     let error = l2_norm(solution_exact - galsol, &mesh);

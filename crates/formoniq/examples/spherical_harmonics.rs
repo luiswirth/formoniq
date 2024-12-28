@@ -1,4 +1,4 @@
-use formoniq::problems::helmholtz;
+use formoniq::problems::laplace_beltrami;
 use manifold::gen::dim3::mesh_sphere_surface;
 
 extern crate nalgebra as na;
@@ -16,7 +16,7 @@ fn main() {
   let coord_mesh = triangle_mesh.clone().into_coord_manifold();
   let (mesh, _) = coord_mesh.into_riemannian_complex();
 
-  let spectrum = helmholtz::solve_helmholtz_homogeneous(&mesh);
+  let spectrum = laplace_beltrami::solve_laplace_beltrami_evp(&mesh);
   for (eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
     println!("eigenval={eigenval}");
     assert!((eigenval - eigenval.round()).abs() <= 10e-12);

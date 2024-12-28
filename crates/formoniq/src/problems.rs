@@ -1,5 +1,5 @@
-pub mod helmholtz;
-pub mod poisson;
+pub mod hodge_laplace;
+pub mod laplace_beltrami;
 
-pub mod diffusion;
+pub mod heat;
 pub mod wave;

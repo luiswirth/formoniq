@@ -28,7 +28,7 @@ use common::{
 };
 use formoniq::{
   assemble,
-  fe::{self, LoadElvec},
+  fe::{self, SourceElvec},
 };
 use manifold::gen::cartesian::CartesianMesh;
 
@@ -203,10 +203,10 @@ fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = CartesianMesh::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64);
   let coord_mesh = box_mesh.compute_coord_manifold();
   let (mesh, _) = coord_mesh.into_riemannian_complex();
-  let mut galmat = assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat).to_nalgebra_dense();
+  let mut galmat = assemble::assemble_galmat(&mesh, fe::LaplaceBeltramiElmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
     &mesh,
-    LoadElvec::new(na::DVector::from_element(mesh.nvertices(), 1.0)),
+    SourceElvec::new(na::DVector::from_element(mesh.nvertices(), 1.0)),
   );
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat

@@ -23,7 +23,7 @@ where
 
 #[test]
 fn laplacian_refcell() {
-  check_ref_elmat(fe::laplace_beltrami_elmat, ref_laplacian);
+  check_ref_elmat(fe::LaplaceBeltramiElmat, ref_laplacian);
 }
 fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
   let ndofs = dim + 1;
@@ -40,7 +40,7 @@ fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
 
 #[test]
 fn mass_refcell() {
-  check_ref_elmat(fe::scalar_mass_elmat, ref_mass);
+  check_ref_elmat(fe::ScalarMassElmat, ref_mass);
 }
 fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
   #[rustfmt::skip]
@@ -67,7 +67,7 @@ fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
 
 #[test]
 fn lumped_mass_refcell() {
-  check_ref_elmat(fe::scalar_lumped_mass_elmat, ref_lumped_mass);
+  check_ref_elmat(fe::ScalarLumpedMassElmat, ref_lumped_mass);
 }
 fn ref_lumped_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
   let nvertices = dim + 1;

@@ -109,5 +109,5 @@ fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = CartesianMesh::new_unit(DIM, nboxes_per_dim);
   let coord_mesh = box_mesh.compute_coord_manifold();
   let (mesh, _) = coord_mesh.into_riemannian_complex();
-  assemble::assemble_galmat(&mesh, fe::laplace_beltrami_elmat).to_nalgebra_dense()
+  assemble::assemble_galmat(&mesh, fe::LaplaceBeltramiElmat).to_nalgebra_dense()
 }
