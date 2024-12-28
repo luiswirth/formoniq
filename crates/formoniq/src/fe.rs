@@ -1,5 +1,6 @@
 pub mod whitney;
 
+use common::Dim;
 use manifold::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex};
 
 pub type DofIdx = KSimplexIdx;
@@ -33,8 +34,19 @@ where
 ///
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub fn laplace_beltrami_elmat(cell: &LocalComplex) -> na::DMatrix<f64> {
-  let ref_difbarys = whitney::ref_difbarys(cell.dim());
+  let ref_difbarys = ref_difbarys(cell.dim());
   cell.vol() * cell.metric().covector_norm_sqr(&ref_difbarys)
+}
+
+/// The constant exterior drivatives of the reference barycentric coordinate
+/// functions, given in the 1-form standard basis.
+pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
+  let mut ref_difbarys = na::DMatrix::zeros(n, n + 1);
+  for i in 0..n {
+    ref_difbarys[(i, 0)] = -1.0;
+    ref_difbarys[(i, i + 1)] = 1.0;
+  }
+  ref_difbarys
 }
 
 /// Exact Element Matrix Provider for scalar mass bilinear form.

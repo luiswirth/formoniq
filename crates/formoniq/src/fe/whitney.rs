@@ -12,53 +12,9 @@ use manifold::simplicial::{LocalComplex, REFCELLS};
 
 use super::scalar_mass_elmat;
 
-/// The constant exterior drivatives of the reference barycentric coordinate
-/// functions, given in the 1-form standard basis.
-pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
-  let mut ref_difbarys = na::DMatrix::zeros(n, n + 1);
-  for i in 0..n {
-    ref_difbarys[(i, 0)] = -1.0;
-    ref_difbarys[(i, i + 1)] = 1.0;
-  }
-  ref_difbarys
-}
-
-fn assemble_const_form(
-  simp: &IndexAlgebra<Local, Sorted, Unsigned>,
-  ignored_ivertex: usize,
-  n: Dim,
-) -> na::DVector<f64> {
-  let k = simp.len() - 1;
-  let kform_basis_size = binomial(n, k);
-
-  let mut form = na::DVector::zeros(kform_basis_size);
-
-  let mut form_indices = Vec::new();
-  for (ivertex, &vertex) in simp.iter().enumerate() {
-    if vertex != 0 && ivertex != ignored_ivertex {
-      form_indices.push(vertex - 1);
-    }
-  }
-
-  if simp[0] == 0 && ignored_ivertex != 0 {
-    for i in 0..n {
-      let mut form_indices = form_indices.clone();
-      form_indices.insert(0, i);
-      let Some(form_indices) = IndexAlgebra::new(form_indices).try_sort_signed() else {
-        continue;
-      };
-      let sort_sign = form_indices.sign();
-      let form_indices = form_indices.forget_sign().with_local_base(n);
-      form[form_indices.lex_rank()] += -1.0 * sort_sign.as_f64();
-    }
-  } else {
-    let form_indices = IndexAlgebra::new(form_indices.clone())
-      .assume_sorted()
-      .with_local_base(n);
-    form[form_indices.lex_rank()] += 1.0;
-  }
-
-  form
+/// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
+pub fn exterior_derivative(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
+  REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
 }
 
 /// Element Matrix for the weak Hodge star operator / the mass bilinear form on the reference element.
@@ -104,6 +60,67 @@ pub fn hodge_mass_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64
   elmat
 }
 
+fn assemble_const_form(
+  simp: &IndexAlgebra<Local, Sorted, Unsigned>,
+  ignored_ivertex: usize,
+  n: Dim,
+) -> na::DVector<f64> {
+  let k = simp.len() - 1;
+  let kform_basis_size = binomial(n, k);
+
+  let mut form = na::DVector::zeros(kform_basis_size);
+
+  let mut form_indices = Vec::new();
+  for (ivertex, &vertex) in simp.iter().enumerate() {
+    if vertex != 0 && ivertex != ignored_ivertex {
+      form_indices.push(vertex - 1);
+    }
+  }
+
+  if simp[0] == 0 && ignored_ivertex != 0 {
+    for i in 0..n {
+      let mut form_indices = form_indices.clone();
+      form_indices.insert(0, i);
+      let Some(form_indices) = IndexAlgebra::new(form_indices).try_sort_signed() else {
+        continue;
+      };
+      let sort_sign = form_indices.sign();
+      let form_indices = form_indices.forget_sign().with_local_base(n);
+      form[form_indices.lex_rank()] += -1.0 * sort_sign.as_f64();
+    }
+  } else {
+    let form_indices = IndexAlgebra::new(form_indices.clone())
+      .assume_sorted()
+      .with_local_base(n);
+    form[form_indices.lex_rank()] += 1.0;
+  }
+
+  form
+}
+
+/// Exact Element Matrix Provider for the $(dif u, dif v)$.
+///
+/// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
+pub fn dif_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+  exterior_derivative(cell.dim(), k).transpose()
+    * hodge_mass_elmat(cell, k + 1)
+    * exterior_derivative(cell.dim(), k)
+}
+
+/// Exact Element Matrix Provider for the $(u, dif tau)$.
+///
+/// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
+pub fn id_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+  exterior_derivative(cell.dim(), k - 1).transpose() * hodge_mass_elmat(cell, k)
+}
+
+/// Exact Element Matrix Provider for the $(dif sigma, v)$.
+///
+/// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
+pub fn dif_id_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
+  hodge_mass_elmat(cell, k) * exterior_derivative(cell.dim(), k - 1)
+}
+
 /// The constant exterior derivatives of the reference Whitney forms, given in
 /// the k-form standard basis.
 pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
@@ -145,29 +162,15 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   ref_difwhitneys
 }
 
-/// Exact Element Matrix Provider for the exterior derivative part of Hodge-Laplace operator.
-///
-/// $A = [inner(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^(k+1) (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_laplace_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let ref_difwhitneys = ref_difwhitneys(cell.dim(), k);
-  println!("n={},k={k}{ref_difwhitneys}", cell.dim());
-  cell.vol() * cell.metric().kform_norm_sqr(k + 1, &ref_difwhitneys)
-}
-
-/// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-pub fn kexterior_derivative_local(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
-  REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
-}
-
 #[cfg(test)]
 mod test {
-  use crate::fe::{laplace_beltrami_elmat, scalar_mass_elmat};
-
-  use super::{
-    hodge_laplace_dif_elmat, hodge_mass_elmat, kexterior_derivative_local, ref_difbarys,
-    ref_difwhitneys,
+  use crate::fe::{
+    laplace_beltrami_elmat, ref_difbarys, scalar_mass_elmat, whitney::dif_dif_elmat,
   };
+
+  use super::{hodge_mass_elmat, ref_difwhitneys};
   use common::linalg::assert_mat_eq;
+  use exterior::RiemannianMetricExt;
   use manifold::simplicial::ReferenceCell;
 
   #[test]
@@ -181,7 +184,6 @@ mod test {
   #[test]
   fn ref_difwhitneyn_is_zero() {
     for n in 0..=5 {
-      println!("n={n}");
       let whitneys = ref_difwhitneys(n, n);
       let zero = na::DMatrix::zeros(0, 1);
       assert_mat_eq(&whitneys, &zero)
@@ -189,11 +191,11 @@ mod test {
   }
 
   #[test]
-  fn hodge_laplace0_is_laplace_beltrami_refcell() {
-    for n in 0..=3 {
+  fn dif_dif0_is_laplace_beltrami() {
+    for n in 1..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
+      let hodge_laplace = dif_dif_elmat(&cell, 0);
       let laplace_beltrami = laplace_beltrami_elmat(&cell);
-      let hodge_laplace = hodge_laplace_dif_elmat(&cell, 0);
       assert_mat_eq(&hodge_laplace, &laplace_beltrami);
     }
   }
@@ -209,15 +211,17 @@ mod test {
   }
 
   #[test]
-  fn hodge_laplace_dif_with_hodge_mass() {
+  fn dif_dif_is_norm_of_difwhitneys() {
     for n in 0..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
       for k in 0..n {
-        println!("n={n},k={k}");
-        let var0 = kexterior_derivative_local(cell.dim(), k).transpose()
-          * hodge_mass_elmat(&cell, k + 1)
-          * kexterior_derivative_local(cell.dim(), k);
-        let var1 = hodge_laplace_dif_elmat(&cell, k);
+        let var0 = dif_dif_elmat(&cell, k);
+
+        let var1 = cell.vol()
+          * cell
+            .metric()
+            .kform_norm_sqr(k + 1, &ref_difwhitneys(cell.dim(), k));
+
         assert_mat_eq(&var0, &var1);
       }
     }

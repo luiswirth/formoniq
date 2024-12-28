@@ -33,3 +33,5 @@ pub fn solve_helmholtz_homogeneous(
 
   (eigenvals, eigenfuncs)
 }
+
+pub fn solve_hodge_laplace_evp() {}
