@@ -10,7 +10,7 @@ use index_algebra::{
 };
 use manifold::simplicial::{LocalComplex, REFCELLS};
 
-use super::scalar_mass_elmat;
+use super::{ElmatProvider, ScalarMassElmat};
 
 /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
 pub fn exterior_derivative(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
@@ -20,44 +20,51 @@ pub fn exterior_derivative(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
 /// Element Matrix for the weak Hodge star operator / the mass bilinear form on the reference element.
 ///
 /// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
-pub fn hodge_mass_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  let n = cell.dim();
-  let difk = k + 1;
-  let k_factorial = factorial(k) as f64;
-  let k_factorial_sqr = k_factorial.powi(2);
-
-  let kwhitney_basis_size = binomial(n + 1, k + 1);
-
-  let scalar_mass = scalar_mass_elmat(cell);
-
-  let mut elmat = na::DMatrix::zeros(kwhitney_basis_size, kwhitney_basis_size);
-  let simplicies: Vec<_> = IndexSubsets::canonical(n + 1, difk).collect();
-  let forms: Vec<Vec<_>> = simplicies
-    .iter()
-    .map(|simp| (0..difk).map(|i| assemble_const_form(simp, i, n)).collect())
-    .collect();
-
-  for (arank, asimp) in simplicies.iter().enumerate() {
-    for (brank, bsimp) in simplicies.iter().enumerate() {
-      let mut sum = 0.0;
-
-      for l in 0..difk {
-        for m in 0..difk {
-          let sign = Sign::from_parity(l + m);
-
-          let aform = &forms[arank][l];
-          let bform = &forms[brank][m];
-
-          let inner = cell.metric().kform_inner_product(k, aform, bform);
-          sum += sign.as_f64() * inner * scalar_mass[(asimp[l], bsimp[m])];
-        }
-      }
-
-      elmat[(arank, brank)] = k_factorial_sqr * sum;
-    }
+pub struct HodgeMassElmat(pub ExteriorRank);
+impl ElmatProvider for HodgeMassElmat {
+  fn form_rank(&self) -> ExteriorRank {
+    self.0
   }
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+    let n = cell.dim();
+    let k = self.0;
+    let difk = k + 1;
+    let k_factorial = factorial(k) as f64;
+    let k_factorial_sqr = k_factorial.powi(2);
 
-  elmat
+    let kwhitney_basis_size = binomial(n + 1, k + 1);
+
+    let scalar_mass = ScalarMassElmat.eval(cell);
+
+    let mut elmat = na::DMatrix::zeros(kwhitney_basis_size, kwhitney_basis_size);
+    let simplicies: Vec<_> = IndexSubsets::canonical(n + 1, difk).collect();
+    let forms: Vec<Vec<_>> = simplicies
+      .iter()
+      .map(|simp| (0..difk).map(|i| assemble_const_form(simp, i, n)).collect())
+      .collect();
+
+    for (arank, asimp) in simplicies.iter().enumerate() {
+      for (brank, bsimp) in simplicies.iter().enumerate() {
+        let mut sum = 0.0;
+
+        for l in 0..difk {
+          for m in 0..difk {
+            let sign = Sign::from_parity(l + m);
+
+            let aform = &forms[arank][l];
+            let bform = &forms[brank][m];
+
+            let inner = cell.metric().kform_inner_product(k, aform, bform);
+            sum += sign.as_f64() * inner * scalar_mass[(asimp[l], bsimp[m])];
+          }
+        }
+
+        elmat[(arank, brank)] = k_factorial_sqr * sum;
+      }
+    }
+
+    elmat
+  }
 }
 
 fn assemble_const_form(
@@ -101,24 +108,45 @@ fn assemble_const_form(
 /// Exact Element Matrix Provider for the $(dif u, dif v)$.
 ///
 /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
-pub fn dif_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  exterior_derivative(cell.dim(), k).transpose()
-    * hodge_mass_elmat(cell, k + 1)
-    * exterior_derivative(cell.dim(), k)
+pub struct DifDifElmat(pub ExteriorRank);
+impl ElmatProvider for DifDifElmat {
+  fn form_rank(&self) -> ExteriorRank {
+    self.0
+  }
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+    let k = self.0;
+    exterior_derivative(cell.dim(), k).transpose()
+      * HodgeMassElmat(k + 1).eval(cell)
+      * exterior_derivative(cell.dim(), k)
+  }
 }
 
 /// Exact Element Matrix Provider for the $(u, dif tau)$.
 ///
 /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
-pub fn id_dif_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  exterior_derivative(cell.dim(), k - 1).transpose() * hodge_mass_elmat(cell, k)
+pub struct IdDifElmat(pub ExteriorRank);
+impl ElmatProvider for IdDifElmat {
+  fn form_rank(&self) -> ExteriorRank {
+    self.0
+  }
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+    let k = self.0;
+    exterior_derivative(cell.dim(), k - 1).transpose() * HodgeMassElmat(k).eval(cell)
+  }
 }
 
 /// Exact Element Matrix Provider for the $(dif sigma, v)$.
 ///
 /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
-pub fn dif_id_elmat(cell: &LocalComplex, k: ExteriorRank) -> na::DMatrix<f64> {
-  hodge_mass_elmat(cell, k) * exterior_derivative(cell.dim(), k - 1)
+pub struct DifIdElmat(pub ExteriorRank);
+impl ElmatProvider for DifIdElmat {
+  fn form_rank(&self) -> ExteriorRank {
+    self.0
+  }
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+    let k = self.0;
+    HodgeMassElmat(k).eval(cell) * exterior_derivative(cell.dim(), k - 1)
+  }
 }
 
 /// The constant exterior derivatives of the reference Whitney forms, given in
@@ -164,11 +192,9 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
 
 #[cfg(test)]
 mod test {
-  use crate::fe::{
-    laplace_beltrami_elmat, ref_difbarys, scalar_mass_elmat, whitney::dif_dif_elmat,
-  };
+  use crate::fe::{ref_difbarys, ElmatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
-  use super::{hodge_mass_elmat, ref_difwhitneys};
+  use super::{ref_difwhitneys, DifDifElmat, HodgeMassElmat};
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
   use manifold::simplicial::ReferenceCell;
@@ -194,8 +220,8 @@ mod test {
   fn dif_dif0_is_laplace_beltrami() {
     for n in 1..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
-      let hodge_laplace = dif_dif_elmat(&cell, 0);
-      let laplace_beltrami = laplace_beltrami_elmat(&cell);
+      let hodge_laplace = DifDifElmat(0).eval(&cell);
+      let laplace_beltrami = LaplaceBeltramiElmat.eval(&cell);
       assert_mat_eq(&hodge_laplace, &laplace_beltrami);
     }
   }
@@ -204,8 +230,8 @@ mod test {
   fn hodge_mass0_is_scalar_mass() {
     for n in 0..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
-      let hodge_mass = hodge_mass_elmat(&cell, 0);
-      let scalar_mass = scalar_mass_elmat(&cell);
+      let hodge_mass = HodgeMassElmat(0).eval(&cell);
+      let scalar_mass = ScalarMassElmat.eval(&cell);
       assert_mat_eq(&hodge_mass, &scalar_mass);
     }
   }
@@ -215,7 +241,7 @@ mod test {
     for n in 0..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
       for k in 0..n {
-        let var0 = dif_dif_elmat(&cell, k);
+        let var0 = DifDifElmat(k).eval(&cell);
 
         let var1 = cell.vol()
           * cell

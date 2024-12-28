@@ -31,9 +31,9 @@ pub fn solve_wave<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, fe::laplace_beltrami_elmat);
-  let mut mass = assemble::assemble_galmat(mesh, fe::scalar_mass_elmat);
-  let mut force = assemble::assemble_galvec(mesh, fe::LoadElvec::new(force_data));
+  let mut laplace = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
+  let mut mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat);
+  let mut force = assemble::assemble_galvec(mesh, fe::SourceElvec::new(force_data));
 
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut force);
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut force);

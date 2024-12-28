@@ -1,4 +1,4 @@
-//! Module for the (Heat) Diffussion Equation, the prototypical parabolic PDE.
+//! Module for the Heat Equation, the prototypical parabolic PDE.
 
 use common::util::FaerCholesky;
 use manifold::RiemannianComplex;
@@ -9,7 +9,7 @@ use crate::{
 };
 
 /// times = [t_0,t_1,...,T]
-pub fn solve_diffusion<F>(
+pub fn solve_heat<F>(
   mesh: &RiemannianComplex,
   nsteps: usize,
   dt: f64,
@@ -21,9 +21,9 @@ pub fn solve_diffusion<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, fe::laplace_beltrami_elmat);
-  let mut mass = assemble::assemble_galmat(mesh, fe::scalar_mass_elmat);
-  let mut source = assemble::assemble_galvec(mesh, fe::LoadElvec::new(source_data));
+  let mut laplace = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
+  let mut mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat);
+  let mut source = assemble::assemble_galvec(mesh, fe::SourceElvec::new(source_data));
 
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut source);
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut source);
@@ -39,7 +39,7 @@ where
 
   let last_step = nsteps - 1;
   for istep in 0..nsteps {
-    println!("Solving Diffusion Equation at step={istep}/{last_step}...");
+    println!("Solving Heat Equation at step={istep}/{last_step}...");
 
     let prev = solution.last().unwrap();
     let rhs = &mass * prev + dt * &source;

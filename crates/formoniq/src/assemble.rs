@@ -3,17 +3,16 @@ use crate::fe::{DofIdx, ElmatProvider, ElvecProvider};
 use common::{sparse::SparseMatrix, util};
 use manifold::RiemannianComplex;
 
-// TODO: generalize to k-forms
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(mesh: &RiemannianComplex, elmat: impl ElmatProvider) -> SparseMatrix {
   let mut galmat = SparseMatrix::zeros(mesh.nvertices(), mesh.nvertices());
   for cell in mesh.cells() {
     let cell = cell.as_cell_complex();
+    let faces = &cell.faces()[elmat.form_rank()];
     let elmat = elmat.eval(&cell);
-    let vertices = cell.vertices();
 
-    for (ilocal, &iglobal) in vertices.iter().enumerate() {
-      for (jlocal, &jglobal) in vertices.iter().enumerate() {
+    for (ilocal, &iglobal) in faces.iter().enumerate() {
+      for (jlocal, &jglobal) in faces.iter().enumerate() {
         galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
       }
     }
@@ -21,15 +20,14 @@ pub fn assemble_galmat(mesh: &RiemannianComplex, elmat: impl ElmatProvider) -> S
   galmat
 }
 
-// TODO: generalize to k-forms
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(mesh: &RiemannianComplex, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let mut galvec = na::DVector::zeros(mesh.nvertices());
   for cell in mesh.cells() {
     let cell = cell.as_cell_complex();
+    let faces = &cell.faces()[elvec.form_rank()];
     let elvec = elvec.eval(&cell);
-    let vertices = cell.vertices();
-    for (ilocal, &iglobal) in vertices.iter().enumerate() {
+    for (ilocal, &iglobal) in faces.iter().enumerate() {
       galvec[iglobal] += elvec[ilocal];
     }
   }
