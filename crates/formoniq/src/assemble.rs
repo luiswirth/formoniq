@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use crate::fe::{DofIdx, ElmatProvider, ElvecProvider};
 
 use common::{sparse::SparseMatrix, util};
@@ -35,36 +37,26 @@ pub fn assemble_galvec(mesh: &RiemannianComplex, elvec: impl ElvecProvider) -> n
 }
 
 pub fn drop_boundary_dofs_galmat(mesh: &RiemannianComplex, galmat: &mut SparseMatrix) {
-  drop_dofs_galmat(&mesh.boundary_vertices(), galmat)
+  drop_dofs_galmat(&mesh.boundary_vertices().into_iter().collect(), galmat)
 }
 
-pub fn drop_dofs_galmat(dofs: &[DofIdx], galmat: &mut SparseMatrix) {
+pub fn drop_dofs_galmat(dofs: &HashSet<DofIdx>, galmat: &mut SparseMatrix) {
   assert!(galmat.nrows() == galmat.ncols());
   let ndofs_old = galmat.ncols();
   let ndofs_new = ndofs_old - dofs.len();
 
-  let (_, _, mut triplets) = std::mem::take(galmat).into_parts();
-  for (ndrops, mut idof) in dofs.iter().copied().enumerate() {
-    idof -= ndrops;
-    let mut itriplet = 0;
-    while itriplet < triplets.len() {
-      let mut triplet = triplets[itriplet];
-      let r = &mut triplet.0;
-      let c = &mut triplet.1;
+  let (_, _, triplets) = std::mem::take(galmat).into_parts();
 
-      if *r == idof || *c == idof {
-        triplets.remove(itriplet);
-      } else {
-        if *r > idof {
-          *r -= 1;
-        }
-        if *c > idof {
-          *c -= 1;
-        }
+  let mut triplets: Vec<_> = triplets
+    .into_iter()
+    .filter(|(r, c, _)| !dofs.contains(r) && !dofs.contains(c))
+    .collect();
 
-        itriplet += 1;
-      }
-    }
+  for (r, c, _) in &mut triplets {
+    let diffr = dofs.iter().filter(|&idof| idof < r).count();
+    let diffc = dofs.iter().filter(|&idof| idof < c).count();
+    *r -= diffr;
+    *c -= diffc;
   }
 
   *galmat = SparseMatrix::new(ndofs_new, ndofs_new, triplets);
@@ -74,17 +66,17 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut na::DVector<f64>) {
   *galvec = std::mem::take(galvec).remove_rows_at(dofs);
 }
 
-pub fn reintroduce_zeroed_boundary_dofs_galsols(
-  mesh: &RiemannianComplex,
-  galsols: &mut na::DMatrix<f64>,
-) {
-  reintroduce_zeroed_dofs_galsols(&mesh.boundary_vertices(), galsols)
+pub fn reintroduce_boundary_dofs_galsols(mesh: &RiemannianComplex, galsols: &mut na::DMatrix<f64>) {
+  reintroduce_dropped_dofs_galsols(mesh.boundary_vertices(), galsols)
 }
 
-pub fn reintroduce_zeroed_dofs_galsols(dofs: &[DofIdx], galsols: &mut na::DMatrix<f64>) {
+pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na::DMatrix<f64>) {
+  dofs.sort_unstable();
+  dofs.dedup();
+
   let mut galsol_owned = std::mem::take(galsols);
-  for (ninserts, &dof) in dofs.iter().enumerate() {
-    galsol_owned = galsol_owned.insert_row(ninserts + dof, 0.0);
+  for dof in dofs {
+    galsol_owned = galsol_owned.insert_row(dof, 0.0);
   }
   *galsols = galsol_owned;
 }
@@ -142,7 +134,7 @@ pub fn fix_dofs_coeff(
     na::DVector::from_iterator(ndofs, dof_coeffs_opt.iter().map(|v| v.unwrap_or(0.0)));
 
   // Modify galvec.
-  *galvec -= galmat.to_nalgebra_csc() * dof_coeffs_zeroed;
+  *galvec -= galmat.to_nalgebra_csr() * dof_coeffs_zeroed;
 
   // Set galvec to prescribed coefficents.
   dof_coeffs.iter().for_each(|&(i, v)| galvec[i] = v);

@@ -15,7 +15,7 @@ impl WaveState {
   }
 
   /// The energy should be conserved from state to state.
-  pub fn energy(&self, laplace: &nas::CscMatrix<f64>, mass: &nas::CscMatrix<f64>) -> f64 {
+  pub fn energy(&self, laplace: &nas::CsrMatrix<f64>, mass: &nas::CsrMatrix<f64>) -> f64 {
     0.5 * (quadratic_form_sparse(laplace, &self.pos) + quadratic_form_sparse(mass, &self.vel))
   }
 }
@@ -38,8 +38,8 @@ where
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut force);
   assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut force);
 
-  let laplace = laplace.to_nalgebra_csc();
-  let mass = mass.to_nalgebra_csc();
+  let laplace = laplace.to_nalgebra_csr();
+  let mass = mass.to_nalgebra_csr();
 
   let mass_cholesky = FaerCholesky::new(mass.clone());
 
@@ -74,8 +74,8 @@ pub fn solve_wave_step(
   state: &WaveState,
   dt: f64,
   forcing: &na::DVector<f64>,
-  laplace: &nas::CscMatrix<f64>,
-  mass: &nas::CscMatrix<f64>,
+  laplace: &nas::CsrMatrix<f64>,
+  mass: &nas::CsrMatrix<f64>,
   mass_cholesky: &FaerCholesky,
 ) -> WaveState {
   let WaveState { pos, vel } = state;
