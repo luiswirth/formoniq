@@ -164,8 +164,17 @@ pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix
   let ncols = reader.read_i32::<BigEndian>()? as usize;
 
   let mut data = Vec::with_capacity(nrows * ncols);
-  for _ in 0..(nrows * ncols) {
-    data.push(reader.read_f64::<BigEndian>()?);
+  for _ in 0..ncols {
+    const VEC_FILE_CLASSID: i32 = 1211214;
+    let magic = reader.read_i32::<BigEndian>()?;
+    assert_eq!(magic, VEC_FILE_CLASSID);
+
+    let this_nrows = reader.read_i32::<BigEndian>()? as usize;
+    assert_eq!(this_nrows, nrows);
+
+    for _ in 0..nrows {
+      data.push(reader.read_f64::<BigEndian>()?);
+    }
   }
   Ok(na::DMatrix::from_column_slice(nrows, ncols, &data))
 }
