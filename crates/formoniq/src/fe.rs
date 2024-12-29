@@ -98,12 +98,17 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
   ref_difbarys
 }
 
-pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &RiemannianComplex) -> f64 {
+pub fn integrate_pointwise<'a>(
+  a: impl Into<na::DVectorView<'a, f64>>,
+  mesh: &RiemannianComplex,
+) -> f64 {
+  let a = a.into();
+
   let mut norm: f64 = 0.0;
   for cell in mesh.cells() {
     let mut sum = 0.0;
     for &ivertex in cell.oriented_vertplex().iter() {
-      sum += fn_coeffs[ivertex].powi(2);
+      sum += a[ivertex];
     }
     let nvertices = cell.nvertices();
     let cell_geo = cell.as_cell_complex();
@@ -111,4 +116,17 @@ pub fn l2_norm(fn_coeffs: na::DVector<f64>, mesh: &RiemannianComplex) -> f64 {
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
+}
+pub fn l2_inner<'a>(
+  a: impl Into<na::DVectorView<'a, f64>>,
+  b: impl Into<na::DVectorView<'a, f64>>,
+  mesh: &RiemannianComplex,
+) -> f64 {
+  let a = a.into();
+  let b = b.into();
+  integrate_pointwise(&a.component_mul(&b), mesh)
+}
+pub fn l2_norm<'a>(a: impl Into<na::DVectorView<'a, f64>>, mesh: &RiemannianComplex) -> f64 {
+  let a = a.into();
+  l2_inner(a, a, mesh)
 }
