@@ -1,3 +1,10 @@
+use std::{
+  fs::File,
+  io::{BufReader, BufWriter, Write},
+};
+
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+
 #[derive(Default, Debug, Clone)]
 pub struct SparseMatrix {
   nrows: usize,
@@ -61,7 +68,7 @@ impl SparseMatrix {
     nas::CooMatrix::try_from_triplets(self.nrows, self.ncols, rows, cols, vals).unwrap()
   }
 
-  pub fn to_nalgebra_csc(&self) -> nas::CscMatrix<f64> {
+  pub fn to_nalgebra_csr(&self) -> nas::CsrMatrix<f64> {
     (&self.to_nalgebra_coo()).into()
   }
 
@@ -99,4 +106,90 @@ impl SparseMatrix {
       .collect();
     Self::new(self.nrows, self.ncols, triplets)
   }
+}
+
+pub fn petsc_write_binary(matrix: &nas::CsrMatrix<f64>, filename: &str) -> std::io::Result<()> {
+  let file = File::create(filename)?;
+  let mut writer = BufWriter::new(file);
+
+  const MAT_FILE_CLASSID: i32 = 1211216;
+  writer.write_i32::<BigEndian>(MAT_FILE_CLASSID)?;
+
+  let rows = matrix.nrows() as i32;
+  let cols = matrix.ncols() as i32;
+  let nnz = matrix.nnz() as i32;
+  writer.write_i32::<BigEndian>(rows)?;
+  writer.write_i32::<BigEndian>(cols)?;
+  writer.write_i32::<BigEndian>(nnz)?;
+
+  let row_offsets = matrix.row_offsets();
+  for i in 0..rows as usize {
+    let row_nnz = (row_offsets[i + 1] - row_offsets[i]) as i32;
+    writer.write_i32::<BigEndian>(row_nnz)?;
+  }
+
+  let col_indices = matrix.col_indices();
+  for &col in col_indices {
+    writer.write_i32::<BigEndian>(col as i32)?;
+  }
+
+  let values = matrix.values();
+  for &value in values {
+    writer.write_f64::<BigEndian>(value)?;
+  }
+
+  writer.flush()?;
+  Ok(())
+}
+
+pub fn petsc_read_eigenvals(filename: &str) -> std::io::Result<na::DVector<f64>> {
+  let file = File::open(filename)?;
+  let mut reader = BufReader::new(file);
+
+  let neigenvals = reader.read_i32::<BigEndian>()? as usize;
+  let mut eigenvals = na::DVector::zeros(neigenvals);
+
+  for i in 0..neigenvals {
+    eigenvals[i] = reader.read_f64::<BigEndian>()?;
+  }
+
+  Ok(eigenvals)
+}
+
+pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix<f64>> {
+  let file = File::open(filename)?;
+  let mut reader = BufReader::new(file);
+
+  let nrows = reader.read_i32::<BigEndian>()? as usize;
+  let ncols = reader.read_i32::<BigEndian>()? as usize;
+
+  let mut data = Vec::with_capacity(nrows * ncols);
+  for _ in 0..(nrows * ncols) {
+    data.push(reader.read_f64::<BigEndian>()?);
+  }
+  Ok(na::DMatrix::from_column_slice(nrows, ncols, &data))
+}
+
+pub fn petsc_eigensolve(
+  lhs: &nas::CsrMatrix<f64>,
+  rhs: &nas::CsrMatrix<f64>,
+) -> (na::DVector<f64>, na::DMatrix<f64>) {
+  let solver_path = "/home/luis/thesis/solvers/petsc-solver";
+  petsc_write_binary(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
+  petsc_write_binary(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
+
+  let binary = "./solve";
+  let args = ["-eps_target", "0."];
+
+  let status = std::process::Command::new(binary)
+    .current_dir(solver_path)
+    .args(args)
+    .status()
+    .unwrap();
+  assert!(status.success());
+
+  let eigenvals = petsc_read_eigenvals(&format!("{solver_path}/out/eigenvals.bin")).unwrap();
+  let eigenvecs = petsc_read_eigenvecs(&format!("{solver_path}/out/eigenvecs.bin")).unwrap();
+
+  (eigenvals, eigenvecs)
 }

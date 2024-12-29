@@ -10,3 +10,4 @@ faer = "0.19.4"
 faer-ext = "0.3.0"
 
 num-traits = "0.2.19"
+byteorder = "1.5.0"

@@ -22,10 +22,10 @@ impl DMatrixExt for na::DMatrix<f64> {
   }
 }
 
-pub fn bilinear_form(mat: &nas::CscMatrix<f64>, u: &na::DVector<f64>, v: &na::DVector<f64>) -> f64 {
+pub fn bilinear_form(mat: &nas::CsrMatrix<f64>, u: &na::DVector<f64>, v: &na::DVector<f64>) -> f64 {
   ((mat.transpose() * u).transpose() * v).x
 }
-pub fn quadratic_form_sparse(mat: &nas::CscMatrix<f64>, u: &na::DVector<f64>) -> f64 {
+pub fn quadratic_form_sparse(mat: &nas::CsrMatrix<f64>, u: &na::DVector<f64>) -> f64 {
   bilinear_form(mat, u, u)
 }
 

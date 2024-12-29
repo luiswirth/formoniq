@@ -72,16 +72,16 @@ pub fn navec2faervec(na: &na::DVector<f64>) -> faer::Mat<f64> {
   faer
 }
 
-type SparseMatrixFaer = faer::sparse::SparseColMat<usize, f64>;
+type SparseMatrixFaer = faer::sparse::SparseRowMat<usize, f64>;
 
-pub fn nalgebra2faer(m: nas::CscMatrix<f64>) -> SparseMatrixFaer {
+pub fn nalgebra2faer(m: nas::CsrMatrix<f64>) -> SparseMatrixFaer {
   let nrows = m.nrows();
   let ncols = m.ncols();
   let (col_ptrs, row_indices, values) = m.disassemble();
 
   let symbolic =
-    faer::sparse::SymbolicSparseColMat::new_checked(nrows, ncols, col_ptrs, None, row_indices);
-  faer::sparse::SparseColMat::new(symbolic, values)
+    faer::sparse::SymbolicSparseRowMat::new_checked(nrows, ncols, col_ptrs, None, row_indices);
+  faer::sparse::SparseRowMat::new(symbolic, values)
 }
 
 pub fn faer2nalgebra(m: SparseMatrixFaer) -> nas::CscMatrix<f64> {
@@ -94,7 +94,7 @@ pub struct FaerLu {
   raw: faer::sparse::linalg::solvers::Lu<usize, f64>,
 }
 impl FaerLu {
-  pub fn new(a: nas::CscMatrix<f64>) -> Self {
+  pub fn new(a: nas::CsrMatrix<f64>) -> Self {
     let raw = nalgebra2faer(a).sp_lu().unwrap();
     Self { raw }
   }
@@ -111,7 +111,7 @@ pub struct FaerCholesky {
   raw: faer::sparse::linalg::solvers::Cholesky<usize, f64>,
 }
 impl FaerCholesky {
-  pub fn new(a: nas::CscMatrix<f64>) -> Self {
+  pub fn new(a: nas::CsrMatrix<f64>) -> Self {
     let raw = nalgebra2faer(a).sp_cholesky(faer::Side::Upper).unwrap();
     Self { raw }
   }

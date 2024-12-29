@@ -12,7 +12,6 @@ common = { path = "../common" }
 
 nalgebra = "0.33.2"
 nalgebra-sparse = "0.10.0"
-lanczos = "0.2.0"
 
 tracing = "0.1.40"
 
