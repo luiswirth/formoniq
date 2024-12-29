@@ -39,6 +39,9 @@ impl TriangleSurface3D {
   pub fn vertex_coords(&self) -> &na::Matrix3xX<f64> {
     &self.coords
   }
+  pub fn vertex_coords_mut(&mut self) -> &mut na::Matrix3xX<f64> {
+    &mut self.coords
+  }
 }
 
 impl TriangleSurface3D {
