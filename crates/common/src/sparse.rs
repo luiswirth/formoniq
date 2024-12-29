@@ -188,7 +188,7 @@ pub fn petsc_eigensolve(
   petsc_write_binary(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
 
   let binary = "./solve";
-  let args = ["-eps_target", "0."];
+  let args = ["-eps_target", "0.", "-eps_nev", "10"];
 
   let status = std::process::Command::new(binary)
     .current_dir(solver_path)
