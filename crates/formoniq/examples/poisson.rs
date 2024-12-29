@@ -76,7 +76,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     let galsol = laplace_beltrami::solve_laplace_beltrami_source(&mesh, load_data, boundary_data);
 
     // Compute L2 error and convergence rate.
-    let error = l2_norm(solution_exact - galsol, &mesh);
+    let error = l2_norm(&(solution_exact - galsol), &mesh);
     let conv_rate = if let Some(&prev_error) = errors.last() {
       let quot: f64 = error / prev_error;
       -quot.log2()
