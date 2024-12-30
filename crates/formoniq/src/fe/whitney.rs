@@ -22,7 +22,10 @@ pub fn exterior_derivative(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
 /// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub struct HodgeMassElmat(pub ExteriorRank);
 impl ElmatProvider for HodgeMassElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
+    self.0
+  }
+  fn col_rank(&self) -> ExteriorRank {
     self.0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
@@ -110,7 +113,10 @@ fn assemble_const_form(
 /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
 pub struct DifDifElmat(pub ExteriorRank);
 impl ElmatProvider for DifDifElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
+    self.0
+  }
+  fn col_rank(&self) -> ExteriorRank {
     self.0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
@@ -126,7 +132,10 @@ impl ElmatProvider for DifDifElmat {
 /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
 pub struct IdDifElmat(pub ExteriorRank);
 impl ElmatProvider for IdDifElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
+    self.0 - 1
+  }
+  fn col_rank(&self) -> ExteriorRank {
     self.0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
@@ -140,8 +149,11 @@ impl ElmatProvider for IdDifElmat {
 /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
 pub struct DifIdElmat(pub ExteriorRank);
 impl ElmatProvider for DifIdElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
     self.0
+  }
+  fn col_rank(&self) -> ExteriorRank {
+    self.0 - 1
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
     let k = self.0;

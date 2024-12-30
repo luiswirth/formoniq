@@ -7,12 +7,13 @@ use manifold::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex
 pub type DofIdx = KSimplexIdx;
 
 pub trait ElmatProvider {
-  fn form_rank(&self) -> ExteriorRank;
+  fn row_rank(&self) -> ExteriorRank;
+  fn col_rank(&self) -> ExteriorRank;
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64>;
 }
 
 pub trait ElvecProvider {
-  fn form_rank(&self) -> ExteriorRank;
+  fn rank(&self) -> ExteriorRank;
   fn eval(&self, cell: &LocalComplex) -> na::DVector<f64>;
 }
 
@@ -21,7 +22,10 @@ pub trait ElvecProvider {
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub struct LaplaceBeltramiElmat;
 impl ElmatProvider for LaplaceBeltramiElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn col_rank(&self) -> ExteriorRank {
     0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
@@ -33,7 +37,10 @@ impl ElmatProvider for LaplaceBeltramiElmat {
 /// Exact Element Matrix Provider for scalar mass bilinear form.
 pub struct ScalarMassElmat;
 impl ElmatProvider for ScalarMassElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn col_rank(&self) -> ExteriorRank {
     0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
@@ -50,7 +57,10 @@ impl ElmatProvider for ScalarMassElmat {
 /// obtained through trapezoidal quadrature rule.
 pub struct ScalarLumpedMassElmat;
 impl ElmatProvider for ScalarLumpedMassElmat {
-  fn form_rank(&self) -> ExteriorRank {
+  fn row_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn col_rank(&self) -> ExteriorRank {
     0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
@@ -73,7 +83,7 @@ impl SourceElvec {
   }
 }
 impl ElvecProvider for SourceElvec {
-  fn form_rank(&self) -> ExteriorRank {
+  fn rank(&self) -> ExteriorRank {
     0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DVector<f64> {
