@@ -75,7 +75,7 @@ impl LocalComplex {
   pub fn orientation(&self) -> Sign {
     self.orientation
   }
-  pub fn faces(&self) -> &[Vec<KSimplexIdx>] {
+  pub fn skeletons(&self) -> &[Vec<KSimplexIdx>] {
     &self.subs
   }
 

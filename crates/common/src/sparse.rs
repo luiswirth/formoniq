@@ -39,6 +39,7 @@ impl SparseMatrix {
   }
 
   pub fn push(&mut self, r: usize, c: usize, v: f64) {
+    assert!(r <= self.nrows() && c <= self.ncols());
     if v != 0.0 {
       self.triplets.push((r, c, v));
     }
@@ -179,7 +180,7 @@ pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix
   Ok(na::DMatrix::from_column_slice(nrows, ncols, &data))
 }
 
-pub fn petsc_eigensolve(
+pub fn petsc_ghiep(
   lhs: &nas::CsrMatrix<f64>,
   rhs: &nas::CsrMatrix<f64>,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
@@ -187,7 +188,7 @@ pub fn petsc_eigensolve(
   petsc_write_binary(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
   petsc_write_binary(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
 
-  let binary = "./solve";
+  let binary = "./ghiep";
   let args = ["-eps_target", "0.", "-eps_nev", "10"];
 
   let status = std::process::Command::new(binary)

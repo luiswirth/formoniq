@@ -1,6 +1,6 @@
 //! Module for the Poisson Equation, the prototypical ellipitic PDE.
 
-use common::{sparse::petsc_eigensolve, util::FaerCholesky};
+use common::{sparse::petsc_ghiep, util::FaerCholesky};
 use manifold::RiemannianComplex;
 
 use crate::{assemble, fe, fe::DofIdx};
@@ -33,7 +33,7 @@ pub fn solve_laplace_beltrami_evp(
   let laplace_galmat = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
   let mass_galmat = assemble::assemble_galmat(mesh, fe::ScalarLumpedMassElmat);
 
-  petsc_eigensolve(
+  petsc_ghiep(
     &laplace_galmat.to_nalgebra_csr(),
     &mass_galmat.to_nalgebra_csr(),
   )
