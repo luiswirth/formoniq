@@ -9,7 +9,7 @@ fn main() {
   let coord_mesh = triangle_mesh.clone().into_coord_manifold();
   let (mesh, _) = coord_mesh.into_riemannian_complex();
 
-  let spectrum = laplace_beltrami::solve_laplace_beltrami_evp(&mesh);
+  let spectrum = laplace_beltrami::solve_laplace_beltrami_evp(&mesh, 10);
 
   for (i, (&eigenval, eigenfunc)) in spectrum.0.iter().zip(spectrum.1.column_iter()).enumerate() {
     println!("eigenval={eigenval:.2}");

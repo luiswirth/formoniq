@@ -17,7 +17,7 @@ pub fn exterior_derivative(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
 }
 
-/// Element Matrix for the weak Hodge star operator / the mass bilinear form on the reference element.
+/// Element Matrix for the weak Hodge star operator / the mass bilinear form.
 ///
 /// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub struct HodgeMassElmat(pub ExteriorRank);
@@ -43,7 +43,11 @@ impl ElmatProvider for HodgeMassElmat {
     let simplicies: Vec<_> = IndexSubsets::canonical(n + 1, difk).collect();
     let forms: Vec<Vec<_>> = simplicies
       .iter()
-      .map(|simp| (0..difk).map(|i| assemble_const_form(simp, i, n)).collect())
+      .map(|simp| {
+        (0..difk)
+          .map(|i| construct_const_form(simp, i, n))
+          .collect()
+      })
       .collect();
 
     for (arank, asimp) in simplicies.iter().enumerate() {
@@ -70,7 +74,7 @@ impl ElmatProvider for HodgeMassElmat {
   }
 }
 
-fn assemble_const_form(
+fn construct_const_form(
   simp: &IndexAlgebra<Local, Sorted, Unsigned>,
   ignored_ivertex: usize,
   n: Dim,
@@ -108,7 +112,7 @@ fn assemble_const_form(
   form
 }
 
-/// Exact Element Matrix Provider for the $(dif u, dif v)$.
+/// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
 ///
 /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
 pub struct DifDifElmat(pub ExteriorRank);
@@ -127,28 +131,11 @@ impl ElmatProvider for DifDifElmat {
   }
 }
 
-/// Exact Element Matrix Provider for the $(u, dif tau)$.
-///
-/// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
-pub struct IdDifElmat(pub ExteriorRank);
-impl ElmatProvider for IdDifElmat {
-  fn row_rank(&self) -> ExteriorRank {
-    self.0 - 1
-  }
-  fn col_rank(&self) -> ExteriorRank {
-    self.0
-  }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
-    let k = self.0;
-    exterior_derivative(cell.dim(), k - 1).transpose() * HodgeMassElmat(k).eval(cell)
-  }
-}
-
-/// Exact Element Matrix Provider for the $(dif sigma, v)$.
+/// Element Matrix Provider for the weak mixed exterior derivative $(dif sigma, v)$.
 ///
 /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
-pub struct DifIdElmat(pub ExteriorRank);
-impl ElmatProvider for DifIdElmat {
+pub struct DifElmat(pub ExteriorRank);
+impl ElmatProvider for DifElmat {
   fn row_rank(&self) -> ExteriorRank {
     self.0
   }
@@ -158,6 +145,24 @@ impl ElmatProvider for DifIdElmat {
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
     let k = self.0;
     HodgeMassElmat(k).eval(cell) * exterior_derivative(cell.dim(), k - 1)
+  }
+}
+
+/// Element Matrix Provider for the weak mixed codifferential $(u, dif tau)$.
+///
+/// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
+pub struct CodifElmat(pub ExteriorRank);
+impl ElmatProvider for CodifElmat {
+  fn row_rank(&self) -> ExteriorRank {
+    self.0 - 1
+  }
+  fn col_rank(&self) -> ExteriorRank {
+    self.0
+  }
+  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+    // TODO: think about transpose != adjoint
+    let k = self.0;
+    exterior_derivative(cell.dim(), k - 1).transpose() * HodgeMassElmat(k).eval(cell)
   }
 }
 
@@ -206,7 +211,7 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
 mod test {
   use crate::fe::{ref_difbarys, ElmatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
-  use super::{ref_difwhitneys, DifDifElmat, HodgeMassElmat};
+  use super::{ref_difwhitneys, CodifElmat, DifDifElmat, DifElmat, HodgeMassElmat};
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
   use manifold::simplicial::ReferenceCell;
@@ -246,6 +251,42 @@ mod test {
       let scalar_mass = ScalarMassElmat.eval(&cell);
       assert_mat_eq(&hodge_mass, &scalar_mass);
     }
+  }
+
+  #[test]
+  fn hodge_mass_n2_k1() {
+    let cell = ReferenceCell::new(2).to_cell_complex();
+    let computed = HodgeMassElmat(1).eval(&cell);
+    let expected = na::dmatrix![
+      1./3.,1./6.,0.   ;
+      1./6.,1./3.,0.   ;
+      0.   ,0.   ,1./6.;
+    ];
+    assert_mat_eq(&computed, &expected);
+  }
+
+  #[test]
+  fn dif_n2_k1() {
+    let cell = ReferenceCell::new(2).to_cell_complex();
+    let computed = DifElmat(1).eval(&cell);
+    let expected = na::dmatrix![
+      -1./2., 1./3.,1./6.;
+      -1./2., 1./6.,1./3.;
+       0.   ,-1./6.,1./6.;
+    ];
+    assert_mat_eq(&computed, &expected);
+  }
+
+  #[test]
+  fn codif_n2_k1() {
+    let cell = ReferenceCell::new(2).to_cell_complex();
+    let computed = CodifElmat(1).eval(&cell);
+    let expected = na::dmatrix![
+      -1./2., -1./2., 0.   ;
+       1./3.,  1./6.,-1./6.;
+       1./6.,  1./3., 1./6.;
+    ];
+    assert_mat_eq(&computed, &expected);
   }
 
   #[test]

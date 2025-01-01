@@ -183,13 +183,22 @@ pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix
 pub fn petsc_ghiep(
   lhs: &nas::CsrMatrix<f64>,
   rhs: &nas::CsrMatrix<f64>,
+  neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   let solver_path = "/home/luis/thesis/solvers/petsc-solver";
   petsc_write_binary(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
   petsc_write_binary(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
 
   let binary = "./ghiep";
-  let args = ["-eps_target", "0.", "-eps_nev", "10"];
+  #[rustfmt::skip]
+  let args = [
+    "-st_pc_factor_mat_solver_type", "mumps",
+    "-st_type", "sinvert",
+    "-st_shift", "0.1",
+    "-eps_target", "0.",
+    //"-eps_gen_non_hermitian",
+    "-eps_nev", &neigen_values.to_string(),
+  ];
 
   let status = std::process::Command::new(binary)
     .current_dir(solver_path)
