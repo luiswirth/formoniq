@@ -1,52 +1,109 @@
 use crate::{assemble, fe};
 
-use common::sparse::{petsc_ghiep, SparseMatrix};
+use common::{
+  sparse::{petsc_ghiep, SparseMatrix},
+  util::FaerLu,
+};
 use exterior::ExteriorRank;
 use manifold::RiemannianComplex;
+
+pub fn solve_hodge_laplace_source(
+  mesh: &RiemannianComplex,
+  k: ExteriorRank,
+  source_data: na::DVector<f64>,
+) -> na::DVector<f64> {
+  // TODO: handle harmonics (computed from EVP)
+  //let harmonics = nas::CsrMatrix::zeros(0, 0);
+
+  // TODO: handle k=0
+  let mass_sigma = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k - 1));
+  let dif_sigma = assemble::assemble_galmat(mesh, fe::whitney::DifElmat(k));
+  let codif_u = assemble::assemble_galmat(mesh, fe::whitney::CodifElmat(k));
+  let difdif_u = assemble::assemble_galmat(mesh, fe::whitney::DifDifElmat(k));
+  let mass_u = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k));
+
+  let mut galmat = SparseMatrix::zeros(
+    mass_sigma.nrows() + dif_sigma.nrows(),
+    mass_sigma.ncols() + codif_u.ncols(),
+  );
+  for &(r, c, v) in mass_sigma.triplets() {
+    galmat.push(r, c, v);
+  }
+  for &(r, mut c, mut v) in codif_u.triplets() {
+    c += mass_sigma.ncols();
+    v *= -1.0;
+    galmat.push(r, c, v);
+  }
+  for &(mut r, c, v) in dif_sigma.triplets() {
+    r += mass_sigma.nrows();
+    galmat.push(r, c, v);
+  }
+  for &(mut r, mut c, v) in difdif_u.triplets() {
+    r += mass_sigma.nrows();
+    c += mass_sigma.ncols();
+    galmat.push(r, c, v);
+  }
+
+  let galmat = galmat.to_nalgebra_csr();
+
+  let mass_u = mass_u.to_nalgebra_csr();
+  let galvec = mass_u * source_data;
+  #[allow(clippy::toplevel_ref_arg)]
+  let galvec = na::stack![
+    na::DVector::zeros(mass_sigma.ncols() + codif_u.ncols());
+    galvec
+  ];
+
+  FaerLu::new(galmat).solve(&galvec)
+}
 
 pub fn solve_hodge_laplace_evp(
   mesh: &RiemannianComplex,
   k: ExteriorRank,
+  neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
-  // TODO: should we accept negative ExteriorRanks?
-  // TODO: return zero if elmat is zero for correspoding rank.
-  let kkmass_galmat = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k - 1));
-  let id_dif_galmat = assemble::assemble_galmat(mesh, fe::whitney::IdDifElmat(k));
-  let dif_id_galmat = assemble::assemble_galmat(mesh, fe::whitney::DifIdElmat(k));
-  let dif_dif_galmat = assemble::assemble_galmat(mesh, fe::whitney::DifDifElmat(k));
-  let kmass_galmat = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k));
+  // TODO: handle k=0
+  let mass_sigma = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k - 1));
+  let dif_sigma = assemble::assemble_galmat(mesh, fe::whitney::DifElmat(k));
+  let codif_u = assemble::assemble_galmat(mesh, fe::whitney::CodifElmat(k));
+  let difdif_u = assemble::assemble_galmat(mesh, fe::whitney::DifDifElmat(k));
+  let mass_u = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k));
 
   let mut lhs = SparseMatrix::zeros(
-    kkmass_galmat.nrows() + dif_id_galmat.nrows(),
-    kkmass_galmat.ncols() + id_dif_galmat.ncols(),
+    mass_sigma.nrows() + dif_sigma.nrows(),
+    mass_sigma.ncols() + codif_u.ncols(),
   );
-  for &(r, c, v) in kmass_galmat.triplets() {
+  for &(r, c, v) in mass_sigma.triplets() {
     lhs.push(r, c, v);
   }
-  for &(r, mut c, mut v) in id_dif_galmat.triplets() {
-    c += kkmass_galmat.ncols();
+  for &(r, mut c, mut v) in codif_u.triplets() {
+    c += mass_sigma.ncols();
     v *= -1.0;
     lhs.push(r, c, v);
   }
-  for &(mut r, c, v) in dif_id_galmat.triplets() {
-    r += kkmass_galmat.nrows();
+  for &(mut r, c, v) in dif_sigma.triplets() {
+    r += mass_sigma.nrows();
     lhs.push(r, c, v);
   }
-  for &(mut r, mut c, v) in dif_dif_galmat.triplets() {
-    r += kkmass_galmat.nrows();
-    c += kkmass_galmat.ncols();
+  for &(mut r, mut c, v) in difdif_u.triplets() {
+    r += mass_sigma.nrows();
+    c += mass_sigma.ncols();
     lhs.push(r, c, v);
   }
 
   let mut rhs = SparseMatrix::zeros(
-    kkmass_galmat.nrows() + kmass_galmat.nrows(),
-    kkmass_galmat.ncols() + kmass_galmat.ncols(),
+    mass_sigma.nrows() + mass_u.nrows(),
+    mass_sigma.ncols() + mass_u.ncols(),
   );
-  for &(mut r, mut c, v) in kmass_galmat.triplets() {
-    r += kkmass_galmat.nrows();
-    c += kkmass_galmat.ncols();
+  for &(mut r, mut c, v) in mass_u.triplets() {
+    r += mass_sigma.nrows();
+    c += mass_sigma.ncols();
     rhs.push(r, c, v);
   }
 
-  petsc_ghiep(&lhs.to_nalgebra_csr(), &rhs.to_nalgebra_csr())
+  petsc_ghiep(
+    &lhs.to_nalgebra_csr(),
+    &rhs.to_nalgebra_csr(),
+    neigen_values,
+  )
 }

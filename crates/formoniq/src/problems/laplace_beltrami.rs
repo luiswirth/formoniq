@@ -29,6 +29,7 @@ where
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
   mesh: &RiemannianComplex,
+  neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   let laplace_galmat = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
   let mass_galmat = assemble::assemble_galmat(mesh, fe::ScalarLumpedMassElmat);
@@ -36,5 +37,6 @@ pub fn solve_laplace_beltrami_evp(
   petsc_ghiep(
     &laplace_galmat.to_nalgebra_csr(),
     &mass_galmat.to_nalgebra_csr(),
+    neigen_values,
   )
 }
