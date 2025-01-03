@@ -1,7 +1,7 @@
 use crate::RiemannianMetric;
 
 use common::Dim;
-use index_algebra::IndexAlgebra;
+use index_algebra::IndexSet;
 
 pub type EdgeIdx = usize;
 
@@ -66,10 +66,9 @@ impl EdgeLengths {
         let vi = i + 1;
         let vj = j + 1;
         // TODO: can we compute this more directly?
-        let eij = IndexAlgebra::from([vi, vj])
+        let eij = IndexSet::from([vi, vj])
           .assume_sorted()
-          .with_local_base(nvertices)
-          .lex_rank();
+          .lex_rank(nvertices);
         let lij = self[eij];
 
         let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));

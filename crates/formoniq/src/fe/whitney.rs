@@ -6,7 +6,7 @@ use index_algebra::{
   factorial,
   sign::{sort_signed, Sign},
   variants::*,
-  IndexAlgebra,
+  IndexSet,
 };
 use manifold::simplicial::{LocalComplex, REFCELLS};
 
@@ -75,7 +75,7 @@ impl ElmatProvider for HodgeMassElmat {
 }
 
 fn construct_const_form(
-  simp: &IndexAlgebra<Local, Sorted, Unsigned>,
+  simp: &IndexSet<CanonicalOrder, Unsigned>,
   ignored_ivertex: usize,
   n: Dim,
 ) -> na::DVector<f64> {
@@ -95,18 +95,16 @@ fn construct_const_form(
     for i in 0..n {
       let mut form_indices = form_indices.clone();
       form_indices.insert(0, i);
-      let Some(form_indices) = IndexAlgebra::new(form_indices).try_sort_signed() else {
+      let Some(form_indices) = IndexSet::new(form_indices).try_sort_signed() else {
         continue;
       };
       let sort_sign = form_indices.sign();
-      let form_indices = form_indices.forget_sign().with_local_base(n);
-      form[form_indices.lex_rank()] += -1.0 * sort_sign.as_f64();
+      let form_indices = form_indices.forget_sign();
+      form[form_indices.lex_rank(n)] += -1.0 * sort_sign.as_f64();
     }
   } else {
-    let form_indices = IndexAlgebra::new(form_indices.clone())
-      .assume_sorted()
-      .with_local_base(n);
-    form[form_indices.lex_rank()] += 1.0;
+    let form_indices = IndexSet::new(form_indices.clone()).assume_sorted();
+    form[form_indices.lex_rank(n)] += 1.0;
   }
 
   form
@@ -188,18 +186,14 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
           continue;
         };
 
-        let kform_comb = IndexAlgebra::from(kform_comb)
-          .assume_sorted()
-          .with_local_base(n);
-        let kform_comb_rank = kform_comb.lex_rank();
+        let kform_comb = IndexSet::from(kform_comb).assume_sorted();
+        let kform_comb_rank = kform_comb.lex_rank(n);
         ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign.as_f64() * difk_factorial;
       }
     } else {
       let kform_comb: Vec<_> = whitney_comb.iter().map(|c| *c - 1).collect();
-      let kform_comb = IndexAlgebra::from(kform_comb)
-        .assume_sorted()
-        .with_local_base(n);
-      let kform_comb_rank = kform_comb.lex_rank();
+      let kform_comb = IndexSet::from(kform_comb).assume_sorted();
+      let kform_comb_rank = kform_comb.lex_rank(n);
       ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = difk_factorial;
     }
   }

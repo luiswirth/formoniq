@@ -284,14 +284,13 @@ impl<'m> SimplexHandle<'m> {
       for sup in self
         .sorted_vertplex()
         .clone()
-        .with_global_base(parent_cell.sorted_vertplex().into_global_base())
-        .anti_boundary()
+        .anti_boundary(parent_cell.sorted_vertplex())
       {
         let coeff = sup.sign().as_i32();
         let idx = self
           .mesh
           .skeleton(self.dim() + 1)
-          .get_by_vertplex(&sup.forget_sign().forget_base())
+          .get_by_vertplex(&sup.forget_sign())
           .kidx();
 
         idxs.push(idx);
@@ -358,15 +357,8 @@ impl<'m> SimplexHandle<'m> {
         self
           .sorted_vertplex()
           .clone()
-          .with_global_base(parent_cell.oriented_vertplex().clone().into_global_base())
-          .sups(dim + 1)
-          .map(move |a| {
-            self
-              .mesh
-              .skeleton(dim)
-              .get_by_vertplex(&a.forget_base())
-              .idx
-          })
+          .sups(parent_cell.sorted_vertplex(), dim + 1)
+          .map(move |a| self.mesh.skeleton(dim).get_by_vertplex(&a).idx)
           .map(move |a| Self::new(self.mesh, a))
       })
       .collect()
@@ -488,9 +480,7 @@ mod test {
       println!();
     }
 
-    let cell_vertplex = Vertplex::increasing(dim + 1)
-      .with_sign(Sign::Pos)
-      .forget_base();
+    let cell_vertplex = Vertplex::increasing(dim + 1).with_sign(Sign::Pos);
     for dim_sub in 0..=dim {
       let subs: Vec<_> = cell.as_simplex().subs(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
