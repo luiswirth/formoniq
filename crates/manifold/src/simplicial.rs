@@ -5,18 +5,16 @@ use crate::{
 
 use geometry::{regge::EdgeLengths, RiemannianMetric};
 use index_algebra::{
-  binomial, combinators::GradedIndexSubsets, factorial, sign::Sign, variants::*, IndexAlgebra,
+  binomial, combinators::GradedIndexSubsets, factorial, sign::Sign, variants::*, IndexSet,
 };
 
 use std::{f64::consts::SQRT_2, sync::LazyLock};
 
-pub type Vertplex<B, O, S> = IndexAlgebra<B, O, S>;
+pub type Vertplex<O, S> = IndexSet<O, S>;
 
-pub type SortedVertplex = Vertplex<Unspecified, Sorted, Unsigned>;
-pub type OrderedVertplex = Vertplex<Unspecified, Ordered, Unsigned>;
-pub type OrientedVertplex = Vertplex<Unspecified, Ordered, Signed>;
-
-pub type RefVertplex = Vertplex<Local, Sorted, Unsigned>;
+pub type SortedVertplex = Vertplex<CanonicalOrder, Unsigned>;
+pub type OrderedVertplex = Vertplex<ArbitraryOrder, Unsigned>;
+pub type OrientedVertplex = Vertplex<ArbitraryOrder, Signed>;
 
 pub fn nsubsimplicies(dim: Dim, dim_sub: Dim) -> usize {
   let nverts = dim + 1;
@@ -24,7 +22,7 @@ pub fn nsubsimplicies(dim: Dim, dim_sub: Dim) -> usize {
   binomial(nverts, nverts_sub)
 }
 
-pub fn subvertplicies(dim: Dim) -> Vec<Vec<RefVertplex>> {
+pub fn subvertplicies(dim: Dim) -> Vec<Vec<SortedVertplex>> {
   GradedIndexSubsets::canonical(dim + 1)
     .skip(1)
     .map(|subs| subs.collect())
@@ -35,7 +33,7 @@ pub trait SimplexExt {
   fn dim(&self) -> Dim;
   fn nvertices(&self) -> usize;
 }
-impl<B: Base, O: Order, S: Signedness> SimplexExt for Vertplex<B, O, S> {
+impl<O: SetOrder, S: SetSign> SimplexExt for Vertplex<O, S> {
   fn dim(&self) -> Dim {
     self.len() - 1
   }
@@ -114,7 +112,7 @@ pub static REFCELLS: LazyLock<Vec<ReferenceCell>> =
   LazyLock::new(|| (0..=4).map(ReferenceCell::new).collect());
 
 pub struct ReferenceCell {
-  faces: Vec<Vec<RefVertplex>>,
+  faces: Vec<Vec<SortedVertplex>>,
   edge_lengths: EdgeLengths,
 }
 impl ReferenceCell {
@@ -144,7 +142,7 @@ impl ReferenceCell {
     self.faces[k].len()
   }
 
-  pub fn as_vertplex(&self) -> &RefVertplex {
+  pub fn as_vertplex(&self) -> &SortedVertplex {
     &self.faces[self.dim()][0]
   }
 
@@ -178,7 +176,7 @@ impl ReferenceCell {
   }
 
   pub fn into_singleton_mesh(self) -> RiemannianComplex {
-    let facets = vec![self.as_vertplex().clone().forget_base().into_oriented()];
+    let facets = vec![self.as_vertplex().clone().into_oriented()];
 
     RiemannianManifold {
       facets,

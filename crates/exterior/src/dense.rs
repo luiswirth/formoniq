@@ -1,8 +1,8 @@
 use common::Dim;
 use geometry::RiemannianMetric;
-use index_algebra::{binomial, IndexAlgebra};
+use index_algebra::{binomial, IndexSet};
 
-use crate::{ExtBasis, ExteriorRank, ExteriorTermExt};
+use crate::{ExteriorBasis, ExteriorRank, ExteriorTermExt};
 
 pub struct ExteriorElement {
   coeffs: na::DVector<f64>,
@@ -24,16 +24,14 @@ impl ExteriorElement {
     }
   }
 
-  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExtBasis)> + use<'_> {
+  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorBasis)> + use<'_> {
     self
       .coeffs
       .iter()
       .copied()
       .enumerate()
       .map(move |(i, coeff)| {
-        let basis = IndexAlgebra::from_lex_rank(self.dim, self.rank, i)
-          .forget_base()
-          .ext();
+        let basis = IndexSet::from_lex_rank(self.dim, self.rank, i).ext(self.dim);
         (coeff, basis)
       })
   }
@@ -69,7 +67,7 @@ impl ExteriorElement {
           .try_sort_signed()
         {
           let sign = merged_basis.sign();
-          let merged_basis = merged_basis.forget_sign().with_local_base(dim).lex_rank();
+          let merged_basis = merged_basis.forget_sign().lex_rank(dim);
           new_coeffs[merged_basis] += sign.as_f64() * dbg!(self_coeff * other_coeff);
         }
       }
@@ -83,11 +81,11 @@ impl ExteriorElement {
   }
 }
 
-impl std::ops::Index<ExtBasis> for ExteriorElement {
+impl std::ops::Index<ExteriorBasis> for ExteriorElement {
   type Output = f64;
-  fn index(&self, index: ExtBasis) -> &Self::Output {
+  fn index(&self, index: ExteriorBasis) -> &Self::Output {
     assert!(index.rank() == self.rank);
-    let index = index.index_set.with_local_base(self.dim).lex_rank();
+    let index = index.index_set.lex_rank(self.dim);
     &self.coeffs[index]
   }
 }
