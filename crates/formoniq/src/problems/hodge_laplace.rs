@@ -1,9 +1,6 @@
 use crate::{assemble, fe};
 
-use common::{
-  sparse::{petsc_ghiep, SparseMatrix},
-  util::FaerLu,
-};
+use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
 use exterior::ExteriorRank;
 use manifold::RiemannianComplex;
 
@@ -11,7 +8,7 @@ pub fn solve_hodge_laplace_source(
   mesh: &RiemannianComplex,
   k: ExteriorRank,
   source_data: na::DVector<f64>,
-) -> na::DVector<f64> {
+) -> (na::DVector<f64>, na::DVector<f64>) {
   // TODO: handle harmonics (computed from EVP)
   //let harmonics = nas::CsrMatrix::zeros(0, 0);
 
@@ -19,7 +16,7 @@ pub fn solve_hodge_laplace_source(
   let mass_sigma = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k - 1));
   let dif_sigma = assemble::assemble_galmat(mesh, fe::whitney::DifElmat(k));
   let codif_u = assemble::assemble_galmat(mesh, fe::whitney::CodifElmat(k));
-  let difdif_u = assemble::assemble_galmat(mesh, fe::whitney::DifDifElmat(k));
+  let difdif_u = assemble::assemble_galmat(mesh, fe::whitney::CodifDifElmat(k));
   let mass_u = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k));
 
   let mut galmat = SparseMatrix::zeros(
@@ -50,11 +47,14 @@ pub fn solve_hodge_laplace_source(
   let galvec = mass_u * source_data;
   #[allow(clippy::toplevel_ref_arg)]
   let galvec = na::stack![
-    na::DVector::zeros(mass_sigma.ncols() + codif_u.ncols());
+    na::DVector::zeros(mass_sigma.ncols());
     galvec
   ];
 
-  FaerLu::new(galmat).solve(&galvec)
+  let galsol = petsc_saddle_point(&galmat, &galvec);
+  let sigma = galsol.view_range(..mass_sigma.nrows(), 0).into_owned();
+  let u = galsol.view_range(mass_sigma.nrows().., 0).into_owned();
+  (sigma, u)
 }
 
 pub fn solve_hodge_laplace_evp(
@@ -66,7 +66,7 @@ pub fn solve_hodge_laplace_evp(
   let mass_sigma = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k - 1));
   let dif_sigma = assemble::assemble_galmat(mesh, fe::whitney::DifElmat(k));
   let codif_u = assemble::assemble_galmat(mesh, fe::whitney::CodifElmat(k));
-  let difdif_u = assemble::assemble_galmat(mesh, fe::whitney::DifDifElmat(k));
+  let difdif_u = assemble::assemble_galmat(mesh, fe::whitney::CodifDifElmat(k));
   let mass_u = assemble::assemble_galmat(mesh, fe::whitney::HodgeMassElmat(k));
 
   let mut lhs = SparseMatrix::zeros(

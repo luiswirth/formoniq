@@ -115,8 +115,8 @@ fn construct_const_form(
 /// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
 ///
 /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
-pub struct DifDifElmat(pub ExteriorRank);
-impl ElmatProvider for DifDifElmat {
+pub struct CodifDifElmat(pub ExteriorRank);
+impl ElmatProvider for CodifDifElmat {
   fn row_rank(&self) -> ExteriorRank {
     self.0
   }
@@ -160,7 +160,6 @@ impl ElmatProvider for CodifElmat {
     self.0
   }
   fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
-    // TODO: think about transpose != adjoint
     let k = self.0;
     exterior_derivative(cell.dim(), k - 1).transpose() * HodgeMassElmat(k).eval(cell)
   }
@@ -207,11 +206,15 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   ref_difwhitneys
 }
 
+pub fn ref_whitney(_barycoords: na::DVector<f64>) -> na::DVector<f64> {
+  todo!()
+}
+
 #[cfg(test)]
 mod test {
   use crate::fe::{ref_difbarys, ElmatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
-  use super::{ref_difwhitneys, CodifElmat, DifDifElmat, DifElmat, HodgeMassElmat};
+  use super::{ref_difwhitneys, CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
   use manifold::simplicial::ReferenceCell;
@@ -237,7 +240,7 @@ mod test {
   fn dif_dif0_is_laplace_beltrami() {
     for n in 1..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
-      let hodge_laplace = DifDifElmat(0).eval(&cell);
+      let hodge_laplace = CodifDifElmat(0).eval(&cell);
       let laplace_beltrami = LaplaceBeltramiElmat.eval(&cell);
       assert_mat_eq(&hodge_laplace, &laplace_beltrami);
     }
@@ -294,7 +297,7 @@ mod test {
     for n in 0..=3 {
       let cell = ReferenceCell::new(n).to_cell_complex();
       for k in 0..n {
-        let var0 = DifDifElmat(k).eval(&cell);
+        let var0 = CodifDifElmat(k).eval(&cell);
 
         let var1 = cell.vol()
           * cell

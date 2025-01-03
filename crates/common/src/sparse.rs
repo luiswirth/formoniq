@@ -109,22 +109,24 @@ impl SparseMatrix {
   }
 }
 
-pub fn petsc_write_binary(matrix: &nas::CsrMatrix<f64>, filename: &str) -> std::io::Result<()> {
+const PETSC_MAT_FILE_CLASSID: i32 = 1211216;
+const PETSC_VEC_FILE_CLASSID: i32 = 1211214;
+
+pub fn petsc_write_matrix(matrix: &nas::CsrMatrix<f64>, filename: &str) -> std::io::Result<()> {
   let file = File::create(filename)?;
   let mut writer = BufWriter::new(file);
 
-  const MAT_FILE_CLASSID: i32 = 1211216;
-  writer.write_i32::<BigEndian>(MAT_FILE_CLASSID)?;
+  writer.write_i32::<BigEndian>(PETSC_MAT_FILE_CLASSID)?;
 
-  let rows = matrix.nrows() as i32;
-  let cols = matrix.ncols() as i32;
+  let nrows = matrix.nrows() as i32;
+  let ncols = matrix.ncols() as i32;
   let nnz = matrix.nnz() as i32;
-  writer.write_i32::<BigEndian>(rows)?;
-  writer.write_i32::<BigEndian>(cols)?;
+  writer.write_i32::<BigEndian>(nrows)?;
+  writer.write_i32::<BigEndian>(ncols)?;
   writer.write_i32::<BigEndian>(nnz)?;
 
   let row_offsets = matrix.row_offsets();
-  for i in 0..rows as usize {
+  for i in 0..nrows as usize {
     let row_nnz = (row_offsets[i + 1] - row_offsets[i]) as i32;
     writer.write_i32::<BigEndian>(row_nnz)?;
   }
@@ -141,6 +143,40 @@ pub fn petsc_write_binary(matrix: &nas::CsrMatrix<f64>, filename: &str) -> std::
 
   writer.flush()?;
   Ok(())
+}
+
+pub fn petsc_write_vector(vector: &na::DVector<f64>, filename: &str) -> std::io::Result<()> {
+  let file = File::create(filename)?;
+  let mut writer = BufWriter::new(file);
+
+  writer.write_i32::<BigEndian>(PETSC_VEC_FILE_CLASSID)?;
+
+  let nrows = vector.nrows() as i32;
+  writer.write_i32::<BigEndian>(nrows)?;
+
+  for &value in vector {
+    writer.write_f64::<BigEndian>(value)?;
+  }
+
+  writer.flush()?;
+  Ok(())
+}
+
+pub fn petsc_read_vector(filename: &str) -> std::io::Result<na::DVector<f64>> {
+  let file = File::open(filename)?;
+  let mut reader = BufReader::new(file);
+
+  let magic = reader.read_i32::<BigEndian>()?;
+  assert_eq!(magic, PETSC_VEC_FILE_CLASSID);
+
+  let nrows = reader.read_i32::<BigEndian>()? as usize;
+
+  let mut vector = na::DVector::zeros(nrows);
+  for i in 0..nrows {
+    vector[i] = reader.read_f64::<BigEndian>()?;
+  }
+
+  Ok(vector)
 }
 
 pub fn petsc_read_eigenvals(filename: &str) -> std::io::Result<na::DVector<f64>> {
@@ -166,9 +202,8 @@ pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix
 
   let mut data = Vec::with_capacity(nrows * ncols);
   for _ in 0..ncols {
-    const VEC_FILE_CLASSID: i32 = 1211214;
     let magic = reader.read_i32::<BigEndian>()?;
-    assert_eq!(magic, VEC_FILE_CLASSID);
+    assert_eq!(magic, PETSC_VEC_FILE_CLASSID);
 
     let this_nrows = reader.read_i32::<BigEndian>()? as usize;
     assert_eq!(this_nrows, nrows);
@@ -186,8 +221,8 @@ pub fn petsc_ghiep(
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   let solver_path = "/home/luis/thesis/solvers/petsc-solver";
-  petsc_write_binary(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
-  petsc_write_binary(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
+  petsc_write_matrix(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
+  petsc_write_matrix(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
 
   let binary = "./ghiep";
   #[rustfmt::skip]
@@ -211,4 +246,29 @@ pub fn petsc_ghiep(
   let eigenvecs = petsc_read_eigenvecs(&format!("{solver_path}/out/eigenvecs.bin")).unwrap();
 
   (eigenvals, eigenvecs)
+}
+
+pub fn petsc_saddle_point(lhs: &nas::CsrMatrix<f64>, rhs: &na::DVector<f64>) -> na::DVector<f64> {
+  let solver_path = "/home/luis/thesis/solvers/petsc-solver";
+
+  petsc_write_matrix(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
+  petsc_write_vector(rhs, &format!("{solver_path}/in/b.bin")).unwrap();
+
+  let binary = "./hils";
+  #[rustfmt::skip]
+  let args: [&str; 0] = [
+    //"-ksp_type", "minres",
+    //"-pc_type", "lu",
+    //"-ksp_max_it", "1000",
+    //"-ksp_rtol", "1e-9",
+  ];
+
+  let status = std::process::Command::new(binary)
+    .current_dir(solver_path)
+    .args(args)
+    .status()
+    .unwrap();
+  assert!(status.success());
+
+  petsc_read_vector(&format!("{solver_path}/out/x.bin")).unwrap()
 }

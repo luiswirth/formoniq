@@ -135,7 +135,10 @@ impl<B: Base, O: Order, S: Signedness> IndexAlgebra<B, O, S> {
     let sort_sign = sort_signed(&mut indices);
     let self_sign = self.signedness.get_or_default();
     let sign = self_sign * sort_sign;
-    if indices.windows(2).any(|s| s[0] == s[1]) {
+
+    let len = indices.len();
+    indices.dedup();
+    if indices.len() != len {
       return None;
     }
 

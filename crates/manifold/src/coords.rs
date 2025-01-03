@@ -66,10 +66,19 @@ impl CoordManifold {
 }
 
 pub struct CoordSimplex {
-  vertices: na::DMatrix<f64>,
+  pub vertices: na::DMatrix<f64>,
 }
 impl CoordSimplex {
   pub fn new(vertices: na::DMatrix<f64>) -> Self {
+    Self { vertices }
+  }
+
+  pub fn standard(ndim: Dim) -> Self {
+    let nvertices = ndim + 1;
+    let mut vertices = na::DMatrix::<f64>::zeros(ndim, nvertices);
+    for i in 0..ndim {
+      vertices[(i, i + 1)] = 1.0;
+    }
     Self { vertices }
   }
 
@@ -116,5 +125,12 @@ impl CoordSimplex {
   }
   pub fn orientation(&self) -> Sign {
     Sign::from_f64(self.det())
+  }
+
+  pub fn integrate_diff_form<F>(&self, _f: F) -> f64
+  where
+    F: Fn(na::DVector<f64>) -> na::DVector<f64>,
+  {
+    todo!("trapezoidal rule")
   }
 }
