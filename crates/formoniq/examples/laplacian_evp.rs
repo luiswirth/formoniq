@@ -11,7 +11,7 @@ fn main() {
   let nboxes_per_dim = 30;
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.compute_coord_manifold();
-  let surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone().embed_euclidean(3));
+  let surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone());
   let (mesh, _) = coord_mesh.into_riemannian_complex();
 
   let neigen_values = 10;

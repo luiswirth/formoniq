@@ -16,6 +16,8 @@ pub type SortedVertplex = Vertplex<CanonicalOrder, Unsigned>;
 pub type OrderedVertplex = Vertplex<ArbitraryOrder, Unsigned>;
 pub type OrientedVertplex = Vertplex<ArbitraryOrder, Signed>;
 
+pub type SimplicialTopology = Vec<OrientedVertplex>;
+
 pub fn nsubsimplicies(dim: Dim, dim_sub: Dim) -> usize {
   let nverts = dim + 1;
   let nverts_sub = dim_sub + 1;

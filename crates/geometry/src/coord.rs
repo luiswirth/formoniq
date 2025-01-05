@@ -4,14 +4,74 @@ use crate::regge::EdgeLengths;
 
 pub type VertexIdx = usize;
 
+type CoordMatrix<D> = na::OMatrix<f64, D, na::Dyn>;
+type CoordVector<D> = na::OVector<f64, D>;
+//type CoordVectorView<'a, D> = na::VectorView<'a, f64, D>;
+
 #[derive(Debug, Clone)]
-pub struct VertexCoords {
-  matrix: na::DMatrix<f64>,
+pub struct VertexCoords<D: na::Dim = na::Dyn>
+where
+  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
+{
+  matrix: CoordMatrix<D>,
 }
-impl VertexCoords {
-  pub fn new(matrix: na::DMatrix<f64>) -> Self {
+
+impl<D: na::Dim> VertexCoords<D>
+where
+  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
+{
+  pub fn new(matrix: CoordMatrix<D>) -> Self {
     Self { matrix }
   }
+  pub fn matrix(&self) -> &CoordMatrix<D> {
+    &self.matrix
+  }
+  pub fn matrix_mut(&mut self) -> &mut CoordMatrix<D> {
+    &mut self.matrix
+  }
+  pub fn into_matrix(self) -> CoordMatrix<D> {
+    self.matrix
+  }
+}
+
+impl<D: na::Dim> From<CoordMatrix<D>> for VertexCoords<D>
+where
+  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
+{
+  fn from(matrix: CoordMatrix<D>) -> Self {
+    Self::new(matrix)
+  }
+}
+
+impl<D: na::Dim> From<&[CoordVector<D>]> for VertexCoords<D>
+where
+  na::DefaultAllocator: na::allocator::Allocator<D>,
+  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
+{
+  fn from(vectors: &[CoordVector<D>]) -> Self {
+    let matrix = CoordMatrix::from_columns(vectors);
+    Self::new(matrix)
+  }
+}
+
+impl VertexCoords<na::Dyn> {
+  pub fn into_const_dim<D1: na::DimName>(self) -> VertexCoords<D1> {
+    let matrix: CoordMatrix<D1> = na::try_convert(self.matrix).unwrap();
+    VertexCoords::new(matrix)
+  }
+}
+impl<D: na::DimName> VertexCoords<D> {
+  pub fn into_dyn_dim(self) -> VertexCoords<na::Dyn> {
+    let matrix: CoordMatrix<na::Dyn> = na::try_convert(self.matrix).unwrap();
+    VertexCoords::new(matrix)
+  }
+}
+
+impl<D: na::Dim> VertexCoords<D>
+where
+  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
+  na::DefaultAllocator: na::allocator::Allocator<D>,
+{
   pub fn dim(&self) -> Dim {
     self.matrix.nrows()
   }
@@ -19,31 +79,33 @@ impl VertexCoords {
     self.matrix.ncols()
   }
 
-  pub fn coord(&self, ivertex: VertexIdx) -> na::DVectorView<f64> {
-    self.matrix.column(ivertex)
+  // TODO: return view
+  pub fn coord(&self, ivertex: VertexIdx) -> CoordVector<D> {
+    self.matrix.column(ivertex).into_owned()
   }
 
-  pub fn matrix(&self) -> &na::DMatrix<f64> {
-    &self.matrix
-  }
-  pub fn matrix_mut(&mut self) -> &mut na::DMatrix<f64> {
-    &mut self.matrix
-  }
-  pub fn into_matrix(self) -> na::DMatrix<f64> {
-    self.matrix
-  }
-
-  pub fn eval_coord_fn<F>(&self, f: F) -> na::DVector<f64>
-  where
-    F: FnMut(na::DVectorView<f64>) -> f64,
-  {
-    na::DVector::from_iterator(self.nvertices(), self.matrix.column_iter().map(f))
+  pub fn coord_iter(
+    &self,
+  ) -> na::iter::ColumnIter<
+    '_,
+    f64,
+    D,
+    na::Dyn,
+    <na::DefaultAllocator as na::allocator::Allocator<D, na::Dyn>>::Buffer<f64>,
+  > {
+    self.matrix.column_iter()
   }
 
-  pub fn embed_euclidean(mut self, dim: Dim) -> VertexCoords {
-    let old_dim = self.matrix.nrows();
-    self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
-    self
+  pub fn coord_iter_mut(
+    &mut self,
+  ) -> na::iter::ColumnIterMut<
+    '_,
+    f64,
+    D,
+    na::Dyn,
+    <na::DefaultAllocator as na::allocator::Allocator<D, na::Dyn>>::Buffer<f64>,
+  > {
+    self.matrix.column_iter_mut()
   }
 
   pub fn to_edge_lengths(
@@ -57,5 +119,13 @@ impl VertexCoords {
       edge_lengths[iedge] = length;
     }
     EdgeLengths::new(edge_lengths)
+  }
+}
+
+impl VertexCoords<na::Dyn> {
+  pub fn embed_euclidean(mut self, dim: Dim) -> VertexCoords {
+    let old_dim = self.matrix.nrows();
+    self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
+    self
   }
 }

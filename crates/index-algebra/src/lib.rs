@@ -1,7 +1,4 @@
 //! Combinatorics with sets of indicies
-//!
-//! Consider turning this into it's own crate.
-//! Possible names: indexalgebra, permutic
 
 #![allow(clippy::len_without_is_empty)]
 

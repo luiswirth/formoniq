@@ -36,38 +36,24 @@ fn main() {
 
   assert!(!mesh.has_boundary());
   let boundary_data = |_| unreachable!();
+  let force_data = na::DVector::zeros(mesh.nvertices());
 
-  let initial_pos = coords.eval_coord_fn(|p| {
-    let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
-    #[allow(unused_variables)]
-    let [r, theta, phi] = dim3::cartesian2spherical(p);
+  let initial_pos = coords
+    .coord_iter()
+    .map(|p| {
+      let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();
+      #[allow(unused_variables)]
+      let [r, theta, phi] = dim3::cartesian2spherical(p);
 
-    (-theta.powi(2) * 50.0).exp()
-  });
+      (-theta.powi(2) * 50.0).exp()
+    })
+    .collect::<Vec<_>>()
+    .into();
   let initial_vel = na::DVector::zeros(mesh.nvertices());
   let initial_data = WaveState::new(initial_pos, initial_vel);
 
-  let force_data = na::DVector::zeros(mesh.nvertices());
-
   let solution = wave::solve_wave(&mesh, &times, boundary_data, initial_data, force_data);
 
-  let mdd_frames: Vec<Vec<[f32; 3]>> = solution
-    .into_iter()
-    .map(|state| {
-      let mut surface = surface.clone();
-      surface.displace_normal(&state.pos);
-
-      let frame_coords: Vec<[f32; 3]> = surface
-        .vertex_coords()
-        .column_iter()
-        .map(|col| [col.x as f32, col.y as f32, col.z as f32])
-        .collect();
-
-      frame_coords
-    })
-    .collect();
-  let times: Vec<_> = times.into_iter().map(|f| f as f32).collect();
-
-  println!("Writing animation to `.mdd` file...");
-  dim3::write_mdd_file("out/sphere_wave.mdd", &mdd_frames, &times).unwrap();
+  let displacements: Vec<_> = solution.into_iter().map(|s| s.pos).collect();
+  dim3::write_displacement_animation(&surface, &displacements, times.iter().copied());
 }

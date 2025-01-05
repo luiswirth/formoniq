@@ -15,7 +15,7 @@ fn main() {
     println!("eigenval={eigenval:.2}");
 
     let mut surface = triangle_mesh.clone();
-    for (ivertex, mut cart_pos) in surface.vertex_coords_mut().column_iter_mut().enumerate() {
+    for (ivertex, mut cart_pos) in surface.vertex_coords_mut().coord_iter_mut().enumerate() {
       cart_pos *= eigenfunc[ivertex];
     }
     std::fs::write(
