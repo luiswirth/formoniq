@@ -73,20 +73,10 @@ fn main() {
     coords_list.push(coords_new);
   }
 
-  let mdd_frames: Vec<Vec<[f32; 3]>> = coords_list
+  let coords_list: Vec<_> = coords_list
     .into_iter()
-    .map(|coords| {
-      let frame_coords: Vec<[f32; 3]> = coords
-        .matrix()
-        .column_iter()
-        .map(|col| [col[0] as f32, col[1] as f32, col[2] as f32])
-        .collect();
-
-      frame_coords
-    })
+    .map(|coords| coords.into_const_dim())
     .collect();
-  let times: Vec<_> = (0..=nsteps).map(|istep| dt as f32 * istep as f32).collect();
-
-  println!("Writing animation to `.mdd` file...");
-  dim3::write_mdd_file("out/curvature_flow.mdd", &mdd_frames, &times).unwrap();
+  let times = (0..=nsteps).map(|istep| istep as f64 * dt);
+  dim3::write_3dmesh_animation(&coords_list, times);
 }

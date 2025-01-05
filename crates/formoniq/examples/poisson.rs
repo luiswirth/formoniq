@@ -27,8 +27,18 @@ fn main() {
         let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
         let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
 
-        let anal_sol = coord_mesh.coords().eval_coord_fn(anal_sol);
-        let anal_lapl = coord_mesh.coords().eval_coord_fn(anal_lapl);
+        let anal_sol = coord_mesh
+          .coords()
+          .coord_iter()
+          .map(anal_sol)
+          .collect::<Vec<_>>()
+          .into();
+        let anal_lapl = coord_mesh
+          .coords()
+          .coord_iter()
+          .map(anal_lapl)
+          .collect::<Vec<_>>()
+          .into();
 
         let (mesh, _) = coord_mesh.into_riemannian_complex();
 

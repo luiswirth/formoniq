@@ -4,13 +4,13 @@ use index_algebra::sign::Sign;
 
 use crate::{
   complex::Complex,
-  simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt},
+  simplicial::{OrderedVertplex, OrientedVertplex, SimplexExt, SimplicialTopology},
   Dim, RiemannianComplex,
 };
 
 #[derive(Debug, Clone)]
 pub struct CoordManifold {
-  facets: Vec<OrientedVertplex>,
+  facets: SimplicialTopology,
   coords: VertexCoords,
 }
 impl CoordManifold {

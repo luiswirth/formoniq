@@ -1,45 +1,52 @@
 use geometry::coord::VertexCoords;
 use index_algebra::sign::Sign;
 
-use crate::{complex::VertexIdx, coords::CoordManifold, simplicial::Vertplex};
+use crate::{
+  complex::VertexIdx,
+  coords::CoordManifold,
+  simplicial::{SimplicialTopology, Vertplex},
+};
 
-use std::{collections::HashMap, fmt::Write, sync::LazyLock};
+use std::{collections::HashMap, fmt::Write, path::Path, sync::LazyLock};
 
-/// Returns $[r, theta, phi]$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
-pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
-  let r = p.norm();
-  let theta = (p.z / r).acos(); // [0,pi]
-  let phi = p.y.atan2(p.x); // [0,tau]
-  [r, theta, phi]
+pub type TriangleTopology = Vec<[VertexIdx; 3]>;
+pub trait TriangleTopologyExt {
+  fn from_simplex_topology(simp: SimplicialTopology) -> Self;
+}
+impl TriangleTopologyExt for TriangleTopology {
+  fn from_simplex_topology(simp: SimplicialTopology) -> Self {
+    simp
+      .into_iter()
+      .map(|c| {
+        let mut vs: [VertexIdx; 3] = c.as_slice().to_vec().try_into().unwrap();
+        if c.sign().is_neg() {
+          vs.swap(0, 1);
+        }
+        vs
+      })
+      .collect()
+  }
 }
 
-/// Takes $(r, theta, phi)$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
-pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
-  let x = r * theta.sin() * phi.cos();
-  let y = r * theta.sin() * phi.sin();
-  let z = r * theta.cos();
-  na::Vector3::new(x, y, z)
-}
+pub type VertexCoords3d = VertexCoords<na::U3>;
 
 #[derive(Debug, Clone)]
 pub struct TriangleSurface3D {
-  triangles: Vec<[VertexIdx; 3]>,
-  coords: na::Matrix3xX<f64>,
+  triangles: TriangleTopology,
+  coords: VertexCoords3d,
 }
 impl TriangleSurface3D {
-  pub fn new(triangles: Vec<[VertexIdx; 3]>, vertex_coords: na::Matrix3xX<f64>) -> Self {
-    Self {
-      triangles,
-      coords: vertex_coords,
-    }
+  pub fn new(triangles: TriangleTopology, coords: impl Into<VertexCoords3d>) -> Self {
+    let coords = coords.into();
+    Self { triangles, coords }
   }
   pub fn triangles(&self) -> &[[VertexIdx; 3]] {
     &self.triangles
   }
-  pub fn vertex_coords(&self) -> &na::Matrix3xX<f64> {
+  pub fn vertex_coords(&self) -> &VertexCoords3d {
     &self.coords
   }
-  pub fn vertex_coords_mut(&mut self) -> &mut na::Matrix3xX<f64> {
+  pub fn vertex_coords_mut(&mut self) -> &mut VertexCoords3d {
     &mut self.coords
   }
 }
@@ -50,24 +57,14 @@ impl TriangleSurface3D {
     assert!(mesh.dim_intrinsic() == 2, "Manifold is not a 2D surface.");
 
     let (facets, coords) = mesh.into_parts();
-
-    let triangles = facets
-      .into_iter()
-      .map(|c| {
-        let mut vs: [VertexIdx; 3] = c.as_slice().to_vec().try_into().unwrap();
-        if c.sign().is_neg() {
-          vs.swap(0, 1);
-        }
-        vs
-      })
-      .collect();
-    let coords = na::try_convert(coords.into_matrix()).unwrap();
+    let triangles = TriangleTopology::from_simplex_topology(facets);
+    let coords = coords.into_const_dim();
 
     Self::new(triangles, coords)
   }
 
   pub fn into_coord_manifold(self) -> CoordManifold {
-    let coords = VertexCoords::new(na::convert(self.coords));
+    let coords = self.coords.into_dyn_dim();
     let facets = self
       .triangles
       .into_iter()
@@ -78,7 +75,7 @@ impl TriangleSurface3D {
 
   pub fn to_obj_string(&self) -> String {
     let mut string = String::new();
-    for v in self.coords.column_iter() {
+    for v in self.coords.coord_iter() {
       writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
     }
     for t in &self.triangles {
@@ -114,16 +111,17 @@ impl TriangleSurface3D {
     }
 
     let vertex_coords = na::Matrix3xX::from_columns(&vertex_coords);
+    let vertex_coords = VertexCoords::from(vertex_coords);
     Self::new(triangles, vertex_coords)
   }
 
   pub fn displace_normal<'a>(&mut self, displacements: impl Into<na::DVectorView<'a, f64>>) {
     let displacements = displacements.into();
 
-    let mut vertex_normals = vec![na::Vector3::zeros(); self.coords.ncols()];
-    let mut vertex_triangle_counts = vec![0; self.coords.ncols()];
+    let mut vertex_normals = vec![na::Vector3::zeros(); self.coords.nvertices()];
+    let mut vertex_triangle_counts = vec![0; self.coords.nvertices()];
     for ivs in &self.triangles {
-      let vs = ivs.map(|i| self.coords.column(i));
+      let vs = ivs.map(|i| self.coords.coord(i));
       let e0 = vs[1] - vs[0];
       let e1 = vs[2] - vs[0];
       let triangle_normal = e0.cross(&e1).normalize();
@@ -137,7 +135,7 @@ impl TriangleSurface3D {
     }
     for ((mut v, n), &d) in self
       .coords
-      .column_iter_mut()
+      .coord_iter_mut()
       .zip(vertex_normals)
       .zip(displacements)
     {
@@ -146,8 +144,24 @@ impl TriangleSurface3D {
   }
 }
 
+/// Returns $[r, theta, phi]$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
+pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
+  let r = p.norm();
+  let theta = (p.z / r).acos(); // [0,pi]
+  let phi = p.y.atan2(p.x); // [0,tau]
+  [r, theta, phi]
+}
+
+/// Takes $(r, theta, phi)$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
+pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
+  let x = r * theta.sin() * phi.cos();
+  let y = r * theta.sin() * phi.sin();
+  let z = r * theta.cos();
+  na::Vector3::new(x, y, z)
+}
+
 pub fn write_mdd_file(
-  filename: &str,
+  filename: impl AsRef<Path>,
   frames: &[Vec<[f32; 3]>],
   times: &[f32],
 ) -> std::io::Result<()> {
@@ -156,11 +170,10 @@ pub fn write_mdd_file(
   let file = std::fs::File::create(filename)?;
   let mut writer = std::io::BufWriter::new(file);
 
-  let nframes = frames.len() as u32;
-  let nvertices = frames[0].len() as u32;
-
   // header
+  let nframes = frames.len() as u32;
   writer.write_all(&nframes.to_be_bytes())?;
+  let nvertices = frames[0].len() as u32;
   writer.write_all(&nvertices.to_be_bytes())?;
 
   for &time in times {
@@ -177,20 +190,55 @@ pub fn write_mdd_file(
   Ok(())
 }
 
+pub fn write_3dmesh_animation<'a, 'b>(
+  coords_frames: impl IntoIterator<Item = &'a VertexCoords3d>,
+  time_frames: impl IntoIterator<Item = f64>,
+) where
+  VertexCoords3d: std::fmt::Debug,
+{
+  let mdd_frames: Vec<Vec<[f32; 3]>> = coords_frames
+    .into_iter()
+    .map(|coords| {
+      coords
+        .coord_iter()
+        .map(|col| [col.x as f32, col.y as f32, col.z as f32])
+        .collect()
+    })
+    .collect();
+  let time_frames: Vec<f32> = time_frames.into_iter().map(|t| t as f32).collect();
+
+  write_mdd_file("out/sphere_wave.mdd", &mdd_frames, &time_frames).unwrap()
+}
+
+pub fn write_displacement_animation<'a>(
+  base_surface: &TriangleSurface3D,
+  displacements_frames: impl IntoIterator<Item = &'a na::DVector<f64>>,
+  frame_times: impl IntoIterator<Item = f64>,
+) {
+  let coords_frames: Vec<_> = displacements_frames
+    .into_iter()
+    .map(|displacement| {
+      let mut surface = base_surface.clone();
+      surface.displace_normal(displacement);
+      surface.coords
+    })
+    .collect();
+
+  write_3dmesh_animation(&coords_frames, frame_times);
+}
+
 /// Geodesic sphere from subdividing a icosahedron
 pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
   let triangles = ICOSAHEDRON_SURFACE.triangles().to_vec();
   let vertex_coords = ICOSAHEDRON_SURFACE
     .vertex_coords()
-    .column_iter()
+    .coord_iter()
     .map(|c| c.into_owned())
     .collect();
 
   let (triangles, vertex_coords) = subdivide(triangles, vertex_coords, nsubdivisions);
 
-  let vertex_coords = na::Matrix3xX::from_columns(&vertex_coords);
-
-  TriangleSurface3D::new(triangles, vertex_coords)
+  TriangleSurface3D::new(triangles, vertex_coords.as_slice())
 }
 
 fn subdivide(
@@ -245,7 +293,7 @@ static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
   let phi = (1.0 + 5.0f64.sqrt()) / 2.0;
 
   #[rustfmt::skip]
-  let vertices = [
+  let vertex_coords = [
     [-1.0, phi, 0.0],
     [ 1.0, phi, 0.0],
     [-1.0,-phi, 0.0],
@@ -260,34 +308,34 @@ static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
     [-phi, 0.0, 1.0],
   ];
 
-  let vertices: Vec<_> = vertices
+  let vertex_coords: Vec<_> = vertex_coords
     .into_iter()
     .map(|v| na::Vector3::new(v[0], v[1], v[2]).normalize())
     .collect();
-  let vertex_coords = na::Matrix3xX::from_columns(&vertices);
 
+  #[rustfmt::skip]
   let triangles = vec![
-    [0, 11, 5],
-    [0, 5, 1],
-    [0, 1, 7],
-    [0, 7, 10],
-    [0, 10, 11],
-    [1, 5, 9],
-    [5, 11, 4],
-    [11, 10, 2],
+    [ 0,11, 5],
+    [ 0, 5, 1],
+    [ 0, 1, 7],
+    [ 0, 7,10],
+    [ 0,10,11],
+    [ 1, 5, 9],
+    [ 5,11, 4],
+    [11,10, 2],
     [10, 7, 6],
-    [7, 1, 8],
-    [3, 9, 4],
-    [3, 4, 2],
-    [3, 2, 6],
-    [3, 6, 8],
-    [3, 8, 9],
-    [4, 9, 5],
-    [2, 4, 11],
-    [6, 2, 10],
-    [8, 6, 7],
-    [9, 8, 1],
+    [ 7, 1, 8],
+    [ 3, 9, 4],
+    [ 3, 4, 2],
+    [ 3, 2, 6],
+    [ 3, 6, 8],
+    [ 3, 8, 9],
+    [ 4, 9, 5],
+    [ 2, 4,11],
+    [ 6, 2,10],
+    [ 8, 6, 7],
+    [ 9, 8, 1],
   ];
 
-  TriangleSurface3D::new(triangles, vertex_coords)
+  TriangleSurface3D::new(triangles, vertex_coords.as_slice())
 });
