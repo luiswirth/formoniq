@@ -3,23 +3,24 @@ use std::collections::HashSet;
 use crate::fe::{DofIdx, ElmatProvider, ElvecProvider};
 
 use common::{sparse::SparseMatrix, util};
-use manifold::RiemannianComplex;
+use geometry::metric::manifold::MetricComplex;
+use topology::complex::ManifoldComplex;
 
 /// Assembly algorithm for the Galerkin Matrix.
-pub fn assemble_galmat(mesh: &RiemannianComplex, elmat: impl ElmatProvider) -> SparseMatrix {
+pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElmatProvider) -> SparseMatrix {
   let row_rank = elmat.row_rank();
   let col_rank = elmat.col_rank();
-  let nsimps_row = mesh.skeleton(row_rank).len();
-  let nsimps_col = mesh.skeleton(col_rank).len();
-  let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
-  for cell in mesh.cells() {
-    let cell = cell.as_cell_complex();
-    let row_faces = &cell.skeletons()[row_rank];
-    let col_faces = &cell.skeletons()[col_rank];
-    let elmat = elmat.eval(&cell);
 
-    for (ilocal, &iglobal) in row_faces.iter().enumerate() {
-      for (jlocal, &jglobal) in col_faces.iter().enumerate() {
+  let nsimps_row = global.topology().skeleton(row_rank).len();
+  let nsimps_col = global.topology().skeleton(col_rank).len();
+  let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
+  for local in global.local_complexes() {
+    let row_subs = &local.topology().skeletons()[row_rank];
+    let col_subs = &local.topology().skeletons()[col_rank];
+    let elmat = elmat.eval(&local);
+
+    for (ilocal, &iglobal) in row_subs.iter().enumerate() {
+      for (jlocal, &jglobal) in col_subs.iter().enumerate() {
         galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
       }
     }
@@ -28,23 +29,24 @@ pub fn assemble_galmat(mesh: &RiemannianComplex, elmat: impl ElmatProvider) -> S
 }
 
 /// Assembly algorithm for the Galerkin Vector.
-pub fn assemble_galvec(mesh: &RiemannianComplex, elvec: impl ElvecProvider) -> na::DVector<f64> {
+pub fn assemble_galvec(complex: &MetricComplex, elvec: impl ElvecProvider) -> na::DVector<f64> {
   let rank = elvec.rank();
-  let nsimps = mesh.skeleton(rank).len();
+
+  let nsimps = complex.topology().skeleton(rank).len();
   let mut galvec = na::DVector::zeros(nsimps);
-  for cell in mesh.cells() {
-    let cell = cell.as_cell_complex();
-    let faces = &cell.skeletons()[rank];
-    let elvec = elvec.eval(&cell);
-    for (ilocal, &iglobal) in faces.iter().enumerate() {
+  for local in complex.local_complexes() {
+    let subs = &local.topology().skeletons()[rank];
+    let elvec = elvec.eval(&local);
+
+    for (ilocal, &iglobal) in subs.iter().enumerate() {
       galvec[iglobal] += elvec[ilocal];
     }
   }
   galvec
 }
 
-pub fn drop_boundary_dofs_galmat(mesh: &RiemannianComplex, galmat: &mut SparseMatrix) {
-  drop_dofs_galmat(&mesh.boundary_vertices().into_iter().collect(), galmat)
+pub fn drop_boundary_dofs_galmat(complex: &ManifoldComplex, galmat: &mut SparseMatrix) {
+  drop_dofs_galmat(&complex.boundary_vertices().kidx_iter().collect(), galmat)
 }
 
 pub fn drop_dofs_galmat(dofs: &HashSet<DofIdx>, galmat: &mut SparseMatrix) {
@@ -73,8 +75,11 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut na::DVector<f64>) {
   *galvec = std::mem::take(galvec).remove_rows_at(dofs);
 }
 
-pub fn reintroduce_boundary_dofs_galsols(mesh: &RiemannianComplex, galsols: &mut na::DMatrix<f64>) {
-  reintroduce_dropped_dofs_galsols(mesh.boundary_vertices(), galsols)
+pub fn reintroduce_boundary_dofs_galsols(
+  complex: &ManifoldComplex,
+  galsols: &mut na::DMatrix<f64>,
+) {
+  reintroduce_dropped_dofs_galsols(complex.boundary_vertices().kidxs().to_vec(), galsols)
 }
 
 pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na::DMatrix<f64>) {
@@ -89,25 +94,25 @@ pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na:
 }
 
 pub fn enforce_homogeneous_dirichlet_bc(
-  mesh: &RiemannianComplex,
+  complex: &ManifoldComplex,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) {
-  let boundary_vertices = mesh.boundary_vertices();
-  fix_dofs_zero(&boundary_vertices, galmat, galvec);
+  let boundary_vertices = complex.boundary_vertices();
+  fix_dofs_zero(boundary_vertices.kidxs(), galmat, galvec);
 }
 
 pub fn enforce_dirichlet_bc<F>(
-  mesh: &RiemannianComplex,
+  complex: &ManifoldComplex,
   boundary_coeff_map: F,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) where
   F: Fn(DofIdx) -> f64,
 {
-  let boundary_dofs = mesh.boundary_vertices();
+  let boundary_dofs = complex.boundary_vertices();
   let dof_coeffs: Vec<_> = boundary_dofs
-    .into_iter()
+    .kidx_iter()
     .map(|idof| (idof, boundary_coeff_map(idof)))
     .collect();
 

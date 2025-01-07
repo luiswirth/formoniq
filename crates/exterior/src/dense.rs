@@ -1,8 +1,41 @@
-use common::Dim;
-use geometry::RiemannianMetric;
+use geometry::{coord::CoordRef, metric::RiemannianMetric};
 use index_algebra::{binomial, IndexSet};
+use topology::Dim;
 
 use crate::{ExteriorBasis, ExteriorRank, ExteriorTermExt};
+
+pub type KVector = ExteriorElement;
+
+pub type KForm = ExteriorElement;
+pub type DifferentialKForm<F> = ExteriorCoordField<F>;
+pub type KFormCoeffs = ExteriorCoeffs;
+
+pub type ExteriorCoeffs = na::DVector<f64>;
+
+pub struct ExteriorCoordField<F>
+where
+  F: Fn(CoordRef) -> ExteriorCoeffs,
+{
+  coeff_fn: F,
+  dim: Dim,
+  rank: ExteriorRank,
+}
+impl<F> ExteriorCoordField<F>
+where
+  F: Fn(CoordRef) -> ExteriorCoeffs,
+{
+  pub fn dim(&self) -> Dim {
+    self.dim
+  }
+  pub fn rank(&self) -> ExteriorRank {
+    self.rank
+  }
+  pub fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> ExteriorElement {
+    let coord = coord.into();
+    let coeffs = (self.coeff_fn)(coord);
+    ExteriorElement::new(coeffs, self.dim, self.rank)
+  }
+}
 
 pub struct ExteriorElement {
   coeffs: na::DVector<f64>,
@@ -64,10 +97,10 @@ impl ExteriorElement {
           .index_set
           .clone()
           .union(other_basis.index_set.clone())
-          .try_sort_signed()
+          .try_into_sorted_signed()
         {
-          let sign = merged_basis.sign();
-          let merged_basis = merged_basis.forget_sign().lex_rank(dim);
+          let sign = merged_basis.sign;
+          let merged_basis = merged_basis.set.lex_rank(dim);
           new_coeffs[merged_basis] += sign.as_f64() * dbg!(self_coeff * other_coeff);
         }
       }
@@ -78,6 +111,13 @@ impl ExteriorElement {
 
   pub fn hodge_star(&self, _metric: &RiemannianMetric) -> Self {
     todo!()
+  }
+}
+
+impl KForm {
+  pub fn on_kvector(&self, kvector: &KVector) -> f64 {
+    assert!(self.dim == kvector.dim && self.rank == kvector.rank);
+    self.coeffs.dot(&kvector.coeffs)
   }
 }
 

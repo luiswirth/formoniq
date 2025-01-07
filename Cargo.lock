@@ -242,6 +242,7 @@ dependencies = [
  "geometry",
  "index-algebra",
  "nalgebra",
+ "topology",
 ]
 
 [[package]]
@@ -306,9 +307,9 @@ dependencies = [
  "geometry",
  "index-algebra",
  "itertools 0.14.0",
- "manifold",
  "nalgebra",
  "nalgebra-sparse",
+ "topology",
  "tracing",
  "tracing-subscriber",
 ]
@@ -447,7 +448,12 @@ version = "0.1.0"
 dependencies = [
  "common",
  "index-algebra",
+ "itertools 0.13.0",
+ "mshio",
  "nalgebra",
+ "nalgebra-sparse",
+ "topology",
+ "tracing",
 ]
 
 [[package]]
@@ -546,21 +552,6 @@ name = "log"
 version = "0.4.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
-
-[[package]]
-name = "manifold"
-version = "0.1.0"
-dependencies = [
- "common",
- "geometry",
- "index-algebra",
- "indexmap",
- "itertools 0.13.0",
- "mshio",
- "nalgebra",
- "nalgebra-sparse",
- "tracing",
-]
 
 [[package]]
 name = "matrixcompare"
@@ -1222,6 +1213,17 @@ checksum = "8b9ef9bad013ada3808854ceac7b46812a6465ba368859a37e2100283d2d719c"
 dependencies = [
  "cfg-if",
  "once_cell",
+]
+
+[[package]]
+name = "topology"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "index-algebra",
+ "indexmap",
+ "itertools 0.13.0",
+ "nalgebra",
 ]
 
 [[package]]

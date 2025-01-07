@@ -2,12 +2,12 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::problems::laplace_beltrami;
-use manifold::gen::dim3::mesh_sphere_surface;
+use geometry::coord::manifold::dim3::mesh_sphere_surface;
 
 fn main() {
   let triangle_mesh = mesh_sphere_surface(6);
-  let coord_mesh = triangle_mesh.clone().into_coord_manifold();
-  let (mesh, _) = coord_mesh.into_riemannian_complex();
+  let coord_mesh = triangle_mesh.clone().into_coord_skeleton();
+  let (mesh, _) = coord_mesh.into_metric_complex();
 
   let spectrum = laplace_beltrami::solve_laplace_beltrami_evp(&mesh, 10);
 

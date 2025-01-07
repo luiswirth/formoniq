@@ -5,7 +5,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::{fe::l2_norm, problems::laplace_beltrami};
-use manifold::{gen::cartesian::CartesianMesh, RiemannianComplex};
+use geometry::{coord::manifold::cartesian::CartesianMesh, metric::manifold::MetricComplex};
 
 use std::f64::consts::TAU;
 
@@ -40,7 +40,7 @@ fn main() {
           .collect::<Vec<_>>()
           .into();
 
-        let (mesh, _) = coord_mesh.into_riemannian_complex();
+        let (mesh, _) = coord_mesh.into_metric_complex();
 
         PoissonWithSol {
           mesh,
@@ -55,7 +55,7 @@ fn main() {
 }
 
 struct PoissonWithSol {
-  mesh: RiemannianComplex,
+  mesh: MetricComplex,
   load_data: na::DVector<f64>,
   solution_exact: na::DVector<f64>,
 }

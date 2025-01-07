@@ -1,29 +1,19 @@
-use geometry::coord::VertexCoords;
-use index_algebra::sign::Sign;
+use super::CoordSkeleton;
+use crate::coord::VertexCoords;
 
-use crate::{
-  complex::VertexIdx,
-  coords::CoordManifold,
-  simplicial::{SimplicialTopology, Vertplex},
-};
+use topology::{simplex::Simplex, skeleton::ManifoldSkeleton};
 
 use std::{collections::HashMap, fmt::Write, path::Path, sync::LazyLock};
 
-pub type TriangleTopology = Vec<[VertexIdx; 3]>;
+pub type TriangleTopology = Vec<[usize; 3]>;
 pub trait TriangleTopologyExt {
-  fn from_simplex_topology(simp: SimplicialTopology) -> Self;
+  fn try_from_skeleton(manifold: ManifoldSkeleton) -> Self;
 }
 impl TriangleTopologyExt for TriangleTopology {
-  fn from_simplex_topology(simp: SimplicialTopology) -> Self {
-    simp
-      .into_iter()
-      .map(|c| {
-        let mut vs: [VertexIdx; 3] = c.as_slice().to_vec().try_into().unwrap();
-        if c.sign().is_neg() {
-          vs.swap(0, 1);
-        }
-        vs
-      })
+  fn try_from_skeleton(skeleton: ManifoldSkeleton) -> Self {
+    skeleton
+      .into_simplex_iter()
+      .map(|simp| simp.try_into().unwrap())
       .collect()
   }
 }
@@ -40,7 +30,7 @@ impl TriangleSurface3D {
     let coords = coords.into();
     Self { triangles, coords }
   }
-  pub fn triangles(&self) -> &[[VertexIdx; 3]] {
+  pub fn triangles(&self) -> &[[usize; 3]] {
     &self.triangles
   }
   pub fn vertex_coords(&self) -> &VertexCoords3d {
@@ -52,25 +42,31 @@ impl TriangleSurface3D {
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_manifold(mesh: CoordManifold) -> Self {
-    assert!(mesh.dim_embedded() == 3, "Manifold is not embedded in 3D.");
-    assert!(mesh.dim_intrinsic() == 2, "Manifold is not a 2D surface.");
-
-    let (facets, coords) = mesh.into_parts();
-    let triangles = TriangleTopology::from_simplex_topology(facets);
+  pub fn from_coord_skeleton(skeleton: CoordSkeleton) -> Self {
+    assert!(
+      skeleton.dim_embedded() == 3,
+      "Skeleton is not embedded in 3D."
+    );
+    assert!(
+      skeleton.dim_intrinsic() == 2,
+      "Skeleton is not a 2D surface."
+    );
+    let (skeleton, coords) = skeleton.into_parts();
+    let triangles = TriangleTopology::try_from_skeleton(skeleton);
     let coords = coords.into_const_dim();
 
     Self::new(triangles, coords)
   }
 
-  pub fn into_coord_manifold(self) -> CoordManifold {
-    let coords = self.coords.into_dyn_dim();
-    let facets = self
+  pub fn into_coord_skeleton(self) -> CoordSkeleton {
+    let simps = self
       .triangles
       .into_iter()
-      .map(|t| Vertplex::from(t).with_sign(Sign::Pos))
+      .map(|tria| Simplex::from(tria).into_sorted())
       .collect();
-    CoordManifold::new(facets, coords)
+    let skeleton = ManifoldSkeleton::new(simps);
+    let coords = self.coords.into_dyn_dim();
+    CoordSkeleton::new(skeleton, coords)
   }
 
   pub fn to_obj_string(&self) -> String {
@@ -100,7 +96,7 @@ impl TriangleSurface3D {
         assert!(coords.len() == 3);
         vertex_coords.push(na::Vector3::new(coords[0], coords[1], coords[2]));
       } else if let Some(indices) = line.strip_prefix("f ") {
-        let indices: Vec<VertexIdx> = indices
+        let indices: Vec<usize> = indices
           .split_whitespace()
           // .obj uses 1-indexing.
           .map(|x| x.parse::<usize>().unwrap() - 1)
@@ -242,10 +238,10 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
 }
 
 fn subdivide(
-  triangles: Vec<[VertexIdx; 3]>,
+  triangles: Vec<[usize; 3]>,
   mut vertex_coords: Vec<na::Vector3<f64>>,
   depth: usize,
-) -> (Vec<[VertexIdx; 3]>, Vec<na::Vector3<f64>>) {
+) -> (Vec<[usize; 3]>, Vec<na::Vector3<f64>>) {
   if depth == 0 {
     return (triangles, vertex_coords);
   }

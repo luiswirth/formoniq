@@ -1,20 +1,38 @@
-use common::Dim;
+use common::sparse::SparseMatrix;
 use exterior::{ExteriorRank, RiemannianMetricExt};
+use geometry::metric::manifold::local::LocalMetricComplex;
 use index_algebra::{
   binomial,
   combinators::IndexSubsets,
   factorial,
   sign::{sort_signed, Sign},
-  variants::*,
   IndexSet,
 };
-use manifold::simplicial::{LocalComplex, REFCELLS};
+use topology::{
+  complex::{local::LocalComplex, ManifoldComplex},
+  simplex::SortedSimplex,
+  Dim,
+};
 
 use super::{ElmatProvider, ScalarMassElmat};
 
-/// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-pub fn exterior_derivative(cell_dim: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
-  REFCELLS[cell_dim].kboundary_operator(k + 1).transpose()
+pub trait ManifoldComplexExt {
+  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> SparseMatrix;
+}
+impl ManifoldComplexExt for ManifoldComplex {
+  /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
+  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> SparseMatrix {
+    self.boundary_operator(rank + 1).transpose()
+  }
+}
+
+pub trait LocalComplexExt {
+  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> na::DMatrix<f64>;
+}
+impl LocalComplexExt for LocalComplex {
+  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> na::DMatrix<f64> {
+    self.boundary_operator(rank + 1).transpose()
+  }
 }
 
 /// Element Matrix for the weak Hodge star operator / the mass bilinear form.
@@ -28,8 +46,8 @@ impl ElmatProvider for HodgeMassElmat {
   fn col_rank(&self) -> ExteriorRank {
     self.0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
-    let n = cell.dim();
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+    let n = local_complex.dim();
     let k = self.0;
     let difk = k + 1;
     let k_factorial = factorial(k) as f64;
@@ -37,7 +55,7 @@ impl ElmatProvider for HodgeMassElmat {
 
     let kwhitney_basis_size = binomial(n + 1, k + 1);
 
-    let scalar_mass = ScalarMassElmat.eval(cell);
+    let scalar_mass = ScalarMassElmat.eval(local_complex);
 
     let mut elmat = na::DMatrix::zeros(kwhitney_basis_size, kwhitney_basis_size);
     let simplicies: Vec<_> = IndexSubsets::canonical(n + 1, difk).collect();
@@ -61,7 +79,7 @@ impl ElmatProvider for HodgeMassElmat {
             let aform = &forms[arank][l];
             let bform = &forms[brank][m];
 
-            let inner = cell.metric().kform_inner_product(k, aform, bform);
+            let inner = local_complex.metric().kform_inner_product(k, aform, bform);
             sum += sign.as_f64() * inner * scalar_mass[(asimp[l], bsimp[m])];
           }
         }
@@ -75,31 +93,31 @@ impl ElmatProvider for HodgeMassElmat {
 }
 
 fn construct_const_form(
-  simp: &IndexSet<CanonicalOrder, Unsigned>,
+  simplex: &SortedSimplex,
   ignored_ivertex: usize,
   n: Dim,
 ) -> na::DVector<f64> {
-  let k = simp.len() - 1;
+  let k = simplex.len() - 1;
   let kform_basis_size = binomial(n, k);
 
   let mut form = na::DVector::zeros(kform_basis_size);
 
   let mut form_indices = Vec::new();
-  for (ivertex, &vertex) in simp.iter().enumerate() {
+  for (ivertex, vertex) in simplex.iter().enumerate() {
     if vertex != 0 && ivertex != ignored_ivertex {
       form_indices.push(vertex - 1);
     }
   }
 
-  if simp[0] == 0 && ignored_ivertex != 0 {
+  if simplex[0] == 0 && ignored_ivertex != 0 {
     for i in 0..n {
       let mut form_indices = form_indices.clone();
       form_indices.insert(0, i);
-      let Some(form_indices) = IndexSet::new(form_indices).try_sort_signed() else {
+      let Some(form_indices) = IndexSet::new(form_indices).try_into_sorted_signed() else {
         continue;
       };
-      let sort_sign = form_indices.sign();
-      let form_indices = form_indices.forget_sign();
+      let sort_sign = form_indices.sign;
+      let form_indices = form_indices.set;
       form[form_indices.lex_rank(n)] += -1.0 * sort_sign.as_f64();
     }
   } else {
@@ -121,11 +139,12 @@ impl ElmatProvider for CodifDifElmat {
   fn col_rank(&self) -> ExteriorRank {
     self.0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
     let k = self.0;
-    exterior_derivative(cell.dim(), k).transpose()
-      * HodgeMassElmat(k + 1).eval(cell)
-      * exterior_derivative(cell.dim(), k)
+    let dif = local_complex.topology().exterior_derivative_operator(k);
+    let codif = dif.transpose();
+    let mass = HodgeMassElmat(k + 1).eval(local_complex);
+    codif * mass * dif
   }
 }
 
@@ -140,9 +159,11 @@ impl ElmatProvider for DifElmat {
   fn col_rank(&self) -> ExteriorRank {
     self.0 - 1
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
     let k = self.0;
-    HodgeMassElmat(k).eval(cell) * exterior_derivative(cell.dim(), k - 1)
+    let dif = local_complex.topology().exterior_derivative_operator(k - 1);
+    let mass = HodgeMassElmat(k).eval(local_complex);
+    mass * dif
   }
 }
 
@@ -157,9 +178,12 @@ impl ElmatProvider for CodifElmat {
   fn col_rank(&self) -> ExteriorRank {
     self.0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
     let k = self.0;
-    exterior_derivative(cell.dim(), k - 1).transpose() * HodgeMassElmat(k).eval(cell)
+    let dif = local_complex.topology().exterior_derivative_operator(k - 1);
+    let codif = dif.transpose();
+    let mass = HodgeMassElmat(k).eval(local_complex);
+    codif * mass
   }
 }
 
@@ -175,7 +199,7 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   let mut ref_difwhitneys = na::DMatrix::zeros(kform_basis_size, whitney_basis_size);
   for (whitney_comb_rank, whitney_comb) in IndexSubsets::canonical(n + 1, k + 1).enumerate() {
     if whitney_comb[0] == 0 {
-      let kform_comb: Vec<_> = whitney_comb.iter().skip(1).map(|c| *c - 1).collect();
+      let kform_comb: Vec<_> = whitney_comb.iter().skip(1).map(|c| c - 1).collect();
       for i in 0..n {
         let mut kform_comb = kform_comb.clone();
         kform_comb.insert(0, i);
@@ -191,7 +215,7 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
         ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign.as_f64() * difk_factorial;
       }
     } else {
-      let kform_comb: Vec<_> = whitney_comb.iter().map(|c| *c - 1).collect();
+      let kform_comb: Vec<_> = whitney_comb.iter().map(|c| c - 1).collect();
       let kform_comb = IndexSet::from(kform_comb).assume_sorted();
       let kform_comb_rank = kform_comb.lex_rank(n);
       ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = difk_factorial;
@@ -211,7 +235,7 @@ mod test {
   use super::{ref_difwhitneys, CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
-  use manifold::simplicial::ReferenceCell;
+  use geometry::metric::manifold::local::LocalMetricComplex;
 
   #[test]
   fn ref_difwhitney0_is_ref_difbary() {
@@ -233,9 +257,9 @@ mod test {
   #[test]
   fn dif_dif0_is_laplace_beltrami() {
     for n in 1..=3 {
-      let cell = ReferenceCell::new(n).to_cell_complex();
-      let hodge_laplace = CodifDifElmat(0).eval(&cell);
-      let laplace_beltrami = LaplaceBeltramiElmat.eval(&cell);
+      let complex = LocalMetricComplex::reference(n);
+      let hodge_laplace = CodifDifElmat(0).eval(&complex);
+      let laplace_beltrami = LaplaceBeltramiElmat.eval(&complex);
       assert_mat_eq(&hodge_laplace, &laplace_beltrami);
     }
   }
@@ -243,17 +267,17 @@ mod test {
   #[test]
   fn hodge_mass0_is_scalar_mass() {
     for n in 0..=3 {
-      let cell = ReferenceCell::new(n).to_cell_complex();
-      let hodge_mass = HodgeMassElmat(0).eval(&cell);
-      let scalar_mass = ScalarMassElmat.eval(&cell);
+      let complex = LocalMetricComplex::reference(n);
+      let hodge_mass = HodgeMassElmat(0).eval(&complex);
+      let scalar_mass = ScalarMassElmat.eval(&complex);
       assert_mat_eq(&hodge_mass, &scalar_mass);
     }
   }
 
   #[test]
   fn hodge_mass_n2_k1() {
-    let cell = ReferenceCell::new(2).to_cell_complex();
-    let computed = HodgeMassElmat(1).eval(&cell);
+    let complex = LocalMetricComplex::reference(2);
+    let computed = HodgeMassElmat(1).eval(&complex);
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
       1./6.,1./3.,0.   ;
@@ -264,8 +288,8 @@ mod test {
 
   #[test]
   fn dif_n2_k1() {
-    let cell = ReferenceCell::new(2).to_cell_complex();
-    let computed = DifElmat(1).eval(&cell);
+    let complex = LocalMetricComplex::reference(2);
+    let computed = DifElmat(1).eval(&complex);
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
@@ -276,8 +300,8 @@ mod test {
 
   #[test]
   fn codif_n2_k1() {
-    let cell = ReferenceCell::new(2).to_cell_complex();
-    let computed = CodifElmat(1).eval(&cell);
+    let complex = LocalMetricComplex::reference(2);
+    let computed = CodifElmat(1).eval(&complex);
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
@@ -289,14 +313,14 @@ mod test {
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for n in 0..=3 {
-      let cell = ReferenceCell::new(n).to_cell_complex();
+      let complex = LocalMetricComplex::reference(n);
       for k in 0..n {
-        let var0 = CodifDifElmat(k).eval(&cell);
+        let var0 = CodifDifElmat(k).eval(&complex);
 
-        let var1 = cell.vol()
-          * cell
+        let var1 = complex.vol()
+          * complex
             .metric()
-            .kform_norm_sqr(k + 1, &ref_difwhitneys(cell.dim(), k));
+            .kform_norm_sqr(k + 1, &ref_difwhitneys(complex.dim(), k));
 
         assert_mat_eq(&var0, &var1);
       }

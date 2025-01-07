@@ -3,7 +3,7 @@
 use crate::{assemble, fe, fe::DofIdx};
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use manifold::RiemannianComplex;
+use geometry::metric::manifold::MetricComplex;
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
@@ -22,7 +22,7 @@ impl WaveState {
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
@@ -35,8 +35,8 @@ where
   let mut mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat);
   let mut force = assemble::assemble_galvec(mesh, fe::SourceElvec::new(force_data));
 
-  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut force);
-  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut force);
+  assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut laplace, &mut force);
+  assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut mass, &mut force);
 
   let laplace = laplace.to_nalgebra_csr();
   let mass = mass.to_nalgebra_csr();
@@ -100,7 +100,7 @@ pub fn solve_wave_step(
 /// For explicit time stepping typically Cmax = 1.
 /// Implicit time stepping is usually more lenient, allowing bigger values.
 /// We assume here Cmax = 1, with a 5% safety margin.
-pub fn cfl_dt(mesh: &RiemannianComplex, vel: f64) -> f64 {
+pub fn cfl_dt(mesh: &MetricComplex, vel: f64) -> f64 {
   const MARGIN: f64 = 0.95;
   MARGIN * mesh.mesh_width_min() / vel
 }

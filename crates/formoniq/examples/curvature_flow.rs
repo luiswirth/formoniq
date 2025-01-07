@@ -5,8 +5,10 @@ extern crate nalgebra_sparse as nas;
 
 use common::util::FaerCholesky;
 use formoniq::{assemble, fe};
-use geometry::coord::VertexCoords;
-use manifold::gen::dim3;
+use geometry::coord::{
+  manifold::dim3::{write_3dmesh_animation, TriangleSurface3D},
+  VertexCoords,
+};
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -17,11 +19,11 @@ fn main() {
   let obj_path = std::env::var("FORMONIQ_OBJ_PATH")
     .expect("specify the OBJ file using the envvar `FORMONIQ_OBJ_PATH`");
   let obj_string = std::fs::read_to_string(obj_path).unwrap();
-  let surface = dim3::TriangleSurface3D::from_obj_string(&obj_string);
+  let surface = TriangleSurface3D::from_obj_string(&obj_string);
   std::fs::write("out/curvature_flow.obj", surface.to_obj_string()).unwrap();
 
-  let coord_mesh = surface.into_coord_manifold();
-  let (mut mesh, coords) = coord_mesh.into_riemannian_complex();
+  let (mut mesh, coords) = surface.into_coord_skeleton().into_metric_complex();
+  let nvertices = mesh.topology().vertices().len();
 
   let mut coords_list = vec![coords];
 
@@ -34,11 +36,11 @@ fn main() {
 
     let laplace = assemble::assemble_galmat(&mesh, fe::LaplaceBeltramiElmat);
     let mass = assemble::assemble_galmat(&mesh, fe::ScalarMassElmat);
-    let source = na::DVector::zeros(mesh.nvertices());
+    let source = na::DVector::zeros(nvertices);
 
     let coords_initial = coords_list.first().unwrap();
     let coords_old = coords_list.last().unwrap();
-    let mut coords_new = na::DMatrix::zeros(coords_initial.dim(), mesh.nvertices());
+    let mut coords_new = na::DMatrix::zeros(coords_initial.dim(), nvertices);
     for d in 0..coords_initial.dim() {
       let comps_initial = coords_initial.matrix().row(d).transpose();
       let comps_old = coords_old.matrix().row(d).transpose();
@@ -48,8 +50,8 @@ fn main() {
       let mut source = source.clone();
 
       let boundary_data = |inode| comps_initial[inode];
-      assemble::enforce_dirichlet_bc(&mesh, boundary_data, &mut laplace, &mut source);
-      assemble::enforce_dirichlet_bc(&mesh, boundary_data, &mut mass, &mut source);
+      assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut laplace, &mut source);
+      assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut mass, &mut source);
 
       let laplace = laplace.to_nalgebra_csr();
       let mass = mass.to_nalgebra_csr();
@@ -65,10 +67,10 @@ fn main() {
     let coords_new = VertexCoords::new(coords_new);
     *mesh.edge_lengths_mut() = coords_new.to_edge_lengths(
       mesh
-        .complex()
+        .topology()
         .edges()
-        .keys()
-        .map(|e| e.indices().try_into().unwrap()),
+        .iter()
+        .map(|e| e.simplex_set().clone().try_into().unwrap()),
     );
     coords_list.push(coords_new);
   }
@@ -78,5 +80,5 @@ fn main() {
     .map(|coords| coords.into_const_dim())
     .collect();
   let times = (0..=nsteps).map(|istep| istep as f64 * dt);
-  dim3::write_3dmesh_animation(&coords_list, times);
+  write_3dmesh_animation(&coords_list, times);
 }

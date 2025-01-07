@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 geometry = { path = "../geometry" }
+topology = { path = "../topology" }
 index-algebra = { path = "../index-algebra" }
 common = { path = "../common" }
 
