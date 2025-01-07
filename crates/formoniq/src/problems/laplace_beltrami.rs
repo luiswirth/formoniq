@@ -1,13 +1,13 @@
 //! Module for the Poisson Equation, the prototypical ellipitic PDE.
 
-use common::{sparse::petsc_ghiep, util::FaerCholesky};
-use manifold::RiemannianComplex;
-
 use crate::{assemble, fe, fe::DofIdx};
+
+use common::{sparse::petsc_ghiep, util::FaerCholesky};
+use geometry::metric::manifold::MetricComplex;
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
   source_data: na::DVector<f64>,
   boundary_data: F,
 ) -> na::DVector<f64>
@@ -20,7 +20,7 @@ where
   let elvec = fe::SourceElvec::new(source_data);
   let mut galvec = assemble::assemble_galvec(mesh, elvec);
 
-  assemble::enforce_dirichlet_bc(mesh, boundary_data, &mut galmat, &mut galvec);
+  assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut galmat, &mut galvec);
 
   let galmat = galmat.to_nalgebra_csr();
   FaerCholesky::new(galmat).solve(&galvec)
@@ -28,7 +28,7 @@ where
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   let laplace_galmat = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);

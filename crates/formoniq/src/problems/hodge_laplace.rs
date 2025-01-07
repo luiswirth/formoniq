@@ -2,10 +2,10 @@ use crate::{assemble, fe};
 
 use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
 use exterior::ExteriorRank;
-use manifold::RiemannianComplex;
+use geometry::metric::manifold::MetricComplex;
 
 pub fn solve_hodge_laplace_source(
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
   k: ExteriorRank,
   source_data: na::DVector<f64>,
 ) -> (na::DVector<f64>, na::DVector<f64>) {
@@ -58,7 +58,7 @@ pub fn solve_hodge_laplace_source(
 }
 
 pub fn solve_hodge_laplace_evp(
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
   k: ExteriorRank,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {

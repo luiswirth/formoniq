@@ -1,20 +1,20 @@
 pub mod whitney;
 
-use common::Dim;
 use exterior::ExteriorRank;
-use manifold::{complex::KSimplexIdx, simplicial::LocalComplex, RiemannianComplex};
+use geometry::metric::manifold::{local::LocalMetricComplex, MetricComplex};
+use topology::Dim;
 
-pub type DofIdx = KSimplexIdx;
+pub type DofIdx = usize;
 
 pub trait ElmatProvider {
   fn row_rank(&self) -> ExteriorRank;
   fn col_rank(&self) -> ExteriorRank;
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64>;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64>;
 }
 
 pub trait ElvecProvider {
   fn rank(&self) -> ExteriorRank;
-  fn eval(&self, cell: &LocalComplex) -> na::DVector<f64>;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DVector<f64>;
 }
 
 /// Exact Element Matrix Provider for the Laplace-Beltrami operator.
@@ -28,9 +28,9 @@ impl ElmatProvider for LaplaceBeltramiElmat {
   fn col_rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
-    let ref_difbarys = ref_difbarys(cell.dim());
-    cell.vol() * cell.metric().covector_norm_sqr(&ref_difbarys)
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+    let ref_difbarys = ref_difbarys(local_complex.dim());
+    local_complex.vol() * local_complex.metric().covector_norm_sqr(&ref_difbarys)
   }
 }
 
@@ -43,10 +43,10 @@ impl ElmatProvider for ScalarMassElmat {
   fn col_rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
-    let ndofs = cell.nvertices();
-    let dim = cell.dim();
-    let v = cell.vol() / ((dim + 1) * (dim + 2)) as f64;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+    let ndofs = local_complex.topology().nvertices();
+    let dim = local_complex.dim();
+    let v = local_complex.vol() / ((dim + 1) * (dim + 2)) as f64;
     let mut elmat = na::DMatrix::from_element(ndofs, ndofs, v);
     elmat.fill_diagonal(2.0 * v);
     elmat
@@ -63,9 +63,9 @@ impl ElmatProvider for ScalarLumpedMassElmat {
   fn col_rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DMatrix<f64> {
-    let n = cell.nvertices();
-    let v = cell.vol() / n as f64;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+    let n = local_complex.topology().nvertices();
+    let v = local_complex.vol() / n as f64;
     na::DMatrix::from_diagonal_element(n, n, v)
   }
 }
@@ -86,13 +86,17 @@ impl ElvecProvider for SourceElvec {
   fn rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, cell: &LocalComplex) -> na::DVector<f64> {
-    let nverts = cell.nvertices();
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DVector<f64> {
+    let nverts = local_complex.topology().nvertices();
 
-    cell.vol() / nverts as f64
+    local_complex.vol() / nverts as f64
       * na::DVector::from_iterator(
         nverts,
-        cell.vertices().iter().copied().map(|iv| self.dof_data[iv]),
+        local_complex
+          .topology()
+          .vertices()
+          .iter()
+          .map(|&iv| self.dof_data[iv]),
       )
   }
 }
@@ -108,35 +112,36 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
   ref_difbarys
 }
 
+// TODO: remove this???
 pub fn integrate_pointwise<'a>(
   a: impl Into<na::DVectorView<'a, f64>>,
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
 ) -> f64 {
   let a = a.into();
 
   let mut norm: f64 = 0.0;
-  for cell in mesh.cells() {
+  for facet in mesh.topology().facets().iter() {
     let mut sum = 0.0;
-    for &ivertex in cell.oriented_vertplex().iter() {
+    for ivertex in facet.simplex_set().iter() {
       sum += a[ivertex];
     }
-    let nvertices = cell.nvertices();
-    let cell_geo = cell.as_cell_complex();
-    let vol = cell_geo.vol();
+    let nvertices = facet.nvertices();
+    let vol = mesh.local_complex(facet).vol();
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
 }
+
 pub fn l2_inner<'a>(
   a: impl Into<na::DVectorView<'a, f64>>,
   b: impl Into<na::DVectorView<'a, f64>>,
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
 ) -> f64 {
   let a = a.into();
   let b = b.into();
   integrate_pointwise(&a.component_mul(&b), mesh)
 }
-pub fn l2_norm<'a>(a: impl Into<na::DVectorView<'a, f64>>, mesh: &RiemannianComplex) -> f64 {
+pub fn l2_norm<'a>(a: impl Into<na::DVectorView<'a, f64>>, mesh: &MetricComplex) -> f64 {
   let a = a.into();
   l2_inner(a, a, mesh)
 }

@@ -107,6 +107,14 @@ impl SparseMatrix {
       .collect();
     Self::new(self.nrows, self.ncols, triplets)
   }
+
+  pub fn transpose(&self) -> SparseMatrix {
+    let mut triplets = self.triplets.clone();
+    for t in &mut triplets {
+      std::mem::swap(&mut t.0, &mut t.1);
+    }
+    Self::new(self.ncols, self.nrows, triplets)
+  }
 }
 
 const PETSC_MAT_FILE_CLASSID: i32 = 1211216;

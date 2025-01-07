@@ -1,11 +1,12 @@
-use crate::{
-  coords::{CoordManifold, CoordSimplex},
-  simplicial::{OrderedVertplex, OrientedVertplex},
-  Dim, VertexIdx,
-};
+use super::CoordSkeleton;
+use crate::coord::VertexCoords;
 
-use geometry::coord::VertexCoords;
 use index_algebra::{factorial, IndexSet};
+use topology::{
+  simplex::{Simplex, SortedSimplex},
+  skeleton::ManifoldSkeleton,
+  Dim,
+};
 
 /// converts linear index to cartesian index
 ///
@@ -119,23 +120,23 @@ impl CartesianMesh {
   pub fn nvertices(&self) -> usize {
     self.nvertices_axis().pow(self.dim() as u32)
   }
-  pub fn vertex_cart_idx(&self, ivertex: VertexIdx) -> na::DVector<usize> {
+  pub fn vertex_cart_idx(&self, ivertex: usize) -> na::DVector<usize> {
     linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim())
   }
-  pub fn vertex_pos(&self, ivertex: VertexIdx) -> na::DVector<f64> {
+  pub fn vertex_pos(&self, ivertex: usize) -> na::DVector<f64> {
     (self.vertex_cart_idx(ivertex).cast::<f64>() / (self.nvertices_axis() - 1) as f64)
       .component_mul(&self.side_lengths())
       + self.min()
   }
 
-  pub fn is_vertex_on_boundary(&self, vertex: VertexIdx) -> bool {
+  pub fn is_vertex_on_boundary(&self, vertex: usize) -> bool {
     let coords = linear_index2cartesian_index(vertex, self.nvertices_axis(), self.rect.dim());
     coords
       .iter()
       .any(|&c| c == 0 || c == self.nvertices_axis() - 1)
   }
 
-  pub fn boundary_vertices(&self) -> Vec<VertexIdx> {
+  pub fn boundary_vertices(&self) -> Vec<usize> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
       let nvertices_boundary_face = self.nvertices_axis().pow(self.dim() as u32 - 1);
@@ -155,7 +156,7 @@ impl CartesianMesh {
 }
 
 impl CartesianMesh {
-  pub fn compute_coord_manifold(&self) -> CoordManifold {
+  pub fn compute_coord_manifold(&self) -> CoordSkeleton {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
@@ -167,7 +168,7 @@ impl CartesianMesh {
 
     let dim = self.dim();
     let nsimplicies = factorial(dim) * nboxes;
-    let mut simplicies: Vec<OrientedVertplex> = Vec::with_capacity(nsimplicies);
+    let mut simplicies: Vec<SortedSimplex> = Vec::with_capacity(nsimplicies);
 
     // iterate through all boxes that make up the mesh
     for ibox in 0..nboxes {
@@ -183,30 +184,26 @@ impl CartesianMesh {
       // Each permutation of the basis directions (dimensions) gives rise to one simplex.
       let cube_simplicies = basisdirs.permutations().map(|basisdirs| {
         // Construct simplex by adding all shifted vertices.
-        let mut vertplex = vec![ivertex_origin];
+        let mut simplex = vec![ivertex_origin];
 
         // Add every shift (according to permutation) to vertex iteratively.
         // Every shift step gives us one vertex.
         let mut vertex_icart = vertex_icart_origin.clone();
-        for &basisdir in basisdirs.iter() {
+        for basisdir in basisdirs.set.iter() {
           vertex_icart[basisdir] += 1;
 
           let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nvertices_axis());
-          vertplex.push(ivertex);
+          simplex.push(ivertex);
         }
 
-        let vertplex = OrderedVertplex::from(vertplex);
-
-        // Ensure consistent positive orientation of cells.
-        let orientation = CoordSimplex::from_vertplex(&vertplex, &coords).orientation();
-
-        vertplex.with_sign(orientation)
+        Simplex::from(simplex).assume_sorted()
       });
 
       simplicies.extend(cube_simplicies);
     }
 
-    CoordManifold::new(simplicies, coords)
+    let skeleton = ManifoldSkeleton::new(simplicies);
+    CoordSkeleton::new(skeleton, coords)
   }
 }
 
@@ -240,10 +237,9 @@ mod test {
       &[0, 4, 6, 7],
     ];
     let facets: Vec<_> = mesh
-      .facets()
-      .iter()
-      .cloned()
-      .map(|c| c.into_vec())
+      .skeleton()
+      .simplex_iter()
+      .map(|s| s.clone().into_vec())
       .collect();
     assert_eq!(facets, expected_facets);
   }
@@ -277,10 +273,9 @@ mod test {
       &[4, 7, 8],
     ];
     let facets: Vec<_> = mesh
-      .facets()
-      .iter()
-      .cloned()
-      .map(|c| c.into_vec())
+      .skeleton()
+      .simplex_iter()
+      .map(|s| s.clone().into_vec())
       .collect();
     assert_eq!(facets, expected_simplicies);
   }

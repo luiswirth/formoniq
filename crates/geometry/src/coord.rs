@@ -1,11 +1,15 @@
-use common::Dim;
+pub mod manifold;
 
-use crate::regge::EdgeLengths;
+use crate::metric::EdgeLengths;
+
+use topology::Dim;
 
 pub type VertexIdx = usize;
 
-type CoordMatrix<D> = na::OMatrix<f64, D, na::Dyn>;
-type CoordVector<D> = na::OVector<f64, D>;
+pub type Coord<D = na::Dyn> = na::OVector<f64, D>;
+pub type CoordRef<'a, D = na::Dyn> = na::VectorView<'a, f64, D>;
+
+pub type CoordMatrix<D> = na::OMatrix<f64, D, na::Dyn>;
 //type CoordVectorView<'a, D> = na::VectorView<'a, f64, D>;
 
 #[derive(Debug, Clone)]
@@ -43,12 +47,12 @@ where
   }
 }
 
-impl<D: na::Dim> From<&[CoordVector<D>]> for VertexCoords<D>
+impl<D: na::Dim> From<&[Coord<D>]> for VertexCoords<D>
 where
   na::DefaultAllocator: na::allocator::Allocator<D>,
   na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
 {
-  fn from(vectors: &[CoordVector<D>]) -> Self {
+  fn from(vectors: &[Coord<D>]) -> Self {
     let matrix = CoordMatrix::from_columns(vectors);
     Self::new(matrix)
   }
@@ -80,7 +84,7 @@ where
   }
 
   // TODO: return view
-  pub fn coord(&self, ivertex: VertexIdx) -> CoordVector<D> {
+  pub fn coord(&self, ivertex: VertexIdx) -> Coord<D> {
     self.matrix.column(ivertex).into_owned()
   }
 

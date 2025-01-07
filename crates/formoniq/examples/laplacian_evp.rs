@@ -4,15 +4,15 @@ extern crate nalgebra_sparse as nas;
 use std::f64::consts::PI;
 
 use formoniq::problems::hodge_laplace;
-use manifold::gen::{cartesian::CartesianMesh, dim3::TriangleSurface3D};
+use geometry::coord::manifold::{cartesian::CartesianMesh, dim3::TriangleSurface3D};
 
 fn main() {
   let dim = 2;
   let nboxes_per_dim = 30;
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.compute_coord_manifold();
-  let surface = TriangleSurface3D::from_coord_manifold(coord_mesh.clone());
-  let (mesh, _) = coord_mesh.into_riemannian_complex();
+  let surface = TriangleSurface3D::from_coord_skeleton(coord_mesh.clone());
+  let (mesh, _) = coord_mesh.into_metric_complex();
 
   let neigen_values = 10;
   let form_rank = 2;

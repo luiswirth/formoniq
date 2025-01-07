@@ -1,10 +1,11 @@
-use geometry::coord::VertexCoords;
 use index_algebra::sign::Sign;
+use topology::{simplex::Simplex, skeleton::ManifoldSkeleton};
 
-use crate::{coords::CoordManifold, simplicial::Vertplex};
+use super::CoordSkeleton;
+use crate::coord::VertexCoords;
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
+pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
@@ -38,19 +39,27 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordManifold {
       let simplex = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
       // NOTE: gmsh always produces positively oriented cells
       // TODO: only assume Pos for cells(!) not all simplicies.
-      let simplex = Vertplex::new(simplex).with_sign(Sign::Pos);
+      let simplex = Simplex::new(simplex).with_sign(Sign::Pos);
       simplex_acc.push(simplex);
     }
   }
 
-  if !quads.is_empty() {
-    return CoordManifold::new(quads, mesh_vertices);
-  }
-  if !trias.is_empty() {
-    return CoordManifold::new(trias, mesh_vertices);
-  }
-  if !edges.is_empty() {
-    return CoordManifold::new(edges, mesh_vertices);
-  }
-  panic!("failed to construct Triangulation from gmsh");
+  // TODO: create complex from all given simplicies (also subs)
+  let skeleton = if !quads.is_empty() {
+    quads
+  } else if !trias.is_empty() {
+    trias
+  } else if !edges.is_empty() {
+    edges
+  } else {
+    panic!("Failed to construct Triangulation from gmsh.");
+  };
+
+  let skeleton = skeleton
+    .into_iter()
+    .map(|simp| simp.set.into_sorted())
+    .collect();
+  let skeleton = ManifoldSkeleton::new(skeleton);
+
+  CoordSkeleton::new(skeleton, mesh_vertices)
 }

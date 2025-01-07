@@ -1,7 +1,7 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
 use common::util::FaerCholesky;
-use manifold::RiemannianComplex;
+use geometry::metric::manifold::MetricComplex;
 
 use crate::{
   assemble,
@@ -10,7 +10,7 @@ use crate::{
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_heat<F>(
-  mesh: &RiemannianComplex,
+  mesh: &MetricComplex,
   nsteps: usize,
   dt: f64,
   boundary_data: F,
@@ -25,8 +25,8 @@ where
   let mut mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat);
   let mut source = assemble::assemble_galvec(mesh, fe::SourceElvec::new(source_data));
 
-  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut laplace, &mut source);
-  assemble::enforce_dirichlet_bc(mesh, &boundary_data, &mut mass, &mut source);
+  assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut laplace, &mut source);
+  assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut mass, &mut source);
 
   let laplace = laplace.to_nalgebra_csr();
   let mass = mass.to_nalgebra_csr();

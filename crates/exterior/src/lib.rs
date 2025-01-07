@@ -4,37 +4,28 @@ extern crate nalgebra as na;
 
 pub mod dense;
 
-use common::Dim;
-use geometry::RiemannianMetric;
+use geometry::metric::RiemannianMetric;
 use index_algebra::{
-  combinators::{IndexPermutations, IndexSubsets},
+  combinators::{IndexSubPermutations, IndexSubsets},
   variants::*,
   IndexSet,
 };
+use topology::Dim;
 
 use std::collections::HashMap;
 
 pub type ExteriorRank = usize;
 
-pub type ExteriorBasis = ExteriorTerm<CanonicalOrder, Unsigned>;
-
-pub trait ExteriorTermExt<O: SetOrder, S: SetSign> {
-  fn ext(self, dim: Dim) -> ExteriorTerm<O, S>;
-}
-impl<Set: Into<IndexSet<O, S>>, O: SetOrder, S: SetSign> ExteriorTermExt<O, S> for Set {
-  fn ext(self, dim: Dim) -> ExteriorTerm<O, S> {
-    ExteriorTerm::new(self.into(), dim)
-  }
-}
+pub type ExteriorBasis = ExteriorTerm<CanonicalOrder>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ExteriorTerm<O: SetOrder, S: SetSign> {
-  index_set: IndexSet<O, S>,
+pub struct ExteriorTerm<O: SetOrder> {
+  index_set: IndexSet<O>,
   dim: Dim,
 }
 
-impl<O: SetOrder, S: SetSign> ExteriorTerm<O, S> {
-  pub fn new(index_set: IndexSet<O, S>, dim: Dim) -> Self {
+impl<O: SetOrder> ExteriorTerm<O> {
+  pub fn new(index_set: IndexSet<O>, dim: Dim) -> Self {
     Self { index_set, dim }
   }
   pub fn rank(&self) -> ExteriorRank {
@@ -45,7 +36,7 @@ impl<O: SetOrder, S: SetSign> ExteriorTerm<O, S> {
   }
 }
 
-impl<S: SetSign> ExteriorTerm<CanonicalOrder, S> {
+impl ExteriorBasis {
   // TODO: is there a more efficent implementation?
   pub fn hodge_star(
     &self,
@@ -55,21 +46,20 @@ impl<S: SetSign> ExteriorTerm<CanonicalOrder, S> {
     let k = self.rank();
     let dual_k = n - k;
 
-    let primal_coeff = self.index_set.signedness().get_or_default().as_f64();
-    let primal_index = self.index_set.clone().forget_sign();
+    let primal_coeff = 1.0;
+    let primal_index = &self.index_set;
 
     let mut dual_terms = Vec::new();
     for dual_index in IndexSubsets::canonical(n, dual_k) {
       let mut dual_coeff = 0.0;
 
-      for sum_index in IndexPermutations::canonical_sub(n, k) {
-        let sum_index = sum_index.forget_sign();
+      for sum_index in IndexSubPermutations::canonical(n, k) {
         let full_dual_index = sum_index.clone().union(dual_index.clone());
-        let Some(full_dual_index) = full_dual_index.clone().try_sort_signed() else {
+        let Some(full_dual_index) = full_dual_index.try_into_sorted_signed() else {
           // Levi-Civita symbol is zero.
           continue;
         };
-        let sign = full_dual_index.sign().as_f64();
+        let sign = full_dual_index.sign.as_f64();
 
         let metric_prod: f64 = (0..k)
           .map(|iindex| metric.inverse_metric_tensor()[(primal_index[iindex], sum_index[iindex])])
@@ -95,18 +85,18 @@ impl<S: SetSign> ExteriorTerm<CanonicalOrder, S> {
 #[derive(Debug, Clone)]
 pub struct ScaledExteriorTerm<O: SetOrder> {
   coeff: f64,
-  term: ExteriorTerm<O, Unsigned>,
+  term: ExteriorTerm<O>,
 }
 
 impl<O: SetOrder> ScaledExteriorTerm<O> {
-  pub fn new(coeff: f64, term: ExteriorTerm<O, Unsigned>) -> Self {
+  pub fn new(coeff: f64, term: ExteriorTerm<O>) -> Self {
     Self { coeff, term }
   }
 
   pub fn coeff(&self) -> f64 {
     self.coeff
   }
-  pub fn term(&self) -> &ExteriorTerm<O, Unsigned> {
+  pub fn term(&self) -> &ExteriorTerm<O> {
     &self.term
   }
 
@@ -119,9 +109,9 @@ impl<O: SetOrder> ScaledExteriorTerm<O> {
 
   pub fn into_canonical(self) -> ScaledExteriorTerm<CanonicalOrder> {
     let dim = self.dim();
-    let term = self.term.index_set.sort_signed();
-    let coeff = self.coeff * term.sign().as_f64();
-    let term = term.forget_sign().ext(dim);
+    let (term, sign) = self.term.index_set.into_sorted_signed().into_parts();
+    let coeff = self.coeff * sign.as_f64();
+    let term = term.ext(dim);
     ScaledExteriorTerm { coeff, term }
   }
 
@@ -164,11 +154,11 @@ impl ScaledExteriorTerm<CanonicalOrder> {
   }
 }
 
-impl<O: SetOrder, S: SetSign> std::ops::Mul<ExteriorTerm<O, S>> for f64 {
+impl<O: SetOrder> std::ops::Mul<ExteriorTerm<O>> for f64 {
   type Output = ScaledExteriorTerm<O>;
-  fn mul(self, term: ExteriorTerm<O, S>) -> Self::Output {
-    let coeff = self * term.index_set.signedness().get_or_default().as_f64();
-    let term = term.index_set.forget_sign().ext(term.dim);
+  fn mul(self, term: ExteriorTerm<O>) -> Self::Output {
+    let coeff = self;
+    let term = term.index_set.ext(term.dim);
     ScaledExteriorTerm::new(coeff, term)
   }
 }
@@ -366,10 +356,19 @@ impl RiemannianMetricExt for RiemannianMetric {
   }
 }
 
+pub trait ExteriorTermExt<O: SetOrder> {
+  fn ext(self, dim: Dim) -> ExteriorTerm<O>;
+}
+impl<Set: Into<IndexSet<O>>, O: SetOrder> ExteriorTermExt<O> for Set {
+  fn ext(self, dim: Dim) -> ExteriorTerm<O> {
+    ExteriorTerm::new(self.into(), dim)
+  }
+}
+
 #[cfg(test)]
 mod test {
   use common::linalg::assert_mat_eq;
-  use geometry::RiemannianMetric;
+  use geometry::metric::RiemannianMetric;
   use index_algebra::binomial;
 
   use crate::RiemannianMetricExt;

@@ -1,4 +1,4 @@
-use crate::sign::Sign;
+use crate::{sign::Sign, SignedIndexSet};
 
 use super::{variants::*, IndexSet};
 
@@ -6,60 +6,69 @@ use super::{variants::*, IndexSet};
 ///
 /// It's lexicographical relative to the original set order.
 /// It's only absolutly lexicographical, if the original set was sorted.
-pub struct IndexPermutations<O: SetOrder, S: SetSign> {
+pub struct IndexSubPermutations {
   state: itertools::Permutations<std::vec::IntoIter<usize>>,
-  set: IndexSet<O, S>,
 }
 
-impl<O: SetOrder, S: SetSign> IndexPermutations<O, S> {
-  pub fn new(set: IndexSet<O, S>) -> Self {
-    let k = set.len();
-    Self::new_sub(set, k)
-  }
-
-  pub fn new_sub(set: IndexSet<O, S>, k: usize) -> Self {
+impl IndexSubPermutations {
+  pub fn new<O: SetOrder>(set: IndexSet<O>, k: usize) -> Self {
     let indices = set.indices.clone().into_iter();
     let state = itertools::Itertools::permutations(indices, k);
-
-    Self { state, set }
+    Self { state }
   }
 }
-impl IndexPermutations<CanonicalOrder, Unsigned> {
-  pub fn canonical(n: usize) -> Self {
-    Self::canonical_sub(n, n)
-  }
-
-  pub fn canonical_sub(n: usize, k: usize) -> Self {
+impl IndexSubPermutations {
+  pub fn canonical(n: usize, k: usize) -> Self {
     let set = IndexSet::increasing(n);
-    Self::new_sub(set, k)
+    Self::new(set, k)
   }
 }
 
-impl<O: SetOrder, S: SetSign> Iterator for IndexPermutations<O, S> {
-  type Item = IndexSet<ArbitraryOrder, Signed>;
+impl Iterator for IndexSubPermutations {
+  type Item = IndexSet<ArbitraryOrder>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.state.next()?;
-    let sorted = IndexSet::new(indices.clone())
-      .with_sign(self.set.signedness.get_or_default())
-      .try_sort_signed()
-      .unwrap();
-    let next = IndexSet {
-      indices: indices.clone(),
-      order: ArbitraryOrder,
-      signedness: sorted.signedness,
-    };
-
+    let next = IndexSet::new(indices);
     Some(next)
   }
 }
 
+pub struct IndexPermutations {
+  sub_permutations: IndexSubPermutations,
+  set_sign: Sign,
+}
+impl IndexPermutations {
+  pub fn new<O: SetOrder>(set: SignedIndexSet<O>) -> Self {
+    let SignedIndexSet { set, sign } = set;
+    let k = set.len();
+    let sub_permutations = IndexSubPermutations::new(set, k);
+    Self {
+      sub_permutations,
+      set_sign: sign,
+    }
+  }
+  pub fn canonical(n: usize) -> Self {
+    let set = IndexSet::increasing(n).with_sign(Sign::Pos);
+    Self::new(set)
+  }
+}
+
+impl Iterator for IndexPermutations {
+  type Item = SignedIndexSet<ArbitraryOrder>;
+  fn next(&mut self) -> Option<Self::Item> {
+    let next = self.sub_permutations.next()?;
+    let permut_sign = next.permut_sign().unwrap();
+    let sign = self.set_sign * permut_sign;
+    Some(next.with_sign(sign))
+  }
+}
+
 pub struct GradedIndexSubsets<O: SetOrder> {
-  set: IndexSet<O, Unsigned>,
+  set: IndexSet<O>,
   k: usize,
 }
 impl<O: SetOrder> GradedIndexSubsets<O> {
-  pub fn new<S: SetSign>(set: IndexSet<O, S>) -> Self {
-    let set = set.forget_sign();
+  pub fn new(set: IndexSet<O>) -> Self {
     let k = 0;
     Self { set, k }
   }
@@ -87,7 +96,7 @@ pub struct IndexSubsets<O: SetOrder> {
 }
 
 impl<O: SetOrder> IndexSubsets<O> {
-  pub fn new<S: SetSign>(set: IndexSet<O, S>, k: usize) -> Self {
+  pub fn new(set: IndexSet<O>, k: usize) -> Self {
     let subsets = itertools::Itertools::combinations(set.indices.into_iter(), k);
     let order = set.order;
     Self { subsets, order }
@@ -102,120 +111,79 @@ impl IndexSubsets<CanonicalOrder> {
 }
 
 impl<O: SetOrder> Iterator for IndexSubsets<O> {
-  type Item = IndexSet<O, Unsigned>;
+  type Item = IndexSet<O>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.subsets.next()?;
     let next = IndexSet {
       indices,
       order: self.order,
-      signedness: Unsigned,
     };
     Some(next)
   }
 }
 
-pub struct IndexBoundarySets<O: SetOrder, S: SetSign> {
+pub struct IndexBoundarySets<O: SetOrder> {
   subsets: IndexSubsets<O>,
-  signedness: S,
-  boundary_sign: Sign,
+  sign: Sign,
 }
 
-impl<O: SetOrder, S: SetSign> IndexBoundarySets<O, S> {
-  pub fn new(set: IndexSet<O, S>) -> Self {
-    let k = set.len() - 1;
-    let signedness = set.signedness;
-    let subsets = IndexSubsets::new(set, k);
+impl<O: SetOrder> IndexBoundarySets<O> {
+  pub fn new(set: SignedIndexSet<O>) -> Self {
+    let k = set.set.len() - 1;
+    let subsets = IndexSubsets::new(set.set, k);
     let boundary_sign = Sign::from_parity(k);
-    Self {
-      subsets,
-      signedness,
-      boundary_sign,
-    }
+    let sign = set.sign * boundary_sign;
+    Self { subsets, sign }
   }
 }
 
-impl<O: SetOrder, S: SetSign> Iterator for IndexBoundarySets<O, S> {
-  type Item = IndexSet<O, Signed>;
+impl<O: SetOrder> Iterator for IndexBoundarySets<O> {
+  type Item = SignedIndexSet<O>;
   fn next(&mut self) -> Option<Self::Item> {
-    let self_sign = self.signedness.get_or_default();
-    let sign = self_sign * self.boundary_sign;
-    self.boundary_sign.flip();
-
-    let next = self.subsets.next()?;
-    let next = IndexSet {
-      indices: next.indices,
-      order: next.order,
-      signedness: Signed(sign),
-    };
+    let next = self.subsets.next()?.with_sign(self.sign);
+    self.sign.flip();
     Some(next)
   }
 }
 
 pub struct IndexSupsets {
-  base_subsets: IndexSubsets<CanonicalOrder>,
-  set: IndexSet<CanonicalOrder, Unsigned>,
+  root_subsets: IndexSubsets<CanonicalOrder>,
+  set: IndexSet<CanonicalOrder>,
 }
 impl IndexSupsets {
-  pub fn new<S: SetSign>(
-    set: IndexSet<CanonicalOrder, S>,
-    universe: IndexSet<CanonicalOrder, S>,
-    k: usize,
-  ) -> Self {
-    let base_set = IndexSet {
-      indices: universe.indices,
-      order: CanonicalOrder,
-      signedness: Unsigned,
-    };
-    let base_subsets = IndexSubsets::new(base_set, k);
-    let set = set.forget_sign();
-    Self { base_subsets, set }
+  pub fn new(set: IndexSet<CanonicalOrder>, root: IndexSet<CanonicalOrder>, k: usize) -> Self {
+    let root_subsets = IndexSubsets::new(root, k);
+    Self { root_subsets, set }
   }
 }
 impl Iterator for IndexSupsets {
-  type Item = IndexSet<CanonicalOrder, Unsigned>;
+  type Item = IndexSet<CanonicalOrder>;
   fn next(&mut self) -> Option<Self::Item> {
-    let next = self.base_subsets.next()?;
-    if self.set.is_sub_of(&next) {
-      Some(next)
-    } else {
-      None
-    }
+    let next = self.root_subsets.next()?;
+    self.set.is_sub_of(&next).then_some(next)
   }
 }
 
-pub struct IndexAntiBoundarySets<S: SetSign> {
+pub struct IndexAntiBoundarySets {
   supsets: IndexSupsets,
-  signedness: S,
-  boundary_sign: Sign,
+  sign: Sign,
 }
 
-impl<S: SetSign> IndexAntiBoundarySets<S> {
-  pub fn new(set: IndexSet<CanonicalOrder, S>, universe: IndexSet<CanonicalOrder, S>) -> Self {
-    let k = set.len() + 1;
-    let signedness = set.signedness;
-    let supsets = IndexSupsets::new(set, universe, k);
+impl IndexAntiBoundarySets {
+  pub fn new(set: SignedIndexSet<CanonicalOrder>, root: IndexSet<CanonicalOrder>) -> Self {
+    let k = set.set.len() + 1;
+    let supsets = IndexSupsets::new(set.set, root, k);
     let boundary_sign = Sign::from_parity(k);
-    Self {
-      supsets,
-      signedness,
-      boundary_sign,
-    }
+    let sign = set.sign * boundary_sign;
+    Self { supsets, sign }
   }
 }
 
-impl<S: SetSign> Iterator for IndexAntiBoundarySets<S> {
-  type Item = IndexSet<CanonicalOrder, Signed>;
+impl Iterator for IndexAntiBoundarySets {
+  type Item = SignedIndexSet<CanonicalOrder>;
   fn next(&mut self) -> Option<Self::Item> {
-    let self_sign = self.signedness.get_or_default();
-    let sign = self_sign * self.boundary_sign;
-    self.boundary_sign.flip();
-
-    let next = self.supsets.next()?;
-    let next = IndexSet {
-      indices: next.indices,
-      order: next.order,
-      signedness: Signed(sign),
-    };
+    let next = self.supsets.next()?.with_sign(self.sign);
+    self.sign.flip();
     Some(next)
   }
 }
@@ -232,11 +200,11 @@ mod test {
       let permuts: Vec<_> = IndexPermutations::canonical(n).collect();
       for win in permuts.windows(2) {
         let [a, b] = win else { unreachable!() };
-        assert!(a.lexicographical_cmp(b).is_lt());
+        assert!(a.set.lexicographical_cmp(&b.set).is_lt());
       }
       for permut in permuts {
-        let computed_sign = permut.sign();
-        let expected_sign = permut.forget_sign().try_sort_signed().unwrap().sign();
+        let computed_sign = permut.sign;
+        let expected_sign = permut.set.clone().into_sorted_signed().sign;
         assert_eq!(computed_sign, expected_sign);
       }
     }

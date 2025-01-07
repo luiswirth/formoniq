@@ -4,9 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-manifold = { path = "../manifold" }
 exterior = { path = "../exterior" }
 geometry = { path = "../geometry" }
+topology = { path = "../topology" }
 index-algebra = { path = "../index-algebra" }
 common = { path = "../common" }
 

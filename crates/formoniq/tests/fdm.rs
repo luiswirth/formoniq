@@ -22,15 +22,13 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::{
-  linalg::{kronecker_sum, matrix_from_const_diagonals},
-  Dim,
-};
+use common::linalg::{kronecker_sum, matrix_from_const_diagonals};
 use formoniq::{
   assemble,
   fe::{self, SourceElvec},
 };
-use manifold::gen::cartesian::CartesianMesh;
+use geometry::coord::manifold::cartesian::CartesianMesh;
+use topology::Dim;
 
 use std::sync::LazyLock;
 
@@ -202,11 +200,14 @@ fn feec_galmat_boundary(dim: Dim) -> na::DMatrix<f64> {
 fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = CartesianMesh::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64);
   let coord_mesh = box_mesh.compute_coord_manifold();
-  let (mesh, _) = coord_mesh.into_riemannian_complex();
+  let (mesh, _) = coord_mesh.into_metric_complex();
   let mut galmat = assemble::assemble_galmat(&mesh, fe::LaplaceBeltramiElmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
     &mesh,
-    SourceElvec::new(na::DVector::from_element(mesh.nvertices(), 1.0)),
+    SourceElvec::new(na::DVector::from_element(
+      mesh.topology().vertices().len(),
+      1.0,
+    )),
   );
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat

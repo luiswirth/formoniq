@@ -22,20 +22,15 @@ pub fn factorial(num: usize) -> usize {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct IndexSet<O: SetOrder, S: SetSign> {
+pub struct IndexSet<O: SetOrder> {
   indices: Vec<usize>,
   order: O,
-  signedness: S,
 }
 
-impl<O: SetOrder, S: SetSign> IndexSet<O, S> {
+impl<O: SetOrder> IndexSet<O> {
   pub fn indices(&self) -> &[usize] {
     &self.indices
   }
-  pub fn signedness(&self) -> S {
-    self.signedness
-  }
-
   pub fn len(&self) -> usize {
     self.indices.len()
   }
@@ -46,7 +41,7 @@ impl<O: SetOrder, S: SetSign> IndexSet<O, S> {
     self
       .iter()
       .zip(other.iter())
-      .find_map(|(a, b)| match a.cmp(b) {
+      .find_map(|(a, b)| match a.cmp(&b) {
         O::Equal => None,
         non_eq => Some(non_eq),
       })
@@ -74,43 +69,45 @@ impl<O: SetOrder, S: SetSign> IndexSet<O, S> {
       .then_with(|| self.pure_lexicographical_cmp(other))
   }
 
+  pub fn union<O1: SetOrder>(self, mut other: IndexSet<O1>) -> IndexSet<ArbitraryOrder> {
+    let mut indices = self.indices;
+    indices.append(&mut other.indices);
+    IndexSet::new(indices)
+  }
+
   pub fn remove(&mut self, i: usize) -> usize {
     self.indices.remove(i)
   }
 
-  pub fn permutations(&self) -> IndexPermutations<O, S> {
-    IndexPermutations::new(self.clone())
-  }
-
-  pub fn subs(&self, ksub: usize) -> IndexSubsets<O> {
+  pub fn subsets(&self, ksub: usize) -> IndexSubsets<O> {
     IndexSubsets::new(self.clone(), ksub)
   }
 
-  pub fn boundary(&self) -> IndexBoundarySets<O, S> {
-    IndexBoundarySets::new(self.clone())
+  pub fn boundary(&self) -> IndexBoundarySets<O> {
+    IndexBoundarySets::new(self.clone().with_sign(Sign::Pos))
+  }
+
+  pub fn permutations(&self) -> IndexPermutations {
+    self.clone().with_sign(Sign::Pos).permutations()
   }
 }
 
-impl<O: SetOrder, S: SetSign> std::ops::Index<usize> for IndexSet<O, S> {
+impl<O: SetOrder> std::ops::Index<usize> for IndexSet<O> {
   type Output = usize;
   fn index(&self, index: usize) -> &Self::Output {
     &self.indices[index]
   }
 }
 
-// Only Sorted
-impl<S: SetSign> IndexSet<CanonicalOrder, S> {
-  pub fn is_sub_of<S1: SetSign>(&self, other: &IndexSet<CanonicalOrder, S1>) -> bool {
+impl IndexSet<CanonicalOrder> {
+  pub fn is_sub_of(&self, other: &Self) -> bool {
     self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
   }
-  pub fn is_sup_of<S1: SetSign>(&self, other: &IndexSet<CanonicalOrder, S1>) -> bool {
+  pub fn is_sup_of(&self, other: &Self) -> bool {
     self.sub_cmp(other).map(|o| o.is_ge()).unwrap_or(false)
   }
   /// Subset partial order relation.
-  pub fn sub_cmp<S1: SetSign>(
-    &self,
-    other: &IndexSet<CanonicalOrder, S1>,
-  ) -> Option<std::cmp::Ordering> {
+  pub fn sub_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
     use std::cmp::Ordering as O;
     let mut is_le = true;
     let mut is_ge = true;
@@ -150,51 +147,16 @@ impl<S: SetSign> IndexSet<CanonicalOrder, S> {
   }
 }
 
-/// Only Signed
-impl<O: SetOrder> IndexSet<O, Signed> {
-  pub fn sign(&self) -> Sign {
-    self.signedness.0
+impl IndexSet<CanonicalOrder> {
+  pub fn supsets(&self, len_sup: usize, root: &Self) -> IndexSupsets {
+    IndexSupsets::new(self.clone(), root.clone(), len_sup)
   }
-  pub fn sign_mut(&mut self) -> &mut Sign {
-    &mut self.signedness.0
-  }
-}
-
-/// Only Unsigned
-impl<O: SetOrder> IndexSet<O, Unsigned> {
-  pub fn union<O1: SetOrder>(
-    self,
-    mut other: IndexSet<O1, Unsigned>,
-  ) -> IndexSet<ArbitraryOrder, Unsigned> {
-    let mut indices = self.indices;
-    indices.append(&mut other.indices);
-    IndexSet {
-      indices,
-      order: ArbitraryOrder,
-      signedness: Unsigned,
-    }
+  pub fn anti_boundary(&self, root: &IndexSet<CanonicalOrder>) -> IndexAntiBoundarySets {
+    IndexAntiBoundarySets::new(self.clone().with_sign(Sign::Pos), root.clone())
   }
 }
 
-impl<S: SetSign> IndexSet<CanonicalOrder, S> {
-  pub fn sups(&self, universe: Self, len_sup: usize) -> IndexSupsets {
-    IndexSupsets::new(self.clone(), universe, len_sup)
-  }
-
-  pub fn anti_boundary(&self, universe: Self) -> IndexAntiBoundarySets<S> {
-    IndexAntiBoundarySets::new(self.clone(), universe)
-  }
-}
-
-/// Oriented == Sorted + Signed
-impl IndexSet<ArbitraryOrder, Signed> {
-  pub fn orientation_eq(&self, other: &Self) -> bool {
-    self.indices == other.indices && self.sign() == other.sign()
-  }
-}
-
-/// Only Local + Sorted + Unsigned
-impl IndexSet<CanonicalOrder, Unsigned> {
+impl IndexSet<CanonicalOrder> {
   pub fn from_lex_rank(n: usize, k: usize, mut rank: usize) -> Self {
     let mut indices = Vec::with_capacity(k);
     let mut start = 0;
@@ -215,7 +177,6 @@ impl IndexSet<CanonicalOrder, Unsigned> {
     Self {
       indices,
       order: CanonicalOrder,
-      signedness: Unsigned,
     }
   }
 
@@ -228,7 +189,7 @@ impl IndexSet<CanonicalOrder, Unsigned> {
     let k = self.len();
 
     let mut rank = 0;
-    for (i, &index) in self.iter().enumerate() {
+    for (i, index) in self.iter().enumerate() {
       let start = if i == 0 { 0 } else { self[i - 1] + 1 };
       for s in start..index {
         rank += binomial(n - s - 1, k - i - 1);
@@ -248,7 +209,7 @@ impl IndexSet<CanonicalOrder, Unsigned> {
 }
 
 // Constructors
-impl IndexSet<ArbitraryOrder, Unsigned> {
+impl IndexSet<ArbitraryOrder> {
   pub fn new(indices: Vec<usize>) -> Self {
     Self {
       indices,
@@ -256,29 +217,29 @@ impl IndexSet<ArbitraryOrder, Unsigned> {
     }
   }
 }
-impl IndexSet<CanonicalOrder, Unsigned> {
+
+impl IndexSet<CanonicalOrder> {
   pub fn none() -> Self {
     Self::default()
   }
   pub fn single(index: usize) -> Self {
-    IndexSet::new(vec![index]).assume_sorted()
+    IndexSet {
+      indices: vec![index],
+      order: CanonicalOrder,
+    }
   }
-}
-
-impl IndexSet<CanonicalOrder, Unsigned> {
   pub fn increasing(n: usize) -> Self {
     IndexSet {
       indices: (0..n).collect(),
       order: CanonicalOrder,
-      signedness: Unsigned,
     }
   }
 }
 
 // Conversions
-impl<O: SetOrder, S: SetSign> IndexSet<O, S> {
-  pub fn iter(&self) -> std::slice::Iter<usize> {
-    self.indices.iter()
+impl<O: SetOrder> IndexSet<O> {
+  pub fn iter(&self) -> std::iter::Copied<std::slice::Iter<'_, usize>> {
+    self.indices.iter().copied()
   }
   pub fn as_slice(&self) -> &[usize] {
     self.indices.as_slice()
@@ -286,17 +247,52 @@ impl<O: SetOrder, S: SetSign> IndexSet<O, S> {
   pub fn into_vec(self) -> Vec<usize> {
     self.indices
   }
-  pub fn into_array<const N: usize>(self) -> Result<[usize; N], Vec<usize>> {
-    self.into_vec().try_into()
-  }
 }
-impl From<Vec<usize>> for IndexSet<ArbitraryOrder, Unsigned> {
+impl From<Vec<usize>> for IndexSet<ArbitraryOrder> {
   fn from(value: Vec<usize>) -> Self {
     Self::new(value)
   }
 }
-impl<const N: usize> From<[usize; N]> for IndexSet<ArbitraryOrder, Unsigned> {
+impl<const N: usize> From<[usize; N]> for IndexSet<ArbitraryOrder> {
   fn from(value: [usize; N]) -> Self {
     Self::new(value.to_vec())
+  }
+}
+
+impl<const N: usize, O: SetOrder> TryFrom<IndexSet<O>> for [usize; N] {
+  type Error = IndexSet<O>;
+  fn try_from(value: IndexSet<O>) -> Result<Self, Self::Error> {
+    value.indices.try_into().map_err(|indices| IndexSet {
+      indices,
+      ..Default::default()
+    })
+  }
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub struct SignedIndexSet<O: SetOrder> {
+  pub set: IndexSet<O>,
+  pub sign: Sign,
+}
+impl<O: SetOrder> SignedIndexSet<O> {
+  pub fn new(set: IndexSet<O>, sign: Sign) -> Self {
+    Self { set, sign }
+  }
+
+  pub fn into_parts(self) -> (IndexSet<O>, Sign) {
+    (self.set, self.sign)
+  }
+
+  pub fn permutations(&self) -> IndexPermutations {
+    IndexPermutations::new(self.clone())
+  }
+  pub fn boundary(&self) -> IndexBoundarySets<O> {
+    IndexBoundarySets::new(self.clone())
+  }
+}
+
+impl SignedIndexSet<CanonicalOrder> {
+  pub fn anti_boundary(&self, root: &IndexSet<CanonicalOrder>) -> IndexAntiBoundarySets {
+    IndexAntiBoundarySets::new(self.clone(), root.clone())
   }
 }
