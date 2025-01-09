@@ -2,11 +2,11 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use common::linalg::assert_mat_eq;
-use formoniq::fe::{self, ElmatProvider};
+use formoniq::fe::{self, ElMatProvider};
 use geometry::metric::manifold::{local::LocalMetricComplex, ref_vol};
 use topology::Dim;
 
-fn check_ref_elmat<F>(elmat: impl ElmatProvider, ref_elmat: F)
+fn check_ref_elmat<F>(elmat: impl ElMatProvider, ref_elmat: F)
 where
   F: Fn(Dim) -> Option<na::DMatrix<f64>>,
 {

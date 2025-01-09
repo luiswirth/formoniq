@@ -12,6 +12,8 @@ pub type CoordRef<'a, D = na::Dyn> = na::VectorView<'a, f64, D>;
 pub type CoordMatrix<D> = na::OMatrix<f64, D, na::Dyn>;
 //type CoordVectorView<'a, D> = na::VectorView<'a, f64, D>;
 
+pub type TangentVector = na::DVector<f64>;
+
 #[derive(Debug, Clone)]
 pub struct VertexCoords<D: na::Dim = na::Dyn>
 where

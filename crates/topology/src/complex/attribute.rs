@@ -97,4 +97,27 @@ impl<D: DimInfoProvider> Cochain<D> {
   pub fn new(dim: D, coeffs: na::DVector<f64>) -> Self {
     Self { dim, coeffs }
   }
+
+  pub fn coeffs(&self) -> &na::DVector<f64> {
+    &self.coeffs
+  }
+
+  pub fn component_mul(&self, other: &Self) -> Self {
+    assert_eq!(self.dim, other.dim);
+    let coeffs = self.coeffs.component_mul(&other.coeffs);
+    Self::new(self.dim, coeffs)
+  }
+}
+
+impl<D: DimInfoProvider> std::ops::Index<SimplexIdx<D>> for Cochain<D> {
+  type Output = f64;
+  fn index(&self, idx: SimplexIdx<D>) -> &Self::Output {
+    &self.coeffs[idx.kidx]
+  }
+}
+impl<D: DimInfoProvider> std::ops::Index<SimplexHandle<'_, D>> for Cochain<D> {
+  type Output = f64;
+  fn index(&self, handle: SimplexHandle<'_, D>) -> &Self::Output {
+    &self.coeffs[handle.kidx()]
+  }
 }

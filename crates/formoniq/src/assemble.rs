@@ -1,13 +1,16 @@
 use std::collections::HashSet;
 
-use crate::fe::{DofIdx, ElmatProvider, ElvecProvider};
+use crate::fe::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
 use geometry::metric::manifold::MetricComplex;
 use topology::complex::ManifoldComplex;
 
+pub type GalMat = SparseMatrix;
+pub type GalVec = na::DVector<f64>;
+
 /// Assembly algorithm for the Galerkin Matrix.
-pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElmatProvider) -> SparseMatrix {
+pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElMatProvider) -> GalMat {
   let row_rank = elmat.row_rank();
   let col_rank = elmat.col_rank();
 
@@ -29,12 +32,12 @@ pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElmatProvider) -> Spa
 }
 
 /// Assembly algorithm for the Galerkin Vector.
-pub fn assemble_galvec(complex: &MetricComplex, elvec: impl ElvecProvider) -> na::DVector<f64> {
+pub fn assemble_galvec(global: &MetricComplex, elvec: impl ElVecProvider) -> GalVec {
   let rank = elvec.rank();
 
-  let nsimps = complex.topology().skeleton(rank).len();
+  let nsimps = global.topology().skeleton(rank).len();
   let mut galvec = na::DVector::zeros(nsimps);
-  for local in complex.local_complexes() {
+  for local in global.local_complexes() {
     let subs = &local.topology().skeletons()[rank];
     let elvec = elvec.eval(&local);
 
@@ -45,7 +48,7 @@ pub fn assemble_galvec(complex: &MetricComplex, elvec: impl ElvecProvider) -> na
   galvec
 }
 
-pub fn drop_boundary_dofs_galmat(complex: &ManifoldComplex, galmat: &mut SparseMatrix) {
+pub fn drop_boundary_dofs_galmat(complex: &ManifoldComplex, galmat: &mut GalMat) {
   drop_dofs_galmat(&complex.boundary_vertices().kidx_iter().collect(), galmat)
 }
 
@@ -71,7 +74,7 @@ pub fn drop_dofs_galmat(dofs: &HashSet<DofIdx>, galmat: &mut SparseMatrix) {
   *galmat = SparseMatrix::new(ndofs_new, ndofs_new, triplets);
 }
 
-pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut na::DVector<f64>) {
+pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
   *galvec = std::mem::take(galvec).remove_rows_at(dofs);
 }
 

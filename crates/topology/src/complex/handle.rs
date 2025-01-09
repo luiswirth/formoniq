@@ -97,8 +97,7 @@ impl<'m, D: DimInfoProvider> std::fmt::Debug for SimplexHandle<'m, D> {
 }
 
 impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
-  pub fn new(complex: &'m ManifoldComplex, idx: impl Into<SimplexIdx<D>>) -> Self {
-    let idx = idx.into();
+  pub fn new(complex: &'m ManifoldComplex, idx: SimplexIdx<D>) -> Self {
     idx.assert_valid(complex);
     Self { complex, idx }
   }
@@ -180,8 +179,17 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
       .iter()
       .map(|&cell_idx| SimplexIdx::new(ConstCodim, cell_idx).handle(self.complex))
   }
+
   pub fn edges(&self) -> impl Iterator<Item = EdgeHandle> {
+    // TODO: optimize
     self.subsimps(ConstDim)
+  }
+
+  pub fn vertices(&self) -> impl Iterator<Item = VertexHandle> {
+    self
+      .simplex_set()
+      .iter()
+      .map(|v| VertexIdx::new(ConstDim, v).handle(self.complex))
   }
 
   /// The dim-subsimplicies of this simplex.
@@ -268,14 +276,14 @@ impl<'m, D: DimInfoProvider> SkeletonHandle<'m, D> {
   }
 
   pub fn get_by_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m, D> {
-    SimplexHandle::new(self.complex, (self.dim, idx))
+    SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
   pub fn get_by_simplex(&self, key: &SortedSimplex) -> SimplexHandle<'m, D> {
     let idx = self.raw().get_full(key).unwrap().0;
-    SimplexHandle::new(self.complex, (self.dim, idx))
+    SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
 
   pub fn iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m, D>> + '_ {
-    (0..self.len()).map(|idx| SimplexHandle::new(self.complex, (self.dim, idx)))
+    (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
 }

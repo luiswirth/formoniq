@@ -1,20 +1,24 @@
+use super::{ElMatProvider, ScalarMassElmat};
+
 use common::sparse::SparseMatrix;
-use exterior::{ExteriorRank, RiemannianMetricExt};
-use geometry::metric::manifold::local::LocalMetricComplex;
+use exterior::{
+  dense::{ExteriorElement, KForm},
+  ExteriorRank, RiemannianMetricExt,
+};
+use geometry::{coord::CoordRef, metric::manifold::local::LocalMetricComplex};
 use index_algebra::{
   binomial,
   combinators::IndexSubsets,
   factorial,
   sign::{sort_signed, Sign},
+  variants::ArbitraryOrder,
   IndexSet,
 };
 use topology::{
   complex::{local::LocalComplex, ManifoldComplex},
-  simplex::SortedSimplex,
+  simplex::{Simplex, SimplexExt, SortedSimplex},
   Dim,
 };
-
-use super::{ElmatProvider, ScalarMassElmat};
 
 pub trait ManifoldComplexExt {
   fn exterior_derivative_operator(&self, rank: ExteriorRank) -> SparseMatrix;
@@ -39,7 +43,7 @@ impl LocalComplexExt for LocalComplex {
 ///
 /// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub struct HodgeMassElmat(pub ExteriorRank);
-impl ElmatProvider for HodgeMassElmat {
+impl ElMatProvider for HodgeMassElmat {
   fn row_rank(&self) -> ExteriorRank {
     self.0
   }
@@ -132,7 +136,7 @@ fn construct_const_form(
 ///
 /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
 pub struct CodifDifElmat(pub ExteriorRank);
-impl ElmatProvider for CodifDifElmat {
+impl ElMatProvider for CodifDifElmat {
   fn row_rank(&self) -> ExteriorRank {
     self.0
   }
@@ -152,7 +156,7 @@ impl ElmatProvider for CodifDifElmat {
 ///
 /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
 pub struct DifElmat(pub ExteriorRank);
-impl ElmatProvider for DifElmat {
+impl ElMatProvider for DifElmat {
   fn row_rank(&self) -> ExteriorRank {
     self.0
   }
@@ -171,7 +175,7 @@ impl ElmatProvider for DifElmat {
 ///
 /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
 pub struct CodifElmat(pub ExteriorRank);
-impl ElmatProvider for CodifElmat {
+impl ElMatProvider for CodifElmat {
   fn row_rank(&self) -> ExteriorRank {
     self.0 - 1
   }
@@ -224,13 +228,51 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
   ref_difwhitneys
 }
 
-pub fn ref_whitney(_barycoords: na::DVector<f64>) -> na::DVector<f64> {
-  todo!()
+pub fn ref_bary(coord: CoordRef, vertex: usize) -> f64 {
+  let dim = coord.len();
+  assert!(vertex <= dim);
+  if vertex == 0 {
+    1.0 - coord.sum()
+  } else {
+    coord[vertex - 1]
+  }
+}
+
+pub fn ref_difbary(dim: Dim, vertex: usize) -> ExteriorElement {
+  assert!(vertex <= dim);
+  let v = if vertex == 0 {
+    na::DVector::from_element(dim, -1.0)
+  } else {
+    let mut v = na::DVector::zeros(dim);
+    v[vertex - 1] = 1.0;
+    v
+  };
+  ExteriorElement::from_1vector(v)
+}
+
+// returns constant k-form
+pub fn ref_whitney(coord: CoordRef, simplex: Simplex<ArbitraryOrder>) -> KForm {
+  let dim = coord.len();
+  let rank = simplex.dim();
+  let mut kform = KForm::zero(dim, rank);
+  for (i, vertex) in simplex.iter().enumerate() {
+    let sign = Sign::from_parity(i);
+    let bary = ref_bary(coord, vertex);
+    let wedge = KForm::wedge_big(
+      simplex
+        .iter()
+        .enumerate()
+        .filter(|&(j, _)| j != i)
+        .map(|(_, v)| ref_difbary(dim, v)),
+    );
+    kform += sign.as_f64() * bary * wedge;
+  }
+  factorial(rank) as f64 * kform
 }
 
 #[cfg(test)]
 mod test {
-  use crate::fe::{ref_difbarys, ElmatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
+  use crate::fe::{ref_difbarys, ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
   use super::{ref_difwhitneys, CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
   use common::linalg::assert_mat_eq;
