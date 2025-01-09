@@ -3,6 +3,7 @@
 extern crate nalgebra as na;
 
 pub mod dense;
+pub mod manifold;
 
 use geometry::metric::RiemannianMetric;
 use index_algebra::{

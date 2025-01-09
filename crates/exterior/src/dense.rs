@@ -1,4 +1,4 @@
-use geometry::{coord::CoordRef, metric::RiemannianMetric};
+use geometry::{coord::Coord, metric::RiemannianMetric};
 use index_algebra::{binomial, IndexSet};
 use topology::Dim;
 
@@ -7,14 +7,14 @@ use crate::{ExteriorBasis, ExteriorRank, ExteriorTermExt};
 pub type KVector = ExteriorElement;
 
 pub type KForm = ExteriorElement;
-pub type DifferentialKForm<F> = ExteriorCoordField<F>;
+pub type KFormCoordField<F> = ExteriorCoordField<F>;
 pub type KFormCoeffs = ExteriorCoeffs;
 
 pub type ExteriorCoeffs = na::DVector<f64>;
 
 pub struct ExteriorCoordField<F>
 where
-  F: Fn(CoordRef) -> ExteriorCoeffs,
+  F: Fn(Coord) -> ExteriorCoeffs,
 {
   coeff_fn: F,
   dim: Dim,
@@ -22,7 +22,7 @@ where
 }
 impl<F> ExteriorCoordField<F>
 where
-  F: Fn(CoordRef) -> ExteriorCoeffs,
+  F: Fn(Coord) -> ExteriorCoeffs,
 {
   pub fn dim(&self) -> Dim {
     self.dim
@@ -30,8 +30,7 @@ where
   pub fn rank(&self) -> ExteriorRank {
     self.rank
   }
-  pub fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> ExteriorElement {
-    let coord = coord.into();
+  pub fn at_point(&self, coord: Coord) -> ExteriorElement {
     let coeffs = (self.coeff_fn)(coord);
     ExteriorElement::new(coeffs, self.dim, self.rank)
   }
@@ -55,6 +54,25 @@ impl ExteriorElement {
       dim,
       rank,
     }
+  }
+
+  pub fn one(dim: Dim) -> Self {
+    Self {
+      coeffs: na::DVector::from_element(1, 1.0),
+      dim,
+      rank: 0,
+    }
+  }
+
+  // TODO: naming???
+  pub fn from_1vector(vector: na::DVector<f64>) -> Self {
+    let dim = vector.len();
+    Self::new(vector, dim, 1)
+  }
+
+  pub fn into_1vector(self) -> na::DVector<f64> {
+    assert!(self.rank == 1);
+    self.coeffs
   }
 
   pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorBasis)> + use<'_> {
@@ -109,8 +127,48 @@ impl ExteriorElement {
     Self::new(new_coeffs, self.dim, new_rank)
   }
 
+  pub fn wedge_big(factors: impl IntoIterator<Item = Self>) -> Self {
+    let mut factors = factors.into_iter();
+    let first = factors.next().unwrap();
+    factors.fold(first, |acc, factor| acc.wedge(&factor))
+  }
+
   pub fn hodge_star(&self, _metric: &RiemannianMetric) -> Self {
     todo!()
+  }
+}
+
+impl std::ops::Add<ExteriorElement> for ExteriorElement {
+  type Output = Self;
+  fn add(mut self, other: ExteriorElement) -> Self::Output {
+    self += other;
+    self
+  }
+}
+impl std::ops::AddAssign<ExteriorElement> for ExteriorElement {
+  fn add_assign(&mut self, other: ExteriorElement) {
+    assert_eq!(self.dim, other.dim);
+    assert_eq!(self.rank, other.rank);
+    self.coeffs += other.coeffs;
+  }
+}
+
+impl std::ops::Mul<f64> for ExteriorElement {
+  type Output = Self;
+  fn mul(mut self, scalar: f64) -> Self::Output {
+    self *= scalar;
+    self
+  }
+}
+impl std::ops::MulAssign<f64> for ExteriorElement {
+  fn mul_assign(&mut self, scalar: f64) {
+    self.coeffs *= scalar;
+  }
+}
+impl std::ops::Mul<ExteriorElement> for f64 {
+  type Output = ExteriorElement;
+  fn mul(self, rhs: ExteriorElement) -> Self::Output {
+    rhs * self
   }
 }
 

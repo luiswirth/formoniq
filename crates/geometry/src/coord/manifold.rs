@@ -7,6 +7,7 @@ use crate::metric::manifold::MetricComplex;
 
 use common::linalg::DMatrixExt;
 use index_algebra::sign::Sign;
+use itertools::Itertools;
 use topology::{complex::ManifoldComplex, simplex::Simplex, skeleton::ManifoldSkeleton, Dim};
 
 #[derive(Debug, Clone)]
@@ -43,23 +44,71 @@ impl CoordSkeleton {
     self
   }
 
-  pub fn into_metric_complex(self) -> (MetricComplex, VertexCoords) {
+  pub fn into_coord_complex(self) -> CoordComplex {
     let Self { skeleton, coords } = self;
     let complex = ManifoldComplex::from_facet_skeleton(skeleton);
-    let edges = complex.edges();
+    CoordComplex::new(complex, coords)
+  }
+
+  pub fn into_metric_complex(self) -> (MetricComplex, VertexCoords) {
+    self.into_coord_complex().into_metric_complex()
+  }
+}
+
+#[derive(Debug, Clone)]
+pub struct CoordComplex {
+  topology: ManifoldComplex,
+  coords: VertexCoords,
+}
+impl CoordComplex {
+  pub fn new(topology: ManifoldComplex, coords: VertexCoords) -> Self {
+    Self { topology, coords }
+  }
+
+  pub fn reference(dim: Dim) -> Self {
+    let topology = ManifoldComplex::reference(dim);
+
+    let coords = topology
+      .vertices()
+      .iter()
+      .map(|v| v.kidx())
+      .map(|v| {
+        let mut vec = na::DVector::zeros(dim);
+        if v > 0 {
+          vec[v - 1] = 1.0;
+        }
+        vec
+      })
+      .collect_vec();
+    let coords = na::DMatrix::from_columns(&coords);
+    let coords = VertexCoords::new(coords);
+
+    Self::new(topology, coords)
+  }
+
+  pub fn topology(&self) -> &ManifoldComplex {
+    &self.topology
+  }
+  pub fn coords(&self) -> &VertexCoords {
+    &self.coords
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.topology.dim()
+  }
+
+  pub fn into_metric_complex(self) -> (MetricComplex, VertexCoords) {
+    let Self { topology, coords } = self;
+    let edges = topology.edges();
     let edges = edges
       .iter()
       .map(|e| e.simplex_set().clone().try_into().unwrap());
     let edge_lengths = coords.to_edge_lengths(edges);
-    (MetricComplex::new(complex, edge_lengths), coords)
+    (MetricComplex::new(topology, edge_lengths), coords)
   }
 }
 
-pub struct CoordComplex {
-  _complex: ManifoldComplex,
-  _coords: VertexCoords,
-}
-
+#[derive(Debug, Clone)]
 pub struct CoordSimplex {
   pub vertices: VertexCoords,
 }

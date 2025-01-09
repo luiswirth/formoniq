@@ -5,30 +5,36 @@ use geometry::metric::manifold::{local::LocalMetricComplex, MetricComplex};
 use topology::Dim;
 
 pub type DofIdx = usize;
+pub type DofCoeff = f64;
 
-pub trait ElmatProvider {
+// TODO: turn into cochain
+pub type FeFunction = na::DVector<f64>;
+
+pub type ElMat = na::DMatrix<f64>;
+pub trait ElMatProvider {
   fn row_rank(&self) -> ExteriorRank;
   fn col_rank(&self) -> ExteriorRank;
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64>;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat;
 }
 
-pub trait ElvecProvider {
+pub type ElVec = na::DVector<f64>;
+pub trait ElVecProvider {
   fn rank(&self) -> ExteriorRank;
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DVector<f64>;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElVec;
 }
 
 /// Exact Element Matrix Provider for the Laplace-Beltrami operator.
 ///
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub struct LaplaceBeltramiElmat;
-impl ElmatProvider for LaplaceBeltramiElmat {
+impl ElMatProvider for LaplaceBeltramiElmat {
   fn row_rank(&self) -> ExteriorRank {
     0
   }
   fn col_rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
     let ref_difbarys = ref_difbarys(local_complex.dim());
     local_complex.vol() * local_complex.metric().covector_norm_sqr(&ref_difbarys)
   }
@@ -36,14 +42,14 @@ impl ElmatProvider for LaplaceBeltramiElmat {
 
 /// Exact Element Matrix Provider for scalar mass bilinear form.
 pub struct ScalarMassElmat;
-impl ElmatProvider for ScalarMassElmat {
+impl ElMatProvider for ScalarMassElmat {
   fn row_rank(&self) -> ExteriorRank {
     0
   }
   fn col_rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
     let ndofs = local_complex.topology().nvertices();
     let dim = local_complex.dim();
     let v = local_complex.vol() / ((dim + 1) * (dim + 2)) as f64;
@@ -56,14 +62,14 @@ impl ElmatProvider for ScalarMassElmat {
 /// Approximated Element Matrix Provider for scalar mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
 pub struct ScalarLumpedMassElmat;
-impl ElmatProvider for ScalarLumpedMassElmat {
+impl ElMatProvider for ScalarLumpedMassElmat {
   fn row_rank(&self) -> ExteriorRank {
     0
   }
   fn col_rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
     let n = local_complex.topology().nvertices();
     let v = local_complex.vol() / n as f64;
     na::DMatrix::from_diagonal_element(n, n, v)
@@ -82,11 +88,11 @@ impl SourceElvec {
     Self { dof_data }
   }
 }
-impl ElvecProvider for SourceElvec {
+impl ElVecProvider for SourceElvec {
   fn rank(&self) -> ExteriorRank {
     0
   }
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DVector<f64> {
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElVec {
     let nverts = local_complex.topology().nvertices();
 
     local_complex.vol() / nverts as f64
@@ -112,36 +118,24 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
   ref_difbarys
 }
 
-// TODO: remove this???
-pub fn integrate_pointwise<'a>(
-  a: impl Into<na::DVectorView<'a, f64>>,
-  mesh: &MetricComplex,
-) -> f64 {
-  let a = a.into();
+pub fn l2_inner(a: &FeFunction, b: &FeFunction, mesh: &MetricComplex) -> f64 {
+  integrate_pointwise(&a.component_mul(b), mesh)
+}
+pub fn l2_norm(a: &FeFunction, mesh: &MetricComplex) -> f64 {
+  l2_inner(a, a, mesh)
+}
 
+// this is weird...
+pub fn integrate_pointwise(func: &FeFunction, mesh: &MetricComplex) -> f64 {
   let mut norm: f64 = 0.0;
   for facet in mesh.topology().facets().iter() {
     let mut sum = 0.0;
-    for ivertex in facet.simplex_set().iter() {
-      sum += a[ivertex];
+    for vertex in facet.vertices() {
+      sum += func[vertex.kidx()];
     }
     let nvertices = facet.nvertices();
     let vol = mesh.local_complex(facet).vol();
     norm += (vol / nvertices as f64) * sum;
   }
   norm.sqrt()
-}
-
-pub fn l2_inner<'a>(
-  a: impl Into<na::DVectorView<'a, f64>>,
-  b: impl Into<na::DVectorView<'a, f64>>,
-  mesh: &MetricComplex,
-) -> f64 {
-  let a = a.into();
-  let b = b.into();
-  integrate_pointwise(&a.component_mul(&b), mesh)
-}
-pub fn l2_norm<'a>(a: impl Into<na::DVectorView<'a, f64>>, mesh: &MetricComplex) -> f64 {
-  let a = a.into();
-  l2_inner(a, a, mesh)
 }
