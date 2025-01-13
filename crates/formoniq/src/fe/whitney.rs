@@ -5,7 +5,10 @@ use exterior::{
   dense::{ExteriorElement, KForm},
   ExteriorRank, RiemannianMetricExt,
 };
-use geometry::{coord::CoordRef, metric::manifold::local::LocalMetricComplex};
+use geometry::{
+  coord::{manifold::CoordSimplex, CoordRef},
+  metric::manifold::local::LocalMetricComplex,
+};
 use index_algebra::{
   binomial,
   combinators::IndexSubsets,
@@ -269,6 +272,69 @@ pub fn ref_whitney<O: SetOrder>(coord: CoordRef, simplex: &Simplex<O>) -> KForm 
     kform += sign.as_f64() * bary * wedge;
   }
   factorial(rank) as f64 * kform
+}
+
+pub fn whitney_on_facet<O: SetOrder>(
+  coord: CoordRef,
+  facet: &CoordSimplex,
+  whitney_simplex: &Simplex<O>,
+) -> KForm {
+  let dim = facet.dim_intrinsic();
+  let rank = whitney_simplex.dim();
+
+  let linear = facet.spanning_vectors();
+  let linear_inv = linear.clone().lu();
+  let coord_ref = linear_inv
+    .solve(&(coord - facet.vertices.coord(0)))
+    .unwrap();
+  let linear_inv = linear.try_inverse().unwrap();
+
+  let form_ref = ref_whitney(coord_ref.as_view(), whitney_simplex);
+  let form_simp = form_ref
+    .basis_iter()
+    .map(|(coeff, basis)| {
+      coeff
+        * KForm::wedge_big(
+          basis
+            .indices()
+            .iter()
+            .map(|i| KForm::from_1vector(linear_inv.row(i).transpose())),
+        )
+        .unwrap_or(ExteriorElement::one(dim))
+    })
+    .sum();
+  form_simp
+}
+
+pub fn whitney_on_facet_impl_det<O: SetOrder>(
+  coord: CoordRef,
+  facet: &CoordSimplex,
+  whitney_simplex: &Simplex<O>,
+) -> KForm {
+  let dim = facet.dim_intrinsic();
+  let rank = whitney_simplex.dim();
+
+  let linear = facet.spanning_vectors();
+  let linear_inv = linear.clone().lu();
+  let coord_ref = linear_inv
+    .solve(&(coord - facet.vertices.coord(0)))
+    .unwrap();
+  let linear_inv = linear.try_inverse().unwrap();
+
+  let form_ref = ref_whitney(coord_ref.as_view(), whitney_simplex);
+  let mut form_simp = KForm::zero(dim, rank);
+  for (coeff_simp, basis_simp) in form_simp.basis_iter_mut() {
+    for (coeff_ref, basis_ref) in form_ref.basis_iter() {
+      let mut mat = na::DMatrix::zeros(rank, rank);
+      for (ii, i) in basis_simp.indices().iter().enumerate() {
+        for (jj, j) in basis_ref.indices().iter().enumerate() {
+          mat[(ii, jj)] = linear_inv[(i, j)];
+        }
+      }
+      *coeff_simp = coeff_ref * mat.determinant();
+    }
+  }
+  form_simp
 }
 
 #[cfg(test)]

@@ -64,6 +64,12 @@ impl ExteriorElement {
     }
   }
 
+  pub fn dim(&self) -> Dim {
+    self.dim
+  }
+  pub fn rank(&self) -> ExteriorRank {
+    self.rank
+  }
   pub fn coeffs(&self) -> &na::DVector<f64> {
     &self.coeffs
   }
@@ -80,15 +86,26 @@ impl ExteriorElement {
   }
 
   pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorBasis)> + use<'_> {
+    let dim = self.dim;
+    let rank = self.rank;
     self
       .coeffs
       .iter()
       .copied()
       .enumerate()
       .map(move |(i, coeff)| {
-        let basis = IndexSet::from_lex_rank(self.dim, self.rank, i).ext(self.dim);
+        let basis = IndexSet::from_lex_rank(dim, rank, i).ext(dim);
         (coeff, basis)
       })
+  }
+
+  pub fn basis_iter_mut(&mut self) -> impl Iterator<Item = (&mut f64, ExteriorBasis)> + use<'_> {
+    let dim = self.dim;
+    let rank = self.rank;
+    self.coeffs.iter_mut().enumerate().map(move |(i, coeff)| {
+      let basis = IndexSet::from_lex_rank(dim, rank, i).ext(dim);
+      (coeff, basis)
+    })
   }
 
   pub fn wedge(&self, other: &Self) -> Self {
@@ -116,9 +133,9 @@ impl ExteriorElement {
         }
 
         if let Some(merged_basis) = self_basis
-          .index_set
+          .indices
           .clone()
-          .union(other_basis.index_set.clone())
+          .union(other_basis.indices.clone())
           .try_into_sorted_signed()
         {
           let sign = merged_basis.sign;
@@ -213,13 +230,13 @@ impl std::ops::Index<ExteriorBasis> for ExteriorElement {
   type Output = f64;
   fn index(&self, index: ExteriorBasis) -> &Self::Output {
     assert!(index.rank() == self.rank);
-    let index = index.index_set.lex_rank(self.dim);
+    let index = index.indices.lex_rank(self.dim);
     &self.coeffs[index]
   }
 }
 impl std::ops::IndexMut<ExteriorBasis> for ExteriorElement {
   fn index_mut(&mut self, index: ExteriorBasis) -> &mut Self::Output {
-    let index = index.index_set.lex_rank(self.dim);
+    let index = index.indices.lex_rank(self.dim);
     &mut self.coeffs[index]
   }
 }
@@ -227,6 +244,26 @@ impl std::ops::Index<usize> for ExteriorElement {
   type Output = f64;
   fn index(&self, index: usize) -> &Self::Output {
     &self.coeffs[index]
+  }
+}
+
+impl<O: SetOrder> std::iter::FromIterator<ScaledExteriorTerm<O>> for ExteriorElement {
+  fn from_iter<T: IntoIterator<Item = ScaledExteriorTerm<O>>>(iter: T) -> Self {
+    let mut iter = iter.into_iter();
+    let first = iter.next().unwrap();
+    let mut element = Self::from(first);
+    iter.for_each(|term| element += term);
+    element
+  }
+}
+impl std::iter::Sum for ExteriorElement {
+  fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
+    let mut iter = iter.into_iter();
+    let mut sum = iter.next().unwrap();
+    for element in iter {
+      sum += element;
+    }
+    sum
   }
 }
 

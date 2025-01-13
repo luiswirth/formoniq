@@ -19,16 +19,19 @@ pub type ExteriorBasis = ExteriorTerm<CanonicalOrder>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExteriorTerm<O: SetOrder> {
-  index_set: IndexSet<O>,
+  indices: IndexSet<O>,
   dim: Dim,
 }
 
 impl<O: SetOrder> ExteriorTerm<O> {
-  pub fn new(index_set: IndexSet<O>, dim: Dim) -> Self {
-    Self { index_set, dim }
+  pub fn new(indices: IndexSet<O>, dim: Dim) -> Self {
+    Self { indices, dim }
+  }
+  pub fn indices(&self) -> &IndexSet<O> {
+    &self.indices
   }
   pub fn rank(&self) -> ExteriorRank {
-    self.index_set.len()
+    self.indices.len()
   }
   pub fn dim(&self) -> Dim {
     self.dim
@@ -43,7 +46,7 @@ impl ExteriorBasis {
     let dual_k = n - k;
 
     let primal_coeff = 1.0;
-    let primal_index = &self.index_set;
+    let primal_index = &self.indices;
 
     let mut dual_element = ExteriorElement::zero(n, dual_k);
     for dual_index in IndexSubsets::canonical(n, dual_k) {
@@ -97,7 +100,7 @@ impl<O: SetOrder> ScaledExteriorTerm<O> {
 
   pub fn into_canonical(self) -> ScaledExteriorTerm<CanonicalOrder> {
     let dim = self.dim();
-    let (term, sign) = self.term.index_set.into_sorted_signed().into_parts();
+    let (term, sign) = self.term.indices.into_sorted_signed().into_parts();
     let coeff = self.coeff * sign.as_f64();
     let term = term.ext(dim);
     ScaledExteriorTerm { coeff, term }
@@ -106,15 +109,15 @@ impl<O: SetOrder> ScaledExteriorTerm<O> {
   pub fn assume_canonical(self) -> ScaledExteriorTerm<CanonicalOrder> {
     ScaledExteriorTerm {
       coeff: self.coeff,
-      term: self.term.index_set.assume_sorted().ext(self.term.dim),
+      term: self.term.indices.assume_sorted().ext(self.term.dim),
     }
   }
 
   pub fn pure_lexicographical_cmp(&self, other: &Self) -> std::cmp::Ordering {
     self
       .term
-      .index_set
-      .pure_lexicographical_cmp(&other.term.index_set)
+      .indices
+      .pure_lexicographical_cmp(&other.term.indices)
   }
 
   pub fn eq_epsilon(&self, other: &Self, epsilon: f64) -> bool {
@@ -143,7 +146,7 @@ impl<O: SetOrder> std::ops::Mul<ExteriorTerm<O>> for f64 {
   type Output = ScaledExteriorTerm<O>;
   fn mul(self, term: ExteriorTerm<O>) -> Self::Output {
     let coeff = self;
-    let term = term.index_set.ext(term.dim);
+    let term = term.indices.ext(term.dim);
     ScaledExteriorTerm::new(coeff, term)
   }
 }
