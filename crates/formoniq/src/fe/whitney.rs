@@ -11,7 +11,7 @@ use index_algebra::{
   combinators::IndexSubsets,
   factorial,
   sign::{sort_signed, Sign},
-  variants::ArbitraryOrder,
+  variants::SetOrder,
   IndexSet,
 };
 use topology::{
@@ -251,7 +251,7 @@ pub fn ref_difbary(dim: Dim, vertex: usize) -> ExteriorElement {
 }
 
 // returns constant k-form
-pub fn ref_whitney(coord: CoordRef, simplex: Simplex<ArbitraryOrder>) -> KForm {
+pub fn ref_whitney<O: SetOrder>(coord: CoordRef, simplex: &Simplex<O>) -> KForm {
   let dim = coord.len();
   let rank = simplex.dim();
   let mut kform = KForm::zero(dim, rank);
@@ -264,7 +264,8 @@ pub fn ref_whitney(coord: CoordRef, simplex: Simplex<ArbitraryOrder>) -> KForm {
         .enumerate()
         .filter(|&(j, _)| j != i)
         .map(|(_, v)| ref_difbary(dim, v)),
-    );
+    )
+    .unwrap_or(KForm::one(dim));
     kform += sign.as_f64() * bary * wedge;
   }
   factorial(rank) as f64 * kform

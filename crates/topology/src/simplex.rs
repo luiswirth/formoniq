@@ -34,6 +34,15 @@ impl SortedSimplexExt for SortedSimplex {
   }
 }
 
+pub fn graded_subsimplicies(
+  dim_facet: Dim,
+) -> impl Iterator<Item = impl Iterator<Item = SortedSimplex>> {
+  (0..=dim_facet).map(move |d| subsimplicies(dim_facet, d))
+}
+pub fn subsimplicies(dim_facet: Dim, dim_sub: Dim) -> impl Iterator<Item = SortedSimplex> {
+  IndexSubsets::canonical(dim_facet + 1, dim_sub + 1)
+}
+
 pub fn nsubsimplicies(dim_facet: Dim, dim_sub: Dim) -> usize {
   binomial(dim_facet + 1, dim_sub + 1)
 }

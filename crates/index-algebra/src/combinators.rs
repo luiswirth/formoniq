@@ -103,7 +103,7 @@ impl<O: SetOrder> IndexSubsets<O> {
   }
 }
 impl IndexSubsets<CanonicalOrder> {
-  /// Sorted subsets of {1,...,n}
+  /// Sorted subsets of {0,...,n-1}
   pub fn canonical(n: usize, k: usize) -> Self {
     let set = IndexSet::increasing(n);
     Self::new(set, k)
