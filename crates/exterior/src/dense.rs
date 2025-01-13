@@ -1,8 +1,8 @@
 use geometry::{coord::Coord, metric::RiemannianMetric};
-use index_algebra::{binomial, IndexSet};
+use index_algebra::{binomial, variants::SetOrder, IndexSet};
 use topology::Dim;
 
-use crate::{ExteriorBasis, ExteriorRank, ExteriorTermExt};
+use crate::{ExteriorBasis, ExteriorRank, ExteriorTermExt, ScaledExteriorTerm};
 
 pub type KVector = ExteriorElement;
 
@@ -64,6 +64,10 @@ impl ExteriorElement {
     }
   }
 
+  pub fn coeffs(&self) -> &na::DVector<f64> {
+    &self.coeffs
+  }
+
   // TODO: naming???
   pub fn from_1vector(vector: na::DVector<f64>) -> Self {
     let dim = vector.len();
@@ -119,7 +123,7 @@ impl ExteriorElement {
         {
           let sign = merged_basis.sign;
           let merged_basis = merged_basis.set.lex_rank(dim);
-          new_coeffs[merged_basis] += sign.as_f64() * dbg!(self_coeff * other_coeff);
+          new_coeffs[merged_basis] += sign.as_f64() * self_coeff * other_coeff;
         }
       }
     }
@@ -127,14 +131,24 @@ impl ExteriorElement {
     Self::new(new_coeffs, self.dim, new_rank)
   }
 
-  pub fn wedge_big(factors: impl IntoIterator<Item = Self>) -> Self {
+  pub fn wedge_big(factors: impl IntoIterator<Item = Self>) -> Option<Self> {
     let mut factors = factors.into_iter();
-    let first = factors.next().unwrap();
-    factors.fold(first, |acc, factor| acc.wedge(&factor))
+    let first = factors.next()?;
+    let prod = factors.fold(first, |acc, factor| acc.wedge(&factor));
+    Some(prod)
   }
 
-  pub fn hodge_star(&self, _metric: &RiemannianMetric) -> Self {
-    todo!()
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> Self {
+    self
+      .basis_iter()
+      .map(|(coeff, basis)| (coeff * basis).hodge_star(metric))
+      .fold(Self::one(self.dim), |acc, a| acc + a)
+  }
+
+  pub fn eq_epsilon(&self, other: &Self, eps: f64) -> bool {
+    self.dim == other.dim
+      && self.rank == other.rank
+      && (&self.coeffs - &other.coeffs).norm_squared() <= eps.powi(2)
   }
 }
 
@@ -172,6 +186,22 @@ impl std::ops::Mul<ExteriorElement> for f64 {
   }
 }
 
+impl<O: SetOrder> std::ops::AddAssign<ScaledExteriorTerm<O>> for ExteriorElement {
+  fn add_assign(&mut self, term: ScaledExteriorTerm<O>) {
+    let term = term.into_canonical();
+    self[term.term] += term.coeff;
+  }
+}
+
+impl<O: SetOrder> From<ScaledExteriorTerm<O>> for ExteriorElement {
+  fn from(term: ScaledExteriorTerm<O>) -> Self {
+    let term = term.into_canonical();
+    let mut element = Self::zero(term.dim(), term.rank());
+    element[term.term] += term.coeff;
+    element
+  }
+}
+
 impl KForm {
   pub fn on_kvector(&self, kvector: &KVector) -> f64 {
     assert!(self.dim == kvector.dim && self.rank == kvector.rank);
@@ -185,6 +215,12 @@ impl std::ops::Index<ExteriorBasis> for ExteriorElement {
     assert!(index.rank() == self.rank);
     let index = index.index_set.lex_rank(self.dim);
     &self.coeffs[index]
+  }
+}
+impl std::ops::IndexMut<ExteriorBasis> for ExteriorElement {
+  fn index_mut(&mut self, index: ExteriorBasis) -> &mut Self::Output {
+    let index = index.index_set.lex_rank(self.dim);
+    &mut self.coeffs[index]
   }
 }
 impl std::ops::Index<usize> for ExteriorElement {

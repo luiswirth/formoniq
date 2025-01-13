@@ -36,7 +36,7 @@ where
   let vectors = vectors
     .column_iter()
     .map(|v| KVector::from_1vector(v.into_owned()));
-  let kvector = KVector::wedge_big(vectors);
+  let kvector = KVector::wedge_big(vectors).unwrap_or(KForm::one(simplex.dim_embedded()));
 
   let mut sum = 0.0;
   for vertex_coord in simplex.vertices.coord_iter() {

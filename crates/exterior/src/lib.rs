@@ -5,6 +5,7 @@ extern crate nalgebra as na;
 pub mod dense;
 pub mod manifold;
 
+use dense::ExteriorElement;
 use geometry::metric::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexSubPermutations, IndexSubsets},
@@ -13,10 +14,7 @@ use index_algebra::{
 };
 use topology::Dim;
 
-use std::collections::HashMap;
-
 pub type ExteriorRank = usize;
-
 pub type ExteriorBasis = ExteriorTerm<CanonicalOrder>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -39,10 +37,7 @@ impl<O: SetOrder> ExteriorTerm<O> {
 
 impl ExteriorBasis {
   // TODO: is there a more efficent implementation?
-  pub fn hodge_star(
-    &self,
-    metric: &RiemannianMetric,
-  ) -> SparseExteriorElement<CanonicalOrder, CanonicalOrder> {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     let n = self.dim();
     let k = self.rank();
     let dual_k = n - k;
@@ -50,7 +45,7 @@ impl ExteriorBasis {
     let primal_coeff = 1.0;
     let primal_index = &self.index_set;
 
-    let mut dual_terms = Vec::new();
+    let mut dual_element = ExteriorElement::zero(n, dual_k);
     for dual_index in IndexSubsets::canonical(n, dual_k) {
       let mut dual_coeff = 0.0;
 
@@ -68,16 +63,8 @@ impl ExteriorBasis {
 
         dual_coeff += sign * primal_coeff * metric_prod;
       }
-
-      if dual_coeff != 0.0 {
-        dual_terms.push(ScaledExteriorTerm::new(dual_coeff, dual_index.ext(n)));
-      }
+      dual_element += dual_coeff * dual_index.ext(n);
     }
-
-    let dual_element = SparseExteriorElement {
-      terms: dual_terms,
-      term_order: CanonicalOrder,
-    };
 
     metric.det_sqrt() * dual_element
   }
@@ -147,10 +134,7 @@ impl<O: SetOrder> ScaledExteriorTerm<O> {
 
 /// With Local Base and Sorted
 impl ScaledExteriorTerm<CanonicalOrder> {
-  pub fn hodge_star(
-    &self,
-    metric: &RiemannianMetric,
-  ) -> SparseExteriorElement<CanonicalOrder, CanonicalOrder> {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
     self.coeff * self.term.hodge_star(metric)
   }
 }
@@ -174,119 +158,6 @@ impl<O: SetOrder> std::ops::Mul<ScaledExteriorTerm<O>> for f64 {
 impl<O: SetOrder> std::ops::MulAssign<f64> for ScaledExteriorTerm<O> {
   fn mul_assign(&mut self, scalar: f64) {
     self.coeff *= scalar;
-  }
-}
-
-impl<InnerO: SetOrder, OuterO: SetOrder> std::ops::Mul<SparseExteriorElement<InnerO, OuterO>>
-  for f64
-{
-  type Output = SparseExteriorElement<InnerO, OuterO>;
-  fn mul(self, mut element: SparseExteriorElement<InnerO, OuterO>) -> Self::Output {
-    for term in &mut element.terms {
-      *term *= self;
-    }
-    element
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct SparseExteriorElement<InnerO: SetOrder, OuterO: SetOrder> {
-  terms: Vec<ScaledExteriorTerm<InnerO>>,
-  term_order: OuterO,
-}
-
-impl<OInner: SetOrder> SparseExteriorElement<OInner, ArbitraryOrder> {
-  pub fn new(terms: Vec<ScaledExteriorTerm<OInner>>) -> Self {
-    let dim = terms[0].dim();
-    let rank = terms[0].rank();
-    assert!(terms.iter().all(|term| term.dim() == dim));
-    assert!(terms.iter().all(|term| term.rank() == rank));
-    Self {
-      terms,
-      term_order: ArbitraryOrder,
-    }
-  }
-}
-
-impl<OInner: SetOrder, OOuter: SetOrder> SparseExteriorElement<OInner, OOuter> {
-  pub fn dim(&self) -> Dim {
-    self.terms[0].dim()
-  }
-  pub fn rank(&self) -> ExteriorRank {
-    self.terms[0].rank()
-  }
-  pub fn term_order(&self) -> OOuter {
-    self.term_order
-  }
-
-  pub fn into_canonical(self) -> SparseExteriorElement<CanonicalOrder, CanonicalOrder> {
-    let Self { terms, .. } = self;
-
-    let mut terms: Vec<_> = terms
-      .into_iter()
-      .map(|term| term.into_canonical())
-      .collect();
-    terms.sort_unstable_by(ScaledExteriorTerm::pure_lexicographical_cmp);
-    terms.dedup_by(|a, b| {
-      if a.term == b.term {
-        b.coeff += a.coeff;
-        true
-      } else {
-        false
-      }
-    });
-
-    SparseExteriorElement {
-      terms,
-      term_order: CanonicalOrder,
-    }
-  }
-
-  pub fn assume_canonical(self) -> SparseExteriorElement<CanonicalOrder, CanonicalOrder> {
-    let Self { terms, .. } = self;
-
-    let terms: Vec<_> = terms
-      .into_iter()
-      .map(|term| term.assume_canonical())
-      .collect();
-    assert!(terms.is_sorted_by(|a, b| a.pure_lexicographical_cmp(b).is_lt()));
-
-    SparseExteriorElement {
-      terms,
-      term_order: CanonicalOrder,
-    }
-  }
-
-  pub fn eq_epsilon(&self, other: &Self, epsilon: f64) -> bool {
-    self
-      .terms
-      .iter()
-      .zip(other.terms.iter())
-      .all(|(a, b)| a.eq_epsilon(b, epsilon))
-  }
-}
-
-impl SparseExteriorElement<CanonicalOrder, ArbitraryOrder> {
-  pub fn hodge_star(
-    &self,
-    metric: &RiemannianMetric,
-  ) -> SparseExteriorElement<CanonicalOrder, ArbitraryOrder> {
-    let mut dual_terms = HashMap::new();
-    for primal_term in &self.terms {
-      for dual_term in primal_term.clone().hodge_star(metric).terms {
-        let dual_coeff = dual_terms.entry(dual_term.term).or_insert(0.0);
-        *dual_coeff += dual_term.coeff;
-      }
-    }
-    let dual_terms = dual_terms
-      .into_iter()
-      .map(|(term, coeff)| ScaledExteriorTerm::new(coeff, term))
-      .collect();
-
-    Self {
-      terms: dual_terms,
-      term_order: ArbitraryOrder,
-    }
   }
 }
 
@@ -379,19 +250,17 @@ mod test {
     use super::*;
 
     let dim = 4;
-    let terms = SparseExteriorElement::new(vec![
-      ScaledExteriorTerm::new(1.0, vec![2, 0, 1].ext(dim)),
-      ScaledExteriorTerm::new(3.0, vec![1, 3, 2].ext(dim)),
-      ScaledExteriorTerm::new(-2.0, vec![0, 2, 1].ext(dim)),
-      ScaledExteriorTerm::new(3.0, vec![0, 1, 2].ext(dim)),
-    ]);
-    let canonical = terms.into_canonical();
-    let expected = SparseExteriorElement::new(vec![
-      ScaledExteriorTerm::new(6.0, vec![0, 1, 2].ext(dim)),
-      ScaledExteriorTerm::new(-3.0, vec![1, 2, 3].ext(dim)),
-    ])
-    .assume_canonical();
-    assert!(canonical.eq_epsilon(&expected, 10e-12));
+    let mut e0 = ExteriorElement::zero(dim, 3);
+    e0 += 1.0 * vec![2, 0, 1].ext(dim);
+    e0 += 3.0 * vec![1, 3, 2].ext(dim);
+    e0 += -2.0 * vec![0, 2, 1].ext(dim);
+    e0 += 3.0 * vec![0, 1, 2].ext(dim);
+
+    let mut e1 = ExteriorElement::zero(dim, 3);
+    e1 += 6.0 * vec![0, 1, 2].ext(dim);
+    e1 += -3.0 * vec![1, 2, 3].ext(dim);
+
+    assert!(e0.eq_epsilon(&e1, 10e-12));
   }
 
   #[test]
@@ -402,11 +271,10 @@ mod test {
       let metric = RiemannianMetric::euclidean(dim);
 
       let primal = IndexSet::new(vec![]).assume_sorted().ext(dim);
-
       let dual = primal.hodge_star(&metric);
 
-      let expected_dual = IndexSet::increasing(dim).ext(dim);
-      let expected_dual = SparseExteriorElement::new(vec![1.0 * expected_dual]).assume_canonical();
+      let expected_dual = 1.0 * IndexSet::increasing(dim).ext(dim);
+      let expected_dual = ExteriorElement::from(expected_dual);
       assert!(dual.eq_epsilon(&expected_dual, 10e-12));
     }
   }
