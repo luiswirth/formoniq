@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use common::linalg::assert_mat_eq;
-use formoniq::fe::{self, ElMatProvider};
+use formoniq::operators::{self, ElMatProvider};
 use geometry::metric::manifold::{local::LocalMetricComplex, ref_vol};
 use topology::Dim;
 
@@ -24,7 +24,7 @@ where
 
 #[test]
 fn laplacian_refcell() {
-  check_ref_elmat(fe::LaplaceBeltramiElmat, ref_laplacian);
+  check_ref_elmat(operators::LaplaceBeltramiElmat, ref_laplacian);
 }
 fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
   let ndofs = dim + 1;
@@ -41,7 +41,7 @@ fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
 
 #[test]
 fn mass_refcell() {
-  check_ref_elmat(fe::ScalarMassElmat, ref_mass);
+  check_ref_elmat(operators::ScalarMassElmat, ref_mass);
 }
 fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
   #[rustfmt::skip]
@@ -68,7 +68,7 @@ fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
 
 #[test]
 fn lumped_mass_refcell() {
-  check_ref_elmat(fe::ScalarLumpedMassElmat, ref_lumped_mass);
+  check_ref_elmat(operators::ScalarLumpedMassElmat, ref_lumped_mass);
 }
 fn ref_lumped_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
   let nvertices = dim + 1;

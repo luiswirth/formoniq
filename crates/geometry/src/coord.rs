@@ -2,7 +2,6 @@ pub mod manifold;
 
 use crate::metric::EdgeLengths;
 
-use manifold::CoordSimplex;
 use topology::Dim;
 
 pub type VertexIdx = usize;
@@ -134,20 +133,5 @@ impl VertexCoords<na::Dyn> {
     let old_dim = self.matrix.nrows();
     self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self
-  }
-}
-
-pub struct LinearCoordMap {
-  linear: na::DMatrix<f64>,
-  translation: na::DVector<f64>,
-}
-impl LinearCoordMap {
-  pub fn reference_to_coord(simp: &CoordSimplex) -> Self {
-    let linear = simp.spanning_vectors();
-    let translation = simp.vertices.coord(0);
-    Self {
-      linear,
-      translation,
-    }
   }
 }

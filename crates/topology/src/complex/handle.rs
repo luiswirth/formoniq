@@ -80,6 +80,10 @@ impl<D: DimInfoProvider> SimplexIdx<D> {
   pub fn handle(self, complex: &ManifoldComplex) -> SimplexHandle<D> {
     SimplexHandle::new(complex, self)
   }
+
+  fn to_dyn(self, complex_dim: Dim) -> SimplexIdx<Dim> {
+    SimplexIdx::new(self.dim.dim(complex_dim), self.kidx)
+  }
 }
 
 #[derive(Copy, Clone)]
@@ -100,6 +104,10 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   pub fn new(complex: &'m ManifoldComplex, idx: SimplexIdx<D>) -> Self {
     idx.assert_valid(complex);
     Self { complex, idx }
+  }
+
+  pub fn to_dyn(self) -> SimplexHandle<'m, Dim> {
+    SimplexHandle::new(self.complex, self.idx.to_dyn(self.complex.dim()))
   }
 
   pub fn idx(&self) -> SimplexIdx<D> {
@@ -140,7 +148,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   pub fn anti_boundary(&self) -> SparseSignChain<Dim> {
     let mut idxs = Vec::new();
     let mut signs = Vec::new();
-    for parent in self.parent_facets() {
+    for parent in self.cofacets() {
       for sup in self.simplex_set().anti_boundary(parent.simplex_set()) {
         let sign = sup.sign;
         let idx = self
@@ -172,10 +180,10 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
     SparseSignChain::new(self.dim() - 1, idxs, signs)
   }
 
-  pub fn parent_facets(&self) -> impl Iterator<Item = FacetHandle> + '_ {
+  pub fn cofacets(&self) -> impl Iterator<Item = FacetHandle> + '_ {
     self
       .simplex_data()
-      .parent_facets
+      .cofacets
       .iter()
       .map(|&cell_idx| SimplexIdx::new(ConstCodim, cell_idx).handle(self.complex))
   }
@@ -215,7 +223,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   pub fn sups<DSup: DimInfoProvider>(&self, dim_sup: DSup) -> Vec<SimplexHandle<DSup>> {
     let dim_sup_dyn = dim_sup.dim(self.complex().dim());
     self
-      .parent_facets()
+      .cofacets()
       .flat_map(|parent| {
         self
           .simplex_set()

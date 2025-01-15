@@ -1,27 +1,115 @@
-use super::{ElMatProvider, ScalarMassElmat};
-
 use common::sparse::SparseMatrix;
-use exterior::{
-  dense::{ExteriorElement, KForm},
-  ExteriorRank, RiemannianMetricExt,
-};
-use geometry::{
-  coord::{manifold::CoordSimplex, CoordRef},
-  metric::manifold::local::LocalMetricComplex,
-};
-use index_algebra::{
-  binomial,
-  combinators::IndexSubsets,
-  factorial,
-  sign::{sort_signed, Sign},
-  variants::SetOrder,
-  IndexSet,
-};
+use exterior::{ExteriorRank, RiemannianMetricExt};
+use geometry::metric::manifold::{local::LocalMetricComplex, MetricComplex};
+use index_algebra::{binomial, combinators::IndexSubsets, factorial, sign::Sign, IndexSet};
 use topology::{
-  complex::{local::LocalComplex, ManifoldComplex},
-  simplex::{Simplex, SimplexExt, SortedSimplex},
+  complex::{attribute::Cochain, local::LocalComplex, ManifoldComplex},
+  simplex::SortedSimplex,
   Dim,
 };
+
+pub type DofIdx = usize;
+pub type DofCoeff = f64;
+
+// TODO: turn into cochain
+pub type FeFunction = Cochain<Dim>;
+
+pub type ElMat = na::DMatrix<f64>;
+pub trait ElMatProvider {
+  fn row_rank(&self) -> ExteriorRank;
+  fn col_rank(&self) -> ExteriorRank;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat;
+}
+
+pub type ElVec = na::DVector<f64>;
+pub trait ElVecProvider {
+  fn rank(&self) -> ExteriorRank;
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElVec;
+}
+
+/// Exact Element Matrix Provider for the Laplace-Beltrami operator.
+///
+/// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
+pub struct LaplaceBeltramiElmat;
+impl ElMatProvider for LaplaceBeltramiElmat {
+  fn row_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn col_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
+    let ref_difbarys = ref_difbarys(local_complex.dim());
+    local_complex.vol() * local_complex.metric().covector_norm_sqr(&ref_difbarys)
+  }
+}
+
+/// Exact Element Matrix Provider for scalar mass bilinear form.
+pub struct ScalarMassElmat;
+impl ElMatProvider for ScalarMassElmat {
+  fn row_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn col_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
+    let ndofs = local_complex.topology().nvertices();
+    let dim = local_complex.dim();
+    let v = local_complex.vol() / ((dim + 1) * (dim + 2)) as f64;
+    let mut elmat = na::DMatrix::from_element(ndofs, ndofs, v);
+    elmat.fill_diagonal(2.0 * v);
+    elmat
+  }
+}
+
+/// Approximated Element Matrix Provider for scalar mass bilinear form,
+/// obtained through trapezoidal quadrature rule.
+pub struct ScalarLumpedMassElmat;
+impl ElMatProvider for ScalarLumpedMassElmat {
+  fn row_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn col_rank(&self) -> ExteriorRank {
+    0
+  }
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
+    let n = local_complex.topology().nvertices();
+    let v = local_complex.vol() / n as f64;
+    na::DMatrix::from_diagonal_element(n, n, v)
+  }
+}
+
+/// Element Vector Provider for scalar source function.
+///
+/// Computed using trapezoidal quadrature rule.
+/// Exact for constant source.
+pub struct SourceElvec {
+  dof_data: na::DVector<f64>,
+}
+impl SourceElvec {
+  pub fn new(dof_data: na::DVector<f64>) -> Self {
+    Self { dof_data }
+  }
+}
+impl ElVecProvider for SourceElvec {
+  fn rank(&self) -> ExteriorRank {
+    0
+  }
+  fn eval(&self, local_complex: &LocalMetricComplex) -> ElVec {
+    let nverts = local_complex.topology().nvertices();
+
+    local_complex.vol() / nverts as f64
+      * na::DVector::from_iterator(
+        nverts,
+        local_complex
+          .topology()
+          .vertices()
+          .iter()
+          .map(|&iv| self.dof_data[iv]),
+      )
+  }
+}
 
 pub trait ManifoldComplexExt {
   fn exterior_derivative_operator(&self, rank: ExteriorRank) -> SparseMatrix;
@@ -194,154 +282,47 @@ impl ElMatProvider for CodifElmat {
   }
 }
 
-/// The constant exterior derivatives of the reference Whitney forms, given in
-/// the k-form standard basis.
-pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
-  let difk = k + 1;
-  let difk_factorial = factorial(difk) as f64;
+/// The constant exterior drivatives of the reference barycentric coordinate
+/// functions, given in the 1-form standard basis.
+pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
+  let mut ref_difbarys = na::DMatrix::zeros(n, n + 1);
+  for i in 0..n {
+    ref_difbarys[(i, 0)] = -1.0;
+    ref_difbarys[(i, i + 1)] = 1.0;
+  }
+  ref_difbarys
+}
 
-  let whitney_basis_size = binomial(n + 1, k + 1);
-  let kform_basis_size = binomial(n, difk);
+pub fn l2_inner(a: &FeFunction, b: &FeFunction, mesh: &MetricComplex) -> f64 {
+  integrate_pointwise(&a.component_mul(b), mesh)
+}
+pub fn l2_norm(a: &FeFunction, mesh: &MetricComplex) -> f64 {
+  l2_inner(a, a, mesh)
+}
 
-  let mut ref_difwhitneys = na::DMatrix::zeros(kform_basis_size, whitney_basis_size);
-  for (whitney_comb_rank, whitney_comb) in IndexSubsets::canonical(n + 1, k + 1).enumerate() {
-    if whitney_comb[0] == 0 {
-      let kform_comb: Vec<_> = whitney_comb.iter().skip(1).map(|c| c - 1).collect();
-      for i in 0..n {
-        let mut kform_comb = kform_comb.clone();
-        kform_comb.insert(0, i);
-        let sign = sort_signed(&mut kform_comb);
-
-        kform_comb.dedup();
-        if kform_comb.len() != difk {
-          continue;
-        };
-
-        let kform_comb = IndexSet::from(kform_comb).assume_sorted();
-        let kform_comb_rank = kform_comb.lex_rank(n);
-        ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign.as_f64() * difk_factorial;
-      }
-    } else {
-      let kform_comb: Vec<_> = whitney_comb.iter().map(|c| c - 1).collect();
-      let kform_comb = IndexSet::from(kform_comb).assume_sorted();
-      let kform_comb_rank = kform_comb.lex_rank(n);
-      ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = difk_factorial;
+// this is weird...
+pub fn integrate_pointwise(func: &FeFunction, mesh: &MetricComplex) -> f64 {
+  let mut norm: f64 = 0.0;
+  for facet in mesh.topology().facets().iter() {
+    let mut sum = 0.0;
+    for vertex in facet.vertices() {
+      sum += func[vertex.to_dyn()];
     }
+    let nvertices = facet.nvertices();
+    let vol = mesh.local_complex(facet).vol();
+    norm += (vol / nvertices as f64) * sum;
   }
-  ref_difwhitneys
-}
-
-pub fn ref_bary(coord: CoordRef, vertex: usize) -> f64 {
-  let dim = coord.len();
-  assert!(vertex <= dim);
-  if vertex == 0 {
-    1.0 - coord.sum()
-  } else {
-    coord[vertex - 1]
-  }
-}
-
-pub fn ref_difbary(dim: Dim, vertex: usize) -> ExteriorElement {
-  assert!(vertex <= dim);
-  let v = if vertex == 0 {
-    na::DVector::from_element(dim, -1.0)
-  } else {
-    let mut v = na::DVector::zeros(dim);
-    v[vertex - 1] = 1.0;
-    v
-  };
-  ExteriorElement::from_1vector(v)
-}
-
-// returns constant k-form
-pub fn ref_whitney<O: SetOrder>(coord: CoordRef, simplex: &Simplex<O>) -> KForm {
-  let dim = coord.len();
-  let rank = simplex.dim();
-  let mut kform = KForm::zero(dim, rank);
-  for (i, vertex) in simplex.iter().enumerate() {
-    let sign = Sign::from_parity(i);
-    let bary = ref_bary(coord, vertex);
-    let wedge = KForm::wedge_big(
-      simplex
-        .iter()
-        .enumerate()
-        .filter(|&(j, _)| j != i)
-        .map(|(_, v)| ref_difbary(dim, v)),
-    )
-    .unwrap_or(KForm::one(dim));
-    kform += sign.as_f64() * bary * wedge;
-  }
-  factorial(rank) as f64 * kform
-}
-
-pub fn whitney_on_facet<O: SetOrder>(
-  coord: CoordRef,
-  facet: &CoordSimplex,
-  whitney_simplex: &Simplex<O>,
-) -> KForm {
-  let dim = facet.dim_intrinsic();
-  let rank = whitney_simplex.dim();
-
-  let linear = facet.spanning_vectors();
-  let linear_inv = linear.clone().lu();
-  let coord_ref = linear_inv
-    .solve(&(coord - facet.vertices.coord(0)))
-    .unwrap();
-  let linear_inv = linear.try_inverse().unwrap();
-
-  let form_ref = ref_whitney(coord_ref.as_view(), whitney_simplex);
-  let form_simp = form_ref
-    .basis_iter()
-    .map(|(coeff, basis)| {
-      coeff
-        * KForm::wedge_big(
-          basis
-            .indices()
-            .iter()
-            .map(|i| KForm::from_1vector(linear_inv.row(i).transpose())),
-        )
-        .unwrap_or(ExteriorElement::one(dim))
-    })
-    .sum();
-  form_simp
-}
-
-pub fn whitney_on_facet_impl_det<O: SetOrder>(
-  coord: CoordRef,
-  facet: &CoordSimplex,
-  whitney_simplex: &Simplex<O>,
-) -> KForm {
-  let dim = facet.dim_intrinsic();
-  let rank = whitney_simplex.dim();
-
-  let linear = facet.spanning_vectors();
-  let linear_inv = linear.clone().lu();
-  let coord_ref = linear_inv
-    .solve(&(coord - facet.vertices.coord(0)))
-    .unwrap();
-  let linear_inv = linear.try_inverse().unwrap();
-
-  let form_ref = ref_whitney(coord_ref.as_view(), whitney_simplex);
-  let mut form_simp = KForm::zero(dim, rank);
-  for (coeff_simp, basis_simp) in form_simp.basis_iter_mut() {
-    for (coeff_ref, basis_ref) in form_ref.basis_iter() {
-      let mut mat = na::DMatrix::zeros(rank, rank);
-      for (ii, i) in basis_simp.indices().iter().enumerate() {
-        for (jj, j) in basis_ref.indices().iter().enumerate() {
-          mat[(ii, jj)] = linear_inv[(i, j)];
-        }
-      }
-      *coeff_simp = coeff_ref * mat.determinant();
-    }
-  }
-  form_simp
+  norm.sqrt()
 }
 
 #[cfg(test)]
 mod test {
-  use crate::fe::{ref_difbarys, ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
+  use super::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
+  use crate::{
+    operators::{ref_difbarys, ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat},
+    whitney::ref_difwhitneys,
+  };
 
-  use super::{ref_difwhitneys, CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
   use geometry::metric::manifold::local::LocalMetricComplex;

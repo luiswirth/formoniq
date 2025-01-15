@@ -69,6 +69,19 @@ impl<O: SetOrder> IndexSet<O> {
       .then_with(|| self.pure_lexicographical_cmp(other))
   }
 
+  pub fn global_to_local_subset(&self, subset: &Self) -> IndexSet<ArbitraryOrder> {
+    let subset = subset
+      .iter()
+      .map(|iglobal| {
+        self
+          .iter()
+          .position(|iother| iglobal == iother)
+          .expect("Not a subset.")
+      })
+      .collect();
+    IndexSet::new(subset)
+  }
+
   pub fn union<O1: SetOrder>(self, mut other: IndexSet<O1>) -> IndexSet<ArbitraryOrder> {
     let mut indices = self.indices;
     indices.append(&mut other.indices);

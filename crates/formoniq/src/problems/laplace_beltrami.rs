@@ -2,7 +2,7 @@
 
 use crate::{
   assemble,
-  fe::{self, DofCoeff, FeFunction},
+  operators::{self, DofCoeff, FeFunction},
 };
 
 use common::{sparse::petsc_ghiep, util::FaerCholesky};
@@ -18,15 +18,16 @@ pub fn solve_laplace_beltrami_source<F>(
 where
   F: Fn(KSimplexIdx) -> DofCoeff,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
+  let mut laplace = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
 
-  let mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat).to_nalgebra_csr();
-  let mut source = mass * source_data;
+  let mass = assemble::assemble_galmat(mesh, operators::ScalarMassElmat).to_nalgebra_csr();
+  let mut source = mass * source_data.coeffs;
 
   assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut laplace, &mut source);
 
   let laplace = laplace.to_nalgebra_csr();
-  FaerCholesky::new(laplace).solve(&source)
+  let sol = FaerCholesky::new(laplace).solve(&source);
+  FeFunction::new(0, sol)
 }
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
@@ -34,8 +35,8 @@ pub fn solve_laplace_beltrami_evp(
   mesh: &MetricComplex,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
-  let laplace_galmat = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
-  let mass_galmat = assemble::assemble_galmat(mesh, fe::ScalarLumpedMassElmat);
+  let laplace_galmat = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
+  let mass_galmat = assemble::assemble_galmat(mesh, operators::ScalarLumpedMassElmat);
 
   petsc_ghiep(
     &laplace_galmat.to_nalgebra_csr(),

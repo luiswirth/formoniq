@@ -1,6 +1,6 @@
 extern crate nalgebra as na;
 
-use formoniq::fe::whitney::{ref_whitney, whitney_on_facet};
+use formoniq::whitney::whitney_on_facet;
 use geometry::coord::manifold::CoordSimplex;
 use topology::simplex::{graded_subsimplicies, SimplexExt};
 
@@ -8,13 +8,13 @@ use std::io::Write;
 
 fn main() {
   let nnodes_dim = 20;
-  let dim = 2;
 
   let facet = na::dmatrix![
     1.0, 0.5, 0.0;
     0.0, 0.5, 0.5;
   ];
   let facet = CoordSimplex::new(facet);
+  let dim = facet.dim_intrinsic();
 
   for simplex in graded_subsimplicies(dim).flatten() {
     let rank = simplex.dim();
@@ -31,7 +31,7 @@ fn main() {
           + yf * facet.spanning_vectors().column(1);
         let xf = coord[0];
         let yf = coord[1];
-        //let form = ref_whitney(coord.as_view(), &simplex);
+
         let form = whitney_on_facet(coord.as_view(), &facet, &simplex);
 
         write!(writer, "{xf:.4} {yf:.4}").unwrap();

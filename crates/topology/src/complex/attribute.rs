@@ -115,9 +115,31 @@ impl<D: DimInfoProvider> std::ops::Index<SimplexIdx<D>> for Cochain<D> {
     &self.coeffs[idx.kidx]
   }
 }
+
 impl<D: DimInfoProvider> std::ops::Index<SimplexHandle<'_, D>> for Cochain<D> {
   type Output = f64;
   fn index(&self, handle: SimplexHandle<'_, D>) -> &Self::Output {
     &self.coeffs[handle.kidx()]
+  }
+}
+
+impl<D: DimInfoProvider> std::ops::Index<usize> for Cochain<D> {
+  type Output = f64;
+  fn index(&self, idx: usize) -> &Self::Output {
+    &self.coeffs[idx]
+  }
+}
+
+impl<D: DimInfoProvider> std::ops::SubAssign for Cochain<D> {
+  fn sub_assign(&mut self, rhs: Self) {
+    assert!(self.dim == rhs.dim);
+    self.coeffs -= rhs.coeffs;
+  }
+}
+impl<D: DimInfoProvider> std::ops::Sub for Cochain<D> {
+  type Output = Self;
+  fn sub(mut self, rhs: Self) -> Self::Output {
+    self -= rhs;
+    self
   }
 }
