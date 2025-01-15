@@ -2,10 +2,10 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use exterior::{
-  dense::{DifferentialMultiForm, MultiForm},
+  dense::{DifferentialFormClosure, ExteriorField, MultiForm},
   manifold::discretize_form_on_mesh,
 };
-use formoniq::{operators::FeFunction, problems::hodge_laplace, whitney::whitney_on_facet};
+use formoniq::{operators::FeFunction, problems::hodge_laplace, whitney::WhitneyForm};
 use geometry::coord::{
   manifold::{cartesian::CartesianMesh, CoordComplex, CoordSimplex, SimplexHandleExt},
   CoordRef,
@@ -21,14 +21,15 @@ fn main() {
 
   let form_grade = 1;
   let source = Box::new(move |x: CoordRef| MultiForm::new(x.into(), dim, form_grade));
-  let source = DifferentialMultiForm::from_element_fn(source, dim, form_grade);
+  let source = DifferentialFormClosure::new(source, dim, form_grade);
 
   let source = discretize_form_on_mesh(&source, &coord_mesh);
 
   let (_sigma, u) = hodge_laplace::solve_hodge_laplace_source(&mesh, form_grade, source);
 
   for facet in mesh.topology().facets().iter() {
-    let coord_facet = CoordSimplex::from_simplex(facet.simplex_set(), coord_mesh.coords());
+    let coord_facet =
+      CoordSimplex::from_simplex_and_coords(facet.simplex_set(), coord_mesh.coords());
     let coord = coord_facet.barycenter();
 
     let approx_u = evaluate_fe_function_at_coord(&coord, &u, &coord_mesh).into_coeffs();
@@ -61,7 +62,7 @@ pub fn evaluate_fe_function_at_coord<'a>(
     .topology()
     .facets()
     .iter()
-    .find(|facet| facet.coord(mesh.coords()).is_coord_inside(coord))
+    .find(|facet| facet.coord_simplex(mesh.coords()).is_coord_inside(coord))
   else {
     return MultiForm::zero(dim, grade);
   };
@@ -73,8 +74,8 @@ pub fn evaluate_fe_function_at_coord<'a>(
       .simplex_set()
       .global_to_local_subset(dof_simp.simplex_set());
 
-    let dof_value =
-      fe[dof_simp] * whitney_on_facet(coord, &facet.coord(mesh.coords()), &local_dof_simp);
+    let dof_value = fe[dof_simp]
+      * WhitneyForm::new(facet.coord_simplex(mesh.coords()), local_dof_simp).at_point(coord);
     fe_value += dof_value;
   }
 

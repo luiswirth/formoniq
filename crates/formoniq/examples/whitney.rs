@@ -1,6 +1,7 @@
 extern crate nalgebra as na;
 
-use formoniq::whitney::whitney_on_facet;
+use exterior::dense::ExteriorField;
+use formoniq::whitney::WhitneyForm;
 use geometry::coord::manifold::CoordSimplex;
 use topology::simplex::{graded_subsimplicies, SimplexExt};
 
@@ -17,6 +18,8 @@ fn main() {
   let dim = facet.dim_intrinsic();
 
   for simplex in graded_subsimplicies(dim).flatten() {
+    let whitney_form = WhitneyForm::new(facet.clone(), simplex.clone());
+
     let grade = simplex.dim();
     let simplex_string: String = simplex.iter().map(|i| i.to_string()).collect();
     let file = std::fs::File::create(format!("out/whitney{grade}_{simplex_string}.txt")).unwrap();
@@ -32,7 +35,7 @@ fn main() {
         let xf = coord[0];
         let yf = coord[1];
 
-        let form = whitney_on_facet(coord.as_view(), &facet, &simplex);
+        let form = whitney_form.at_point(&coord);
 
         write!(writer, "{xf:.4} {yf:.4}").unwrap();
         for coeff in form.coeffs().iter() {

@@ -1,4 +1,4 @@
-use crate::dense::{DifferentialMultiForm, MultiVector};
+use crate::dense::{DifferentialMultiForm, MultiForm, MultiVector};
 
 use geometry::coord::{
   manifold::{CoordComplex, CoordSimplex},
@@ -7,6 +7,7 @@ use geometry::coord::{
 use topology::{complex::attribute::Cochain, Dim};
 
 pub trait CoordSimplexExt {
+  fn difbarys(&self) -> Vec<MultiForm>;
   fn spanning_multivector(&self) -> MultiVector;
 }
 impl CoordSimplexExt for CoordSimplex {
@@ -17,19 +18,27 @@ impl CoordSimplexExt for CoordSimplex {
       .map(|v| MultiVector::from_grade1(v.into_owned()));
     MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_embedded()))
   }
+
+  fn difbarys(&self) -> Vec<MultiForm> {
+    let gradbarys = self.gradbarys();
+    gradbarys
+      .column_iter()
+      .map(|g| MultiForm::from_grade1(g.into_owned()))
+      .collect()
+  }
 }
 
 /// Discretize continuous coordinate-based differential k-form into
 /// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
 pub fn discretize_form_on_mesh(
-  form: &DifferentialMultiForm,
+  form: &impl DifferentialMultiForm,
   complex: &CoordComplex,
 ) -> Cochain<Dim> {
   let cochain = complex
     .topology()
     .skeleton(form.grade())
     .iter()
-    .map(|simp| CoordSimplex::from_simplex(simp.simplex_set(), complex.coords()))
+    .map(|simp| CoordSimplex::from_simplex_and_coords(simp.simplex_set(), complex.coords()))
     .map(|simp| discretize_form_on_simplex(form, &simp))
     .collect::<Vec<_>>()
     .into();
@@ -39,18 +48,17 @@ pub fn discretize_form_on_mesh(
 /// Approximates the integral of a differential k-form over a k-simplex,
 /// by means of a vertex based (trapezoidal?) quadrature rule.
 pub fn discretize_form_on_simplex(
-  differential_form: &DifferentialMultiForm,
+  differential_form: &impl DifferentialMultiForm,
   simplex: &CoordSimplex,
 ) -> f64 {
-  let transform = simplex.affine_transform();
   let multivector = simplex.spanning_multivector();
   let f = |coord: CoordRef| {
     differential_form
-      .at_point(transform.apply(coord).as_view())
+      .at_point(simplex.local_to_global_coord(coord).as_view())
       .on_multivector(&multivector)
   };
-  let ref_simp = CoordSimplex::standard(simplex.dim_intrinsic());
-  barycentric_quadrature(&f, &ref_simp)
+  let std_simp = CoordSimplex::standard(simplex.dim_intrinsic());
+  barycentric_quadrature(&f, &std_simp)
 }
 
 /// Integrates affine linear functions exactly.
