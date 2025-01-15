@@ -3,7 +3,7 @@ extern crate nalgebra as na;
 use exterior::dense::ExteriorField;
 use formoniq::whitney::WhitneyForm;
 use geometry::coord::manifold::CoordSimplex;
-use topology::simplex::{graded_subsimplicies, SimplexExt};
+use topology::simplex::graded_subsimplicies;
 
 use std::io::Write;
 
@@ -21,7 +21,7 @@ fn main() {
     let whitney_form = WhitneyForm::new(facet.clone(), simplex.clone());
 
     let grade = simplex.dim();
-    let simplex_string: String = simplex.iter().map(|i| i.to_string()).collect();
+    let simplex_string: String = simplex.vertices.iter().map(|i| i.to_string()).collect();
     let file = std::fs::File::create(format!("out/whitney{grade}_{simplex_string}.txt")).unwrap();
     let mut writer = std::io::BufWriter::new(file);
 

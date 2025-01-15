@@ -1,10 +1,10 @@
 use common::sparse::SparseMatrix;
 use exterior::{ExteriorGrade, RiemannianMetricExt};
 use geometry::metric::manifold::{local::LocalMetricComplex, MetricComplex};
-use index_algebra::{binomial, combinators::IndexSubsets, factorial, sign::Sign, IndexSet};
+use index_algebra::{binomial, factorial, sign::Sign, IndexSet};
 use topology::{
   complex::{attribute::Cochain, local::LocalComplex, ManifoldComplex},
-  simplex::SortedSimplex,
+  simplex::{subsimplicies, SortedSimplex},
   Dim,
 };
 
@@ -153,7 +153,7 @@ impl ElMatProvider for HodgeMassElmat {
     let scalar_mass = ScalarMassElmat.eval(local_complex);
 
     let mut elmat = na::DMatrix::zeros(kwhitney_basis_size, kwhitney_basis_size);
-    let simplicies: Vec<_> = IndexSubsets::canonical(n + 1, difk).collect();
+    let simplicies: Vec<_> = subsimplicies(n, k).collect();
     let forms: Vec<Vec<_>> = simplicies
       .iter()
       .map(|simp| {
@@ -177,7 +177,7 @@ impl ElMatProvider for HodgeMassElmat {
             let inner = local_complex
               .metric()
               .multi_form_inner_product(k, aform, bform);
-            sum += sign.as_f64() * inner * scalar_mass[(asimp[l], bsimp[m])];
+            sum += sign.as_f64() * inner * scalar_mass[(asimp.vertices[l], bsimp.vertices[m])];
           }
         }
 
@@ -194,19 +194,19 @@ fn construct_const_form(
   ignored_ivertex: usize,
   n: Dim,
 ) -> na::DVector<f64> {
-  let k = simplex.len() - 1;
+  let k = simplex.nvertices() - 1;
   let kform_basis_size = binomial(n, k);
 
   let mut form = na::DVector::zeros(kform_basis_size);
 
   let mut form_indices = Vec::new();
-  for (ivertex, vertex) in simplex.iter().enumerate() {
+  for (ivertex, vertex) in simplex.vertices.iter().enumerate() {
     if vertex != 0 && ivertex != ignored_ivertex {
       form_indices.push(vertex - 1);
     }
   }
 
-  if simplex[0] == 0 && ignored_ivertex != 0 {
+  if simplex.vertices[0] == 0 && ignored_ivertex != 0 {
     for i in 0..n {
       let mut form_indices = form_indices.clone();
       form_indices.insert(0, i);

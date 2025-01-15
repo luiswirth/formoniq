@@ -36,10 +36,10 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
       }
     };
     for e in block.elements {
-      let simplex = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
+      let simplex: Vec<_> = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
       // NOTE: gmsh always produces positively oriented cells
       // TODO: only assume Pos for cells(!) not all simplicies.
-      let simplex = Simplex::new(simplex).with_sign(Sign::Pos);
+      let simplex = Simplex::from(simplex).with_sign(Sign::Pos);
       simplex_acc.push(simplex);
     }
   }
@@ -57,7 +57,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
 
   let skeleton = skeleton
     .into_iter()
-    .map(|simp| simp.set.into_sorted())
+    .map(|simp| simp.into_simplex().into_sorted())
     .collect();
   let skeleton = ManifoldSkeleton::new(skeleton);
 

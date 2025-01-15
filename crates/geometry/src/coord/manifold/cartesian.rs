@@ -239,7 +239,7 @@ mod test {
     let facets: Vec<_> = mesh
       .skeleton()
       .simplex_iter()
-      .map(|s| s.clone().into_vec())
+      .map(|s| s.vertices.clone().into_vec())
       .collect();
     assert_eq!(facets, expected_facets);
   }
@@ -275,7 +275,7 @@ mod test {
     let facets: Vec<_> = mesh
       .skeleton()
       .simplex_iter()
-      .map(|s| s.clone().into_vec())
+      .map(|s| s.vertices.clone().into_vec())
       .collect();
     assert_eq!(facets, expected_simplicies);
   }

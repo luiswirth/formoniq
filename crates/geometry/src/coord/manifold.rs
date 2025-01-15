@@ -10,7 +10,7 @@ use index_algebra::sign::Sign;
 use itertools::Itertools;
 use topology::{
   complex::{dim::DimInfoProvider, handle::SimplexHandle, ManifoldComplex},
-  simplex::{Simplex, SimplexExt},
+  simplex::Simplex,
   skeleton::ManifoldSkeleton,
   Dim,
 };
@@ -110,7 +110,7 @@ impl CoordComplex {
     let edges = topology.edges();
     let edges = edges
       .iter()
-      .map(|e| e.simplex_set().clone().try_into().unwrap());
+      .map(|e| e.simplex_set().vertices.clone().try_into().unwrap());
     let edge_lengths = coords.to_edge_lengths(edges);
     (MetricComplex::new(topology, edge_lengths), coords)
   }
@@ -139,15 +139,15 @@ impl CoordSimplex {
   where
     O: index_algebra::variants::SetOrder,
   {
-    let mut vert_coords = na::DMatrix::zeros(coords.dim(), simp.len());
-    for (i, v) in simp.iter().enumerate() {
+    let mut vert_coords = na::DMatrix::zeros(coords.dim(), simp.nvertices());
+    for (i, v) in simp.vertices.iter().enumerate() {
       vert_coords.set_column(i, &coords.coord(v));
     }
     CoordSimplex::new(vert_coords)
   }
 
   pub fn edges(&self) -> impl Iterator<Item = CoordSimplex> + use<'_> {
-    Simplex::increasing(self.nvertices())
+    Simplex::standard(self.nvertices())
       .subsimps(1)
       .map(|edge| Self::from_simplex_and_coords(&edge, &self.vertices))
   }
