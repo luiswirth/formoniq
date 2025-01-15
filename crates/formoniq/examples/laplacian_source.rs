@@ -6,21 +6,78 @@ extern crate nalgebra_sparse as nas;
 use std::ops::Neg;
 
 use exterior::{dense::KForm, manifold::discretize_mesh};
-use formoniq::problems::hodge_laplace;
-use geometry::coord::{manifold::cartesian::CartesianMesh, Coord};
+use formoniq::{operators::FeFunction, problems::hodge_laplace, whitney::whitney_on_facet};
+use geometry::coord::{
+  manifold::{cartesian::CartesianMesh, CoordComplex, CoordSimplex, SimplexHandleExt},
+  Coord, CoordRef,
+};
+use itertools::Itertools;
+use topology::{complex::dim::DimInfoProvider, simplex::Simplex};
 
 fn main() {
   let dim = 2;
-  let nboxes_per_dim = 10;
+  let nboxes_per_dim = 100;
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.compute_coord_manifold().into_coord_complex();
   let (mesh, _) = coord_mesh.clone().into_metric_complex();
 
   let form_rank = 1;
-  let source = |x: Coord| KForm::new(x, dim, form_rank);
+  let source = |x: CoordRef| KForm::new(x.into(), dim, form_rank);
 
-  let source = discretize_mesh(&source, form_rank, &coord_mesh).coeffs;
+  let source = discretize_mesh(&source, form_rank, &coord_mesh);
 
   let (_sigma, u) = hodge_laplace::solve_hodge_laplace_source(&mesh, form_rank, source);
-  println!("{u}");
+
+  for facet in mesh.topology().facets().iter() {
+    let coord_facet = CoordSimplex::from_simplex(facet.simplex_set(), coord_mesh.coords());
+    let coord = coord_facet.barycenter();
+
+    let approx_u = evaluate_fe_function_at_coord(&coord, &u, &coord_mesh).into_coeffs();
+
+    let x = coord[0];
+    let y = coord[1];
+    let exact_ux = -x.powi(3) / 6.0 + x / 2.0 * (y.powi(2) - y);
+    let exact_uy = -y.powi(3) / 6.0 + y / 2.0 * (x.powi(2) - x);
+    let exact_u = na::DVector::from_row_slice(&[exact_ux, exact_uy]);
+
+    println!("approx: {approx_u}");
+    println!("exact: {exact_u}");
+  }
+}
+
+pub fn evaluate_fe_function_at_coord<'a>(
+  coord: impl Into<CoordRef<'a>>,
+  fe: &FeFunction,
+  mesh: &CoordComplex,
+) -> KForm {
+  let coord = coord.into();
+
+  let dim = mesh.dim_embedded();
+  assert_eq!(coord.len(), dim);
+  let rank = fe.dim.dim(mesh.dim_intrinsic());
+
+  // Find facet that contains coord.
+  // WARN: very slow and inefficent
+  let Some(facet) = mesh
+    .topology()
+    .facets()
+    .iter()
+    .find(|facet| facet.coord(mesh.coords()).is_coord_inside(coord))
+  else {
+    return KForm::zero(dim, rank);
+  };
+
+  let mut fe_value = KForm::zero(mesh.dim_intrinsic(), rank);
+  let dof_simps = facet.subsimps(rank);
+  for dof_simp in dof_simps {
+    let local_dof_simp = facet
+      .simplex_set()
+      .global_to_local_subset(dof_simp.simplex_set());
+
+    let dof_value =
+      fe[dof_simp] * whitney_on_facet(coord, &facet.coord(mesh.coords()), &local_dof_simp);
+    fe_value += dof_value;
+  }
+
+  fe_value
 }

@@ -4,8 +4,11 @@ extern crate nalgebra as na;
 
 pub mod dense;
 pub mod manifold;
+pub mod variance;
 
-use dense::ExteriorElement;
+use std::marker::PhantomData;
+
+use dense::{ExteriorElement, KForm};
 use geometry::metric::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexSubPermutations, IndexSubsets},
@@ -13,19 +16,31 @@ use index_algebra::{
   IndexSet,
 };
 use topology::Dim;
+use variance::VarianceMarker;
 
 pub type ExteriorRank = usize;
-pub type ExteriorBasis = ExteriorTerm<CanonicalOrder>;
+pub type ExteriorBasis<V> = ExteriorTerm<V, CanonicalOrder>;
+
+pub type KVectorTerm<O> = ExteriorTerm<variance::Contra, O>;
+pub type KFormTerm<O> = ExteriorTerm<variance::Co, O>;
+
+pub type KVectorBasis = ExteriorBasis<variance::Contra>;
+pub type KFormBasis = ExteriorBasis<variance::Co>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ExteriorTerm<O: SetOrder> {
+pub struct ExteriorTerm<V: VarianceMarker, O: SetOrder> {
   indices: IndexSet<O>,
   dim: Dim,
+  variance: PhantomData<V>,
 }
 
-impl<O: SetOrder> ExteriorTerm<O> {
+impl<V: VarianceMarker, O: SetOrder> ExteriorTerm<V, O> {
   pub fn new(indices: IndexSet<O>, dim: Dim) -> Self {
-    Self { indices, dim }
+    Self {
+      indices,
+      dim,
+      variance: PhantomData,
+    }
   }
   pub fn indices(&self) -> &IndexSet<O> {
     &self.indices
@@ -38,9 +53,9 @@ impl<O: SetOrder> ExteriorTerm<O> {
   }
 }
 
-impl ExteriorBasis {
+impl KFormBasis {
   // TODO: is there a more efficent implementation?
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> KForm {
     let n = self.dim();
     let k = self.rank();
     let dual_k = n - k;
@@ -74,31 +89,32 @@ impl ExteriorBasis {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScaledExteriorTerm<O: SetOrder> {
+pub struct ScaledExteriorTerm<V: VarianceMarker, O: SetOrder> {
   coeff: f64,
-  term: ExteriorTerm<O>,
+  term: ExteriorTerm<V, O>,
 }
 
-impl<O: SetOrder> ScaledExteriorTerm<O> {
-  pub fn new(coeff: f64, term: ExteriorTerm<O>) -> Self {
+pub type ScaledExteriorBasis<V> = ScaledExteriorTerm<V, CanonicalOrder>;
+
+impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
+  pub fn new(coeff: f64, term: ExteriorTerm<V, O>) -> Self {
     Self { coeff, term }
   }
 
   pub fn coeff(&self) -> f64 {
     self.coeff
   }
-  pub fn term(&self) -> &ExteriorTerm<O> {
+  pub fn term(&self) -> &ExteriorTerm<V, O> {
     &self.term
   }
-
+  pub fn dim(&self) -> Dim {
+    self.term.dim()
+  }
   pub fn rank(&self) -> ExteriorRank {
     self.term.rank()
   }
-  pub fn k(&self) -> ExteriorRank {
-    self.rank()
-  }
 
-  pub fn into_canonical(self) -> ScaledExteriorTerm<CanonicalOrder> {
+  pub fn into_canonical(self) -> ScaledExteriorTerm<V, CanonicalOrder> {
     let dim = self.dim();
     let (term, sign) = self.term.indices.into_sorted_signed().into_parts();
     let coeff = self.coeff * sign.as_f64();
@@ -106,7 +122,7 @@ impl<O: SetOrder> ScaledExteriorTerm<O> {
     ScaledExteriorTerm { coeff, term }
   }
 
-  pub fn assume_canonical(self) -> ScaledExteriorTerm<CanonicalOrder> {
+  pub fn assume_canonical(self) -> ScaledExteriorTerm<V, CanonicalOrder> {
     ScaledExteriorTerm {
       coeff: self.coeff,
       term: self.term.indices.assume_sorted().ext(self.term.dim),
@@ -125,42 +141,41 @@ impl<O: SetOrder> ScaledExteriorTerm<O> {
   }
 }
 
-/// With Local Base
-impl<O: SetOrder> ScaledExteriorTerm<O> {
-  pub fn dim(&self) -> Dim {
-    self.term.dim()
-  }
-  pub fn n(&self) -> Dim {
-    self.dim()
-  }
-}
-
-/// With Local Base and Sorted
-impl ScaledExteriorTerm<CanonicalOrder> {
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> ExteriorElement {
+pub type ScaledKFormBasis = ScaledExteriorBasis<variance::Co>;
+impl ScaledKFormBasis {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> KForm {
     self.coeff * self.term.hodge_star(metric)
   }
 }
 
-impl<O: SetOrder> std::ops::Mul<ExteriorTerm<O>> for f64 {
-  type Output = ScaledExteriorTerm<O>;
-  fn mul(self, term: ExteriorTerm<O>) -> Self::Output {
+impl<V: VarianceMarker, O: SetOrder> std::ops::Mul<ExteriorTerm<V, O>> for f64 {
+  type Output = ScaledExteriorTerm<V, O>;
+  fn mul(self, term: ExteriorTerm<V, O>) -> Self::Output {
     let coeff = self;
     let term = term.indices.ext(term.dim);
     ScaledExteriorTerm::new(coeff, term)
   }
 }
 
-impl<O: SetOrder> std::ops::Mul<ScaledExteriorTerm<O>> for f64 {
-  type Output = ScaledExteriorTerm<O>;
-  fn mul(self, mut term: ScaledExteriorTerm<O>) -> Self::Output {
+impl<V: VarianceMarker, O: SetOrder> std::ops::Mul<ScaledExteriorTerm<V, O>> for f64 {
+  type Output = ScaledExteriorTerm<V, O>;
+  fn mul(self, mut term: ScaledExteriorTerm<V, O>) -> Self::Output {
     term.coeff *= self;
     term
   }
 }
-impl<O: SetOrder> std::ops::MulAssign<f64> for ScaledExteriorTerm<O> {
+impl<V: VarianceMarker, O: SetOrder> std::ops::MulAssign<f64> for ScaledExteriorTerm<V, O> {
   fn mul_assign(&mut self, scalar: f64) {
     self.coeff *= scalar;
+  }
+}
+
+pub trait ExteriorTermExt<V: VarianceMarker, O: SetOrder> {
+  fn ext(self, dim: Dim) -> ExteriorTerm<V, O>;
+}
+impl<V: VarianceMarker, Set: Into<IndexSet<O>>, O: SetOrder> ExteriorTermExt<V, O> for Set {
+  fn ext(self, dim: Dim) -> ExteriorTerm<V, O> {
+    ExteriorTerm::new(self.into(), dim)
   }
 }
 
@@ -231,15 +246,6 @@ impl RiemannianMetricExt for RiemannianMetric {
   }
 }
 
-pub trait ExteriorTermExt<O: SetOrder> {
-  fn ext(self, dim: Dim) -> ExteriorTerm<O>;
-}
-impl<Set: Into<IndexSet<O>>, O: SetOrder> ExteriorTermExt<O> for Set {
-  fn ext(self, dim: Dim) -> ExteriorTerm<O> {
-    ExteriorTerm::new(self.into(), dim)
-  }
-}
-
 #[cfg(test)]
 mod test {
   use common::linalg::assert_mat_eq;
@@ -253,7 +259,7 @@ mod test {
     use super::*;
 
     let dim = 4;
-    let mut e0 = ExteriorElement::zero(dim, 3);
+    let mut e0 = KForm::zero(dim, 3);
     e0 += 1.0 * vec![2, 0, 1].ext(dim);
     e0 += 3.0 * vec![1, 3, 2].ext(dim);
     e0 += -2.0 * vec![0, 2, 1].ext(dim);

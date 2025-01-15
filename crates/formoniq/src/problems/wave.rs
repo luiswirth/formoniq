@@ -1,6 +1,6 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
-use crate::{assemble, fe, fe::DofIdx};
+use crate::{assemble, operators, operators::DofIdx};
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
 use geometry::metric::manifold::MetricComplex;
@@ -31,9 +31,9 @@ pub fn solve_wave<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
-  let mut mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat);
-  let mut force = assemble::assemble_galvec(mesh, fe::SourceElvec::new(force_data));
+  let mut laplace = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
+  let mut mass = assemble::assemble_galmat(mesh, operators::ScalarMassElmat);
+  let mut force = assemble::assemble_galvec(mesh, operators::SourceElvec::new(force_data));
 
   assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut laplace, &mut force);
   assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut mass, &mut force);

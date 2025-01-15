@@ -27,7 +27,7 @@ pub type ComplexSkeleton = IndexMap<SortedSimplex, SimplexData>;
 
 #[derive(Default, Debug, Clone)]
 pub struct SimplexData {
-  pub parent_facets: Vec<KSimplexIdx>,
+  pub cofacets: Vec<KSimplexIdx>,
 }
 
 impl ManifoldComplex {
@@ -36,9 +36,7 @@ impl ManifoldComplex {
   }
 
   pub fn reference(dim: Dim) -> Self {
-    let data = SimplexData {
-      parent_facets: vec![0],
-    };
+    let data = SimplexData { cofacets: vec![0] };
     let skeletons = GradedIndexSubsets::canonical(dim + 1)
       // skip empty simplex
       .skip(1)
@@ -126,7 +124,7 @@ impl ManifoldComplex {
         let nvertices_sub = dim_sub + 1;
         for sub in facet.subsets(nvertices_sub) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
-          sub.parent_facets.push(ifacet);
+          sub.cofacets.push(ifacet);
         }
       }
     }
@@ -137,8 +135,8 @@ impl ManifoldComplex {
 
     // Topology checks.
     let faces = &skeletons[dim - 1];
-    for (_, SimplexData { parent_facets }) in faces {
-      let nparents = parent_facets.len();
+    for (_, SimplexData { cofacets }) in faces {
+      let nparents = cofacets.len();
       let is_manifold = nparents == 2 || nparents == 1;
       assert!(is_manifold, "Topology must be manifold.");
     }

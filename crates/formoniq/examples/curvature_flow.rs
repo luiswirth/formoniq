@@ -4,7 +4,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use common::util::FaerCholesky;
-use formoniq::{assemble, fe};
+use formoniq::{assemble, operators};
 use geometry::coord::{
   manifold::dim3::{write_3dmesh_animation, TriangleSurface3D},
   VertexCoords,
@@ -34,8 +34,8 @@ fn main() {
   for istep in 0..nsteps {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
-    let laplace = assemble::assemble_galmat(&mesh, fe::LaplaceBeltramiElmat);
-    let mass = assemble::assemble_galmat(&mesh, fe::ScalarMassElmat);
+    let laplace = assemble::assemble_galmat(&mesh, operators::LaplaceBeltramiElmat);
+    let mass = assemble::assemble_galmat(&mesh, operators::ScalarMassElmat);
     let source = na::DVector::zeros(nvertices);
 
     let coords_initial = coords_list.first().unwrap();

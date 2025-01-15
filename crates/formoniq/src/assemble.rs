@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::fe::{DofIdx, ElMatProvider, ElVecProvider};
+use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
 use geometry::metric::manifold::MetricComplex;

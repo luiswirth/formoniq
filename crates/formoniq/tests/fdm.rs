@@ -25,7 +25,7 @@ extern crate nalgebra_sparse as nas;
 use common::linalg::{kronecker_sum, matrix_from_const_diagonals};
 use formoniq::{
   assemble,
-  fe::{self, SourceElvec},
+  operators::{self, SourceElvec},
 };
 use geometry::coord::manifold::cartesian::CartesianMesh;
 use topology::Dim;
@@ -201,7 +201,8 @@ fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = CartesianMesh::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64);
   let coord_mesh = box_mesh.compute_coord_manifold();
   let (mesh, _) = coord_mesh.into_metric_complex();
-  let mut galmat = assemble::assemble_galmat(&mesh, fe::LaplaceBeltramiElmat).to_nalgebra_dense();
+  let mut galmat =
+    assemble::assemble_galmat(&mesh, operators::LaplaceBeltramiElmat).to_nalgebra_dense();
   let mut galvec = assemble::assemble_galvec(
     &mesh,
     SourceElvec::new(na::DVector::from_element(

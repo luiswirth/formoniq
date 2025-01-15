@@ -2,13 +2,18 @@ pub mod cartesian;
 pub mod dim3;
 pub mod gmsh;
 
-use super::VertexCoords;
-use crate::metric::manifold::MetricComplex;
+use super::{Coord, CoordRef, VertexCoords};
+use crate::metric::manifold::{ref_vol, MetricComplex};
 
 use common::linalg::DMatrixExt;
 use index_algebra::sign::Sign;
 use itertools::Itertools;
-use topology::{complex::ManifoldComplex, simplex::Simplex, skeleton::ManifoldSkeleton, Dim};
+use topology::{
+  complex::{dim::DimInfoProvider, handle::SimplexHandle, ManifoldComplex},
+  simplex::{Simplex, SimplexExt},
+  skeleton::ManifoldSkeleton,
+  Dim,
+};
 
 #[derive(Debug, Clone)]
 pub struct CoordSkeleton {
@@ -93,8 +98,11 @@ impl CoordComplex {
     &self.coords
   }
 
-  pub fn dim(&self) -> Dim {
+  pub fn dim_intrinsic(&self) -> Dim {
     self.topology.dim()
+  }
+  pub fn dim_embedded(&self) -> Dim {
+    self.coords.dim()
   }
 
   pub fn into_metric_complex(self) -> (MetricComplex, VertexCoords) {
@@ -137,6 +145,12 @@ impl CoordSimplex {
     }
     CoordSimplex::new(vert_coords)
   }
+
+  pub fn edges(&self) -> impl Iterator<Item = CoordSimplex> + use<'_> {
+    Simplex::increasing(self.nvertices())
+      .subsimps(1)
+      .map(|edge| Self::from_simplex(&edge, &self.vertices))
+  }
 }
 impl CoordSimplex {
   pub fn nvertices(&self) -> usize {
@@ -162,17 +176,79 @@ impl CoordSimplex {
     mat
   }
 
+  /// Affine transform from reference simplex to this simplex.
+  pub fn affine_transform(&self) -> AffineCoordTransform {
+    let linear = self.spanning_vectors();
+    let translation = self.vertices.coord(0);
+    AffineCoordTransform::new(linear, translation)
+  }
+
+  pub fn barycenter(&self) -> Coord {
+    let mut barycenter = na::DVector::zeros(self.dim_embedded());
+    self.vertices.coord_iter().for_each(|v| barycenter += v);
+    barycenter /= self.nvertices() as f64;
+    barycenter
+  }
+
   pub fn det(&self) -> f64 {
-    if self.is_euclidean() {
+    let det = if self.is_euclidean() {
       self.spanning_vectors().determinant()
     } else {
       self.spanning_vectors().gram_det_sqrt()
-    }
+    };
+    ref_vol(self.dim_intrinsic()) * det
   }
   pub fn vol(&self) -> f64 {
     self.det().abs()
   }
   pub fn orientation(&self) -> Sign {
     Sign::from_f64(self.det())
+  }
+
+  pub fn global_to_local_coords(&self, global: CoordRef) -> na::DVector<f64> {
+    self.affine_transform().try_apply_inverse(global).unwrap()
+  }
+
+  pub fn global_to_bary_coords(&self, global: CoordRef) -> na::DVector<f64> {
+    let local = self.global_to_local_coords(global);
+    let bary0 = 1.0 - local.sum();
+    local.insert_row(0, bary0)
+  }
+
+  pub fn is_coord_inside(&self, global: CoordRef) -> bool {
+    let bary = self.global_to_bary_coords(global);
+    bary.iter().all(|&b| (0.0..=1.0).contains(&b))
+  }
+}
+
+pub trait SimplexHandleExt {
+  fn coord(&self, coords: &VertexCoords) -> CoordSimplex;
+}
+impl<'c, D: DimInfoProvider> SimplexHandleExt for SimplexHandle<'c, D> {
+  fn coord(&self, coords: &VertexCoords) -> CoordSimplex {
+    CoordSimplex::from_simplex(self.simplex_set(), coords)
+  }
+}
+
+pub struct AffineCoordTransform {
+  pub linear: na::DMatrix<f64>,
+  pub translation: na::DVector<f64>,
+}
+impl AffineCoordTransform {
+  pub fn new(linear: na::DMatrix<f64>, translation: na::DVector<f64>) -> Self {
+    Self {
+      linear,
+      translation,
+    }
+  }
+  pub fn apply(&self, coord: CoordRef) -> Coord {
+    &self.linear * coord + &self.translation
+  }
+  pub fn try_apply_inverse(&self, coord: CoordRef) -> Option<Coord> {
+    self.linear.clone().qr().solve(&(coord - &self.translation))
+  }
+
+  pub fn try_inverse(&self) -> Option<Self> {
+    todo!()
   }
 }

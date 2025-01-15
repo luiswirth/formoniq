@@ -5,7 +5,7 @@ use geometry::metric::manifold::MetricComplex;
 
 use crate::{
   assemble,
-  fe::{self, DofIdx},
+  operators::{self, DofIdx},
 };
 
 /// times = [t_0,t_1,...,T]
@@ -21,9 +21,9 @@ pub fn solve_heat<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, fe::LaplaceBeltramiElmat);
-  let mut mass = assemble::assemble_galmat(mesh, fe::ScalarMassElmat);
-  let mut source = assemble::assemble_galvec(mesh, fe::SourceElvec::new(source_data));
+  let mut laplace = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
+  let mut mass = assemble::assemble_galmat(mesh, operators::ScalarMassElmat);
+  let mut source = assemble::assemble_galvec(mesh, operators::SourceElvec::new(source_data));
 
   assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut laplace, &mut source);
   assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut mass, &mut source);
