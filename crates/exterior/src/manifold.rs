@@ -1,53 +1,55 @@
+use crate::dense::{DifferentialMultiForm, MultiVector};
+
 use geometry::coord::{
   manifold::{CoordComplex, CoordSimplex},
   CoordRef,
 };
 use topology::{complex::attribute::Cochain, Dim};
 
-use crate::{
-  dense::{KForm, KVector},
-  ExteriorRank,
-};
+pub trait CoordSimplexExt {
+  fn spanning_multivector(&self) -> MultiVector;
+}
+impl CoordSimplexExt for CoordSimplex {
+  fn spanning_multivector(&self) -> MultiVector {
+    let vectors = self.spanning_vectors();
+    let vectors = vectors
+      .column_iter()
+      .map(|v| MultiVector::from_grade1(v.into_owned()));
+    MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_embedded()))
+  }
+}
 
 /// Discretize continuous coordinate-based differential k-form into
 /// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
-pub fn discretize_mesh<F>(
-  form_field: &F,
-  rank: ExteriorRank,
+pub fn discretize_form_on_mesh(
+  form: &DifferentialMultiForm,
   complex: &CoordComplex,
-) -> Cochain<Dim>
-where
-  F: Fn(CoordRef) -> KForm,
-{
+) -> Cochain<Dim> {
   let cochain = complex
     .topology()
-    .skeleton(rank)
+    .skeleton(form.grade())
     .iter()
     .map(|simp| CoordSimplex::from_simplex(simp.simplex_set(), complex.coords()))
-    .map(|simp| discretize_simplex(form_field, &simp))
+    .map(|simp| discretize_form_on_simplex(form, &simp))
     .collect::<Vec<_>>()
     .into();
-  Cochain::new(rank, cochain)
+  Cochain::new(form.grade(), cochain)
 }
 
 /// Approximates the integral of a differential k-form over a k-simplex,
 /// by means of a vertex based (trapezoidal?) quadrature rule.
-pub fn discretize_simplex<F>(form_field: &F, simplex: &CoordSimplex) -> f64
-where
-  F: Fn(CoordRef) -> KForm,
-{
-  let vectors = simplex.spanning_vectors();
-  let vectors = vectors
-    .column_iter()
-    .map(|v| KVector::from_rank1(v.into_owned()));
-
-  let kvector = KVector::wedge_big(vectors).unwrap_or(KVector::one(simplex.dim_embedded()));
-
+pub fn discretize_form_on_simplex(
+  differential_form: &DifferentialMultiForm,
+  simplex: &CoordSimplex,
+) -> f64 {
   let transform = simplex.affine_transform();
-  let f = |coord: CoordRef| form_field(transform.apply(coord).as_view()).evaluate(&kvector);
-
+  let multivector = simplex.spanning_multivector();
+  let f = |coord: CoordRef| {
+    differential_form
+      .at_point(transform.apply(coord).as_view())
+      .on_multivector(&multivector)
+  };
   let ref_simp = CoordSimplex::standard(simplex.dim_intrinsic());
-
   barycentric_quadrature(&f, &ref_simp)
 }
 

@@ -4,23 +4,23 @@ use crate::{
 };
 
 use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
-use exterior::ExteriorRank;
+use exterior::ExteriorGrade;
 use geometry::metric::manifold::MetricComplex;
 
 pub fn solve_hodge_laplace_source(
   mesh: &MetricComplex,
-  rank: ExteriorRank,
+  grade: ExteriorGrade,
   source_data: FeFunction,
 ) -> (FeFunction, FeFunction) {
   // TODO: handle harmonics (computed from EVP)
   //let harmonics = nas::CsrMatrix::zeros(0, 0);
 
   // TODO: handle k=0
-  let mass_sigma = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(rank - 1));
-  let dif_sigma = assemble::assemble_galmat(mesh, operators::DifElmat(rank));
-  let codif_u = assemble::assemble_galmat(mesh, operators::CodifElmat(rank));
-  let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(rank));
-  let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(rank));
+  let mass_sigma = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade - 1));
+  let dif_sigma = assemble::assemble_galmat(mesh, operators::DifElmat(grade));
+  let codif_u = assemble::assemble_galmat(mesh, operators::CodifElmat(grade));
+  let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(grade));
+  let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade));
 
   let mut galmat = SparseMatrix::zeros(
     mass_sigma.nrows() + dif_sigma.nrows(),
@@ -56,11 +56,11 @@ pub fn solve_hodge_laplace_source(
 
   let galsol = petsc_saddle_point(&galmat, &galvec);
   let sigma = FeFunction::new(
-    rank - 1,
+    grade - 1,
     galsol.view_range(..mass_sigma.nrows(), 0).into_owned(),
   );
   let u = FeFunction::new(
-    rank,
+    grade,
     galsol.view_range(mass_sigma.nrows().., 0).into_owned(),
   );
   (sigma, u)
@@ -68,7 +68,7 @@ pub fn solve_hodge_laplace_source(
 
 pub fn solve_hodge_laplace_evp(
   mesh: &MetricComplex,
-  k: ExteriorRank,
+  k: ExteriorGrade,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
   // TODO: handle k=0

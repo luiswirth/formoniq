@@ -1,32 +1,31 @@
-#![allow(warnings)]
-
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use std::ops::Neg;
-
-use exterior::{dense::KForm, manifold::discretize_mesh};
+use exterior::{
+  dense::{DifferentialMultiForm, MultiForm},
+  manifold::discretize_form_on_mesh,
+};
 use formoniq::{operators::FeFunction, problems::hodge_laplace, whitney::whitney_on_facet};
 use geometry::coord::{
   manifold::{cartesian::CartesianMesh, CoordComplex, CoordSimplex, SimplexHandleExt},
-  Coord, CoordRef,
+  CoordRef,
 };
-use itertools::Itertools;
-use topology::{complex::dim::DimInfoProvider, simplex::Simplex};
+use topology::complex::dim::DimInfoProvider;
 
 fn main() {
   let dim = 2;
-  let nboxes_per_dim = 100;
+  let nboxes_per_dim = 10;
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
   let coord_mesh = box_mesh.compute_coord_manifold().into_coord_complex();
   let (mesh, _) = coord_mesh.clone().into_metric_complex();
 
-  let form_rank = 1;
-  let source = |x: CoordRef| KForm::new(x.into(), dim, form_rank);
+  let form_grade = 1;
+  let source = Box::new(move |x: CoordRef| MultiForm::new(x.into(), dim, form_grade));
+  let source = DifferentialMultiForm::from_element_fn(source, dim, form_grade);
 
-  let source = discretize_mesh(&source, form_rank, &coord_mesh);
+  let source = discretize_form_on_mesh(&source, &coord_mesh);
 
-  let (_sigma, u) = hodge_laplace::solve_hodge_laplace_source(&mesh, form_rank, source);
+  let (_sigma, u) = hodge_laplace::solve_hodge_laplace_source(&mesh, form_grade, source);
 
   for facet in mesh.topology().facets().iter() {
     let coord_facet = CoordSimplex::from_simplex(facet.simplex_set(), coord_mesh.coords());
@@ -49,12 +48,12 @@ pub fn evaluate_fe_function_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
   fe: &FeFunction,
   mesh: &CoordComplex,
-) -> KForm {
+) -> MultiForm {
   let coord = coord.into();
 
   let dim = mesh.dim_embedded();
   assert_eq!(coord.len(), dim);
-  let rank = fe.dim.dim(mesh.dim_intrinsic());
+  let grade = fe.dim.dim(mesh.dim_intrinsic());
 
   // Find facet that contains coord.
   // WARN: very slow and inefficent
@@ -64,11 +63,11 @@ pub fn evaluate_fe_function_at_coord<'a>(
     .iter()
     .find(|facet| facet.coord(mesh.coords()).is_coord_inside(coord))
   else {
-    return KForm::zero(dim, rank);
+    return MultiForm::zero(dim, grade);
   };
 
-  let mut fe_value = KForm::zero(mesh.dim_intrinsic(), rank);
-  let dof_simps = facet.subsimps(rank);
+  let mut fe_value = MultiForm::zero(mesh.dim_intrinsic(), grade);
+  let dof_simps = facet.subsimps(grade);
   for dof_simp in dof_simps {
     let local_dof_simp = facet
       .simplex_set()

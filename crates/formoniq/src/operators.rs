@@ -1,5 +1,5 @@
 use common::sparse::SparseMatrix;
-use exterior::{ExteriorRank, RiemannianMetricExt};
+use exterior::{ExteriorGrade, RiemannianMetricExt};
 use geometry::metric::manifold::{local::LocalMetricComplex, MetricComplex};
 use index_algebra::{binomial, combinators::IndexSubsets, factorial, sign::Sign, IndexSet};
 use topology::{
@@ -16,14 +16,14 @@ pub type FeFunction = Cochain<Dim>;
 
 pub type ElMat = na::DMatrix<f64>;
 pub trait ElMatProvider {
-  fn row_rank(&self) -> ExteriorRank;
-  fn col_rank(&self) -> ExteriorRank;
+  fn row_grade(&self) -> ExteriorGrade;
+  fn col_grade(&self) -> ExteriorGrade;
   fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat;
 }
 
 pub type ElVec = na::DVector<f64>;
 pub trait ElVecProvider {
-  fn rank(&self) -> ExteriorRank;
+  fn grade(&self) -> ExteriorGrade;
   fn eval(&self, local_complex: &LocalMetricComplex) -> ElVec;
 }
 
@@ -32,10 +32,10 @@ pub trait ElVecProvider {
 /// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
 pub struct LaplaceBeltramiElmat;
 impl ElMatProvider for LaplaceBeltramiElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     0
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
@@ -47,10 +47,10 @@ impl ElMatProvider for LaplaceBeltramiElmat {
 /// Exact Element Matrix Provider for scalar mass bilinear form.
 pub struct ScalarMassElmat;
 impl ElMatProvider for ScalarMassElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     0
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
@@ -67,10 +67,10 @@ impl ElMatProvider for ScalarMassElmat {
 /// obtained through trapezoidal quadrature rule.
 pub struct ScalarLumpedMassElmat;
 impl ElMatProvider for ScalarLumpedMassElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     0
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> ElMat {
@@ -93,7 +93,7 @@ impl SourceElvec {
   }
 }
 impl ElVecProvider for SourceElvec {
-  fn rank(&self) -> ExteriorRank {
+  fn grade(&self) -> ExteriorGrade {
     0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> ElVec {
@@ -112,33 +112,33 @@ impl ElVecProvider for SourceElvec {
 }
 
 pub trait ManifoldComplexExt {
-  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> SparseMatrix;
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
 }
 impl ManifoldComplexExt for ManifoldComplex {
   /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> SparseMatrix {
-    self.boundary_operator(rank + 1).transpose()
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix {
+    self.boundary_operator(grade + 1).transpose()
   }
 }
 
 pub trait LocalComplexExt {
-  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> na::DMatrix<f64>;
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> na::DMatrix<f64>;
 }
 impl LocalComplexExt for LocalComplex {
-  fn exterior_derivative_operator(&self, rank: ExteriorRank) -> na::DMatrix<f64> {
-    self.boundary_operator(rank + 1).transpose()
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> na::DMatrix<f64> {
+    self.boundary_operator(grade + 1).transpose()
   }
 }
 
 /// Element Matrix for the weak Hodge star operator / the mass bilinear form.
 ///
 /// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
-pub struct HodgeMassElmat(pub ExteriorRank);
+pub struct HodgeMassElmat(pub ExteriorGrade);
 impl ElMatProvider for HodgeMassElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
@@ -163,23 +163,25 @@ impl ElMatProvider for HodgeMassElmat {
       })
       .collect();
 
-    for (arank, asimp) in simplicies.iter().enumerate() {
-      for (brank, bsimp) in simplicies.iter().enumerate() {
+    for (agrade, asimp) in simplicies.iter().enumerate() {
+      for (bgrade, bsimp) in simplicies.iter().enumerate() {
         let mut sum = 0.0;
 
         for l in 0..difk {
           for m in 0..difk {
             let sign = Sign::from_parity(l + m);
 
-            let aform = &forms[arank][l];
-            let bform = &forms[brank][m];
+            let aform = &forms[agrade][l];
+            let bform = &forms[bgrade][m];
 
-            let inner = local_complex.metric().kform_inner_product(k, aform, bform);
+            let inner = local_complex
+              .metric()
+              .multi_form_inner_product(k, aform, bform);
             sum += sign.as_f64() * inner * scalar_mass[(asimp[l], bsimp[m])];
           }
         }
 
-        elmat[(arank, brank)] = k_factorial_sqr * sum;
+        elmat[(agrade, bgrade)] = k_factorial_sqr * sum;
       }
     }
 
@@ -226,12 +228,12 @@ fn construct_const_form(
 /// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
 ///
 /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
-pub struct CodifDifElmat(pub ExteriorRank);
+pub struct CodifDifElmat(pub ExteriorGrade);
 impl ElMatProvider for CodifDifElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
@@ -246,12 +248,12 @@ impl ElMatProvider for CodifDifElmat {
 /// Element Matrix Provider for the weak mixed exterior derivative $(dif sigma, v)$.
 ///
 /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
-pub struct DifElmat(pub ExteriorRank);
+pub struct DifElmat(pub ExteriorGrade);
 impl ElMatProvider for DifElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     self.0 - 1
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
@@ -265,12 +267,12 @@ impl ElMatProvider for DifElmat {
 /// Element Matrix Provider for the weak mixed codifferential $(u, dif tau)$.
 ///
 /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
-pub struct CodifElmat(pub ExteriorRank);
+pub struct CodifElmat(pub ExteriorGrade);
 impl ElMatProvider for CodifElmat {
-  fn row_rank(&self) -> ExteriorRank {
+  fn row_grade(&self) -> ExteriorGrade {
     self.0 - 1
   }
-  fn col_rank(&self) -> ExteriorRank {
+  fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
   fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
@@ -410,7 +412,7 @@ mod test {
         let var1 = complex.vol()
           * complex
             .metric()
-            .kform_norm_sqr(k + 1, &ref_difwhitneys(complex.dim(), k));
+            .multi_form_norm_sqr(k + 1, &ref_difwhitneys(complex.dim(), k));
 
         assert_mat_eq(&var0, &var1);
       }

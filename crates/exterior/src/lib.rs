@@ -8,7 +8,7 @@ pub mod variance;
 
 use std::marker::PhantomData;
 
-use dense::{ExteriorElement, KForm};
+use dense::{ExteriorElement, MultiForm};
 use geometry::metric::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexSubPermutations, IndexSubsets},
@@ -18,14 +18,14 @@ use index_algebra::{
 use topology::Dim;
 use variance::VarianceMarker;
 
-pub type ExteriorRank = usize;
-pub type ExteriorBasis<V> = ExteriorTerm<V, CanonicalOrder>;
+pub type ExteriorGrade = usize;
+pub type ExteriorBase<V> = ExteriorTerm<V, CanonicalOrder>;
 
-pub type KVectorTerm<O> = ExteriorTerm<variance::Contra, O>;
-pub type KFormTerm<O> = ExteriorTerm<variance::Co, O>;
+pub type MultiVectorTerm<O> = ExteriorTerm<variance::Contra, O>;
+pub type MultiFormTerm<O> = ExteriorTerm<variance::Co, O>;
 
-pub type KVectorBasis = ExteriorBasis<variance::Contra>;
-pub type KFormBasis = ExteriorBasis<variance::Co>;
+pub type MultiVectorBase = ExteriorBase<variance::Contra>;
+pub type MultiFormBase = ExteriorBase<variance::Co>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ExteriorTerm<V: VarianceMarker, O: SetOrder> {
@@ -45,7 +45,7 @@ impl<V: VarianceMarker, O: SetOrder> ExteriorTerm<V, O> {
   pub fn indices(&self) -> &IndexSet<O> {
     &self.indices
   }
-  pub fn rank(&self) -> ExteriorRank {
+  pub fn grade(&self) -> ExteriorGrade {
     self.indices.len()
   }
   pub fn dim(&self) -> Dim {
@@ -53,11 +53,11 @@ impl<V: VarianceMarker, O: SetOrder> ExteriorTerm<V, O> {
   }
 }
 
-impl KFormBasis {
+impl MultiFormBase {
   // TODO: is there a more efficent implementation?
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> KForm {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> MultiForm {
     let n = self.dim();
-    let k = self.rank();
+    let k = self.grade();
     let dual_k = n - k;
 
     let primal_coeff = 1.0;
@@ -94,7 +94,7 @@ pub struct ScaledExteriorTerm<V: VarianceMarker, O: SetOrder> {
   term: ExteriorTerm<V, O>,
 }
 
-pub type ScaledExteriorBasis<V> = ScaledExteriorTerm<V, CanonicalOrder>;
+pub type ScaledExteriorBase<V> = ScaledExteriorTerm<V, CanonicalOrder>;
 
 impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
   pub fn new(coeff: f64, term: ExteriorTerm<V, O>) -> Self {
@@ -110,8 +110,8 @@ impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
   pub fn dim(&self) -> Dim {
     self.term.dim()
   }
-  pub fn rank(&self) -> ExteriorRank {
-    self.term.rank()
+  pub fn grade(&self) -> ExteriorGrade {
+    self.term.grade()
   }
 
   pub fn into_canonical(self) -> ScaledExteriorTerm<V, CanonicalOrder> {
@@ -141,9 +141,9 @@ impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
   }
 }
 
-pub type ScaledKFormBasis = ScaledExteriorBasis<variance::Co>;
-impl ScaledKFormBasis {
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> KForm {
+pub type ScaledMultiFormBase = ScaledExteriorBase<variance::Co>;
+impl ScaledMultiFormBase {
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> MultiForm {
     self.coeff * self.term.hodge_star(metric)
   }
 }
@@ -180,28 +180,32 @@ impl<V: VarianceMarker, Set: Into<IndexSet<O>>, O: SetOrder> ExteriorTermExt<V, 
 }
 
 pub trait RiemannianMetricExt {
-  fn kform_inner_product(&self, k: ExteriorRank, v: &na::DVector<f64>, w: &na::DVector<f64>)
-    -> f64;
-  fn kform_norm_sqr(&self, k: ExteriorRank, v: &na::DMatrix<f64>) -> na::DMatrix<f64>;
-  fn kform_inner_product_mat(
+  fn multi_form_inner_product(
     &self,
-    k: ExteriorRank,
+    k: ExteriorGrade,
+    v: &na::DVector<f64>,
+    w: &na::DVector<f64>,
+  ) -> f64;
+  fn multi_form_norm_sqr(&self, k: ExteriorGrade, v: &na::DMatrix<f64>) -> na::DMatrix<f64>;
+  fn multi_form_inner_product_mat(
+    &self,
+    k: ExteriorGrade,
     v: &na::DMatrix<f64>,
     w: &na::DMatrix<f64>,
   ) -> na::DMatrix<f64>;
-  fn kform_gramian(&self, k: ExteriorRank) -> na::DMatrix<f64>;
+  fn multi_form_gramian(&self, k: ExteriorGrade) -> na::DMatrix<f64>;
 }
 
 // TODO: consider storing
 /// Gram matrix on lexicographically ordered standard k-form standard basis.
 impl RiemannianMetricExt for RiemannianMetric {
-  fn kform_gramian(&self, k: ExteriorRank) -> na::DMatrix<f64> {
+  fn multi_form_gramian(&self, k: ExteriorGrade) -> na::DMatrix<f64> {
     let n = self.dim();
     let combinations: Vec<_> = IndexSubsets::canonical(n, k).collect();
     let covector_gramian = self.covector_gramian();
 
-    let mut kform_gramian = na::DMatrix::zeros(combinations.len(), combinations.len());
-    let mut kbasis_mat = na::DMatrix::zeros(k, k);
+    let mut multi_form_gramian = na::DMatrix::zeros(combinations.len(), combinations.len());
+    let mut multi_basis_mat = na::DMatrix::zeros(k, k);
 
     for icomb in 0..combinations.len() {
       let combi = &combinations[icomb];
@@ -212,37 +216,37 @@ impl RiemannianMetricExt for RiemannianMetric {
           let combii = combi[iicomb];
           for jjcomb in 0..k {
             let combjj = combj[jjcomb];
-            kbasis_mat[(iicomb, jjcomb)] = covector_gramian[(combii, combjj)];
+            multi_basis_mat[(iicomb, jjcomb)] = covector_gramian[(combii, combjj)];
           }
         }
-        let det = kbasis_mat.determinant();
-        kform_gramian[(icomb, jcomb)] = det;
-        kform_gramian[(jcomb, icomb)] = det;
+        let det = multi_basis_mat.determinant();
+        multi_form_gramian[(icomb, jcomb)] = det;
+        multi_form_gramian[(jcomb, icomb)] = det;
       }
     }
-    kform_gramian
+    multi_form_gramian
   }
-  fn kform_inner_product(
+  fn multi_form_inner_product(
     &self,
-    k: ExteriorRank,
+    k: ExteriorGrade,
     v: &na::DVector<f64>,
     w: &na::DVector<f64>,
   ) -> f64 {
-    (v.transpose() * self.kform_gramian(k) * w).x
+    (v.transpose() * self.multi_form_gramian(k) * w).x
   }
 
-  fn kform_inner_product_mat(
+  fn multi_form_inner_product_mat(
     &self,
-    k: ExteriorRank,
+    k: ExteriorGrade,
     v: &na::DMatrix<f64>,
     w: &na::DMatrix<f64>,
   ) -> na::DMatrix<f64> {
     println!("{:?}", v.shape());
-    println!("{:?}", self.kform_gramian(k).shape());
-    v.transpose() * self.kform_gramian(k) * w
+    println!("{:?}", self.multi_form_gramian(k).shape());
+    v.transpose() * self.multi_form_gramian(k) * w
   }
-  fn kform_norm_sqr(&self, k: ExteriorRank, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-    self.kform_inner_product_mat(k, v, v)
+  fn multi_form_norm_sqr(&self, k: ExteriorGrade, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+    self.multi_form_inner_product_mat(k, v, v)
   }
 }
 
@@ -259,7 +263,7 @@ mod test {
     use super::*;
 
     let dim = 4;
-    let mut e0 = KForm::zero(dim, 3);
+    let mut e0 = MultiForm::zero(dim, 3);
     e0 += 1.0 * vec![2, 0, 1].ext(dim);
     e0 += 3.0 * vec![1, 3, 2].ext(dim);
     e0 += -2.0 * vec![0, 2, 1].ext(dim);
@@ -289,13 +293,13 @@ mod test {
   }
 
   #[test]
-  fn kform_gramian_euclidean() {
+  fn multi_form_gramian_euclidean() {
     for n in 0..=3 {
       let metric = RiemannianMetric::euclidean(n);
       for k in 0..=n {
         let binomial = binomial(n, k);
         let expected_gram = na::DMatrix::identity(binomial, binomial);
-        let computed_gram = metric.kform_gramian(k);
+        let computed_gram = metric.multi_form_gramian(k);
         assert_mat_eq(&computed_gram, &expected_gram);
       }
     }

@@ -1,9 +1,9 @@
 use crate::{
   variance::{self, VarianceMarker},
-  ExteriorBasis, ExteriorRank, ExteriorTermExt, ScaledExteriorTerm,
+  ExteriorBase, ExteriorGrade, ExteriorTermExt, ScaledExteriorTerm,
 };
 
-use geometry::{coord::Coord, metric::RiemannianMetric};
+use geometry::{coord::CoordRef, metric::RiemannianMetric};
 use index_algebra::{binomial, variants::SetOrder, IndexSet};
 use topology::Dim;
 
@@ -13,15 +13,15 @@ use std::marker::PhantomData;
 pub struct ExteriorElement<V: VarianceMarker> {
   coeffs: na::DVector<f64>,
   dim: Dim,
-  rank: ExteriorRank,
+  grade: ExteriorGrade,
   variance: PhantomData<V>,
 }
 
-pub type KVector = ExteriorElement<variance::Contra>;
-impl KVector {}
+pub type MultiVector = ExteriorElement<variance::Contra>;
+impl MultiVector {}
 
-pub type KForm = ExteriorElement<variance::Co>;
-impl KForm {
+pub type MultiForm = ExteriorElement<variance::Co>;
+impl MultiForm {
   /// Precompose k-form by some linear map.
   ///
   /// Needed for pullback/pushforward of differential k-form.
@@ -30,19 +30,19 @@ impl KForm {
       .basis_iter()
       .map(|(coeff, basis)| {
         coeff
-          * KForm::wedge_big(
+          * MultiForm::wedge_big(
             basis
               .indices()
               .iter()
-              .map(|i| KForm::from_rank1(linear_map.row(i).transpose())),
+              .map(|i| MultiForm::from_grade1(linear_map.row(i).transpose())),
           )
           .unwrap_or(ExteriorElement::one(self.dim))
       })
       .sum()
   }
 
-  pub fn evaluate(&self, kvector: &KVector) -> f64 {
-    assert!(self.dim == kvector.dim && self.rank == kvector.rank);
+  pub fn on_multivector(&self, kvector: &MultiVector) -> f64 {
+    assert!(self.dim == kvector.dim && self.grade == kvector.grade);
     self.coeffs.dot(&kvector.coeffs)
   }
 
@@ -55,20 +55,20 @@ impl KForm {
 }
 
 impl<V: VarianceMarker> ExteriorElement<V> {
-  pub fn new(coeffs: na::DVector<f64>, dim: Dim, rank: ExteriorRank) -> Self {
-    assert_eq!(coeffs.len(), binomial(dim, rank));
+  pub fn new(coeffs: na::DVector<f64>, dim: Dim, grade: ExteriorGrade) -> Self {
+    assert_eq!(coeffs.len(), binomial(dim, grade));
     Self {
       coeffs,
       dim,
-      rank,
+      grade,
       variance: PhantomData,
     }
   }
-  pub fn zero(dim: Dim, rank: ExteriorRank) -> Self {
+  pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {
     Self {
-      coeffs: na::DVector::zeros(binomial(dim, rank)),
+      coeffs: na::DVector::zeros(binomial(dim, grade)),
       dim,
-      rank,
+      grade,
       variance: PhantomData,
     }
   }
@@ -76,25 +76,25 @@ impl<V: VarianceMarker> ExteriorElement<V> {
     Self {
       coeffs: na::DVector::from_element(1, 1.0),
       dim,
-      rank: 0,
+      grade: 0,
       variance: PhantomData,
     }
   }
 
-  pub fn from_rank1(vector: na::DVector<f64>) -> Self {
+  pub fn from_grade1(vector: na::DVector<f64>) -> Self {
     let dim = vector.len();
     Self::new(vector, dim, 1)
   }
-  pub fn into_rank1(self) -> na::DVector<f64> {
-    assert!(self.rank == 1);
+  pub fn into_grade1(self) -> na::DVector<f64> {
+    assert!(self.grade == 1);
     self.coeffs
   }
 
   pub fn dim(&self) -> Dim {
     self.dim
   }
-  pub fn rank(&self) -> ExteriorRank {
-    self.rank
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
   }
   pub fn coeffs(&self) -> &na::DVector<f64> {
     &self.coeffs
@@ -103,27 +103,27 @@ impl<V: VarianceMarker> ExteriorElement<V> {
     self.coeffs
   }
 
-  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorBasis<V>)> + use<'_, V> {
+  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorBase<V>)> + use<'_, V> {
     let dim = self.dim;
-    let rank = self.rank;
+    let grade = self.grade;
     self
       .coeffs
       .iter()
       .copied()
       .enumerate()
       .map(move |(i, coeff)| {
-        let basis = IndexSet::from_lex_rank(dim, rank, i).ext(dim);
+        let basis = IndexSet::from_lex_rank(dim, grade, i).ext(dim);
         (coeff, basis)
       })
   }
 
   pub fn basis_iter_mut(
     &mut self,
-  ) -> impl Iterator<Item = (&mut f64, ExteriorBasis<V>)> + use<'_, V> {
+  ) -> impl Iterator<Item = (&mut f64, ExteriorBase<V>)> + use<'_, V> {
     let dim = self.dim;
-    let rank = self.rank;
+    let grade = self.grade;
     self.coeffs.iter_mut().enumerate().map(move |(i, coeff)| {
-      let basis = IndexSet::from_lex_rank(dim, rank, i).ext(dim);
+      let basis = IndexSet::from_lex_rank(dim, grade, i).ext(dim);
       (coeff, basis)
     })
   }
@@ -135,12 +135,12 @@ impl<V: VarianceMarker> ExteriorElement<V> {
     );
     let dim = self.dim;
     assert!(
-      self.rank + other.rank <= self.dim,
-      "Resultant rank exceeds the dimension of the space"
+      self.grade + other.grade <= self.dim,
+      "Resultant grade exceeds the dimension of the space"
     );
 
-    let new_rank = self.rank + other.rank;
-    let new_basis_size = binomial(self.dim, new_rank);
+    let new_grade = self.grade + other.grade;
+    let new_basis_size = binomial(self.dim, new_grade);
     let mut new_coeffs = na::DVector::zeros(new_basis_size);
 
     for (self_coeff, self_basis) in self.basis_iter() {
@@ -165,7 +165,7 @@ impl<V: VarianceMarker> ExteriorElement<V> {
       }
     }
 
-    Self::new(new_coeffs, self.dim, new_rank)
+    Self::new(new_coeffs, self.dim, new_grade)
   }
 
   pub fn wedge_big(factors: impl IntoIterator<Item = Self>) -> Option<Self> {
@@ -177,7 +177,7 @@ impl<V: VarianceMarker> ExteriorElement<V> {
 
   pub fn eq_epsilon(&self, other: &Self, eps: f64) -> bool {
     self.dim == other.dim
-      && self.rank == other.rank
+      && self.grade == other.grade
       && (&self.coeffs - &other.coeffs).norm_squared() <= eps.powi(2)
   }
 }
@@ -192,7 +192,7 @@ impl<V: VarianceMarker> std::ops::Add<ExteriorElement<V>> for ExteriorElement<V>
 impl<V: VarianceMarker> std::ops::AddAssign<ExteriorElement<V>> for ExteriorElement<V> {
   fn add_assign(&mut self, other: ExteriorElement<V>) {
     assert_eq!(self.dim, other.dim);
-    assert_eq!(self.rank, other.rank);
+    assert_eq!(self.grade, other.grade);
     self.coeffs += other.coeffs;
   }
 }
@@ -228,22 +228,22 @@ impl<V: VarianceMarker, O: SetOrder> std::ops::AddAssign<ScaledExteriorTerm<V, O
 impl<V: VarianceMarker, O: SetOrder> From<ScaledExteriorTerm<V, O>> for ExteriorElement<V> {
   fn from(term: ScaledExteriorTerm<V, O>) -> Self {
     let term = term.into_canonical();
-    let mut element = Self::zero(term.dim(), term.rank());
+    let mut element = Self::zero(term.dim(), term.grade());
     element[term.term] += term.coeff;
     element
   }
 }
 
-impl<V: VarianceMarker> std::ops::Index<ExteriorBasis<V>> for ExteriorElement<V> {
+impl<V: VarianceMarker> std::ops::Index<ExteriorBase<V>> for ExteriorElement<V> {
   type Output = f64;
-  fn index(&self, index: ExteriorBasis<V>) -> &Self::Output {
-    assert!(index.rank() == self.rank);
+  fn index(&self, index: ExteriorBase<V>) -> &Self::Output {
+    assert!(index.grade() == self.grade);
     let index = index.indices.lex_rank(self.dim);
     &self.coeffs[index]
   }
 }
-impl<V: VarianceMarker> std::ops::IndexMut<ExteriorBasis<V>> for ExteriorElement<V> {
-  fn index_mut(&mut self, index: ExteriorBasis<V>) -> &mut Self::Output {
+impl<V: VarianceMarker> std::ops::IndexMut<ExteriorBase<V>> for ExteriorElement<V> {
+  fn index_mut(&mut self, index: ExteriorBase<V>) -> &mut Self::Output {
     let index = index.indices.lex_rank(self.dim);
     &mut self.coeffs[index]
   }
@@ -277,142 +277,134 @@ impl<V: VarianceMarker> std::iter::Sum for ExteriorElement<V> {
   }
 }
 
-pub struct Rank1Wedge<V: VarianceMarker> {
-  factors: Vec<na::DVector<f64>>,
+pub struct SimpleWedge<V: VarianceMarker> {
+  factors: na::DMatrix<f64>,
   variance: PhantomData<V>,
 }
 
-impl<V: VarianceMarker> Rank1Wedge<V> {
-  pub fn new(factors: Vec<na::DVector<f64>>) -> Self {
+impl<V: VarianceMarker> SimpleWedge<V> {
+  pub fn new(factors: na::DMatrix<f64>) -> Self {
     Self {
       factors,
       variance: PhantomData,
     }
   }
+  pub fn det(&self) -> f64 {
+    self.factors.determinant()
+  }
+  pub fn vol(&self) -> f64 {
+    self.det().abs()
+  }
 }
 
-pub type VectorWedge = Rank1Wedge<variance::Contra>;
+pub type VectorWedge = SimpleWedge<variance::Contra>;
 impl VectorWedge {}
 
-pub type CovectorWedge = Rank1Wedge<variance::Co>;
+pub type CovectorWedge = SimpleWedge<variance::Co>;
 impl CovectorWedge {
   pub fn evaluate(&self, vectors: &VectorWedge) -> f64 {
     let covectors = self;
     let mut mat = na::DMatrix::zeros(covectors.factors.len(), vectors.factors.len());
-    for (i, covector) in self.factors.iter().enumerate() {
-      for (j, vector) in vectors.factors.iter().enumerate() {
-        mat[(i, j)] = covector.dot(vector);
+    for (i, covector) in covectors.factors.column_iter().enumerate() {
+      for (j, vector) in vectors.factors.column_iter().enumerate() {
+        mat[(i, j)] = covector.dot(&vector);
       }
     }
     mat.determinant()
   }
 }
 
-pub struct ExteriorCoordField<V: VarianceMarker> {
-  coeff_fn: Box<dyn Fn(Coord) -> na::DVector<f64>>,
+pub struct ExteriorField<V: VarianceMarker> {
+  coeff_fn: Box<dyn Fn(CoordRef) -> na::DVector<f64>>,
   dim: Dim,
-  rank: ExteriorRank,
+  grade: ExteriorGrade,
   variance: PhantomData<V>,
 }
-impl<V: VarianceMarker> ExteriorCoordField<V> {
+impl<V: VarianceMarker> ExteriorField<V> {
+  pub fn from_coeff_fn(
+    coeff_fn: Box<dyn Fn(CoordRef) -> na::DVector<f64>>,
+    dim: Dim,
+    grade: ExteriorGrade,
+  ) -> Self {
+    Self {
+      coeff_fn,
+      dim,
+      grade,
+      variance: PhantomData,
+    }
+  }
+  pub fn from_element_fn(
+    element_fn: Box<dyn Fn(CoordRef) -> ExteriorElement<V>>,
+    dim: Dim,
+    grade: ExteriorGrade,
+  ) -> Self
+  where
+    V: 'static,
+  {
+    let coeff_fn = Box::new(move |coord: CoordRef| element_fn(coord).coeffs);
+    Self {
+      coeff_fn,
+      dim,
+      grade,
+      variance: PhantomData,
+    }
+  }
+
   pub fn dim(&self) -> Dim {
     self.dim
   }
-  pub fn rank(&self) -> ExteriorRank {
-    self.rank
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
   }
-  pub fn at_point(&self, coord: Coord) -> ExteriorElement<V> {
-    let coeffs = (self.coeff_fn)(coord);
-    ExteriorElement::new(coeffs, self.dim, self.rank)
+  pub fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> ExteriorElement<V> {
+    let coeffs = (self.coeff_fn)(coord.into());
+    ExteriorElement::new(coeffs, self.dim, self.grade)
   }
 }
 
-pub type KVectorCoordField = ExteriorCoordField<variance::Contra>;
-pub type KFormCoordField = ExteriorCoordField<variance::Co>;
+pub type MultiVectorField = ExteriorField<variance::Contra>;
+pub type MultiFormField = ExteriorField<variance::Co>;
+pub type DifferentialMultiForm = MultiFormField;
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use na::DVector;
 
   #[test]
-  fn test_wedge_product_simple() {
-    // Define two simple 1-forms in a 3D space
-    let dim = 3;
-    let rank_1 = 1;
-    let rank_2 = 1;
+  fn compute_wedge() {
+    let a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
+    let b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
 
-    // Basis: e1, e2, e3
-    let coeffs_a = DVector::from_vec(vec![1.0, 0.0, 0.0]); // Represents "e1"
-    let coeffs_b = DVector::from_vec(vec![0.0, 1.0, 0.0]); // Represents "e2"
-
-    let form_a = KForm::new(coeffs_a, dim, rank_1);
-    let form_b = KForm::new(coeffs_b, dim, rank_2);
-
-    // Perform the wedge product
-    let result = form_a.wedge(&form_b);
-
-    // Expected result: e1 ∧ e2 → a 2-form with coefficient 1 for the basis (1,2)
-    let expected_coeffs = DVector::from_vec(vec![1.0, 0.0, 0.0]); // Basis: (1,2), (1,3), (2,3)
-    let expected_form = KForm::new(expected_coeffs, dim, 2);
-
-    assert_eq!(result.coeffs, expected_form.coeffs);
+    let computed_ab = a.wedge(&b);
+    let expected_ab = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 2);
+    assert_eq!(computed_ab.coeffs, expected_ab.coeffs);
   }
 
   #[test]
-  fn test_wedge_product_antisymmetry() {
-    // Check antisymmetry: e1 ∧ e2 = -e2 ∧ e1
-    let dim = 3;
-    let rank = 1;
+  fn wedge_antisymmetry() {
+    let form_a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
+    let form_b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
 
-    let coeffs_a = DVector::from_vec(vec![1.0, 0.0, 0.0]); // e1
-    let coeffs_b = DVector::from_vec(vec![0.0, 1.0, 0.0]); // e2
-
-    let form_a = KForm::new(coeffs_a, dim, rank);
-    let form_b = KForm::new(coeffs_b, dim, rank);
-
-    let result_ab = form_a.wedge(&form_b);
-    let result_ba = form_b.wedge(&form_a);
-
-    // Antisymmetry: result_ab = -result_ba
-    assert_eq!(result_ab.coeffs, -result_ba.coeffs);
+    let ab = form_a.wedge(&form_b);
+    let ba = form_b.wedge(&form_a);
+    assert_eq!(ab.coeffs, -ba.coeffs);
   }
 
   #[test]
-  fn test_wedge_product_with_zero_form() {
-    // Wedge with a zero k-form should result in zero
-    let dim = 3;
-    let rank_1 = 1;
-    let rank_2 = 1;
+  fn wedge_with_zero() {
+    let form = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
+    let zero_form = MultiForm::zero(3, 1);
 
-    let coeffs_a = DVector::from_vec(vec![1.0, 0.0, 0.0]); // e1
-    let coeffs_zero = DVector::zeros(3); // Zero form
-
-    let form_a = KForm::new(coeffs_a, dim, rank_1);
-    let zero_form = KForm::new(coeffs_zero, dim, rank_2);
-
-    let result = form_a.wedge(&zero_form);
-
-    let expected_coeffs = DVector::zeros(3);
-    let expected_form = KForm::new(expected_coeffs, dim, 2);
-
-    assert_eq!(result.coeffs, expected_form.coeffs);
+    let wedge_computed = form.wedge(&zero_form);
+    let wedge_expected = MultiForm::zero(3, 2);
+    assert_eq!(wedge_computed.coeffs, wedge_expected.coeffs);
   }
 
   #[test]
-  fn test_wedge_product_rank_exceeds_dim() {
-    // Test that an assertion is triggered when rank exceeds the dimension
-    let dim = 2;
-    let rank_1 = 1;
-    let rank_2 = 2;
-
-    let coeffs_a = DVector::from_vec(vec![1.0, 0.0]);
-    let coeffs_b = DVector::from_vec(vec![1.0]);
-
-    let form_a = KForm::new(coeffs_a, dim, rank_1);
-    let form_b = KForm::new(coeffs_b, dim, rank_2);
-
-    let result = std::panic::catch_unwind(|| form_a.wedge(&form_b));
+  fn wedge_grade_exceeds_dim() {
+    let a = MultiForm::new(na::dvector![1.0, 0.0], 2, 1);
+    let b = MultiForm::new(na::dvector![1.0], 2, 2);
+    let result = std::panic::catch_unwind(|| a.wedge(&b));
     assert!(result.is_err());
   }
 }
