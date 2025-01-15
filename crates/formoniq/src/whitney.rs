@@ -1,4 +1,8 @@
-use exterior::{dense::MultiForm, ExteriorGrade};
+use exterior::{
+  dense::{ExteriorElement, ExteriorField, MultiForm},
+  manifold::CoordSimplexExt,
+  variance, ExteriorGrade,
+};
 use geometry::coord::{manifold::CoordSimplex, CoordRef};
 use index_algebra::{
   binomial,
@@ -50,84 +54,81 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorGrade) -> na::DMatrix<f64> {
   ref_difwhitneys
 }
 
-pub fn ref_bary(coord: CoordRef, vertex: usize) -> f64 {
-  let dim = coord.len();
-  assert!(vertex <= dim);
-  if vertex == 0 {
-    1.0 - coord.sum()
-  } else {
-    coord[vertex - 1]
+/// Whitney Form on the reference complex.
+///
+/// Can be evaluated on local coordinates.
+pub struct WhitneyForm<O: SetOrder> {
+  coord_facet: CoordSimplex,
+  associated_subsimp: Simplex<O>,
+}
+impl<O: SetOrder> WhitneyForm<O> {
+  pub fn new(coord_facet: CoordSimplex, associated_subsimp: Simplex<O>) -> Self {
+    Self {
+      coord_facet,
+      associated_subsimp,
+    }
   }
 }
-
-pub fn ref_difbary(dim: Dim, vertex: usize) -> MultiForm {
-  assert!(vertex <= dim);
-  let v = if vertex == 0 {
-    na::DVector::from_element(dim, -1.0)
-  } else {
-    let mut v = na::DVector::zeros(dim);
-    v[vertex - 1] = 1.0;
-    v
-  };
-  MultiForm::from_grade1(v)
-}
-
-pub fn ref_whitney<O: SetOrder>(coord: CoordRef, simplex: &Simplex<O>) -> MultiForm {
-  let dim = coord.len();
-  let grade = simplex.dim();
-  let mut form = MultiForm::zero(dim, grade);
-  for (i, vertex) in simplex.iter().enumerate() {
-    let wedge_terms = simplex
-      .iter()
-      .enumerate()
-      .filter(|&(j, _)| j != i)
-      .map(|(_, v)| ref_difbary(dim, v));
-    let wedge = MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(dim));
-
-    let sign = Sign::from_parity(i);
-    let bary = ref_bary(coord, vertex);
-    form += sign.as_f64() * bary * wedge;
+impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
+  type Variance = variance::Co;
+  fn dim(&self) -> Dim {
+    self.coord_facet.dim_intrinsic()
   }
-  factorial(grade) as f64 * form
-}
+  fn grade(&self) -> ExteriorGrade {
+    self.associated_subsimp.dim()
+  }
+  fn at_point<'a>(&self, coord_local: impl Into<CoordRef<'a>>) -> ExteriorElement<Self::Variance> {
+    let coord_local = coord_local.into();
+    assert_eq!(coord_local.len(), self.dim());
 
-pub fn whitney_on_facet<O: SetOrder>(
-  coord_global: CoordRef,
-  facet: &CoordSimplex,
-  whitney_simplex: &Simplex<O>,
-) -> MultiForm {
-  assert_eq!(coord_global.len(), facet.dim_embedded());
+    let barys = self.coord_facet.global_to_bary_coord(coord_local);
+    let difbarys = self.coord_facet.difbarys();
 
-  // Pushforward of reference Whitney form.
-  let transform = facet.affine_transform();
-  let coord_ref = transform.try_apply_inverse(coord_global).unwrap();
-  let form_ref = ref_whitney(coord_ref.as_view(), whitney_simplex);
-  let linear_inv = transform.linear.try_inverse().unwrap();
-  form_ref.precompose(&linear_inv)
+    let dim = self.dim();
+    let grade = self.grade();
+    let mut form = MultiForm::zero(dim, grade);
+    for (i, vertex) in self.associated_subsimp.iter().enumerate() {
+      let wedge_terms = self
+        .associated_subsimp
+        .iter()
+        .enumerate()
+        .filter(|&(j, _)| j != i)
+        .map(|(_, v)| difbarys[v].clone());
+      let wedge = MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(dim));
+
+      let sign = Sign::from_parity(i);
+      let bary = barys[vertex];
+      form += sign.as_f64() * bary * wedge;
+    }
+    factorial(grade) as f64 * form
+  }
 }
 
 #[cfg(test)]
 mod test {
-  use exterior::{dense::DifferentialMultiForm, manifold::discretize_form_on_simplex};
+  use exterior::manifold::discretize_form_on_simplex;
   use geometry::coord::manifold::{CoordComplex, SimplexHandleExt};
 
-  use super::ref_whitney;
+  use super::WhitneyForm;
 
   #[test]
   fn whitney_basis_property() {
     for dim in 0..=4 {
-      let complex = CoordComplex::reference(dim);
+      let complex = CoordComplex::standard(dim);
+      let coord_facet = complex
+        .topology()
+        .facets()
+        .get_by_kidx(0)
+        .coord_simplex(complex.coords());
       for grade in 0..=dim {
         for this_simp in complex.topology().skeleton(grade).iter() {
           let this_simpset = this_simp.simplex_set().clone();
-          let whitney_form = DifferentialMultiForm::from_coeff_fn(
-            Box::new(move |coord| ref_whitney(coord.as_view(), &this_simpset).into_coeffs()),
-            dim,
-            grade,
-          );
+          let whitney_form = WhitneyForm::new(coord_facet.clone(), this_simpset);
           for other_simplex in complex.topology().skeleton(grade).iter() {
-            let computed =
-              discretize_form_on_simplex(&whitney_form, &other_simplex.coord(complex.coords()));
+            let computed = discretize_form_on_simplex(
+              &whitney_form,
+              &other_simplex.coord_simplex(complex.coords()),
+            );
             let expected = (this_simp == other_simplex) as u32 as f64;
             let diff = (computed - expected).abs();
             const TOL: f64 = 10e-9;

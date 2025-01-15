@@ -70,7 +70,7 @@ impl CoordComplex {
     Self { topology, coords }
   }
 
-  pub fn reference(dim: Dim) -> Self {
+  pub fn standard(dim: Dim) -> Self {
     let topology = ManifoldComplex::reference(dim);
 
     let coords = topology
@@ -135,7 +135,7 @@ impl CoordSimplex {
     Self::new(vertices)
   }
 
-  pub fn from_simplex<O>(simp: &Simplex<O>, coords: &VertexCoords) -> CoordSimplex
+  pub fn from_simplex_and_coords<O>(simp: &Simplex<O>, coords: &VertexCoords) -> CoordSimplex
   where
     O: index_algebra::variants::SetOrder,
   {
@@ -149,7 +149,7 @@ impl CoordSimplex {
   pub fn edges(&self) -> impl Iterator<Item = CoordSimplex> + use<'_> {
     Simplex::increasing(self.nvertices())
       .subsimps(1)
-      .map(|edge| Self::from_simplex(&edge, &self.vertices))
+      .map(|edge| Self::from_simplex_and_coords(&edge, &self.vertices))
   }
 }
 impl CoordSimplex {
@@ -166,28 +166,17 @@ impl CoordSimplex {
     self.dim_intrinsic() == self.dim_embedded()
   }
 
+  pub fn base_vertex(&self) -> Coord {
+    self.vertices.coord(0)
+  }
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
     let mut mat = na::DMatrix::zeros(self.dim_embedded(), self.dim_intrinsic());
-    let v0 = self.vertices.coord(0);
+    let v0 = self.base_vertex();
     for (i, vi) in self.vertices.coord_iter().skip(1).enumerate() {
       let v0i = vi - &v0;
       mat.set_column(i, &v0i);
     }
     mat
-  }
-
-  /// Affine transform from reference simplex to this simplex.
-  pub fn affine_transform(&self) -> AffineCoordTransform {
-    let linear = self.spanning_vectors();
-    let translation = self.vertices.coord(0);
-    AffineCoordTransform::new(linear, translation)
-  }
-
-  pub fn barycenter(&self) -> Coord {
-    let mut barycenter = na::DVector::zeros(self.dim_embedded());
-    self.vertices.coord_iter().for_each(|v| barycenter += v);
-    barycenter /= self.nvertices() as f64;
-    barycenter
   }
 
   pub fn det(&self) -> f64 {
@@ -205,50 +194,152 @@ impl CoordSimplex {
     Sign::from_f64(self.det())
   }
 
-  pub fn global_to_local_coords(&self, global: CoordRef) -> na::DVector<f64> {
-    self.affine_transform().try_apply_inverse(global).unwrap()
+  pub fn linear_transform(&self) -> na::DMatrix<f64> {
+    self.spanning_vectors()
   }
 
-  pub fn global_to_bary_coords(&self, global: CoordRef) -> na::DVector<f64> {
-    let local = self.global_to_local_coords(global);
-    let bary0 = 1.0 - local.sum();
-    local.insert_row(0, bary0)
+  pub fn affine_diffeomorphism(&self) -> AffineDiffeomorphism {
+    let translation = self.base_vertex();
+    let linear = self.linear_transform();
+    AffineDiffeomorphism::from_forward(translation, linear)
   }
 
+  pub fn local_to_global_coord<'a>(&self, local: impl Into<CoordRef<'a>>) -> Coord {
+    let local = local.into();
+    self.linear_transform() * local + self.base_vertex()
+  }
+  pub fn global_to_local_coord(&self, global: CoordRef) -> Coord {
+    self
+      .linear_transform()
+      .qr()
+      .solve(&(global - self.base_vertex()))
+      .unwrap()
+  }
+
+  pub fn global_to_bary_coord<'a>(&self, global: impl Into<CoordRef<'a>>) -> Coord {
+    let global = global.into();
+    local_to_bary_coord(&self.global_to_local_coord(global))
+  }
+
+  pub fn gradbarys(&self) -> na::DMatrix<f64> {
+    let spanning = self.spanning_vectors();
+    let difbary0 = -spanning.column_sum();
+    let mut difbarys = spanning.insert_column(0, 0.0);
+    difbarys.set_column(0, &difbary0);
+    difbarys
+  }
+
+  pub fn barycenter(&self) -> Coord {
+    let mut barycenter = na::DVector::zeros(self.dim_embedded());
+    self.vertices.coord_iter().for_each(|v| barycenter += v);
+    barycenter /= self.nvertices() as f64;
+    barycenter
+  }
   pub fn is_coord_inside(&self, global: CoordRef) -> bool {
-    let bary = self.global_to_bary_coords(global);
+    let bary = self.global_to_bary_coord(global);
     bary.iter().all(|&b| (0.0..=1.0).contains(&b))
   }
 }
 
+pub fn local_to_bary_coord<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
+  let local = local.into();
+  let bary0 = 1.0 - local.sum();
+  local.insert_row(0, bary0)
+}
+
+pub fn standard_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
+  let coord = coord.into();
+  let dim = coord.len();
+  assert!(ivertex <= dim);
+  if ivertex == 0 {
+    1.0 - coord.sum()
+  } else {
+    coord[ivertex - 1]
+  }
+}
+
+pub fn standard_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
+  assert!(ivertex <= dim);
+  if ivertex == 0 {
+    na::DVector::from_element(dim, -1.0)
+  } else {
+    let mut v = na::DVector::zeros(dim);
+    v[ivertex - 1] = 1.0;
+    v
+  }
+}
+
 pub trait SimplexHandleExt {
-  fn coord(&self, coords: &VertexCoords) -> CoordSimplex;
+  fn coord_simplex(&self, coords: &VertexCoords) -> CoordSimplex;
 }
 impl<'c, D: DimInfoProvider> SimplexHandleExt for SimplexHandle<'c, D> {
-  fn coord(&self, coords: &VertexCoords) -> CoordSimplex {
-    CoordSimplex::from_simplex(self.simplex_set(), coords)
+  fn coord_simplex(&self, coords: &VertexCoords) -> CoordSimplex {
+    CoordSimplex::from_simplex_and_coords(self.simplex_set(), coords)
   }
 }
 
-pub struct AffineCoordTransform {
-  pub linear: na::DMatrix<f64>,
-  pub translation: na::DVector<f64>,
+pub struct AffineDiffeomorphism {
+  translation: na::DVector<f64>,
+  linear: na::DMatrix<f64>,
+  linear_qr: na::QR<f64, na::Dyn, na::Dyn>,
+  linear_inv: na::DMatrix<f64>,
 }
-impl AffineCoordTransform {
-  pub fn new(linear: na::DMatrix<f64>, translation: na::DVector<f64>) -> Self {
+impl AffineDiffeomorphism {
+  pub fn from_forward(translation: na::DVector<f64>, linear: na::DMatrix<f64>) -> Self {
+    let linear_qr = linear.clone().qr();
+    let linear_inv = if linear.is_empty() {
+      na::DMatrix::zeros(0, 0)
+    } else if linear.is_square() {
+      linear.clone().try_inverse().unwrap()
+    } else {
+      linear.clone().pseudo_inverse(1e-12).unwrap()
+    };
     Self {
-      linear,
       translation,
+      linear,
+      linear_qr,
+      linear_inv,
     }
   }
-  pub fn apply(&self, coord: CoordRef) -> Coord {
+
+  pub fn apply_forward(&self, coord: CoordRef) -> Coord {
     &self.linear * coord + &self.translation
   }
-  pub fn try_apply_inverse(&self, coord: CoordRef) -> Option<Coord> {
-    self.linear.clone().qr().solve(&(coord - &self.translation))
+  pub fn apply_backward(&self, coord: CoordRef) -> Coord {
+    self.linear_qr.solve(&(coord - &self.translation)).unwrap()
+  }
+  pub fn linear_inv(&self) -> &na::DMatrix<f64> {
+    &self.linear_inv
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+
+  #[test]
+  fn standard_barys() {
+    for dim in 0..=4 {
+      let simp = CoordSimplex::standard(dim);
+      for pos in simp.vertices.coord_iter() {
+        let computed = simp.global_to_bary_coord(pos);
+        for ibary in 0..simp.nvertices() {
+          let expected = standard_bary(ibary, pos);
+          assert_eq!(computed[ibary], expected);
+        }
+      }
+    }
   }
 
-  pub fn try_inverse(&self) -> Option<Self> {
-    todo!()
+  #[test]
+  fn standard_gradbarys() {
+    for dim in 0..=4 {
+      let simp = CoordSimplex::standard(dim);
+      let computed = simp.gradbarys();
+      for ibary in 0..simp.nvertices() {
+        let expected = standard_gradbary(dim, ibary);
+        assert_eq!(computed.column(ibary), expected);
+      }
+    }
   }
 }
