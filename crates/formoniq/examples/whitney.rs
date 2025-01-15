@@ -17,9 +17,9 @@ fn main() {
   let dim = facet.dim_intrinsic();
 
   for simplex in graded_subsimplicies(dim).flatten() {
-    let rank = simplex.dim();
+    let grade = simplex.dim();
     let simplex_string: String = simplex.iter().map(|i| i.to_string()).collect();
-    let file = std::fs::File::create(format!("out/whitney{rank}_{simplex_string}.txt")).unwrap();
+    let file = std::fs::File::create(format!("out/whitney{grade}_{simplex_string}.txt")).unwrap();
     let mut writer = std::io::BufWriter::new(file);
 
     for x in 0..nnodes_dim {

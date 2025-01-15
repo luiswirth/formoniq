@@ -15,8 +15,8 @@ fn main() {
   let (mesh, _) = coord_mesh.into_metric_complex();
 
   let neigen_values = 10;
-  let form_rank = 2;
-  let spectrum = hodge_laplace::solve_hodge_laplace_evp(&mesh, form_rank, neigen_values);
+  let form_grade = 2;
+  let spectrum = hodge_laplace::solve_hodge_laplace_evp(&mesh, form_grade, neigen_values);
   for (&eigenval, eigenfunc) in spectrum.0.iter().zip(spectrum.1.column_iter()) {
     let eigenval_reduced = (eigenval / PI.powi(2)).round() as u32;
     println!("eigenval={eigenval}, eigenval'={eigenval_reduced}");

@@ -1,4 +1,4 @@
-use exterior::{dense::KForm, ExteriorRank};
+use exterior::{dense::MultiForm, ExteriorGrade};
 use geometry::coord::{manifold::CoordSimplex, CoordRef};
 use index_algebra::{
   binomial,
@@ -15,7 +15,7 @@ use topology::{
 
 /// The constant exterior derivatives of the reference Whitney forms, given in
 /// the k-form standard basis.
-pub fn ref_difwhitneys(n: Dim, k: ExteriorRank) -> na::DMatrix<f64> {
+pub fn ref_difwhitneys(n: Dim, k: ExteriorGrade) -> na::DMatrix<f64> {
   let difk = k + 1;
   let difk_factorial = factorial(difk) as f64;
 
@@ -60,7 +60,7 @@ pub fn ref_bary(coord: CoordRef, vertex: usize) -> f64 {
   }
 }
 
-pub fn ref_difbary(dim: Dim, vertex: usize) -> KForm {
+pub fn ref_difbary(dim: Dim, vertex: usize) -> MultiForm {
   assert!(vertex <= dim);
   let v = if vertex == 0 {
     na::DVector::from_element(dim, -1.0)
@@ -69,33 +69,33 @@ pub fn ref_difbary(dim: Dim, vertex: usize) -> KForm {
     v[vertex - 1] = 1.0;
     v
   };
-  KForm::from_rank1(v)
+  MultiForm::from_grade1(v)
 }
 
-pub fn ref_whitney<O: SetOrder>(coord: CoordRef, simplex: &Simplex<O>) -> KForm {
+pub fn ref_whitney<O: SetOrder>(coord: CoordRef, simplex: &Simplex<O>) -> MultiForm {
   let dim = coord.len();
-  let rank = simplex.dim();
-  let mut kform = KForm::zero(dim, rank);
+  let grade = simplex.dim();
+  let mut form = MultiForm::zero(dim, grade);
   for (i, vertex) in simplex.iter().enumerate() {
     let wedge_terms = simplex
       .iter()
       .enumerate()
       .filter(|&(j, _)| j != i)
       .map(|(_, v)| ref_difbary(dim, v));
-    let wedge = KForm::wedge_big(wedge_terms).unwrap_or(KForm::one(dim));
+    let wedge = MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(dim));
 
     let sign = Sign::from_parity(i);
     let bary = ref_bary(coord, vertex);
-    kform += sign.as_f64() * bary * wedge;
+    form += sign.as_f64() * bary * wedge;
   }
-  factorial(rank) as f64 * kform
+  factorial(grade) as f64 * form
 }
 
 pub fn whitney_on_facet<O: SetOrder>(
   coord_global: CoordRef,
   facet: &CoordSimplex,
   whitney_simplex: &Simplex<O>,
-) -> KForm {
+) -> MultiForm {
   assert_eq!(coord_global.len(), facet.dim_embedded());
 
   // Pushforward of reference Whitney form.
@@ -108,11 +108,8 @@ pub fn whitney_on_facet<O: SetOrder>(
 
 #[cfg(test)]
 mod test {
-  use exterior::manifold::discretize_simplex;
-  use geometry::coord::{
-    manifold::{CoordComplex, SimplexHandleExt},
-    CoordRef,
-  };
+  use exterior::{dense::DifferentialMultiForm, manifold::discretize_form_on_simplex};
+  use geometry::coord::manifold::{CoordComplex, SimplexHandleExt};
 
   use super::ref_whitney;
 
@@ -120,21 +117,22 @@ mod test {
   fn whitney_basis_property() {
     for dim in 0..=4 {
       let complex = CoordComplex::reference(dim);
-      for rank in 0..=dim {
-        for whitney_simplex in complex.topology().skeleton(rank).iter() {
-          let whitney_form =
-            |coord: CoordRef| ref_whitney(coord.as_view(), whitney_simplex.simplex_set());
-          for other_simplex in complex.topology().skeleton(rank).iter() {
-            let value_computed =
-              discretize_simplex(&whitney_form, &other_simplex.coord(complex.coords()));
-            let value_expected = (whitney_simplex == other_simplex) as u32 as f64;
-            let diff = (value_computed - value_expected).abs();
+      for grade in 0..=dim {
+        for this_simp in complex.topology().skeleton(grade).iter() {
+          let this_simpset = this_simp.simplex_set().clone();
+          let whitney_form = DifferentialMultiForm::from_coeff_fn(
+            Box::new(move |coord| ref_whitney(coord.as_view(), &this_simpset).into_coeffs()),
+            dim,
+            grade,
+          );
+          for other_simplex in complex.topology().skeleton(grade).iter() {
+            let computed =
+              discretize_form_on_simplex(&whitney_form, &other_simplex.coord(complex.coords()));
+            let expected = (this_simp == other_simplex) as u32 as f64;
+            let diff = (computed - expected).abs();
             const TOL: f64 = 10e-9;
             let equal = diff <= TOL;
-            assert!(
-              equal,
-              "computed={value_computed}\nexpected={value_expected}"
-            );
+            assert!(equal, "computed={computed}\nexpected={expected}");
           }
         }
       }

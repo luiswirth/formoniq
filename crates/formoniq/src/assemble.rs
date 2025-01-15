@@ -1,25 +1,25 @@
-use std::collections::HashSet;
-
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
 use geometry::metric::manifold::MetricComplex;
 use topology::complex::ManifoldComplex;
 
+use std::collections::HashSet;
+
 pub type GalMat = SparseMatrix;
 pub type GalVec = na::DVector<f64>;
 
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElMatProvider) -> GalMat {
-  let row_rank = elmat.row_rank();
-  let col_rank = elmat.col_rank();
+  let row_grade = elmat.row_grade();
+  let col_grade = elmat.col_grade();
 
-  let nsimps_row = global.topology().skeleton(row_rank).len();
-  let nsimps_col = global.topology().skeleton(col_rank).len();
+  let nsimps_row = global.topology().skeleton(row_grade).len();
+  let nsimps_col = global.topology().skeleton(col_grade).len();
   let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
   for local in global.local_complexes() {
-    let row_subs = &local.topology().skeletons()[row_rank];
-    let col_subs = &local.topology().skeletons()[col_rank];
+    let row_subs = &local.topology().skeletons()[row_grade];
+    let col_subs = &local.topology().skeletons()[col_grade];
     let elmat = elmat.eval(&local);
 
     for (ilocal, &iglobal) in row_subs.iter().enumerate() {
@@ -33,12 +33,12 @@ pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElMatProvider) -> Gal
 
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(global: &MetricComplex, elvec: impl ElVecProvider) -> GalVec {
-  let rank = elvec.rank();
+  let grade = elvec.grade();
 
-  let nsimps = global.topology().skeleton(rank).len();
+  let nsimps = global.topology().skeleton(grade).len();
   let mut galvec = na::DVector::zeros(nsimps);
   for local in global.local_complexes() {
-    let subs = &local.topology().skeletons()[rank];
+    let subs = &local.topology().skeletons()[grade];
     let elvec = elvec.eval(&local);
 
     for (ilocal, &iglobal) in subs.iter().enumerate() {
