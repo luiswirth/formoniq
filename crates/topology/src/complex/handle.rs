@@ -1,7 +1,4 @@
-use crate::{
-  simplex::{SimplexExt, SortedSimplex, SortedSimplexExt},
-  Dim,
-};
+use crate::{simplex::SortedSimplex, Dim};
 
 use super::{
   attribute::SparseSignChain,
@@ -136,7 +133,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
       .1
   }
   pub fn nvertices(&self) -> usize {
-    self.simplex_set().len()
+    self.simplex_set().nvertices()
   }
   pub fn simplex_set(&self) -> &'m SortedSimplex {
     self.complex.skeletons[self.dim()]
@@ -154,7 +151,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
         let idx = self
           .complex
           .skeleton(self.dim() + 1)
-          .get_by_simplex(&sup.set)
+          .get_by_simplex(&sup.into_simplex())
           .kidx();
 
         idxs.push(idx);
@@ -172,7 +169,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
       let idx = self
         .complex
         .skeleton(self.dim() - 1)
-        .get_by_simplex(&sub.set)
+        .get_by_simplex(&sub.into_simplex())
         .kidx();
       idxs.push(idx);
       signs.push(sign);
@@ -196,6 +193,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   pub fn vertices(&self) -> impl Iterator<Item = VertexHandle> {
     self
       .simplex_set()
+      .vertices
       .iter()
       .map(|v| VertexIdx::new(ConstDim, v).handle(self.complex))
   }

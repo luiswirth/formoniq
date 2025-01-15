@@ -70,7 +70,7 @@ fn main() {
         .topology()
         .edges()
         .iter()
-        .map(|e| e.simplex_set().clone().try_into().unwrap()),
+        .map(|e| e.simplex_set().vertices.clone().try_into().unwrap()),
     );
     coords_list.push(coords_new);
   }

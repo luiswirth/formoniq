@@ -13,7 +13,7 @@ impl TriangleTopologyExt for TriangleTopology {
   fn try_from_skeleton(skeleton: ManifoldSkeleton) -> Self {
     skeleton
       .into_simplex_iter()
-      .map(|simp| simp.try_into().unwrap())
+      .map(|simp| simp.vertices.try_into().unwrap())
       .collect()
   }
 }

@@ -1,7 +1,4 @@
-use crate::{
-  simplex::{SimplexExt, SortedSimplex},
-  Dim,
-};
+use crate::{simplex::SortedSimplex, Dim};
 
 /// A container for simplicies of the same dimension.
 #[derive(Debug, Clone)]

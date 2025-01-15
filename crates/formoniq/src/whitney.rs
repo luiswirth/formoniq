@@ -12,10 +12,7 @@ use index_algebra::{
   variants::SetOrder,
   IndexSet,
 };
-use topology::{
-  simplex::{Simplex, SimplexExt},
-  Dim,
-};
+use topology::{simplex::Simplex, Dim};
 
 /// The constant exterior derivatives of the reference Whitney forms, given in
 /// the k-form standard basis.
@@ -60,13 +57,36 @@ pub fn ref_difwhitneys(n: Dim, k: ExteriorGrade) -> na::DMatrix<f64> {
 pub struct WhitneyForm<O: SetOrder> {
   coord_facet: CoordSimplex,
   associated_subsimp: Simplex<O>,
+  difbarys: Vec<MultiForm>,
 }
 impl<O: SetOrder> WhitneyForm<O> {
   pub fn new(coord_facet: CoordSimplex, associated_subsimp: Simplex<O>) -> Self {
+    let difbarys = coord_facet.difbarys();
     Self {
       coord_facet,
       associated_subsimp,
+      difbarys,
     }
+  }
+
+  pub fn wedge_term(&self, iterm: usize) -> MultiForm {
+    let wedge_terms = self
+      .associated_subsimp
+      .vertices
+      .iter()
+      .map(|vertex| self.difbarys[vertex].clone())
+      .enumerate()
+      // leave off i'th difbary
+      .filter_map(|(ipos, bary)| (ipos != iterm).then_some(bary));
+    MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(self.dim()))
+  }
+
+  pub fn signed_wedge_terms(&self) -> impl ExactSizeIterator<Item = MultiForm> + use<'_, O> {
+    (0..self.associated_subsimp.nvertices()).map(|i| {
+      let sign = Sign::from_parity(i);
+      let wedge = self.wedge_term(i);
+      sign.as_f64() * wedge
+    })
   }
 }
 impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
@@ -82,21 +102,14 @@ impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
     assert_eq!(coord_local.len(), self.dim());
 
     let barys = self.coord_facet.global_to_bary_coord(coord_local);
-    let difbarys = self.coord_facet.difbarys();
 
     let dim = self.dim();
     let grade = self.grade();
     let mut form = MultiForm::zero(dim, grade);
-    for (i, vertex) in self.associated_subsimp.iter().enumerate() {
-      let wedge_terms = self
-        .associated_subsimp
-        .iter()
-        .enumerate()
-        .filter(|&(j, _)| j != i)
-        .map(|(_, v)| difbarys[v].clone());
-      let wedge = MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(dim));
-
+    for (i, vertex) in self.associated_subsimp.vertices.iter().enumerate() {
       let sign = Sign::from_parity(i);
+      let wedge = self.wedge_term(i);
+
       let bary = barys[vertex];
       form += sign.as_f64() * bary * wedge;
     }

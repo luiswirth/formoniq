@@ -160,7 +160,7 @@ impl Iterator for IndexSupsets {
   type Item = IndexSet<CanonicalOrder>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.root_subsets.next()?;
-    self.set.is_sub_of(&next).then_some(next)
+    self.set.is_subset_of(&next).then_some(next)
   }
 }
 

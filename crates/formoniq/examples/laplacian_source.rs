@@ -72,7 +72,7 @@ pub fn evaluate_fe_function_at_coord<'a>(
   for dof_simp in dof_simps {
     let local_dof_simp = facet
       .simplex_set()
-      .global_to_local_subset(dof_simp.simplex_set());
+      .global_to_local_subsimp(dof_simp.simplex_set());
 
     let dof_value = fe[dof_simp]
       * WhitneyForm::new(facet.coord_simplex(mesh.coords()), local_dof_simp).at_point(coord);

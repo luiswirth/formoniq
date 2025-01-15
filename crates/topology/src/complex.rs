@@ -3,19 +3,22 @@ pub mod dim;
 pub mod handle;
 pub mod local;
 
-use std::sync::LazyLock;
-
-use crate::{simplex::SortedSimplex, skeleton::ManifoldSkeleton, Dim};
-
 use attribute::KSimplexCollection;
-use common::sparse::SparseMatrix;
 use dim::{ConstCodim, ConstDim};
 use handle::{FaceCodim, FacetCodim, KSimplexIdx, VertexDim};
+use local::LocalComplex;
 
-use index_algebra::combinators::GradedIndexSubsets;
+use crate::{
+  simplex::{graded_subsimplicies, SortedSimplex},
+  skeleton::ManifoldSkeleton,
+  Dim,
+};
+
+use common::sparse::SparseMatrix;
+
 use indexmap::IndexMap;
 use itertools::Itertools;
-use local::LocalComplex;
+use std::sync::LazyLock;
 
 /// A simplicial manifold complex.
 #[derive(Debug, Clone)]
@@ -37,9 +40,7 @@ impl ManifoldComplex {
 
   pub fn reference(dim: Dim) -> Self {
     let data = SimplexData { cofacets: vec![0] };
-    let skeletons = GradedIndexSubsets::canonical(dim + 1)
-      // skip empty simplex
-      .skip(1)
+    let skeletons = graded_subsimplicies(dim)
       .map(|simps| simps.map(|simp| (simp, data.clone())).collect())
       .collect();
     Self::new(skeletons)
@@ -90,7 +91,7 @@ impl ManifoldComplex {
     let vertices = self
       .boundary_faces()
       .handle_iter(self)
-      .flat_map(|face| face.simplex_set().iter())
+      .flat_map(|face| face.simplex_set().vertices.clone())
       .unique()
       .collect();
     KSimplexCollection::new(vertices, ConstDim)
@@ -104,8 +105,8 @@ impl ManifoldComplex {
     for (isup, sup) in sups.iter().enumerate() {
       let sup_boundary = sup.simplex_set().boundary();
       for sub in sup_boundary {
-        let isub = subs.get_by_simplex(&sub.set).kidx();
         let sign = sub.sign.as_f64();
+        let isub = subs.get_by_simplex(&sub.into_simplex()).kidx();
         mat.push(isub, isup, sign);
       }
     }
@@ -121,8 +122,7 @@ impl ManifoldComplex {
     let mut skeletons = vec![ComplexSkeleton::new(); dim + 1];
     for (ifacet, facet) in facets.iter().enumerate() {
       for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
-        let nvertices_sub = dim_sub + 1;
-        for sub in facet.subsets(nvertices_sub) {
+        for sub in facet.subsimps(dim_sub) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
           sub.cofacets.push(ifacet);
         }
@@ -131,7 +131,7 @@ impl ManifoldComplex {
 
     // TODO: verify correct!
     // sort vertices
-    skeletons[0].sort_by(|v0, _, v1, _| v0[0].cmp(&v1[0]));
+    skeletons[0].sort_by(|v0, _, v1, _| v0.vertices[0].cmp(&v1.vertices[0]));
 
     // Topology checks.
     let faces = &skeletons[dim - 1];
@@ -168,9 +168,7 @@ pub static LOCAL_BOUNDARY_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> = Lazy
 #[cfg(test)]
 mod test {
   use super::ManifoldComplex;
-  use crate::simplex::{nsubsimplicies, Simplex, SimplexExt};
-
-  use index_algebra::sign::Sign;
+  use crate::simplex::{nsubsimplicies, Simplex};
 
   #[test]
   fn incidence() {
@@ -188,11 +186,11 @@ mod test {
       println!();
     }
 
-    let facet_simplex = Simplex::increasing(dim + 1).with_sign(Sign::Pos);
+    let facet_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
       let subs: Vec<_> = facet.subsimps(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
-      let subs_vertices: Vec<_> = facet_simplex.set.subsimps(dim_sub).collect();
+      let subs_vertices: Vec<_> = facet_simplex.subsimps(dim_sub).collect();
       assert_eq!(
         subs
           .iter()
@@ -211,7 +209,7 @@ mod test {
             .collect::<Vec<_>>();
           sups_vertices
             .iter()
-            .all(|sup| sub_vertices.is_sub_of(sup) && sup.is_sub_of(&facet_simplex.set));
+            .all(|sup| sub_vertices.is_subsimp_of(sup) && sup.is_subsimp_of(&facet_simplex));
         }
       }
     }

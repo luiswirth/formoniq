@@ -113,7 +113,7 @@ impl<O: SetOrder> std::ops::Index<usize> for IndexSet<O> {
 }
 
 impl IndexSet<CanonicalOrder> {
-  pub fn is_sub_of(&self, other: &Self) -> bool {
+  pub fn is_subset_of(&self, other: &Self) -> bool {
     self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
   }
   pub fn is_sup_of(&self, other: &Self) -> bool {
@@ -246,6 +246,14 @@ impl IndexSet<CanonicalOrder> {
       indices: (0..n).collect(),
       order: CanonicalOrder,
     }
+  }
+}
+
+impl<O: SetOrder> IntoIterator for IndexSet<O> {
+  type Item = usize;
+  type IntoIter = std::vec::IntoIter<Self::Item>;
+  fn into_iter(self) -> Self::IntoIter {
+    self.indices.into_iter()
   }
 }
 
