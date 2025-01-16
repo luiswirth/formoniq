@@ -90,11 +90,20 @@ impl RiemannianMetric {
     eigenvectors
   }
 
+  pub fn orthormal_change_of_basis(&self) -> na::DMatrix<f64> {
+    self.orthonormal_basis().try_inverse().unwrap()
+  }
+
   /// Gram matrix on tangent vector standard basis.
   pub fn vector_gramian(&self) -> &na::DMatrix<f64> {
     &self.metric_tensor
   }
-  pub fn vector_inner_product(
+
+  pub fn vector_inner_product(&self, v: &na::DVector<f64>, w: &na::DVector<f64>) -> f64 {
+    (v.transpose() * self.vector_gramian() * w).x
+  }
+
+  pub fn vector_inner_product_mat(
     &self,
     v: &na::DMatrix<f64>,
     w: &na::DMatrix<f64>,
@@ -102,7 +111,7 @@ impl RiemannianMetric {
     v.transpose() * self.vector_gramian() * w
   }
   pub fn vector_norm_sqr(&self, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-    self.vector_inner_product(v, v)
+    self.vector_inner_product_mat(v, v)
   }
 
   /// Gram matrix on tangent covector standard basis.
@@ -214,14 +223,21 @@ mod test {
     let metric = RiemannianMetric::from_tangent_vectors(tangent_vectors.clone());
     let orthonormal_basis = metric.orthonormal_basis();
     assert!(
-      (orthonormal_basis.transpose() * metric.metric_tensor * &orthonormal_basis
+      (orthonormal_basis.transpose() * &metric.metric_tensor * &orthonormal_basis
         - na::DMatrix::identity(dim, dim))
       .norm()
         <= 1e-12
     );
 
-    let orthonormal_tangent_vectors = tangent_vectors * orthonormal_basis;
+    let orthonormal_tangent_vectors = tangent_vectors * &orthonormal_basis;
     let orthogonal_metric = RiemannianMetric::from_tangent_vectors(orthonormal_tangent_vectors);
     assert!((orthogonal_metric.metric_tensor() - na::DMatrix::identity(dim, dim)).norm() <= 1e-12);
+
+    let vector_a = na::dvector![0.2, 5.3];
+    let vector_b = na::dvector![-1.3, 2.8];
+    let inner0 = metric.vector_inner_product(&vector_a, &vector_b);
+    let cob = metric.orthormal_change_of_basis();
+    let inner1 = (&cob * vector_a).dot(&(&cob * vector_b));
+    assert_eq!(inner0, inner1);
   }
 }
