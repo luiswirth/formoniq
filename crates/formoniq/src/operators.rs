@@ -1,12 +1,17 @@
 use common::sparse::SparseMatrix;
 use exterior::{ExteriorGrade, RiemannianMetricExt};
-use geometry::metric::manifold::{local::LocalMetricComplex, MetricComplex};
-use index_algebra::{binomial, factorial, sign::Sign, IndexSet};
+use geometry::{
+  coord::manifold::CoordSimplex,
+  metric::manifold::{local::LocalMetricComplex, MetricComplex},
+};
+use index_algebra::{factorial, sign::Sign};
 use topology::{
   complex::{attribute::Cochain, local::LocalComplex, ManifoldComplex},
-  simplex::{subsimplicies, SortedSimplex},
+  simplex::subsimplicies,
   Dim,
 };
+
+use crate::whitney::WhitneyForm;
 
 pub type DofIdx = usize;
 pub type DofCoeff = f64;
@@ -141,88 +146,50 @@ impl ElMatProvider for HodgeMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
-    let n = local_complex.dim();
-    let k = self.0;
-    let difk = k + 1;
-    let k_factorial = factorial(k) as f64;
-    let k_factorial_sqr = k_factorial.powi(2);
 
-    let kwhitney_basis_size = binomial(n + 1, k + 1);
+  fn eval(&self, local_complex: &LocalMetricComplex) -> na::DMatrix<f64> {
+    let dim = local_complex.dim();
+    let grade = self.0;
+
+    let nvertices = grade + 1;
+    let simplicies: Vec<_> = subsimplicies(dim, grade).collect();
+
+    let wedge_terms: Vec<_> = simplicies
+      .iter()
+      .cloned()
+      .map(|simp| WhitneyForm::new(CoordSimplex::standard(dim), simp).wedge_terms())
+      .collect();
 
     let scalar_mass = ScalarMassElmat.eval(local_complex);
 
-    let mut elmat = na::DMatrix::zeros(kwhitney_basis_size, kwhitney_basis_size);
-    let simplicies: Vec<_> = subsimplicies(n, k).collect();
-    let forms: Vec<Vec<_>> = simplicies
-      .iter()
-      .map(|simp| {
-        (0..difk)
-          .map(|i| construct_const_form(simp, i, n))
-          .collect()
-      })
-      .collect();
+    let mut elmat = na::DMatrix::zeros(simplicies.len(), simplicies.len());
+    for (i, asimp) in simplicies.iter().enumerate() {
+      for (j, bsimp) in simplicies.iter().enumerate() {
+        let wedge_terms_a = &wedge_terms[i];
+        let wedge_terms_b = &wedge_terms[j];
+        let wedge_inners = local_complex
+          .metric()
+          .multi_form_inner_product_mat(wedge_terms_a, wedge_terms_b);
 
-    for (agrade, asimp) in simplicies.iter().enumerate() {
-      for (bgrade, bsimp) in simplicies.iter().enumerate() {
         let mut sum = 0.0;
+        for avertex in 0..nvertices {
+          for bvertex in 0..nvertices {
+            let sign = Sign::from_parity(avertex + bvertex);
 
-        for l in 0..difk {
-          for m in 0..difk {
-            let sign = Sign::from_parity(l + m);
+            let inner = wedge_inners[(avertex, bvertex)];
 
-            let aform = &forms[agrade][l];
-            let bform = &forms[bgrade][m];
-
-            let inner = local_complex
-              .metric()
-              .multi_form_inner_product(k, aform, bform);
-            sum += sign.as_f64() * inner * scalar_mass[(asimp.vertices[l], bsimp.vertices[m])];
+            sum += sign.as_f64()
+              * inner
+              * scalar_mass[(asimp.vertices[avertex], bsimp.vertices[bvertex])];
           }
         }
 
-        elmat[(agrade, bgrade)] = k_factorial_sqr * sum;
+        elmat[(i, j)] = sum;
       }
     }
 
-    elmat
+    (factorial(grade) as f64).powi(2) * elmat
   }
-}
-
-fn construct_const_form(
-  simplex: &SortedSimplex,
-  ignored_ivertex: usize,
-  n: Dim,
-) -> na::DVector<f64> {
-  let k = simplex.nvertices() - 1;
-  let kform_basis_size = binomial(n, k);
-
-  let mut form = na::DVector::zeros(kform_basis_size);
-
-  let mut form_indices = Vec::new();
-  for (ivertex, vertex) in simplex.vertices.iter().enumerate() {
-    if vertex != 0 && ivertex != ignored_ivertex {
-      form_indices.push(vertex - 1);
-    }
-  }
-
-  if simplex.vertices[0] == 0 && ignored_ivertex != 0 {
-    for i in 0..n {
-      let mut form_indices = form_indices.clone();
-      form_indices.insert(0, i);
-      let Some(form_indices) = IndexSet::new(form_indices).try_into_sorted_signed() else {
-        continue;
-      };
-      let sort_sign = form_indices.sign;
-      let form_indices = form_indices.set;
-      form[form_indices.lex_rank(n)] += -1.0 * sort_sign.as_f64();
-    }
-  } else {
-    let form_indices = IndexSet::new(form_indices.clone()).assume_sorted();
-    form[form_indices.lex_rank(n)] += 1.0;
-  }
-
-  form
 }
 
 /// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
@@ -321,30 +288,16 @@ pub fn integrate_pointwise(func: &FeFunction, mesh: &MetricComplex) -> f64 {
 mod test {
   use super::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
   use crate::{
-    operators::{ref_difbarys, ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat},
-    whitney::ref_difwhitneys,
+    operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat},
+    whitney::WhitneyForm,
   };
 
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
-  use geometry::metric::manifold::local::LocalMetricComplex;
-
-  #[test]
-  fn ref_difwhitney0_is_ref_difbary() {
-    for n in 0..=5 {
-      let whitneys = ref_difwhitneys(n, 0);
-      let barys = ref_difbarys(n);
-      assert_mat_eq(&whitneys, &barys)
-    }
-  }
-  #[test]
-  fn ref_difwhitneyn_is_zero() {
-    for n in 0..=5 {
-      let whitneys = ref_difwhitneys(n, n);
-      let zero = na::DMatrix::zeros(0, 1);
-      assert_mat_eq(&whitneys, &zero)
-    }
-  }
+  use geometry::{
+    coord::manifold::{CoordComplex, SimplexHandleExt},
+    metric::manifold::local::LocalMetricComplex,
+  };
 
   #[test]
   fn dif_dif0_is_laplace_beltrami() {
@@ -404,17 +357,32 @@ mod test {
 
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
-    for n in 0..=3 {
-      let complex = LocalMetricComplex::reference(n);
-      for k in 0..n {
-        let var0 = CodifDifElmat(k).eval(&complex);
+    for dim in 1..=3 {
+      let coord_complex = CoordComplex::standard(dim);
+      let (metric_complex, coords) = coord_complex.into_metric_complex();
+      for grade in 0..dim {
+        let facet = metric_complex.topology().facets().get_by_kidx(0);
+        let coord_facet = facet.coord_simplex(&coords);
+        let local_complex = metric_complex.local_complex(facet);
 
-        let var1 = complex.vol()
-          * complex
-            .metric()
-            .multi_form_norm_sqr(k + 1, &ref_difwhitneys(complex.dim(), k));
+        let difdif = CodifDifElmat(grade).eval(&local_complex);
 
-        assert_mat_eq(&var0, &var1);
+        let difwhitneys: Vec<_> = metric_complex
+          .topology()
+          .skeleton(grade)
+          .iter()
+          .map(|simp| WhitneyForm::new(coord_facet.clone(), simp.simplex_set().clone()).dif())
+          .collect();
+        let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
+        for (i, awhitney) in difwhitneys.iter().enumerate() {
+          for (j, bwhitney) in difwhitneys.iter().enumerate() {
+            inner[(i, j)] = local_complex
+              .metric()
+              .multi_form_inner_product(awhitney, bwhitney);
+          }
+        }
+        inner *= local_complex.vol();
+        assert_mat_eq(&difdif, &inner);
       }
     }
   }

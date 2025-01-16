@@ -7,6 +7,7 @@ use geometry::coord::{
 use topology::{complex::attribute::Cochain, Dim};
 
 pub trait CoordSimplexExt {
+  fn difbary(&self, i: usize) -> MultiForm;
   fn difbarys(&self) -> Vec<MultiForm>;
   fn spanning_multivector(&self) -> MultiVector;
 }
@@ -17,6 +18,11 @@ impl CoordSimplexExt for CoordSimplex {
       .column_iter()
       .map(|v| MultiVector::from_grade1(v.into_owned()));
     MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_embedded()))
+  }
+
+  fn difbary(&self, i: usize) -> MultiForm {
+    let gradbary = self.gradbary(i);
+    MultiForm::from_grade1(gradbary)
   }
 
   fn difbarys(&self) -> Vec<MultiForm> {

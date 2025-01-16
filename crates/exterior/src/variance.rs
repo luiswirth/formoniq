@@ -15,11 +15,17 @@ impl VarianceTrait for Variance {
   }
 }
 
-pub trait VarianceMarker: Debug + Copy + Clone + PartialEq + Eq + Hash {}
+pub trait VarianceMarker: Debug + Copy + Clone + PartialEq + Eq + Hash {
+  fn variance() -> Variance;
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Contra;
-impl VarianceMarker for Contra {}
+impl VarianceMarker for Contra {
+  fn variance() -> Variance {
+    Variance::Contra
+  }
+}
 impl VarianceTrait for Contra {
   fn variance(&self) -> Variance {
     Variance::Contra
@@ -27,7 +33,11 @@ impl VarianceTrait for Contra {
 }
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct Co;
-impl VarianceMarker for Co {}
+impl VarianceMarker for Co {
+  fn variance() -> Variance {
+    Variance::Co
+  }
+}
 impl VarianceTrait for Co {
   fn variance(&self) -> Variance {
     Variance::Co

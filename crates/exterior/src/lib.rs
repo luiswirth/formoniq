@@ -8,7 +8,7 @@ pub mod variance;
 
 use std::marker::PhantomData;
 
-use dense::{ExteriorElement, MultiForm};
+use dense::{ExteriorElement, MultiForm, MultiFormList};
 use geometry::metric::RiemannianMetric;
 use index_algebra::{
   combinators::{IndexSubPermutations, IndexSubsets},
@@ -180,20 +180,10 @@ impl<V: VarianceMarker, Set: Into<IndexSet<O>>, O: SetOrder> ExteriorTermExt<V, 
 }
 
 pub trait RiemannianMetricExt {
-  fn multi_form_inner_product(
-    &self,
-    k: ExteriorGrade,
-    v: &na::DVector<f64>,
-    w: &na::DVector<f64>,
-  ) -> f64;
-  fn multi_form_norm_sqr(&self, k: ExteriorGrade, v: &na::DMatrix<f64>) -> na::DMatrix<f64>;
-  fn multi_form_inner_product_mat(
-    &self,
-    k: ExteriorGrade,
-    v: &na::DMatrix<f64>,
-    w: &na::DMatrix<f64>,
-  ) -> na::DMatrix<f64>;
   fn multi_form_gramian(&self, k: ExteriorGrade) -> na::DMatrix<f64>;
+  fn multi_form_inner_product_mat(&self, v: &MultiFormList, w: &MultiFormList) -> na::DMatrix<f64>;
+  fn multi_form_inner_product(&self, v: &MultiForm, w: &MultiForm) -> f64;
+  fn multi_form_norm(&self, v: &MultiForm) -> f64;
 }
 
 // TODO: consider storing
@@ -226,27 +216,21 @@ impl RiemannianMetricExt for RiemannianMetric {
     }
     multi_form_gramian
   }
-  fn multi_form_inner_product(
-    &self,
-    k: ExteriorGrade,
-    v: &na::DVector<f64>,
-    w: &na::DVector<f64>,
-  ) -> f64 {
-    (v.transpose() * self.multi_form_gramian(k) * w).x
+
+  fn multi_form_inner_product_mat(&self, v: &MultiFormList, w: &MultiFormList) -> na::DMatrix<f64> {
+    assert_eq!(v.dim(), w.dim());
+    assert_eq!(v.grade(), w.grade());
+    v.coeffs().transpose() * self.multi_form_gramian(v.grade()) * w.coeffs()
   }
 
-  fn multi_form_inner_product_mat(
-    &self,
-    k: ExteriorGrade,
-    v: &na::DMatrix<f64>,
-    w: &na::DMatrix<f64>,
-  ) -> na::DMatrix<f64> {
-    println!("{:?}", v.shape());
-    println!("{:?}", self.multi_form_gramian(k).shape());
-    v.transpose() * self.multi_form_gramian(k) * w
+  fn multi_form_inner_product(&self, v: &MultiForm, w: &MultiForm) -> f64 {
+    assert_eq!(v.dim(), w.dim());
+    assert_eq!(v.grade(), w.grade());
+    (v.coeffs().transpose() * self.multi_form_gramian(v.grade()) * w.coeffs()).x
   }
-  fn multi_form_norm_sqr(&self, k: ExteriorGrade, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
-    self.multi_form_inner_product_mat(k, v, v)
+
+  fn multi_form_norm(&self, v: &MultiForm) -> f64 {
+    self.multi_form_inner_product(v, v)
   }
 }
 

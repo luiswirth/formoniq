@@ -12,6 +12,60 @@ use topology::Dim;
 
 use std::marker::PhantomData;
 
+#[derive(Debug, Clone)]
+pub struct ExteriorElementList<V: VarianceMarker> {
+  coeffs: na::DMatrix<f64>,
+  dim: Dim,
+  grade: ExteriorGrade,
+  variance: PhantomData<V>,
+}
+
+impl<V: VarianceMarker> ExteriorElementList<V> {
+  pub fn new(coeffs: na::DMatrix<f64>, dim: Dim, grade: ExteriorGrade) -> Self {
+    assert_eq!(coeffs.nrows(), binomial(dim, grade));
+    Self {
+      coeffs,
+      dim,
+      grade,
+      variance: PhantomData,
+    }
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.dim
+  }
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+  pub fn coeffs(&self) -> &na::DMatrix<f64> {
+    &self.coeffs
+  }
+  pub fn into_coeffs(self) -> na::DMatrix<f64> {
+    self.coeffs
+  }
+}
+
+impl<V: VarianceMarker> FromIterator<ExteriorElement<V>> for ExteriorElementList<V> {
+  fn from_iter<T: IntoIterator<Item = ExteriorElement<V>>>(iter: T) -> Self {
+    let mut iter = iter.into_iter();
+    let first = iter.next().unwrap();
+    let dim = first.dim();
+    let grade = first.grade();
+    let mut coeffs = na::DMatrix::zeros(first.coeffs.len(), 1);
+    coeffs.set_column(0, &first.coeffs);
+    for (i, elem) in iter.enumerate() {
+      assert!(elem.dim() == dim);
+      assert!(elem.grade() == grade);
+      coeffs = coeffs.insert_column(i + 1, 0.0);
+      coeffs.set_column(i + 1, &elem.coeffs);
+    }
+    Self::new(coeffs, dim, grade)
+  }
+}
+
+pub type MultiVectorList = ExteriorElementList<variance::Contra>;
+pub type MultiFormList = ExteriorElementList<variance::Co>;
+
 /// An element of an exterior algebra.
 #[derive(Debug, Clone)]
 pub struct ExteriorElement<V: VarianceMarker> {
@@ -19,43 +73,6 @@ pub struct ExteriorElement<V: VarianceMarker> {
   dim: Dim,
   grade: ExteriorGrade,
   variance: PhantomData<V>,
-}
-
-pub type MultiVector = ExteriorElement<variance::Contra>;
-impl MultiVector {}
-
-pub type MultiForm = ExteriorElement<variance::Co>;
-impl MultiForm {
-  /// Precompose k-form by some linear map.
-  ///
-  /// Needed for pullback/pushforward of differential k-form.
-  pub fn precompose(&self, linear_map: &na::DMatrix<f64>) -> Self {
-    self
-      .basis_iter()
-      .map(|(coeff, basis)| {
-        coeff
-          * MultiForm::wedge_big(
-            basis
-              .indices()
-              .iter()
-              .map(|i| MultiForm::from_grade1(linear_map.row(i).transpose())),
-          )
-          .unwrap_or(ExteriorElement::one(self.dim))
-      })
-      .sum()
-  }
-
-  pub fn on_multivector(&self, kvector: &MultiVector) -> f64 {
-    assert!(self.dim == kvector.dim && self.grade == kvector.grade);
-    self.coeffs.dot(&kvector.coeffs)
-  }
-
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> Self {
-    self
-      .basis_iter()
-      .map(|(coeff, basis)| (coeff * basis).hodge_star(metric))
-      .fold(Self::one(self.dim), |acc, a| acc + a)
-  }
 }
 
 impl<V: VarianceMarker> ExteriorElement<V> {
@@ -133,26 +150,21 @@ impl<V: VarianceMarker> ExteriorElement<V> {
   }
 
   pub fn wedge(&self, other: &Self) -> Self {
-    assert_eq!(
-      self.dim, other.dim,
-      "Dimensions must match for wedge product"
-    );
+    assert_eq!(self.dim, other.dim);
     let dim = self.dim;
-    assert!(
-      self.grade + other.grade <= self.dim,
-      "Resultant grade exceeds the dimension of the space"
-    );
 
     let new_grade = self.grade + other.grade;
+    assert!(new_grade <= dim);
+
     let new_basis_size = binomial(self.dim, new_grade);
     let mut new_coeffs = na::DVector::zeros(new_basis_size);
 
     for (self_coeff, self_basis) in self.basis_iter() {
       for (other_coeff, other_basis) in other.basis_iter() {
-        if self_coeff == 0.0 || other_coeff == 0.0 {
+        if self_basis == other_basis {
           continue;
         }
-        if self_basis == other_basis {
+        if self_coeff == 0.0 || other_coeff == 0.0 {
           continue;
         }
 
@@ -278,6 +290,43 @@ impl<V: VarianceMarker> std::iter::Sum for ExteriorElement<V> {
       sum += element;
     }
     sum
+  }
+}
+
+pub type MultiVector = ExteriorElement<variance::Contra>;
+impl MultiVector {}
+
+pub type MultiForm = ExteriorElement<variance::Co>;
+impl MultiForm {
+  /// Precompose k-form by some linear map.
+  ///
+  /// Needed for pullback/pushforward of differential k-form.
+  pub fn precompose(&self, linear_map: &na::DMatrix<f64>) -> Self {
+    self
+      .basis_iter()
+      .map(|(coeff, basis)| {
+        coeff
+          * MultiForm::wedge_big(
+            basis
+              .indices()
+              .iter()
+              .map(|i| MultiForm::from_grade1(linear_map.row(i).transpose())),
+          )
+          .unwrap_or(ExteriorElement::one(self.dim))
+      })
+      .sum()
+  }
+
+  pub fn on_multivector(&self, kvector: &MultiVector) -> f64 {
+    assert!(self.dim == kvector.dim && self.grade == kvector.grade);
+    self.coeffs.dot(&kvector.coeffs)
+  }
+
+  pub fn hodge_star(&self, metric: &RiemannianMetric) -> Self {
+    self
+      .basis_iter()
+      .map(|(coeff, basis)| (coeff * basis).hodge_star(metric))
+      .fold(Self::one(self.dim), |acc, a| acc + a)
   }
 }
 
