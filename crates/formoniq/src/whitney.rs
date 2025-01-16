@@ -1,57 +1,13 @@
 use exterior::{
-  dense::{ExteriorElement, ExteriorField, MultiForm},
+  dense::{ExteriorElement, ExteriorField, MultiForm, MultiFormList},
   manifold::CoordSimplexExt,
   variance, ExteriorGrade,
 };
 use geometry::coord::{manifold::CoordSimplex, CoordRef};
-use index_algebra::{
-  binomial,
-  combinators::IndexSubsets,
-  factorial,
-  sign::{sort_signed, Sign},
-  variants::SetOrder,
-  IndexSet,
-};
+use index_algebra::{factorial, sign::Sign, variants::SetOrder};
 use topology::{simplex::Simplex, Dim};
 
-/// The constant exterior derivatives of the reference Whitney forms, given in
-/// the k-form standard basis.
-pub fn ref_difwhitneys(n: Dim, k: ExteriorGrade) -> na::DMatrix<f64> {
-  let difk = k + 1;
-  let difk_factorial = factorial(difk) as f64;
-
-  let whitney_basis_size = binomial(n + 1, k + 1);
-  let kform_basis_size = binomial(n, difk);
-
-  let mut ref_difwhitneys = na::DMatrix::zeros(kform_basis_size, whitney_basis_size);
-  for (whitney_comb_rank, whitney_comb) in IndexSubsets::canonical(n + 1, k + 1).enumerate() {
-    if whitney_comb[0] == 0 {
-      let kform_comb: Vec<_> = whitney_comb.iter().skip(1).map(|c| c - 1).collect();
-      for i in 0..n {
-        let mut kform_comb = kform_comb.clone();
-        kform_comb.insert(0, i);
-        let sign = sort_signed(&mut kform_comb);
-
-        kform_comb.dedup();
-        if kform_comb.len() != difk {
-          continue;
-        };
-
-        let kform_comb = IndexSet::from(kform_comb).assume_sorted();
-        let kform_comb_rank = kform_comb.lex_rank(n);
-        ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = -sign.as_f64() * difk_factorial;
-      }
-    } else {
-      let kform_comb: Vec<_> = whitney_comb.iter().map(|c| c - 1).collect();
-      let kform_comb = IndexSet::from(kform_comb).assume_sorted();
-      let kform_comb_rank = kform_comb.lex_rank(n);
-      ref_difwhitneys[(kform_comb_rank, whitney_comb_rank)] = difk_factorial;
-    }
-  }
-  ref_difwhitneys
-}
-
-/// Whitney Form on the reference complex.
+/// Whitney Form on a coordinate complex.
 ///
 /// Can be evaluated on local coordinates.
 pub struct WhitneyForm<O: SetOrder> {
@@ -61,7 +17,12 @@ pub struct WhitneyForm<O: SetOrder> {
 }
 impl<O: SetOrder> WhitneyForm<O> {
   pub fn new(coord_facet: CoordSimplex, associated_subsimp: Simplex<O>) -> Self {
-    let difbarys = coord_facet.difbarys();
+    let difbarys = associated_subsimp
+      .vertices
+      .iter()
+      .map(|vertex| coord_facet.difbary(vertex))
+      .collect();
+
     Self {
       coord_facet,
       associated_subsimp,
@@ -71,22 +32,30 @@ impl<O: SetOrder> WhitneyForm<O> {
 
   pub fn wedge_term(&self, iterm: usize) -> MultiForm {
     let wedge_terms = self
-      .associated_subsimp
-      .vertices
+      .difbarys
       .iter()
-      .map(|vertex| self.difbarys[vertex].clone())
       .enumerate()
       // leave off i'th difbary
-      .filter_map(|(ipos, bary)| (ipos != iterm).then_some(bary));
+      .filter_map(|(ipos, bary)| (ipos != iterm).then_some(bary.clone()));
     MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(self.dim()))
   }
 
-  pub fn signed_wedge_terms(&self) -> impl ExactSizeIterator<Item = MultiForm> + use<'_, O> {
-    (0..self.associated_subsimp.nvertices()).map(|i| {
-      let sign = Sign::from_parity(i);
-      let wedge = self.wedge_term(i);
-      sign.as_f64() * wedge
-    })
+  pub fn wedge_terms(&self) -> MultiFormList {
+    (0..self.difbarys.len())
+      .map(|i| self.wedge_term(i))
+      .collect()
+  }
+
+  /// The constant exterior derivative of the Whitney form.
+  pub fn dif(&self) -> MultiForm {
+    dbg!(self.grade());
+    dbg!(self.dim());
+    if self.grade() == self.dim() {
+      return MultiForm::zero(self.dim(), self.grade() + 1);
+    }
+    let factorial = factorial(self.grade() + 1) as f64;
+    let difbarys = self.difbarys.clone();
+    factorial * MultiForm::wedge_big(difbarys).unwrap()
   }
 }
 impl<O: SetOrder> ExteriorField for WhitneyForm<O> {

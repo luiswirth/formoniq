@@ -169,6 +169,10 @@ impl CoordSimplex {
   pub fn base_vertex(&self) -> Coord {
     self.vertices.coord(0)
   }
+  pub fn spanning_vector(&self, i: usize) -> na::DVector<f64> {
+    assert!(i < self.dim_intrinsic());
+    self.vertices.coord(i + 1) - self.base_vertex()
+  }
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
     let mut mat = na::DMatrix::zeros(self.dim_embedded(), self.dim_intrinsic());
     let v0 = self.base_vertex();
@@ -219,6 +223,15 @@ impl CoordSimplex {
   pub fn global_to_bary_coord<'a>(&self, global: impl Into<CoordRef<'a>>) -> Coord {
     let global = global.into();
     local_to_bary_coord(&self.global_to_local_coord(global))
+  }
+
+  pub fn gradbary(&self, i: usize) -> na::DVector<f64> {
+    if i == 0 {
+      let spanning = self.spanning_vectors();
+      -spanning.column_sum()
+    } else {
+      self.spanning_vector(i - 1)
+    }
   }
 
   pub fn gradbarys(&self) -> na::DMatrix<f64> {
