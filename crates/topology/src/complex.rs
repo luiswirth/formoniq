@@ -38,7 +38,7 @@ impl ManifoldComplex {
     Self { skeletons }
   }
 
-  pub fn reference(dim: Dim) -> Self {
+  pub fn standard(dim: Dim) -> Self {
     let data = SimplexData { cofacets: vec![0] };
     let skeletons = graded_subsimplicies(dim)
       .map(|simps| simps.map(|simp| (simp, data.clone())).collect())
@@ -149,7 +149,7 @@ pub const DIM_PRECOMPUTED: usize = 3;
 
 pub static REFERENCE_COMPLEXES: LazyLock<Vec<ManifoldComplex>> = LazyLock::new(|| {
   (0..=DIM_PRECOMPUTED)
-    .map(ManifoldComplex::reference)
+    .map(ManifoldComplex::standard)
     .collect()
 });
 
@@ -173,7 +173,7 @@ mod test {
   #[test]
   fn incidence() {
     let dim = 3;
-    let complex = ManifoldComplex::reference(dim);
+    let complex = ManifoldComplex::standard(dim);
     let facet = complex.facets().iter().next().unwrap();
 
     // print

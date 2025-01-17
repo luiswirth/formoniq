@@ -18,8 +18,8 @@ fn main() {
   println!("Writing mesh to `.obj` file...");
   std::fs::write("out/sphere_wave.obj", surface.to_obj_string()).unwrap();
 
-  let coord_mesh = surface.clone().into_coord_skeleton();
-  let (mesh, coords) = coord_mesh.into_metric_complex();
+  let coord_mesh = surface.clone().into_coord_skeleton().into_coord_complex();
+  let mesh = coord_mesh.to_metric_complex();
   let nvertices = mesh.topology().vertices().len();
 
   let final_time = 2.0 * TAU;
@@ -41,7 +41,8 @@ fn main() {
   let boundary_data = |_| unreachable!();
   let force_data = na::DVector::zeros(nvertices);
 
-  let initial_pos = coords
+  let initial_pos = coord_mesh
+    .coords()
     .coord_iter()
     .map(|p| {
       let p: na::Vector3<f64> = na::try_convert(p.into_owned()).unwrap();

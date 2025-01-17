@@ -295,7 +295,7 @@ mod test {
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
   use geometry::{
-    coord::manifold::{CoordComplex, SimplexHandleExt},
+    coord::manifold::{EmbeddedComplex, SimplexHandleExt},
     metric::manifold::local::LocalMetricComplex,
   };
 
@@ -358,11 +358,11 @@ mod test {
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in 1..=3 {
-      let coord_complex = CoordComplex::standard(dim);
-      let (metric_complex, coords) = coord_complex.into_metric_complex();
+      let coord_complex = EmbeddedComplex::standard(dim);
+      let metric_complex = coord_complex.to_metric_complex();
       for grade in 0..dim {
         let facet = metric_complex.topology().facets().get_by_kidx(0);
-        let coord_facet = facet.coord_simplex(&coords);
+        let coord_facet = facet.coord_simplex(coord_complex.coords());
         let local_complex = metric_complex.local_complex(facet);
 
         let difdif = CodifDifElmat(grade).eval(&local_complex);

@@ -48,8 +48,6 @@ impl<O: SetOrder> WhitneyForm<O> {
 
   /// The constant exterior derivative of the Whitney form.
   pub fn dif(&self) -> MultiForm {
-    dbg!(self.grade());
-    dbg!(self.dim());
     if self.grade() == self.dim() {
       return MultiForm::zero(self.dim(), self.grade() + 1);
     }
@@ -61,16 +59,15 @@ impl<O: SetOrder> WhitneyForm<O> {
 impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
   type Variance = variance::Co;
   fn dim(&self) -> Dim {
-    self.coord_facet.dim_intrinsic()
+    self.coord_facet.dim_embedded()
   }
   fn grade(&self) -> ExteriorGrade {
     self.associated_subsimp.dim()
   }
-  fn at_point<'a>(&self, coord_local: impl Into<CoordRef<'a>>) -> ExteriorElement<Self::Variance> {
-    let coord_local = coord_local.into();
-    assert_eq!(coord_local.len(), self.dim());
-
-    let barys = self.coord_facet.global_to_bary_coord(coord_local);
+  fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> ExteriorElement<Self::Variance> {
+    let coord_global = coord_global.into();
+    assert_eq!(coord_global.len(), self.dim());
+    let barys = self.coord_facet.global_to_bary_coord(coord_global);
 
     let dim = self.dim();
     let grade = self.grade();
@@ -89,14 +86,14 @@ impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
 #[cfg(test)]
 mod test {
   use exterior::manifold::discretize_form_on_simplex;
-  use geometry::coord::manifold::{CoordComplex, SimplexHandleExt};
+  use geometry::coord::manifold::{EmbeddedComplex, SimplexHandleExt};
 
   use super::WhitneyForm;
 
   #[test]
   fn whitney_basis_property() {
     for dim in 0..=4 {
-      let complex = CoordComplex::standard(dim);
+      let complex = EmbeddedComplex::standard(dim);
       let coord_facet = complex
         .topology()
         .facets()

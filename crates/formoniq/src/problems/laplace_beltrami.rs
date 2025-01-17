@@ -34,13 +34,20 @@ where
 pub fn solve_laplace_beltrami_evp(
   mesh: &MetricComplex,
   neigen_values: usize,
-) -> (na::DVector<f64>, na::DMatrix<f64>) {
+) -> (na::DVector<f64>, Vec<FeFunction>) {
   let laplace_galmat = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
   let mass_galmat = assemble::assemble_galmat(mesh, operators::ScalarLumpedMassElmat);
 
-  petsc_ghiep(
+  let (eigenvals, eigenvecs) = petsc_ghiep(
     &laplace_galmat.to_nalgebra_csr(),
     &mass_galmat.to_nalgebra_csr(),
     neigen_values,
-  )
+  );
+
+  let eigenvecs = eigenvecs
+    .column_iter()
+    .map(|c| FeFunction::new(0, c.into_owned()))
+    .collect();
+
+  (eigenvals, eigenvecs)
 }

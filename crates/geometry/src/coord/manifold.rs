@@ -1,6 +1,9 @@
 pub mod cartesian;
 pub mod dim3;
 pub mod gmsh;
+pub mod vtk;
+
+use std::rc::Rc;
 
 use super::{Coord, CoordRef, VertexCoords};
 use crate::metric::manifold::{ref_vol, MetricComplex};
@@ -16,23 +19,23 @@ use topology::{
 };
 
 #[derive(Debug, Clone)]
-pub struct CoordSkeleton {
-  skeleton: ManifoldSkeleton,
+pub struct EmbeddedSkeleton {
+  topology: ManifoldSkeleton,
   coords: VertexCoords,
 }
-impl CoordSkeleton {
-  pub fn new(skeleton: ManifoldSkeleton, coords: VertexCoords) -> Self {
-    Self { skeleton, coords }
+impl EmbeddedSkeleton {
+  pub fn new(topology: ManifoldSkeleton, coords: VertexCoords) -> Self {
+    Self { topology, coords }
   }
   pub fn dim_embedded(&self) -> Dim {
     self.coords.dim()
   }
   pub fn dim_intrinsic(&self) -> Dim {
-    self.skeleton.dim()
+    self.topology.dim()
   }
 
   pub fn skeleton(&self) -> &ManifoldSkeleton {
-    &self.skeleton
+    &self.topology
   }
   pub fn coords(&self) -> &VertexCoords {
     &self.coords
@@ -41,37 +44,40 @@ impl CoordSkeleton {
     &mut self.coords
   }
   pub fn into_parts(self) -> (ManifoldSkeleton, VertexCoords) {
-    (self.skeleton, self.coords)
+    (self.topology, self.coords)
   }
 
-  pub fn embed_euclidean(mut self, dim: Dim) -> CoordSkeleton {
+  pub fn embed_euclidean(mut self, dim: Dim) -> EmbeddedSkeleton {
     self.coords = self.coords.embed_euclidean(dim);
     self
   }
 
-  pub fn into_coord_complex(self) -> CoordComplex {
-    let Self { skeleton, coords } = self;
-    let complex = ManifoldComplex::from_facet_skeleton(skeleton);
-    CoordComplex::new(complex, coords)
+  pub fn into_coord_complex(self) -> EmbeddedComplex {
+    let Self {
+      topology: skeleton,
+      coords,
+    } = self;
+    let complex = Rc::new(ManifoldComplex::from_facet_skeleton(skeleton));
+    EmbeddedComplex::new(complex, coords)
   }
 
-  pub fn into_metric_complex(self) -> (MetricComplex, VertexCoords) {
-    self.into_coord_complex().into_metric_complex()
+  pub fn into_metric_complex(self) -> MetricComplex {
+    self.into_coord_complex().to_metric_complex()
   }
 }
 
 #[derive(Debug, Clone)]
-pub struct CoordComplex {
-  topology: ManifoldComplex,
+pub struct EmbeddedComplex {
+  topology: Rc<ManifoldComplex>,
   coords: VertexCoords,
 }
-impl CoordComplex {
-  pub fn new(topology: ManifoldComplex, coords: VertexCoords) -> Self {
+impl EmbeddedComplex {
+  pub fn new(topology: Rc<ManifoldComplex>, coords: VertexCoords) -> Self {
     Self { topology, coords }
   }
 
   pub fn standard(dim: Dim) -> Self {
-    let topology = ManifoldComplex::reference(dim);
+    let topology = ManifoldComplex::standard(dim);
 
     let coords = topology
       .vertices()
@@ -88,7 +94,7 @@ impl CoordComplex {
     let coords = na::DMatrix::from_columns(&coords);
     let coords = VertexCoords::new(coords);
 
-    Self::new(topology, coords)
+    Self::new(Rc::new(topology), coords)
   }
 
   pub fn topology(&self) -> &ManifoldComplex {
@@ -105,14 +111,14 @@ impl CoordComplex {
     self.coords.dim()
   }
 
-  pub fn into_metric_complex(self) -> (MetricComplex, VertexCoords) {
+  pub fn to_metric_complex(&self) -> MetricComplex {
     let Self { topology, coords } = self;
     let edges = topology.edges();
     let edges = edges
       .iter()
       .map(|e| e.simplex_set().vertices.clone().try_into().unwrap());
     let edge_lengths = coords.to_edge_lengths(edges);
-    (MetricComplex::new(topology, edge_lengths), coords)
+    MetricComplex::new(topology.clone(), edge_lengths)
   }
 }
 
@@ -215,8 +221,8 @@ impl CoordSimplex {
   pub fn global_to_local_coord(&self, global: CoordRef) -> Coord {
     self
       .linear_transform()
-      .qr()
-      .solve(&(global - self.base_vertex()))
+      .svd(true, true)
+      .solve(&(global - self.base_vertex()), 1e-12)
       .unwrap()
   }
 
@@ -294,12 +300,12 @@ impl<'c, D: DimInfoProvider> SimplexHandleExt for SimplexHandle<'c, D> {
 pub struct AffineDiffeomorphism {
   translation: na::DVector<f64>,
   linear: na::DMatrix<f64>,
-  linear_qr: na::QR<f64, na::Dyn, na::Dyn>,
+  linear_svd: na::SVD<f64, na::Dyn, na::Dyn>,
   linear_inv: na::DMatrix<f64>,
 }
 impl AffineDiffeomorphism {
   pub fn from_forward(translation: na::DVector<f64>, linear: na::DMatrix<f64>) -> Self {
-    let linear_qr = linear.clone().qr();
+    let linear_qr = linear.clone().svd(true, true);
     let linear_inv = if linear.is_empty() {
       na::DMatrix::zeros(0, 0)
     } else if linear.is_square() {
@@ -310,7 +316,7 @@ impl AffineDiffeomorphism {
     Self {
       translation,
       linear,
-      linear_qr,
+      linear_svd: linear_qr,
       linear_inv,
     }
   }
@@ -319,7 +325,10 @@ impl AffineDiffeomorphism {
     &self.linear * coord + &self.translation
   }
   pub fn apply_backward(&self, coord: CoordRef) -> Coord {
-    self.linear_qr.solve(&(coord - &self.translation)).unwrap()
+    self
+      .linear_svd
+      .solve(&(coord - &self.translation), 1e-12)
+      .unwrap()
   }
   pub fn linear_inv(&self) -> &na::DMatrix<f64> {
     &self.linear_inv

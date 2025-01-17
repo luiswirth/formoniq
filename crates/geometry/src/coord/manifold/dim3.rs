@@ -1,22 +1,11 @@
-use super::CoordSkeleton;
-use crate::coord::VertexCoords;
+use super::{EmbeddedComplex, EmbeddedSkeleton};
+use crate::coord::{manifold::CoordSimplex, VertexCoords};
 
 use topology::{simplex::Simplex, skeleton::ManifoldSkeleton};
 
 use std::{collections::HashMap, fmt::Write, path::Path, sync::LazyLock};
 
 pub type TriangleTopology = Vec<[usize; 3]>;
-pub trait TriangleTopologyExt {
-  fn try_from_skeleton(manifold: ManifoldSkeleton) -> Self;
-}
-impl TriangleTopologyExt for TriangleTopology {
-  fn try_from_skeleton(skeleton: ManifoldSkeleton) -> Self {
-    skeleton
-      .into_simplex_iter()
-      .map(|simp| simp.vertices.try_into().unwrap())
-      .collect()
-  }
-}
 
 pub type VertexCoords3d = VertexCoords<na::U3>;
 
@@ -42,23 +31,34 @@ impl TriangleSurface3D {
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_skeleton(skeleton: CoordSkeleton) -> Self {
+  pub fn from_coord_skeleton(skeleton: EmbeddedSkeleton) -> Self {
+    assert!(skeleton.dim_intrinsic() == 2, "Topology is not 2D.");
     assert!(
-      skeleton.dim_embedded() == 3,
-      "Skeleton is not embedded in 3D."
+      skeleton.dim_embedded() <= 3,
+      "Skeleton is not embeddable in 3D."
     );
-    assert!(
-      skeleton.dim_intrinsic() == 2,
-      "Skeleton is not a 2D surface."
-    );
+    let skeleton = skeleton.embed_euclidean(3);
     let (skeleton, coords) = skeleton.into_parts();
-    let triangles = TriangleTopology::try_from_skeleton(skeleton);
+
+    // TODO: is this good?
+    let triangles = skeleton
+      .into_simplex_iter()
+      .map(|simp| {
+        let mut vertices: [usize; 3] = simp.vertices.clone().try_into().unwrap();
+        let coord_simp = CoordSimplex::from_simplex_and_coords(&simp, &coords);
+        if coord_simp.orientation().is_neg() {
+          vertices.swap(1, 2);
+        }
+        vertices
+      })
+      .collect();
+
     let coords = coords.into_const_dim();
 
     Self::new(triangles, coords)
   }
 
-  pub fn into_coord_skeleton(self) -> CoordSkeleton {
+  pub fn into_coord_skeleton(self) -> EmbeddedSkeleton {
     let simps = self
       .triangles
       .into_iter()
@@ -66,13 +66,34 @@ impl TriangleSurface3D {
       .collect();
     let skeleton = ManifoldSkeleton::new(simps);
     let coords = self.coords.into_dyn_dim();
-    CoordSkeleton::new(skeleton, coords)
+    EmbeddedSkeleton::new(skeleton, coords)
+  }
+
+  pub fn into_coord_complex(self) -> EmbeddedComplex {
+    self.into_coord_skeleton().into_coord_complex()
   }
 
   pub fn to_obj_string(&self) -> String {
     let mut string = String::new();
     for v in self.coords.coord_iter() {
       writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
+    }
+    for t in &self.triangles {
+      // .obj uses 1-indexing.
+      writeln!(string, "f {} {} {}", t[0] + 1, t[1] + 1, t[2] + 1).unwrap();
+    }
+    string
+  }
+
+  pub fn to_obj_string_with_colors(&self, colors: [f64; 3]) -> String {
+    let mut string = String::new();
+    for v in self.coords.coord_iter() {
+      writeln!(
+        string,
+        "v {:.6} {:.6} {:.6} {:.6} {:.6} {:.6}",
+        v.x, v.y, v.z, colors[0], colors[1], colors[2]
+      )
+      .unwrap();
     }
     for t in &self.triangles {
       // .obj uses 1-indexing.
