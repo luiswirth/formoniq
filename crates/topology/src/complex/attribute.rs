@@ -49,7 +49,7 @@ impl<D: DimInfoProvider> FromIterator<SimplexIdx<D>> for KSimplexCollection<D> {
         idx.kidx
       })
       .collect();
-    Self::new(kidxs, dim.unwrap())
+    Self::new(kidxs, dim.unwrap_or(D::default()))
   }
 }
 impl<'a, D: DimInfoProvider> FromIterator<SimplexHandle<'a, D>> for KSimplexCollection<D> {
@@ -100,6 +100,13 @@ impl<D: DimInfoProvider> Cochain<D> {
 
   pub fn coeffs(&self) -> &na::DVector<f64> {
     &self.coeffs
+  }
+
+  pub fn len(&self) -> usize {
+    self.coeffs.len()
+  }
+  pub fn is_empty(&self) -> bool {
+    self.coeffs().len() == 0
   }
 
   pub fn component_mul(&self, other: &Self) -> Self {

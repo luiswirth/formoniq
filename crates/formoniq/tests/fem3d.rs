@@ -108,7 +108,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
 
 fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
   let box_mesh = CartesianMesh::new_unit(DIM, nboxes_per_dim);
-  let coord_mesh = box_mesh.compute_coord_manifold();
-  let (mesh, _) = coord_mesh.into_metric_complex();
+  let coord_mesh = box_mesh.compute_coord_manifold().into_coord_complex();
+  let mesh = coord_mesh.to_metric_complex();
   assemble::assemble_galmat(&mesh, operators::LaplaceBeltramiElmat).to_nalgebra_dense()
 }

@@ -46,7 +46,7 @@ fn main() {
           .into();
         let anal_lapl = FeFunction::new(0, anal_lapl);
 
-        let (mesh, _) = coord_mesh.into_metric_complex();
+        let mesh = coord_mesh.into_metric_complex();
 
         PoissonWithSol {
           mesh,

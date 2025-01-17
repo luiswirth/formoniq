@@ -19,6 +19,15 @@ impl ManifoldSkeleton {
     Some(Self { simplicies })
   }
 
+  #[must_use]
+  pub fn len(&self) -> usize {
+    self.simplicies.len()
+  }
+  #[must_use]
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+
   pub fn dim(&self) -> Dim {
     self.simplicies[0].dim()
   }

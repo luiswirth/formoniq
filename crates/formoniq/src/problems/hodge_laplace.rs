@@ -1,31 +1,42 @@
+use std::mem;
+
 use crate::{
-  assemble,
+  assemble::{self, GalMat},
   operators::{self, FeFunction},
 };
 
 use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
 use exterior::ExteriorGrade;
 use geometry::metric::manifold::MetricComplex;
+use itertools::Itertools;
 
 pub fn solve_hodge_laplace_source(
   mesh: &MetricComplex,
   grade: ExteriorGrade,
   source_data: FeFunction,
-) -> (FeFunction, FeFunction) {
-  // TODO: handle harmonics (computed from EVP)
-  //let harmonics = nas::CsrMatrix::zeros(0, 0);
+) -> (FeFunction, FeFunction, FeFunction) {
+  let harmonics = solve_hodge_laplace_harmonics(mesh, grade);
 
-  // TODO: handle k=0
-  let mass_sigma = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade - 1));
-  let dif_sigma = assemble::assemble_galmat(mesh, operators::DifElmat(grade));
-  let codif_u = assemble::assemble_galmat(mesh, operators::CodifElmat(grade));
+  let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
+    (
+      assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade - 1)),
+      assemble::assemble_galmat(mesh, operators::DifElmat(grade)),
+      assemble::assemble_galmat(mesh, operators::CodifElmat(grade)),
+    )
+  } else {
+    (GalMat::default(), GalMat::default(), GalMat::default())
+  };
   let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(grade));
   let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade));
 
+  let mass_u = mass_u.to_nalgebra_csr();
+  let mass_harmonics = &mass_u * &harmonics;
+
   let mut galmat = SparseMatrix::zeros(
-    mass_sigma.nrows() + dif_sigma.nrows(),
-    mass_sigma.ncols() + codif_u.ncols(),
+    mass_sigma.nrows() + dif_sigma.nrows() + mass_harmonics.ncols(),
+    mass_sigma.ncols() + codif_u.ncols() + mass_harmonics.ncols(),
   );
+
   for &(r, c, v) in mass_sigma.triplets() {
     galmat.push(r, c, v);
   }
@@ -43,44 +54,101 @@ pub fn solve_hodge_laplace_source(
     c += mass_sigma.ncols();
     galmat.push(r, c, v);
   }
+  for (mut r, mut c) in (0..mass_harmonics.nrows()).zip(0..mass_harmonics.ncols()) {
+    let v = mass_harmonics[(r, c)];
+    r += mass_sigma.nrows();
+    c += mass_sigma.ncols() + difdif_u.ncols();
+    galmat.push(r, c, v);
+  }
+  for (mut r, mut c) in (0..mass_harmonics.nrows()).zip(0..mass_harmonics.ncols()) {
+    let v = mass_harmonics[(r, c)];
+    // transpose
+    mem::swap(&mut r, &mut c);
+    r += mass_sigma.nrows() + dif_sigma.nrows();
+    c += mass_sigma.ncols();
+    galmat.push(r, c, v);
+  }
 
   let galmat = galmat.to_nalgebra_csr();
 
-  let mass_u = mass_u.to_nalgebra_csr();
   let galvec = mass_u * source_data.coeffs;
   #[allow(clippy::toplevel_ref_arg)]
   let galvec = na::stack![
     na::DVector::zeros(mass_sigma.ncols());
-    galvec
+    galvec;
+    na::DVector::zeros(harmonics.ncols());
   ];
 
   let galsol = petsc_saddle_point(&galmat, &galvec);
   let sigma = FeFunction::new(
     grade - 1,
-    galsol.view_range(..mass_sigma.nrows(), 0).into_owned(),
+    galsol.view_range(..mass_sigma.ncols(), 0).into_owned(),
   );
   let u = FeFunction::new(
     grade,
-    galsol.view_range(mass_sigma.nrows().., 0).into_owned(),
+    galsol
+      .view_range(mass_sigma.ncols()..mass_sigma.ncols() + codif_u.ncols(), 0)
+      .into_owned(),
   );
-  (sigma, u)
+  let p = FeFunction::new(
+    grade,
+    galsol
+      .view_range(mass_sigma.ncols() + codif_u.ncols().., 0)
+      .into_owned(),
+  );
+  (sigma, u, p)
+}
+
+pub fn solve_hodge_laplace_harmonics(
+  mesh: &MetricComplex,
+  grade: ExteriorGrade,
+) -> na::DMatrix<f64> {
+  // TODO: improve this!
+  // first of all find exactly all eigenvectors with eigenval 0
+  // use simplical homology to determine number of harmonics
+  let (eigenvals, eigenfuncs) = solve_hodge_laplace_evp(mesh, grade, 10);
+
+  println!("{eigenvals}");
+
+  if eigenvals[eigenvals.len() - 1] <= 1e-12 {
+    panic!("might have missed a harmonic");
+  }
+
+  let harmonic_indices = eigenvals
+    .iter()
+    .enumerate()
+    .filter(|&(_, &eigenval)| eigenval <= 1e-12)
+    .map(|(i, _)| i)
+    .collect_vec();
+
+  let nwhitneys = mesh.topology().nsimplicies(grade);
+  let mut harmonics = na::DMatrix::zeros(nwhitneys, harmonic_indices.len());
+  for (icol, iharmonic) in harmonic_indices.into_iter().enumerate() {
+    harmonics.set_column(icol, &eigenfuncs.column(iharmonic));
+  }
+  harmonics
 }
 
 pub fn solve_hodge_laplace_evp(
   mesh: &MetricComplex,
-  k: ExteriorGrade,
+  grade: ExteriorGrade,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
-  // TODO: handle k=0
-  let mass_sigma = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(k - 1));
-  let dif_sigma = assemble::assemble_galmat(mesh, operators::DifElmat(k));
-  let codif_u = assemble::assemble_galmat(mesh, operators::CodifElmat(k));
-  let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(k));
-  let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(k));
+  let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
+    (
+      assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade - 1)),
+      assemble::assemble_galmat(mesh, operators::DifElmat(grade)),
+      assemble::assemble_galmat(mesh, operators::CodifElmat(grade)),
+    )
+  } else {
+    (GalMat::default(), GalMat::default(), GalMat::default())
+  };
+  let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(grade));
+  let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade));
 
   let mut lhs = SparseMatrix::zeros(
-    mass_sigma.nrows() + dif_sigma.nrows(),
-    mass_sigma.ncols() + codif_u.ncols(),
+    mass_sigma.nrows() + difdif_u.nrows(),
+    mass_sigma.ncols() + difdif_u.ncols(),
   );
   for &(r, c, v) in mass_sigma.triplets() {
     lhs.push(r, c, v);

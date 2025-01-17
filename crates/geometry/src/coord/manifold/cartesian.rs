@@ -1,4 +1,4 @@
-use super::CoordSkeleton;
+use super::EmbeddedSkeleton;
 use crate::coord::VertexCoords;
 
 use index_algebra::{factorial, IndexSet};
@@ -156,7 +156,7 @@ impl CartesianMesh {
 }
 
 impl CartesianMesh {
-  pub fn compute_coord_manifold(&self) -> CoordSkeleton {
+  pub fn compute_coord_manifold(&self) -> EmbeddedSkeleton {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
@@ -203,7 +203,7 @@ impl CartesianMesh {
     }
 
     let skeleton = ManifoldSkeleton::new(simplicies);
-    CoordSkeleton::new(skeleton, coords)
+    EmbeddedSkeleton::new(skeleton, coords)
   }
 }
 

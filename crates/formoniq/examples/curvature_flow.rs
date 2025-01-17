@@ -22,10 +22,11 @@ fn main() {
   let surface = TriangleSurface3D::from_obj_string(&obj_string);
   std::fs::write("out/curvature_flow.obj", surface.to_obj_string()).unwrap();
 
-  let (mut mesh, coords) = surface.into_coord_skeleton().into_metric_complex();
+  let coord_mesh = surface.into_coord_skeleton().into_coord_complex();
+  let mut mesh = coord_mesh.to_metric_complex();
   let nvertices = mesh.topology().vertices().len();
 
-  let mut coords_list = vec![coords];
+  let mut coords_list = vec![coord_mesh.coords().clone()];
 
   let dt = 1e-3;
   let nsteps = 10;

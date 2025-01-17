@@ -7,6 +7,11 @@ pub enum DimInfo {
   Dim(usize),
   Codim(usize),
 }
+impl Default for DimInfo {
+  fn default() -> Self {
+    Self::Dim(0)
+  }
+}
 impl DimInfoProvider for DimInfo {
   fn dim_info(self) -> DimInfo {
     self
@@ -19,14 +24,14 @@ impl DimInfoProvider for Dim {
   }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ConstDim<const N: usize>;
 impl<const N: usize> DimInfoProvider for ConstDim<N> {
   fn dim_info(self) -> DimInfo {
     DimInfo::Dim(N)
   }
 }
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct ConstCodim<const N: usize>;
 impl<const N: usize> DimInfoProvider for ConstCodim<N> {
   fn dim_info(self) -> DimInfo {
@@ -34,7 +39,7 @@ impl<const N: usize> DimInfoProvider for ConstCodim<N> {
   }
 }
 
-pub trait DimInfoProvider: Debug + Copy + Eq + Hash {
+pub trait DimInfoProvider: Debug + Default + Copy + Eq + Hash {
   fn dim_info(self) -> DimInfo;
   fn dim(self, complex_dim: usize) -> usize {
     match self.dim_info() {
