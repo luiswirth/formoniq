@@ -3,7 +3,7 @@ use index_algebra::sign::Sign;
 use super::{
   dim::DimInfoProvider,
   handle::{KSimplexIdx, SimplexHandle, SimplexIdx},
-  ManifoldComplex,
+  TopologyComplex,
 };
 
 pub struct KSimplexCollection<D: DimInfoProvider> {
@@ -31,7 +31,7 @@ impl<D: DimInfoProvider> KSimplexCollection<D> {
   }
   pub fn handle_iter<'c>(
     &self,
-    complex: &'c ManifoldComplex,
+    complex: &'c TopologyComplex,
   ) -> impl ExactSizeIterator<Item = SimplexHandle<'c, D>> + use<'c, '_, D> {
     self.idx_iter().map(|idx| SimplexHandle::new(complex, idx))
   }

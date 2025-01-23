@@ -5,26 +5,27 @@ pub mod vtk;
 
 use std::rc::Rc;
 
-use super::{Coord, CoordRef, VertexCoords};
+use super::{Coord, CoordMatrix, CoordRef, VertexCoords};
 use crate::metric::manifold::{ref_vol, MetricComplex};
 
 use common::linalg::DMatrixExt;
 use index_algebra::sign::Sign;
 use itertools::Itertools;
 use topology::{
-  complex::{dim::DimInfoProvider, handle::SimplexHandle, ManifoldComplex},
+  complex::{dim::DimInfoProvider, handle::SimplexHandle, TopologyComplex},
   simplex::Simplex,
-  skeleton::ManifoldSkeleton,
+  skeleton::TopologySkeleton,
   Dim,
 };
+use tracing::warn;
 
 #[derive(Debug, Clone)]
-pub struct EmbeddedSkeleton {
-  topology: ManifoldSkeleton,
+pub struct CoordSkeleton {
+  topology: TopologySkeleton,
   coords: VertexCoords,
 }
-impl EmbeddedSkeleton {
-  pub fn new(topology: ManifoldSkeleton, coords: VertexCoords) -> Self {
+impl CoordSkeleton {
+  pub fn new(topology: TopologySkeleton, coords: VertexCoords) -> Self {
     Self { topology, coords }
   }
   pub fn dim_embedded(&self) -> Dim {
@@ -34,7 +35,7 @@ impl EmbeddedSkeleton {
     self.topology.dim()
   }
 
-  pub fn skeleton(&self) -> &ManifoldSkeleton {
+  pub fn skeleton(&self) -> &TopologySkeleton {
     &self.topology
   }
   pub fn coords(&self) -> &VertexCoords {
@@ -43,22 +44,22 @@ impl EmbeddedSkeleton {
   pub fn coords_mut(&mut self) -> &mut VertexCoords {
     &mut self.coords
   }
-  pub fn into_parts(self) -> (ManifoldSkeleton, VertexCoords) {
+  pub fn into_parts(self) -> (TopologySkeleton, VertexCoords) {
     (self.topology, self.coords)
   }
 
-  pub fn embed_euclidean(mut self, dim: Dim) -> EmbeddedSkeleton {
+  pub fn embed_euclidean(mut self, dim: Dim) -> CoordSkeleton {
     self.coords = self.coords.embed_euclidean(dim);
     self
   }
 
-  pub fn into_coord_complex(self) -> EmbeddedComplex {
+  pub fn into_coord_complex(self) -> CoordComplex {
     let Self {
       topology: skeleton,
       coords,
     } = self;
-    let complex = Rc::new(ManifoldComplex::from_facet_skeleton(skeleton));
-    EmbeddedComplex::new(complex, coords)
+    let complex = Rc::new(TopologyComplex::from_facet_skeleton(skeleton));
+    CoordComplex::new(complex, coords)
   }
 
   pub fn into_metric_complex(self) -> MetricComplex {
@@ -67,17 +68,17 @@ impl EmbeddedSkeleton {
 }
 
 #[derive(Debug, Clone)]
-pub struct EmbeddedComplex {
-  topology: Rc<ManifoldComplex>,
+pub struct CoordComplex {
+  topology: Rc<TopologyComplex>,
   coords: VertexCoords,
 }
-impl EmbeddedComplex {
-  pub fn new(topology: Rc<ManifoldComplex>, coords: VertexCoords) -> Self {
+impl CoordComplex {
+  pub fn new(topology: Rc<TopologyComplex>, coords: VertexCoords) -> Self {
     Self { topology, coords }
   }
 
   pub fn standard(dim: Dim) -> Self {
-    let topology = ManifoldComplex::standard(dim);
+    let topology = TopologyComplex::standard(dim);
 
     let coords = topology
       .vertices()
@@ -97,7 +98,7 @@ impl EmbeddedComplex {
     Self::new(Rc::new(topology), coords)
   }
 
-  pub fn topology(&self) -> &ManifoldComplex {
+  pub fn topology(&self) -> &TopologyComplex {
     &self.topology
   }
   pub fn coords(&self) -> &VertexCoords {
@@ -204,6 +205,17 @@ impl CoordSimplex {
     Sign::from_f64(self.det())
   }
 
+  pub fn swap_vertices(&mut self, icol: usize, jcol: usize) {
+    self.vertices.swap_coords(icol, jcol)
+  }
+  pub fn flip_orientation(&mut self) {
+    if self.nvertices() >= 2 {
+      self.swap_vertices(0, 1)
+    } else {
+      warn!("Cannot flip CoordSimplex with less than 2 vertices.")
+    }
+  }
+
   pub fn linear_transform(&self) -> na::DMatrix<f64> {
     self.spanning_vectors()
   }
@@ -219,8 +231,12 @@ impl CoordSimplex {
     self.linear_transform() * local + self.base_vertex()
   }
   pub fn global_to_local_coord(&self, global: CoordRef) -> Coord {
-    self
-      .linear_transform()
+    let linear_transform = self.linear_transform();
+    if linear_transform.is_empty() {
+      return Coord::default();
+    }
+
+    linear_transform
       .svd(true, true)
       .solve(&(global - self.base_vertex()), 1e-12)
       .unwrap()
@@ -300,12 +316,12 @@ impl<'c, D: DimInfoProvider> SimplexHandleExt for SimplexHandle<'c, D> {
 pub struct AffineDiffeomorphism {
   translation: na::DVector<f64>,
   linear: na::DMatrix<f64>,
-  linear_svd: na::SVD<f64, na::Dyn, na::Dyn>,
+  linear_svd: Option<na::SVD<f64, na::Dyn, na::Dyn>>,
   linear_inv: na::DMatrix<f64>,
 }
 impl AffineDiffeomorphism {
   pub fn from_forward(translation: na::DVector<f64>, linear: na::DMatrix<f64>) -> Self {
-    let linear_qr = linear.clone().svd(true, true);
+    let linear_svd = linear.is_empty().then(|| linear.clone().svd(true, true));
     let linear_inv = if linear.is_empty() {
       na::DMatrix::zeros(0, 0)
     } else if linear.is_square() {
@@ -316,7 +332,7 @@ impl AffineDiffeomorphism {
     Self {
       translation,
       linear,
-      linear_svd: linear_qr,
+      linear_svd,
       linear_inv,
     }
   }
@@ -325,10 +341,10 @@ impl AffineDiffeomorphism {
     &self.linear * coord + &self.translation
   }
   pub fn apply_backward(&self, coord: CoordRef) -> Coord {
-    self
-      .linear_svd
-      .solve(&(coord - &self.translation), 1e-12)
-      .unwrap()
+    let Some(svd) = &self.linear_svd else {
+      return Coord::default();
+    };
+    svd.solve(&(coord - &self.translation), 1e-12).unwrap()
   }
   pub fn linear_inv(&self) -> &na::DMatrix<f64> {
     &self.linear_inv

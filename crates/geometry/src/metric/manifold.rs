@@ -13,22 +13,22 @@ use crate::metric::EdgeLengths;
 use index_algebra::factorial;
 use local::LocalMetricComplex;
 use topology::{
-  complex::{handle::FacetHandle, ManifoldComplex},
+  complex::{handle::FacetHandle, TopologyComplex},
   simplex::nsubsimplicies,
-  skeleton::ManifoldSkeleton,
+  skeleton::TopologySkeleton,
   Dim,
 };
 
 use std::{f64::consts::SQRT_2, rc::Rc};
 
 pub struct MetricSkeleton {
-  pub skeleton: ManifoldSkeleton,
+  pub skeleton: TopologySkeleton,
   pub lengths: EdgeLengths,
 }
 impl MetricSkeleton {
   pub fn into_complex(self) -> MetricComplex {
     let Self { skeleton, lengths } = self;
-    let topology = Rc::new(ManifoldComplex::from_facet_skeleton(skeleton));
+    let topology = Rc::new(TopologyComplex::from_facet_skeleton(skeleton));
     MetricComplex::new(topology, lengths)
   }
 }
@@ -36,17 +36,17 @@ impl MetricSkeleton {
 /// A simplicial manifold with both topological and geometric information.
 #[derive(Debug)]
 pub struct MetricComplex {
-  topology: Rc<ManifoldComplex>,
+  topology: Rc<TopologyComplex>,
   lengths: EdgeLengths,
 }
 
 impl MetricComplex {
-  pub fn new(topology: Rc<ManifoldComplex>, lengths: EdgeLengths) -> Self {
+  pub fn new(topology: Rc<TopologyComplex>, lengths: EdgeLengths) -> Self {
     Self { topology, lengths }
   }
 
   pub fn reference(dim: Dim) -> Self {
-    let topology = Rc::new(ManifoldComplex::standard(dim));
+    let topology = Rc::new(TopologyComplex::standard(dim));
 
     let nedges = nsubsimplicies(dim, 1);
     let edge_lengths: Vec<f64> = (0..dim)
@@ -58,7 +58,7 @@ impl MetricComplex {
     Self::new(topology, edge_lengths)
   }
 
-  pub fn topology(&self) -> &ManifoldComplex {
+  pub fn topology(&self) -> &TopologyComplex {
     &self.topology
   }
   pub fn edge_lengths(&self) -> &EdgeLengths {

@@ -18,7 +18,7 @@ where
     let refcell = LocalMetricComplex::reference(dim);
     let computed_elmat = elmat.eval(&refcell);
 
-    assert_mat_eq(&computed_elmat, &expected_elmat);
+    assert_mat_eq(&computed_elmat, &expected_elmat, None);
   }
 }
 

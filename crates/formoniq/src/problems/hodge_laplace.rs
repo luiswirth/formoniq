@@ -54,13 +54,13 @@ pub fn solve_hodge_laplace_source(
     c += mass_sigma.ncols();
     galmat.push(r, c, v);
   }
-  for (mut r, mut c) in (0..mass_harmonics.nrows()).zip(0..mass_harmonics.ncols()) {
+  for (mut r, mut c) in (0..mass_harmonics.nrows()).cartesian_product(0..mass_harmonics.ncols()) {
     let v = mass_harmonics[(r, c)];
     r += mass_sigma.nrows();
     c += mass_sigma.ncols() + difdif_u.ncols();
     galmat.push(r, c, v);
   }
-  for (mut r, mut c) in (0..mass_harmonics.nrows()).zip(0..mass_harmonics.ncols()) {
+  for (mut r, mut c) in (0..mass_harmonics.nrows()).cartesian_product(0..mass_harmonics.ncols()) {
     let v = mass_harmonics[(r, c)];
     // transpose
     mem::swap(&mut r, &mut c);

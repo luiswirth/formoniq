@@ -1,7 +1,7 @@
 use crate::dense::{DifferentialMultiForm, MultiForm, MultiVector};
 
 use geometry::coord::{
-  manifold::{CoordSimplex, EmbeddedComplex},
+  manifold::{CoordComplex, CoordSimplex},
   CoordRef,
 };
 use topology::{complex::attribute::Cochain, Dim};
@@ -38,7 +38,7 @@ impl CoordSimplexExt for CoordSimplex {
 /// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
 pub fn discretize_form_on_mesh(
   form: &impl DifferentialMultiForm,
-  complex: &EmbeddedComplex,
+  complex: &CoordComplex,
 ) -> Cochain<Dim> {
   let cochain = complex
     .topology()

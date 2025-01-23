@@ -86,14 +86,15 @@ impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
 #[cfg(test)]
 mod test {
   use exterior::manifold::discretize_form_on_simplex;
-  use geometry::coord::manifold::{EmbeddedComplex, SimplexHandleExt};
+  use geometry::coord::manifold::{CoordComplex, SimplexHandleExt};
+  use index_algebra::sign::Sign;
 
   use super::WhitneyForm;
 
   #[test]
   fn whitney_basis_property() {
     for dim in 0..=4 {
-      let complex = EmbeddedComplex::standard(dim);
+      let complex = CoordComplex::standard(dim);
       let coord_facet = complex
         .topology()
         .facets()
@@ -104,15 +105,29 @@ mod test {
           let this_simpset = this_simp.simplex_set().clone();
           let whitney_form = WhitneyForm::new(coord_facet.clone(), this_simpset);
           for other_simplex in complex.topology().skeleton(grade).iter() {
-            let computed = discretize_form_on_simplex(
-              &whitney_form,
-              &other_simplex.coord_simplex(complex.coords()),
-            );
-            let expected = (this_simp == other_simplex) as u32 as f64;
-            let diff = (computed - expected).abs();
+            let are_equal = this_simp == other_simplex;
+            let other_simplex = other_simplex.coord_simplex(complex.coords());
+            let discret = discretize_form_on_simplex(&whitney_form, &other_simplex);
+            let expected = Sign::Pos.as_f64() * are_equal as usize as f64;
+            let diff = (discret - expected).abs();
             const TOL: f64 = 10e-9;
             let equal = diff <= TOL;
-            assert!(equal, "computed={computed}\nexpected={expected}");
+            assert!(equal, "for: computed={discret} expected={expected}");
+            if other_simplex.nvertices() >= 2 {
+              let other_simplex_rev = {
+                let mut r = other_simplex.clone();
+                r.flip_orientation();
+                r
+              };
+              let discret_rev = discretize_form_on_simplex(&whitney_form, &other_simplex_rev);
+              let expected_rev = Sign::Neg.as_f64() * are_equal as usize as f64;
+              let diff_rev = (discret_rev - expected_rev).abs();
+              let equal_rev = diff_rev <= TOL;
+              assert!(
+                equal_rev,
+                "rev: computed={discret_rev} expected={expected_rev}"
+              );
+            }
           }
         }
       }

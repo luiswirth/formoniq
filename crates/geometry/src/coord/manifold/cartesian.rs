@@ -1,10 +1,10 @@
-use super::EmbeddedSkeleton;
+use super::CoordSkeleton;
 use crate::coord::VertexCoords;
 
 use index_algebra::{factorial, IndexSet};
 use topology::{
   simplex::{Simplex, SortedSimplex},
-  skeleton::ManifoldSkeleton,
+  skeleton::TopologySkeleton,
   Dim,
 };
 
@@ -156,7 +156,7 @@ impl CartesianMesh {
 }
 
 impl CartesianMesh {
-  pub fn compute_coord_manifold(&self) -> EmbeddedSkeleton {
+  pub fn compute_coord_manifold(&self) -> CoordSkeleton {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
@@ -202,8 +202,8 @@ impl CartesianMesh {
       simplicies.extend(cube_simplicies);
     }
 
-    let skeleton = ManifoldSkeleton::new(simplicies);
-    EmbeddedSkeleton::new(skeleton, coords)
+    let skeleton = TopologySkeleton::new(simplicies);
+    CoordSkeleton::new(skeleton, coords)
   }
 }
 

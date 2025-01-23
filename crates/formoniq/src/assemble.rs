@@ -2,7 +2,7 @@ use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
 use geometry::metric::manifold::MetricComplex;
-use topology::complex::ManifoldComplex;
+use topology::complex::TopologyComplex;
 
 use std::collections::HashSet;
 
@@ -48,7 +48,7 @@ pub fn assemble_galvec(global: &MetricComplex, elvec: impl ElVecProvider) -> Gal
   galvec
 }
 
-pub fn drop_boundary_dofs_galmat(complex: &ManifoldComplex, galmat: &mut GalMat) {
+pub fn drop_boundary_dofs_galmat(complex: &TopologyComplex, galmat: &mut GalMat) {
   drop_dofs_galmat(&complex.boundary_vertices().kidx_iter().collect(), galmat)
 }
 
@@ -79,7 +79,7 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
 }
 
 pub fn reintroduce_boundary_dofs_galsols(
-  complex: &ManifoldComplex,
+  complex: &TopologyComplex,
   galsols: &mut na::DMatrix<f64>,
 ) {
   reintroduce_dropped_dofs_galsols(complex.boundary_vertices().kidxs().to_vec(), galsols)
@@ -97,7 +97,7 @@ pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na:
 }
 
 pub fn enforce_homogeneous_dirichlet_bc(
-  complex: &ManifoldComplex,
+  complex: &TopologyComplex,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) {
@@ -106,7 +106,7 @@ pub fn enforce_homogeneous_dirichlet_bc(
 }
 
 pub fn enforce_dirichlet_bc<F>(
-  complex: &ManifoldComplex,
+  complex: &TopologyComplex,
   boundary_coeff_map: F,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,

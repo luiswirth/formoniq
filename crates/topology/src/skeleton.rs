@@ -2,10 +2,10 @@ use crate::{simplex::SortedSimplex, Dim};
 
 /// A container for simplicies of the same dimension.
 #[derive(Debug, Clone)]
-pub struct ManifoldSkeleton {
+pub struct TopologySkeleton {
   simplicies: Vec<SortedSimplex>,
 }
-impl ManifoldSkeleton {
+impl TopologySkeleton {
   pub fn new(simplicies: Vec<SortedSimplex>) -> Self {
     Self::try_new(simplicies).unwrap()
   }

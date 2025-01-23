@@ -1,11 +1,11 @@
 use index_algebra::sign::Sign;
-use topology::{simplex::Simplex, skeleton::ManifoldSkeleton};
+use topology::{simplex::Simplex, skeleton::TopologySkeleton};
 
-use super::EmbeddedSkeleton;
+use super::CoordSkeleton;
 use crate::coord::VertexCoords;
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn gmsh2coord_mesh(bytes: &[u8]) -> EmbeddedSkeleton {
+pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
@@ -59,7 +59,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> EmbeddedSkeleton {
     .into_iter()
     .map(|simp| simp.into_simplex().into_sorted())
     .collect();
-  let skeleton = ManifoldSkeleton::new(skeleton);
+  let skeleton = TopologySkeleton::new(skeleton);
 
-  EmbeddedSkeleton::new(skeleton, mesh_vertices)
+  CoordSkeleton::new(skeleton, mesh_vertices)
 }
