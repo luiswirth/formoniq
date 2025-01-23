@@ -1,4 +1,4 @@
-use super::EmbeddedSkeleton;
+use super::CoordSkeleton;
 
 use vtkio::{
   model::{
@@ -7,7 +7,7 @@ use vtkio::{
   IOBuffer,
 };
 
-pub fn embedded_mesh_to_vtk(facets: &EmbeddedSkeleton) -> Vtk {
+pub fn embedded_mesh_to_vtk(facets: &CoordSkeleton) -> Vtk {
   let cell_type = match facets.dim_intrinsic() {
     1 => CellType::Line,
     2 => CellType::Triangle,

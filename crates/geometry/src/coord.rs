@@ -38,6 +38,10 @@ where
   pub fn into_matrix(self) -> CoordMatrix<D> {
     self.matrix
   }
+
+  fn swap_coords(&mut self, icol: usize, jcol: usize) {
+    self.matrix.swap_columns(icol, jcol)
+  }
 }
 
 impl<D: na::Dim> From<CoordMatrix<D>> for VertexCoords<D>
@@ -134,4 +138,17 @@ impl VertexCoords<na::Dyn> {
     self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self
   }
+}
+
+pub fn write_coords<W: std::io::Write>(
+  mut writer: W,
+  coords: &VertexCoords,
+) -> std::io::Result<()> {
+  for coord in coords.coord_iter() {
+    for &comp in coord {
+      write!(writer, "{comp:.6} ")?;
+    }
+    writeln!(writer)?;
+  }
+  Ok(())
 }

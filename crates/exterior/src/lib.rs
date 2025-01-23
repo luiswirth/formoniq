@@ -284,7 +284,7 @@ mod test {
         let binomial = binomial(n, k);
         let expected_gram = na::DMatrix::identity(binomial, binomial);
         let computed_gram = metric.multi_form_gramian(k);
-        assert_mat_eq(&computed_gram, &expected_gram);
+        assert_mat_eq(&computed_gram, &expected_gram, None);
       }
     }
   }

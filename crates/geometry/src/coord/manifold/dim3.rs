@@ -1,7 +1,7 @@
-use super::{EmbeddedComplex, EmbeddedSkeleton};
+use super::{CoordComplex, CoordSkeleton};
 use crate::coord::{manifold::CoordSimplex, VertexCoords};
 
-use topology::{simplex::Simplex, skeleton::ManifoldSkeleton};
+use topology::{simplex::Simplex, skeleton::TopologySkeleton};
 
 use std::{collections::HashMap, fmt::Write, path::Path, sync::LazyLock};
 
@@ -31,7 +31,7 @@ impl TriangleSurface3D {
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_skeleton(skeleton: EmbeddedSkeleton) -> Self {
+  pub fn from_coord_skeleton(skeleton: CoordSkeleton) -> Self {
     assert!(skeleton.dim_intrinsic() == 2, "Topology is not 2D.");
     assert!(
       skeleton.dim_embedded() <= 3,
@@ -58,18 +58,18 @@ impl TriangleSurface3D {
     Self::new(triangles, coords)
   }
 
-  pub fn into_coord_skeleton(self) -> EmbeddedSkeleton {
+  pub fn into_coord_skeleton(self) -> CoordSkeleton {
     let simps = self
       .triangles
       .into_iter()
       .map(|tria| Simplex::from(tria).into_sorted())
       .collect();
-    let skeleton = ManifoldSkeleton::new(simps);
+    let skeleton = TopologySkeleton::new(simps);
     let coords = self.coords.into_dyn_dim();
-    EmbeddedSkeleton::new(skeleton, coords)
+    CoordSkeleton::new(skeleton, coords)
   }
 
-  pub fn into_coord_complex(self) -> EmbeddedComplex {
+  pub fn into_coord_complex(self) -> CoordComplex {
     self.into_coord_skeleton().into_coord_complex()
   }
 

@@ -107,3 +107,16 @@ impl<O: SetOrder> From<SignedIndexSet<O>> for SignedSimplex<O> {
     Self::new(signed_vertices.set, signed_vertices.sign)
   }
 }
+
+pub fn write_simplicies<'a, W: std::io::Write, O: SetOrder + 'a>(
+  mut writer: W,
+  simplices: impl Iterator<Item = &'a Simplex<O>>,
+) -> std::io::Result<()> {
+  for simplex in simplices {
+    for vertex in simplex.vertices.iter() {
+      write!(writer, "{vertex} ")?;
+    }
+    writeln!(writer)?;
+  }
+  Ok(())
+}

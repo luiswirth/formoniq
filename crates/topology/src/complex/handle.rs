@@ -4,7 +4,7 @@ use super::{
   attribute::SparseSignChain,
   dim::{ConstCodim, ConstDim, DimInfoProvider},
   local::LocalComplex,
-  ComplexSkeleton, ManifoldComplex, SimplexData,
+  ComplexSkeleton, SimplexData, TopologyComplex,
 };
 
 pub type VertexDim = ConstDim<0>;
@@ -29,7 +29,7 @@ pub type FacetsHandle<'c> = SkeletonHandle<'c, FacetCodim>;
 
 pub type KSimplexIdx = usize;
 
-impl ManifoldComplex {
+impl TopologyComplex {
   pub fn skeletons(&self) -> impl Iterator<Item = SkeletonHandle<Dim>> {
     (0..=self.dim()).map(|d| SkeletonHandle::new(self, d))
   }
@@ -67,14 +67,14 @@ impl<D: DimInfoProvider> SimplexIdx<D> {
   pub fn new(dim: D, kidx: KSimplexIdx) -> Self {
     Self { dim, kidx }
   }
-  pub fn is_valid(self, complex: &ManifoldComplex) -> bool {
+  pub fn is_valid(self, complex: &TopologyComplex) -> bool {
     self.dim.is_valid(complex.dim()) && self.kidx < complex.skeleton(self.dim).len()
   }
-  pub fn assert_valid(self, mesh: &ManifoldComplex) {
+  pub fn assert_valid(self, mesh: &TopologyComplex) {
     assert!(self.is_valid(mesh), "Not a valid simplex index.");
   }
 
-  pub fn handle(self, complex: &ManifoldComplex) -> SimplexHandle<D> {
+  pub fn handle(self, complex: &TopologyComplex) -> SimplexHandle<D> {
     SimplexHandle::new(complex, self)
   }
 
@@ -85,20 +85,20 @@ impl<D: DimInfoProvider> SimplexIdx<D> {
 
 #[derive(Copy, Clone)]
 pub struct SimplexHandle<'c, D: DimInfoProvider> {
-  complex: &'c ManifoldComplex,
+  complex: &'c TopologyComplex,
   idx: SimplexIdx<D>,
 }
 impl<'m, D: DimInfoProvider> std::fmt::Debug for SimplexHandle<'m, D> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)
-      .field("complex", &(self.complex as *const ManifoldComplex))
+      .field("complex", &(self.complex as *const TopologyComplex))
       .finish()
   }
 }
 
 impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
-  pub fn new(complex: &'m ManifoldComplex, idx: SimplexIdx<D>) -> Self {
+  pub fn new(complex: &'m TopologyComplex, idx: SimplexIdx<D>) -> Self {
     idx.assert_valid(complex);
     Self { complex, idx }
   }
@@ -120,7 +120,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
     self.idx.kidx
   }
 
-  pub fn complex(&self) -> &'m ManifoldComplex {
+  pub fn complex(&self) -> &'m TopologyComplex {
     self.complex
   }
   pub fn skeleton(&self) -> SkeletonHandle<'m, D> {
@@ -241,7 +241,7 @@ impl<D: DimInfoProvider> Eq for SimplexHandle<'_, D> {}
 
 impl<D: DimInfoProvider> std::hash::Hash for SimplexHandle<'_, D> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.complex as *const ManifoldComplex).hash(state);
+    (self.complex as *const TopologyComplex).hash(state);
     self.idx.hash(state);
   }
 }
@@ -253,12 +253,12 @@ impl<'m> FacetHandle<'m> {
 }
 
 pub struct SkeletonHandle<'m, D: DimInfoProvider> {
-  complex: &'m ManifoldComplex,
+  complex: &'m TopologyComplex,
   dim: D,
 }
 
 impl<'m, D: DimInfoProvider> SkeletonHandle<'m, D> {
-  pub fn new(complex: &'m ManifoldComplex, dim: D) -> Self {
+  pub fn new(complex: &'m TopologyComplex, dim: D) -> Self {
     dim.assert_valid(complex.dim());
     Self { complex, dim }
   }

@@ -2,7 +2,7 @@ use crate::{operators::FeFunction, whitney::WhitneyForm};
 
 use exterior::dense::{ExteriorField, MultiForm};
 use geometry::coord::{
-  manifold::{EmbeddedComplex, SimplexHandleExt},
+  manifold::{CoordComplex, SimplexHandleExt},
   CoordRef,
 };
 use topology::complex::dim::DimInfoProvider;
@@ -10,7 +10,7 @@ use topology::complex::dim::DimInfoProvider;
 pub fn evaluate_fe_function_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
   fe: &FeFunction,
-  mesh: &EmbeddedComplex,
+  mesh: &CoordComplex,
 ) -> MultiForm {
   let coord = coord.into();
 
@@ -45,7 +45,7 @@ pub fn evaluate_fe_function_at_coord<'a>(
 
 pub fn evaluate_fe_function_at_facet_barycenters(
   fe: &FeFunction,
-  mesh: &EmbeddedComplex,
+  mesh: &CoordComplex,
 ) -> Vec<MultiForm> {
   let grade = fe.dim.dim(mesh.dim_intrinsic());
 
@@ -72,31 +72,51 @@ pub fn evaluate_fe_function_at_facet_barycenters(
     .collect()
 }
 
-pub fn evaluate_fe_function_at_dof_barycenters(
+pub fn evaluate_fe_function_facets_vertices(
   fe: &FeFunction,
-  mesh: &EmbeddedComplex,
-) -> Vec<MultiForm> {
+  mesh: &CoordComplex,
+) -> Vec<Vec<MultiForm>> {
   let grade = fe.dim.dim(mesh.dim_intrinsic());
 
   mesh
     .topology()
-    .skeleton(fe.dim)
+    .facets()
     .iter()
-    .map(|dof_simp| {
-      let cofacet = dof_simp.cofacets().next().unwrap();
+    .map(|facet| {
+      facet
+        .vertices()
+        .map(|vertex| {
+          let mut value = MultiForm::zero(mesh.dim_embedded(), grade);
+          for dof_simp in facet.subsimps(grade) {
+            let local_dof_simp = facet
+              .simplex_set()
+              .global_to_local_subsimp(dof_simp.simplex_set());
 
-      let mut value = MultiForm::zero(mesh.dim_embedded(), grade);
-      let local_dof_simp = cofacet
-        .simplex_set()
-        .global_to_local_subsimp(dof_simp.simplex_set());
-
-      let barycenter = dof_simp.coord_simplex(mesh.coords()).barycenter();
-
-      let dof_value = fe[dof_simp]
-        * WhitneyForm::new(cofacet.coord_simplex(mesh.coords()), local_dof_simp)
-          .at_point(&barycenter);
-      value += dof_value;
-      value
+            let dof_value = fe[dof_simp]
+              * WhitneyForm::new(facet.coord_simplex(mesh.coords()), local_dof_simp)
+                .at_point(&mesh.coords().coord(vertex.kidx()));
+            value += dof_value;
+          }
+          value
+        })
+        .collect()
     })
     .collect()
+}
+
+pub fn write_evaluations<W: std::io::Write>(
+  mut writer: W,
+  facet_evals: &[Vec<MultiForm>],
+) -> std::io::Result<()> {
+  for facet_eval in facet_evals {
+    writeln!(writer, "facet")?;
+    for vertex_eval in facet_eval {
+      for comp in vertex_eval.coeffs() {
+        write!(writer, "{comp:.6} ")?;
+      }
+      writeln!(writer)?;
+    }
+    writeln!(writer)?;
+  }
+  Ok(())
 }

@@ -10,7 +10,7 @@ use local::LocalComplex;
 
 use crate::{
   simplex::{graded_subsimplicies, SortedSimplex},
-  skeleton::ManifoldSkeleton,
+  skeleton::TopologySkeleton,
   Dim,
 };
 
@@ -22,7 +22,7 @@ use std::sync::LazyLock;
 
 /// A simplicial manifold complex.
 #[derive(Debug, Clone)]
-pub struct ManifoldComplex {
+pub struct TopologyComplex {
   skeletons: Vec<ComplexSkeleton>,
 }
 
@@ -33,7 +33,7 @@ pub struct SimplexData {
   pub cofacets: Vec<KSimplexIdx>,
 }
 
-impl ManifoldComplex {
+impl TopologyComplex {
   pub fn new(skeletons: Vec<ComplexSkeleton>) -> Self {
     Self { skeletons }
   }
@@ -114,8 +114,8 @@ impl ManifoldComplex {
   }
 }
 
-impl ManifoldComplex {
-  pub fn from_facet_skeleton(facets: ManifoldSkeleton) -> Self {
+impl TopologyComplex {
+  pub fn from_facet_skeleton(facets: TopologySkeleton) -> Self {
     let dim = facets.dim();
     let facets = facets.into_simplicies();
 
@@ -147,9 +147,9 @@ impl ManifoldComplex {
 
 pub const DIM_PRECOMPUTED: usize = 3;
 
-pub static REFERENCE_COMPLEXES: LazyLock<Vec<ManifoldComplex>> = LazyLock::new(|| {
+pub static REFERENCE_COMPLEXES: LazyLock<Vec<TopologyComplex>> = LazyLock::new(|| {
   (0..=DIM_PRECOMPUTED)
-    .map(ManifoldComplex::standard)
+    .map(TopologyComplex::standard)
     .collect()
 });
 
@@ -167,13 +167,13 @@ pub static LOCAL_BOUNDARY_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> = Lazy
 
 #[cfg(test)]
 mod test {
-  use super::ManifoldComplex;
+  use super::TopologyComplex;
   use crate::simplex::{nsubsimplicies, Simplex};
 
   #[test]
   fn incidence() {
     let dim = 3;
-    let complex = ManifoldComplex::standard(dim);
+    let complex = TopologyComplex::standard(dim);
     let facet = complex.facets().iter().next().unwrap();
 
     // print

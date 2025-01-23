@@ -13,7 +13,7 @@ fn feec_vs_fem3d() {
   for nboxes_per_dim in 1..=10 {
     let feec = feec_galmat(nboxes_per_dim);
     let fem = fem3d_galmat(nboxes_per_dim);
-    assert_mat_eq(&feec, &fem);
+    assert_mat_eq(&feec, &fem, None);
   }
 }
 

@@ -6,7 +6,7 @@ use geometry::{
 };
 use index_algebra::{factorial, sign::Sign};
 use topology::{
-  complex::{attribute::Cochain, local::LocalComplex, ManifoldComplex},
+  complex::{attribute::Cochain, local::LocalComplex, TopologyComplex},
   simplex::subsimplicies,
   Dim,
 };
@@ -119,7 +119,7 @@ impl ElVecProvider for SourceElvec {
 pub trait ManifoldComplexExt {
   fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
 }
-impl ManifoldComplexExt for ManifoldComplex {
+impl ManifoldComplexExt for TopologyComplex {
   /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
   fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix {
     self.boundary_operator(grade + 1).transpose()
@@ -295,7 +295,7 @@ mod test {
   use common::linalg::assert_mat_eq;
   use exterior::RiemannianMetricExt;
   use geometry::{
-    coord::manifold::{EmbeddedComplex, SimplexHandleExt},
+    coord::manifold::{CoordComplex, SimplexHandleExt},
     metric::manifold::local::LocalMetricComplex,
   };
 
@@ -305,7 +305,7 @@ mod test {
       let complex = LocalMetricComplex::reference(n);
       let hodge_laplace = CodifDifElmat(0).eval(&complex);
       let laplace_beltrami = LaplaceBeltramiElmat.eval(&complex);
-      assert_mat_eq(&hodge_laplace, &laplace_beltrami);
+      assert_mat_eq(&hodge_laplace, &laplace_beltrami, None);
     }
   }
 
@@ -315,7 +315,7 @@ mod test {
       let complex = LocalMetricComplex::reference(n);
       let hodge_mass = HodgeMassElmat(0).eval(&complex);
       let scalar_mass = ScalarMassElmat.eval(&complex);
-      assert_mat_eq(&hodge_mass, &scalar_mass);
+      assert_mat_eq(&hodge_mass, &scalar_mass, None);
     }
   }
 
@@ -328,7 +328,7 @@ mod test {
       1./6.,1./3.,0.   ;
       0.   ,0.   ,1./6.;
     ];
-    assert_mat_eq(&computed, &expected);
+    assert_mat_eq(&computed, &expected, None);
   }
 
   #[test]
@@ -340,7 +340,7 @@ mod test {
       -1./2., 1./6.,1./3.;
        0.   ,-1./6.,1./6.;
     ];
-    assert_mat_eq(&computed, &expected);
+    assert_mat_eq(&computed, &expected, None);
   }
 
   #[test]
@@ -352,13 +352,13 @@ mod test {
        1./3.,  1./6.,-1./6.;
        1./6.,  1./3., 1./6.;
     ];
-    assert_mat_eq(&computed, &expected);
+    assert_mat_eq(&computed, &expected, None);
   }
 
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in 1..=3 {
-      let coord_complex = EmbeddedComplex::standard(dim);
+      let coord_complex = CoordComplex::standard(dim);
       let metric_complex = coord_complex.to_metric_complex();
       for grade in 0..dim {
         let facet = metric_complex.topology().facets().get_by_kidx(0);
@@ -382,7 +382,7 @@ mod test {
           }
         }
         inner *= local_complex.vol();
-        assert_mat_eq(&difdif, &inner);
+        assert_mat_eq(&difdif, &inner, None);
       }
     }
   }
