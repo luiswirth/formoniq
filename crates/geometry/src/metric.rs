@@ -1,11 +1,11 @@
 pub mod manifold;
 
 use common::linalg::DMatrixExt;
-use index_algebra::{factorial, variants::SetOrder, IndexSet};
+use index_algebra::{factorial, IndexSet};
 use itertools::Itertools;
 use topology::{
-  complex::TopologyComplex,
-  simplex::{nsubsimplicies, Simplex},
+  complex::{dim::DimInfoProvider, handle::SimplexHandle, TopologyComplex},
+  simplex::nsubsimplicies,
   Dim,
 };
 
@@ -258,24 +258,25 @@ impl MeshEdgeLengths {
     topology
       .facets()
       .handle_iter()
-      .map(|facet| {
-        self
-          .simplex_geometry(facet.simplex_set())
-          .shape_reguarity_measure()
-      })
+      .map(|facet| self.simplex_geometry(facet).shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
 
-  pub fn simplex_geometry<O: SetOrder>(&self, simplex: &Simplex<O>) -> SimplexGeometry {
+  pub fn simplex_geometry<D: DimInfoProvider>(
+    &self,
+    simplex: SimplexHandle<'_, D>,
+  ) -> SimplexGeometry {
     self.simplex_edge_lengths(simplex).geometry()
   }
 
-  pub fn simplex_edge_lengths<O: SetOrder>(&self, simplex: &Simplex<O>) -> SimplexEdgeLengths {
+  pub fn simplex_edge_lengths<D: DimInfoProvider>(
+    &self,
+    simplex: SimplexHandle<'_, D>,
+  ) -> SimplexEdgeLengths {
     let lengths = simplex
-      .vertices
-      .iter()
-      .map(|edge| self.length(edge))
+      .edges()
+      .map(|edge| self.length(edge.kidx()))
       .collect_vec()
       .into();
     SimplexEdgeLengths::new(lengths, simplex.dim())

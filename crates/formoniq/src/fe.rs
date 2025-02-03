@@ -1,4 +1,8 @@
-use crate::{operators::FeFunction, whitney::WhitneyForm};
+use crate::{
+  assemble::assemble_galmat,
+  operators::{CodifDifElmat, FeFunction, HodgeMassElmat},
+  whitney::WhitneyForm,
+};
 
 use exterior::dense::{ExteriorField, MultiForm};
 use geometry::{
@@ -7,18 +11,24 @@ use geometry::{
 };
 use topology::complex::{dim::DimInfoProvider, TopologyComplex};
 
-#[allow(unused_variables)]
 pub fn l2_norm(fe: &FeFunction, topology: &TopologyComplex, geometry: &MeshEdgeLengths) -> f64 {
-  todo!()
+  let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim)).to_nalgebra_csr();
+  //fe.coeffs().transpose() * mass * fe.coeffs()
+  ((mass.transpose() * fe.coeffs()).transpose() * fe.coeffs())
+    .x
+    .sqrt()
 }
 
-#[allow(unused_variables)]
 pub fn hlambda_norm(
   fe: &FeFunction,
   topology: &TopologyComplex,
   geometry: &MeshEdgeLengths,
 ) -> f64 {
-  todo!()
+  let difdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim)).to_nalgebra_csr();
+  //fe.coeffs().transpose() * difdif * fe.coeffs()
+  ((difdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())
+    .x
+    .sqrt()
 }
 
 pub fn evaluate_fe_function_at_coord<'a>(
