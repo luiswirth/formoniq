@@ -6,24 +6,26 @@ use crate::{
 };
 
 use common::{sparse::petsc_ghiep, util::FaerCholesky};
-use geometry::metric::manifold::MetricComplex;
-use topology::complex::handle::KSimplexIdx;
+use geometry::metric::MeshEdgeLengths;
+use topology::complex::{handle::KSimplexIdx, TopologyComplex};
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(
-  mesh: &MetricComplex,
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
   source_data: FeFunction,
   boundary_data: F,
 ) -> FeFunction
 where
   F: Fn(KSimplexIdx) -> DofCoeff,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
+  let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
 
-  let mass = assemble::assemble_galmat(mesh, operators::ScalarMassElmat).to_nalgebra_csr();
+  let mass =
+    assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat).to_nalgebra_csr();
   let mut source = mass * source_data.coeffs;
 
-  assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut laplace, &mut source);
+  assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source);
 
   let laplace = laplace.to_nalgebra_csr();
   let sol = FaerCholesky::new(laplace).solve(&source);
@@ -32,11 +34,13 @@ where
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
-  mesh: &MetricComplex,
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
   neigen_values: usize,
 ) -> (na::DVector<f64>, Vec<FeFunction>) {
-  let laplace_galmat = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
-  let mass_galmat = assemble::assemble_galmat(mesh, operators::ScalarLumpedMassElmat);
+  let laplace_galmat =
+    assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
+  let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarLumpedMassElmat);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(
     &laplace_galmat.to_nalgebra_csr(),

@@ -1,7 +1,7 @@
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
-use geometry::metric::manifold::MetricComplex;
+use geometry::metric::MeshEdgeLengths;
 use topology::complex::TopologyComplex;
 
 use std::collections::HashSet;
@@ -10,21 +10,27 @@ pub type GalMat = SparseMatrix;
 pub type GalVec = na::DVector<f64>;
 
 /// Assembly algorithm for the Galerkin Matrix.
-pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElMatProvider) -> GalMat {
+pub fn assemble_galmat(
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
+  elmat: impl ElMatProvider,
+) -> GalMat {
   let row_grade = elmat.row_grade();
   let col_grade = elmat.col_grade();
 
-  let nsimps_row = global.topology().skeleton(row_grade).len();
-  let nsimps_col = global.topology().skeleton(col_grade).len();
-  let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
-  for local in global.local_complexes() {
-    let row_subs = &local.topology().skeletons()[row_grade];
-    let col_subs = &local.topology().skeletons()[col_grade];
-    let elmat = elmat.eval(&local);
+  let nsimps_row = topology.skeleton(row_grade).len();
+  let nsimps_col = topology.skeleton(col_grade).len();
 
+  let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
+  for facet in topology.facets().handle_iter() {
+    let geo = geometry.simplex_geometry(facet.simplex_set());
+    let elmat = elmat.eval(&geo);
+
+    let row_subs: Vec<_> = facet.subsimps(row_grade).collect();
+    let col_subs: Vec<_> = facet.subsimps(col_grade).collect();
     for (ilocal, &iglobal) in row_subs.iter().enumerate() {
       for (jlocal, &jglobal) in col_subs.iter().enumerate() {
-        galmat.push(iglobal, jglobal, elmat[(ilocal, jlocal)]);
+        galmat.push(iglobal.kidx(), jglobal.kidx(), elmat[(ilocal, jlocal)]);
       }
     }
   }
@@ -32,17 +38,23 @@ pub fn assemble_galmat(global: &MetricComplex, elmat: impl ElMatProvider) -> Gal
 }
 
 /// Assembly algorithm for the Galerkin Vector.
-pub fn assemble_galvec(global: &MetricComplex, elvec: impl ElVecProvider) -> GalVec {
+pub fn assemble_galvec(
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
+  elvec: impl ElVecProvider,
+) -> GalVec {
   let grade = elvec.grade();
 
-  let nsimps = global.topology().skeleton(grade).len();
+  let nsimps = topology.skeleton(grade).len();
   let mut galvec = na::DVector::zeros(nsimps);
-  for local in global.local_complexes() {
-    let subs = &local.topology().skeletons()[grade];
-    let elvec = elvec.eval(&local);
 
+  for facet in topology.facets().handle_iter() {
+    let geo = geometry.simplex_geometry(facet.simplex_set());
+    let elvec = elvec.eval(&geo);
+
+    let subs: Vec<_> = facet.subsimps(grade).collect();
     for (ilocal, &iglobal) in subs.iter().enumerate() {
-      galvec[iglobal] += elvec[ilocal];
+      galvec[iglobal.kidx()] += elvec[ilocal];
     }
   }
   galvec

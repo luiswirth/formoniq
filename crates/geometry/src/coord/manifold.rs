@@ -3,10 +3,8 @@ pub mod dim3;
 pub mod gmsh;
 pub mod vtk;
 
-use std::rc::Rc;
-
-use super::{Coord, CoordMatrix, CoordRef, VertexCoords};
-use crate::metric::manifold::{ref_vol, MetricComplex};
+use super::{Coord, CoordRef, MeshVertexCoords};
+use crate::metric::ref_vol;
 
 use common::linalg::DMatrixExt;
 use index_algebra::sign::Sign;
@@ -14,121 +12,37 @@ use itertools::Itertools;
 use topology::{
   complex::{dim::DimInfoProvider, handle::SimplexHandle, TopologyComplex},
   simplex::Simplex,
-  skeleton::TopologySkeleton,
   Dim,
 };
 use tracing::warn;
 
-#[derive(Debug, Clone)]
-pub struct CoordSkeleton {
-  topology: TopologySkeleton,
-  coords: VertexCoords,
-}
-impl CoordSkeleton {
-  pub fn new(topology: TopologySkeleton, coords: VertexCoords) -> Self {
-    Self { topology, coords }
-  }
-  pub fn dim_embedded(&self) -> Dim {
-    self.coords.dim()
-  }
-  pub fn dim_intrinsic(&self) -> Dim {
-    self.topology.dim()
-  }
+pub fn standard_coord_complex(dim: Dim) -> (TopologyComplex, MeshVertexCoords) {
+  let topology = TopologyComplex::standard(dim);
 
-  pub fn skeleton(&self) -> &TopologySkeleton {
-    &self.topology
-  }
-  pub fn coords(&self) -> &VertexCoords {
-    &self.coords
-  }
-  pub fn coords_mut(&mut self) -> &mut VertexCoords {
-    &mut self.coords
-  }
-  pub fn into_parts(self) -> (TopologySkeleton, VertexCoords) {
-    (self.topology, self.coords)
-  }
+  let coords = topology
+    .vertices()
+    .handle_iter()
+    .map(|v| v.kidx())
+    .map(|v| {
+      let mut vec = na::DVector::zeros(dim);
+      if v > 0 {
+        vec[v - 1] = 1.0;
+      }
+      vec
+    })
+    .collect_vec();
+  let coords = na::DMatrix::from_columns(&coords);
+  let coords = MeshVertexCoords::new(coords);
 
-  pub fn embed_euclidean(mut self, dim: Dim) -> CoordSkeleton {
-    self.coords = self.coords.embed_euclidean(dim);
-    self
-  }
-
-  pub fn into_coord_complex(self) -> CoordComplex {
-    let Self {
-      topology: skeleton,
-      coords,
-    } = self;
-    let complex = Rc::new(TopologyComplex::from_facet_skeleton(skeleton));
-    CoordComplex::new(complex, coords)
-  }
-
-  pub fn into_metric_complex(self) -> MetricComplex {
-    self.into_coord_complex().to_metric_complex()
-  }
+  (topology, coords)
 }
 
 #[derive(Debug, Clone)]
-pub struct CoordComplex {
-  topology: Rc<TopologyComplex>,
-  coords: VertexCoords,
+pub struct SimplexCoords {
+  pub vertices: MeshVertexCoords,
 }
-impl CoordComplex {
-  pub fn new(topology: Rc<TopologyComplex>, coords: VertexCoords) -> Self {
-    Self { topology, coords }
-  }
-
-  pub fn standard(dim: Dim) -> Self {
-    let topology = TopologyComplex::standard(dim);
-
-    let coords = topology
-      .vertices()
-      .iter()
-      .map(|v| v.kidx())
-      .map(|v| {
-        let mut vec = na::DVector::zeros(dim);
-        if v > 0 {
-          vec[v - 1] = 1.0;
-        }
-        vec
-      })
-      .collect_vec();
-    let coords = na::DMatrix::from_columns(&coords);
-    let coords = VertexCoords::new(coords);
-
-    Self::new(Rc::new(topology), coords)
-  }
-
-  pub fn topology(&self) -> &TopologyComplex {
-    &self.topology
-  }
-  pub fn coords(&self) -> &VertexCoords {
-    &self.coords
-  }
-
-  pub fn dim_intrinsic(&self) -> Dim {
-    self.topology.dim()
-  }
-  pub fn dim_embedded(&self) -> Dim {
-    self.coords.dim()
-  }
-
-  pub fn to_metric_complex(&self) -> MetricComplex {
-    let Self { topology, coords } = self;
-    let edges = topology.edges();
-    let edges = edges
-      .iter()
-      .map(|e| e.simplex_set().vertices.clone().try_into().unwrap());
-    let edge_lengths = coords.to_edge_lengths(edges);
-    MetricComplex::new(topology.clone(), edge_lengths)
-  }
-}
-
-#[derive(Debug, Clone)]
-pub struct CoordSimplex {
-  pub vertices: VertexCoords,
-}
-impl CoordSimplex {
-  pub fn new(vertices: impl Into<VertexCoords>) -> Self {
+impl SimplexCoords {
+  pub fn new(vertices: impl Into<MeshVertexCoords>) -> Self {
     let vertices = vertices.into();
     Self { vertices }
   }
@@ -142,7 +56,7 @@ impl CoordSimplex {
     Self::new(vertices)
   }
 
-  pub fn from_simplex_and_coords<O>(simp: &Simplex<O>, coords: &VertexCoords) -> CoordSimplex
+  pub fn from_simplex_and_coords<O>(simp: &Simplex<O>, coords: &MeshVertexCoords) -> SimplexCoords
   where
     O: index_algebra::variants::SetOrder,
   {
@@ -150,16 +64,16 @@ impl CoordSimplex {
     for (i, v) in simp.vertices.iter().enumerate() {
       vert_coords.set_column(i, &coords.coord(v));
     }
-    CoordSimplex::new(vert_coords)
+    SimplexCoords::new(vert_coords)
   }
 
-  pub fn edges(&self) -> impl Iterator<Item = CoordSimplex> + use<'_> {
+  pub fn edges(&self) -> impl Iterator<Item = SimplexCoords> + use<'_> {
     Simplex::standard(self.nvertices())
       .subsimps(1)
       .map(|edge| Self::from_simplex_and_coords(&edge, &self.vertices))
   }
 }
-impl CoordSimplex {
+impl SimplexCoords {
   pub fn nvertices(&self) -> usize {
     self.vertices.nvertices()
   }
@@ -305,11 +219,11 @@ pub fn standard_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
 }
 
 pub trait SimplexHandleExt {
-  fn coord_simplex(&self, coords: &VertexCoords) -> CoordSimplex;
+  fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords;
 }
 impl<'c, D: DimInfoProvider> SimplexHandleExt for SimplexHandle<'c, D> {
-  fn coord_simplex(&self, coords: &VertexCoords) -> CoordSimplex {
-    CoordSimplex::from_simplex_and_coords(self.simplex_set(), coords)
+  fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
+    SimplexCoords::from_simplex_and_coords(self.simplex_set(), coords)
   }
 }
 
@@ -358,7 +272,7 @@ mod test {
   #[test]
   fn standard_barys() {
     for dim in 0..=4 {
-      let simp = CoordSimplex::standard(dim);
+      let simp = SimplexCoords::standard(dim);
       for pos in simp.vertices.coord_iter() {
         let computed = simp.global_to_bary_coord(pos);
         for ibary in 0..simp.nvertices() {
@@ -372,7 +286,7 @@ mod test {
   #[test]
   fn standard_gradbarys() {
     for dim in 0..=4 {
-      let simp = CoordSimplex::standard(dim);
+      let simp = SimplexCoords::standard(dim);
       let computed = simp.gradbarys();
       for ibary in 0..simp.nvertices() {
         let expected = standard_gradbary(dim, ibary);

@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 
 use exterior::dense::ExteriorField;
 use formoniq::whitney::WhitneyForm;
-use geometry::coord::manifold::CoordSimplex;
+use geometry::coord::manifold::SimplexCoords;
 use topology::simplex::graded_subsimplicies;
 
 use std::io::Write;
@@ -14,7 +14,7 @@ fn main() {
     1.0, 0.5, 0.0;
     0.0, 0.5, 0.5;
   ];
-  let facet = CoordSimplex::new(facet);
+  let facet = SimplexCoords::new(facet);
   let dim = facet.dim_intrinsic();
 
   for simplex in graded_subsimplicies(dim).flatten() {

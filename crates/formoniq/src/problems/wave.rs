@@ -1,9 +1,13 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
-use crate::{assemble, operators, operators::DofIdx};
+use crate::{
+  assemble,
+  operators::{self, DofIdx, FeFunction},
+};
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use geometry::metric::manifold::MetricComplex;
+use geometry::metric::MeshEdgeLengths;
+use topology::complex::TopologyComplex;
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
@@ -22,21 +26,22 @@ impl WaveState {
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
-  mesh: &MetricComplex,
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
-  force_data: na::DVector<f64>,
+  force_data: FeFunction,
 ) -> Vec<WaveState>
 where
   F: Fn(DofIdx) -> f64,
 {
-  let mut laplace = assemble::assemble_galmat(mesh, operators::LaplaceBeltramiElmat);
-  let mut mass = assemble::assemble_galmat(mesh, operators::ScalarMassElmat);
-  let mut force = assemble::assemble_galvec(mesh, operators::SourceElvec::new(force_data));
+  let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
+  let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
+  let mut force = mass.to_nalgebra_csr() * force_data.coeffs();
 
-  assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut laplace, &mut force);
-  assemble::enforce_dirichlet_bc(mesh.topology(), &boundary_data, &mut mass, &mut force);
+  assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut force);
+  assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut force);
 
   let laplace = laplace.to_nalgebra_csr();
   let mass = mass.to_nalgebra_csr();
@@ -100,7 +105,7 @@ pub fn solve_wave_step(
 /// For explicit time stepping typically Cmax = 1.
 /// Implicit time stepping is usually more lenient, allowing bigger values.
 /// We assume here Cmax = 1, with a 5% safety margin.
-pub fn cfl_dt(mesh: &MetricComplex, vel: f64) -> f64 {
+pub fn cfl_dt(mesh_geo: &MeshEdgeLengths, vel: f64) -> f64 {
   const MARGIN: f64 = 0.95;
-  MARGIN * mesh.mesh_width_min() / vel
+  MARGIN * mesh_geo.mesh_width_min() / vel
 }

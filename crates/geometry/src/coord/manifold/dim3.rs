@@ -1,13 +1,11 @@
-use super::{CoordComplex, CoordSkeleton};
-use crate::coord::{manifold::CoordSimplex, VertexCoords};
+use crate::coord::{manifold::SimplexCoords, MeshVertexCoords};
 
-use topology::{simplex::Simplex, skeleton::TopologySkeleton};
+use topology::{complex::TopologyComplex, simplex::Simplex, skeleton::TopologySkeleton};
 
 use std::{collections::HashMap, fmt::Write, path::Path, sync::LazyLock};
 
 pub type TriangleTopology = Vec<[usize; 3]>;
-
-pub type VertexCoords3d = VertexCoords<na::U3>;
+pub type VertexCoords3d = MeshVertexCoords<na::U3>;
 
 #[derive(Debug, Clone)]
 pub struct TriangleSurface3D {
@@ -31,21 +29,17 @@ impl TriangleSurface3D {
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_skeleton(skeleton: CoordSkeleton) -> Self {
-    assert!(skeleton.dim_intrinsic() == 2, "Topology is not 2D.");
-    assert!(
-      skeleton.dim_embedded() <= 3,
-      "Skeleton is not embeddable in 3D."
-    );
-    let skeleton = skeleton.embed_euclidean(3);
-    let (skeleton, coords) = skeleton.into_parts();
+  pub fn from_coord_skeleton(topology: TopologySkeleton, coords: MeshVertexCoords) -> Self {
+    assert!(topology.dim() == 2, "Topology is not 2D.");
+    assert!(coords.dim() <= 3, "Skeleton is not embeddable in 3D.");
+    let coords = coords.embed_euclidean(3);
 
     // TODO: is this good?
-    let triangles = skeleton
+    let triangles = topology
       .into_simplex_iter()
       .map(|simp| {
         let mut vertices: [usize; 3] = simp.vertices.clone().try_into().unwrap();
-        let coord_simp = CoordSimplex::from_simplex_and_coords(&simp, &coords);
+        let coord_simp = SimplexCoords::from_simplex_and_coords(&simp, &coords);
         if coord_simp.orientation().is_neg() {
           vertices.swap(1, 2);
         }
@@ -58,7 +52,7 @@ impl TriangleSurface3D {
     Self::new(triangles, coords)
   }
 
-  pub fn into_coord_skeleton(self) -> CoordSkeleton {
+  pub fn into_coord_skeleton(self) -> (TopologySkeleton, MeshVertexCoords) {
     let simps = self
       .triangles
       .into_iter()
@@ -66,11 +60,13 @@ impl TriangleSurface3D {
       .collect();
     let skeleton = TopologySkeleton::new(simps);
     let coords = self.coords.into_dyn_dim();
-    CoordSkeleton::new(skeleton, coords)
+    (skeleton, coords)
   }
 
-  pub fn into_coord_complex(self) -> CoordComplex {
-    self.into_coord_skeleton().into_coord_complex()
+  pub fn into_coord_complex(self) -> (TopologyComplex, MeshVertexCoords) {
+    let (skeleton, coords) = self.into_coord_skeleton();
+    let complex = TopologyComplex::from_facet_skeleton(skeleton);
+    (complex, coords)
   }
 
   pub fn to_obj_string(&self) -> String {
@@ -128,7 +124,7 @@ impl TriangleSurface3D {
     }
 
     let vertex_coords = na::Matrix3xX::from_columns(&vertex_coords);
-    let vertex_coords = VertexCoords::from(vertex_coords);
+    let vertex_coords = MeshVertexCoords::from(vertex_coords);
     Self::new(triangles, vertex_coords)
   }
 

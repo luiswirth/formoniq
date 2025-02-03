@@ -12,7 +12,6 @@ use exterior::{
 };
 use formoniq::{
   fe::{evaluate_fe_function_facets_vertices, write_evaluations},
-  operators::FeFunction,
   problems::hodge_laplace,
 };
 use geometry::coord::{manifold::cartesian::CartesianMesh, write_coords, CoordRef};
@@ -26,23 +25,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let dim = 2;
   let nboxes_per_dim = 3;
   let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
-  let coord_mesh = box_mesh.compute_coord_manifold().into_coord_complex();
-  let metric_mesh = coord_mesh.to_metric_complex();
+  let (topology, coords) = box_mesh.compute_coord_complex();
+  let metric = coords.to_edge_lengths(&topology);
 
   let file = File::create(format!("{path}/coords.txt"))?;
   let writer = BufWriter::new(file);
-  write_coords(writer, coord_mesh.coords())?;
+  write_coords(writer, &coords)?;
 
   let file = File::create(format!("{path}/facets.txt"))?;
   let writer = BufWriter::new(file);
-  write_simplicies(
-    writer,
-    metric_mesh
-      .topology()
-      .facets()
-      .iter()
-      .map(|f| f.simplex_set()),
-  )?;
+  write_simplicies(writer, topology.facets().set_iter())?;
 
   let form_grade = 1;
   let source = Box::new(move |x: CoordRef| {
@@ -52,9 +44,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   //let source = Box::new(move |x: CoordRef| MultiForm::from_grade1(na::dvector![1.0, 0.0]));
   let source = DifferentialFormClosure::new(source, dim, form_grade);
-  let source = discretize_form_on_mesh(&source, &coord_mesh);
+  let source = discretize_form_on_mesh(&source, &topology, &coords);
 
-  let facet_evals = evaluate_fe_function_facets_vertices(&source, &coord_mesh);
+  let facet_evals = evaluate_fe_function_facets_vertices(&source, &topology, &coords);
 
   let file = File::create(format!("{path}/evaluations.txt"))?;
   let writer = BufWriter::new(file);
@@ -64,7 +56,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   //let source = na::DVector::from_element(ndofs, 1.0);
   //let source = FeFunction::new(form_grade, source);
 
-  let (_sigma, u, _p) = hodge_laplace::solve_hodge_laplace_source(&metric_mesh, form_grade, source);
+  let (_sigma, u, _p) =
+    hodge_laplace::solve_hodge_laplace_source(&topology, &metric, form_grade, source);
 
   //let ndofs = mesh.topology().skeleton(form_grade).len();
   //let mut u = na::DVector::zeros(ndofs);
@@ -80,7 +73,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     MultiForm::from_grade1(exact_u)
   };
   let analytic_form = DifferentialFormClosure::new(Box::new(analytic_form), dim, form_grade);
-  let analytic_cochain = discretize_form_on_mesh(&analytic_form, &coord_mesh);
+  let analytic_cochain = discretize_form_on_mesh(&analytic_form, &topology, &coords);
 
   for (&approx, &exact) in u.coeffs().iter().zip(analytic_cochain.coeffs().iter()) {
     println!("approx={approx}, exact={exact}");

@@ -3,7 +3,7 @@ use exterior::{
   manifold::CoordSimplexExt,
   variance, ExteriorGrade,
 };
-use geometry::coord::{manifold::CoordSimplex, CoordRef};
+use geometry::coord::{manifold::SimplexCoords, CoordRef};
 use index_algebra::{factorial, sign::Sign, variants::SetOrder};
 use topology::{simplex::Simplex, Dim};
 
@@ -11,12 +11,12 @@ use topology::{simplex::Simplex, Dim};
 ///
 /// Can be evaluated on local coordinates.
 pub struct WhitneyForm<O: SetOrder> {
-  coord_facet: CoordSimplex,
+  coord_facet: SimplexCoords,
   associated_subsimp: Simplex<O>,
   difbarys: Vec<MultiForm>,
 }
 impl<O: SetOrder> WhitneyForm<O> {
-  pub fn new(coord_facet: CoordSimplex, associated_subsimp: Simplex<O>) -> Self {
+  pub fn new(coord_facet: SimplexCoords, associated_subsimp: Simplex<O>) -> Self {
     let difbarys = associated_subsimp
       .vertices
       .iter()
@@ -86,27 +86,29 @@ impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
 #[cfg(test)]
 mod test {
   use exterior::manifold::discretize_form_on_simplex;
-  use geometry::coord::manifold::{CoordComplex, SimplexHandleExt};
+  use geometry::coord::{manifold::SimplexHandleExt, MeshVertexCoords};
   use index_algebra::sign::Sign;
+  use topology::complex::TopologyComplex;
 
   use super::WhitneyForm;
 
   #[test]
   fn whitney_basis_property() {
     for dim in 0..=4 {
-      let complex = CoordComplex::standard(dim);
-      let coord_facet = complex
-        .topology()
-        .facets()
-        .get_by_kidx(0)
-        .coord_simplex(complex.coords());
+      let topology = TopologyComplex::standard(dim);
+      let coords = MeshVertexCoords::standard(dim);
+
+      let facet = topology.facets().get_by_kidx(0);
+      let facet_coords = facet.coord_simplex(&coords);
+
       for grade in 0..=dim {
-        for this_simp in complex.topology().skeleton(grade).iter() {
+        for this_simp in topology.skeleton(grade).handle_iter() {
           let this_simpset = this_simp.simplex_set().clone();
-          let whitney_form = WhitneyForm::new(coord_facet.clone(), this_simpset);
-          for other_simplex in complex.topology().skeleton(grade).iter() {
+          let whitney_form = WhitneyForm::new(facet_coords.clone(), this_simpset);
+
+          for other_simplex in topology.skeleton(grade).handle_iter() {
             let are_equal = this_simp == other_simplex;
-            let other_simplex = other_simplex.coord_simplex(complex.coords());
+            let other_simplex = other_simplex.coord_simplex(&coords);
             let discret = discretize_form_on_simplex(&whitney_form, &other_simplex);
             let expected = Sign::Pos.as_f64() * are_equal as usize as f64;
             let diff = (discret - expected).abs();

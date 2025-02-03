@@ -1,11 +1,10 @@
+use crate::coord::MeshVertexCoords;
+
 use index_algebra::sign::Sign;
 use topology::{simplex::Simplex, skeleton::TopologySkeleton};
 
-use super::CoordSkeleton;
-use crate::coord::VertexCoords;
-
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
+pub fn gmsh2coord_mesh(bytes: &[u8]) -> (TopologySkeleton, MeshVertexCoords) {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
@@ -15,7 +14,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
     .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]))
     .collect();
   let mesh_vertices = na::DMatrix::from_columns(&mesh_vertices);
-  let mesh_vertices = VertexCoords::new(mesh_vertices);
+  let mesh_vertices = MeshVertexCoords::new(mesh_vertices);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();
@@ -61,5 +60,5 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> CoordSkeleton {
     .collect();
   let skeleton = TopologySkeleton::new(skeleton);
 
-  CoordSkeleton::new(skeleton, mesh_vertices)
+  (skeleton, mesh_vertices)
 }

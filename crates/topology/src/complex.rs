@@ -53,7 +53,7 @@ impl TopologyComplex {
   pub fn local_complexes(&self) -> Vec<LocalComplex> {
     self
       .facets()
-      .iter()
+      .handle_iter()
       .map(|facet| facet.to_local_complex())
       .collect()
   }
@@ -69,7 +69,7 @@ impl TopologyComplex {
   pub fn boundary_faces(&self) -> KSimplexCollection<FaceCodim> {
     self
       .faces()
-      .iter()
+      .handle_iter()
       .filter(|f| f.anti_boundary().len() == 1)
       .collect()
   }
@@ -100,9 +100,14 @@ impl TopologyComplex {
   /// $diff^k: Delta_k -> Delta_(k-1)$
   pub fn boundary_operator(&self, dim: Dim) -> SparseMatrix {
     let sups = &self.skeleton(dim);
+
+    if dim == 0 {
+      return SparseMatrix::zeros(0, sups.len());
+    }
+
     let subs = &self.skeleton(dim - 1);
     let mut mat = SparseMatrix::zeros(subs.len(), sups.len());
-    for (isup, sup) in sups.iter().enumerate() {
+    for (isup, sup) in sups.handle_iter().enumerate() {
       let sup_boundary = sup.simplex_set().boundary();
       for sub in sup_boundary {
         let sign = sub.sign.as_f64();
@@ -145,7 +150,7 @@ impl TopologyComplex {
   }
 }
 
-pub const DIM_PRECOMPUTED: usize = 3;
+pub const DIM_PRECOMPUTED: usize = 4;
 
 pub static REFERENCE_COMPLEXES: LazyLock<Vec<TopologyComplex>> = LazyLock::new(|| {
   (0..=DIM_PRECOMPUTED)
@@ -158,7 +163,7 @@ pub static LOCAL_BOUNDARY_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> = Lazy
     .iter()
     .enumerate()
     .map(|(dim, complex)| {
-      (1..=dim)
+      (0..=dim)
         .map(|sub_dim| complex.boundary_operator(sub_dim).to_nalgebra_dense())
         .collect()
     })
@@ -174,12 +179,12 @@ mod test {
   fn incidence() {
     let dim = 3;
     let complex = TopologyComplex::standard(dim);
-    let facet = complex.facets().iter().next().unwrap();
+    let facet = complex.facets().handle_iter().next().unwrap();
 
     // print
     for dim_sub in 0..=dim {
       let skeleton = complex.skeleton(dim_sub);
-      for simp in skeleton.iter() {
+      for simp in skeleton.handle_iter() {
         let simp_vertices = simp.simplex_set();
         print!("{simp_vertices:?},");
       }

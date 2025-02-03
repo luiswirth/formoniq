@@ -6,10 +6,10 @@ use geometry::coord::manifold::dim3::mesh_sphere_surface;
 
 fn main() {
   let triangle_mesh = mesh_sphere_surface(6);
-  let coord_mesh = triangle_mesh.clone().into_coord_complex();
-  let metric_mesh = coord_mesh.to_metric_complex();
+  let (topology, coords) = triangle_mesh.clone().into_coord_complex();
+  let metric = coords.to_edge_lengths(&topology);
 
-  let spectrum = laplace_beltrami::solve_laplace_beltrami_evp(&metric_mesh, 10);
+  let spectrum = laplace_beltrami::solve_laplace_beltrami_evp(&topology, &metric, 10);
 
   for (i, (&eigenval, eigenfunc)) in spectrum.0.iter().zip(spectrum.1).enumerate() {
     println!("eigenval={eigenval:.2}");

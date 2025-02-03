@@ -3,7 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use common::linalg::assert_mat_eq;
 use formoniq::operators::{self, ElMatProvider};
-use geometry::metric::manifold::{local::LocalMetricComplex, ref_vol};
+use geometry::metric::{ref_vol, SimplexGeometry};
 use topology::Dim;
 
 fn check_ref_elmat<F>(elmat: impl ElMatProvider, ref_elmat: F)
@@ -15,7 +15,7 @@ where
       continue;
     };
 
-    let refcell = LocalMetricComplex::reference(dim);
+    let refcell = SimplexGeometry::standard(dim);
     let computed_elmat = elmat.eval(&refcell);
 
     assert_mat_eq(&computed_elmat, &expected_elmat, None);

@@ -97,6 +97,11 @@ impl<D: DimInfoProvider> Cochain<D> {
   pub fn new(dim: D, coeffs: na::DVector<f64>) -> Self {
     Self { dim, coeffs }
   }
+  pub fn zero(dim: D, topology: &TopologyComplex) -> Self {
+    let ncoeffs = topology.nsimplicies(dim);
+    let coeffs = na::DVector::zeros(ncoeffs);
+    Self::new(dim, coeffs)
+  }
 
   pub fn coeffs(&self) -> &na::DVector<f64> {
     &self.coeffs
