@@ -1,8 +1,8 @@
-use super::CoordSkeleton;
-use crate::coord::VertexCoords;
+use crate::coord::MeshVertexCoords;
 
 use index_algebra::{factorial, IndexSet};
 use topology::{
+  complex::TopologyComplex,
   simplex::{Simplex, SortedSimplex},
   skeleton::TopologySkeleton,
   Dim,
@@ -156,12 +156,18 @@ impl CartesianMesh {
 }
 
 impl CartesianMesh {
-  pub fn compute_coord_manifold(&self) -> CoordSkeleton {
+  pub fn compute_coord_complex(&self) -> (TopologyComplex, MeshVertexCoords) {
+    let (skeleton, coords) = self.compute_coord_facets();
+    let complex = TopologyComplex::from_facet_skeleton(skeleton);
+    (complex, coords)
+  }
+
+  pub fn compute_coord_facets(&self) -> (TopologySkeleton, MeshVertexCoords) {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
     }
-    let coords = VertexCoords::new(coords);
+    let coords = MeshVertexCoords::new(coords);
 
     let nboxes = self.ncells();
     let nboxes_axis = self.ncells_axis();
@@ -203,7 +209,7 @@ impl CartesianMesh {
     }
 
     let skeleton = TopologySkeleton::new(simplicies);
-    CoordSkeleton::new(skeleton, coords)
+    (skeleton, coords)
   }
 }
 
@@ -213,7 +219,7 @@ mod test {
 
   #[test]
   fn unit_cube_mesh() {
-    let mesh = CartesianMesh::new_unit(3, 1).compute_coord_manifold();
+    let (mesh, coords) = CartesianMesh::new_unit(3, 1).compute_coord_facets();
 
     #[rustfmt::skip]
     let expected_coords = na::DMatrix::from_column_slice(3, 8, &[
@@ -226,7 +232,7 @@ mod test {
       0., 1., 1.,
       1., 1., 1.,
     ]);
-    assert_eq!(*mesh.coords().matrix(), expected_coords);
+    assert_eq!(*coords.matrix(), expected_coords);
 
     let expected_facets = vec![
       &[0, 1, 3, 7],
@@ -237,7 +243,6 @@ mod test {
       &[0, 4, 6, 7],
     ];
     let facets: Vec<_> = mesh
-      .skeleton()
       .simplex_iter()
       .map(|s| s.vertices.clone().into_vec())
       .collect();
@@ -246,7 +251,7 @@ mod test {
 
   #[test]
   fn unit_square_mesh() {
-    let mesh = CartesianMesh::new_unit(2, 2).compute_coord_manifold();
+    let (mesh, coords) = CartesianMesh::new_unit(2, 2).compute_coord_facets();
 
     #[rustfmt::skip]
     let expected_coords = na::DMatrix::from_column_slice(2, 9, &[
@@ -260,7 +265,7 @@ mod test {
       0.5, 1.0,
       1.0, 1.0,
     ]);
-    assert_eq!(*mesh.coords().matrix(), expected_coords);
+    assert_eq!(*coords.matrix(), expected_coords);
 
     let expected_simplicies = vec![
       &[0, 1, 4],
@@ -273,7 +278,6 @@ mod test {
       &[4, 7, 8],
     ];
     let facets: Vec<_> = mesh
-      .skeleton()
       .simplex_iter()
       .map(|s| s.vertices.clone().into_vec())
       .collect();

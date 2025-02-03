@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::{
   assemble::{self, GalMat},
   operators::{self, FeFunction},
@@ -7,27 +5,62 @@ use crate::{
 
 use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
 use exterior::ExteriorGrade;
-use geometry::metric::manifold::MetricComplex;
+use geometry::metric::MeshEdgeLengths;
 use itertools::Itertools;
+use topology::complex::TopologyComplex;
+
+use std::mem;
+
+pub struct MixedGalmats {
+  mass_sigma: GalMat,
+  dif_sigma: GalMat,
+  codif_u: GalMat,
+  difdif_u: GalMat,
+  mass_u: GalMat,
+}
+impl MixedGalmats {
+  pub fn compute(
+    topology: &TopologyComplex,
+    geometry: &MeshEdgeLengths,
+    grade: ExteriorGrade,
+  ) -> Self {
+    let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
+      (
+        assemble::assemble_galmat(topology, geometry, operators::HodgeMassElmat(grade - 1)),
+        assemble::assemble_galmat(topology, geometry, operators::DifElmat(grade)),
+        assemble::assemble_galmat(topology, geometry, operators::CodifElmat(grade)),
+      )
+    } else {
+      (GalMat::default(), GalMat::default(), GalMat::default())
+    };
+    let difdif_u = assemble::assemble_galmat(topology, geometry, operators::CodifDifElmat(grade));
+    let mass_u = assemble::assemble_galmat(topology, geometry, operators::HodgeMassElmat(grade));
+
+    Self {
+      mass_sigma,
+      dif_sigma,
+      codif_u,
+      difdif_u,
+      mass_u,
+    }
+  }
+}
 
 pub fn solve_hodge_laplace_source(
-  mesh: &MetricComplex,
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
   source_data: FeFunction,
 ) -> (FeFunction, FeFunction, FeFunction) {
-  let harmonics = solve_hodge_laplace_harmonics(mesh, grade);
+  let harmonics = solve_hodge_laplace_harmonics(topology, geometry, grade);
 
-  let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-    (
-      assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade - 1)),
-      assemble::assemble_galmat(mesh, operators::DifElmat(grade)),
-      assemble::assemble_galmat(mesh, operators::CodifElmat(grade)),
-    )
-  } else {
-    (GalMat::default(), GalMat::default(), GalMat::default())
-  };
-  let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(grade));
-  let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade));
+  let MixedGalmats {
+    mass_sigma,
+    dif_sigma,
+    codif_u,
+    difdif_u,
+    mass_u,
+  } = MixedGalmats::compute(topology, geometry, grade);
 
   let mass_u = mass_u.to_nalgebra_csr();
   let mass_harmonics = &mass_u * &harmonics;
@@ -100,13 +133,14 @@ pub fn solve_hodge_laplace_source(
 }
 
 pub fn solve_hodge_laplace_harmonics(
-  mesh: &MetricComplex,
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
 ) -> na::DMatrix<f64> {
   // TODO: improve this!
   // first of all find exactly all eigenvectors with eigenval 0
   // use simplical homology to determine number of harmonics
-  let (eigenvals, eigenfuncs) = solve_hodge_laplace_evp(mesh, grade, 10);
+  let (eigenvals, eigenfuncs) = solve_hodge_laplace_evp(topology, geometry, grade, 10);
 
   println!("{eigenvals}");
 
@@ -121,7 +155,7 @@ pub fn solve_hodge_laplace_harmonics(
     .map(|(i, _)| i)
     .collect_vec();
 
-  let nwhitneys = mesh.topology().nsimplicies(grade);
+  let nwhitneys = topology.nsimplicies(grade);
   let mut harmonics = na::DMatrix::zeros(nwhitneys, harmonic_indices.len());
   for (icol, iharmonic) in harmonic_indices.into_iter().enumerate() {
     harmonics.set_column(icol, &eigenfuncs.column(iharmonic));
@@ -130,21 +164,18 @@ pub fn solve_hodge_laplace_harmonics(
 }
 
 pub fn solve_hodge_laplace_evp(
-  mesh: &MetricComplex,
+  topology: &TopologyComplex,
+  geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
-  let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-    (
-      assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade - 1)),
-      assemble::assemble_galmat(mesh, operators::DifElmat(grade)),
-      assemble::assemble_galmat(mesh, operators::CodifElmat(grade)),
-    )
-  } else {
-    (GalMat::default(), GalMat::default(), GalMat::default())
-  };
-  let difdif_u = assemble::assemble_galmat(mesh, operators::CodifDifElmat(grade));
-  let mass_u = assemble::assemble_galmat(mesh, operators::HodgeMassElmat(grade));
+  let MixedGalmats {
+    mass_sigma,
+    dif_sigma,
+    codif_u,
+    difdif_u,
+    mass_u,
+  } = MixedGalmats::compute(topology, geometry, grade);
 
   let mut lhs = SparseMatrix::zeros(
     mass_sigma.nrows() + difdif_u.nrows(),

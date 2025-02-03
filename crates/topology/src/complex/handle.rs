@@ -1,4 +1,9 @@
-use crate::{simplex::SortedSimplex, Dim};
+use index_algebra::variants::CanonicalOrder;
+
+use crate::{
+  simplex::{Simplex, SortedSimplex},
+  Dim,
+};
 
 use super::{
   attribute::SparseSignChain,
@@ -289,7 +294,10 @@ impl<'m, D: DimInfoProvider> SkeletonHandle<'m, D> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
 
-  pub fn iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m, D>> + '_ {
+  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m, D>> + '_ {
     (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
+  }
+  pub fn set_iter(&self) -> impl ExactSizeIterator<Item = &Simplex<CanonicalOrder>> + '_ {
+    self.handle_iter().map(|s| s.simplex_set())
   }
 }

@@ -265,7 +265,7 @@ mod test {
     use super::*;
 
     for dim in 0..=3 {
-      let metric = RiemannianMetric::euclidean(dim);
+      let metric = RiemannianMetric::standard(dim);
 
       let primal = IndexSet::new(vec![]).assume_sorted().ext(dim);
       let dual = primal.hodge_star(&metric);
@@ -279,7 +279,7 @@ mod test {
   #[test]
   fn multi_form_gramian_euclidean() {
     for n in 0..=3 {
-      let metric = RiemannianMetric::euclidean(n);
+      let metric = RiemannianMetric::standard(n);
       for k in 0..=n {
         let binomial = binomial(n, k);
         let expected_gram = na::DMatrix::identity(binomial, binomial);

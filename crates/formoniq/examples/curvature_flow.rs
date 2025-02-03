@@ -7,7 +7,7 @@ use common::util::FaerCholesky;
 use formoniq::{assemble, operators};
 use geometry::coord::{
   manifold::dim3::{write_3dmesh_animation, TriangleSurface3D},
-  VertexCoords,
+  MeshVertexCoords,
 };
 
 #[allow(unused_imports)]
@@ -22,11 +22,11 @@ fn main() {
   let surface = TriangleSurface3D::from_obj_string(&obj_string);
   std::fs::write("out/curvature_flow.obj", surface.to_obj_string()).unwrap();
 
-  let coord_mesh = surface.into_coord_skeleton().into_coord_complex();
-  let mut mesh = coord_mesh.to_metric_complex();
-  let nvertices = mesh.topology().vertices().len();
+  let (topology, coords) = surface.into_coord_complex();
+  let mut metric = coords.to_edge_lengths(&topology);
+  let nvertices = topology.vertices().len();
 
-  let mut coords_list = vec![coord_mesh.coords().clone()];
+  let mut coords_list = vec![coords];
 
   let dt = 1e-3;
   let nsteps = 10;
@@ -35,8 +35,8 @@ fn main() {
   for istep in 0..nsteps {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
-    let laplace = assemble::assemble_galmat(&mesh, operators::LaplaceBeltramiElmat);
-    let mass = assemble::assemble_galmat(&mesh, operators::ScalarMassElmat);
+    let laplace = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat);
+    let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
     let source = na::DVector::zeros(nvertices);
 
     let coords_initial = coords_list.first().unwrap();
@@ -51,8 +51,8 @@ fn main() {
       let mut source = source.clone();
 
       let boundary_data = |inode| comps_initial[inode];
-      assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut laplace, &mut source);
-      assemble::enforce_dirichlet_bc(mesh.topology(), boundary_data, &mut mass, &mut source);
+      assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut laplace, &mut source);
+      assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut mass, &mut source);
 
       let laplace = laplace.to_nalgebra_csr();
       let mass = mass.to_nalgebra_csr();
@@ -65,14 +65,8 @@ fn main() {
       coords_new.row_mut(d).copy_from(&comps_new);
     }
 
-    let coords_new = VertexCoords::new(coords_new);
-    *mesh.edge_lengths_mut() = coords_new.to_edge_lengths(
-      mesh
-        .topology()
-        .edges()
-        .iter()
-        .map(|e| e.simplex_set().vertices.clone().try_into().unwrap()),
-    );
+    let coords_new = MeshVertexCoords::new(coords_new);
+    metric = coords_new.to_edge_lengths(&topology);
     coords_list.push(coords_new);
   }
 

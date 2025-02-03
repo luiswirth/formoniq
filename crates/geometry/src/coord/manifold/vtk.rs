@@ -1,5 +1,4 @@
-use super::CoordSkeleton;
-
+use topology::skeleton::TopologySkeleton;
 use vtkio::{
   model::{
     Attributes, ByteOrder, CellType, Cells, UnstructuredGridPiece, Version, VertexNumbers, Vtk,
@@ -7,24 +6,24 @@ use vtkio::{
   IOBuffer,
 };
 
-pub fn embedded_mesh_to_vtk(facets: &CoordSkeleton) -> Vtk {
-  let cell_type = match facets.dim_intrinsic() {
+use crate::coord::MeshVertexCoords;
+
+pub fn embedded_mesh_to_vtk(facets: &TopologySkeleton, coords: &MeshVertexCoords) -> Vtk {
+  let cell_type = match facets.dim() {
     1 => CellType::Line,
     2 => CellType::Triangle,
     3 => CellType::Tetra,
     _ => panic!("Bad Mesh for VTK export"),
   };
 
-  let points = IOBuffer::new(facets.coords.matrix().iter().copied().collect());
+  let points = IOBuffer::new(coords.matrix().iter().copied().collect());
 
   let connectivity = facets
-    .topology
     .simplex_iter()
     .flat_map(|simp| simp.vertices.clone())
     .map(|i| i as u64)
     .collect();
   let offsets = facets
-    .topology
     .simplex_iter()
     .map(|simp| simp.nvertices() as u64)
     .scan(0, |offset, nverts| {
@@ -38,7 +37,7 @@ pub fn embedded_mesh_to_vtk(facets: &CoordSkeleton) -> Vtk {
     connectivity,
     offsets,
   };
-  let types = vec![cell_type; facets.topology.len()];
+  let types = vec![cell_type; facets.len()];
   let cells = Cells { cell_verts, types };
 
   let grid = UnstructuredGridPiece {

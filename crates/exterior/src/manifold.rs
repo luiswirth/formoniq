@@ -1,17 +1,17 @@
 use crate::dense::{DifferentialMultiForm, MultiForm, MultiVector};
 
-use geometry::coord::{
-  manifold::{CoordComplex, CoordSimplex},
-  CoordRef,
+use geometry::coord::{manifold::SimplexCoords, CoordRef, MeshVertexCoords};
+use topology::{
+  complex::{attribute::Cochain, TopologyComplex},
+  Dim,
 };
-use topology::{complex::attribute::Cochain, Dim};
 
 pub trait CoordSimplexExt {
   fn difbary(&self, i: usize) -> MultiForm;
   fn difbarys(&self) -> Vec<MultiForm>;
   fn spanning_multivector(&self) -> MultiVector;
 }
-impl CoordSimplexExt for CoordSimplex {
+impl CoordSimplexExt for SimplexCoords {
   fn spanning_multivector(&self) -> MultiVector {
     let vectors = self.spanning_vectors();
     let vectors = vectors
@@ -38,13 +38,13 @@ impl CoordSimplexExt for CoordSimplex {
 /// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
 pub fn discretize_form_on_mesh(
   form: &impl DifferentialMultiForm,
-  complex: &CoordComplex,
+  topology: &TopologyComplex,
+  coords: &MeshVertexCoords,
 ) -> Cochain<Dim> {
-  let cochain = complex
-    .topology()
+  let cochain = topology
     .skeleton(form.grade())
-    .iter()
-    .map(|simp| CoordSimplex::from_simplex_and_coords(simp.simplex_set(), complex.coords()))
+    .handle_iter()
+    .map(|simp| SimplexCoords::from_simplex_and_coords(simp.simplex_set(), coords))
     .map(|simp| discretize_form_on_simplex(form, &simp))
     .collect::<Vec<_>>()
     .into();
@@ -55,7 +55,7 @@ pub fn discretize_form_on_mesh(
 /// by means of a vertex based (trapezoidal?) quadrature rule.
 pub fn discretize_form_on_simplex(
   differential_form: &impl DifferentialMultiForm,
-  simplex: &CoordSimplex,
+  simplex: &SimplexCoords,
 ) -> f64 {
   let multivector = simplex.spanning_multivector();
   let f = |coord: CoordRef| {
@@ -63,19 +63,19 @@ pub fn discretize_form_on_simplex(
       .at_point(simplex.local_to_global_coord(coord).as_view())
       .on_multivector(&multivector)
   };
-  let std_simp = CoordSimplex::standard(simplex.dim_intrinsic());
+  let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());
   barycentric_quadrature(&f, &std_simp)
 }
 
 /// Integrates affine linear functions exactly.
-pub fn barycentric_quadrature<F>(f: &F, simplex: &CoordSimplex) -> f64
+pub fn barycentric_quadrature<F>(f: &F, simplex: &SimplexCoords) -> f64
 where
   F: Fn(CoordRef) -> f64,
 {
   simplex.vol() * f(simplex.barycenter().as_view())
 }
 
-pub fn vertex_quadature<F>(f: &F, simplex: &CoordSimplex) -> f64
+pub fn vertex_quadature<F>(f: &F, simplex: &SimplexCoords) -> f64
 where
   F: Fn(CoordRef) -> f64,
 {
@@ -83,7 +83,7 @@ where
   simplex.vol() * sum / simplex.nvertices() as f64
 }
 
-pub fn edge_midpoint_quadrature<F>(f: &F, simplex: &CoordSimplex) -> f64
+pub fn edge_midpoint_quadrature<F>(f: &F, simplex: &SimplexCoords) -> f64
 where
   F: Fn(CoordRef) -> f64,
 {

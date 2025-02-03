@@ -4,11 +4,9 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{
-  operators::{l2_norm, FeFunction},
-  problems::laplace_beltrami,
-};
-use geometry::{coord::manifold::cartesian::CartesianMesh, metric::manifold::MetricComplex};
+use formoniq::{fe::l2_norm, operators::FeFunction, problems::laplace_beltrami};
+use geometry::{coord::manifold::cartesian::CartesianMesh, metric::MeshEdgeLengths};
+use topology::complex::TopologyComplex;
 
 use std::f64::consts::TAU;
 
@@ -24,32 +22,27 @@ fn main() {
 
         // Mesh of hypercube $[0, tau]^d$.
         let box_mesh = CartesianMesh::new_unit_scaled(dim, nboxes_per_dim, TAU);
-        let coord_mesh = box_mesh.compute_coord_manifold();
+        let (topology, coords) = box_mesh.compute_coord_complex();
 
         // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
         let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
         let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
 
-        let anal_sol = coord_mesh
-          .coords()
-          .coord_iter()
-          .map(anal_sol)
-          .collect::<Vec<_>>()
-          .into();
+        let anal_sol = coords.coord_iter().map(anal_sol).collect::<Vec<_>>().into();
         let anal_sol = FeFunction::new(0, anal_sol);
 
-        let anal_lapl = coord_mesh
-          .coords()
+        let anal_lapl = coords
           .coord_iter()
           .map(anal_lapl)
           .collect::<Vec<_>>()
           .into();
         let anal_lapl = FeFunction::new(0, anal_lapl);
 
-        let mesh = coord_mesh.into_metric_complex();
+        let metric = coords.to_edge_lengths(&topology);
 
         PoissonWithSol {
-          mesh,
+          topology,
+          metric,
           solution_exact: anal_sol,
           load_data: anal_lapl,
         }
@@ -61,7 +54,8 @@ fn main() {
 }
 
 struct PoissonWithSol {
-  mesh: MetricComplex,
+  topology: TopologyComplex,
+  metric: MeshEdgeLengths,
   load_data: FeFunction,
   solution_exact: FeFunction,
 }
@@ -83,16 +77,18 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
   let mut errors = Vec::with_capacity(refined_setups.len());
   for (refinement_level, setup) in refined_setups.into_iter().enumerate() {
     let PoissonWithSol {
-      mesh,
+      topology,
+      metric,
       load_data,
       solution_exact,
     } = setup;
 
     let boundary_data = |ivertex| solution_exact[ivertex];
-    let galsol = laplace_beltrami::solve_laplace_beltrami_source(&mesh, load_data, boundary_data);
+    let galsol =
+      laplace_beltrami::solve_laplace_beltrami_source(&topology, &metric, load_data, boundary_data);
 
     // Compute L2 error and convergence rate.
-    let error = l2_norm(&(solution_exact - galsol), &mesh);
+    let error = l2_norm(&(solution_exact - galsol), &topology, &metric);
     let conv_rate = if let Some(&prev_error) = errors.last() {
       let quot: f64 = error / prev_error;
       -quot.log2()
@@ -101,8 +97,8 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     };
     errors.push(error);
 
-    let mesh_width = mesh.mesh_width_max();
-    let shape_regularity = mesh.shape_regularity_measure();
+    let mesh_width = metric.mesh_width_max();
+    let shape_regularity = metric.shape_regularity_measure(&topology);
 
     println!(
       "| {:>2} | {:>10.3e} | {:>10.3e} | {:>9.3e} | {:>9.2} |",
