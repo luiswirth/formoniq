@@ -5,7 +5,7 @@ pub mod local;
 
 use attribute::KSimplexCollection;
 use dim::{ConstCodim, ConstDim};
-use handle::{FaceCodim, FacetCodim, FacetIdx, VertexDim};
+use handle::{CellCodim, CellIdx, FacetCodim, VertexDim};
 use local::LocalComplex;
 
 use crate::{
@@ -30,7 +30,7 @@ pub type ComplexSkeleton = IndexMap<SortedSimplex, SimplexData>;
 
 #[derive(Default, Debug, Clone)]
 pub struct SimplexData {
-  pub cofacets: Vec<FacetIdx>,
+  pub cocells: Vec<CellIdx>,
 }
 
 impl TopologyComplex {
@@ -40,7 +40,7 @@ impl TopologyComplex {
 
   pub fn standard(dim: Dim) -> Self {
     let data = SimplexData {
-      cofacets: vec![FacetIdx::new_static(0)],
+      cocells: vec![CellIdx::new_static(0)],
     };
     let skeletons = graded_subsimplicies(dim)
       .map(|simps| simps.map(|simp| (simp, data.clone())).collect())
@@ -54,46 +54,46 @@ impl TopologyComplex {
 
   pub fn local_complexes(&self) -> Vec<LocalComplex> {
     self
-      .facets()
+      .cells()
       .handle_iter()
-      .map(|facet| facet.to_local_complex())
+      .map(|cell| cell.to_local_complex())
       .collect()
   }
 
   pub fn has_boundary(&self) -> bool {
-    !self.boundary_faces().is_empty()
+    !self.boundary_facets().is_empty()
   }
 
-  /// For a d-mesh computes the boundary, which consists of faces ((d-1)-subs).
+  /// For a d-mesh computes the boundary, which consists of facets ((d-1)-subs).
   ///
-  /// The boundary faces are characterized by the fact that they
-  /// only have 1 facet as super entity.
-  pub fn boundary_faces(&self) -> KSimplexCollection<FaceCodim> {
+  /// The boundary facets are characterized by the fact that they
+  /// only have 1 cell as super entity.
+  pub fn boundary_facets(&self) -> KSimplexCollection<FacetCodim> {
     self
-      .faces()
+      .facets()
       .handle_iter()
       .filter(|f| f.anti_boundary().len() == 1)
       .collect()
   }
 
-  pub fn boundary_facets(&self) -> KSimplexCollection<FacetCodim> {
-    let facets = self
-      .boundary_faces()
+  pub fn boundary_cells(&self) -> KSimplexCollection<CellCodim> {
+    let cells = self
+      .boundary_facets()
       .handle_iter(self)
-      // the boundary has only one parent facet by definition
-      .map(|face| face.anti_boundary().kidxs()[0])
+      // the boundary has only one parent cell by definition
+      .map(|facet| facet.anti_boundary().kidxs()[0])
       .unique()
       .collect();
-    KSimplexCollection::new(facets, ConstCodim)
+    KSimplexCollection::new(cells, ConstCodim)
   }
 
   /// The vertices that lie on the boundary of the mesh.
   /// No particular order of vertices.
   pub fn boundary_vertices(&self) -> KSimplexCollection<VertexDim> {
     let vertices = self
-      .boundary_faces()
+      .boundary_facets()
       .handle_iter(self)
-      .flat_map(|face| face.simplex_set().vertices.clone())
+      .flat_map(|facet| facet.simplex_set().vertices.clone())
       .unique()
       .collect();
     KSimplexCollection::new(vertices, ConstDim)
@@ -122,16 +122,16 @@ impl TopologyComplex {
 }
 
 impl TopologyComplex {
-  pub fn from_facet_skeleton(facets: TopologySkeleton) -> Self {
-    let dim = facets.dim();
-    let facets = facets.into_simplicies();
+  pub fn from_cell_skeleton(cells: TopologySkeleton) -> Self {
+    let dim = cells.dim();
+    let cells = cells.into_simplicies();
 
     let mut skeletons = vec![ComplexSkeleton::new(); dim + 1];
-    for (ifacet, facet) in facets.iter().enumerate() {
+    for (icell, cell) in cells.iter().enumerate() {
       for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
-        for sub in facet.subsimps(dim_sub) {
+        for sub in cell.subsimps(dim_sub) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
-          sub.cofacets.push(FacetIdx::new_static(ifacet));
+          sub.cocells.push(CellIdx::new_static(icell));
         }
       }
     }
@@ -141,9 +141,9 @@ impl TopologyComplex {
     skeletons[0].sort_by(|v0, _, v1, _| v0.vertices[0].cmp(&v1.vertices[0]));
 
     // Topology checks.
-    let faces = &skeletons[dim - 1];
-    for (_, SimplexData { cofacets }) in faces {
-      let nparents = cofacets.len();
+    let facets = &skeletons[dim - 1];
+    for (_, SimplexData { cocells }) in facets {
+      let nparents = cocells.len();
       let is_manifold = nparents == 2 || nparents == 1;
       assert!(is_manifold, "Topology must be manifold.");
     }
@@ -181,7 +181,7 @@ mod test {
   fn incidence() {
     let dim = 3;
     let complex = TopologyComplex::standard(dim);
-    let facet = complex.facets().handle_iter().next().unwrap();
+    let cell = complex.cells().handle_iter().next().unwrap();
 
     // print
     for dim_sub in 0..=dim {
@@ -193,11 +193,11 @@ mod test {
       println!();
     }
 
-    let facet_simplex = Simplex::standard(dim);
+    let cell_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
-      let subs: Vec<_> = facet.subsimps(dim_sub).collect();
+      let subs: Vec<_> = cell.subsimps(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
-      let subs_vertices: Vec<_> = facet_simplex.subsimps(dim_sub).collect();
+      let subs_vertices: Vec<_> = cell_simplex.subsimps(dim_sub).collect();
       assert_eq!(
         subs
           .iter()
@@ -216,7 +216,7 @@ mod test {
             .collect::<Vec<_>>();
           sups_vertices
             .iter()
-            .all(|sup| sub_vertices.is_subsimp_of(sup) && sup.is_subsimp_of(&facet_simplex));
+            .all(|sup| sub_vertices.is_subsimp_of(sup) && sup.is_subsimp_of(&cell_simplex));
         }
       }
     }

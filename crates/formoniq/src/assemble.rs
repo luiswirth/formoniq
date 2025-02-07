@@ -22,12 +22,12 @@ pub fn assemble_galmat(
   let nsimps_col = topology.skeleton(col_grade).len();
 
   let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
-  for facet in topology.facets().handle_iter() {
-    let geo = geometry.simplex_geometry(facet);
+  for cell in topology.cells().handle_iter() {
+    let geo = geometry.simplex_geometry(cell);
     let elmat = elmat.eval(&geo);
 
-    let row_subs: Vec<_> = facet.subsimps(row_grade).collect();
-    let col_subs: Vec<_> = facet.subsimps(col_grade).collect();
+    let row_subs: Vec<_> = cell.subsimps(row_grade).collect();
+    let col_subs: Vec<_> = cell.subsimps(col_grade).collect();
     for (ilocal, &iglobal) in row_subs.iter().enumerate() {
       for (jlocal, &jglobal) in col_subs.iter().enumerate() {
         galmat.push(iglobal.kidx(), jglobal.kidx(), elmat[(ilocal, jlocal)]);
@@ -48,11 +48,11 @@ pub fn assemble_galvec(
   let nsimps = topology.skeleton(grade).len();
   let mut galvec = na::DVector::zeros(nsimps);
 
-  for facet in topology.facets().handle_iter() {
-    let geo = geometry.simplex_geometry(facet);
+  for cell in topology.cells().handle_iter() {
+    let geo = geometry.simplex_geometry(cell);
     let elvec = elvec.eval(&geo);
 
-    let subs: Vec<_> = facet.subsimps(grade).collect();
+    let subs: Vec<_> = cell.subsimps(grade).collect();
     for (ilocal, &iglobal) in subs.iter().enumerate() {
       galvec[iglobal.kidx()] += elvec[ilocal];
     }
