@@ -3,8 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::{
   fe::{
-    evaluate_fe_function_at_facet_barycenters, evaluate_fe_function_facets_vertices,
-    write_evaluations,
+    evaluate_fe_function_at_cell_barycenters, evaluate_fe_function_cell_vertices, write_evaluations,
   },
   operators::FeFunction,
   problems::hodge_laplace,
@@ -30,9 +29,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let neigen = 10;
 
   let ncells_axis = 3;
-  let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_facets();
+  let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_cells();
   let triangle_mesh = TriangleSurface3D::from_coord_skeleton(topology.clone(), coords.clone());
-  let topology = TopologyComplex::from_facet_skeleton(topology);
+  let topology = TopologyComplex::from_cell_skeleton(topology);
   let metric = coords.to_edge_lengths(&topology);
 
   let (eigenvals, eigenfuncs) =
@@ -42,29 +41,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("eigenval={eigenval:.3}");
     let eigenfunc = FeFunction::new(grade, eigenfunc.into_owned());
 
-    let facet_evals = evaluate_fe_function_facets_vertices(&eigenfunc, &topology, &coords);
-    println!("{facet_evals:#?}");
+    let cell_evals = evaluate_fe_function_cell_vertices(&eigenfunc, &topology, &coords);
+    println!("{cell_evals:#?}");
 
     let file = File::create(format!("{path}/coords.txt"))?;
     let writer = BufWriter::new(file);
     write_coords(writer, &coords)?;
 
-    let file = File::create(format!("{path}/facets.txt"))?;
+    let file = File::create(format!("{path}/cells.txt"))?;
     let writer = BufWriter::new(file);
-    write_simplicies(writer, topology.facets().set_iter())?;
+    write_simplicies(writer, topology.cells().set_iter())?;
 
     let file = File::create(format!("{path}/evaluations.txt"))?;
     let writer = BufWriter::new(file);
-    write_evaluations(writer, &facet_evals)?;
+    write_evaluations(writer, &cell_evals)?;
 
     let mut displacements = na::DVector::zeros(coords.nvertices());
-    let facet_values = evaluate_fe_function_at_facet_barycenters(&eigenfunc, &topology, &coords);
-    for facet in topology.facets().handle_iter() {
-      let value = &facet_values[facet.kidx()];
+    let cell_values = evaluate_fe_function_at_cell_barycenters(&eigenfunc, &topology, &coords);
+    for cell in topology.cells().handle_iter() {
+      let value = &cell_values[cell.kidx()];
       let norm = value.coeffs().norm();
 
-      for vertex in facet.vertices() {
-        displacements[vertex.kidx()] += norm / vertex.cofacets().count() as f64;
+      for vertex in cell.vertices() {
+        displacements[vertex.kidx()] += norm / vertex.cocells().count() as f64;
       }
     }
 

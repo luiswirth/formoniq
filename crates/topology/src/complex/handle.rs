@@ -7,30 +7,30 @@ use crate::{
 
 use super::{
   attribute::SparseSignChain,
-  dim::{ConstCodim, ConstDim, DimInfoProvider},
+  dim::{ConstCodim, ConstDim, RelDimTrait},
   local::LocalComplex,
   ComplexSkeleton, SimplexData, TopologyComplex,
 };
 
 pub type VertexDim = ConstDim<0>;
 pub type EdgeDim = ConstDim<1>;
-pub type FaceCodim = ConstCodim<1>;
-pub type FacetCodim = ConstCodim<0>;
+pub type FacetCodim = ConstCodim<1>;
+pub type CellCodim = ConstCodim<0>;
 
 pub type VertexIdx = SimplexIdx<VertexDim>;
 pub type EdgeIdx = SimplexIdx<EdgeDim>;
-pub type FaceIdx = SimplexIdx<FaceCodim>;
 pub type FacetIdx = SimplexIdx<FacetCodim>;
+pub type CellIdx = SimplexIdx<CellCodim>;
 
 pub type VertexHandle<'c> = SimplexHandle<'c, VertexDim>;
 pub type EdgeHandle<'c> = SimplexHandle<'c, EdgeDim>;
-pub type FaceHandle<'c> = SimplexHandle<'c, FaceCodim>;
 pub type FacetHandle<'c> = SimplexHandle<'c, FacetCodim>;
+pub type CellHandle<'c> = SimplexHandle<'c, CellCodim>;
 
 pub type VerticesHandle<'c> = SkeletonHandle<'c, VertexDim>;
 pub type EdgesHandle<'c> = SkeletonHandle<'c, EdgeDim>;
-pub type FacesHandle<'c> = SkeletonHandle<'c, FaceCodim>;
 pub type FacetsHandle<'c> = SkeletonHandle<'c, FacetCodim>;
+pub type CellsHandle<'c> = SkeletonHandle<'c, CellCodim>;
 
 pub type KSimplexIdx = usize;
 
@@ -38,10 +38,10 @@ impl TopologyComplex {
   pub fn skeletons(&self) -> impl Iterator<Item = SkeletonHandle<Dim>> {
     (0..=self.dim()).map(|d| SkeletonHandle::new(self, d))
   }
-  pub fn skeleton<D: DimInfoProvider>(&self, dim: D) -> SkeletonHandle<D> {
+  pub fn skeleton<D: RelDimTrait>(&self, dim: D) -> SkeletonHandle<D> {
     SkeletonHandle::new(self, dim)
   }
-  pub fn nsimplicies<D: DimInfoProvider>(&self, dim: D) -> usize {
+  pub fn nsimplicies<D: RelDimTrait>(&self, dim: D) -> usize {
     self.skeleton(dim).len()
   }
   pub fn vertices(&self) -> VerticesHandle {
@@ -50,20 +50,20 @@ impl TopologyComplex {
   pub fn edges(&self) -> EdgesHandle {
     self.skeleton(ConstDim)
   }
-  pub fn faces(&self) -> FacesHandle {
+  pub fn facets(&self) -> FacetsHandle {
     self.skeleton(ConstCodim)
   }
-  pub fn facets(&self) -> FacetsHandle {
+  pub fn cells(&self) -> CellsHandle {
     self.skeleton(ConstCodim)
   }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct SimplexIdx<D: DimInfoProvider> {
+pub struct SimplexIdx<D: RelDimTrait> {
   pub dim: D,
   pub kidx: KSimplexIdx,
 }
-impl<D: DimInfoProvider> From<(D, KSimplexIdx)> for SimplexIdx<D> {
+impl<D: RelDimTrait> From<(D, KSimplexIdx)> for SimplexIdx<D> {
   fn from((dim, kidx): (D, KSimplexIdx)) -> Self {
     Self { dim, kidx }
   }
@@ -87,7 +87,7 @@ impl<const N: usize> SimplexIdx<ConstCodim<N>> {
   }
 }
 
-impl<D: DimInfoProvider> SimplexIdx<D> {
+impl<D: RelDimTrait> SimplexIdx<D> {
   pub fn new(dim: D, kidx: KSimplexIdx) -> Self {
     Self { dim, kidx }
   }
@@ -109,11 +109,11 @@ impl<D: DimInfoProvider> SimplexIdx<D> {
 }
 
 #[derive(Copy, Clone)]
-pub struct SimplexHandle<'c, D: DimInfoProvider> {
+pub struct SimplexHandle<'c, D: RelDimTrait> {
   complex: &'c TopologyComplex,
   idx: SimplexIdx<D>,
 }
-impl<'m, D: DimInfoProvider> std::fmt::Debug for SimplexHandle<'m, D> {
+impl<'m, D: RelDimTrait> std::fmt::Debug for SimplexHandle<'m, D> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)
@@ -122,7 +122,7 @@ impl<'m, D: DimInfoProvider> std::fmt::Debug for SimplexHandle<'m, D> {
   }
 }
 
-impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
+impl<'m, D: RelDimTrait> SimplexHandle<'m, D> {
   pub fn new(complex: &'m TopologyComplex, idx: SimplexIdx<D>) -> Self {
     idx.assert_valid(complex);
     Self { complex, idx }
@@ -170,7 +170,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   pub fn anti_boundary(&self) -> SparseSignChain<Dim> {
     let mut idxs = Vec::new();
     let mut signs = Vec::new();
-    for parent in self.cofacets() {
+    for parent in self.cocells() {
       for sup in self.simplex_set().anti_boundary(parent.simplex_set()) {
         let sign = sup.sign;
         let idx = self
@@ -202,10 +202,10 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
     SparseSignChain::new(self.dim() - 1, idxs, signs)
   }
 
-  pub fn cofacets(&self) -> impl Iterator<Item = FacetHandle> + '_ {
+  pub fn cocells(&self) -> impl Iterator<Item = CellHandle> + '_ {
     self
       .simplex_data()
-      .cofacets
+      .cocells
       .iter()
       .map(|&cell_idx| cell_idx.handle(self.complex))
   }
@@ -228,7 +228,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   /// These are ordered lexicographically w.r.t.
   /// the local vertex indices.
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
-  pub fn subsimps<DSub: DimInfoProvider>(
+  pub fn subsimps<DSub: RelDimTrait>(
     &self,
     dim_sub: DSub,
   ) -> impl Iterator<Item = SimplexHandle<DSub>> {
@@ -243,10 +243,10 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   ///
   /// These are ordered first by cell index and then
   /// by lexicographically w.r.t. the local vertex indices.
-  pub fn sups<DSup: DimInfoProvider>(&self, dim_sup: DSup) -> Vec<SimplexHandle<DSup>> {
+  pub fn sups<DSup: RelDimTrait>(&self, dim_sup: DSup) -> Vec<SimplexHandle<DSup>> {
     let dim_sup_dyn = dim_sup.dim(self.complex().dim());
     self
-      .cofacets()
+      .cocells()
       .flat_map(|parent| {
         self
           .simplex_set()
@@ -257,32 +257,32 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
   }
 }
 
-impl<D: DimInfoProvider> PartialEq for SimplexHandle<'_, D> {
+impl<D: RelDimTrait> PartialEq for SimplexHandle<'_, D> {
   fn eq(&self, other: &Self) -> bool {
     std::ptr::eq(self.complex, other.complex) && self.idx == other.idx
   }
 }
-impl<D: DimInfoProvider> Eq for SimplexHandle<'_, D> {}
+impl<D: RelDimTrait> Eq for SimplexHandle<'_, D> {}
 
-impl<D: DimInfoProvider> std::hash::Hash for SimplexHandle<'_, D> {
+impl<D: RelDimTrait> std::hash::Hash for SimplexHandle<'_, D> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     (self.complex as *const TopologyComplex).hash(state);
     self.idx.hash(state);
   }
 }
 
-impl<'m> FacetHandle<'m> {
+impl<'m> CellHandle<'m> {
   pub fn to_local_complex(&self) -> LocalComplex {
-    LocalComplex::from_facet(*self)
+    LocalComplex::from_cell(*self)
   }
 }
 
-pub struct SkeletonHandle<'m, D: DimInfoProvider> {
+pub struct SkeletonHandle<'m, D: RelDimTrait> {
   complex: &'m TopologyComplex,
   dim: D,
 }
 
-impl<'m, D: DimInfoProvider> SkeletonHandle<'m, D> {
+impl<'m, D: RelDimTrait> SkeletonHandle<'m, D> {
   pub fn new(complex: &'m TopologyComplex, dim: D) -> Self {
     dim.assert_valid(complex.dim());
     Self { complex, dim }

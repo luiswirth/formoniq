@@ -1,5 +1,5 @@
 use super::{
-  handle::{FacetHandle, KSimplexIdx},
+  handle::{CellHandle, KSimplexIdx},
   REFERENCE_COMPLEXES,
 };
 use crate::Dim;
@@ -15,9 +15,9 @@ impl LocalComplex {
     Self { skeletons }
   }
 
-  pub fn from_facet(facet: FacetHandle) -> Self {
-    let subs = (0..=facet.dim())
-      .map(|dim_sub| facet.subsimps(dim_sub).map(|sub| sub.kidx()).collect())
+  pub fn from_cell(cell: CellHandle) -> Self {
+    let subs = (0..=cell.dim())
+      .map(|dim_sub| cell.subsimps(dim_sub).map(|sub| sub.kidx()).collect())
       .collect();
     Self::new(subs)
   }

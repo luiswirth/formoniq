@@ -65,7 +65,7 @@ impl TriangleSurface3D {
 
   pub fn into_coord_complex(self) -> (TopologyComplex, MeshVertexCoords) {
     let (skeleton, coords) = self.into_coord_skeleton();
-    let complex = TopologyComplex::from_facet_skeleton(skeleton);
+    let complex = TopologyComplex::from_cell_skeleton(skeleton);
     (complex, coords)
   }
 

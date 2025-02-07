@@ -11,20 +11,20 @@ use topology::{simplex::Simplex, Dim};
 ///
 /// Can be evaluated on local coordinates.
 pub struct WhitneyForm<O: SetOrder> {
-  coord_facet: SimplexCoords,
+  cell_coords: SimplexCoords,
   associated_subsimp: Simplex<O>,
   difbarys: Vec<MultiForm>,
 }
 impl<O: SetOrder> WhitneyForm<O> {
-  pub fn new(coord_facet: SimplexCoords, associated_subsimp: Simplex<O>) -> Self {
+  pub fn new(cell_coords: SimplexCoords, associated_subsimp: Simplex<O>) -> Self {
     let difbarys = associated_subsimp
       .vertices
       .iter()
-      .map(|vertex| coord_facet.difbary(vertex))
+      .map(|vertex| cell_coords.difbary(vertex))
       .collect();
 
     Self {
-      coord_facet,
+      cell_coords,
       associated_subsimp,
       difbarys,
     }
@@ -59,7 +59,7 @@ impl<O: SetOrder> WhitneyForm<O> {
 impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
   type Variance = variance::Co;
   fn dim(&self) -> Dim {
-    self.coord_facet.dim_embedded()
+    self.cell_coords.dim_embedded()
   }
   fn grade(&self) -> ExteriorGrade {
     self.associated_subsimp.dim()
@@ -67,7 +67,7 @@ impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
   fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> ExteriorElement<Self::Variance> {
     let coord_global = coord_global.into();
     assert_eq!(coord_global.len(), self.dim());
-    let barys = self.coord_facet.global_to_bary_coord(coord_global);
+    let barys = self.cell_coords.global_to_bary_coord(coord_global);
 
     let dim = self.dim();
     let grade = self.grade();
@@ -98,13 +98,13 @@ mod test {
       let topology = TopologyComplex::standard(dim);
       let coords = MeshVertexCoords::standard(dim);
 
-      let facet = topology.facets().get_by_kidx(0);
-      let facet_coords = facet.coord_simplex(&coords);
+      let cell = topology.cells().get_by_kidx(0);
+      let cell_coords = cell.coord_simplex(&coords);
 
       for grade in 0..=dim {
         for this_simp in topology.skeleton(grade).handle_iter() {
           let this_simpset = this_simp.simplex_set().clone();
-          let whitney_form = WhitneyForm::new(facet_coords.clone(), this_simpset);
+          let whitney_form = WhitneyForm::new(cell_coords.clone(), this_simpset);
 
           for other_simplex in topology.skeleton(grade).handle_iter() {
             let are_equal = this_simp == other_simplex;

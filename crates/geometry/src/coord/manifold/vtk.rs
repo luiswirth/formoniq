@@ -8,8 +8,8 @@ use vtkio::{
 
 use crate::coord::MeshVertexCoords;
 
-pub fn embedded_mesh_to_vtk(facets: &TopologySkeleton, coords: &MeshVertexCoords) -> Vtk {
-  let cell_type = match facets.dim() {
+pub fn embedded_mesh_to_vtk(cells: &TopologySkeleton, coords: &MeshVertexCoords) -> Vtk {
+  let cell_type = match cells.dim() {
     1 => CellType::Line,
     2 => CellType::Triangle,
     3 => CellType::Tetra,
@@ -18,12 +18,12 @@ pub fn embedded_mesh_to_vtk(facets: &TopologySkeleton, coords: &MeshVertexCoords
 
   let points = IOBuffer::new(coords.matrix().iter().copied().collect());
 
-  let connectivity = facets
+  let connectivity = cells
     .simplex_iter()
     .flat_map(|simp| simp.vertices.clone())
     .map(|i| i as u64)
     .collect();
-  let offsets = facets
+  let offsets = cells
     .simplex_iter()
     .map(|simp| simp.nvertices() as u64)
     .scan(0, |offset, nverts| {
@@ -37,7 +37,7 @@ pub fn embedded_mesh_to_vtk(facets: &TopologySkeleton, coords: &MeshVertexCoords
     connectivity,
     offsets,
   };
-  let types = vec![cell_type; facets.len()];
+  let types = vec![cell_type; cells.len()];
   let cells = Cells { cell_verts, types };
 
   let grid = UnstructuredGridPiece {

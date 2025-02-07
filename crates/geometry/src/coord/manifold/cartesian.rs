@@ -139,8 +139,8 @@ impl CartesianMeshInfo {
   pub fn boundary_vertices(&self) -> Vec<usize> {
     let mut r = Vec::new();
     for d in 0..self.dim() {
-      let nvertices_boundary_face = self.nvertices_axis().pow(self.dim() as u32 - 1);
-      for ivertex in 0..nvertices_boundary_face {
+      let nvertices_boundary_facet = self.nvertices_axis().pow(self.dim() as u32 - 1);
+      for ivertex in 0..nvertices_boundary_facet {
         let vertex_icart =
           linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim() - 1);
         let low_boundary = vertex_icart.clone().insert_row(d, 0);
@@ -157,12 +157,12 @@ impl CartesianMeshInfo {
 
 impl CartesianMeshInfo {
   pub fn compute_coord_complex(&self) -> (TopologyComplex, MeshVertexCoords) {
-    let (skeleton, coords) = self.compute_coord_facets();
-    let complex = TopologyComplex::from_facet_skeleton(skeleton);
+    let (skeleton, coords) = self.compute_coord_cells();
+    let complex = TopologyComplex::from_cell_skeleton(skeleton);
     (complex, coords)
   }
 
-  pub fn compute_coord_facets(&self) -> (TopologySkeleton, MeshVertexCoords) {
+  pub fn compute_coord_cells(&self) -> (TopologySkeleton, MeshVertexCoords) {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
@@ -219,7 +219,7 @@ mod test {
 
   #[test]
   fn unit_cube_mesh() {
-    let (mesh, coords) = CartesianMeshInfo::new_unit(3, 1).compute_coord_facets();
+    let (mesh, coords) = CartesianMeshInfo::new_unit(3, 1).compute_coord_cells();
 
     #[rustfmt::skip]
     let expected_coords = na::DMatrix::from_column_slice(3, 8, &[
@@ -234,7 +234,7 @@ mod test {
     ]);
     assert_eq!(*coords.matrix(), expected_coords);
 
-    let expected_facets = vec![
+    let expected_cells = vec![
       &[0, 1, 3, 7],
       &[0, 1, 5, 7],
       &[0, 2, 3, 7],
@@ -242,16 +242,16 @@ mod test {
       &[0, 4, 5, 7],
       &[0, 4, 6, 7],
     ];
-    let facets: Vec<_> = mesh
+    let cells: Vec<_> = mesh
       .simplex_iter()
       .map(|s| s.vertices.clone().into_vec())
       .collect();
-    assert_eq!(facets, expected_facets);
+    assert_eq!(cells, expected_cells);
   }
 
   #[test]
   fn unit_square_mesh() {
-    let (mesh, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_facets();
+    let (mesh, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_cells();
 
     #[rustfmt::skip]
     let expected_coords = na::DMatrix::from_column_slice(2, 9, &[
@@ -277,10 +277,10 @@ mod test {
       &[4, 5, 8],
       &[4, 7, 8],
     ];
-    let facets: Vec<_> = mesh
+    let cells: Vec<_> = mesh
       .simplex_iter()
       .map(|s| s.vertices.clone().into_vec())
       .collect();
-    assert_eq!(facets, expected_simplicies);
+    assert_eq!(cells, expected_simplicies);
   }
 }

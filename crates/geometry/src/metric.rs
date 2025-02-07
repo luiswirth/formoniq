@@ -4,7 +4,7 @@ use common::linalg::DMatrixExt;
 use index_algebra::{factorial, IndexSet};
 use itertools::Itertools;
 use topology::{
-  complex::{dim::DimInfoProvider, handle::SimplexHandle, TopologyComplex},
+  complex::{dim::RelDimTrait, handle::SimplexHandle, TopologyComplex},
   simplex::nsubsimplicies,
   Dim,
 };
@@ -256,21 +256,18 @@ impl MeshEdgeLengths {
   /// shape regularity measure over all cells.
   pub fn shape_regularity_measure(&self, topology: &TopologyComplex) -> f64 {
     topology
-      .facets()
+      .cells()
       .handle_iter()
-      .map(|facet| self.simplex_geometry(facet).shape_reguarity_measure())
+      .map(|cell| self.simplex_geometry(cell).shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
 
-  pub fn simplex_geometry<D: DimInfoProvider>(
-    &self,
-    simplex: SimplexHandle<'_, D>,
-  ) -> SimplexGeometry {
+  pub fn simplex_geometry<D: RelDimTrait>(&self, simplex: SimplexHandle<'_, D>) -> SimplexGeometry {
     self.simplex_edge_lengths(simplex).geometry()
   }
 
-  pub fn simplex_edge_lengths<D: DimInfoProvider>(
+  pub fn simplex_edge_lengths<D: RelDimTrait>(
     &self,
     simplex: SimplexHandle<'_, D>,
   ) -> SimplexEdgeLengths {

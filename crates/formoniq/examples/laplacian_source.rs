@@ -11,7 +11,7 @@ use exterior::{
   manifold::discretize_form_on_mesh,
 };
 use formoniq::{
-  fe::{evaluate_fe_function_facets_vertices, write_evaluations},
+  fe::{evaluate_fe_function_cell_vertices, write_evaluations},
   problems::hodge_laplace,
 };
 use geometry::coord::{manifold::cartesian::CartesianMeshInfo, write_coords, CoordRef};
@@ -32,9 +32,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let writer = BufWriter::new(file);
   write_coords(writer, &coords)?;
 
-  let file = File::create(format!("{path}/facets.txt"))?;
+  let file = File::create(format!("{path}/cells.txt"))?;
   let writer = BufWriter::new(file);
-  write_simplicies(writer, topology.facets().set_iter())?;
+  write_simplicies(writer, topology.cells().set_iter())?;
 
   let form_grade = 1;
   let source = Box::new(move |x: CoordRef| {
@@ -46,11 +46,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let source = DifferentialFormClosure::new(source, dim, form_grade);
   let source = discretize_form_on_mesh(&source, &topology, &coords);
 
-  let facet_evals = evaluate_fe_function_facets_vertices(&source, &topology, &coords);
+  let cell_evals = evaluate_fe_function_cell_vertices(&source, &topology, &coords);
 
   let file = File::create(format!("{path}/evaluations.txt"))?;
   let writer = BufWriter::new(file);
-  write_evaluations(writer, &facet_evals)?;
+  write_evaluations(writer, &cell_evals)?;
 
   //let ndofs = mesh.topology().skeleton(form_grade).len();
   //let source = na::DVector::from_element(ndofs, 1.0);

@@ -10,7 +10,7 @@ use common::linalg::DMatrixExt;
 use index_algebra::sign::Sign;
 use itertools::Itertools;
 use topology::{
-  complex::{dim::DimInfoProvider, handle::SimplexHandle, TopologyComplex},
+  complex::{dim::RelDimTrait, handle::SimplexHandle, TopologyComplex},
   simplex::Simplex,
   Dim,
 };
@@ -221,7 +221,7 @@ pub fn standard_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
 pub trait SimplexHandleExt {
   fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords;
 }
-impl<'c, D: DimInfoProvider> SimplexHandleExt for SimplexHandle<'c, D> {
+impl<'c, D: RelDimTrait> SimplexHandleExt for SimplexHandle<'c, D> {
   fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
     SimplexCoords::from_simplex_and_coords(self.simplex_set(), coords)
   }
