@@ -5,7 +5,7 @@ pub mod local;
 
 use attribute::KSimplexCollection;
 use dim::{ConstCodim, ConstDim};
-use handle::{FaceCodim, FacetCodim, KSimplexIdx, VertexDim};
+use handle::{FaceCodim, FacetCodim, FacetIdx, VertexDim};
 use local::LocalComplex;
 
 use crate::{
@@ -30,7 +30,7 @@ pub type ComplexSkeleton = IndexMap<SortedSimplex, SimplexData>;
 
 #[derive(Default, Debug, Clone)]
 pub struct SimplexData {
-  pub cofacets: Vec<KSimplexIdx>,
+  pub cofacets: Vec<FacetIdx>,
 }
 
 impl TopologyComplex {
@@ -39,7 +39,9 @@ impl TopologyComplex {
   }
 
   pub fn standard(dim: Dim) -> Self {
-    let data = SimplexData { cofacets: vec![0] };
+    let data = SimplexData {
+      cofacets: vec![FacetIdx::new_static(0)],
+    };
     let skeletons = graded_subsimplicies(dim)
       .map(|simps| simps.map(|simp| (simp, data.clone())).collect())
       .collect();
@@ -129,7 +131,7 @@ impl TopologyComplex {
       for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
         for sub in facet.subsimps(dim_sub) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
-          sub.cofacets.push(ifacet);
+          sub.cofacets.push(FacetIdx::new_static(ifacet));
         }
       }
     }

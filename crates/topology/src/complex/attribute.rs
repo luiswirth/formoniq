@@ -27,7 +27,9 @@ impl<D: DimInfoProvider> KSimplexCollection<D> {
     self.kidxs.iter().copied()
   }
   pub fn idx_iter(&self) -> impl ExactSizeIterator<Item = SimplexIdx<D>> + '_ {
-    self.kidx_iter().map(|kidx| SimplexIdx::new(self.dim, kidx))
+    self
+      .kidx_iter()
+      .map(|kidx| SimplexIdx::from((self.dim, kidx)))
   }
   pub fn handle_iter<'c>(
     &self,

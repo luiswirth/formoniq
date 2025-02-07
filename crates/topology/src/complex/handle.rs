@@ -68,10 +68,30 @@ impl<D: DimInfoProvider> From<(D, KSimplexIdx)> for SimplexIdx<D> {
     Self { dim, kidx }
   }
 }
+
+impl SimplexIdx<Dim> {
+  pub fn new_dyn(dim: Dim, kidx: KSimplexIdx) -> Self {
+    Self { dim, kidx }
+  }
+}
+impl<const N: usize> SimplexIdx<ConstDim<N>> {
+  pub fn new_static(kidx: KSimplexIdx) -> Self {
+    let dim = ConstDim;
+    Self { dim, kidx }
+  }
+}
+impl<const N: usize> SimplexIdx<ConstCodim<N>> {
+  pub fn new_static(kidx: KSimplexIdx) -> Self {
+    let dim = ConstCodim;
+    Self { dim, kidx }
+  }
+}
+
 impl<D: DimInfoProvider> SimplexIdx<D> {
   pub fn new(dim: D, kidx: KSimplexIdx) -> Self {
     Self { dim, kidx }
   }
+
   pub fn is_valid(self, complex: &TopologyComplex) -> bool {
     self.dim.is_valid(complex.dim()) && self.kidx < complex.skeleton(self.dim).len()
   }
@@ -187,7 +207,7 @@ impl<'m, D: DimInfoProvider> SimplexHandle<'m, D> {
       .simplex_data()
       .cofacets
       .iter()
-      .map(|&cell_idx| SimplexIdx::new(ConstCodim, cell_idx).handle(self.complex))
+      .map(|&cell_idx| cell_idx.handle(self.complex))
   }
 
   pub fn edges(&self) -> impl Iterator<Item = EdgeHandle> {
