@@ -72,12 +72,12 @@ impl Rect {
   }
 }
 
-pub struct CartesianMesh {
+pub struct CartesianMeshInfo {
   rect: Rect,
   ncells_axis: usize,
 }
 // constructors
-impl CartesianMesh {
+impl CartesianMeshInfo {
   pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>, ncells_axis: usize) -> Self {
     let rect = Rect::new_min_max(min, max);
     Self { rect, ncells_axis }
@@ -92,7 +92,7 @@ impl CartesianMesh {
   }
 }
 // getters
-impl CartesianMesh {
+impl CartesianMeshInfo {
   pub fn rect(&self) -> &Rect {
     &self.rect
   }
@@ -155,7 +155,7 @@ impl CartesianMesh {
   }
 }
 
-impl CartesianMesh {
+impl CartesianMeshInfo {
   pub fn compute_coord_complex(&self) -> (TopologyComplex, MeshVertexCoords) {
     let (skeleton, coords) = self.compute_coord_facets();
     let complex = TopologyComplex::from_facet_skeleton(skeleton);
@@ -215,11 +215,11 @@ impl CartesianMesh {
 
 #[cfg(test)]
 mod test {
-  use super::CartesianMesh;
+  use super::CartesianMeshInfo;
 
   #[test]
   fn unit_cube_mesh() {
-    let (mesh, coords) = CartesianMesh::new_unit(3, 1).compute_coord_facets();
+    let (mesh, coords) = CartesianMeshInfo::new_unit(3, 1).compute_coord_facets();
 
     #[rustfmt::skip]
     let expected_coords = na::DMatrix::from_column_slice(3, 8, &[
@@ -251,7 +251,7 @@ mod test {
 
   #[test]
   fn unit_square_mesh() {
-    let (mesh, coords) = CartesianMesh::new_unit(2, 2).compute_coord_facets();
+    let (mesh, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_facets();
 
     #[rustfmt::skip]
     let expected_coords = na::DMatrix::from_column_slice(2, 9, &[

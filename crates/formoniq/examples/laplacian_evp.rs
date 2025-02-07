@@ -10,7 +10,7 @@ use formoniq::{
   problems::hodge_laplace,
 };
 use geometry::coord::{
-  manifold::{cartesian::CartesianMesh, dim3::TriangleSurface3D},
+  manifold::{cartesian::CartesianMeshInfo, dim3::TriangleSurface3D},
   write_coords,
 };
 use topology::{complex::TopologyComplex, simplex::write_simplicies};
@@ -30,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let neigen = 10;
 
   let ncells_axis = 3;
-  let (topology, coords) = CartesianMesh::new_unit(dim, ncells_axis).compute_coord_facets();
+  let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_facets();
   let triangle_mesh = TriangleSurface3D::from_coord_skeleton(topology.clone(), coords.clone());
   let topology = TopologyComplex::from_facet_skeleton(topology);
   let metric = coords.to_edge_lengths(&topology);

@@ -14,7 +14,7 @@ use formoniq::{
   fe::{evaluate_fe_function_facets_vertices, write_evaluations},
   problems::hodge_laplace,
 };
-use geometry::coord::{manifold::cartesian::CartesianMesh, write_coords, CoordRef};
+use geometry::coord::{manifold::cartesian::CartesianMeshInfo, write_coords, CoordRef};
 use topology::simplex::write_simplicies;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let dim = 2;
   let nboxes_per_dim = 3;
-  let box_mesh = CartesianMesh::new_unit(dim, nboxes_per_dim);
+  let box_mesh = CartesianMeshInfo::new_unit(dim, nboxes_per_dim);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
 

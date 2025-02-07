@@ -1,5 +1,10 @@
 use std::path::Path;
 
+pub fn algebraic_convergence_rate(next: f64, prev: f64) -> f64 {
+  let quot: f64 = next / prev;
+  -quot.log2()
+}
+
 pub trait SubType<Sup> {
   /// hallucinating conversion
   fn into_sup_type(self) -> Sup;

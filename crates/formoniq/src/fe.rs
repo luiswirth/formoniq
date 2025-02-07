@@ -19,11 +19,7 @@ pub fn l2_norm(fe: &FeFunction, topology: &TopologyComplex, geometry: &MeshEdgeL
     .sqrt()
 }
 
-pub fn hlambda_norm(
-  fe: &FeFunction,
-  topology: &TopologyComplex,
-  geometry: &MeshEdgeLengths,
-) -> f64 {
+pub fn h1_norm(fe: &FeFunction, topology: &TopologyComplex, geometry: &MeshEdgeLengths) -> f64 {
   let difdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim)).to_nalgebra_csr();
   //fe.coeffs().transpose() * difdif * fe.coeffs()
   ((difdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())

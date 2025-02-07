@@ -3,7 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use common::linalg::assert_mat_eq;
 use formoniq::{assemble, operators};
-use geometry::coord::manifold::cartesian::CartesianMesh;
+use geometry::coord::manifold::cartesian::CartesianMeshInfo;
 use topology::Dim;
 
 const DIM: Dim = 3;
@@ -107,7 +107,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
 }
 
 fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
-  let box_mesh = CartesianMesh::new_unit(DIM, nboxes_per_dim);
+  let box_mesh = CartesianMeshInfo::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
   assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat).to_nalgebra_dense()
