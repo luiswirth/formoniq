@@ -8,7 +8,6 @@ use crate::{
 use super::{
   attribute::SparseSignChain,
   dim::{ConstCodim, ConstDim, RelDimTrait},
-  local::LocalComplex,
   ComplexSkeleton, SimplexData, TopologyComplex,
 };
 
@@ -268,12 +267,6 @@ impl<D: RelDimTrait> std::hash::Hash for SimplexHandle<'_, D> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     (self.complex as *const TopologyComplex).hash(state);
     self.idx.hash(state);
-  }
-}
-
-impl<'m> CellHandle<'m> {
-  pub fn to_local_complex(&self) -> LocalComplex {
-    LocalComplex::from_cell(*self)
   }
 }
 

@@ -1,7 +1,5 @@
 use std::path::Path;
 
-use faer::solvers::SpSolverCore;
-
 pub fn algebraic_convergence_rate(next: f64, prev: f64) -> f64 {
   let quot: f64 = next / prev;
   -quot.log2()

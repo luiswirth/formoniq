@@ -1,14 +1,10 @@
 use std::sync::LazyLock;
 
-use common::sparse::SparseMatrix;
 use exterior::{term::RiemannianMetricExt, ExteriorGrade};
 use manifold::{
   geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
   topology::{
-    complex::{
-      attribute::Cochain, local::LocalComplex, TopologyComplex, DIM_PRECOMPUTED,
-      LOCAL_BOUNDARY_OPERATORS,
-    },
+    complex::{attribute::Cochain, DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
     simplex::{nsubsimplicies, subsimplicies},
   },
   Dim,
@@ -102,25 +98,6 @@ impl ElMatProvider for ScalarLumpedMassElmat {
     let n = geomery.nvertices();
     let v = geomery.vol() / n as f64;
     na::DMatrix::from_diagonal_element(n, n, v)
-  }
-}
-
-pub trait ManifoldComplexExt {
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
-}
-impl ManifoldComplexExt for TopologyComplex {
-  /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix {
-    self.boundary_operator(grade + 1).transpose()
-  }
-}
-
-pub trait LocalComplexExt {
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> na::DMatrix<f64>;
-}
-impl LocalComplexExt for LocalComplex {
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> na::DMatrix<f64> {
-    self.boundary_operator(grade + 1).transpose()
   }
 }
 

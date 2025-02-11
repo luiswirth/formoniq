@@ -1,3 +1,4 @@
+use common::sparse::SparseMatrix;
 use exterior::{
   field::{DifferentialMultiForm, ExteriorField},
   variance, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList, MultiVector,
@@ -13,6 +14,16 @@ use manifold::{
   Dim,
 };
 use multi_index::{factorial, sign::Sign, variants::SetOrder};
+
+pub trait ManifoldComplexExt {
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
+}
+impl ManifoldComplexExt for TopologyComplex {
+  /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix {
+    self.boundary_operator(grade + 1).transpose()
+  }
+}
 
 pub trait CoordSimplexExt {
   fn difbary(&self, i: usize) -> MultiForm;
