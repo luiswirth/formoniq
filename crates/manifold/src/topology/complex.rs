@@ -1,12 +1,10 @@
 pub mod attribute;
 pub mod dim;
 pub mod handle;
-pub mod local;
 
 use attribute::KSimplexCollection;
 use dim::{ConstCodim, ConstDim};
 use handle::{CellCodim, CellIdx, FacetCodim, VertexDim};
-use local::LocalComplex;
 
 use super::{
   simplex::{graded_subsimplicies, SortedSimplex},
@@ -14,7 +12,7 @@ use super::{
 };
 use crate::Dim;
 
-use common::{sparse::SparseMatrix, util::FaerLu};
+use common::sparse::SparseMatrix;
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -50,14 +48,6 @@ impl TopologyComplex {
 
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
-  }
-
-  pub fn local_complexes(&self) -> Vec<LocalComplex> {
-    self
-      .cells()
-      .handle_iter()
-      .map(|cell| cell.to_local_complex())
-      .collect()
   }
 
   pub fn has_boundary(&self) -> bool {
