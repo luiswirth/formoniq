@@ -3,8 +3,10 @@ extern crate nalgebra_sparse as nas;
 
 use common::linalg::assert_mat_eq;
 use formoniq::operators::{self, ElMatProvider};
-use geometry::metric::{ref_vol, SimplexGeometry};
-use topology::Dim;
+use manifold::{
+  geometry::metric::{ref_vol, SimplexGeometry},
+  Dim,
+};
 
 fn check_ref_elmat<F>(elmat: impl ElMatProvider, ref_elmat: F)
 where

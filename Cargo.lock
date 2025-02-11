@@ -269,10 +269,8 @@ name = "exterior"
 version = "0.1.0"
 dependencies = [
  "common",
- "geometry",
- "index-algebra",
+ "multi-index",
  "nalgebra",
- "topology",
 ]
 
 [[package]]
@@ -344,14 +342,14 @@ version = "0.1.0"
 dependencies = [
  "common",
  "exterior",
- "geometry",
- "index-algebra",
  "itertools 0.14.0",
+ "manifold",
+ "multi-index",
  "nalgebra",
  "nalgebra-sparse",
- "topology",
  "tracing",
  "tracing-subscriber",
+ "whitney",
 ]
 
 [[package]]
@@ -483,21 +481,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "geometry"
-version = "0.1.0"
-dependencies = [
- "common",
- "index-algebra",
- "itertools 0.13.0",
- "mshio",
- "nalgebra",
- "nalgebra-sparse",
- "topology",
- "tracing",
- "vtkio",
-]
-
-[[package]]
 name = "half"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -520,14 +503,6 @@ name = "heck"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
-
-[[package]]
-name = "index-algebra"
-version = "0.1.0"
-dependencies = [
- "itertools 0.13.0",
- "num-integer",
-]
 
 [[package]]
 name = "indexmap"
@@ -590,9 +565,9 @@ checksum = "8355be11b20d696c8f18f6cc018c4e372165b1fa8126cef092399c9951984ffa"
 
 [[package]]
 name = "log"
-version = "0.4.22"
+version = "0.4.25"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a7a70ba024b9dc04c27ea2f0c0548feb474ec5c54bba33a7f72f873a39d07b24"
+checksum = "04cbf5b083de1c7e0222a7a51dbfdba1cbe1c6ab0b15e29fff3f6c077fd9cd9f"
 
 [[package]]
 name = "lz4_flex"
@@ -609,6 +584,21 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "manifold"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "indexmap",
+ "itertools 0.13.0",
+ "mshio",
+ "multi-index",
+ "nalgebra",
+ "nalgebra-sparse",
+ "tracing",
+ "vtkio",
 ]
 
 [[package]]
@@ -672,6 +662,14 @@ dependencies = [
  "num-derive",
  "num-traits",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "multi-index"
+version = "0.1.0"
+dependencies = [
+ "itertools 0.13.0",
+ "num-integer",
 ]
 
 [[package]]
@@ -1323,17 +1321,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "topology"
-version = "0.1.0"
-dependencies = [
- "common",
- "index-algebra",
- "indexmap",
- "itertools 0.13.0",
- "nalgebra",
-]
-
-[[package]]
 name = "tracing"
 version = "0.1.41"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1410,9 +1397,9 @@ checksum = "adb9e6ca4f869e1180728b7950e35922a7fc6397f7b641499e8f3ef06e50dc83"
 
 [[package]]
 name = "valuable"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
+checksum = "ba73ea9cf16a25df0c8caa16c51acb937d5712a8429db78a3ee29d5dcacd3a65"
 
 [[package]]
 name = "version_check"
@@ -1447,6 +1434,16 @@ checksum = "29790946404f91d9c5d06f9874efddea1dc06c5efe94541a7d6863108e3a5e4b"
 dependencies = [
  "same-file",
  "winapi-util",
+]
+
+[[package]]
+name = "whitney"
+version = "0.1.0"
+dependencies = [
+ "common",
+ "exterior",
+ "manifold",
+ "multi-index",
 ]
 
 [[package]]

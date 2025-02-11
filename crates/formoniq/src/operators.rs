@@ -1,19 +1,20 @@
 use std::sync::LazyLock;
 
 use common::sparse::SparseMatrix;
-use exterior::{ExteriorGrade, RiemannianMetricExt};
-use geometry::{coord::manifold::SimplexCoords, metric::SimplexGeometry};
-use index_algebra::{factorial, sign::Sign};
-use topology::{
-  complex::{
-    attribute::Cochain, local::LocalComplex, TopologyComplex, DIM_PRECOMPUTED,
-    LOCAL_BOUNDARY_OPERATORS,
+use exterior::{term::RiemannianMetricExt, ExteriorGrade};
+use manifold::{
+  geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
+  topology::{
+    complex::{
+      attribute::Cochain, local::LocalComplex, TopologyComplex, DIM_PRECOMPUTED,
+      LOCAL_BOUNDARY_OPERATORS,
+    },
+    simplex::{nsubsimplicies, subsimplicies},
   },
-  simplex::{nsubsimplicies, subsimplicies},
   Dim,
 };
-
-use crate::whitney::WhitneyForm;
+use multi_index::{factorial, sign::Sign};
+use whitney::WhitneyForm;
 
 pub static LOCAL_DIFFERENTIAL_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> =
   LazyLock::new(|| {
@@ -256,15 +257,15 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
 #[cfg(test)]
 mod test {
   use super::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
-  use crate::{
-    operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat},
-    whitney::WhitneyForm,
-  };
+  use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
   use common::linalg::assert_mat_eq;
-  use exterior::RiemannianMetricExt;
-  use geometry::{coord::manifold::SimplexCoords, metric::SimplexGeometry};
-  use topology::simplex::subsimplicies;
+  use exterior::term::RiemannianMetricExt;
+  use manifold::{
+    geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
+    topology::simplex::subsimplicies,
+  };
+  use whitney::WhitneyForm;
 
   #[test]
   fn dif_dif0_is_laplace_beltrami() {

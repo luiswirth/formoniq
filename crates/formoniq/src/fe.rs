@@ -1,15 +1,17 @@
 use crate::{
   assemble::assemble_galmat,
   operators::{CodifDifElmat, FeFunction, HodgeMassElmat},
-  whitney::WhitneyForm,
 };
 
-use exterior::dense::{ExteriorField, MultiForm};
-use geometry::{
-  coord::{manifold::SimplexHandleExt, CoordRef, MeshVertexCoords},
-  metric::MeshEdgeLengths,
+use exterior::{field::ExteriorField, MultiForm};
+use manifold::{
+  geometry::{
+    coord::{local::SimplexHandleExt, CoordRef, MeshVertexCoords},
+    metric::MeshEdgeLengths,
+  },
+  topology::complex::{dim::RelDimTrait, TopologyComplex},
 };
-use topology::complex::{dim::RelDimTrait, TopologyComplex};
+use whitney::WhitneyForm;
 
 pub fn l2_norm(fe: &FeFunction, topology: &TopologyComplex, geometry: &MeshEdgeLengths) -> f64 {
   let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim)).to_nalgebra_csr();

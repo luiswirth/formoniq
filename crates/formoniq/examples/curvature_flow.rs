@@ -5,10 +5,7 @@ extern crate nalgebra_sparse as nas;
 
 use common::util::FaerCholesky;
 use formoniq::{assemble, operators};
-use geometry::coord::{
-  manifold::dim3::{write_3dmesh_animation, TriangleSurface3D},
-  MeshVertexCoords,
-};
+use manifold::geometry::coord::MeshVertexCoords;
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -19,8 +16,8 @@ fn main() {
   let obj_path = std::env::var("FORMONIQ_OBJ_PATH")
     .expect("specify the OBJ file using the envvar `FORMONIQ_OBJ_PATH`");
   let obj_string = std::fs::read_to_string(obj_path).unwrap();
-  let surface = TriangleSurface3D::from_obj_string(&obj_string);
-  std::fs::write("out/curvature_flow.obj", surface.to_obj_string()).unwrap();
+  std::fs::write("out/curvature_flow.obj", &obj_string).unwrap();
+  let surface = manifold::io::from_obj_string(&obj_string);
 
   let (topology, coords) = surface.into_coord_complex();
   let mut metric = coords.to_edge_lengths(&topology);
@@ -75,5 +72,5 @@ fn main() {
     .map(|coords| coords.into_const_dim())
     .collect();
   let times = (0..=nsteps).map(|istep| istep as f64 * dt);
-  write_3dmesh_animation(&coords_list, times);
+  manifold::io::write_3dmesh_animation(&coords_list, times);
 }

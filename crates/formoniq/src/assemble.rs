@@ -1,8 +1,7 @@
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
-use geometry::metric::MeshEdgeLengths;
-use topology::complex::TopologyComplex;
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
 
 use std::collections::HashSet;
 

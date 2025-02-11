@@ -5,10 +5,9 @@ use crate::{
 
 use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
 use exterior::ExteriorGrade;
-use geometry::metric::MeshEdgeLengths;
-use itertools::Itertools;
-use topology::complex::TopologyComplex;
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
 
+use itertools::Itertools;
 use std::mem;
 
 pub struct MixedGalmats {

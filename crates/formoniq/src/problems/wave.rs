@@ -6,8 +6,7 @@ use crate::{
 };
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use geometry::metric::MeshEdgeLengths;
-use topology::complex::TopologyComplex;
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
