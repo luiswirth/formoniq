@@ -6,16 +6,17 @@ use std::{
   io::BufWriter,
 };
 
-use exterior::{
-  dense::{DifferentialFormClosure, MultiForm},
-  manifold::discretize_form_on_mesh,
-};
+use exterior::{field::DifferentialFormClosure, MultiForm};
 use formoniq::{
   fe::{evaluate_fe_function_cell_vertices, write_evaluations},
   problems::hodge_laplace,
 };
-use geometry::coord::{manifold::cartesian::CartesianMeshInfo, write_coords, CoordRef};
-use topology::simplex::write_simplicies;
+use manifold::{
+  gen::cartesian::CartesianMeshInfo,
+  geometry::coord::{write_coords, CoordRef},
+  topology::simplex::write_simplicies,
+};
+use whitney::discretize_form_on_mesh;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let path = "out/laplacian_source";

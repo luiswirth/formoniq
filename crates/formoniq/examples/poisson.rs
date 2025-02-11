@@ -10,8 +10,10 @@ use formoniq::{
   operators::FeFunction,
   problems::laplace_beltrami,
 };
-use geometry::{coord::manifold::cartesian::CartesianMeshInfo, metric::MeshEdgeLengths};
-use topology::complex::TopologyComplex;
+use manifold::{
+  gen::cartesian::CartesianMeshInfo, geometry::metric::MeshEdgeLengths,
+  topology::complex::TopologyComplex,
+};
 
 use std::f64::consts::TAU;
 

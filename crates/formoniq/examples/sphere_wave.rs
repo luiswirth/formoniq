@@ -5,9 +5,7 @@ use formoniq::{
   operators::FeFunction,
   problems::wave::{self, WaveState},
 };
-use geometry::coord::manifold::dim3::{
-  cartesian2spherical, mesh_sphere_surface, write_displacement_animation,
-};
+use manifold::dim3::{cartesian2spherical, mesh_sphere_surface};
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -19,7 +17,7 @@ fn main() {
   let mesh_subdivisions = 5;
   let surface = mesh_sphere_surface(mesh_subdivisions);
   println!("Writing mesh to `.obj` file...");
-  std::fs::write("out/sphere_wave.obj", surface.to_obj_string()).unwrap();
+  std::fs::write("out/sphere_wave.obj", manifold::io::to_obj_string(&surface)).unwrap();
 
   let (topology, coords) = surface.clone().into_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
@@ -68,5 +66,5 @@ fn main() {
   );
 
   let displacements: Vec<_> = solution.into_iter().map(|s| s.pos).collect();
-  write_displacement_animation(&surface, &displacements, times.iter().copied());
+  manifold::io::write_displacement_animation(&surface, &displacements, times.iter().copied());
 }

@@ -27,8 +27,7 @@ use formoniq::{
   assemble,
   operators::{self},
 };
-use geometry::coord::manifold::cartesian::CartesianMeshInfo;
-use topology::Dim;
+use manifold::{gen::cartesian::CartesianMeshInfo, Dim};
 
 use std::sync::LazyLock;
 

@@ -8,11 +8,12 @@ use formoniq::{
   operators::FeFunction,
   problems::hodge_laplace,
 };
-use geometry::coord::{
-  manifold::{cartesian::CartesianMeshInfo, dim3::TriangleSurface3D},
-  write_coords,
+use manifold::{
+  dim3::TriangleSurface3D,
+  gen::cartesian::CartesianMeshInfo,
+  geometry::coord::write_coords,
+  topology::{complex::TopologyComplex, simplex::write_simplicies},
 };
-use topology::{complex::TopologyComplex, simplex::write_simplicies};
 
 use std::{
   fs::{self, File},
@@ -82,7 +83,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     std::fs::write(
       format!("{path}/eigenfunc{ieigen}.obj"),
-      surface.to_obj_string().as_bytes(),
+      manifold::io::to_obj_string(&surface).as_bytes(),
     )
     .unwrap();
   }

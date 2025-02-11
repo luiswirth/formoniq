@@ -1,9 +1,8 @@
 extern crate nalgebra as na;
 
-use exterior::dense::ExteriorField;
-use formoniq::whitney::WhitneyForm;
-use geometry::coord::manifold::SimplexCoords;
-use topology::simplex::graded_subsimplicies;
+use exterior::field::ExteriorField;
+use manifold::{geometry::coord::local::SimplexCoords, topology::simplex::graded_subsimplicies};
+use whitney::WhitneyForm;
 
 use std::io::Write;
 

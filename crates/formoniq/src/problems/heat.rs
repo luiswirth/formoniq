@@ -1,13 +1,12 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
-use common::util::FaerCholesky;
-use geometry::metric::MeshEdgeLengths;
-use topology::complex::TopologyComplex;
-
 use crate::{
   assemble,
   operators::{self, DofIdx, FeFunction},
 };
+
+use common::util::FaerCholesky;
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
 
 /// times = [t_0,t_1,...,T]
 #[allow(clippy::too_many_arguments)]

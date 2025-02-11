@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::problems::laplace_beltrami;
-use geometry::coord::manifold::dim3::mesh_sphere_surface;
+use manifold::dim3::mesh_sphere_surface;
 
 fn main() {
   let triangle_mesh = mesh_sphere_surface(6);
@@ -20,7 +20,7 @@ fn main() {
     }
     std::fs::write(
       format!("out/spherical_harmonic{i}.obj"),
-      surface.to_obj_string().as_bytes(),
+      manifold::io::to_obj_string(&surface).as_bytes(),
     )
     .unwrap();
   }
