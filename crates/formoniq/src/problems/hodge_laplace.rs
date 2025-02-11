@@ -136,29 +136,9 @@ pub fn solve_hodge_laplace_harmonics(
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
 ) -> na::DMatrix<f64> {
-  // TODO: improve this!
-  // first of all find exactly all eigenvectors with eigenval 0
-  // use simplical homology to determine number of harmonics
-  let (eigenvals, eigenfuncs) = solve_hodge_laplace_evp(topology, geometry, grade, 10);
-
-  println!("{eigenvals}");
-
-  if eigenvals[eigenvals.len() - 1] <= 1e-12 {
-    panic!("might have missed a harmonic");
-  }
-
-  let harmonic_indices = eigenvals
-    .iter()
-    .enumerate()
-    .filter(|&(_, &eigenval)| eigenval <= 1e-12)
-    .map(|(i, _)| i)
-    .collect_vec();
-
-  let nwhitneys = topology.nsimplicies(grade);
-  let mut harmonics = na::DMatrix::zeros(nwhitneys, harmonic_indices.len());
-  for (icol, iharmonic) in harmonic_indices.into_iter().enumerate() {
-    harmonics.set_column(icol, &eigenfuncs.column(iharmonic));
-  }
+  let homology_dim = topology.homology_dim(grade);
+  let (eigenvals, harmonics) = solve_hodge_laplace_evp(topology, geometry, grade, homology_dim);
+  assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   harmonics
 }
 

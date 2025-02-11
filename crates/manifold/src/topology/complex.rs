@@ -14,7 +14,7 @@ use super::{
 };
 use crate::Dim;
 
-use common::sparse::SparseMatrix;
+use common::{sparse::SparseMatrix, util::FaerLu};
 
 use indexmap::IndexMap;
 use itertools::Itertools;
@@ -118,6 +118,27 @@ impl TopologyComplex {
       }
     }
     mat
+  }
+
+  /// Dimension of the k-th homology group.
+  ///
+  /// k-th Betti number.
+  /// Number of k-dimensional holes in the manifold.
+  /// Computed using simplicial homology.
+  pub fn homology_dim(&self, dim: Dim) -> usize {
+    // TODO: use sparse matrix!
+    let boundary_this = self.boundary_operator(dim).to_nalgebra_dense();
+    let boundary_plus = self.boundary_operator(dim + 1).to_nalgebra_dense();
+
+    const RANK_TOL: f64 = 1e-12;
+
+    let dim_image = |op: &na::DMatrix<f64>| -> usize { op.rank(RANK_TOL) };
+    let dim_kernel = |op: &na::DMatrix<f64>| -> usize { op.ncols() - dim_image(op) };
+
+    let dim_cycles = dim_kernel(&boundary_this);
+    let dim_boundaries = dim_image(&boundary_plus);
+
+    dim_cycles - dim_boundaries
   }
 }
 
