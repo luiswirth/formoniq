@@ -8,7 +8,7 @@ use manifold::{
     local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
   },
   topology::{
-    complex::{attribute::Cochain, TopologyComplex},
+    complex::{attribute::Cochain, Complex},
     simplex::Simplex,
   },
   Dim,
@@ -18,7 +18,7 @@ use multi_index::{factorial, sign::Sign, variants::SetOrder};
 pub trait ManifoldComplexExt {
   fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
 }
-impl ManifoldComplexExt for TopologyComplex {
+impl ManifoldComplexExt for Complex {
   /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
   fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix {
     self.boundary_operator(grade + 1).transpose()
@@ -57,7 +57,7 @@ impl CoordSimplexExt for SimplexCoords {
 /// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
 pub fn discretize_form_on_mesh(
   form: &impl DifferentialMultiForm,
-  topology: &TopologyComplex,
+  topology: &Complex,
   coords: &MeshVertexCoords,
 ) -> Cochain<Dim> {
   let cochain = topology
@@ -170,7 +170,7 @@ mod test {
     crate::discretize_form_on_simplex,
     manifold::{
       geometry::coord::{local::SimplexHandleExt, MeshVertexCoords},
-      topology::complex::TopologyComplex,
+      topology::complex::Complex,
     },
     multi_index::sign::Sign,
   };
@@ -178,7 +178,7 @@ mod test {
   #[test]
   fn whitney_basis_property() {
     for dim in 0..=4 {
-      let topology = TopologyComplex::standard(dim);
+      let topology = Complex::standard(dim);
       let coords = MeshVertexCoords::standard(dim);
 
       let cell = topology.cells().get_by_kidx(0);

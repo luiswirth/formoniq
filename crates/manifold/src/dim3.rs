@@ -1,6 +1,6 @@
 use crate::{
   geometry::coord::{local::SimplexCoords, MeshVertexCoords},
-  topology::{complex::TopologyComplex, simplex::Simplex, skeleton::TopologySkeleton},
+  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
 
 use std::{collections::HashMap, sync::LazyLock};
@@ -33,7 +33,7 @@ impl TriangleSurface3D {
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_skeleton(topology: TopologySkeleton, coords: MeshVertexCoords) -> Self {
+  pub fn from_coord_skeleton(topology: Skeleton, coords: MeshVertexCoords) -> Self {
     assert!(topology.dim() == 2, "Topology is not 2D.");
     assert!(coords.dim() <= 3, "Skeleton is not embeddable in 3D.");
     let coords = coords.embed_euclidean(3);
@@ -56,20 +56,20 @@ impl TriangleSurface3D {
     Self::new(triangles, coords)
   }
 
-  pub fn into_coord_skeleton(self) -> (TopologySkeleton, MeshVertexCoords) {
+  pub fn into_coord_skeleton(self) -> (Skeleton, MeshVertexCoords) {
     let simps = self
       .triangles
       .into_iter()
       .map(|tria| Simplex::from(tria).into_sorted())
       .collect();
-    let skeleton = TopologySkeleton::new(simps);
+    let skeleton = Skeleton::new(simps);
     let coords = self.coords.into_dyn_dim();
     (skeleton, coords)
   }
 
-  pub fn into_coord_complex(self) -> (TopologyComplex, MeshVertexCoords) {
+  pub fn into_coord_complex(self) -> (Complex, MeshVertexCoords) {
     let (skeleton, coords) = self.into_coord_skeleton();
-    let complex = TopologyComplex::from_cell_skeleton(skeleton);
+    let complex = Complex::from_cell_skeleton(skeleton);
     (complex, coords)
   }
 

@@ -3,10 +3,10 @@ use crate::Dim;
 
 /// A container for simplicies of the same dimension.
 #[derive(Debug, Clone)]
-pub struct TopologySkeleton {
+pub struct Skeleton {
   simplicies: Vec<SortedSimplex>,
 }
-impl TopologySkeleton {
+impl Skeleton {
   pub fn new(simplicies: Vec<SortedSimplex>) -> Self {
     Self::try_new(simplicies).unwrap()
   }

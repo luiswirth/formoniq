@@ -1,16 +1,18 @@
-use std::sync::LazyLock;
-
-use exterior::{term::RiemannianMetricExt, ExteriorGrade};
-use manifold::{
-  geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
-  topology::{
-    complex::{attribute::Cochain, DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
-    simplex::{nsubsimplicies, subsimplicies},
+use {
+  exterior::{term::RiemannianMetricExt, ExteriorGrade},
+  manifold::{
+    geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
+    topology::{
+      complex::{attribute::Cochain, DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
+      simplex::{nsubsimplicies, subsimplicies},
+    },
+    Dim,
   },
-  Dim,
+  multi_index::{factorial, sign::Sign},
+  whitney::WhitneyForm,
 };
-use multi_index::{factorial, sign::Sign};
-use whitney::WhitneyForm;
+
+use std::sync::LazyLock;
 
 pub static LOCAL_DIFFERENTIAL_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> =
   LazyLock::new(|| {

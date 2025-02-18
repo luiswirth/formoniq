@@ -6,7 +6,7 @@ use crate::{
 };
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
@@ -25,7 +25,7 @@ impl WaveState {
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   times: &[f64],
   boundary_data: F,

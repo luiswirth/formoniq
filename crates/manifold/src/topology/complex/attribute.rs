@@ -3,7 +3,7 @@ use multi_index::sign::Sign;
 use super::{
   dim::RelDimTrait,
   handle::{KSimplexIdx, SimplexHandle, SimplexIdx},
-  TopologyComplex,
+  Complex,
 };
 
 pub struct KSimplexCollection<D: RelDimTrait> {
@@ -33,7 +33,7 @@ impl<D: RelDimTrait> KSimplexCollection<D> {
   }
   pub fn handle_iter<'c>(
     &self,
-    complex: &'c TopologyComplex,
+    complex: &'c Complex,
   ) -> impl ExactSizeIterator<Item = SimplexHandle<'c, D>> + use<'c, '_, D> {
     self.idx_iter().map(|idx| SimplexHandle::new(complex, idx))
   }
@@ -99,7 +99,7 @@ impl<D: RelDimTrait> Cochain<D> {
   pub fn new(dim: D, coeffs: na::DVector<f64>) -> Self {
     Self { dim, coeffs }
   }
-  pub fn zero(dim: D, topology: &TopologyComplex) -> Self {
+  pub fn zero(dim: D, topology: &Complex) -> Self {
     let ncoeffs = topology.nsimplicies(dim);
     let coeffs = na::DVector::zeros(ncoeffs);
     Self::new(dim, coeffs)

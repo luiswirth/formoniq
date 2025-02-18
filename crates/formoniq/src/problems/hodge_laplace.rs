@@ -5,7 +5,7 @@ use crate::{
 
 use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
 use exterior::ExteriorGrade;
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
 use itertools::Itertools;
 use std::mem;
@@ -19,7 +19,7 @@ pub struct MixedGalmats {
 }
 impl MixedGalmats {
   pub fn compute(
-    topology: &TopologyComplex,
+    topology: &Complex,
     geometry: &MeshEdgeLengths,
     grade: ExteriorGrade,
   ) -> Self {
@@ -46,7 +46,7 @@ impl MixedGalmats {
 }
 
 pub fn solve_hodge_laplace_source(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
   source_data: FeFunction,
@@ -132,7 +132,7 @@ pub fn solve_hodge_laplace_source(
 }
 
 pub fn solve_hodge_laplace_harmonics(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
 ) -> na::DMatrix<f64> {
@@ -143,7 +143,7 @@ pub fn solve_hodge_laplace_harmonics(
 }
 
 pub fn solve_hodge_laplace_evp(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
   neigen_values: usize,

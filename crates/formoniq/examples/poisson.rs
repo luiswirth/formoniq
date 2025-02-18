@@ -12,7 +12,7 @@ use formoniq::{
 };
 use manifold::{
   gen::cartesian::CartesianMeshInfo, geometry::metric::MeshEdgeLengths,
-  topology::complex::TopologyComplex,
+  topology::complex::Complex,
 };
 
 use std::f64::consts::TAU;
@@ -61,7 +61,7 @@ fn main() {
 }
 
 struct PoissonWithSol {
-  topology: TopologyComplex,
+  topology: Complex,
   metric: MeshEdgeLengths,
   load_data: FeFunction,
   solution_exact: FeFunction,

@@ -1,12 +1,12 @@
 use crate::{
   geometry::coord::MeshVertexCoords,
-  topology::{simplex::Simplex, skeleton::TopologySkeleton},
+  topology::{simplex::Simplex, skeleton::Skeleton},
 };
 
 use multi_index::sign::Sign;
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn gmsh2coord_mesh(bytes: &[u8]) -> (TopologySkeleton, MeshVertexCoords) {
+pub fn gmsh2coord_mesh(bytes: &[u8]) -> (Skeleton, MeshVertexCoords) {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
@@ -60,7 +60,7 @@ pub fn gmsh2coord_mesh(bytes: &[u8]) -> (TopologySkeleton, MeshVertexCoords) {
     .into_iter()
     .map(|simp| simp.into_simplex().into_sorted())
     .collect();
-  let skeleton = TopologySkeleton::new(skeleton);
+  let skeleton = Skeleton::new(skeleton);
 
   (skeleton, mesh_vertices)
 }

@@ -17,7 +17,7 @@ fn main() {
     .expect("specify the OBJ file using the envvar `FORMONIQ_OBJ_PATH`");
   let obj_string = std::fs::read_to_string(obj_path).unwrap();
   std::fs::write("out/curvature_flow.obj", &obj_string).unwrap();
-  let surface = manifold::io::from_obj_string(&obj_string);
+  let surface = manifold::io::blender::from_obj_string(&obj_string);
 
   let (topology, coords) = surface.into_coord_complex();
   let mut metric = coords.to_edge_lengths(&topology);
@@ -72,5 +72,5 @@ fn main() {
     .map(|coords| coords.into_const_dim())
     .collect();
   let times = (0..=nsteps).map(|istep| istep as f64 * dt);
-  manifold::io::write_3dmesh_animation(&coords_list, times);
+  manifold::io::blender::write_3dmesh_animation(&coords_list, times);
 }

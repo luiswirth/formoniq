@@ -8,7 +8,7 @@ use crate::{
 use super::{
   attribute::SparseSignChain,
   dim::{ConstCodim, ConstDim, RelDimTrait},
-  ComplexSkeleton, SimplexData, TopologyComplex,
+  ComplexSkeleton, SimplexData, Complex,
 };
 
 pub type VertexDim = ConstDim<0>;
@@ -33,7 +33,7 @@ pub type CellsHandle<'c> = SkeletonHandle<'c, CellCodim>;
 
 pub type KSimplexIdx = usize;
 
-impl TopologyComplex {
+impl Complex {
   pub fn skeletons(&self) -> impl Iterator<Item = SkeletonHandle<Dim>> {
     (0..=self.dim()).map(|d| SkeletonHandle::new(self, d))
   }
@@ -91,14 +91,14 @@ impl<D: RelDimTrait> SimplexIdx<D> {
     Self { dim, kidx }
   }
 
-  pub fn is_valid(self, complex: &TopologyComplex) -> bool {
+  pub fn is_valid(self, complex: &Complex) -> bool {
     self.dim.is_valid(complex.dim()) && self.kidx < complex.skeleton(self.dim).len()
   }
-  pub fn assert_valid(self, mesh: &TopologyComplex) {
+  pub fn assert_valid(self, mesh: &Complex) {
     assert!(self.is_valid(mesh), "Not a valid simplex index.");
   }
 
-  pub fn handle(self, complex: &TopologyComplex) -> SimplexHandle<D> {
+  pub fn handle(self, complex: &Complex) -> SimplexHandle<D> {
     SimplexHandle::new(complex, self)
   }
 
@@ -109,20 +109,20 @@ impl<D: RelDimTrait> SimplexIdx<D> {
 
 #[derive(Copy, Clone)]
 pub struct SimplexHandle<'c, D: RelDimTrait> {
-  complex: &'c TopologyComplex,
+  complex: &'c Complex,
   idx: SimplexIdx<D>,
 }
 impl<'m, D: RelDimTrait> std::fmt::Debug for SimplexHandle<'m, D> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)
-      .field("complex", &(self.complex as *const TopologyComplex))
+      .field("complex", &(self.complex as *const Complex))
       .finish()
   }
 }
 
 impl<'m, D: RelDimTrait> SimplexHandle<'m, D> {
-  pub fn new(complex: &'m TopologyComplex, idx: SimplexIdx<D>) -> Self {
+  pub fn new(complex: &'m Complex, idx: SimplexIdx<D>) -> Self {
     idx.assert_valid(complex);
     Self { complex, idx }
   }
@@ -144,7 +144,7 @@ impl<'m, D: RelDimTrait> SimplexHandle<'m, D> {
     self.idx.kidx
   }
 
-  pub fn complex(&self) -> &'m TopologyComplex {
+  pub fn complex(&self) -> &'m Complex {
     self.complex
   }
   pub fn skeleton(&self) -> SkeletonHandle<'m, D> {
@@ -265,18 +265,18 @@ impl<D: RelDimTrait> Eq for SimplexHandle<'_, D> {}
 
 impl<D: RelDimTrait> std::hash::Hash for SimplexHandle<'_, D> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.complex as *const TopologyComplex).hash(state);
+    (self.complex as *const Complex).hash(state);
     self.idx.hash(state);
   }
 }
 
 pub struct SkeletonHandle<'m, D: RelDimTrait> {
-  complex: &'m TopologyComplex,
+  complex: &'m Complex,
   dim: D,
 }
 
 impl<'m, D: RelDimTrait> SkeletonHandle<'m, D> {
-  pub fn new(complex: &'m TopologyComplex, dim: D) -> Self {
+  pub fn new(complex: &'m Complex, dim: D) -> Self {
     dim.assert_valid(complex.dim());
     Self { complex, dim }
   }
