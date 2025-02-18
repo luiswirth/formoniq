@@ -1,6 +1,6 @@
 use crate::{
   topology::{
-    complex::{dim::RelDimTrait, handle::SimplexHandle, TopologyComplex},
+    complex::{dim::RelDimTrait, handle::SimplexHandle, Complex},
     simplex::{nedges, nsubsimplicies},
   },
   Dim,
@@ -125,7 +125,7 @@ impl MeshEdgeLengths {
 
   /// The shape regularity measure $rho$ of the whole mesh, which is the largest
   /// shape regularity measure over all cells.
-  pub fn shape_regularity_measure(&self, topology: &TopologyComplex) -> f64 {
+  pub fn shape_regularity_measure(&self, topology: &Complex) -> f64 {
     topology
       .cells()
       .handle_iter()
@@ -276,9 +276,9 @@ pub fn compute_regge_metric(edge_lengths: &SimplexEdgeLengths, dim: Dim) -> Riem
   RiemannianMetric::new(metric_tensor)
 }
 
-pub type MetricComplex = (TopologyComplex, MeshEdgeLengths);
+pub type MetricComplex = (Complex, MeshEdgeLengths);
 pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
-  let topology = TopologyComplex::standard(dim);
+  let topology = Complex::standard(dim);
   let edge_lengths = MeshEdgeLengths::standard(dim);
   (topology, edge_lengths)
 }

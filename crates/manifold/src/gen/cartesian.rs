@@ -1,9 +1,9 @@
 use crate::{
   geometry::coord::MeshVertexCoords,
   topology::{
-    complex::TopologyComplex,
+    complex::Complex,
     simplex::{Simplex, SortedSimplex},
-    skeleton::TopologySkeleton,
+    skeleton::Skeleton,
   },
   Dim,
 };
@@ -158,19 +158,25 @@ impl CartesianMeshInfo {
 }
 
 impl CartesianMeshInfo {
-  pub fn compute_coord_complex(&self) -> (TopologyComplex, MeshVertexCoords) {
+  pub fn compute_coord_complex(&self) -> (Complex, MeshVertexCoords) {
     let (skeleton, coords) = self.compute_coord_cells();
-    let complex = TopologyComplex::from_cell_skeleton(skeleton);
+    let complex = Complex::from_cell_skeleton(skeleton);
     (complex, coords)
   }
-
-  pub fn compute_coord_cells(&self) -> (TopologySkeleton, MeshVertexCoords) {
+  pub fn compute_coord_cells(&self) -> (Skeleton, MeshVertexCoords) {
+    let skeleton = self.compute_cell_skeleton();
+    let coords = self.compute_vertex_coords();
+    (skeleton, coords)
+  }
+  pub fn compute_vertex_coords(&self) -> MeshVertexCoords {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
     }
-    let coords = MeshVertexCoords::new(coords);
+    MeshVertexCoords::new(coords)
+  }
 
+  pub fn compute_cell_skeleton(&self) -> Skeleton {
     let nboxes = self.ncells();
     let nboxes_axis = self.ncells_axis();
 
@@ -210,8 +216,7 @@ impl CartesianMeshInfo {
       simplicies.extend(cube_simplicies);
     }
 
-    let skeleton = TopologySkeleton::new(simplicies);
-    (skeleton, coords)
+    Skeleton::new(simplicies)
   }
 }
 

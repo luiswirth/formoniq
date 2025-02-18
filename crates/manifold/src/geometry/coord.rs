@@ -4,7 +4,7 @@ pub mod quadrature;
 use itertools::Itertools;
 use local::SimplexCoords;
 
-use crate::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex, Dim};
+use crate::{geometry::metric::MeshEdgeLengths, topology::complex::Complex, Dim};
 
 pub type VertexIdx = usize;
 
@@ -15,8 +15,8 @@ pub type CoordRef<'a, D = na::Dyn> = na::VectorView<'a, f64, D>;
 
 pub type TangentVector = na::DVector<f64>;
 
-pub fn standard_coord_complex(dim: Dim) -> (TopologyComplex, MeshVertexCoords) {
-  let topology = TopologyComplex::standard(dim);
+pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
+  let topology = Complex::standard(dim);
 
   let coords = topology
     .vertices()
@@ -148,7 +148,7 @@ where
     self.coord_matrix.column_iter_mut()
   }
 
-  pub fn to_edge_lengths(&self, topology: &TopologyComplex) -> MeshEdgeLengths {
+  pub fn to_edge_lengths(&self, topology: &Complex) -> MeshEdgeLengths {
     let edges = topology.edges();
     let mut edge_lengths = na::DVector::zeros(edges.len());
     for (iedge, edge) in edges.set_iter().enumerate() {
@@ -166,17 +166,4 @@ impl MeshVertexCoords<na::Dyn> {
     self.coord_matrix = self.coord_matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self
   }
-}
-
-pub fn write_coords<W: std::io::Write>(
-  mut writer: W,
-  coords: &MeshVertexCoords,
-) -> std::io::Result<()> {
-  for coord in coords.coord_iter() {
-    for &comp in coord {
-      write!(writer, "{comp:.6} ")?;
-    }
-    writeln!(writer)?;
-  }
-  Ok(())
 }

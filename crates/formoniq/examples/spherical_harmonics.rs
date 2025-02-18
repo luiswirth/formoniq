@@ -20,7 +20,7 @@ fn main() {
     }
     std::fs::write(
       format!("out/spherical_harmonic{i}.obj"),
-      manifold::io::to_obj_string(&surface).as_bytes(),
+      manifold::io::blender::to_obj_string(&surface).as_bytes(),
     )
     .unwrap();
   }

@@ -1,24 +1,16 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{
-  fe::{
-    evaluate_fe_function_at_cell_barycenters, evaluate_fe_function_cell_vertices, write_evaluations,
+use {
+  formoniq::{
+    fe::evaluate_fe_function_at_cell_barycenters, operators::FeFunction, problems::hodge_laplace,
   },
-  operators::FeFunction,
-  problems::hodge_laplace,
-};
-use manifold::{
-  dim3::TriangleSurface3D,
-  gen::cartesian::CartesianMeshInfo,
-  geometry::coord::write_coords,
-  topology::{complex::TopologyComplex, simplex::write_simplicies},
+  manifold::{
+    dim3::TriangleSurface3D, gen::cartesian::CartesianMeshInfo, topology::complex::Complex,
+  },
 };
 
-use std::{
-  fs::{self, File},
-  io::BufWriter,
-};
+use std::fs;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let path = "out/laplacian_evp";
@@ -32,8 +24,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let ncells_axis = 3;
   let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_cells();
   let triangle_mesh = TriangleSurface3D::from_coord_skeleton(topology.clone(), coords.clone());
-  let topology = TopologyComplex::from_cell_skeleton(topology);
+  let topology = Complex::from_cell_skeleton(topology);
   let metric = coords.to_edge_lengths(&topology);
+
+  manifold::io::save_coords_to_file(&coords, format!("{path}/coords.txt"))?;
+  manifold::io::save_cells_to_file(&topology, format!("{path}/cells.txt"))?;
 
   let (eigenvals, eigenfuncs) =
     hodge_laplace::solve_hodge_laplace_evp(&topology, &metric, grade, neigen);
@@ -42,20 +37,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("eigenval={eigenval:.3}");
     let eigenfunc = FeFunction::new(grade, eigenfunc.into_owned());
 
-    let cell_evals = evaluate_fe_function_cell_vertices(&eigenfunc, &topology, &coords);
-    println!("{cell_evals:#?}");
-
-    let file = File::create(format!("{path}/coords.txt"))?;
-    let writer = BufWriter::new(file);
-    write_coords(writer, &coords)?;
-
-    let file = File::create(format!("{path}/cells.txt"))?;
-    let writer = BufWriter::new(file);
-    write_simplicies(writer, topology.cells().set_iter())?;
-
-    let file = File::create(format!("{path}/evaluations.txt"))?;
-    let writer = BufWriter::new(file);
-    write_evaluations(writer, &cell_evals)?;
+    formoniq::io::save_evaluations_to_file(
+      &eigenfunc,
+      &topology,
+      &coords,
+      format!("{path}/evaluations.txt"),
+    )?;
 
     let mut displacements = na::DVector::zeros(coords.nvertices());
     let cell_values = evaluate_fe_function_at_cell_barycenters(&eigenfunc, &topology, &coords);
@@ -83,7 +70,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     std::fs::write(
       format!("{path}/eigenfunc{ieigen}.obj"),
-      manifold::io::to_obj_string(&surface).as_bytes(),
+      manifold::io::blender::to_obj_string(&surface).as_bytes(),
     )
     .unwrap();
   }

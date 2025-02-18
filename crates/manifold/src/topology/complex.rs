@@ -8,7 +8,7 @@ use handle::{CellCodim, CellIdx, FacetCodim, VertexDim};
 
 use super::{
   simplex::{graded_subsimplicies, SortedSimplex},
-  skeleton::TopologySkeleton,
+  skeleton::Skeleton,
 };
 use crate::Dim;
 
@@ -20,10 +20,9 @@ use std::sync::LazyLock;
 
 /// A simplicial manifold complex.
 #[derive(Debug, Clone)]
-pub struct TopologyComplex {
+pub struct Complex {
   skeletons: Vec<ComplexSkeleton>,
 }
-
 pub type ComplexSkeleton = IndexMap<SortedSimplex, SimplexData>;
 
 #[derive(Default, Debug, Clone)]
@@ -31,7 +30,7 @@ pub struct SimplexData {
   pub cocells: Vec<CellIdx>,
 }
 
-impl TopologyComplex {
+impl Complex {
   pub fn new(skeletons: Vec<ComplexSkeleton>) -> Self {
     Self { skeletons }
   }
@@ -132,8 +131,8 @@ impl TopologyComplex {
   }
 }
 
-impl TopologyComplex {
-  pub fn from_cell_skeleton(cells: TopologySkeleton) -> Self {
+impl Complex {
+  pub fn from_cell_skeleton(cells: Skeleton) -> Self {
     let dim = cells.dim();
     let cells = cells.into_simplicies();
 
@@ -165,11 +164,8 @@ impl TopologyComplex {
 
 pub const DIM_PRECOMPUTED: usize = 4;
 
-pub static REFERENCE_COMPLEXES: LazyLock<Vec<TopologyComplex>> = LazyLock::new(|| {
-  (0..=DIM_PRECOMPUTED)
-    .map(TopologyComplex::standard)
-    .collect()
-});
+pub static REFERENCE_COMPLEXES: LazyLock<Vec<Complex>> =
+  LazyLock::new(|| (0..=DIM_PRECOMPUTED).map(Complex::standard).collect());
 
 pub static LOCAL_BOUNDARY_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> = LazyLock::new(|| {
   REFERENCE_COMPLEXES
@@ -192,7 +188,7 @@ mod test {
   #[test]
   fn incidence() {
     let dim = 3;
-    let complex = TopologyComplex::standard(dim);
+    let complex = Complex::standard(dim);
     let cell = complex.cells().handle_iter().next().unwrap();
 
     // print

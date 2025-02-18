@@ -6,12 +6,12 @@ use crate::{
 };
 
 use common::util::FaerCholesky;
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
 /// times = [t_0,t_1,...,T]
 #[allow(clippy::too_many_arguments)]
 pub fn solve_heat<F>(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   nsteps: usize,
   dt: f64,

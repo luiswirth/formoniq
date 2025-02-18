@@ -1,7 +1,7 @@
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
 use common::{sparse::SparseMatrix, util};
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::TopologyComplex};
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
 use std::collections::HashSet;
 
@@ -10,7 +10,7 @@ pub type GalVec = na::DVector<f64>;
 
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   elmat: impl ElMatProvider,
 ) -> GalMat {
@@ -38,7 +38,7 @@ pub fn assemble_galmat(
 
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   elvec: impl ElVecProvider,
 ) -> GalVec {
@@ -59,7 +59,7 @@ pub fn assemble_galvec(
   galvec
 }
 
-pub fn drop_boundary_dofs_galmat(complex: &TopologyComplex, galmat: &mut GalMat) {
+pub fn drop_boundary_dofs_galmat(complex: &Complex, galmat: &mut GalMat) {
   drop_dofs_galmat(&complex.boundary_vertices().kidx_iter().collect(), galmat)
 }
 
@@ -90,7 +90,7 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
 }
 
 pub fn reintroduce_boundary_dofs_galsols(
-  complex: &TopologyComplex,
+  complex: &Complex,
   galsols: &mut na::DMatrix<f64>,
 ) {
   reintroduce_dropped_dofs_galsols(complex.boundary_vertices().kidxs().to_vec(), galsols)
@@ -108,7 +108,7 @@ pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na:
 }
 
 pub fn enforce_homogeneous_dirichlet_bc(
-  complex: &TopologyComplex,
+  complex: &Complex,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,
 ) {
@@ -117,7 +117,7 @@ pub fn enforce_homogeneous_dirichlet_bc(
 }
 
 pub fn enforce_dirichlet_bc<F>(
-  complex: &TopologyComplex,
+  complex: &Complex,
   boundary_coeff_map: F,
   galmat: &mut SparseMatrix,
   galvec: &mut na::DVector<f64>,

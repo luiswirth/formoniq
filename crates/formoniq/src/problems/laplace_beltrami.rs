@@ -8,12 +8,12 @@ use crate::{
 use common::{sparse::petsc_ghiep, util::FaerCholesky};
 use manifold::{
   geometry::metric::MeshEdgeLengths,
-  topology::complex::{handle::KSimplexIdx, TopologyComplex},
+  topology::complex::{handle::KSimplexIdx, Complex},
 };
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   source_data: FeFunction,
   boundary_data: F,
@@ -36,7 +36,7 @@ where
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
-  topology: &TopologyComplex,
+  topology: &Complex,
   geometry: &MeshEdgeLengths,
   neigen_values: usize,
 ) -> (na::DVector<f64>, Vec<FeFunction>) {

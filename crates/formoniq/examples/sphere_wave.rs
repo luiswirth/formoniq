@@ -17,7 +17,11 @@ fn main() {
   let mesh_subdivisions = 5;
   let surface = mesh_sphere_surface(mesh_subdivisions);
   println!("Writing mesh to `.obj` file...");
-  std::fs::write("out/sphere_wave.obj", manifold::io::to_obj_string(&surface)).unwrap();
+  std::fs::write(
+    "out/sphere_wave.obj",
+    manifold::io::blender::to_obj_string(&surface),
+  )
+  .unwrap();
 
   let (topology, coords) = surface.clone().into_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
@@ -66,5 +70,9 @@ fn main() {
   );
 
   let displacements: Vec<_> = solution.into_iter().map(|s| s.pos).collect();
-  manifold::io::write_displacement_animation(&surface, &displacements, times.iter().copied());
+  manifold::io::blender::write_displacement_animation(
+    &surface,
+    &displacements,
+    times.iter().copied(),
+  );
 }
