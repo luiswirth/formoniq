@@ -1,17 +1,31 @@
 use std::path::Path;
 
+pub trait CumsumExt {
+  fn cumsum(self) -> impl Iterator<Item = usize>;
+}
+impl<I: IntoIterator<Item = usize>> CumsumExt for I {
+  fn cumsum(self) -> impl Iterator<Item = usize> {
+    self.into_iter().scan(0, |acc, x| {
+      *acc += x;
+      Some(*acc)
+    })
+  }
+}
+
+pub trait IterAllEqExt<T> {
+  fn all_eq(self) -> Option<T>;
+}
+impl<T: PartialEq, I: IntoIterator<Item = T>> IterAllEqExt<T> for I {
+  fn all_eq(self) -> Option<T> {
+    let mut iter = self.into_iter();
+    let first = iter.next()?;
+    iter.all(|elem| elem == first).then_some(first)
+  }
+}
+
 pub fn algebraic_convergence_rate(next: f64, prev: f64) -> f64 {
   let quot: f64 = next / prev;
   -quot.log2()
-}
-
-pub trait SubType<Sup> {
-  /// hallucinating conversion
-  fn into_sup_type(self) -> Sup;
-}
-pub trait SupType<Sub> {
-  /// forgetful conversion
-  fn into_sub_type(self) -> Sub;
 }
 
 pub fn indicies_to_flags(indicies: &[usize], len: usize) -> Vec<bool> {

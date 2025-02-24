@@ -160,27 +160,6 @@ impl ElMatProvider for HodgeMassElmat {
   }
 }
 
-/// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
-///
-/// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
-pub struct CodifDifElmat(pub ExteriorGrade);
-impl ElMatProvider for CodifDifElmat {
-  fn row_grade(&self) -> ExteriorGrade {
-    self.0
-  }
-  fn col_grade(&self) -> ExteriorGrade {
-    self.0
-  }
-  fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
-    let dim = geometry.dim();
-    let grade = self.0;
-    let dif = &LOCAL_DIFFERENTIAL_OPERATORS[dim][grade];
-    let codif = dif.transpose();
-    let mass = HodgeMassElmat(grade + 1).eval(geometry);
-    codif * mass * dif
-  }
-}
-
 /// Element Matrix Provider for the weak mixed exterior derivative $(dif sigma, v)$.
 ///
 /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
@@ -219,6 +198,27 @@ impl ElMatProvider for CodifElmat {
     let codif = dif.transpose();
     let mass = HodgeMassElmat(grade).eval(geometry);
     codif * mass
+  }
+}
+
+/// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
+///
+/// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
+pub struct CodifDifElmat(pub ExteriorGrade);
+impl ElMatProvider for CodifDifElmat {
+  fn row_grade(&self) -> ExteriorGrade {
+    self.0
+  }
+  fn col_grade(&self) -> ExteriorGrade {
+    self.0
+  }
+  fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
+    let dim = geometry.dim();
+    let grade = self.0;
+    let dif = &LOCAL_DIFFERENTIAL_OPERATORS[dim][grade];
+    let codif = dif.transpose();
+    let mass = HodgeMassElmat(grade + 1).eval(geometry);
+    codif * mass * dif
   }
 }
 

@@ -1,19 +1,21 @@
-use common::sparse::SparseMatrix;
-use exterior::{
-  field::{DifferentialMultiForm, ExteriorField},
-  variance, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList, MultiVector,
-};
-use manifold::{
-  geometry::coord::{
-    local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
+use {
+  common::sparse::SparseMatrix,
+  exterior::{
+    field::{DifferentialMultiForm, ExteriorField},
+    variance, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList, MultiVector,
   },
-  topology::{
-    complex::{attribute::Cochain, Complex},
-    simplex::Simplex,
+  manifold::{
+    geometry::coord::{
+      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
+    },
+    topology::{
+      complex::{attribute::Cochain, Complex},
+      simplex::Simplex,
+    },
+    Dim,
   },
-  Dim,
+  multi_index::{factorial, sign::Sign, variants::SetOrder},
 };
-use multi_index::{factorial, sign::Sign, variants::SetOrder};
 
 pub trait ManifoldComplexExt {
   fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
@@ -71,7 +73,7 @@ pub fn discretize_form_on_mesh(
 }
 
 /// Approximates the integral of a differential k-form over a k-simplex,
-/// by means of a vertex based (trapezoidal?) quadrature rule.
+/// by means of barycentric quadrature.
 pub fn discretize_form_on_simplex(
   differential_form: &impl DifferentialMultiForm,
   simplex: &SimplexCoords,

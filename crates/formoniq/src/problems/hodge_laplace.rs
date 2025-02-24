@@ -3,9 +3,11 @@ use crate::{
   operators::{self, FeFunction},
 };
 
-use common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix};
-use exterior::ExteriorGrade;
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
+use {
+  common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix},
+  exterior::ExteriorGrade,
+  manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
+};
 
 use itertools::Itertools;
 use std::mem;
@@ -18,11 +20,7 @@ pub struct MixedGalmats {
   mass_u: GalMat,
 }
 impl MixedGalmats {
-  pub fn compute(
-    topology: &Complex,
-    geometry: &MeshEdgeLengths,
-    grade: ExteriorGrade,
-  ) -> Self {
+  pub fn compute(topology: &Complex, geometry: &MeshEdgeLengths, grade: ExteriorGrade) -> Self {
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
       (
         assemble::assemble_galmat(topology, geometry, operators::HodgeMassElmat(grade - 1)),
@@ -43,6 +41,25 @@ impl MixedGalmats {
       mass_u,
     }
   }
+
+  pub fn sigma_len(&self) -> usize {
+    self.mass_sigma.nrows()
+  }
+  pub fn u_len(&self) -> usize {
+    self.mass_u.nrows()
+  }
+
+  pub fn mixed_hodge_laplacian(&self) -> SparseMatrix {
+    let Self {
+      mass_sigma,
+      dif_sigma,
+      codif_u,
+      difdif_u,
+      ..
+    } = self;
+    let codif_u = codif_u.clone();
+    SparseMatrix::block(&[&[mass_sigma, &(-codif_u)], &[dif_sigma, difdif_u]])
+  }
 }
 
 pub fn solve_hodge_laplace_source(
@@ -53,51 +70,30 @@ pub fn solve_hodge_laplace_source(
 ) -> (FeFunction, FeFunction, FeFunction) {
   let harmonics = solve_hodge_laplace_harmonics(topology, geometry, grade);
 
-  let MixedGalmats {
-    mass_sigma,
-    dif_sigma,
-    codif_u,
-    difdif_u,
-    mass_u,
-  } = MixedGalmats::compute(topology, geometry, grade);
+  let galmats = MixedGalmats::compute(topology, geometry, grade);
 
-  let mass_u = mass_u.to_nalgebra_csr();
+  let mass_u = galmats.mass_u.to_nalgebra_csr();
   let mass_harmonics = &mass_u * &harmonics;
 
-  let mut galmat = SparseMatrix::zeros(
-    mass_sigma.nrows() + dif_sigma.nrows() + mass_harmonics.ncols(),
-    mass_sigma.ncols() + codif_u.ncols() + mass_harmonics.ncols(),
-  );
+  let sigma_len = galmats.sigma_len();
+  let u_len = galmats.u_len();
 
-  for &(r, c, v) in mass_sigma.triplets() {
-    galmat.push(r, c, v);
-  }
-  for &(r, mut c, mut v) in codif_u.triplets() {
-    c += mass_sigma.ncols();
-    v *= -1.0;
-    galmat.push(r, c, v);
-  }
-  for &(mut r, c, v) in dif_sigma.triplets() {
-    r += mass_sigma.nrows();
-    galmat.push(r, c, v);
-  }
-  for &(mut r, mut c, v) in difdif_u.triplets() {
-    r += mass_sigma.nrows();
-    c += mass_sigma.ncols();
-    galmat.push(r, c, v);
-  }
+  let mut galmat = galmats.mixed_hodge_laplacian();
+
+  galmat.grow(mass_harmonics.ncols(), mass_harmonics.ncols());
+
   for (mut r, mut c) in (0..mass_harmonics.nrows()).cartesian_product(0..mass_harmonics.ncols()) {
     let v = mass_harmonics[(r, c)];
-    r += mass_sigma.nrows();
-    c += mass_sigma.ncols() + difdif_u.ncols();
+    r += sigma_len;
+    c += sigma_len + u_len;
     galmat.push(r, c, v);
   }
   for (mut r, mut c) in (0..mass_harmonics.nrows()).cartesian_product(0..mass_harmonics.ncols()) {
     let v = mass_harmonics[(r, c)];
     // transpose
     mem::swap(&mut r, &mut c);
-    r += mass_sigma.nrows() + dif_sigma.nrows();
-    c += mass_sigma.ncols();
+    r += sigma_len + u_len;
+    c += sigma_len;
     galmat.push(r, c, v);
   }
 
@@ -106,27 +102,22 @@ pub fn solve_hodge_laplace_source(
   let galvec = mass_u * source_data.coeffs;
   #[allow(clippy::toplevel_ref_arg)]
   let galvec = na::stack![
-    na::DVector::zeros(mass_sigma.ncols());
+    na::DVector::zeros(sigma_len);
     galvec;
     na::DVector::zeros(harmonics.ncols());
   ];
 
   let galsol = petsc_saddle_point(&galmat, &galvec);
-  let sigma = FeFunction::new(
-    grade - 1,
-    galsol.view_range(..mass_sigma.ncols(), 0).into_owned(),
-  );
+  let sigma = FeFunction::new(grade - 1, galsol.view_range(..sigma_len, 0).into_owned());
   let u = FeFunction::new(
     grade,
     galsol
-      .view_range(mass_sigma.ncols()..mass_sigma.ncols() + codif_u.ncols(), 0)
+      .view_range(sigma_len..sigma_len + u_len, 0)
       .into_owned(),
   );
   let p = FeFunction::new(
     grade,
-    galsol
-      .view_range(mass_sigma.ncols() + codif_u.ncols().., 0)
-      .into_owned(),
+    galsol.view_range(sigma_len + u_len.., 0).into_owned(),
   );
   (sigma, u, p)
 }
@@ -137,6 +128,12 @@ pub fn solve_hodge_laplace_harmonics(
   grade: ExteriorGrade,
 ) -> na::DMatrix<f64> {
   let homology_dim = topology.homology_dim(grade);
+
+  if homology_dim == 0 {
+    let nwhitneys = topology.nsimplicies(grade);
+    return na::DMatrix::zeros(nwhitneys, 0);
+  }
+
   let (eigenvals, harmonics) = solve_hodge_laplace_evp(topology, geometry, grade, homology_dim);
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   harmonics
@@ -148,43 +145,16 @@ pub fn solve_hodge_laplace_evp(
   grade: ExteriorGrade,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
-  let MixedGalmats {
-    mass_sigma,
-    dif_sigma,
-    codif_u,
-    difdif_u,
-    mass_u,
-  } = MixedGalmats::compute(topology, geometry, grade);
+  let galmats = MixedGalmats::compute(topology, geometry, grade);
 
-  let mut lhs = SparseMatrix::zeros(
-    mass_sigma.nrows() + difdif_u.nrows(),
-    mass_sigma.ncols() + difdif_u.ncols(),
-  );
-  for &(r, c, v) in mass_sigma.triplets() {
-    lhs.push(r, c, v);
-  }
-  for &(r, mut c, mut v) in codif_u.triplets() {
-    c += mass_sigma.ncols();
-    v *= -1.0;
-    lhs.push(r, c, v);
-  }
-  for &(mut r, c, v) in dif_sigma.triplets() {
-    r += mass_sigma.nrows();
-    lhs.push(r, c, v);
-  }
-  for &(mut r, mut c, v) in difdif_u.triplets() {
-    r += mass_sigma.nrows();
-    c += mass_sigma.ncols();
-    lhs.push(r, c, v);
-  }
+  let lhs = galmats.mixed_hodge_laplacian();
 
-  let mut rhs = SparseMatrix::zeros(
-    mass_sigma.nrows() + mass_u.nrows(),
-    mass_sigma.ncols() + mass_u.ncols(),
-  );
-  for &(mut r, mut c, v) in mass_u.triplets() {
-    r += mass_sigma.nrows();
-    c += mass_sigma.ncols();
+  let sigma_len = galmats.sigma_len();
+  let u_len = galmats.u_len();
+  let mut rhs = SparseMatrix::zeros(sigma_len + u_len, sigma_len + u_len);
+  for &(mut r, mut c, v) in galmats.mass_u.triplets() {
+    r += sigma_len;
+    c += sigma_len;
     rhs.push(r, c, v);
   }
 
