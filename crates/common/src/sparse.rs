@@ -1,9 +1,10 @@
+use crate::util::{CumsumExt, IterAllEqExt};
+
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use std::{
   fs::File,
   io::{BufReader, BufWriter, Write},
 };
-
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
 #[derive(Default, Debug, Clone)]
 pub struct SparseMatrix {
@@ -62,6 +63,50 @@ impl SparseMatrix {
     }
   }
 
+  /// Concatenates a matrix block grid row-wise and column-wise, automatically computing offsets.
+  pub fn block(block_grid: &[&[&Self]]) -> Self {
+    block_grid
+      .iter()
+      .map(|row| row.len())
+      .all_eq()
+      .expect("Each block row must contain the same number of matrices.");
+
+    let mut row_offsets: Vec<usize> = block_grid
+      .iter()
+      .map(|row| {
+        let nrows = row.first().map_or(0, |m| m.nrows());
+        assert!(row.iter().all(|m| nrows == m.nrows()));
+        nrows
+      })
+      .cumsum()
+      .collect();
+    let nrows_total = row_offsets.pop().unwrap_or(0);
+    row_offsets.insert(0, 0);
+
+    let mut col_offsets: Vec<usize> = block_grid
+      .iter()
+      .map(|row| row.iter().map(|mat| mat.ncols()).cumsum().collect())
+      .all_eq()
+      .expect("Each row must have matrices at the same offsets.");
+    let ncols_total = col_offsets.pop().unwrap_or(0);
+    col_offsets.insert(0, 0);
+
+    let mut result = Self::zeros(nrows_total, ncols_total);
+
+    for (i, row) in block_grid.iter().enumerate() {
+      for (j, block) in row.iter().enumerate() {
+        let row_offset = row_offsets[i];
+        let col_offset = col_offsets[j];
+
+        for &(r, c, v) in block.triplets() {
+          result.push(row_offset + r, col_offset + c, v);
+        }
+      }
+    }
+
+    result
+  }
+
   pub fn to_nalgebra_coo(&self) -> nas::CooMatrix<f64> {
     let rows = self.triplets.iter().map(|t| t.0).collect();
     let cols = self.triplets.iter().map(|t| t.1).collect();
@@ -114,6 +159,21 @@ impl SparseMatrix {
       std::mem::swap(&mut t.0, &mut t.1);
     }
     Self::new(self.ncols, self.nrows, triplets)
+  }
+
+  pub fn grow(&mut self, nrows_added: usize, ncols_added: usize) {
+    self.nrows += nrows_added;
+    self.ncols += ncols_added;
+  }
+}
+
+impl std::ops::Neg for SparseMatrix {
+  type Output = SparseMatrix;
+  fn neg(mut self) -> Self::Output {
+    for (_, _, v) in &mut self.triplets {
+      *v *= -1.0;
+    }
+    self
   }
 }
 
