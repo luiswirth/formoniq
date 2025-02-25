@@ -1,6 +1,6 @@
 use crate::{
   topology::{
-    complex::{dim::RelDimTrait, handle::SimplexHandle, Complex},
+    complex::{handle::SimplexHandle, Complex},
     simplex::{nedges, nsubsimplicies},
   },
   Dim,
@@ -134,14 +134,11 @@ impl MeshEdgeLengths {
       .unwrap()
   }
 
-  pub fn simplex_geometry<D: RelDimTrait>(&self, simplex: SimplexHandle<'_, D>) -> SimplexGeometry {
+  pub fn simplex_geometry(&self, simplex: SimplexHandle) -> SimplexGeometry {
     self.simplex_edge_lengths(simplex).geometry()
   }
 
-  pub fn simplex_edge_lengths<D: RelDimTrait>(
-    &self,
-    simplex: SimplexHandle<'_, D>,
-  ) -> SimplexEdgeLengths {
+  pub fn simplex_edge_lengths(&self, simplex: SimplexHandle) -> SimplexEdgeLengths {
     let lengths = simplex
       .edges()
       .map(|edge| self.length(edge.kidx()))

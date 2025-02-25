@@ -1,6 +1,6 @@
 use crate::{
   assemble::assemble_galmat,
-  operators::{CodifDifElmat, FeFunction, HodgeMassElmat},
+  operators::{CodifDifElmat, HodgeMassElmat},
 };
 
 use exterior::{field::ExteriorField, MultiForm};
@@ -9,11 +9,11 @@ use manifold::{
     coord::{local::SimplexHandleExt, CoordRef, MeshVertexCoords},
     metric::MeshEdgeLengths,
   },
-  topology::complex::{dim::RelDimTrait, Complex},
+  topology::complex::{attribute::Cochain, Complex},
 };
 use whitney::WhitneyForm;
 
-pub fn l2_norm(fe: &FeFunction, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
+pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
   let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim)).to_nalgebra_csr();
   //fe.coeffs().transpose() * mass * fe.coeffs()
   ((mass.transpose() * fe.coeffs()).transpose() * fe.coeffs())
@@ -21,7 +21,7 @@ pub fn l2_norm(fe: &FeFunction, topology: &Complex, geometry: &MeshEdgeLengths) 
     .sqrt()
 }
 
-pub fn h1_norm(fe: &FeFunction, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
+pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
   let difdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim)).to_nalgebra_csr();
   //fe.coeffs().transpose() * difdif * fe.coeffs()
   ((difdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())
@@ -31,7 +31,7 @@ pub fn h1_norm(fe: &FeFunction, topology: &Complex, geometry: &MeshEdgeLengths) 
 
 pub fn evaluate_fe_function_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
-  fe: &FeFunction,
+  fe: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
 ) -> MultiForm {
@@ -39,7 +39,7 @@ pub fn evaluate_fe_function_at_coord<'a>(
 
   let dim = coords.dim();
   assert_eq!(coord.len(), dim);
-  let grade = fe.dim.dim(topology.dim());
+  let grade = fe.dim;
 
   // Find cell that contains coord.
   // WARN: very slow and inefficent
@@ -66,11 +66,11 @@ pub fn evaluate_fe_function_at_coord<'a>(
 }
 
 pub fn evaluate_fe_function_at_cell_barycenters(
-  fe: &FeFunction,
+  fe: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
 ) -> Vec<MultiForm> {
-  let grade = fe.dim.dim(topology.dim());
+  let grade = fe.dim;
 
   topology
     .cells()
@@ -94,11 +94,11 @@ pub fn evaluate_fe_function_at_cell_barycenters(
 }
 
 pub fn evaluate_fe_function_cell_vertices(
-  fe: &FeFunction,
+  fe: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
 ) -> Vec<Vec<MultiForm>> {
-  let grade = fe.dim.dim(topology.dim());
+  let grade = fe.dim;
 
   topology
     .cells()

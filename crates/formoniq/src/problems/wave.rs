@@ -2,11 +2,14 @@
 
 use crate::{
   assemble,
-  operators::{self, DofIdx, FeFunction},
+  operators::{self, DofIdx},
 };
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
+use manifold::{
+  geometry::metric::MeshEdgeLengths,
+  topology::complex::{attribute::Cochain, Complex},
+};
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
@@ -30,7 +33,7 @@ pub fn solve_wave<F>(
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
-  force_data: FeFunction,
+  force_data: Cochain,
 ) -> Vec<WaveState>
 where
   F: Fn(DofIdx) -> f64,

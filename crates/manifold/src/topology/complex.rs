@@ -3,8 +3,7 @@ pub mod dim;
 pub mod handle;
 
 use attribute::KSimplexCollection;
-use dim::{ConstCodim, ConstDim};
-use handle::{CellCodim, CellIdx, FacetCodim, VertexDim};
+use handle::SimplexIdx;
 
 use super::{
   simplex::{graded_subsimplicies, SortedSimplex},
@@ -27,7 +26,7 @@ pub type ComplexSkeleton = IndexMap<SortedSimplex, SimplexData>;
 
 #[derive(Default, Debug, Clone)]
 pub struct SimplexData {
-  pub cocells: Vec<CellIdx>,
+  pub cocells: Vec<SimplexIdx>,
 }
 
 impl Complex {
@@ -37,7 +36,7 @@ impl Complex {
 
   pub fn standard(dim: Dim) -> Self {
     let data = SimplexData {
-      cocells: vec![CellIdx::new_static(0)],
+      cocells: vec![SimplexIdx::new(dim, 0)],
     };
     let skeletons = graded_subsimplicies(dim)
       .map(|simps| simps.map(|simp| (simp, data.clone())).collect())
@@ -57,7 +56,7 @@ impl Complex {
   ///
   /// The boundary facets are characterized by the fact that they
   /// only have 1 cell as super entity.
-  pub fn boundary_facets(&self) -> KSimplexCollection<FacetCodim> {
+  pub fn boundary_facets(&self) -> KSimplexCollection {
     self
       .facets()
       .handle_iter()
@@ -65,7 +64,7 @@ impl Complex {
       .collect()
   }
 
-  pub fn boundary_cells(&self) -> KSimplexCollection<CellCodim> {
+  pub fn boundary_cells(&self) -> KSimplexCollection {
     let cells = self
       .boundary_facets()
       .handle_iter(self)
@@ -73,19 +72,19 @@ impl Complex {
       .map(|facet| facet.anti_boundary().kidxs()[0])
       .unique()
       .collect();
-    KSimplexCollection::new(cells, ConstCodim)
+    KSimplexCollection::new(cells, self.dim())
   }
 
   /// The vertices that lie on the boundary of the mesh.
   /// No particular order of vertices.
-  pub fn boundary_vertices(&self) -> KSimplexCollection<VertexDim> {
+  pub fn boundary_vertices(&self) -> KSimplexCollection {
     let vertices = self
       .boundary_facets()
       .handle_iter(self)
       .flat_map(|facet| facet.simplex_set().vertices.clone())
       .unique()
       .collect();
-    KSimplexCollection::new(vertices, ConstDim)
+    KSimplexCollection::new(vertices, 0)
   }
 
   /// $diff^k: Delta_k -> Delta_(k-1)$
@@ -141,7 +140,7 @@ impl Complex {
       for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
         for sub in cell.subsimps(dim_sub) {
           let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
-          sub.cocells.push(CellIdx::new_static(icell));
+          sub.cocells.push(SimplexIdx::new(dim, icell));
         }
       }
     }

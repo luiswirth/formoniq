@@ -1,17 +1,18 @@
 use multi_index::sign::Sign;
 
+use crate::Dim;
+
 use super::{
-  dim::RelDimTrait,
   handle::{KSimplexIdx, SimplexHandle, SimplexIdx},
   Complex,
 };
 
-pub struct KSimplexCollection<D: RelDimTrait> {
+pub struct KSimplexCollection {
   kidxs: Vec<KSimplexIdx>,
-  dim: D,
+  dim: Dim,
 }
-impl<D: RelDimTrait> KSimplexCollection<D> {
-  pub fn new(idxs: Vec<KSimplexIdx>, dim: D) -> Self {
+impl KSimplexCollection {
+  pub fn new(idxs: Vec<KSimplexIdx>, dim: Dim) -> Self {
     Self { kidxs: idxs, dim }
   }
   pub fn kidxs(&self) -> &[KSimplexIdx] {
@@ -26,7 +27,7 @@ impl<D: RelDimTrait> KSimplexCollection<D> {
   pub fn kidx_iter(&self) -> impl ExactSizeIterator<Item = KSimplexIdx> + '_ {
     self.kidxs.iter().copied()
   }
-  pub fn idx_iter(&self) -> impl ExactSizeIterator<Item = SimplexIdx<D>> + '_ {
+  pub fn idx_iter(&self) -> impl ExactSizeIterator<Item = SimplexIdx> + '_ {
     self
       .kidx_iter()
       .map(|kidx| SimplexIdx::from((self.dim, kidx)))
@@ -34,12 +35,12 @@ impl<D: RelDimTrait> KSimplexCollection<D> {
   pub fn handle_iter<'c>(
     &self,
     complex: &'c Complex,
-  ) -> impl ExactSizeIterator<Item = SimplexHandle<'c, D>> + use<'c, '_, D> {
+  ) -> impl ExactSizeIterator<Item = SimplexHandle<'c>> + use<'c, '_> {
     self.idx_iter().map(|idx| SimplexHandle::new(complex, idx))
   }
 }
-impl<D: RelDimTrait> FromIterator<SimplexIdx<D>> for KSimplexCollection<D> {
-  fn from_iter<T: IntoIterator<Item = SimplexIdx<D>>>(iter: T) -> Self {
+impl FromIterator<SimplexIdx> for KSimplexCollection {
+  fn from_iter<T: IntoIterator<Item = SimplexIdx>>(iter: T) -> Self {
     let mut dim = None;
     let kidxs = iter
       .into_iter()
@@ -51,30 +52,34 @@ impl<D: RelDimTrait> FromIterator<SimplexIdx<D>> for KSimplexCollection<D> {
         idx.kidx
       })
       .collect();
-    Self::new(kidxs, dim.unwrap_or(D::default()))
+    Self::new(kidxs, dim.unwrap())
   }
 }
-impl<'a, D: RelDimTrait> FromIterator<SimplexHandle<'a, D>> for KSimplexCollection<D> {
-  fn from_iter<T: IntoIterator<Item = SimplexHandle<'a, D>>>(iter: T) -> Self {
+impl<'a> FromIterator<SimplexHandle<'a>> for KSimplexCollection {
+  fn from_iter<T: IntoIterator<Item = SimplexHandle<'a>>>(iter: T) -> Self {
     iter.into_iter().map(|handle| handle.idx()).collect()
   }
 }
 
-pub type SparseChain<D> = SparseSkeletonAttributes<i32, D>;
-pub type SparseSignChain<D> = SparseSkeletonAttributes<Sign, D>;
+pub type SparseChain = SparseSkeletonAttributes<i32>;
+pub type SparseSignChain = SparseSkeletonAttributes<Sign>;
 
-pub struct SparseSkeletonAttributes<T, D: RelDimTrait> {
+pub struct SparseSkeletonAttributes<T> {
   data: Vec<T>,
   kidxs: Vec<KSimplexIdx>,
-  _dim: D,
+  dim: Dim,
 }
-impl<T, D: RelDimTrait> SparseSkeletonAttributes<T, D> {
-  pub fn new(dim: D, idxs: Vec<KSimplexIdx>, data: Vec<T>) -> Self {
+impl<T> SparseSkeletonAttributes<T> {
+  pub fn new(dim: Dim, idxs: Vec<KSimplexIdx>, data: Vec<T>) -> Self {
     Self {
-      _dim: dim,
+      dim,
       kidxs: idxs,
       data,
     }
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.dim
   }
 
   pub fn data(&self) -> &[T] {
@@ -91,18 +96,21 @@ impl<T, D: RelDimTrait> SparseSkeletonAttributes<T, D> {
   }
 }
 
-pub struct Cochain<D: RelDimTrait> {
+pub struct Cochain {
   pub coeffs: na::DVector<f64>,
-  pub dim: D,
+  pub dim: Dim,
 }
-impl<D: RelDimTrait> Cochain<D> {
-  pub fn new(dim: D, coeffs: na::DVector<f64>) -> Self {
+impl Cochain {
+  pub fn new(dim: Dim, coeffs: na::DVector<f64>) -> Self {
     Self { dim, coeffs }
   }
-  pub fn zero(dim: D, topology: &Complex) -> Self {
+  pub fn zero(dim: Dim, topology: &Complex) -> Self {
     let ncoeffs = topology.nsimplicies(dim);
     let coeffs = na::DVector::zeros(ncoeffs);
     Self::new(dim, coeffs)
+  }
+  pub fn dim(&self) -> Dim {
+    self.dim
   }
 
   pub fn coeffs(&self) -> &na::DVector<f64> {
@@ -123,34 +131,36 @@ impl<D: RelDimTrait> Cochain<D> {
   }
 }
 
-impl<D: RelDimTrait> std::ops::Index<SimplexIdx<D>> for Cochain<D> {
+impl std::ops::Index<SimplexIdx> for Cochain {
   type Output = f64;
-  fn index(&self, idx: SimplexIdx<D>) -> &Self::Output {
+  fn index(&self, idx: SimplexIdx) -> &Self::Output {
+    assert!(idx.dim() == self.dim());
     &self.coeffs[idx.kidx]
   }
 }
 
-impl<D: RelDimTrait> std::ops::Index<SimplexHandle<'_, D>> for Cochain<D> {
+impl std::ops::Index<SimplexHandle<'_>> for Cochain {
   type Output = f64;
-  fn index(&self, handle: SimplexHandle<'_, D>) -> &Self::Output {
+  fn index(&self, handle: SimplexHandle<'_>) -> &Self::Output {
+    assert!(handle.dim() == self.dim());
     &self.coeffs[handle.kidx()]
   }
 }
 
-impl<D: RelDimTrait> std::ops::Index<usize> for Cochain<D> {
+impl std::ops::Index<usize> for Cochain {
   type Output = f64;
   fn index(&self, idx: usize) -> &Self::Output {
     &self.coeffs[idx]
   }
 }
 
-impl<D: RelDimTrait> std::ops::SubAssign for Cochain<D> {
+impl std::ops::SubAssign for Cochain {
   fn sub_assign(&mut self, rhs: Self) {
     assert!(self.dim == rhs.dim);
     self.coeffs -= rhs.coeffs;
   }
 }
-impl<D: RelDimTrait> std::ops::Sub for Cochain<D> {
+impl std::ops::Sub for Cochain {
   type Output = Self;
   fn sub(mut self, rhs: Self) -> Self::Output {
     self -= rhs;

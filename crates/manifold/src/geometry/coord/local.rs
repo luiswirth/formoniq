@@ -1,10 +1,7 @@
 use super::{Coord, CoordRef, MeshVertexCoords};
 use crate::{
   geometry::metric::ref_vol,
-  topology::{
-    complex::{dim::RelDimTrait, handle::SimplexHandle},
-    simplex::Simplex,
-  },
+  topology::{complex::handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
 
@@ -196,7 +193,7 @@ pub fn standard_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
 pub trait SimplexHandleExt {
   fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords;
 }
-impl<'c, D: RelDimTrait> SimplexHandleExt for SimplexHandle<'c, D> {
+impl<'c> SimplexHandleExt for SimplexHandle<'c> {
   fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
     SimplexCoords::from_simplex_and_coords(self.simplex_set(), coords)
   }

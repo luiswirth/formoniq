@@ -1,6 +1,6 @@
 use crate::{
-  assemble::{self, GalMat},
-  operators::{self, FeFunction},
+  assemble::{assemble_galmat, GalMat},
+  operators::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat},
 };
 
 use {
@@ -10,6 +10,7 @@ use {
 };
 
 use itertools::Itertools;
+use manifold::topology::complex::attribute::Cochain;
 use std::mem;
 
 pub struct MixedGalmats {
@@ -23,15 +24,15 @@ impl MixedGalmats {
   pub fn compute(topology: &Complex, geometry: &MeshEdgeLengths, grade: ExteriorGrade) -> Self {
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
       (
-        assemble::assemble_galmat(topology, geometry, operators::HodgeMassElmat(grade - 1)),
-        assemble::assemble_galmat(topology, geometry, operators::DifElmat(grade)),
-        assemble::assemble_galmat(topology, geometry, operators::CodifElmat(grade)),
+        assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1)),
+        assemble_galmat(topology, geometry, DifElmat(grade)),
+        assemble_galmat(topology, geometry, CodifElmat(grade)),
       )
     } else {
       (GalMat::default(), GalMat::default(), GalMat::default())
     };
-    let difdif_u = assemble::assemble_galmat(topology, geometry, operators::CodifDifElmat(grade));
-    let mass_u = assemble::assemble_galmat(topology, geometry, operators::HodgeMassElmat(grade));
+    let difdif_u = assemble_galmat(topology, geometry, CodifDifElmat(grade));
+    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
 
     Self {
       mass_sigma,
@@ -66,8 +67,8 @@ pub fn solve_hodge_laplace_source(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
-  source_data: FeFunction,
-) -> (FeFunction, FeFunction, FeFunction) {
+  source_data: Cochain,
+) -> (Cochain, Cochain, Cochain) {
   let harmonics = solve_hodge_laplace_harmonics(topology, geometry, grade);
 
   let galmats = MixedGalmats::compute(topology, geometry, grade);
@@ -108,14 +109,14 @@ pub fn solve_hodge_laplace_source(
   ];
 
   let galsol = petsc_saddle_point(&galmat, &galvec);
-  let sigma = FeFunction::new(grade - 1, galsol.view_range(..sigma_len, 0).into_owned());
-  let u = FeFunction::new(
+  let sigma = Cochain::new(grade - 1, galsol.view_range(..sigma_len, 0).into_owned());
+  let u = Cochain::new(
     grade,
     galsol
       .view_range(sigma_len..sigma_len + u_len, 0)
       .into_owned(),
   );
-  let p = FeFunction::new(
+  let p = Cochain::new(
     grade,
     galsol.view_range(sigma_len + u_len.., 0).into_owned(),
   );
