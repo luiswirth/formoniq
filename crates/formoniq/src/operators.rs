@@ -3,7 +3,7 @@ use {
   manifold::{
     geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
     topology::{
-      complex::{attribute::Cochain, DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
+      complex::{DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
       simplex::{nsubsimplicies, subsimplicies},
     },
     Dim,
@@ -33,9 +33,6 @@ pub static LOCAL_DIFFERENTIAL_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> =
 
 pub type DofIdx = usize;
 pub type DofCoeff = f64;
-
-// TODO: turn into cochain
-pub type FeFunction = Cochain<Dim>;
 
 pub type ElMat = na::DMatrix<f64>;
 pub trait ElMatProvider {
@@ -119,6 +116,8 @@ impl ElMatProvider for HodgeMassElmat {
     let dim = geometry.dim();
     let grade = self.0;
 
+    let scalar_mass = ScalarMassElmat.eval(geometry);
+
     let nvertices = grade + 1;
     let simplicies: Vec<_> = subsimplicies(dim, grade).collect();
 
@@ -127,8 +126,6 @@ impl ElMatProvider for HodgeMassElmat {
       .cloned()
       .map(|simp| WhitneyForm::new(SimplexCoords::standard(dim), simp).wedge_terms())
       .collect();
-
-    let scalar_mass = ScalarMassElmat.eval(geometry);
 
     let mut elmat = na::DMatrix::zeros(simplicies.len(), simplicies.len());
     for (i, asimp) in simplicies.iter().enumerate() {

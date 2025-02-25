@@ -7,12 +7,12 @@ extern crate nalgebra_sparse as nas;
 use common::util::algebraic_convergence_rate;
 use formoniq::{
   fe::{h1_norm, l2_norm},
-  operators::FeFunction,
   problems::laplace_beltrami,
 };
 use manifold::{
-  gen::cartesian::CartesianMeshInfo, geometry::metric::MeshEdgeLengths,
-  topology::complex::Complex,
+  gen::cartesian::CartesianMeshInfo,
+  geometry::metric::MeshEdgeLengths,
+  topology::complex::{attribute::Cochain, Complex},
 };
 
 use std::f64::consts::TAU;
@@ -36,14 +36,14 @@ fn main() {
         let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
 
         let anal_sol = coords.coord_iter().map(anal_sol).collect::<Vec<_>>().into();
-        let anal_sol = FeFunction::new(0, anal_sol);
+        let anal_sol = Cochain::new(0, anal_sol);
 
         let anal_lapl = coords
           .coord_iter()
           .map(anal_lapl)
           .collect::<Vec<_>>()
           .into();
-        let anal_lapl = FeFunction::new(0, anal_lapl);
+        let anal_lapl = Cochain::new(0, anal_lapl);
 
         let metric = coords.to_edge_lengths(&topology);
 
@@ -63,8 +63,8 @@ fn main() {
 struct PoissonWithSol {
   topology: Complex,
   metric: MeshEdgeLengths,
-  load_data: FeFunction,
-  solution_exact: FeFunction,
+  load_data: Cochain,
+  solution_exact: Cochain,
 }
 
 /// Supply analytic solution and analytic (negative) Laplacian

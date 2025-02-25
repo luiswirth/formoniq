@@ -1,12 +1,15 @@
-use crate::{fe::evaluate_fe_function_cell_vertices, operators::FeFunction};
+use crate::fe::evaluate_fe_function_cell_vertices;
 
 use exterior::MultiForm;
-use manifold::{geometry::coord::MeshVertexCoords, topology::complex::Complex};
+use manifold::{
+  geometry::coord::MeshVertexCoords,
+  topology::complex::{attribute::Cochain, Complex},
+};
 
 use std::{fs::File, io::BufWriter, path::Path};
 
 pub fn save_evaluations_to_file(
-  fe: &FeFunction,
+  fe: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
   path: impl AsRef<Path>,

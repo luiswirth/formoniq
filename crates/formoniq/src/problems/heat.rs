@@ -2,11 +2,14 @@
 
 use crate::{
   assemble,
-  operators::{self, DofIdx, FeFunction},
+  operators::{self, DofIdx},
 };
 
 use common::util::FaerCholesky;
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
+use manifold::{
+  geometry::metric::MeshEdgeLengths,
+  topology::complex::{attribute::Cochain, Complex},
+};
 
 /// times = [t_0,t_1,...,T]
 #[allow(clippy::too_many_arguments)]
@@ -16,10 +19,10 @@ pub fn solve_heat<F>(
   nsteps: usize,
   dt: f64,
   boundary_data: F,
-  initial_data: FeFunction,
-  source_data: FeFunction,
+  initial_data: Cochain,
+  source_data: Cochain,
   diffusion_coeff: f64,
-) -> Vec<FeFunction>
+) -> Vec<Cochain>
 where
   F: Fn(DofIdx) -> f64,
 {
@@ -47,7 +50,7 @@ where
     let rhs = &mass * prev + dt * &source;
     let next = lse_cholesky.solve(&rhs);
 
-    solution.push(FeFunction::new(0, next));
+    solution.push(Cochain::new(0, next));
   }
 
   solution

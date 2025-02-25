@@ -61,7 +61,7 @@ pub fn discretize_form_on_mesh(
   form: &impl DifferentialMultiForm,
   topology: &Complex,
   coords: &MeshVertexCoords,
-) -> Cochain<Dim> {
+) -> Cochain {
   let cochain = topology
     .skeleton(form.grade())
     .handle_iter()

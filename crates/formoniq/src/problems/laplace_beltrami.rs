@@ -2,22 +2,22 @@
 
 use crate::{
   assemble,
-  operators::{self, DofCoeff, FeFunction},
+  operators::{self, DofCoeff},
 };
 
 use common::{sparse::petsc_ghiep, util::FaerCholesky};
 use manifold::{
   geometry::metric::MeshEdgeLengths,
-  topology::complex::{handle::KSimplexIdx, Complex},
+  topology::complex::{attribute::Cochain, handle::KSimplexIdx, Complex},
 };
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
-  source_data: FeFunction,
+  source_data: Cochain,
   boundary_data: F,
-) -> FeFunction
+) -> Cochain
 where
   F: Fn(KSimplexIdx) -> DofCoeff,
 {
@@ -31,7 +31,7 @@ where
 
   let laplace = laplace.to_nalgebra_csr();
   let sol = FaerCholesky::new(laplace).solve(&source);
-  FeFunction::new(0, sol)
+  Cochain::new(0, sol)
 }
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
@@ -39,7 +39,7 @@ pub fn solve_laplace_beltrami_evp(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
   neigen_values: usize,
-) -> (na::DVector<f64>, Vec<FeFunction>) {
+) -> (na::DVector<f64>, Vec<Cochain>) {
   let laplace_galmat =
     assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
   let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarLumpedMassElmat);
@@ -52,7 +52,7 @@ pub fn solve_laplace_beltrami_evp(
 
   let eigenvecs = eigenvecs
     .column_iter()
-    .map(|c| FeFunction::new(0, c.into_owned()))
+    .map(|c| Cochain::new(0, c.into_owned()))
     .collect();
 
   (eigenvals, eigenvecs)

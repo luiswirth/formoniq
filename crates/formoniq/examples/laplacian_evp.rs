@@ -2,11 +2,11 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use {
-  formoniq::{
-    fe::evaluate_fe_function_at_cell_barycenters, operators::FeFunction, problems::hodge_laplace,
-  },
+  formoniq::{fe::evaluate_fe_function_at_cell_barycenters, problems::hodge_laplace},
   manifold::{
-    dim3::TriangleSurface3D, gen::cartesian::CartesianMeshInfo, topology::complex::Complex,
+    dim3::TriangleSurface3D,
+    gen::cartesian::CartesianMeshInfo,
+    topology::complex::{attribute::Cochain, Complex},
   },
 };
 
@@ -35,7 +35,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   for (ieigen, (&eigenval, eigenfunc)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate()
   {
     println!("eigenval={eigenval:.3}");
-    let eigenfunc = FeFunction::new(grade, eigenfunc.into_owned());
+    let eigenfunc = Cochain::new(grade, eigenfunc.into_owned());
 
     formoniq::io::save_evaluations_to_file(
       &eigenfunc,

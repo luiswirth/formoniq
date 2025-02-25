@@ -1,11 +1,11 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::{
-  operators::FeFunction,
-  problems::wave::{self, WaveState},
+use formoniq::problems::wave::{self, WaveState};
+use manifold::{
+  dim3::{cartesian2spherical, mesh_sphere_surface},
+  topology::complex::attribute::Cochain,
 };
-use manifold::dim3::{cartesian2spherical, mesh_sphere_surface};
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -44,7 +44,7 @@ fn main() {
 
   assert!(!topology.has_boundary());
   let boundary_data = |_| unreachable!();
-  let force_data = FeFunction::zero(0, &topology);
+  let force_data = Cochain::zero(0, &topology);
 
   let initial_pos = coords
     .coord_iter()
