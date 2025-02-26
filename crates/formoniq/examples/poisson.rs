@@ -4,15 +4,17 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::util::algebraic_convergence_rate;
-use formoniq::{
-  fe::{h1_norm, l2_norm},
-  problems::laplace_beltrami,
-};
-use manifold::{
-  gen::cartesian::CartesianMeshInfo,
-  geometry::metric::MeshEdgeLengths,
-  topology::complex::{attribute::Cochain, Complex},
+use {
+  common::util::algebraic_convergence_rate,
+  formoniq::{
+    fe::{h1_norm, l2_norm},
+    problems::laplace_beltrami,
+  },
+  manifold::{
+    gen::cartesian::CartesianMeshInfo, geometry::metric::MeshEdgeLengths,
+    topology::complex::Complex,
+  },
+  whitney::cochain::Cochain,
 };
 
 use std::f64::consts::TAU;

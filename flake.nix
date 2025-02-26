@@ -37,6 +37,8 @@
               cargo-flamegraph
               linuxPackages_latest.perf
 
+              mpi
+              
               (python3.withPackages (ps: with ps; [
                 python-lsp-server
 

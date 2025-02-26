@@ -1,5 +1,4 @@
 pub mod attribute;
-pub mod dim;
 pub mod handle;
 
 use attribute::KSimplexCollection;

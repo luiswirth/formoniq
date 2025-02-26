@@ -6,10 +6,8 @@ use crate::{
 };
 
 use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
-use manifold::{
-  geometry::metric::MeshEdgeLengths,
-  topology::complex::{attribute::Cochain, Complex},
-};
+use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
+use whitney::cochain::Cochain;
 
 pub struct WaveState {
   pub pos: na::DVector<f64>,
