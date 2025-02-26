@@ -322,9 +322,12 @@ pub fn petsc_saddle_point(lhs: &nas::CsrMatrix<f64>, rhs: &na::DVector<f64>) -> 
   petsc_write_matrix(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
   petsc_write_vector(rhs, &format!("{solver_path}/in/b.bin")).unwrap();
 
-  let binary = "./hils";
+  let binary = "mpiexec";
   #[rustfmt::skip]
-  let args: [&str; 0] = [
+  let args: [&str; 3] = [
+    "-n",
+    "1",
+    "./hils",
     //"-ksp_type", "minres",
     //"-pc_type", "lu",
     //"-ksp_max_it", "1000",

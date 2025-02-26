@@ -7,10 +7,10 @@ use {
   common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix},
   exterior::ExteriorGrade,
   manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
+  whitney::cochain::Cochain,
 };
 
 use itertools::Itertools;
-use manifold::topology::complex::attribute::Cochain;
 use std::mem;
 
 pub struct MixedGalmats {
@@ -128,7 +128,9 @@ pub fn solve_hodge_laplace_harmonics(
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
 ) -> na::DMatrix<f64> {
-  let homology_dim = topology.homology_dim(grade);
+  // TODO!!!
+  //let homology_dim = topology.homology_dim(grade);
+  let homology_dim = 0;
 
   if homology_dim == 0 {
     let nwhitneys = topology.nsimplicies(grade);

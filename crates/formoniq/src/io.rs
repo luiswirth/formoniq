@@ -1,9 +1,9 @@
 use crate::fe::evaluate_fe_function_cell_vertices;
 
-use exterior::MultiForm;
-use manifold::{
-  geometry::coord::MeshVertexCoords,
-  topology::complex::{attribute::Cochain, Complex},
+use {
+  exterior::MultiForm,
+  manifold::{geometry::coord::MeshVertexCoords, topology::complex::Complex},
+  whitney::cochain::Cochain,
 };
 
 use std::{fs::File, io::BufWriter, path::Path};

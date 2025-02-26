@@ -8,8 +8,9 @@ use crate::{
 use common::{sparse::petsc_ghiep, util::FaerCholesky};
 use manifold::{
   geometry::metric::MeshEdgeLengths,
-  topology::complex::{attribute::Cochain, handle::KSimplexIdx, Complex},
+  topology::complex::{handle::KSimplexIdx, Complex},
 };
+use whitney::cochain::Cochain;
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(

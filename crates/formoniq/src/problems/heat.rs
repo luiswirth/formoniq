@@ -5,10 +5,10 @@ use crate::{
   operators::{self, DofIdx},
 };
 
-use common::util::FaerCholesky;
-use manifold::{
-  geometry::metric::MeshEdgeLengths,
-  topology::complex::{attribute::Cochain, Complex},
+use {
+  common::util::FaerCholesky,
+  manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
+  whitney::cochain::Cochain,
 };
 
 /// times = [t_0,t_1,...,T]

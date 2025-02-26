@@ -4,10 +4,9 @@ extern crate nalgebra_sparse as nas;
 use {
   formoniq::{fe::evaluate_fe_function_at_cell_barycenters, problems::hodge_laplace},
   manifold::{
-    dim3::TriangleSurface3D,
-    gen::cartesian::CartesianMeshInfo,
-    topology::complex::{attribute::Cochain, Complex},
+    dim3::TriangleSurface3D, gen::cartesian::CartesianMeshInfo, topology::complex::Complex,
   },
+  whitney::cochain::Cochain,
 };
 
 use std::fs;

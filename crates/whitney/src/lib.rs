@@ -1,3 +1,9 @@
+extern crate nalgebra as na;
+
+pub mod cochain;
+
+use crate::cochain::Cochain;
+
 use {
   common::sparse::SparseMatrix,
   exterior::{
@@ -8,10 +14,7 @@ use {
     geometry::coord::{
       local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
     },
-    topology::{
-      complex::{attribute::Cochain, Complex},
-      simplex::Simplex,
-    },
+    topology::{complex::Complex, simplex::Simplex},
     Dim,
   },
   multi_index::{factorial, sign::Sign, variants::SetOrder},
