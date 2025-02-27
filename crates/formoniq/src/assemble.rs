@@ -3,6 +3,7 @@ use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 use common::{sparse::SparseMatrix, util};
 use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
+use rayon::prelude::*;
 use std::collections::HashSet;
 
 pub type GalMat = SparseMatrix;
@@ -20,20 +21,32 @@ pub fn assemble_galmat(
   let nsimps_row = topology.skeleton(row_grade).len();
   let nsimps_col = topology.skeleton(col_grade).len();
 
-  let mut galmat = SparseMatrix::zeros(nsimps_row, nsimps_col);
-  for cell in topology.cells().handle_iter() {
-    let geo = geometry.simplex_geometry(cell);
-    let elmat = elmat.eval(&geo);
+  let triplets: Vec<(usize, usize, f64)> = topology
+    .cells()
+    .handle_iter()
+    .par_bridge()
+    .flat_map(|cell| {
+      let geo = geometry.simplex_geometry(cell);
+      let elmat = elmat.eval(&geo);
 
-    let row_subs: Vec<_> = cell.subsimps(row_grade).collect();
-    let col_subs: Vec<_> = cell.subsimps(col_grade).collect();
-    for (ilocal, &iglobal) in row_subs.iter().enumerate() {
-      for (jlocal, &jglobal) in col_subs.iter().enumerate() {
-        galmat.push(iglobal.kidx(), jglobal.kidx(), elmat[(ilocal, jlocal)]);
+      let row_subs: Vec<_> = cell.subsimps(row_grade).collect();
+      let col_subs: Vec<_> = cell.subsimps(col_grade).collect();
+
+      let mut local_triplets = Vec::new();
+      for (ilocal, &iglobal) in row_subs.iter().enumerate() {
+        for (jlocal, &jglobal) in col_subs.iter().enumerate() {
+          let val = elmat[(ilocal, jlocal)];
+          if val != 0.0 {
+            local_triplets.push((iglobal.kidx(), jglobal.kidx(), val));
+          }
+        }
       }
-    }
-  }
-  galmat
+
+      local_triplets
+    })
+    .collect();
+
+  SparseMatrix::new(nsimps_row, nsimps_col, triplets)
 }
 
 /// Assembly algorithm for the Galerkin Vector.
@@ -43,19 +56,34 @@ pub fn assemble_galvec(
   elvec: impl ElVecProvider,
 ) -> GalVec {
   let grade = elvec.grade();
-
   let nsimps = topology.skeleton(grade).len();
+
+  let entries: Vec<(usize, f64)> = topology
+    .cells()
+    .handle_iter()
+    .par_bridge()
+    .flat_map(|cell| {
+      let geo = geometry.simplex_geometry(cell);
+      let elvec = elvec.eval(&geo);
+
+      let subs: Vec<_> = cell.subsimps(grade).collect();
+
+      let mut local_entires = Vec::new();
+      for (ilocal, &iglobal) in subs.iter().enumerate() {
+        if elvec[ilocal] != 0.0 {
+          local_entires.push((iglobal.kidx(), elvec[ilocal]));
+        }
+      }
+
+      local_entires
+    })
+    .collect();
+
   let mut galvec = na::DVector::zeros(nsimps);
-
-  for cell in topology.cells().handle_iter() {
-    let geo = geometry.simplex_geometry(cell);
-    let elvec = elvec.eval(&geo);
-
-    let subs: Vec<_> = cell.subsimps(grade).collect();
-    for (ilocal, &iglobal) in subs.iter().enumerate() {
-      galvec[iglobal.kidx()] += elvec[ilocal];
-    }
+  for (irow, val) in entries {
+    galvec[irow] += val;
   }
+
   galvec
 }
 
@@ -89,10 +117,7 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
   *galvec = std::mem::take(galvec).remove_rows_at(dofs);
 }
 
-pub fn reintroduce_boundary_dofs_galsols(
-  complex: &Complex,
-  galsols: &mut na::DMatrix<f64>,
-) {
+pub fn reintroduce_boundary_dofs_galsols(complex: &Complex, galsols: &mut na::DMatrix<f64>) {
   reintroduce_dropped_dofs_galsols(complex.boundary_vertices().kidxs().to_vec(), galsols)
 }
 

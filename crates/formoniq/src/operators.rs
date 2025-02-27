@@ -35,14 +35,14 @@ pub type DofIdx = usize;
 pub type DofCoeff = f64;
 
 pub type ElMat = na::DMatrix<f64>;
-pub trait ElMatProvider {
+pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
   fn eval(&self, geometry: &SimplexGeometry) -> ElMat;
 }
 
 pub type ElVec = na::DVector<f64>;
-pub trait ElVecProvider {
+pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
   fn eval(&self, geometry: &SimplexGeometry) -> ElVec;
 }
