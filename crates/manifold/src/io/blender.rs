@@ -1,7 +1,4 @@
-use crate::{
-  dim3::{TriangleSurface3D, VertexCoords3d},
-  geometry::coord::MeshVertexCoords,
-};
+use crate::{dim3::TriangleSurface3D, geometry::coord::MeshVertexCoords};
 
 use std::fmt::Write;
 use std::path::Path;
@@ -9,7 +6,7 @@ use std::path::Path;
 pub fn to_obj_string(surface: &TriangleSurface3D) -> String {
   let mut string = String::new();
   for v in surface.vertex_coords().coord_iter() {
-    writeln!(string, "v {:.6} {:.6} {:.6}", v.x, v.y, v.z).unwrap();
+    writeln!(string, "v {:.6} {:.6} {:.6}", v[0], v[1], v[2]).unwrap();
   }
   for t in surface.triangles() {
     // .obj uses 1-indexing.
@@ -31,7 +28,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
         .map(|x| x.parse::<f64>().unwrap())
         .collect();
       assert!(coords.len() == 3);
-      vertex_coords.push(na::Vector3::new(coords[0], coords[1], coords[2]));
+      vertex_coords.push(na::dvector![coords[0], coords[1], coords[2]]);
     } else if let Some(indices) = line.strip_prefix("f ") {
       let indices: Vec<usize> = indices
         .split_whitespace()
@@ -43,7 +40,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
     }
   }
 
-  let vertex_coords = na::Matrix3xX::from_columns(&vertex_coords);
+  let vertex_coords = na::DMatrix::from_columns(&vertex_coords);
   let vertex_coords = MeshVertexCoords::from(vertex_coords);
   TriangleSurface3D::new(triangles, vertex_coords)
 }
@@ -79,17 +76,15 @@ pub fn write_mdd_file(
 }
 
 pub fn write_3dmesh_animation<'a, 'b>(
-  coords_frames: impl IntoIterator<Item = &'a VertexCoords3d>,
+  coords_frames: impl IntoIterator<Item = &'a MeshVertexCoords>,
   time_frames: impl IntoIterator<Item = f64>,
-) where
-  VertexCoords3d: std::fmt::Debug,
-{
+) {
   let mdd_frames: Vec<Vec<[f32; 3]>> = coords_frames
     .into_iter()
     .map(|coords| {
       coords
         .coord_iter()
-        .map(|col| [col.x as f32, col.y as f32, col.z as f32])
+        .map(|col| [col[0] as f32, col[1] as f32, col[2] as f32])
         .collect()
     })
     .collect();

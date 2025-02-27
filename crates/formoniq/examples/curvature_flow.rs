@@ -67,10 +67,7 @@ fn main() {
     coords_list.push(coords_new);
   }
 
-  let coords_list: Vec<_> = coords_list
-    .into_iter()
-    .map(|coords| coords.into_const_dim())
-    .collect();
+  let coords_list: Vec<_> = coords_list.into_iter().collect();
   let times = (0..=nsteps).map(|istep| istep as f64 * dt);
   manifold::io::blender::write_3dmesh_animation(&coords_list, times);
 }

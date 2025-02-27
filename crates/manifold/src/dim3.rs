@@ -6,28 +6,27 @@ use crate::{
 use std::{collections::HashMap, sync::LazyLock};
 
 pub type TriangleTopology = Vec<[usize; 3]>;
-pub type VertexCoords3d = MeshVertexCoords<na::U3>;
 
 #[derive(Debug, Clone)]
 pub struct TriangleSurface3D {
   triangles: TriangleTopology,
-  coords: VertexCoords3d,
+  coords: MeshVertexCoords,
 }
 impl TriangleSurface3D {
-  pub fn new(triangles: TriangleTopology, coords: impl Into<VertexCoords3d>) -> Self {
+  pub fn new(triangles: TriangleTopology, coords: impl Into<MeshVertexCoords>) -> Self {
     let coords = coords.into();
     Self { triangles, coords }
   }
   pub fn triangles(&self) -> &[[usize; 3]] {
     &self.triangles
   }
-  pub fn vertex_coords(&self) -> &VertexCoords3d {
+  pub fn vertex_coords(&self) -> &MeshVertexCoords {
     &self.coords
   }
-  pub fn vertex_coords_mut(&mut self) -> &mut VertexCoords3d {
+  pub fn vertex_coords_mut(&mut self) -> &mut MeshVertexCoords {
     &mut self.coords
   }
-  pub fn into_parts(self) -> (TriangleTopology, VertexCoords3d) {
+  pub fn into_parts(self) -> (TriangleTopology, MeshVertexCoords) {
     (self.triangles, self.coords)
   }
 }
@@ -51,8 +50,6 @@ impl TriangleSurface3D {
       })
       .collect();
 
-    let coords = coords.into_const_dim();
-
     Self::new(triangles, coords)
   }
 
@@ -63,7 +60,7 @@ impl TriangleSurface3D {
       .map(|tria| Simplex::from(tria).into_sorted())
       .collect();
     let skeleton = Skeleton::new(simps);
-    let coords = self.coords.into_dyn_dim();
+    let coords = self.coords;
     (skeleton, coords)
   }
 
@@ -84,7 +81,7 @@ impl TriangleSurface3D {
       let e1 = vs[2] - vs[0];
       let triangle_normal = e0.cross(&e1).normalize();
       for &iv in ivs {
-        vertex_normals[iv] += triangle_normal;
+        vertex_normals[iv] += &triangle_normal;
         vertex_triangle_counts[iv] += 1;
       }
     }
@@ -134,9 +131,9 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
 
 fn subdivide(
   triangles: Vec<[usize; 3]>,
-  mut vertex_coords: Vec<na::Vector3<f64>>,
+  mut vertex_coords: Vec<na::DVector<f64>>,
   depth: usize,
-) -> (Vec<[usize; 3]>, Vec<na::Vector3<f64>>) {
+) -> (Vec<[usize; 3]>, Vec<na::DVector<f64>>) {
   if depth == 0 {
     return (triangles, vertex_coords);
   }
@@ -165,7 +162,7 @@ fn subdivide(
 fn get_midpoint(
   v0: usize,
   v1: usize,
-  vertices: &mut Vec<na::Vector3<f64>>,
+  vertices: &mut Vec<na::DVector<f64>>,
   midpoints: &mut HashMap<(usize, usize), usize>,
 ) -> usize {
   let edge = if v0 < v1 { (v0, v1) } else { (v1, v0) };
@@ -173,7 +170,7 @@ fn get_midpoint(
     return midpoint;
   }
 
-  let midpoint = ((vertices[v0] + vertices[v1]) / 2.0).normalize();
+  let midpoint = ((&vertices[v0] + &vertices[v1]) / 2.0).normalize();
   vertices.push(midpoint);
   let index = vertices.len() - 1;
   midpoints.insert(edge, index);
@@ -201,7 +198,7 @@ static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
 
   let vertex_coords: Vec<_> = vertex_coords
     .into_iter()
-    .map(|v| na::Vector3::new(v[0], v[1], v[2]).normalize())
+    .map(|v| na::dvector![v[0], v[1], v[2]].normalize())
     .collect();
 
   #[rustfmt::skip]

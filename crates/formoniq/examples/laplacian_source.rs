@@ -66,6 +66,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let analytic_form = DifferentialFormClosure::new(Box::new(analytic_sol), dim, form_grade);
     let analytic_cochain = discretize_form_on_mesh(&analytic_form, &topology, &coords);
 
+    formoniq::io::save_evaluations_to_file(
+      &analytic_cochain,
+      &topology,
+      &coords,
+      format!("{path}/evaluations.txt"),
+    )?;
+
     //for (&approx, &exact) in u.coeffs().iter().zip(analytic_cochain.coeffs().iter()) {
     //  println!("approx={approx}, exact={exact}");
     //}
