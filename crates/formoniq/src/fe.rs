@@ -95,12 +95,12 @@ pub fn evaluate_fe_function_at_cell_barycenters(
     .collect()
 }
 
-pub fn evaluate_fe_function_cell_vertices(
-  fe: &Cochain,
+pub fn evaluate_fe_function_mesh_cell_vertices(
+  cochain: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
 ) -> Vec<Vec<MultiForm>> {
-  let grade = fe.dim;
+  let grade = cochain.dim();
 
   topology
     .cells()
@@ -109,18 +109,26 @@ pub fn evaluate_fe_function_cell_vertices(
       cell
         .vertices()
         .map(|vertex| {
-          let mut value = MultiForm::zero(topology.dim(), grade);
-          for dof_simp in cell.subsimps(grade) {
-            let local_dof_simp = cell
-              .simplex_set()
-              .global_to_local_subsimp(dof_simp.simplex_set());
+          let coord = coords.coord(vertex.kidx());
 
-            let dof_value = fe[dof_simp]
-              * WhitneyForm::new(cell.coord_simplex(coords), local_dof_simp)
-                .at_point(&coords.coord(vertex.kidx()));
-            value += dof_value;
-          }
-          value
+          // vertex value
+          cell
+            .subsimps(grade)
+            .map(|dof_simp| {
+              let coeff = cochain[dof_simp];
+
+              let local_dof_simp = cell
+                .simplex_set()
+                .global_to_local_subsimp(dof_simp.simplex_set());
+              //dbg!(cell.simplex_set().vertices.indices());
+              //dbg!(dof_simp.simplex_set().vertices.indices());
+              //dbg!(&local_dof_simp.vertices.indices());
+              let whitney = WhitneyForm::new(cell.coord_simplex(coords), local_dof_simp);
+
+              // dof_value
+              coeff * whitney.at_point(coord)
+            })
+            .sum()
         })
         .collect()
     })

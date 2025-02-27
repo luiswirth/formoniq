@@ -13,6 +13,7 @@ use tracing::warn;
 pub struct SimplexCoords {
   pub vertices: MeshVertexCoords,
 }
+
 impl SimplexCoords {
   pub fn new(vertices: impl Into<MeshVertexCoords>) -> Self {
     let vertices = vertices.into();
@@ -59,7 +60,11 @@ impl SimplexCoords {
     self.dim_intrinsic() == self.dim_embedded()
   }
 
-  pub fn base_vertex(&self) -> Coord {
+  pub fn coord(&self, ivertex: usize) -> CoordRef {
+    self.vertices.coord(ivertex)
+  }
+
+  pub fn base_vertex(&self) -> CoordRef {
     self.vertices.coord(0)
   }
   pub fn spanning_vector(&self, i: usize) -> na::DVector<f64> {
@@ -70,7 +75,7 @@ impl SimplexCoords {
     let mut mat = na::DMatrix::zeros(self.dim_embedded(), self.dim_intrinsic());
     let v0 = self.base_vertex();
     for (i, vi) in self.vertices.coord_iter().skip(1).enumerate() {
-      let v0i = vi - &v0;
+      let v0i = vi - v0;
       mat.set_column(i, &v0i);
     }
     mat
@@ -107,7 +112,7 @@ impl SimplexCoords {
   }
 
   pub fn affine_diffeomorphism(&self) -> AffineDiffeomorphism {
-    let translation = self.base_vertex();
+    let translation = self.base_vertex().into_owned();
     let linear = self.linear_transform();
     AffineDiffeomorphism::from_forward(translation, linear)
   }
@@ -160,6 +165,12 @@ impl SimplexCoords {
     let bary = self.global_to_bary_coord(global);
     bary.iter().all(|&b| (0.0..=1.0).contains(&b))
   }
+}
+
+pub fn reference_barycenter(dim: Dim) -> Coord {
+  let nvertices = dim + 1;
+  let value = 1.0 / nvertices as f64;
+  na::DVector::from_element(dim, value)
 }
 
 pub fn local_to_bary_coord<'a>(local: impl Into<CoordRef<'a>>) -> Coord {

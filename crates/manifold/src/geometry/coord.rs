@@ -8,8 +8,8 @@ use crate::{geometry::metric::MeshEdgeLengths, topology::complex::Complex, Dim};
 
 pub type VertexIdx = usize;
 
-pub type Coord<D = na::Dyn> = na::OVector<f64, D>;
-pub type CoordRef<'a, D = na::Dyn> = na::VectorView<'a, f64, D>;
+pub type Coord = na::DVector<f64>;
+pub type CoordRef<'a> = na::DVectorView<'a, f64>;
 
 //type CoordVectorView<'a, D> = na::VectorView<'a, f64, D>;
 
@@ -36,36 +36,26 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
   (topology, coords)
 }
 
-pub type CoordMatrix<D> = na::OMatrix<f64, D, na::Dyn>;
 #[derive(Debug, Clone)]
-pub struct MeshVertexCoords<D: na::Dim = na::Dyn>
-where
-  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
-{
-  coord_matrix: CoordMatrix<D>,
+pub struct MeshVertexCoords {
+  coord_matrix: na::DMatrix<f64>,
 }
 
-impl MeshVertexCoords<na::Dyn> {
+impl MeshVertexCoords {
   pub fn standard(ndim: Dim) -> Self {
     SimplexCoords::standard(ndim).vertices
   }
-}
-
-impl<D: na::Dim> MeshVertexCoords<D>
-where
-  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
-{
-  pub fn new(coord_matrix: CoordMatrix<D>) -> Self {
+  pub fn new(coord_matrix: na::DMatrix<f64>) -> Self {
     Self { coord_matrix }
   }
 
-  pub fn matrix(&self) -> &CoordMatrix<D> {
+  pub fn matrix(&self) -> &na::DMatrix<f64> {
     &self.coord_matrix
   }
-  pub fn matrix_mut(&mut self) -> &mut CoordMatrix<D> {
+  pub fn matrix_mut(&mut self) -> &mut na::DMatrix<f64> {
     &mut self.coord_matrix
   }
-  pub fn into_matrix(self) -> CoordMatrix<D> {
+  pub fn into_matrix(self) -> na::DMatrix<f64> {
     self.coord_matrix
   }
 
@@ -74,44 +64,20 @@ where
   }
 }
 
-impl<D: na::Dim> From<CoordMatrix<D>> for MeshVertexCoords<D>
-where
-  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
-{
-  fn from(matrix: CoordMatrix<D>) -> Self {
+impl From<na::DMatrix<f64>> for MeshVertexCoords {
+  fn from(matrix: na::DMatrix<f64>) -> Self {
     Self::new(matrix)
   }
 }
 
-impl<D: na::Dim> From<&[Coord<D>]> for MeshVertexCoords<D>
-where
-  na::DefaultAllocator: na::allocator::Allocator<D>,
-  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
-{
-  fn from(vectors: &[Coord<D>]) -> Self {
-    let matrix = CoordMatrix::from_columns(vectors);
+impl From<&[Coord]> for MeshVertexCoords {
+  fn from(vectors: &[Coord]) -> Self {
+    let matrix = na::DMatrix::from_columns(vectors);
     Self::new(matrix)
   }
 }
 
-impl MeshVertexCoords<na::Dyn> {
-  pub fn into_const_dim<D1: na::DimName>(self) -> MeshVertexCoords<D1> {
-    let matrix: CoordMatrix<D1> = na::try_convert(self.coord_matrix).unwrap();
-    MeshVertexCoords::new(matrix)
-  }
-}
-impl<D: na::DimName> MeshVertexCoords<D> {
-  pub fn into_dyn_dim(self) -> MeshVertexCoords<na::Dyn> {
-    let matrix: CoordMatrix<na::Dyn> = na::try_convert(self.coord_matrix).unwrap();
-    MeshVertexCoords::new(matrix)
-  }
-}
-
-impl<D: na::Dim> MeshVertexCoords<D>
-where
-  na::DefaultAllocator: na::allocator::Allocator<D, na::Dyn>,
-  na::DefaultAllocator: na::allocator::Allocator<D>,
-{
+impl MeshVertexCoords {
   pub fn dim(&self) -> Dim {
     self.coord_matrix.nrows()
   }
@@ -119,32 +85,19 @@ where
     self.coord_matrix.ncols()
   }
 
-  // TODO: return view
-  pub fn coord(&self, ivertex: VertexIdx) -> Coord<D> {
-    self.coord_matrix.column(ivertex).into_owned()
+  pub fn coord(&self, ivertex: VertexIdx) -> CoordRef {
+    self.coord_matrix.column(ivertex)
   }
 
   pub fn coord_iter(
     &self,
-  ) -> na::iter::ColumnIter<
-    '_,
-    f64,
-    D,
-    na::Dyn,
-    <na::DefaultAllocator as na::allocator::Allocator<D, na::Dyn>>::Buffer<f64>,
-  > {
+  ) -> na::iter::ColumnIter<'_, f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> {
     self.coord_matrix.column_iter()
   }
 
   pub fn coord_iter_mut(
     &mut self,
-  ) -> na::iter::ColumnIterMut<
-    '_,
-    f64,
-    D,
-    na::Dyn,
-    <na::DefaultAllocator as na::allocator::Allocator<D, na::Dyn>>::Buffer<f64>,
-  > {
+  ) -> na::iter::ColumnIterMut<'_, f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> {
     self.coord_matrix.column_iter_mut()
   }
 
@@ -160,7 +113,7 @@ where
   }
 }
 
-impl MeshVertexCoords<na::Dyn> {
+impl MeshVertexCoords {
   pub fn embed_euclidean(mut self, dim: Dim) -> MeshVertexCoords {
     let old_dim = self.coord_matrix.nrows();
     self.coord_matrix = self.coord_matrix.insert_rows(old_dim, dim - old_dim, 0.0);
