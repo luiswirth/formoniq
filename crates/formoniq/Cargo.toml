@@ -15,6 +15,7 @@ nalgebra-sparse = "0.10.0"
 
 tracing = "0.1.40"
 itertools = "0.14.0"
+rayon = "1.9.0"
 
 
 [dev-dependencies]
