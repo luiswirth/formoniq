@@ -6,7 +6,7 @@ use crate::{
 };
 
 use common::{linalg::DMatrixExt, metric::AffineDiffeomorphism};
-use multi_index::{sign::Sign, variants::SetOrder};
+use multi_index::{sign::Sign, variants::IndexKind};
 use tracing::warn;
 
 #[derive(Debug, Clone)]
@@ -31,7 +31,7 @@ impl SimplexCoords {
 
   pub fn from_simplex_and_coords<O>(simp: &Simplex<O>, coords: &MeshVertexCoords) -> SimplexCoords
   where
-    O: SetOrder,
+    O: IndexKind,
   {
     let mut vert_coords = na::DMatrix::zeros(coords.dim(), simp.nvertices());
     for (i, v) in simp.vertices.iter().enumerate() {

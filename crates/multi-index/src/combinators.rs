@@ -1,8 +1,7 @@
-use std::marker::PhantomData;
-
+use super::{variants::*, MultiIndex};
 use crate::{sign::Sign, SignedIndexSet};
 
-use super::{variants::*, IndexSet};
+use std::marker::PhantomData;
 
 /// All signed permutations of `self` in lexicographical order.
 ///
@@ -13,7 +12,7 @@ pub struct IndexSubPermutations {
 }
 
 impl IndexSubPermutations {
-  pub fn new<O: SetOrder>(set: IndexSet<O>, k: usize) -> Self {
+  pub fn new<O>(set: MultiIndex<O>, k: usize) -> Self {
     let indices = set.indices.clone().into_iter();
     let state = itertools::Itertools::permutations(indices, k);
     Self { state }
@@ -21,16 +20,16 @@ impl IndexSubPermutations {
 }
 impl IndexSubPermutations {
   pub fn canonical(n: usize, k: usize) -> Self {
-    let set = IndexSet::increasing(n);
+    let set = MultiIndex::increasing(n);
     Self::new(set, k)
   }
 }
 
 impl Iterator for IndexSubPermutations {
-  type Item = IndexSet<ArbitraryOrder>;
+  type Item = MultiIndex<ArbitraryList>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.state.next()?;
-    let next = IndexSet::new(indices);
+    let next = MultiIndex::new(indices);
     Some(next)
   }
 }
@@ -40,7 +39,7 @@ pub struct IndexPermutations {
   set_sign: Sign,
 }
 impl IndexPermutations {
-  pub fn new<O: SetOrder>(set: SignedIndexSet<O>) -> Self {
+  pub fn new<O: IndexKind>(set: SignedIndexSet<O>) -> Self {
     let SignedIndexSet { set, sign } = set;
     let k = set.len();
     let sub_permutations = IndexSubPermutations::new(set, k);
@@ -50,13 +49,13 @@ impl IndexPermutations {
     }
   }
   pub fn canonical(n: usize) -> Self {
-    let set = IndexSet::increasing(n).with_sign(Sign::Pos);
+    let set = MultiIndex::increasing(n).with_sign(Sign::Pos);
     Self::new(set)
   }
 }
 
 impl Iterator for IndexPermutations {
-  type Item = SignedIndexSet<ArbitraryOrder>;
+  type Item = SignedIndexSet<ArbitraryList>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.sub_permutations.next()?;
     let permut_sign = next.permut_sign().unwrap();
@@ -65,23 +64,23 @@ impl Iterator for IndexPermutations {
   }
 }
 
-pub struct GradedIndexSubsets<O: SetOrder> {
-  set: IndexSet<O>,
+pub struct GradedIndexSubsets<O> {
+  set: MultiIndex<O>,
   k: usize,
 }
-impl<O: SetOrder> GradedIndexSubsets<O> {
-  pub fn new(set: IndexSet<O>) -> Self {
+impl<O> GradedIndexSubsets<O> {
+  pub fn new(set: MultiIndex<O>) -> Self {
     let k = 0;
     Self { set, k }
   }
 }
-impl GradedIndexSubsets<CanonicalOrder> {
+impl GradedIndexSubsets<IncreasingSet> {
   pub fn canonical(n: usize) -> Self {
-    let set = IndexSet::increasing(n);
+    let set = MultiIndex::increasing(n);
     Self::new(set)
   }
 }
-impl<O: SetOrder> Iterator for GradedIndexSubsets<O> {
+impl<O: IndexKind> Iterator for GradedIndexSubsets<O> {
   type Item = IndexSubsets<O>;
   fn next(&mut self) -> Option<Self::Item> {
     (self.k <= self.set.len()).then(|| {
@@ -92,13 +91,13 @@ impl<O: SetOrder> Iterator for GradedIndexSubsets<O> {
   }
 }
 
-pub struct IndexSubsets<O: SetOrder> {
+pub struct IndexSubsets<O> {
   subsets: itertools::Combinations<std::vec::IntoIter<usize>>,
   _order: PhantomData<O>,
 }
 
-impl<O: SetOrder> IndexSubsets<O> {
-  pub fn new(set: IndexSet<O>, k: usize) -> Self {
+impl<O> IndexSubsets<O> {
+  pub fn new(set: MultiIndex<O>, k: usize) -> Self {
     let subsets = itertools::Itertools::combinations(set.indices.into_iter(), k);
     Self {
       subsets,
@@ -106,19 +105,19 @@ impl<O: SetOrder> IndexSubsets<O> {
     }
   }
 }
-impl IndexSubsets<CanonicalOrder> {
+impl IndexSubsets<IncreasingSet> {
   /// Sorted subsets of {0,...,n-1}
   pub fn canonical(n: usize, k: usize) -> Self {
-    let set = IndexSet::increasing(n);
+    let set = MultiIndex::increasing(n);
     Self::new(set, k)
   }
 }
 
-impl<O: SetOrder> Iterator for IndexSubsets<O> {
-  type Item = IndexSet<O>;
+impl<O> Iterator for IndexSubsets<O> {
+  type Item = MultiIndex<O>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.subsets.next()?;
-    let next = IndexSet {
+    let next = MultiIndex {
       indices,
       _order: PhantomData,
     };
@@ -126,12 +125,12 @@ impl<O: SetOrder> Iterator for IndexSubsets<O> {
   }
 }
 
-pub struct IndexBoundarySets<O: SetOrder> {
+pub struct IndexBoundarySets<O> {
   subsets: IndexSubsets<O>,
   sign: Sign,
 }
 
-impl<O: SetOrder> IndexBoundarySets<O> {
+impl<O: IndexKind> IndexBoundarySets<O> {
   pub fn new(set: SignedIndexSet<O>) -> Self {
     let k = set.set.len() - 1;
     let subsets = IndexSubsets::new(set.set, k);
@@ -141,7 +140,7 @@ impl<O: SetOrder> IndexBoundarySets<O> {
   }
 }
 
-impl<O: SetOrder> Iterator for IndexBoundarySets<O> {
+impl<O: IndexKind> Iterator for IndexBoundarySets<O> {
   type Item = SignedIndexSet<O>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.subsets.next()?.with_sign(self.sign);
@@ -151,17 +150,17 @@ impl<O: SetOrder> Iterator for IndexBoundarySets<O> {
 }
 
 pub struct IndexSupsets {
-  root_subsets: IndexSubsets<CanonicalOrder>,
-  set: IndexSet<CanonicalOrder>,
+  root_subsets: IndexSubsets<IncreasingSet>,
+  set: MultiIndex<IncreasingSet>,
 }
 impl IndexSupsets {
-  pub fn new(set: IndexSet<CanonicalOrder>, root: IndexSet<CanonicalOrder>, k: usize) -> Self {
+  pub fn new(set: MultiIndex<IncreasingSet>, root: MultiIndex<IncreasingSet>, k: usize) -> Self {
     let root_subsets = IndexSubsets::new(root, k);
     Self { root_subsets, set }
   }
 }
 impl Iterator for IndexSupsets {
-  type Item = IndexSet<CanonicalOrder>;
+  type Item = MultiIndex<IncreasingSet>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.root_subsets.next()?;
     self.set.is_subset_of(&next).then_some(next)
@@ -174,7 +173,7 @@ pub struct IndexAntiBoundarySets {
 }
 
 impl IndexAntiBoundarySets {
-  pub fn new(set: SignedIndexSet<CanonicalOrder>, root: IndexSet<CanonicalOrder>) -> Self {
+  pub fn new(set: SignedIndexSet<IncreasingSet>, root: MultiIndex<IncreasingSet>) -> Self {
     let k = set.set.len() + 1;
     let supsets = IndexSupsets::new(set.set, root, k);
     let boundary_sign = Sign::from_parity(k);
@@ -184,7 +183,7 @@ impl IndexAntiBoundarySets {
 }
 
 impl Iterator for IndexAntiBoundarySets {
-  type Item = SignedIndexSet<CanonicalOrder>;
+  type Item = SignedIndexSet<IncreasingSet>;
   fn next(&mut self) -> Option<Self::Item> {
     let next = self.supsets.next()?.with_sign(self.sign);
     self.sign.flip();
@@ -194,7 +193,7 @@ impl Iterator for IndexAntiBoundarySets {
 
 #[cfg(test)]
 mod test {
-  use crate::IndexSet;
+  use crate::MultiIndex;
 
   use super::{GradedIndexSubsets, IndexPermutations};
 
@@ -241,7 +240,7 @@ mod test {
       for (rank, subset) in linearized.iter().enumerate() {
         assert_eq!(subset.graded_lex_rank(n), rank);
         assert_eq!(
-          IndexSet::from_graded_lex_rank(n, subset.len(), rank),
+          MultiIndex::from_graded_lex_rank(n, subset.len(), rank),
           *subset
         );
       }

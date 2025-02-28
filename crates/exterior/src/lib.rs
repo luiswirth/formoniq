@@ -7,7 +7,7 @@ pub mod variance;
 use term::{ExteriorBase, ExteriorTermExt, ScaledExteriorTerm};
 use variance::VarianceMarker;
 
-use multi_index::{binomial, variants::SetOrder, IndexSet};
+use multi_index::{binomial, variants::IndexKind, MultiIndex};
 
 use std::marker::PhantomData;
 
@@ -135,7 +135,7 @@ impl<V: VarianceMarker> ExteriorElement<V> {
       .copied()
       .enumerate()
       .map(move |(i, coeff)| {
-        let basis = IndexSet::from_lex_rank(dim, grade, i).ext(dim);
+        let basis = MultiIndex::from_lex_rank(dim, grade, i).ext(dim);
         (coeff, basis)
       })
   }
@@ -146,7 +146,7 @@ impl<V: VarianceMarker> ExteriorElement<V> {
     let dim = self.dim;
     let grade = self.grade;
     self.coeffs.iter_mut().enumerate().map(move |(i, coeff)| {
-      let basis = IndexSet::from_lex_rank(dim, grade, i).ext(dim);
+      let basis = MultiIndex::from_lex_rank(dim, grade, i).ext(dim);
       (coeff, basis)
     })
   }
@@ -234,7 +234,7 @@ impl<V: VarianceMarker> std::ops::Mul<ExteriorElement<V>> for f64 {
   }
 }
 
-impl<V: VarianceMarker, O: SetOrder> std::ops::AddAssign<ScaledExteriorTerm<V, O>>
+impl<V: VarianceMarker, O: IndexKind> std::ops::AddAssign<ScaledExteriorTerm<V, O>>
   for ExteriorElement<V>
 {
   fn add_assign(&mut self, term: ScaledExteriorTerm<V, O>) {
@@ -243,7 +243,7 @@ impl<V: VarianceMarker, O: SetOrder> std::ops::AddAssign<ScaledExteriorTerm<V, O
   }
 }
 
-impl<V: VarianceMarker, O: SetOrder> From<ScaledExteriorTerm<V, O>> for ExteriorElement<V> {
+impl<V: VarianceMarker, O: IndexKind> From<ScaledExteriorTerm<V, O>> for ExteriorElement<V> {
   fn from(term: ScaledExteriorTerm<V, O>) -> Self {
     let term = term.into_canonical();
     let mut element = Self::zero(term.dim(), term.grade());
@@ -273,7 +273,7 @@ impl<V: VarianceMarker> std::ops::Index<usize> for ExteriorElement<V> {
   }
 }
 
-impl<V: VarianceMarker, O: SetOrder> std::iter::FromIterator<ScaledExteriorTerm<V, O>>
+impl<V: VarianceMarker, O: IndexKind> std::iter::FromIterator<ScaledExteriorTerm<V, O>>
   for ExteriorElement<V>
 {
   fn from_iter<T: IntoIterator<Item = ScaledExteriorTerm<V, O>>>(iter: T) -> Self {

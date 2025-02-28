@@ -13,7 +13,7 @@ use {
     topology::{complex::Complex, simplex::Simplex},
     Dim,
   },
-  multi_index::{factorial, sign::Sign, variants::SetOrder},
+  multi_index::{factorial, sign::Sign, variants::IndexKind},
 };
 
 pub trait ManifoldComplexExt {
@@ -57,12 +57,12 @@ impl CoordSimplexExt for SimplexCoords {
 /// Whitney Form on a coordinate complex.
 ///
 /// Can be evaluated on local coordinates.
-pub struct WhitneyForm<O: SetOrder> {
+pub struct WhitneyForm<O: IndexKind> {
   cell_coords: SimplexCoords,
   associated_subsimp: Simplex<O>,
   difbarys: Vec<MultiForm>,
 }
-impl<O: SetOrder> WhitneyForm<O> {
+impl<O: IndexKind> WhitneyForm<O> {
   pub fn new(cell_coords: SimplexCoords, associated_subsimp: Simplex<O>) -> Self {
     let difbarys = associated_subsimp
       .vertices
@@ -103,7 +103,7 @@ impl<O: SetOrder> WhitneyForm<O> {
     factorial * MultiForm::wedge_big(difbarys).unwrap()
   }
 }
-impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
+impl<O: IndexKind> ExteriorField for WhitneyForm<O> {
   type Variance = variance::Co;
   fn dim(&self) -> Dim {
     self.cell_coords.dim_embedded()
