@@ -1,15 +1,15 @@
 use crate::Dim;
 
 use multi_index::{
-  binomial, combinators::IndexSubsets, sign::Sign, variants::*, IndexSet, SignedIndexSet,
+  binomial, combinators::IndexSubsets, sign::Sign, variants::*, MultiIndex, SignedIndexSet,
 };
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct Simplex<O: SetOrder> {
-  pub vertices: IndexSet<O>,
+pub struct Simplex<O: IndexKind> {
+  pub vertices: MultiIndex<O>,
 }
-impl<O: SetOrder> Simplex<O> {
-  pub fn new(vertices: IndexSet<O>) -> Self {
+impl<O: IndexKind> Simplex<O> {
+  pub fn new(vertices: MultiIndex<O>) -> Self {
     Self { vertices }
   }
 
@@ -31,27 +31,27 @@ impl<O: SetOrder> Simplex<O> {
     SignedSimplex::new(self.vertices, sign)
   }
 
-  pub fn assume_sorted(self) -> Simplex<CanonicalOrder> {
+  pub fn assume_sorted(self) -> Simplex<IncreasingSet> {
     Simplex::new(self.vertices.assume_sorted())
   }
-  pub fn into_sorted(self) -> Simplex<CanonicalOrder> {
+  pub fn into_sorted(self) -> Simplex<IncreasingSet> {
     Simplex::new(self.vertices.into_sorted())
   }
 
-  pub fn global_to_local_subsimp(&self, sub: &Self) -> Simplex<ArbitraryOrder> {
+  pub fn global_to_local_subsimp(&self, sub: &Self) -> Simplex<ArbitraryList> {
     Simplex::new(self.vertices.global_to_local_subset(&sub.vertices))
   }
 }
-impl<O: SetOrder, S: Into<IndexSet<O>>> From<S> for Simplex<O> {
+impl<O: IndexKind, S: Into<MultiIndex<O>>> From<S> for Simplex<O> {
   fn from(vertices: S) -> Self {
     Self::new(vertices.into())
   }
 }
 
-pub type SortedSimplex = Simplex<CanonicalOrder>;
+pub type SortedSimplex = Simplex<IncreasingSet>;
 impl SortedSimplex {
   pub fn standard(dim: Dim) -> Self {
-    Self::new(IndexSet::increasing(dim + 1))
+    Self::new(MultiIndex::increasing(dim + 1))
   }
 
   pub fn supsimps(&self, sup_dim: Dim, root: &Self) -> impl Iterator<Item = Self> {
@@ -63,7 +63,7 @@ impl SortedSimplex {
   pub fn anti_boundary(
     &self,
     root: &SortedSimplex,
-  ) -> impl Iterator<Item = SignedSimplex<CanonicalOrder>> {
+  ) -> impl Iterator<Item = SignedSimplex<IncreasingSet>> {
     self
       .vertices
       .anti_boundary(&root.vertices)
@@ -92,12 +92,12 @@ pub fn nedges(dim_cell: Dim) -> usize {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct SignedSimplex<O: SetOrder> {
-  pub vertices: IndexSet<O>,
+pub struct SignedSimplex<O: IndexKind> {
+  pub vertices: MultiIndex<O>,
   pub sign: Sign,
 }
-impl<O: SetOrder> SignedSimplex<O> {
-  pub fn new(vertices: IndexSet<O>, sign: Sign) -> Self {
+impl<O: IndexKind> SignedSimplex<O> {
+  pub fn new(vertices: MultiIndex<O>, sign: Sign) -> Self {
     Self { vertices, sign }
   }
 
@@ -105,7 +105,7 @@ impl<O: SetOrder> SignedSimplex<O> {
     Simplex::new(self.vertices)
   }
 }
-impl<O: SetOrder> From<SignedIndexSet<O>> for SignedSimplex<O> {
+impl<O: IndexKind> From<SignedIndexSet<O>> for SignedSimplex<O> {
   fn from(signed_vertices: SignedIndexSet<O>) -> Self {
     Self::new(signed_vertices.set, signed_vertices.sign)
   }

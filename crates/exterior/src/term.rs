@@ -6,13 +6,13 @@ use crate::{
 use common::metric::RiemannianMetric;
 use multi_index::{
   combinators::{IndexSubPermutations, IndexSubsets},
-  variants::{CanonicalOrder, SetOrder},
-  IndexSet,
+  variants::{IncreasingSet, IndexKind},
+  MultiIndex,
 };
 
 use std::marker::PhantomData;
 
-pub type ExteriorBase<V> = ExteriorTerm<V, CanonicalOrder>;
+pub type ExteriorBase<V> = ExteriorTerm<V, IncreasingSet>;
 
 pub type MultiVectorTerm<O> = ExteriorTerm<variance::Contra, O>;
 pub type MultiFormTerm<O> = ExteriorTerm<variance::Co, O>;
@@ -21,21 +21,21 @@ pub type MultiVectorBase = ExteriorBase<variance::Contra>;
 pub type MultiFormBase = ExteriorBase<variance::Co>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ExteriorTerm<V: VarianceMarker, O: SetOrder> {
-  indices: IndexSet<O>,
+pub struct ExteriorTerm<V: VarianceMarker, O: IndexKind> {
+  indices: MultiIndex<O>,
   dim: Dim,
   variance: PhantomData<V>,
 }
 
-impl<V: VarianceMarker, O: SetOrder> ExteriorTerm<V, O> {
-  pub fn new(indices: IndexSet<O>, dim: Dim) -> Self {
+impl<V: VarianceMarker, O: IndexKind> ExteriorTerm<V, O> {
+  pub fn new(indices: MultiIndex<O>, dim: Dim) -> Self {
     Self {
       indices,
       dim,
       variance: PhantomData,
     }
   }
-  pub fn indices(&self) -> &IndexSet<O> {
+  pub fn indices(&self) -> &MultiIndex<O> {
     &self.indices
   }
   pub fn grade(&self) -> ExteriorGrade {
@@ -84,14 +84,14 @@ impl MultiFormBase {
 }
 
 #[derive(Debug, Clone)]
-pub struct ScaledExteriorTerm<V: VarianceMarker, O: SetOrder> {
+pub struct ScaledExteriorTerm<V: VarianceMarker, O: IndexKind> {
   pub coeff: f64,
   pub term: ExteriorTerm<V, O>,
 }
 
-pub type ScaledExteriorBase<V> = ScaledExteriorTerm<V, CanonicalOrder>;
+pub type ScaledExteriorBase<V> = ScaledExteriorTerm<V, IncreasingSet>;
 
-impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
+impl<V: VarianceMarker, O: IndexKind> ScaledExteriorTerm<V, O> {
   pub fn new(coeff: f64, term: ExteriorTerm<V, O>) -> Self {
     Self { coeff, term }
   }
@@ -102,7 +102,7 @@ impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
     self.term.grade()
   }
 
-  pub fn into_canonical(self) -> ScaledExteriorTerm<V, CanonicalOrder> {
+  pub fn into_canonical(self) -> ScaledExteriorTerm<V, IncreasingSet> {
     let dim = self.dim();
     let (term, sign) = self.term.indices.into_sorted_signed().into_parts();
     let coeff = self.coeff * sign.as_f64();
@@ -110,7 +110,7 @@ impl<V: VarianceMarker, O: SetOrder> ScaledExteriorTerm<V, O> {
     ScaledExteriorTerm { coeff, term }
   }
 
-  pub fn assume_canonical(self) -> ScaledExteriorTerm<V, CanonicalOrder> {
+  pub fn assume_canonical(self) -> ScaledExteriorTerm<V, IncreasingSet> {
     ScaledExteriorTerm {
       coeff: self.coeff,
       term: self.term.indices.assume_sorted().ext(self.term.dim),
@@ -136,7 +136,7 @@ impl ScaledMultiFormBase {
   }
 }
 
-impl<V: VarianceMarker, O: SetOrder> std::ops::Mul<ExteriorTerm<V, O>> for f64 {
+impl<V: VarianceMarker, O: IndexKind> std::ops::Mul<ExteriorTerm<V, O>> for f64 {
   type Output = ScaledExteriorTerm<V, O>;
   fn mul(self, term: ExteriorTerm<V, O>) -> Self::Output {
     let coeff = self;
@@ -145,23 +145,23 @@ impl<V: VarianceMarker, O: SetOrder> std::ops::Mul<ExteriorTerm<V, O>> for f64 {
   }
 }
 
-impl<V: VarianceMarker, O: SetOrder> std::ops::Mul<ScaledExteriorTerm<V, O>> for f64 {
+impl<V: VarianceMarker, O: IndexKind> std::ops::Mul<ScaledExteriorTerm<V, O>> for f64 {
   type Output = ScaledExteriorTerm<V, O>;
   fn mul(self, mut term: ScaledExteriorTerm<V, O>) -> Self::Output {
     term.coeff *= self;
     term
   }
 }
-impl<V: VarianceMarker, O: SetOrder> std::ops::MulAssign<f64> for ScaledExteriorTerm<V, O> {
+impl<V: VarianceMarker, O: IndexKind> std::ops::MulAssign<f64> for ScaledExteriorTerm<V, O> {
   fn mul_assign(&mut self, scalar: f64) {
     self.coeff *= scalar;
   }
 }
 
-pub trait ExteriorTermExt<V: VarianceMarker, O: SetOrder> {
+pub trait ExteriorTermExt<V: VarianceMarker, O: IndexKind> {
   fn ext(self, dim: Dim) -> ExteriorTerm<V, O>;
 }
-impl<V: VarianceMarker, Set: Into<IndexSet<O>>, O: SetOrder> ExteriorTermExt<V, O> for Set {
+impl<V: VarianceMarker, Set: Into<MultiIndex<O>>, O: IndexKind> ExteriorTermExt<V, O> for Set {
   fn ext(self, dim: Dim) -> ExteriorTerm<V, O> {
     ExteriorTerm::new(self.into(), dim)
   }
@@ -254,10 +254,10 @@ mod test {
     for dim in 0..=3 {
       let metric = na::DMatrix::identity(dim, dim);
 
-      let primal = IndexSet::new(vec![]).assume_sorted().ext(dim);
+      let primal = MultiIndex::new(vec![]).assume_sorted().ext(dim);
       let dual = primal.hodge_star(&metric);
 
-      let expected_dual = 1.0 * IndexSet::increasing(dim).ext(dim);
+      let expected_dual = 1.0 * MultiIndex::increasing(dim).ext(dim);
       let expected_dual = ExteriorElement::from(expected_dual);
       assert!(dual.eq_epsilon(&expected_dual, 10e-12));
     }

@@ -1,4 +1,4 @@
-use multi_index::variants::CanonicalOrder;
+use multi_index::variants::IncreasingSet;
 
 use crate::{
   topology::simplex::{Simplex, SortedSimplex},
@@ -252,7 +252,7 @@ impl<'m> SkeletonHandle<'m> {
   pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m>> + '_ {
     (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
-  pub fn set_iter(&self) -> impl ExactSizeIterator<Item = &Simplex<CanonicalOrder>> + '_ {
+  pub fn set_iter(&self) -> impl ExactSizeIterator<Item = &Simplex<IncreasingSet>> + '_ {
     self.handle_iter().map(|s| s.simplex_set())
   }
 }

@@ -9,7 +9,7 @@ use crate::{
   topology::{complex::Complex, simplex::Simplex},
 };
 
-use multi_index::variants::SetOrder;
+use multi_index::variants::IndexKind;
 
 pub fn save_cells_to_file(topology: &Complex, path: impl AsRef<Path>) -> std::io::Result<()> {
   let file = File::create(path)?;
@@ -17,7 +17,7 @@ pub fn save_cells_to_file(topology: &Complex, path: impl AsRef<Path>) -> std::io
   write_simplicies(writer, topology.cells().set_iter())
 }
 
-pub fn write_simplicies<'a, W: std::io::Write, O: SetOrder + 'a>(
+pub fn write_simplicies<'a, W: std::io::Write, O: IndexKind + 'a>(
   mut writer: W,
   simplices: impl Iterator<Item = &'a Simplex<O>>,
 ) -> std::io::Result<()> {

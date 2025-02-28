@@ -24,12 +24,12 @@ pub fn factorial(num: usize) -> usize {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct IndexSet<O: SetOrder> {
+pub struct MultiIndex<O> {
   indices: Vec<usize>,
   _order: PhantomData<O>,
 }
 
-impl<O: SetOrder> IndexSet<O> {
+impl<O: IndexKind> MultiIndex<O> {
   pub fn indices(&self) -> &[usize] {
     &self.indices
   }
@@ -71,7 +71,7 @@ impl<O: SetOrder> IndexSet<O> {
       .then_with(|| self.pure_lexicographical_cmp(other))
   }
 
-  pub fn global_to_local_subset(&self, subset: &Self) -> IndexSet<ArbitraryOrder> {
+  pub fn global_to_local_subset(&self, subset: &Self) -> MultiIndex<ArbitraryList> {
     let subset = subset
       .iter()
       .map(|iglobal| {
@@ -81,13 +81,13 @@ impl<O: SetOrder> IndexSet<O> {
           .expect("Not a subset.")
       })
       .collect();
-    IndexSet::new(subset)
+    MultiIndex::new(subset)
   }
 
-  pub fn union<O1: SetOrder>(self, mut other: IndexSet<O1>) -> IndexSet<ArbitraryOrder> {
+  pub fn union<O1>(self, mut other: MultiIndex<O1>) -> MultiIndex<ArbitraryList> {
     let mut indices = self.indices;
     indices.append(&mut other.indices);
-    IndexSet::new(indices)
+    MultiIndex::new(indices)
   }
 
   pub fn remove(&mut self, i: usize) -> usize {
@@ -107,14 +107,14 @@ impl<O: SetOrder> IndexSet<O> {
   }
 }
 
-impl<O: SetOrder> std::ops::Index<usize> for IndexSet<O> {
+impl<O> std::ops::Index<usize> for MultiIndex<O> {
   type Output = usize;
   fn index(&self, index: usize) -> &Self::Output {
     &self.indices[index]
   }
 }
 
-impl IndexSet<CanonicalOrder> {
+impl MultiIndex<IncreasingSet> {
   pub fn is_subset_of(&self, other: &Self) -> bool {
     self.sub_cmp(other).map(|o| o.is_le()).unwrap_or(false)
   }
@@ -162,16 +162,16 @@ impl IndexSet<CanonicalOrder> {
   }
 }
 
-impl IndexSet<CanonicalOrder> {
+impl MultiIndex<IncreasingSet> {
   pub fn supsets(&self, len_sup: usize, root: &Self) -> IndexSupsets {
     IndexSupsets::new(self.clone(), root.clone(), len_sup)
   }
-  pub fn anti_boundary(&self, root: &IndexSet<CanonicalOrder>) -> IndexAntiBoundarySets {
+  pub fn anti_boundary(&self, root: &MultiIndex<IncreasingSet>) -> IndexAntiBoundarySets {
     IndexAntiBoundarySets::new(self.clone().with_sign(Sign::Pos), root.clone())
   }
 }
 
-impl IndexSet<CanonicalOrder> {
+impl MultiIndex<IncreasingSet> {
   pub fn from_lex_rank(n: usize, k: usize, mut rank: usize) -> Self {
     let mut indices = Vec::with_capacity(k);
     let mut start = 0;
@@ -224,7 +224,7 @@ impl IndexSet<CanonicalOrder> {
 }
 
 // Constructors
-impl IndexSet<ArbitraryOrder> {
+impl MultiIndex<ArbitraryList> {
   pub fn new(indices: Vec<usize>) -> Self {
     Self {
       indices,
@@ -233,25 +233,25 @@ impl IndexSet<ArbitraryOrder> {
   }
 }
 
-impl IndexSet<CanonicalOrder> {
+impl MultiIndex<IncreasingSet> {
   pub fn none() -> Self {
     Self::default()
   }
   pub fn single(index: usize) -> Self {
-    IndexSet {
+    MultiIndex {
       indices: vec![index],
       _order: PhantomData,
     }
   }
   pub fn increasing(n: usize) -> Self {
-    IndexSet {
+    MultiIndex {
       indices: (0..n).collect(),
       _order: PhantomData,
     }
   }
 }
 
-impl<O: SetOrder> IntoIterator for IndexSet<O> {
+impl<O> IntoIterator for MultiIndex<O> {
   type Item = usize;
   type IntoIter = std::vec::IntoIter<Self::Item>;
   fn into_iter(self) -> Self::IntoIter {
@@ -260,7 +260,7 @@ impl<O: SetOrder> IntoIterator for IndexSet<O> {
 }
 
 // Conversions
-impl<O: SetOrder> IndexSet<O> {
+impl<O> MultiIndex<O> {
   pub fn iter(&self) -> std::iter::Copied<std::slice::Iter<'_, usize>> {
     self.indices.iter().copied()
   }
@@ -271,21 +271,21 @@ impl<O: SetOrder> IndexSet<O> {
     self.indices
   }
 }
-impl From<Vec<usize>> for IndexSet<ArbitraryOrder> {
+impl From<Vec<usize>> for MultiIndex<ArbitraryList> {
   fn from(value: Vec<usize>) -> Self {
     Self::new(value)
   }
 }
-impl<const N: usize> From<[usize; N]> for IndexSet<ArbitraryOrder> {
+impl<const N: usize> From<[usize; N]> for MultiIndex<ArbitraryList> {
   fn from(value: [usize; N]) -> Self {
     Self::new(value.to_vec())
   }
 }
 
-impl<const N: usize, O: SetOrder> TryFrom<IndexSet<O>> for [usize; N] {
-  type Error = IndexSet<O>;
-  fn try_from(value: IndexSet<O>) -> Result<Self, Self::Error> {
-    value.indices.try_into().map_err(|indices| IndexSet {
+impl<const N: usize, O: IndexKind> TryFrom<MultiIndex<O>> for [usize; N] {
+  type Error = MultiIndex<O>;
+  fn try_from(value: MultiIndex<O>) -> Result<Self, Self::Error> {
+    value.indices.try_into().map_err(|indices| MultiIndex {
       indices,
       ..Default::default()
     })
@@ -293,16 +293,16 @@ impl<const N: usize, O: SetOrder> TryFrom<IndexSet<O>> for [usize; N] {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct SignedIndexSet<O: SetOrder> {
-  pub set: IndexSet<O>,
+pub struct SignedIndexSet<O> {
+  pub set: MultiIndex<O>,
   pub sign: Sign,
 }
-impl<O: SetOrder> SignedIndexSet<O> {
-  pub fn new(set: IndexSet<O>, sign: Sign) -> Self {
+impl<O: IndexKind> SignedIndexSet<O> {
+  pub fn new(set: MultiIndex<O>, sign: Sign) -> Self {
     Self { set, sign }
   }
 
-  pub fn into_parts(self) -> (IndexSet<O>, Sign) {
+  pub fn into_parts(self) -> (MultiIndex<O>, Sign) {
     (self.set, self.sign)
   }
 
@@ -314,8 +314,8 @@ impl<O: SetOrder> SignedIndexSet<O> {
   }
 }
 
-impl SignedIndexSet<CanonicalOrder> {
-  pub fn anti_boundary(&self, root: &IndexSet<CanonicalOrder>) -> IndexAntiBoundarySets {
+impl SignedIndexSet<IncreasingSet> {
+  pub fn anti_boundary(&self, root: &MultiIndex<IncreasingSet>) -> IndexAntiBoundarySets {
     IndexAntiBoundarySets::new(self.clone(), root.clone())
   }
 }

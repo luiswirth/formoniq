@@ -1,28 +1,28 @@
-use super::IndexSet;
+use super::MultiIndex;
 use crate::{
   sign::{sort_signed, Sign},
   SignedIndexSet,
 };
 
-use std::{fmt::Debug, marker::PhantomData};
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
 
-pub trait SetOrder: Default + Clone + Copy + Eq {}
-impl SetOrder for ArbitraryOrder {}
-impl SetOrder for CanonicalOrder {}
+pub trait IndexKind: Debug + Default + Clone + Copy + PartialEq + Eq + Hash {}
 
 /// Arbitrary order of elements. May contain duplicates.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct ArbitraryOrder;
+pub struct ArbitraryList;
+impl IndexKind for ArbitraryList {}
 
 /// Strictly increasing elements! No duplicates allowed.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CanonicalOrder;
+pub struct IncreasingSet;
+impl IndexKind for IncreasingSet {}
 
 /// Variant Conversions
-impl<O: SetOrder> IndexSet<O> {
-  pub fn assume_sorted(self) -> IndexSet<CanonicalOrder> {
+impl<O: IndexKind> MultiIndex<O> {
+  pub fn assume_sorted(self) -> MultiIndex<IncreasingSet> {
     debug_assert!(self.indices.is_sorted_by(|a, b| a < b));
-    IndexSet {
+    MultiIndex {
       indices: self.indices,
       _order: PhantomData,
     }
@@ -35,24 +35,24 @@ impl<O: SetOrder> IndexSet<O> {
     self.clone().try_into_sorted_signed().map(|s| s.sign)
   }
 
-  pub fn try_into_sorted_signed(self) -> Option<SignedIndexSet<CanonicalOrder>> {
+  pub fn try_into_sorted_signed(self) -> Option<SignedIndexSet<IncreasingSet>> {
     self.with_sign(Sign::Pos).try_into_sorted_signed()
   }
-  pub fn into_sorted_signed(self) -> SignedIndexSet<CanonicalOrder> {
+  pub fn into_sorted_signed(self) -> SignedIndexSet<IncreasingSet> {
     self.try_into_sorted_signed().unwrap()
   }
-  pub fn into_sorted(self) -> IndexSet<CanonicalOrder> {
+  pub fn into_sorted(self) -> MultiIndex<IncreasingSet> {
     self.into_sorted_signed().set
   }
 }
 
-impl<O: SetOrder> SignedIndexSet<O> {
-  pub fn into_sorted_signed(self) -> SignedIndexSet<CanonicalOrder> {
+impl<O> SignedIndexSet<O> {
+  pub fn into_sorted_signed(self) -> SignedIndexSet<IncreasingSet> {
     self.try_into_sorted_signed().unwrap()
   }
 
   /// Returns [`None`] if there is a duplicate index.
-  pub fn try_into_sorted_signed(self) -> Option<SignedIndexSet<CanonicalOrder>> {
+  pub fn try_into_sorted_signed(self) -> Option<SignedIndexSet<IncreasingSet>> {
     let mut indices = self.set.indices;
 
     let sort_sign = sort_signed(&mut indices);
@@ -65,7 +65,7 @@ impl<O: SetOrder> SignedIndexSet<O> {
     }
 
     Some(
-      IndexSet {
+      MultiIndex {
         indices,
         _order: PhantomData,
       }
@@ -74,7 +74,7 @@ impl<O: SetOrder> SignedIndexSet<O> {
   }
 }
 
-impl<O: SetOrder> IndexSet<O> {
+impl<O: IndexKind> MultiIndex<O> {
   pub fn with_sign(self, sign: Sign) -> SignedIndexSet<O> {
     SignedIndexSet::new(self, sign)
   }
