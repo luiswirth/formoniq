@@ -93,7 +93,7 @@ impl SimplexCoords {
     self.det().abs()
   }
   pub fn orientation(&self) -> Sign {
-    Sign::from_f64(self.det())
+    Sign::from_f64(self.det()).unwrap()
   }
 
   pub fn swap_vertices(&mut self, icol: usize, jcol: usize) {

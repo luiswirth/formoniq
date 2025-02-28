@@ -7,7 +7,7 @@ use {
   formoniq::{fe::l2_norm, problems::hodge_laplace},
   manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef},
   std::f64::consts::PI,
-  whitney::discretize_form_on_mesh,
+  whitney::cochain::discretize_form_on_mesh,
 };
 
 use std::fs;

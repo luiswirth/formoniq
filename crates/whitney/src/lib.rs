@@ -2,18 +2,14 @@ extern crate nalgebra as na;
 
 pub mod cochain;
 
-use crate::cochain::Cochain;
-
 use {
   common::sparse::SparseMatrix,
   exterior::{
-    field::{DifferentialMultiForm, ExteriorField},
-    variance, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList, MultiVector,
+    field::ExteriorField, variance, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList,
+    MultiVector,
   },
   manifold::{
-    geometry::coord::{
-      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
-    },
+    geometry::coord::{local::SimplexCoords, CoordRef},
     topology::{complex::Complex, simplex::Simplex},
     Dim,
   },
@@ -56,39 +52,6 @@ impl CoordSimplexExt for SimplexCoords {
       .map(|g| MultiForm::from_grade1(g.into_owned()))
       .collect()
   }
-}
-
-/// Discretize continuous coordinate-based differential k-form into
-/// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
-pub fn discretize_form_on_mesh(
-  form: &impl DifferentialMultiForm,
-  topology: &Complex,
-  coords: &MeshVertexCoords,
-) -> Cochain {
-  let cochain = topology
-    .skeleton(form.grade())
-    .handle_iter()
-    .map(|simp| SimplexCoords::from_simplex_and_coords(simp.simplex_set(), coords))
-    .map(|simp| discretize_form_on_simplex(form, &simp))
-    .collect::<Vec<_>>()
-    .into();
-  Cochain::new(form.grade(), cochain)
-}
-
-/// Approximates the integral of a differential k-form over a k-simplex,
-/// by means of barycentric quadrature.
-pub fn discretize_form_on_simplex(
-  differential_form: &impl DifferentialMultiForm,
-  simplex: &SimplexCoords,
-) -> f64 {
-  let multivector = simplex.spanning_multivector();
-  let f = |coord: CoordRef| {
-    differential_form
-      .at_point(simplex.local_to_global_coord(coord).as_view())
-      .on_multivector(&multivector)
-  };
-  let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());
-  barycentric_quadrature(&f, &std_simp)
 }
 
 /// Whitney Form on a coordinate complex.
@@ -169,10 +132,11 @@ impl<O: SetOrder> ExteriorField for WhitneyForm<O> {
 
 #[cfg(test)]
 mod test {
+  use cochain::discretize_form_on_simplex;
+
   use super::*;
 
   use {
-    crate::discretize_form_on_simplex,
     manifold::{
       geometry::coord::{local::SimplexHandleExt, MeshVertexCoords},
       topology::complex::Complex,

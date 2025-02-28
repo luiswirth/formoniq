@@ -6,20 +6,20 @@ pub enum Sign {
 }
 
 impl Sign {
-  pub fn from_f64(f: f64) -> Self {
-    Self::from_bool(f > 0.0)
-  }
   pub fn from_bool(b: bool) -> Self {
     match b {
       true => Self::Pos,
       false => Self::Neg,
     }
   }
+  pub fn from_f64(f: f64) -> Option<Self> {
+    if f == 0.0 {
+      return None;
+    }
+    Some(Self::from_bool(f > 0.0))
+  }
 
-  /// Simplex orientation might change when permuting the vertices.
-  /// This depends on the parity of the number of swaps.
-  /// Even permutations preserve the orientation.
-  /// Odd permutations invert the orientation.
+  /// useful for permutation parity
   pub fn from_parity(n: usize) -> Self {
     match n % 2 {
       0 => Self::Pos,
@@ -54,7 +54,6 @@ impl Sign {
 }
 impl std::ops::Neg for Sign {
   type Output = Self;
-
   fn neg(self) -> Self::Output {
     match self {
       Self::Pos => Self::Neg,
@@ -64,7 +63,6 @@ impl std::ops::Neg for Sign {
 }
 impl std::ops::Mul for Sign {
   type Output = Self;
-
   fn mul(self, other: Self) -> Self::Output {
     match self == other {
       true => Self::Pos,
@@ -91,6 +89,11 @@ impl std::fmt::Display for Sign {
   }
 }
 
+/// Returns the sorted permutation of `a` and the sign of the permutation.
+pub fn sort_signed<T: Ord>(a: &mut [T]) -> Sign {
+  Sign::from_parity(sort_count_swaps(a))
+}
+
 /// Returns the sorted permutation of `a` and the number of swaps.
 pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
   let mut nswaps = 0;
@@ -111,9 +114,4 @@ pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
     }
   }
   nswaps
-}
-
-/// Returns the sorted permutation of `a` and the sign of the permutation.
-pub fn sort_signed<T: Ord>(a: &mut [T]) -> Sign {
-  Sign::from_parity(sort_count_swaps(a))
 }
