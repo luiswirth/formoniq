@@ -4,7 +4,7 @@ use crate::{
   SignedIndexSet,
 };
 
-use std::fmt::Debug;
+use std::{fmt::Debug, marker::PhantomData};
 
 pub trait SetOrder: Default + Clone + Copy + Eq {}
 impl SetOrder for ArbitraryOrder {}
@@ -24,7 +24,7 @@ impl<O: SetOrder> IndexSet<O> {
     debug_assert!(self.indices.is_sorted_by(|a, b| a < b));
     IndexSet {
       indices: self.indices,
-      order: CanonicalOrder,
+      _order: PhantomData,
     }
   }
 
@@ -67,7 +67,7 @@ impl<O: SetOrder> SignedIndexSet<O> {
     Some(
       IndexSet {
         indices,
-        order: CanonicalOrder,
+        _order: PhantomData,
       }
       .with_sign(sign),
     )

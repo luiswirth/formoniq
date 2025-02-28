@@ -6,7 +6,7 @@ use {
   manifold::{
     gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef, topology::complex::Complex,
   },
-  whitney::discretize_form_on_mesh,
+  whitney::cochain::discretize_form_on_mesh,
 };
 
 use std::fs;

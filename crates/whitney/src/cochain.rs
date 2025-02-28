@@ -1,7 +1,16 @@
-use exterior::Dim;
-use manifold::topology::complex::{
-  handle::{SimplexHandle, SimplexIdx},
-  Complex,
+use crate::CoordSimplexExt;
+
+use {
+  exterior::{field::DifferentialMultiForm, Dim},
+  manifold::{
+    geometry::coord::{
+      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
+    },
+    topology::complex::{
+      handle::{SimplexHandle, SimplexIdx},
+      Complex,
+    },
+  },
 };
 
 pub struct Cochain {
@@ -17,14 +26,13 @@ impl Cochain {
     let coeffs = na::DVector::zeros(ncoeffs);
     Self::new(dim, coeffs)
   }
+
   pub fn dim(&self) -> Dim {
     self.dim
   }
-
   pub fn coeffs(&self) -> &na::DVector<f64> {
     &self.coeffs
   }
-
   pub fn len(&self) -> usize {
     self.coeffs.len()
   }
@@ -74,4 +82,37 @@ impl std::ops::Sub for Cochain {
     self -= rhs;
     self
   }
+}
+
+/// Discretize continuous coordinate-based differential k-form into
+/// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
+pub fn discretize_form_on_mesh(
+  form: &impl DifferentialMultiForm,
+  topology: &Complex,
+  coords: &MeshVertexCoords,
+) -> Cochain {
+  let cochain = topology
+    .skeleton(form.grade())
+    .handle_iter()
+    .map(|simp| SimplexCoords::from_simplex_and_coords(simp.simplex_set(), coords))
+    .map(|simp| discretize_form_on_simplex(form, &simp))
+    .collect::<Vec<_>>()
+    .into();
+  Cochain::new(form.grade(), cochain)
+}
+
+/// Approximates the integral of a differential k-form over a k-simplex,
+/// by means of barycentric quadrature.
+pub fn discretize_form_on_simplex(
+  differential_form: &impl DifferentialMultiForm,
+  simplex: &SimplexCoords,
+) -> f64 {
+  let multivector = simplex.spanning_multivector();
+  let f = |coord: CoordRef| {
+    differential_form
+      .at_point(simplex.local_to_global_coord(coord).as_view())
+      .on_multivector(&multivector)
+  };
+  let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());
+  barycentric_quadrature(&f, &std_simp)
 }

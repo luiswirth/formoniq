@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use crate::{sign::Sign, SignedIndexSet};
 
 use super::{variants::*, IndexSet};
@@ -92,14 +94,16 @@ impl<O: SetOrder> Iterator for GradedIndexSubsets<O> {
 
 pub struct IndexSubsets<O: SetOrder> {
   subsets: itertools::Combinations<std::vec::IntoIter<usize>>,
-  order: O,
+  _order: PhantomData<O>,
 }
 
 impl<O: SetOrder> IndexSubsets<O> {
   pub fn new(set: IndexSet<O>, k: usize) -> Self {
     let subsets = itertools::Itertools::combinations(set.indices.into_iter(), k);
-    let order = set.order;
-    Self { subsets, order }
+    Self {
+      subsets,
+      _order: PhantomData,
+    }
   }
 }
 impl IndexSubsets<CanonicalOrder> {
@@ -116,7 +120,7 @@ impl<O: SetOrder> Iterator for IndexSubsets<O> {
     let indices = self.subsets.next()?;
     let next = IndexSet {
       indices,
-      order: self.order,
+      _order: PhantomData,
     };
     Some(next)
   }

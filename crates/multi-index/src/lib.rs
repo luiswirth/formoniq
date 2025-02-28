@@ -7,6 +7,8 @@ pub mod variants;
 
 pub mod sign;
 
+use std::marker::PhantomData;
+
 use combinators::{
   IndexAntiBoundarySets, IndexBoundarySets, IndexPermutations, IndexSubsets, IndexSupsets,
 };
@@ -24,7 +26,7 @@ pub fn factorial(num: usize) -> usize {
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct IndexSet<O: SetOrder> {
   indices: Vec<usize>,
-  order: O,
+  _order: PhantomData<O>,
 }
 
 impl<O: SetOrder> IndexSet<O> {
@@ -189,7 +191,7 @@ impl IndexSet<CanonicalOrder> {
 
     Self {
       indices,
-      order: CanonicalOrder,
+      _order: PhantomData,
     }
   }
 
@@ -238,13 +240,13 @@ impl IndexSet<CanonicalOrder> {
   pub fn single(index: usize) -> Self {
     IndexSet {
       indices: vec![index],
-      order: CanonicalOrder,
+      _order: PhantomData,
     }
   }
   pub fn increasing(n: usize) -> Self {
     IndexSet {
       indices: (0..n).collect(),
-      order: CanonicalOrder,
+      _order: PhantomData,
     }
   }
 }
