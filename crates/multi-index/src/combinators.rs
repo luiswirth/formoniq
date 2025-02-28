@@ -12,7 +12,7 @@ pub struct IndexSubPermutations {
 }
 
 impl IndexSubPermutations {
-  pub fn new<O>(set: MultiIndex<O>, k: usize) -> Self {
+  pub fn new<O: IndexKind>(set: MultiIndex<O>, k: usize) -> Self {
     let indices = set.indices.clone().into_iter();
     let state = itertools::Itertools::permutations(indices, k);
     Self { state }
@@ -64,11 +64,11 @@ impl Iterator for IndexPermutations {
   }
 }
 
-pub struct GradedIndexSubsets<O> {
+pub struct GradedIndexSubsets<O: IndexKind> {
   set: MultiIndex<O>,
   k: usize,
 }
-impl<O> GradedIndexSubsets<O> {
+impl<O: IndexKind> GradedIndexSubsets<O> {
   pub fn new(set: MultiIndex<O>) -> Self {
     let k = 0;
     Self { set, k }
@@ -96,7 +96,7 @@ pub struct IndexSubsets<O> {
   _order: PhantomData<O>,
 }
 
-impl<O> IndexSubsets<O> {
+impl<O: IndexKind> IndexSubsets<O> {
   pub fn new(set: MultiIndex<O>, k: usize) -> Self {
     let subsets = itertools::Itertools::combinations(set.indices.into_iter(), k);
     Self {
@@ -113,7 +113,7 @@ impl IndexSubsets<IncreasingSet> {
   }
 }
 
-impl<O> Iterator for IndexSubsets<O> {
+impl<O: IndexKind> Iterator for IndexSubsets<O> {
   type Item = MultiIndex<O>;
   fn next(&mut self) -> Option<Self::Item> {
     let indices = self.subsets.next()?;

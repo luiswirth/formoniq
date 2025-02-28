@@ -24,7 +24,7 @@ pub fn factorial(num: usize) -> usize {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct MultiIndex<O> {
+pub struct MultiIndex<O: IndexKind> {
   indices: Vec<usize>,
   _order: PhantomData<O>,
 }
@@ -84,7 +84,7 @@ impl<O: IndexKind> MultiIndex<O> {
     MultiIndex::new(subset)
   }
 
-  pub fn union<O1>(self, mut other: MultiIndex<O1>) -> MultiIndex<ArbitraryList> {
+  pub fn union<O1: IndexKind>(self, mut other: MultiIndex<O1>) -> MultiIndex<ArbitraryList> {
     let mut indices = self.indices;
     indices.append(&mut other.indices);
     MultiIndex::new(indices)
@@ -107,7 +107,7 @@ impl<O: IndexKind> MultiIndex<O> {
   }
 }
 
-impl<O> std::ops::Index<usize> for MultiIndex<O> {
+impl<O: IndexKind> std::ops::Index<usize> for MultiIndex<O> {
   type Output = usize;
   fn index(&self, index: usize) -> &Self::Output {
     &self.indices[index]
@@ -251,7 +251,7 @@ impl MultiIndex<IncreasingSet> {
   }
 }
 
-impl<O> IntoIterator for MultiIndex<O> {
+impl<O: IndexKind> IntoIterator for MultiIndex<O> {
   type Item = usize;
   type IntoIter = std::vec::IntoIter<Self::Item>;
   fn into_iter(self) -> Self::IntoIter {
@@ -260,7 +260,7 @@ impl<O> IntoIterator for MultiIndex<O> {
 }
 
 // Conversions
-impl<O> MultiIndex<O> {
+impl<O: IndexKind> MultiIndex<O> {
   pub fn iter(&self) -> std::iter::Copied<std::slice::Iter<'_, usize>> {
     self.indices.iter().copied()
   }
@@ -293,7 +293,7 @@ impl<const N: usize, O: IndexKind> TryFrom<MultiIndex<O>> for [usize; N] {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct SignedIndexSet<O> {
+pub struct SignedIndexSet<O: IndexKind> {
   pub set: MultiIndex<O>,
   pub sign: Sign,
 }

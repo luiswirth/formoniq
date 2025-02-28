@@ -46,7 +46,7 @@ impl<O: IndexKind> MultiIndex<O> {
   }
 }
 
-impl<O> SignedIndexSet<O> {
+impl<O: IndexKind> SignedIndexSet<O> {
   pub fn into_sorted_signed(self) -> SignedIndexSet<IncreasingSet> {
     self.try_into_sorted_signed().unwrap()
   }
