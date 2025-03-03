@@ -13,56 +13,6 @@ use {
 use itertools::Itertools;
 use std::mem;
 
-pub struct MixedGalmats {
-  mass_sigma: GalMat,
-  dif_sigma: GalMat,
-  codif_u: GalMat,
-  difdif_u: GalMat,
-  mass_u: GalMat,
-}
-impl MixedGalmats {
-  pub fn compute(topology: &Complex, geometry: &MeshEdgeLengths, grade: ExteriorGrade) -> Self {
-    let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      (
-        assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1)),
-        assemble_galmat(topology, geometry, DifElmat(grade)),
-        assemble_galmat(topology, geometry, CodifElmat(grade)),
-      )
-    } else {
-      (GalMat::default(), GalMat::default(), GalMat::default())
-    };
-    let difdif_u = assemble_galmat(topology, geometry, CodifDifElmat(grade));
-    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
-
-    Self {
-      mass_sigma,
-      dif_sigma,
-      codif_u,
-      difdif_u,
-      mass_u,
-    }
-  }
-
-  pub fn sigma_len(&self) -> usize {
-    self.mass_sigma.nrows()
-  }
-  pub fn u_len(&self) -> usize {
-    self.mass_u.nrows()
-  }
-
-  pub fn mixed_hodge_laplacian(&self) -> SparseMatrix {
-    let Self {
-      mass_sigma,
-      dif_sigma,
-      codif_u,
-      difdif_u,
-      ..
-    } = self;
-    let codif_u = codif_u.clone();
-    SparseMatrix::block(&[&[mass_sigma, &(-codif_u)], &[dif_sigma, difdif_u]])
-  }
-}
-
 pub fn solve_hodge_laplace_source(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
@@ -166,4 +116,54 @@ pub fn solve_hodge_laplace_evp(
     &rhs.to_nalgebra_csr(),
     neigen_values,
   )
+}
+
+pub struct MixedGalmats {
+  mass_sigma: GalMat,
+  dif_sigma: GalMat,
+  codif_u: GalMat,
+  difdif_u: GalMat,
+  mass_u: GalMat,
+}
+impl MixedGalmats {
+  pub fn compute(topology: &Complex, geometry: &MeshEdgeLengths, grade: ExteriorGrade) -> Self {
+    let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
+      (
+        assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1)),
+        assemble_galmat(topology, geometry, DifElmat(grade)),
+        assemble_galmat(topology, geometry, CodifElmat(grade)),
+      )
+    } else {
+      (GalMat::default(), GalMat::default(), GalMat::default())
+    };
+    let difdif_u = assemble_galmat(topology, geometry, CodifDifElmat(grade));
+    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
+
+    Self {
+      mass_sigma,
+      dif_sigma,
+      codif_u,
+      difdif_u,
+      mass_u,
+    }
+  }
+
+  pub fn sigma_len(&self) -> usize {
+    self.mass_sigma.nrows()
+  }
+  pub fn u_len(&self) -> usize {
+    self.mass_u.nrows()
+  }
+
+  pub fn mixed_hodge_laplacian(&self) -> SparseMatrix {
+    let Self {
+      mass_sigma,
+      dif_sigma,
+      codif_u,
+      difdif_u,
+      ..
+    } = self;
+    let codif_u = codif_u.clone();
+    SparseMatrix::block(&[&[mass_sigma, &(-codif_u)], &[dif_sigma, difdif_u]])
+  }
 }
