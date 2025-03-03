@@ -10,14 +10,27 @@ use {
   whitney::cochain::discretize_form_on_mesh,
 };
 
-use std::fs;
-
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let path = "out/laplacian_source";
-  let _ = fs::remove_dir_all(path);
-  fs::create_dir_all(path).unwrap();
-
   let dim = 2;
+  let form_grade = 1;
+
+  let exact_solution = |p: CoordRef| {
+    let comps = (0..p.len()).map(|i| {
+      let prod = p.remove_row(i).map(|a| a.cos()).product();
+      p[i].sin().powi(2) * prod
+    });
+    MultiForm::from_grade1(na::DVector::from_iterator(p.len(), comps))
+  };
+  let laplacian = |p: CoordRef| {
+    let comps = (0..p.len()).map(|i| {
+      let prod: f64 = p.remove_row(i).map(|a| a.cos()).product();
+      -(2.0 * (2.0 * p[i]).cos() - (p.len() - 1) as f64 * p[i].sin().powi(2)) * prod
+    });
+    MultiForm::from_grade1(na::DVector::from_iterator(p.len(), comps))
+  };
+
+  let laplacian = DifferentialFormClosure::new(Box::new(laplacian), dim, form_grade);
+  let exact_solution = DifferentialFormClosure::new(Box::new(exact_solution), dim, form_grade);
 
   let mut errors = Vec::new();
   for refinement in 0..=10 {
@@ -26,59 +39,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    manifold::io::save_coords_to_file(&coords, format!("{path}/coords.txt"))?;
-    manifold::io::save_cells_to_file(&topology, format!("{path}/cells.txt"))?;
-
-    let form_grade = 1;
-
-    let analytic_sol = |p: CoordRef| {
-      let mut comps = na::DVector::zeros(p.len());
-      for i in 0..p.len() {
-        comps[i] = p[i].sin().powi(2) * p.remove_row(i).map(|a| a.cos()).product();
-      }
-      MultiForm::from_grade1(comps)
-    };
-
-    let scalar_lapl_closure = |selected: f64, others: &[f64]| {
-      let mut scalar_lapl = 0.0;
-      let product: f64 = others.iter().map(|a| a.cos()).product();
-      scalar_lapl += 2.0 * (2.0 * selected).cos() * product;
-      scalar_lapl -= others.len() as f64 * selected.sin().powi(2) * product;
-      scalar_lapl
-    };
-
-    let analytic_laplacian = Box::new(move |p: CoordRef| {
-      let mut comps = na::DVector::zeros(p.len());
-      for i in 0..p.len() {
-        let selected = p[i];
-        let others = p.remove_row(i);
-        comps[i] = -scalar_lapl_closure(selected, others.as_slice());
-      }
-      MultiForm::from_grade1(comps)
-    });
-
-    let source = DifferentialFormClosure::new(analytic_laplacian, dim, form_grade);
-    let source = discretize_form_on_mesh(&source, &topology, &coords);
+    let laplacian = discretize_form_on_mesh(&laplacian, &topology, &coords);
+    let exact_solution = discretize_form_on_mesh(&exact_solution, &topology, &coords);
 
     let (_sigma, u, _p) =
-      hodge_laplace::solve_hodge_laplace_source(&topology, &metric, form_grade, source);
+      hodge_laplace::solve_hodge_laplace_source(&topology, &metric, form_grade, laplacian);
 
-    let analytic_form = DifferentialFormClosure::new(Box::new(analytic_sol), dim, form_grade);
-    let analytic_cochain = discretize_form_on_mesh(&analytic_form, &topology, &coords);
-
-    formoniq::io::save_evaluations_to_file(
-      &analytic_cochain,
-      &topology,
-      &coords,
-      format!("{path}/evaluations.txt"),
-    )?;
-
-    //for (&approx, &exact) in u.coeffs().iter().zip(analytic_cochain.coeffs().iter()) {
-    //  println!("approx={approx}, exact={exact}");
-    //}
-    let diff = analytic_cochain - u;
+    let diff = exact_solution - u;
     let l2_norm = l2_norm(&diff, &topology, &metric);
-    println!("{} {l2_norm}", refinement);
 
     let conv_rate = |errors: &[f64], curr: f64| {
       errors
@@ -89,7 +57,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conv_rate = conv_rate(&errors, l2_norm);
     errors.push(l2_norm);
 
-    println!("conv_rate={conv_rate}");
+    println!("refinement={refinement} | L2_error={l2_norm:<7.2e} | conv_rate={conv_rate:>5.2}");
   }
 
   Ok(())
