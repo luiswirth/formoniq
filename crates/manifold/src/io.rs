@@ -7,14 +7,19 @@ use std::{fs::File, io::BufWriter, path::Path};
 use crate::{
   geometry::coord::MeshVertexCoords,
   topology::{complex::Complex, simplex::Simplex},
+  Dim,
 };
 
 use multi_index::variants::IndexKind;
 
-pub fn save_cells_to_file(topology: &Complex, path: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn save_skeleton_to_file(
+  topology: &Complex,
+  dim: Dim,
+  path: impl AsRef<Path>,
+) -> std::io::Result<()> {
   let file = File::create(path)?;
   let writer = BufWriter::new(file);
-  write_simplicies(writer, topology.cells().set_iter())
+  write_simplicies(writer, topology.skeleton(dim).set_iter())
 }
 
 pub fn write_simplicies<'a, W: std::io::Write, O: IndexKind + 'a>(

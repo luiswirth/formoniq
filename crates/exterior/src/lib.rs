@@ -87,27 +87,22 @@ impl<V: VarianceMarker> ExteriorElement<V> {
       variance: PhantomData,
     }
   }
-  pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {
-    Self {
-      coeffs: na::DVector::zeros(binomial(dim, grade)),
-      dim,
-      grade,
-      variance: PhantomData,
-    }
-  }
-  pub fn one(dim: Dim) -> Self {
-    Self {
-      coeffs: na::DVector::from_element(1, 1.0),
-      dim,
-      grade: 0,
-      variance: PhantomData,
-    }
-  }
 
-  pub fn from_grade1(vector: na::DVector<f64>) -> Self {
+  pub fn scalar(v: f64, dim: Dim) -> ExteriorElement<V> {
+    Self::new(na::dvector![v], dim, 0)
+  }
+  pub fn line(vector: na::DVector<f64>) -> Self {
     let dim = vector.len();
     Self::new(vector, dim, 1)
   }
+
+  pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {
+    Self::new(na::DVector::zeros(binomial(dim, grade)), dim, grade)
+  }
+  pub fn one(dim: Dim) -> Self {
+    Self::scalar(1.0, dim)
+  }
+
   pub fn into_grade1(self) -> na::DVector<f64> {
     assert!(self.grade == 1);
     self.coeffs
@@ -324,7 +319,7 @@ impl MultiForm {
             basis
               .indices()
               .iter()
-              .map(|i| MultiForm::from_grade1(linear_map.row(i).transpose())),
+              .map(|i| MultiForm::line(linear_map.row(i).transpose())),
           )
           .unwrap_or(ExteriorElement::one(self.dim))
       })

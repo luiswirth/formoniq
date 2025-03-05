@@ -6,7 +6,7 @@ use {
   manifold::{
     gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef, topology::complex::Complex,
   },
-  whitney::cochain::discretize_form_on_mesh,
+  whitney::cochain::de_rham_map,
 };
 
 use std::fs;
@@ -19,37 +19,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let dim = 2;
   let grade = 1;
 
-  let ncells_axis = 1;
+  let ncells_axis = 10;
   let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_cells();
   let topology = Complex::from_cell_skeleton(topology);
   let _metric = coords.to_edge_lengths(&topology);
 
-  manifold::io::save_coords_to_file(&coords, format!("{path}/coords.txt"))?;
-  manifold::io::save_cells_to_file(&topology, format!("{path}/cells.txt"))?;
+  manifold::io::save_skeleton_to_file(&topology, dim, format!("{path}/cells.skel"))?;
+  manifold::io::save_skeleton_to_file(&topology, 1, format!("{path}/edges.skel"))?;
+  manifold::io::save_coords_to_file(&coords, format!("{path}/vertices.coords"))?;
 
   let form = |p: CoordRef| {
-    let _x = p[0];
-    let _y = p[1];
-    let comps = na::dvector![1.0, 0.0];
-    MultiForm::from_grade1(comps)
+    let x = 0.5 - p[0];
+    let y = 0.5 - p[1];
+    let comps = na::dvector![-y, x].normalize();
+    MultiForm::line(comps)
   };
   let form = DifferentialFormClosure::new(Box::new(form), dim, grade);
-  let cochain = discretize_form_on_mesh(&form, &topology, &coords);
-
-  for (simplex, coeff) in topology.skeleton(grade).set_iter().zip(cochain.coeffs()) {
-    let simplex = simplex.vertices.indices();
-    println!("W[{simplex:?}] = {coeff}");
-  }
-
-  //let mut cochain = Cochain::zero(grade, &topology);
-  //cochain.coeffs[15] = 1.0;
-
-  formoniq::io::save_evaluations_to_file(
-    &cochain,
-    &topology,
-    &coords,
-    format!("{path}/evaluations.txt"),
-  )?;
+  let cochain = de_rham_map(&form, &topology, &coords);
+  whitney::io::save_cochain_to_file(&cochain, format!("{path}/proj.cochain"))?;
 
   Ok(())
 }

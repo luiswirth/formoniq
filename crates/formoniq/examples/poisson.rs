@@ -6,6 +6,7 @@ extern crate nalgebra_sparse as nas;
 
 use {
   common::util::algebraic_convergence_rate,
+  exterior::{field::DifferentialFormClosure, MultiForm},
   formoniq::{
     fe::{h1_norm, l2_norm},
     problems::laplace_beltrami,
@@ -14,7 +15,7 @@ use {
     gen::cartesian::CartesianMeshInfo, geometry::metric::MeshEdgeLengths,
     topology::complex::Complex,
   },
-  whitney::cochain::Cochain,
+  whitney::cochain::{de_rham_map, Cochain},
 };
 
 use std::f64::consts::TAU;
@@ -24,36 +25,35 @@ fn main() {
 
   for dim in 1_usize..=3 {
     println!("Solving Poisson in {dim}d.");
+
+    // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
+    let solution_exact =
+      move |x: na::DVectorView<f64>| MultiForm::scalar(x.iter().map(|x| x.sin()).sum(), dim);
+    let laplacian =
+      move |x: na::DVectorView<f64>| MultiForm::scalar(x.iter().map(|x| x.sin()).sum(), dim);
+
+    let solution_exact = DifferentialFormClosure::new(Box::new(solution_exact), dim, 0);
+    let laplacian = DifferentialFormClosure::new(Box::new(laplacian), dim, 0);
+
     let nrefinements = 20 / dim;
     let setups = (0..nrefinements)
-      .map(|refinement| {
+      .map(move |refinement| {
         let nboxes_per_dim = 2usize.pow(refinement as u32);
 
         // Mesh of hypercube $[0, tau]^d$.
         let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
         let (topology, coords) = box_mesh.compute_coord_complex();
 
-        // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
-        let anal_sol = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
-        let anal_lapl = |x: na::DVectorView<f64>| x.iter().map(|x| x.sin()).sum();
-
-        let anal_sol = coords.coord_iter().map(anal_sol).collect::<Vec<_>>().into();
-        let anal_sol = Cochain::new(0, anal_sol);
-
-        let anal_lapl = coords
-          .coord_iter()
-          .map(anal_lapl)
-          .collect::<Vec<_>>()
-          .into();
-        let anal_lapl = Cochain::new(0, anal_lapl);
+        let solution_exact = de_rham_map(&solution_exact, &topology, &coords);
+        let laplacian = de_rham_map(&laplacian, &topology, &coords);
 
         let metric = coords.to_edge_lengths(&topology);
 
         PoissonWithSol {
           topology,
           metric,
-          solution_exact: anal_sol,
-          load_data: anal_lapl,
+          solution_exact,
+          load_data: laplacian,
         }
       })
       .collect();

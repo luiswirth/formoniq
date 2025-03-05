@@ -31,7 +31,7 @@ pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> 
     .sqrt()
 }
 
-pub fn evaluate_fe_function_at_coord<'a>(
+pub fn reconstruct_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
   fe: &Cochain,
   topology: &Complex,
@@ -67,7 +67,7 @@ pub fn evaluate_fe_function_at_coord<'a>(
   fe_value
 }
 
-pub fn evaluate_fe_function_at_cell_barycenters(
+pub fn reconstruct_at_mesh_cells_barycenters(
   fe: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
@@ -95,7 +95,7 @@ pub fn evaluate_fe_function_at_cell_barycenters(
     .collect()
 }
 
-pub fn evaluate_fe_function_mesh_cell_vertices(
+pub fn reconstruct_at_mesh_cells_vertices(
   cochain: &Cochain,
   topology: &Complex,
   coords: &MeshVertexCoords,
