@@ -87,7 +87,7 @@ pub fn solve_hodge_laplace_harmonics(
     return na::DMatrix::zeros(nwhitneys, 0);
   }
 
-  let (eigenvals, harmonics) = solve_hodge_laplace_evp(topology, geometry, grade, homology_dim);
+  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(topology, geometry, grade, homology_dim);
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   harmonics
 }
@@ -97,7 +97,7 @@ pub fn solve_hodge_laplace_evp(
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
   neigen_values: usize,
-) -> (na::DVector<f64>, na::DMatrix<f64>) {
+) -> (na::DVector<f64>, na::DMatrix<f64>, na::DMatrix<f64>) {
   let galmats = MixedGalmats::compute(topology, geometry, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
@@ -111,11 +111,15 @@ pub fn solve_hodge_laplace_evp(
     rhs.push(r, c, v);
   }
 
-  petsc_ghiep(
+  let (eigenvals, eigenvectors) = petsc_ghiep(
     &lhs.to_nalgebra_csr(),
     &rhs.to_nalgebra_csr(),
     neigen_values,
-  )
+  );
+
+  let eigen_sigmas = eigenvectors.rows(0, sigma_len).into_owned();
+  let eigen_us = eigenvectors.rows(sigma_len, u_len).into_owned();
+  (eigenvals, eigen_sigmas, eigen_us)
 }
 
 pub struct MixedGalmats {
