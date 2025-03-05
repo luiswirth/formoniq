@@ -86,7 +86,7 @@ impl std::ops::Sub for Cochain {
 
 /// Discretize continuous coordinate-based differential k-form into
 /// discrete k-cochain on CoordComplex via de Rham map (integration over k-simplex).
-pub fn discretize_form_on_mesh(
+pub fn de_rham_map(
   form: &impl DifferentialMultiForm,
   topology: &Complex,
   coords: &MeshVertexCoords,
@@ -95,7 +95,7 @@ pub fn discretize_form_on_mesh(
     .skeleton(form.grade())
     .handle_iter()
     .map(|simp| SimplexCoords::from_simplex_and_coords(simp.simplex_set(), coords))
-    .map(|simp| discretize_form_on_simplex(form, &simp))
+    .map(|simp| de_rahm_map_local(form, &simp))
     .collect::<Vec<_>>()
     .into();
   Cochain::new(form.grade(), cochain)
@@ -103,7 +103,7 @@ pub fn discretize_form_on_mesh(
 
 /// Approximates the integral of a differential k-form over a k-simplex,
 /// by means of barycentric quadrature.
-pub fn discretize_form_on_simplex(
+pub fn de_rahm_map_local(
   differential_form: &impl DifferentialMultiForm,
   simplex: &SimplexCoords,
 ) -> f64 {

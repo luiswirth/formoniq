@@ -1,4 +1,4 @@
-use crate::fe::evaluate_fe_function_mesh_cell_vertices;
+use crate::fe::reconstruct_at_mesh_cells_vertices;
 
 use {
   exterior::MultiForm,
@@ -14,7 +14,7 @@ pub fn save_evaluations_to_file(
   coords: &MeshVertexCoords,
   path: impl AsRef<Path>,
 ) -> std::io::Result<()> {
-  let evals = evaluate_fe_function_mesh_cell_vertices(fe, topology, coords);
+  let evals = reconstruct_at_mesh_cells_vertices(fe, topology, coords);
   let file = File::create(path)?;
   let writer = BufWriter::new(file);
   write_evaluations(writer, &evals)

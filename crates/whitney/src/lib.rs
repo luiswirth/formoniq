@@ -1,6 +1,7 @@
 extern crate nalgebra as na;
 
 pub mod cochain;
+pub mod io;
 
 use {
   common::sparse::SparseMatrix,
@@ -36,20 +37,20 @@ impl CoordSimplexExt for SimplexCoords {
     let vectors = self.spanning_vectors();
     let vectors = vectors
       .column_iter()
-      .map(|v| MultiVector::from_grade1(v.into_owned()));
+      .map(|v| MultiVector::line(v.into_owned()));
     MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_embedded()))
   }
 
   fn difbary(&self, i: usize) -> MultiForm {
     let gradbary = self.gradbary(i);
-    MultiForm::from_grade1(gradbary)
+    MultiForm::line(gradbary)
   }
 
   fn difbarys(&self) -> Vec<MultiForm> {
     let gradbarys = self.gradbarys();
     gradbarys
       .column_iter()
-      .map(|g| MultiForm::from_grade1(g.into_owned()))
+      .map(|g| MultiForm::line(g.into_owned()))
       .collect()
   }
 }
@@ -132,7 +133,7 @@ impl<O: IndexKind> ExteriorField for WhitneyForm<O> {
 
 #[cfg(test)]
 mod test {
-  use cochain::discretize_form_on_simplex;
+  use cochain::de_rahm_map_local;
 
   use super::*;
 
@@ -161,7 +162,7 @@ mod test {
           for other_simplex in topology.skeleton(grade).handle_iter() {
             let are_equal = this_simp == other_simplex;
             let other_simplex = other_simplex.coord_simplex(&coords);
-            let discret = discretize_form_on_simplex(&whitney_form, &other_simplex);
+            let discret = de_rahm_map_local(&whitney_form, &other_simplex);
             let expected = Sign::Pos.as_f64() * are_equal as usize as f64;
             let diff = (discret - expected).abs();
             const TOL: f64 = 10e-9;
@@ -173,7 +174,7 @@ mod test {
                 r.flip_orientation();
                 r
               };
-              let discret_rev = discretize_form_on_simplex(&whitney_form, &other_simplex_rev);
+              let discret_rev = de_rahm_map_local(&whitney_form, &other_simplex_rev);
               let expected_rev = Sign::Neg.as_f64() * are_equal as usize as f64;
               let diff_rev = (discret_rev - expected_rev).abs();
               let equal_rev = diff_rev <= TOL;

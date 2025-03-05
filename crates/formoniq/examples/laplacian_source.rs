@@ -6,11 +6,15 @@ use {
   exterior::{field::DifferentialFormClosure, MultiForm},
   formoniq::{fe::l2_norm, problems::hodge_laplace},
   manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef},
-  std::f64::consts::PI,
-  whitney::cochain::discretize_form_on_mesh,
+  std::{f64::consts::PI, fs},
+  whitney::cochain::de_rham_map,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+  let path = "out/laplacian_source";
+  let _ = fs::remove_dir_all(path);
+  fs::create_dir_all(path).unwrap();
+
   let dim = 2;
   let form_grade = 1;
 
@@ -19,14 +23,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       let prod = p.remove_row(i).map(|a| a.cos()).product();
       p[i].sin().powi(2) * prod
     });
-    MultiForm::from_grade1(na::DVector::from_iterator(p.len(), comps))
+    MultiForm::line(na::DVector::from_iterator(p.len(), comps))
   };
   let laplacian = |p: CoordRef| {
     let comps = (0..p.len()).map(|i| {
       let prod: f64 = p.remove_row(i).map(|a| a.cos()).product();
       -(2.0 * (2.0 * p[i]).cos() - (p.len() - 1) as f64 * p[i].sin().powi(2)) * prod
     });
-    MultiForm::from_grade1(na::DVector::from_iterator(p.len(), comps))
+    MultiForm::line(na::DVector::from_iterator(p.len(), comps))
   };
 
   let laplacian = DifferentialFormClosure::new(Box::new(laplacian), dim, form_grade);
@@ -39,13 +43,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    let laplacian = discretize_form_on_mesh(&laplacian, &topology, &coords);
-    let exact_solution = discretize_form_on_mesh(&exact_solution, &topology, &coords);
+    let laplacian = de_rham_map(&laplacian, &topology, &coords);
+    let exact_u = de_rham_map(&exact_solution, &topology, &coords);
 
     let (_sigma, u, _p) =
       hodge_laplace::solve_hodge_laplace_source(&topology, &metric, form_grade, laplacian);
 
-    let diff = exact_solution - u;
+    manifold::io::save_skeleton_to_file(&topology, dim, format!("{path}/cells.skel"))?;
+    manifold::io::save_skeleton_to_file(&topology, 1, format!("{path}/edges.skel"))?;
+    manifold::io::save_coords_to_file(&coords, format!("{path}/vertices.coords"))?;
+
+    whitney::io::save_cochain_to_file(&exact_u, format!("{path}/exact.cochain"))?;
+    whitney::io::save_cochain_to_file(&u, format!("{path}/fe.cochain"))?;
+
+    let diff = exact_u - u;
     let l2_norm = l2_norm(&diff, &topology, &metric);
 
     let conv_rate = |errors: &[f64], curr: f64| {
