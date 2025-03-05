@@ -43,7 +43,7 @@ pub fn solve_laplace_beltrami_evp(
 ) -> (na::DVector<f64>, Vec<Cochain>) {
   let laplace_galmat =
     assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
-  let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarLumpedMassElmat);
+  let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(
     &laplace_galmat.to_nalgebra_csr(),

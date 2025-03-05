@@ -1,20 +1,33 @@
 use crate::{
   geometry::coord::MeshVertexCoords,
-  topology::{simplex::Simplex, skeleton::Skeleton},
+  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
 
 use multi_index::sign::Sign;
 
+pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshVertexCoords) {
+  let (cells, coords) = gmsh2coord_cells(bytes);
+  let complex = Complex::from_cell_skeleton(cells);
+  (complex, coords)
+}
+
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn gmsh2coord_mesh(bytes: &[u8]) -> (Skeleton, MeshVertexCoords) {
+pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshVertexCoords) {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
-  let mesh_vertices: Vec<_> = mesh_vertices
+  let mut mesh_vertices: Vec<_> = mesh_vertices
     .iter()
     .flat_map(|block| block.nodes.iter())
-    .map(|node| na::DVector::from_column_slice(&[node.x, node.y, node.z]))
+    .map(|node| na::dvector![node.x, node.y, node.z])
     .collect();
+
+  if mesh_vertices.iter().all(|coord| coord[2] == 0.0) {
+    mesh_vertices
+      .iter_mut()
+      .for_each(|coord| *coord = na::dvector![coord[0], coord[1]])
+  }
+
   let mesh_vertices = na::DMatrix::from_columns(&mesh_vertices);
   let mesh_vertices = MeshVertexCoords::new(mesh_vertices);
 

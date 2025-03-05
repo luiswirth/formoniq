@@ -11,16 +11,18 @@ use std::fs;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let path = "out/laplacian_evp";
-  fs::remove_dir_all(path).unwrap();
+  let _ = fs::remove_dir_all(path);
   fs::create_dir_all(path).unwrap();
 
   let dim = 2;
   let grade = 1;
-  let neigen = 10;
+  let neigen = 3;
 
-  let ncells_axis = 10;
-  let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_cells();
-  let topology = Complex::from_cell_skeleton(topology);
+  let (topology, coords) =
+    manifold::io::gmsh::gmsh2coord_complex(&fs::read("/home/luis/annulus/annulus1.msh")?);
+
+  //let ncells_axis = 10;
+  //let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
 
   manifold::io::save_skeleton_to_file(&topology, dim, format!("{path}/cells.skel"))?;
