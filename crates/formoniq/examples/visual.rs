@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use {
-  exterior::{field::DifferentialFormClosure, MultiForm},
+  exterior::{field::DiffFormClosure, MultiForm},
   manifold::{
     gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef, topology::complex::Complex,
   },
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let comps = na::dvector![-y, x].normalize();
     MultiForm::line(comps)
   };
-  let form = DifferentialFormClosure::new(Box::new(form), dim, grade);
+  let form = DiffFormClosure::new(Box::new(form), dim, grade);
   let cochain = de_rham_map(&form, &topology, &coords);
   whitney::io::save_cochain_to_file(&cochain, format!("{path}/proj.cochain"))?;
 

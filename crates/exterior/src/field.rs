@@ -1,11 +1,11 @@
-use std::marker::PhantomData;
-
-use common::metric::AffineDiffeomorphism;
-
 use crate::{
   variance::{self, VarianceMarker},
   Dim, ExteriorElement, ExteriorGrade,
 };
+
+use common::metric::AffineDiffeomorphism;
+
+use std::marker::PhantomData;
 
 pub trait ExteriorField {
   type Variance: VarianceMarker;
@@ -25,7 +25,7 @@ impl<T: ExteriorField<Variance = variance::Co>> MultiFormField for T {}
 pub trait DifferentialMultiForm: MultiFormField {}
 impl<T: MultiFormField> DifferentialMultiForm for T {}
 
-pub type DifferentialFormClosure = ExteriorFieldClosure<variance::Co>;
+pub type DiffFormClosure = ExteriorFieldClosure<variance::Co>;
 
 #[allow(clippy::type_complexity)]
 pub struct ExteriorFieldClosure<V: VarianceMarker> {
@@ -52,20 +52,33 @@ impl<V: VarianceMarker> ExteriorFieldClosure<V> {
 }
 
 // Convenience methods specifically for DifferentialFormClosure
-impl DifferentialFormClosure {
-  /// Create a scalar field (0-form) from a function that returns a scalar value
+impl DiffFormClosure {
+  /// Create a scalar field (0-form).
   pub fn scalar(f: impl Fn(na::DVectorView<f64>) -> f64 + 'static, dim: Dim) -> Self {
     let wrapper = move |x: na::DVectorView<f64>| crate::ExteriorElement::scalar(f(x), dim);
     Self::new(Box::new(wrapper), dim, 0)
   }
-
-  /// Create a 1-form (covector field) from a function that returns a vector
+  /// Create a 1-form (covector field).
   pub fn one_form(
     f: impl Fn(na::DVectorView<f64>) -> na::DVector<f64> + 'static,
     dim: Dim,
   ) -> Self {
     let wrapper = move |x: na::DVectorView<f64>| crate::ExteriorElement::line(f(x));
     Self::new(Box::new(wrapper), dim, 1)
+  }
+
+  /// Create a constant scalar field.
+  pub fn constant_scalar(value: f64, dim: Dim) -> Self {
+    Self::scalar(move |_| value, dim)
+  }
+  /// Create a scalar field that extracts a specific coordinate component.
+  pub fn coordinate_component(icomp: usize, dim: Dim) -> Self {
+    assert!(icomp < dim, "Component index out of bounds");
+    Self::scalar(move |x| x[icomp], dim)
+  }
+  /// Create a scalar field of the radial distance from a center point.
+  pub fn radial_scalar(center: na::DVector<f64>, dim: Dim) -> Self {
+    Self::scalar(move |x| (&center - x).norm(), dim)
   }
 }
 impl<V: VarianceMarker> ExteriorField for ExteriorFieldClosure<V> {

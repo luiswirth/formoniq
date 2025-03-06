@@ -3,7 +3,7 @@ extern crate nalgebra_sparse as nas;
 
 use {
   common::util::algebraic_convergence_rate,
-  exterior::field::DifferentialFormClosure,
+  exterior::field::DiffFormClosure,
   formoniq::{fe::l2_norm, problems::hodge_laplace},
   manifold::gen::cartesian::CartesianMeshInfo,
   std::{f64::consts::PI, fs},
@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let dim = 2;
   let form_grade = 1;
 
-  let exact_solution = DifferentialFormClosure::one_form(
+  let exact_solution = DiffFormClosure::one_form(
     |p| {
       na::DVector::from_iterator(
         p.len(),
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dim,
   );
 
-  let laplacian = DifferentialFormClosure::one_form(
+  let laplacian = DiffFormClosure::one_form(
     |p| {
       na::DVector::from_iterator(
         p.len(),
