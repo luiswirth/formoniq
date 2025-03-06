@@ -37,8 +37,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let exact_solution = DifferentialFormClosure::new(Box::new(exact_solution), dim, form_grade);
 
   let mut errors = Vec::new();
-  for refinement in 0..=10 {
-    let nboxes_per_dim = 2usize.pow(refinement);
+  for irefine in 0..=10 {
+    let refine_path = &format!("{path}/refine{irefine}");
+    fs::create_dir_all(refine_path).unwrap();
+
+    let nboxes_per_dim = 2usize.pow(irefine);
     let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
@@ -49,12 +52,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (_sigma, u, _p) =
       hodge_laplace::solve_hodge_laplace_source(&topology, &metric, form_grade, laplacian);
 
-    manifold::io::save_skeleton_to_file(&topology, dim, format!("{path}/cells.skel"))?;
-    manifold::io::save_skeleton_to_file(&topology, 1, format!("{path}/edges.skel"))?;
-    manifold::io::save_coords_to_file(&coords, format!("{path}/vertices.coords"))?;
+    manifold::io::save_skeleton_to_file(&topology, dim, format!("{refine_path}/cells.skel"))?;
+    manifold::io::save_skeleton_to_file(&topology, 1, format!("{refine_path}/edges.skel"))?;
+    manifold::io::save_coords_to_file(&coords, format!("{refine_path}/vertices.coords"))?;
 
-    whitney::io::save_cochain_to_file(&exact_u, format!("{path}/exact.cochain"))?;
-    whitney::io::save_cochain_to_file(&u, format!("{path}/fe.cochain"))?;
+    whitney::io::save_cochain_to_file(&exact_u, format!("{refine_path}/exact.cochain"))?;
+    whitney::io::save_cochain_to_file(&u, format!("{refine_path}/fe.cochain"))?;
 
     let diff = exact_u - u;
     let l2_norm = l2_norm(&diff, &topology, &metric);
@@ -68,7 +71,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let conv_rate = conv_rate(&errors, l2_norm);
     errors.push(l2_norm);
 
-    println!("refinement={refinement} | L2_error={l2_norm:<7.2e} | conv_rate={conv_rate:>5.2}");
+    println!("refinement={irefine} | L2_error={l2_norm:<7.2e} | conv_rate={conv_rate:>5.2}");
   }
 
   Ok(())
