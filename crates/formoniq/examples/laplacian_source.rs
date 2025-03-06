@@ -3,9 +3,9 @@ extern crate nalgebra_sparse as nas;
 
 use {
   common::util::algebraic_convergence_rate,
-  exterior::{field::DifferentialFormClosure, MultiForm},
+  exterior::field::DifferentialFormClosure,
   formoniq::{fe::l2_norm, problems::hodge_laplace},
-  manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef},
+  manifold::gen::cartesian::CartesianMeshInfo,
   std::{f64::consts::PI, fs},
   whitney::cochain::de_rham_map,
 };
@@ -18,23 +18,31 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let dim = 2;
   let form_grade = 1;
 
-  let exact_solution = |p: CoordRef| {
-    let comps = (0..p.len()).map(|i| {
-      let prod = p.remove_row(i).map(|a| a.cos()).product();
-      p[i].sin().powi(2) * prod
-    });
-    MultiForm::line(na::DVector::from_iterator(p.len(), comps))
-  };
-  let laplacian = |p: CoordRef| {
-    let comps = (0..p.len()).map(|i| {
-      let prod: f64 = p.remove_row(i).map(|a| a.cos()).product();
-      -(2.0 * (2.0 * p[i]).cos() - (p.len() - 1) as f64 * p[i].sin().powi(2)) * prod
-    });
-    MultiForm::line(na::DVector::from_iterator(p.len(), comps))
-  };
+  let exact_solution = DifferentialFormClosure::one_form(
+    |p| {
+      na::DVector::from_iterator(
+        p.len(),
+        (0..p.len()).map(|i| {
+          let prod = p.remove_row(i).map(|a| a.cos()).product();
+          p[i].sin().powi(2) * prod
+        }),
+      )
+    },
+    dim,
+  );
 
-  let laplacian = DifferentialFormClosure::new(Box::new(laplacian), dim, form_grade);
-  let exact_solution = DifferentialFormClosure::new(Box::new(exact_solution), dim, form_grade);
+  let laplacian = DifferentialFormClosure::one_form(
+    |p| {
+      na::DVector::from_iterator(
+        p.len(),
+        (0..p.len()).map(|i| {
+          let prod: f64 = p.remove_row(i).map(|a| a.cos()).product();
+          -(2.0 * (2.0 * p[i]).cos() - (p.len() - 1) as f64 * p[i].sin().powi(2)) * prod
+        }),
+      )
+    },
+    dim,
+  );
 
   let mut errors = Vec::new();
   for irefine in 0..=10 {
