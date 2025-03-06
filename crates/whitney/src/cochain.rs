@@ -21,9 +21,19 @@ impl Cochain {
   pub fn new(dim: Dim, coeffs: na::DVector<f64>) -> Self {
     Self { dim, coeffs }
   }
-  pub fn zero(dim: Dim, topology: &Complex) -> Self {
+  pub fn constant(value: f64, dim: Dim, topology: &Complex) -> Self {
     let ncoeffs = topology.nsimplicies(dim);
-    let coeffs = na::DVector::zeros(ncoeffs);
+    Self::new(dim, na::DVector::from_element(ncoeffs, value))
+  }
+  pub fn zero(dim: Dim, topology: &Complex) -> Self {
+    Self::constant(0.0, dim, topology)
+  }
+  pub fn from_function<F>(f: F, dim: Dim, topology: &Complex) -> Self
+  where
+    F: FnMut(SimplexHandle) -> f64,
+  {
+    let skeleton = topology.skeleton(dim);
+    let coeffs = na::DVector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
     Self::new(dim, coeffs)
   }
 
@@ -38,6 +48,17 @@ impl Cochain {
   }
   pub fn is_empty(&self) -> bool {
     self.coeffs().len() == 0
+  }
+
+  /// Scale this cochain by a factor, modifying it in-place
+  pub fn scale(&mut self, factor: f64) -> &mut Self {
+    self.coeffs *= factor;
+    self
+  }
+
+  /// Create a new cochain by scaling this one.
+  pub fn scaled(&self, factor: f64) -> Self {
+    Self::new(self.dim, &self.coeffs * factor)
   }
 
   pub fn component_mul(&self, other: &Self) -> Self {
@@ -70,6 +91,17 @@ impl std::ops::Index<usize> for Cochain {
   }
 }
 
+impl std::ops::Mul<f64> for Cochain {
+  type Output = Cochain;
+  fn mul(self, rhs: f64) -> Self::Output {
+    self.scaled(rhs)
+  }
+}
+impl std::ops::MulAssign<f64> for Cochain {
+  fn mul_assign(&mut self, rhs: f64) {
+    self.scale(rhs);
+  }
+}
 impl std::ops::SubAssign for Cochain {
   fn sub_assign(&mut self, rhs: Self) {
     assert!(self.dim == rhs.dim);
