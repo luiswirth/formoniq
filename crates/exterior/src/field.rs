@@ -34,6 +34,7 @@ pub struct ExteriorFieldClosure<V: VarianceMarker> {
   grade: ExteriorGrade,
   variance: PhantomData<V>,
 }
+
 #[allow(clippy::type_complexity)]
 impl<V: VarianceMarker> ExteriorFieldClosure<V> {
   pub fn new(
@@ -47,6 +48,24 @@ impl<V: VarianceMarker> ExteriorFieldClosure<V> {
       grade,
       variance: PhantomData,
     }
+  }
+}
+
+// Convenience methods specifically for DifferentialFormClosure
+impl DifferentialFormClosure {
+  /// Create a scalar field (0-form) from a function that returns a scalar value
+  pub fn scalar(f: impl Fn(na::DVectorView<f64>) -> f64 + 'static, dim: Dim) -> Self {
+    let wrapper = move |x: na::DVectorView<f64>| crate::ExteriorElement::scalar(f(x), dim);
+    Self::new(Box::new(wrapper), dim, 0)
+  }
+
+  /// Create a 1-form (covector field) from a function that returns a vector
+  pub fn one_form(
+    f: impl Fn(na::DVectorView<f64>) -> na::DVector<f64> + 'static,
+    dim: Dim,
+  ) -> Self {
+    let wrapper = move |x: na::DVectorView<f64>| crate::ExteriorElement::line(f(x));
+    Self::new(Box::new(wrapper), dim, 1)
   }
 }
 impl<V: VarianceMarker> ExteriorField for ExteriorFieldClosure<V> {

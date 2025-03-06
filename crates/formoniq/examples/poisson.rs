@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 
 use {
   common::util::algebraic_convergence_rate,
-  exterior::{field::DifferentialFormClosure, MultiForm},
+  exterior::field::DifferentialFormClosure,
   formoniq::{
     fe::{h1_norm, l2_norm},
     problems::laplace_beltrami,
@@ -27,13 +27,8 @@ fn main() {
     println!("Solving Poisson in {dim}d.");
 
     // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
-    let solution_exact =
-      move |x: na::DVectorView<f64>| MultiForm::scalar(x.iter().map(|x| x.sin()).sum(), dim);
-    let laplacian =
-      move |x: na::DVectorView<f64>| MultiForm::scalar(x.iter().map(|x| x.sin()).sum(), dim);
-
-    let solution_exact = DifferentialFormClosure::new(Box::new(solution_exact), dim, 0);
-    let laplacian = DifferentialFormClosure::new(Box::new(laplacian), dim, 0);
+    let solution_exact = DifferentialFormClosure::scalar(|x| x.iter().map(|x| x.sin()).sum(), dim);
+    let laplacian = DifferentialFormClosure::scalar(|x| x.iter().map(|x| x.sin()).sum(), dim);
 
     let nrefinements = 20 / dim;
     let setups = (0..nrefinements)
