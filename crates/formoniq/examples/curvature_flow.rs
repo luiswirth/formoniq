@@ -5,7 +5,7 @@ extern crate nalgebra_sparse as nas;
 
 use common::util::FaerCholesky;
 use formoniq::{assemble, operators};
-use manifold::geometry::coord::MeshVertexCoords;
+use manifold::geometry::coord::VertexCoords;
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};
@@ -62,7 +62,7 @@ fn main() {
       coords_new.row_mut(d).copy_from(&comps_new);
     }
 
-    let coords_new = MeshVertexCoords::new(coords_new);
+    let coords_new = VertexCoords::new(coords_new);
     metric = coords_new.to_edge_lengths(&topology);
     coords_list.push(coords_new);
   }

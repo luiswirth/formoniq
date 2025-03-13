@@ -91,9 +91,9 @@ impl<V: VarianceMarker> ExteriorElement<V> {
   pub fn scalar(v: f64, dim: Dim) -> ExteriorElement<V> {
     Self::new(na::dvector![v], dim, 0)
   }
-  pub fn line(vector: na::DVector<f64>) -> Self {
-    let dim = vector.len();
-    Self::new(vector, dim, 1)
+  pub fn line(coeffs: na::DVector<f64>) -> Self {
+    let dim = coeffs.len();
+    Self::new(coeffs, dim, 1)
   }
 
   pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {

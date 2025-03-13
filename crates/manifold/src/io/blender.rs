@@ -1,4 +1,4 @@
-use crate::{dim3::TriangleSurface3D, geometry::coord::MeshVertexCoords};
+use crate::{dim3::TriangleSurface3D, geometry::coord::VertexCoords};
 
 use std::fmt::Write;
 use std::path::Path;
@@ -41,7 +41,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
   }
 
   let vertex_coords = na::DMatrix::from_columns(&vertex_coords);
-  let vertex_coords = MeshVertexCoords::from(vertex_coords);
+  let vertex_coords = VertexCoords::from(vertex_coords);
   TriangleSurface3D::new(triangles, vertex_coords)
 }
 
@@ -76,7 +76,7 @@ pub fn write_mdd_file(
 }
 
 pub fn write_3dmesh_animation<'a, 'b>(
-  coords_frames: impl IntoIterator<Item = &'a MeshVertexCoords>,
+  coords_frames: impl IntoIterator<Item = &'a VertexCoords>,
   time_frames: impl IntoIterator<Item = f64>,
 ) {
   let mdd_frames: Vec<Vec<[f32; 3]>> = coords_frames

@@ -1,7 +1,7 @@
 use {
   exterior::{term::RiemannianMetricExt, ExteriorGrade},
   manifold::{
-    geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
+    geometry::metric::SimplexGeometry,
     topology::{
       complex::{DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
       simplex::{nsubsimplicies, subsimplicies},
@@ -9,7 +9,7 @@ use {
     Dim,
   },
   multi_index::{factorial, sign::Sign},
-  whitney::WhitneyForm,
+  whitney::WhitneyId,
 };
 
 use std::sync::LazyLock;
@@ -112,6 +112,7 @@ impl ElMatProvider for HodgeMassElmat {
     self.0
   }
 
+  // TODO: store precomputed values
   fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
     let dim = geometry.dim();
     let grade = self.0;
@@ -124,7 +125,7 @@ impl ElMatProvider for HodgeMassElmat {
     let wedge_terms: Vec<_> = simplicies
       .iter()
       .cloned()
-      .map(|simp| WhitneyForm::new(SimplexCoords::standard(dim), simp).wedge_terms())
+      .map(|simp| WhitneyId::new(dim, simp).wedge_terms().collect())
       .collect();
 
     let mut elmat = na::DMatrix::zeros(simplicies.len(), simplicies.len());
@@ -237,11 +238,8 @@ mod test {
 
   use common::linalg::assert_mat_eq;
   use exterior::term::RiemannianMetricExt;
-  use manifold::{
-    geometry::{coord::local::SimplexCoords, metric::SimplexGeometry},
-    topology::simplex::subsimplicies,
-  };
-  use whitney::WhitneyForm;
+  use manifold::{geometry::metric::SimplexGeometry, topology::simplex::subsimplicies};
+  use whitney::WhitneyId;
 
   #[test]
   fn dif_dif0_is_laplace_beltrami() {
@@ -303,12 +301,11 @@ mod test {
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in 1..=3 {
       let geometry = SimplexGeometry::standard(dim);
-      let coords = SimplexCoords::standard(dim);
       for grade in 0..dim {
         let difdif = CodifDifElmat(grade).eval(&geometry);
 
         let difwhitneys: Vec<_> = subsimplicies(dim, grade)
-          .map(|simp| WhitneyForm::new(coords.clone(), simp).dif())
+          .map(|simp| WhitneyId::new(dim, simp).dif())
           .collect();
         let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {

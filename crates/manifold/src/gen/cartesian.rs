@@ -1,5 +1,5 @@
 use crate::{
-  geometry::coord::MeshVertexCoords,
+  geometry::coord::VertexCoords,
   topology::{
     complex::Complex,
     simplex::{Simplex, SortedSimplex},
@@ -158,22 +158,22 @@ impl CartesianMeshInfo {
 }
 
 impl CartesianMeshInfo {
-  pub fn compute_coord_complex(&self) -> (Complex, MeshVertexCoords) {
+  pub fn compute_coord_complex(&self) -> (Complex, VertexCoords) {
     let (skeleton, coords) = self.compute_coord_cells();
     let complex = Complex::from_cell_skeleton(skeleton);
     (complex, coords)
   }
-  pub fn compute_coord_cells(&self) -> (Skeleton, MeshVertexCoords) {
+  pub fn compute_coord_cells(&self) -> (Skeleton, VertexCoords) {
     let skeleton = self.compute_cell_skeleton();
     let coords = self.compute_vertex_coords();
     (skeleton, coords)
   }
-  pub fn compute_vertex_coords(&self) -> MeshVertexCoords {
+  pub fn compute_vertex_coords(&self) -> VertexCoords {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
     }
-    MeshVertexCoords::new(coords)
+    VertexCoords::new(coords)
   }
 
   pub fn compute_cell_skeleton(&self) -> Skeleton {
