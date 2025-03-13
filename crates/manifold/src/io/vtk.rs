@@ -1,4 +1,4 @@
-use crate::{geometry::coord::MeshVertexCoords, topology::skeleton::Skeleton};
+use crate::{geometry::coord::VertexCoords, topology::skeleton::Skeleton};
 
 use vtkio::{
   model::{
@@ -7,7 +7,7 @@ use vtkio::{
   IOBuffer,
 };
 
-pub fn embedded_mesh_to_vtk(cells: &Skeleton, coords: &MeshVertexCoords) -> Vtk {
+pub fn embedded_mesh_to_vtk(cells: &Skeleton, coords: &VertexCoords) -> Vtk {
   let cell_type = match cells.dim() {
     1 => CellType::Line,
     2 => CellType::Triangle,

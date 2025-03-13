@@ -181,12 +181,12 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> na::DMatrix<i32>
   let full_galmat = feec_galmat_full(dim, nboxes_per_dim);
 
   // TODO: optimize!
-  let removable_vertices =
+  let boundary_vertices =
     CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64)
       .boundary_vertices();
   let galmat = full_galmat
-    .remove_columns_at(&removable_vertices)
-    .remove_rows_at(&removable_vertices);
+    .remove_columns_at(&boundary_vertices)
+    .remove_rows_at(&boundary_vertices);
 
   cast_int(galmat)
 }
@@ -197,8 +197,8 @@ fn feec_galmat_boundary(dim: Dim) -> na::DMatrix<f64> {
 }
 
 /// Galmat from normalized LSE, where RHS galvec would be constant 1.
-fn feec_galmat_full(dim: Dim, nboxes_per_dim: usize) -> na::DMatrix<f64> {
-  let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64);
+fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> na::DMatrix<f64> {
+  let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
   let mut galmat = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat)

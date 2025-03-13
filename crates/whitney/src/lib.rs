@@ -5,17 +5,19 @@ pub mod io;
 
 use {
   common::sparse::SparseMatrix,
-  exterior::{
-    field::ExteriorField, variance, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList,
-    MultiVector,
-  },
+  exterior::{field::ExteriorField, variance, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
-    geometry::coord::{local::SimplexCoords, CoordRef},
+    geometry::coord::{
+      local::{is_bary_inside, local_to_bary_coords, SimplexCoords},
+      EmbeddingCoordRef, LocalCoordRef,
+    },
     topology::{complex::Complex, simplex::Simplex},
     Dim,
   },
   multi_index::{factorial, sign::Sign, variants::IndexKind},
 };
+
+pub type LocalMultiForm = MultiForm;
 
 pub trait ManifoldComplexExt {
   fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
@@ -55,79 +57,130 @@ impl CoordSimplexExt for SimplexCoords {
   }
 }
 
-/// Whitney Form on a coordinate complex.
-///
-/// Can be evaluated on local coordinates.
-pub struct WhitneyForm<O: IndexKind> {
-  cell_coords: SimplexCoords,
-  associated_subsimp: Simplex<O>,
-  difbarys: Vec<MultiForm>,
+pub fn difbary0_local(dim: Dim) -> LocalMultiForm {
+  let coeffs = na::DVector::from_element(dim, -1.0);
+  LocalMultiForm::line(coeffs)
 }
-impl<O: IndexKind> WhitneyForm<O> {
-  pub fn new(cell_coords: SimplexCoords, associated_subsimp: Simplex<O>) -> Self {
-    let difbarys = associated_subsimp
-      .vertices
-      .iter()
-      .map(|vertex| cell_coords.difbary(vertex))
-      .collect();
+pub fn difbary_local(ibary: usize, dim: Dim) -> LocalMultiForm {
+  let nvertices = dim + 1;
+  assert!(ibary < nvertices);
+  if ibary == 0 {
+    difbary0_local(dim)
+  } else {
+    let mut coeffs = na::DVector::zeros(dim);
+    coeffs[ibary - 1] = 1.0;
+    LocalMultiForm::line(coeffs)
+  }
+}
+pub fn difbarys_local(dim: Dim) -> impl ExactSizeIterator<Item = LocalMultiForm> {
+  let nvertices = dim + 1;
+  (0..nvertices).map(move |ibary| difbary_local(ibary, dim))
+}
+pub fn difbary_wedge_local<O: IndexKind>(dim: Dim) -> LocalMultiForm {
+  MultiForm::wedge_big(difbarys_local(dim)).unwrap_or(MultiForm::one(dim))
+}
 
-    Self {
-      cell_coords,
-      associated_subsimp,
-      difbarys,
-    }
+pub fn bary0_local<'a>(coord: impl Into<LocalCoordRef<'a>>) -> f64 {
+  let coord = coord.into();
+  1.0 - coord.sum()
+}
+
+#[derive(Debug, Clone)]
+pub struct WhitneyId<O: IndexKind> {
+  dim_cell: Dim,
+  dof_simp: Simplex<O>,
+}
+impl<O: IndexKind> WhitneyId<O> {
+  pub fn new(dim_cell: Dim, dof_simp: Simplex<O>) -> Self {
+    Self { dim_cell, dof_simp }
+  }
+  pub fn grade(&self) -> ExteriorGrade {
+    self.dof_simp.dim()
+  }
+  /// The difbarys of the vertices of the DOF simplex.
+  pub fn difbarys(&self) -> impl Iterator<Item = LocalMultiForm> + use<'_, O> {
+    self
+      .dof_simp
+      .vertices
+      .clone()
+      .into_iter()
+      .map(move |ibary| difbary_local(ibary, self.dim_cell))
   }
 
-  pub fn wedge_term(&self, iterm: usize) -> MultiForm {
-    let wedge_terms = self
-      .difbarys
-      .iter()
+  /// d𝜆_i_0 ∧⋯∧̂ omit(d𝜆_i_iwedge) ∧⋯∧ d𝜆_i_dim
+  pub fn wedge_term(&self, iterm: usize) -> LocalMultiForm {
+    let dim_cell = self.dim_cell;
+    let wedge = self
+      .difbarys()
       .enumerate()
       // leave off i'th difbary
-      .filter_map(|(ipos, bary)| (ipos != iterm).then_some(bary.clone()));
-    MultiForm::wedge_big(wedge_terms).unwrap_or(MultiForm::one(self.dim()))
+      .filter_map(|(pos, difbary)| (pos != iterm).then_some(difbary));
+    MultiForm::wedge_big(wedge).unwrap_or(MultiForm::one(dim_cell))
   }
-
-  pub fn wedge_terms(&self) -> MultiFormList {
-    (0..self.difbarys.len())
-      .map(|i| self.wedge_term(i))
-      .collect()
+  pub fn wedge_terms(&self) -> impl ExactSizeIterator<Item = LocalMultiForm> + use<'_, O> {
+    (0..self.dof_simp.nvertices()).map(move |iwedge| self.wedge_term(iwedge))
   }
 
   /// The constant exterior derivative of the Whitney form.
-  pub fn dif(&self) -> MultiForm {
-    if self.grade() == self.dim() {
-      return MultiForm::zero(self.dim(), self.grade() + 1);
+  pub fn dif(&self) -> LocalMultiForm {
+    let dim = self.dim_cell;
+    let grade = self.grade();
+    if grade == dim {
+      return MultiForm::zero(dim, grade + 1);
     }
-    let factorial = factorial(self.grade() + 1) as f64;
-    let difbarys = self.difbarys.clone();
-    factorial * MultiForm::wedge_big(difbarys).unwrap()
+    (factorial(grade + 1) as f64) * MultiForm::wedge_big(self.difbarys()).unwrap()
   }
 }
-impl<O: IndexKind> ExteriorField for WhitneyForm<O> {
+
+impl<O: IndexKind> ExteriorField for WhitneyId<O> {
   type Variance = variance::Co;
-  fn dim(&self) -> Dim {
-    self.cell_coords.dim_embedded()
+  fn dim(&self) -> exterior::Dim {
+    self.dim_cell
   }
   fn grade(&self) -> ExteriorGrade {
-    self.associated_subsimp.dim()
+    self.grade()
   }
-  fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> ExteriorElement<Self::Variance> {
-    let coord_global = coord_global.into();
-    assert_eq!(coord_global.len(), self.dim());
-    let barys = self.cell_coords.global_to_bary_coord(coord_global);
+  fn at_point<'a>(&self, coord_local: impl Into<LocalCoordRef<'a>>) -> LocalMultiForm {
+    let barys = local_to_bary_coords(coord_local);
+    assert!(is_bary_inside(&barys), "Point is outside cell.");
 
-    let dim = self.dim();
+    let dim = self.dim_cell;
     let grade = self.grade();
     let mut form = MultiForm::zero(dim, grade);
-    for (i, vertex) in self.associated_subsimp.vertices.iter().enumerate() {
-      let sign = Sign::from_parity(i);
-      let wedge = self.wedge_term(i);
+    for (iterm, vertex) in self.dof_simp.vertices.iter().enumerate() {
+      let sign = Sign::from_parity(iterm);
+      let wedge = self.wedge_term(iterm);
 
       let bary = barys[vertex];
       form += sign.as_f64() * bary * wedge;
     }
-    factorial(grade) as f64 * form
+    (factorial(grade) as f64) * form
+  }
+}
+
+pub struct CoordWhitneyForm<O: IndexKind> {
+  pub cell_coords: SimplexCoords,
+  pub id: WhitneyId<O>,
+}
+impl<O: IndexKind> CoordWhitneyForm<O> {
+  pub fn new(cell_coords: SimplexCoords, dof_simp: Simplex<O>) -> Self {
+    let id = WhitneyId::new(cell_coords.dim_intrinsic(), dof_simp);
+    Self { cell_coords, id }
+  }
+}
+impl<O: IndexKind> ExteriorField for CoordWhitneyForm<O> {
+  type Variance = variance::Co;
+  fn dim(&self) -> exterior::Dim {
+    self.id.dim()
+  }
+  fn grade(&self) -> ExteriorGrade {
+    self.id.grade()
+  }
+  /// Pullback!
+  fn at_point<'a>(&self, coord_global: impl Into<EmbeddingCoordRef<'a>>) -> MultiForm {
+    let coord_local = self.cell_coords.chart_map(coord_global);
+    let value_local = self.id.at_point(&coord_local);
+    value_local.precompose(&self.cell_coords.linear_transform())
   }
 }
 
@@ -139,7 +192,7 @@ mod test {
 
   use {
     manifold::{
-      geometry::coord::{local::SimplexHandleExt, MeshVertexCoords},
+      geometry::coord::{local::SimplexHandleExt, VertexCoords},
       topology::complex::Complex,
     },
     multi_index::sign::Sign,
@@ -149,33 +202,25 @@ mod test {
   fn whitney_basis_property() {
     for dim in 0..=4 {
       let topology = Complex::standard(dim);
-      let coords = MeshVertexCoords::standard(dim);
-
-      let cell = topology.cells().get_by_kidx(0);
-      let cell_coords = cell.coord_simplex(&coords);
+      let coords = VertexCoords::standard(dim);
 
       for grade in 0..=dim {
-        for this_simp in topology.skeleton(grade).handle_iter() {
-          let this_simpset = this_simp.simplex_set().clone();
-          let whitney_form = WhitneyForm::new(cell_coords.clone(), this_simpset);
+        for dof_simp in topology.skeleton(grade).handle_iter() {
+          let whitney_form = WhitneyId::new(dim, dof_simp.simplex_set().clone());
 
-          for other_simplex in topology.skeleton(grade).handle_iter() {
-            let are_equal = this_simp == other_simplex;
-            let other_simplex = other_simplex.coord_simplex(&coords);
+          for other_simp in topology.skeleton(grade).handle_iter() {
+            let are_same_simp = dof_simp == other_simp;
+            let other_simplex = other_simp.coord_simplex(&coords);
             let discret = de_rahm_map_local(&whitney_form, &other_simplex);
-            let expected = Sign::Pos.as_f64() * are_equal as usize as f64;
+            let expected = Sign::from_bool(are_same_simp).as_f64();
             let diff = (discret - expected).abs();
             const TOL: f64 = 10e-9;
             let equal = diff <= TOL;
             assert!(equal, "for: computed={discret} expected={expected}");
             if other_simplex.nvertices() >= 2 {
-              let other_simplex_rev = {
-                let mut r = other_simplex.clone();
-                r.flip_orientation();
-                r
-              };
+              let other_simplex_rev = other_simplex.clone().flipped_orientation();
               let discret_rev = de_rahm_map_local(&whitney_form, &other_simplex_rev);
-              let expected_rev = Sign::Neg.as_f64() * are_equal as usize as f64;
+              let expected_rev = Sign::Neg.as_f64() * are_same_simp as usize as f64;
               let diff_rev = (discret_rev - expected_rev).abs();
               let equal_rev = diff_rev <= TOL;
               assert!(

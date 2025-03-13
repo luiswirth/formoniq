@@ -4,7 +4,7 @@ use {
   exterior::{field::DifferentialMultiForm, Dim},
   manifold::{
     geometry::coord::{
-      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
+      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, VertexCoords,
     },
     topology::complex::{
       handle::{SimplexHandle, SimplexIdx},
@@ -121,12 +121,12 @@ impl std::ops::Sub for Cochain {
 pub fn de_rham_map(
   form: &impl DifferentialMultiForm,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &VertexCoords,
 ) -> Cochain {
   let cochain = topology
     .skeleton(form.grade())
     .handle_iter()
-    .map(|simp| SimplexCoords::from_simplex_and_coords(simp.simplex_set(), coords))
+    .map(|simp| SimplexCoords::from_mesh_simplex(simp.simplex_set(), coords))
     .map(|simp| de_rahm_map_local(form, &simp))
     .collect::<Vec<_>>()
     .into();
@@ -142,7 +142,7 @@ pub fn de_rahm_map_local(
   let multivector = simplex.spanning_multivector();
   let f = |coord: CoordRef| {
     differential_form
-      .at_point(simplex.local_to_global_coord(coord).as_view())
+      .at_point(simplex.parametrization_map(coord).as_view())
       .on_multivector(&multivector)
   };
   let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());

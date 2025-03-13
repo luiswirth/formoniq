@@ -5,7 +5,7 @@ pub mod vtk;
 use std::{fs::File, io::BufWriter, path::Path};
 
 use crate::{
-  geometry::coord::MeshVertexCoords,
+  geometry::coord::VertexCoords,
   topology::{complex::Complex, simplex::Simplex},
   Dim,
 };
@@ -35,10 +35,7 @@ pub fn write_simplicies<'a, W: std::io::Write, O: IndexKind + 'a>(
   Ok(())
 }
 
-pub fn save_coords_to_file(
-  coords: &MeshVertexCoords,
-  path: impl AsRef<Path>,
-) -> std::io::Result<()> {
+pub fn save_coords_to_file(coords: &VertexCoords, path: impl AsRef<Path>) -> std::io::Result<()> {
   let file = File::create(path)?;
   let writer = BufWriter::new(file);
   write_coords(writer, coords)
@@ -46,7 +43,7 @@ pub fn save_coords_to_file(
 
 pub fn write_coords<W: std::io::Write>(
   mut writer: W,
-  coords: &MeshVertexCoords,
+  coords: &VertexCoords,
 ) -> std::io::Result<()> {
   for coord in coords.coord_iter() {
     for &comp in coord {

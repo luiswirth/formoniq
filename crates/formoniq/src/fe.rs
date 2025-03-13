@@ -1,3 +1,5 @@
+use whitney::CoordWhitneyForm;
+
 use crate::{
   assemble::assemble_galmat,
   operators::{CodifDifElmat, HodgeMassElmat},
@@ -7,12 +9,12 @@ use {
   exterior::{field::ExteriorField, MultiForm},
   manifold::{
     geometry::{
-      coord::{local::SimplexHandleExt, CoordRef, MeshVertexCoords},
+      coord::{local::SimplexHandleExt, CoordRef, VertexCoords},
       metric::MeshEdgeLengths,
     },
     topology::complex::Complex,
   },
-  whitney::{cochain::Cochain, WhitneyForm},
+  whitney::cochain::Cochain,
 };
 
 pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
@@ -35,7 +37,7 @@ pub fn reconstruct_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
   fe: &Cochain,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &VertexCoords,
 ) -> MultiForm {
   let coord = coord.into();
 
@@ -59,8 +61,8 @@ pub fn reconstruct_at_coord<'a>(
       .simplex_set()
       .global_to_local_subsimp(dof_simp.simplex_set());
 
-    let dof_value =
-      fe[dof_simp] * WhitneyForm::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
+    let dof_value = fe[dof_simp]
+      * CoordWhitneyForm::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
     fe_value += dof_value;
   }
 
@@ -70,7 +72,7 @@ pub fn reconstruct_at_coord<'a>(
 pub fn reconstruct_at_mesh_cells_barycenters(
   fe: &Cochain,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &VertexCoords,
 ) -> Vec<MultiForm> {
   let grade = fe.dim;
 
@@ -87,7 +89,7 @@ pub fn reconstruct_at_mesh_cells_barycenters(
         let barycenter = cell.coord_simplex(coords).barycenter();
 
         let dof_value = fe[dof_simp]
-          * WhitneyForm::new(cell.coord_simplex(coords), local_dof_simp).at_point(&barycenter);
+          * CoordWhitneyForm::new(cell.coord_simplex(coords), local_dof_simp).at_point(&barycenter);
         value += dof_value;
       }
       value
@@ -98,7 +100,7 @@ pub fn reconstruct_at_mesh_cells_barycenters(
 pub fn reconstruct_at_mesh_cells_vertices(
   cochain: &Cochain,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &VertexCoords,
 ) -> Vec<Vec<MultiForm>> {
   let grade = cochain.dim();
 
@@ -123,7 +125,7 @@ pub fn reconstruct_at_mesh_cells_vertices(
               //dbg!(cell.simplex_set().vertices.indices());
               //dbg!(dof_simp.simplex_set().vertices.indices());
               //dbg!(&local_dof_simp.vertices.indices());
-              let whitney = WhitneyForm::new(cell.coord_simplex(coords), local_dof_simp);
+              let whitney = CoordWhitneyForm::new(cell.coord_simplex(coords), local_dof_simp);
 
               // dof_value
               coeff * whitney.at_point(coord)

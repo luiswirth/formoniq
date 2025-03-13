@@ -11,11 +11,18 @@ pub type VertexIdx = usize;
 pub type Coord = na::DVector<f64>;
 pub type CoordRef<'a> = na::DVectorView<'a, f64>;
 
-//type CoordVectorView<'a, D> = na::VectorView<'a, f64, D>;
+pub type LocalCoord = Coord;
+pub type LocalCoordRef<'a> = CoordRef<'a>;
+
+pub type BaryCoord = Coord;
+pub type BaryCoordRef<'a> = CoordRef<'a>;
+
+pub type EmbeddingCoord = Coord;
+pub type EmbeddingCoordRef<'a> = CoordRef<'a>;
 
 pub type TangentVector = na::DVector<f64>;
 
-pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
+pub fn standard_coord_complex(dim: Dim) -> (Complex, VertexCoords) {
   let topology = Complex::standard(dim);
 
   let coords = topology
@@ -31,17 +38,17 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
     })
     .collect_vec();
   let coords = na::DMatrix::from_columns(&coords);
-  let coords = MeshVertexCoords::new(coords);
+  let coords = VertexCoords::new(coords);
 
   (topology, coords)
 }
 
 #[derive(Debug, Clone)]
-pub struct MeshVertexCoords {
+pub struct VertexCoords {
   coord_matrix: na::DMatrix<f64>,
 }
 
-impl MeshVertexCoords {
+impl VertexCoords {
   pub fn standard(ndim: Dim) -> Self {
     SimplexCoords::standard(ndim).vertices
   }
@@ -64,20 +71,20 @@ impl MeshVertexCoords {
   }
 }
 
-impl From<na::DMatrix<f64>> for MeshVertexCoords {
+impl From<na::DMatrix<f64>> for VertexCoords {
   fn from(matrix: na::DMatrix<f64>) -> Self {
     Self::new(matrix)
   }
 }
 
-impl From<&[Coord]> for MeshVertexCoords {
+impl From<&[Coord]> for VertexCoords {
   fn from(vectors: &[Coord]) -> Self {
     let matrix = na::DMatrix::from_columns(vectors);
     Self::new(matrix)
   }
 }
 
-impl MeshVertexCoords {
+impl VertexCoords {
   pub fn dim(&self) -> Dim {
     self.coord_matrix.nrows()
   }
@@ -113,8 +120,8 @@ impl MeshVertexCoords {
   }
 }
 
-impl MeshVertexCoords {
-  pub fn embed_euclidean(mut self, dim: Dim) -> MeshVertexCoords {
+impl VertexCoords {
+  pub fn embed_euclidean(mut self, dim: Dim) -> VertexCoords {
     let old_dim = self.coord_matrix.nrows();
     self.coord_matrix = self.coord_matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self
