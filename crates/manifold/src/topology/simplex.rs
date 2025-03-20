@@ -12,17 +12,16 @@ impl<O: IndexKind> Simplex<O> {
   pub fn new(vertices: MultiIndex<O>) -> Self {
     Self { vertices }
   }
-
   pub fn nvertices(&self) -> usize {
     self.vertices.len()
   }
   pub fn dim(&self) -> Dim {
     self.nvertices() - 1
   }
+
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = Self> {
     self.vertices.subsets(sub_dim + 1).map(Self::from)
   }
-
   pub fn boundary(&self) -> impl Iterator<Item = SignedSimplex<O>> {
     self.vertices.boundary().map(SignedSimplex::from)
   }
@@ -52,6 +51,9 @@ pub type SortedSimplex = Simplex<IncreasingSet>;
 impl SortedSimplex {
   pub fn standard(dim: Dim) -> Self {
     Self::new(MultiIndex::increasing(dim + 1))
+  }
+  pub fn single(v: usize) -> Self {
+    Self::new(MultiIndex::single(v))
   }
 
   pub fn supsimps(&self, sup_dim: Dim, root: &Self) -> impl Iterator<Item = Self> {

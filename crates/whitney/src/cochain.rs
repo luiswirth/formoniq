@@ -1,3 +1,5 @@
+use manifold::topology::skeleton::Skeleton;
+
 use crate::CoordSimplexExt;
 
 use {
@@ -21,12 +23,12 @@ impl Cochain {
   pub fn new(dim: Dim, coeffs: na::DVector<f64>) -> Self {
     Self { dim, coeffs }
   }
-  pub fn constant(value: f64, dim: Dim, topology: &Complex) -> Self {
-    let ncoeffs = topology.nsimplicies(dim);
-    Self::new(dim, na::DVector::from_element(ncoeffs, value))
+  pub fn constant(value: f64, skeleton: &Skeleton) -> Self {
+    let ncoeffs = skeleton.len();
+    Self::new(skeleton.dim(), na::DVector::from_element(ncoeffs, value))
   }
-  pub fn zero(dim: Dim, topology: &Complex) -> Self {
-    Self::constant(0.0, dim, topology)
+  pub fn zero(skeleton: &Skeleton) -> Self {
+    Self::constant(0.0, skeleton)
   }
   pub fn from_function<F>(f: F, dim: Dim, topology: &Complex) -> Self
   where
@@ -75,12 +77,24 @@ impl std::ops::Index<SimplexIdx> for Cochain {
     &self.coeffs[idx.kidx]
   }
 }
+impl std::ops::IndexMut<SimplexIdx> for Cochain {
+  fn index_mut(&mut self, idx: SimplexIdx) -> &mut Self::Output {
+    assert!(idx.dim() == self.dim());
+    &mut self.coeffs[idx.kidx]
+  }
+}
 
 impl std::ops::Index<SimplexHandle<'_>> for Cochain {
   type Output = f64;
   fn index(&self, handle: SimplexHandle<'_>) -> &Self::Output {
     assert!(handle.dim() == self.dim());
     &self.coeffs[handle.kidx()]
+  }
+}
+impl std::ops::IndexMut<SimplexHandle<'_>> for Cochain {
+  fn index_mut(&mut self, idx: SimplexHandle<'_>) -> &mut Self::Output {
+    assert!(idx.dim() == self.dim());
+    &mut self.coeffs[idx.kidx()]
   }
 }
 
@@ -142,7 +156,7 @@ pub fn de_rahm_map_local(
   let multivector = simplex.spanning_multivector();
   let f = |coord: CoordRef| {
     differential_form
-      .at_point(simplex.parametrization_map(coord).as_view())
+      .at_point(simplex.local2global(coord).as_view())
       .on_multivector(&multivector)
   };
   let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());

@@ -1,11 +1,17 @@
-use super::{Coord, CoordRef, VertexCoords};
+use super::{
+  BaryCoord, BaryCoordRef, Coord, CoordRef, EmbeddingCoord, EmbeddingCoordRef, LocalCoord,
+  LocalCoordRef, VertexCoords,
+};
 use crate::{
   geometry::metric::ref_vol,
   topology::{complex::handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
 
-use common::{linalg::DMatrixExt, metric::AffineDiffeomorphism};
+use common::{
+  linalg::DMatrixExt,
+  metric::{AffineTransform, RiemannianMetric},
+};
 use multi_index::{sign::Sign, variants::IndexKind};
 use tracing::warn;
 
@@ -27,13 +33,13 @@ impl SimplexCoords {
     }
     Self::new(vertices)
   }
-  pub fn from_mesh_simplex<O>(simp: &Simplex<O>, coords: &VertexCoords) -> SimplexCoords
+  pub fn from_mesh_simplex<O>(simp: &Simplex<O>, mesh_coords: &VertexCoords) -> SimplexCoords
   where
     O: IndexKind,
   {
-    let mut vert_coords = na::DMatrix::zeros(coords.dim(), simp.nvertices());
+    let mut vert_coords = na::DMatrix::zeros(mesh_coords.dim(), simp.nvertices());
     for (i, v) in simp.vertices.iter().enumerate() {
-      vert_coords.set_column(i, &coords.coord(v));
+      vert_coords.set_column(i, &mesh_coords.coord(v));
     }
     SimplexCoords::new(vert_coords)
   }
@@ -71,14 +77,9 @@ impl SimplexCoords {
     }
     mat
   }
-
-  pub fn subsimps(&self, dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
-    Simplex::standard(self.nvertices())
-      .subsimps(dim)
-      .map(|edge| Self::from_mesh_simplex(&edge, &self.vertices))
-  }
-  pub fn edges(&self) -> impl Iterator<Item = SimplexCoords> + use<'_> {
-    self.subsimps(1)
+  pub fn metric_tensor(&self) -> RiemannianMetric {
+    let metric = self.spanning_vectors().gramian();
+    RiemannianMetric::new(metric)
   }
 
   pub fn det(&self) -> f64 {
@@ -96,6 +97,67 @@ impl SimplexCoords {
     Sign::from_f64(self.det()).unwrap()
   }
 
+  pub fn linear_transform(&self) -> na::DMatrix<f64> {
+    self.spanning_vectors()
+  }
+  pub fn affine_transform(&self) -> AffineTransform {
+    let translation = self.base_vertex().into_owned();
+    let linear = self.linear_transform();
+    AffineTransform::new(translation, linear)
+  }
+  pub fn local2global<'a>(&self, local: impl Into<LocalCoordRef<'a>>) -> EmbeddingCoord {
+    let local = local.into();
+    self.affine_transform().apply_forward(local)
+  }
+  pub fn global2local<'a>(&self, global: impl Into<EmbeddingCoordRef<'a>>) -> LocalCoord {
+    let global = global.into();
+    self.affine_transform().apply_backward(global)
+  }
+  pub fn global2bary<'a>(&self, global: impl Into<EmbeddingCoordRef<'a>>) -> BaryCoord {
+    let local = self.global2local(global);
+    let bary0 = 1.0 - local.sum();
+    local.insert_row(0, bary0)
+  }
+
+  pub fn bary2global<'a>(&self, bary: impl Into<BaryCoordRef<'a>>) -> EmbeddingCoord {
+    let bary = bary.into();
+    self
+      .vertices
+      .coord_iter()
+      .zip(bary.iter())
+      .map(|(vi, &baryi)| baryi * vi)
+      .sum()
+  }
+
+  /// Exterior derivative / total differential of barycentric coordinate functions
+  /// in the rows(!) of a matrix.
+  pub fn difbarys(&self) -> na::DMatrix<f64> {
+    let difs = self.linear_transform().pseudo_inverse(1e-12).unwrap();
+    let mut grads = difs.insert_row(0, 0.0);
+    grads.set_row(0, &-grads.row_sum());
+    grads
+  }
+
+  pub fn barycenter(&self) -> Coord {
+    let mut barycenter = na::DVector::zeros(self.dim_embedded());
+    self.vertices.coord_iter().for_each(|v| barycenter += v);
+    barycenter /= self.nvertices() as f64;
+    barycenter
+  }
+  pub fn is_coord_inside(&self, global: CoordRef) -> bool {
+    let bary = self.global2bary(global);
+    is_bary_inside(&bary)
+  }
+
+  pub fn subsimps(&self, dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
+    Simplex::standard(self.nvertices())
+      .subsimps(dim)
+      .map(|edge| Self::from_mesh_simplex(&edge, &self.vertices))
+  }
+  pub fn edges(&self) -> impl Iterator<Item = SimplexCoords> + use<'_> {
+    self.subsimps(1)
+  }
+
   pub fn swap_vertices(&mut self, icol: usize, jcol: usize) {
     self.vertices.swap_coords(icol, jcol)
   }
@@ -110,78 +172,6 @@ impl SimplexCoords {
     self.flip_orientation();
     self
   }
-
-  pub fn linear_transform(&self) -> na::DMatrix<f64> {
-    self.spanning_vectors()
-  }
-
-  pub fn affine_diffeomorphism(&self) -> AffineDiffeomorphism {
-    let translation = self.base_vertex().into_owned();
-    let linear = self.linear_transform();
-    AffineDiffeomorphism::from_forward(translation, linear)
-  }
-
-  /// Local to global coordinates
-  pub fn parametrization_map<'a>(&self, local: impl Into<CoordRef<'a>>) -> Coord {
-    let local = local.into();
-    self.linear_transform() * local + self.base_vertex()
-  }
-  /// Global to local coordinates.
-  pub fn chart_map<'a>(&self, global: impl Into<CoordRef<'a>>) -> Coord {
-    let global = global.into();
-    let linear_transform = self.linear_transform();
-    if linear_transform.is_empty() {
-      return Coord::default();
-    }
-
-    linear_transform
-      .svd(true, true)
-      .solve(&(global - self.base_vertex()), 1e-12)
-      .unwrap()
-  }
-
-  pub fn bary_coords<'a>(&self, global: impl Into<CoordRef<'a>>) -> Coord {
-    let global = global.into();
-    local_to_bary_coords(&self.chart_map(global))
-  }
-
-  pub fn gradbary(&self, i: usize) -> na::DVector<f64> {
-    if i == 0 {
-      let spanning = self.spanning_vectors();
-      -spanning.column_sum()
-    } else {
-      self.spanning_vector(i - 1)
-    }
-  }
-
-  pub fn gradbarys(&self) -> na::DMatrix<f64> {
-    let spanning = self.spanning_vectors();
-    let difbary0 = -spanning.column_sum();
-    let mut difbarys = spanning.insert_column(0, 0.0);
-    difbarys.set_column(0, &difbary0);
-    difbarys
-  }
-
-  pub fn barycenter(&self) -> Coord {
-    let mut barycenter = na::DVector::zeros(self.dim_embedded());
-    self.vertices.coord_iter().for_each(|v| barycenter += v);
-    barycenter /= self.nvertices() as f64;
-    barycenter
-  }
-  pub fn is_coord_inside(&self, global: CoordRef) -> bool {
-    let bary = self.bary_coords(global);
-    is_bary_inside(&bary)
-  }
-}
-
-pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
-  bary.into().iter().all(|&b| (0.0..=1.0).contains(&b))
-}
-
-pub fn reference_barycenter(dim: Dim) -> Coord {
-  let nvertices = dim + 1;
-  let value = 1.0 / nvertices as f64;
-  na::DVector::from_element(dim, value)
 }
 
 pub fn local_to_bary_coords<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
@@ -190,7 +180,15 @@ pub fn local_to_bary_coords<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
   local.insert_row(0, bary0)
 }
 
-pub fn standard_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
+pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
+  bary.into().iter().all(|&b| (0.0..=1.0).contains(&b))
+}
+pub fn ref_barycenter(dim: Dim) -> Coord {
+  let nvertices = dim + 1;
+  let value = 1.0 / nvertices as f64;
+  na::DVector::from_element(dim, value)
+}
+pub fn ref_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
   let coord = coord.into();
   let dim = coord.len();
   assert!(ivertex <= dim);
@@ -200,8 +198,7 @@ pub fn standard_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 
     coord[ivertex - 1]
   }
 }
-
-pub fn standard_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
+pub fn ref_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
   assert!(ivertex <= dim);
   if ivertex == 0 {
     na::DVector::from_element(dim, -1.0)
@@ -230,9 +227,9 @@ mod test {
     for dim in 0..=4 {
       let simp = SimplexCoords::standard(dim);
       for pos in simp.vertices.coord_iter() {
-        let computed = simp.bary_coords(pos);
+        let computed = simp.global2bary(pos);
         for ibary in 0..simp.nvertices() {
-          let expected = standard_bary(ibary, pos);
+          let expected = ref_bary(ibary, pos);
           assert_eq!(computed[ibary], expected);
         }
       }
@@ -243,9 +240,9 @@ mod test {
   fn standard_gradbarys() {
     for dim in 0..=4 {
       let simp = SimplexCoords::standard(dim);
-      let computed = simp.gradbarys();
+      let computed = simp.difbarys();
       for ibary in 0..simp.nvertices() {
-        let expected = standard_gradbary(dim, ibary);
+        let expected = ref_gradbary(dim, ibary);
         assert_eq!(computed.column(ibary), expected);
       }
     }

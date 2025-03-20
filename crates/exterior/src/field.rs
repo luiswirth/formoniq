@@ -1,9 +1,9 @@
+use common::metric::AffineTransform;
+
 use crate::{
   variance::{self, VarianceMarker},
   Dim, ExteriorElement, ExteriorGrade,
 };
-
-use common::metric::AffineDiffeomorphism;
 
 use std::marker::PhantomData;
 
@@ -99,13 +99,13 @@ impl<V: VarianceMarker> ExteriorField for ExteriorFieldClosure<V> {
 
 pub struct FormPushforward<F: DifferentialMultiForm> {
   form: F,
-  diffeomorphism: AffineDiffeomorphism,
+  affine_transform: AffineTransform,
 }
 impl<F: DifferentialMultiForm> FormPushforward<F> {
-  pub fn new(form: F, diffeomorphism: AffineDiffeomorphism) -> Self {
+  pub fn new(form: F, affine_transform: AffineTransform) -> Self {
     Self {
       form,
-      diffeomorphism,
+      affine_transform,
     }
   }
 }
@@ -122,9 +122,9 @@ impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
     coord_global: impl Into<na::DVectorView<'a, f64>>,
   ) -> ExteriorElement<Self::Variance> {
     let coord_global = coord_global.into();
-    let coord_ref = self.diffeomorphism.apply_backward(coord_global);
+    let coord_ref = self.affine_transform.apply_backward(coord_global);
     let form_ref = self.form.at_point(&coord_ref);
-    let linear_inv = self.diffeomorphism.linear_inv();
-    form_ref.precompose(linear_inv)
+    let linear_inv = self.affine_transform.linear.clone().try_inverse().unwrap();
+    form_ref.precompose(&linear_inv)
   }
 }

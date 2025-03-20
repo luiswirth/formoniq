@@ -1,4 +1,4 @@
-use whitney::CoordWhitneyForm;
+use whitney::WhitneyCoordLsf;
 
 use crate::{
   assemble::assemble_galmat,
@@ -35,7 +35,7 @@ pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> 
 
 pub fn reconstruct_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
-  fe: &Cochain,
+  cochain: &Cochain,
   topology: &Complex,
   coords: &VertexCoords,
 ) -> MultiForm {
@@ -43,7 +43,7 @@ pub fn reconstruct_at_coord<'a>(
 
   let dim = coords.dim();
   assert_eq!(coord.len(), dim);
-  let grade = fe.dim;
+  let grade = cochain.dim;
 
   // Find cell that contains coord.
   // WARN: very slow and inefficent
@@ -61,8 +61,8 @@ pub fn reconstruct_at_coord<'a>(
       .simplex_set()
       .global_to_local_subsimp(dof_simp.simplex_set());
 
-    let dof_value = fe[dof_simp]
-      * CoordWhitneyForm::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
+    let dof_value = cochain[dof_simp]
+      * WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
     fe_value += dof_value;
   }
 
@@ -70,11 +70,11 @@ pub fn reconstruct_at_coord<'a>(
 }
 
 pub fn reconstruct_at_mesh_cells_barycenters(
-  fe: &Cochain,
+  cochain: &Cochain,
   topology: &Complex,
   coords: &VertexCoords,
 ) -> Vec<MultiForm> {
-  let grade = fe.dim;
+  let grade = cochain.dim;
 
   topology
     .cells()
@@ -88,8 +88,8 @@ pub fn reconstruct_at_mesh_cells_barycenters(
 
         let barycenter = cell.coord_simplex(coords).barycenter();
 
-        let dof_value = fe[dof_simp]
-          * CoordWhitneyForm::new(cell.coord_simplex(coords), local_dof_simp).at_point(&barycenter);
+        let dof_value = cochain[dof_simp]
+          * WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(&barycenter);
         value += dof_value;
       }
       value
@@ -125,7 +125,7 @@ pub fn reconstruct_at_mesh_cells_vertices(
               //dbg!(cell.simplex_set().vertices.indices());
               //dbg!(dof_simp.simplex_set().vertices.indices());
               //dbg!(&local_dof_simp.vertices.indices());
-              let whitney = CoordWhitneyForm::new(cell.coord_simplex(coords), local_dof_simp);
+              let whitney = WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp);
 
               // dof_value
               coeff * whitney.at_point(coord)

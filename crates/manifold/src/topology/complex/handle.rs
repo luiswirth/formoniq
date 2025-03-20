@@ -1,11 +1,14 @@
 use multi_index::variants::IncreasingSet;
 
 use crate::{
-  topology::simplex::{Simplex, SortedSimplex},
+  topology::{
+    simplex::{Simplex, SortedSimplex},
+    skeleton::Skeleton,
+  },
   Dim,
 };
 
-use super::{attribute::SparseSignChain, Complex, ComplexSkeleton, SimplexData};
+use super::{attribute::SparseSignChain, Complex, SimplexData};
 
 pub type KSimplexIdx = usize;
 
@@ -101,19 +104,15 @@ impl<'m> SimplexHandle<'m> {
     self.complex.skeleton(self.dim())
   }
   pub fn simplex_data(&self) -> &SimplexData {
-    self.complex.skeletons[self.dim()]
-      .get_index(self.kidx())
-      .unwrap()
-      .1
+    &self.complex.skeletons[self.dim()].1 .0[self.kidx()]
   }
   pub fn nvertices(&self) -> usize {
     self.simplex_set().nvertices()
   }
   pub fn simplex_set(&self) -> &'m SortedSimplex {
     self.complex.skeletons[self.dim()]
-      .get_index(self.kidx())
-      .unwrap()
       .0
+      .simplex_by_kidx(self.kidx())
   }
 
   pub fn anti_boundary(&self) -> SparseSignChain {
@@ -230,8 +229,8 @@ impl<'m> SkeletonHandle<'m> {
     self.dim
   }
 
-  pub fn raw(&self) -> &ComplexSkeleton {
-    &self.complex.skeletons[self.dim()]
+  pub fn raw(&self) -> &Skeleton {
+    &self.complex.skeletons[self.dim()].0
   }
 
   pub fn len(&self) -> usize {
@@ -244,8 +243,8 @@ impl<'m> SkeletonHandle<'m> {
   pub fn get_by_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
-  pub fn get_by_simplex(&self, key: &SortedSimplex) -> SimplexHandle<'m> {
-    let idx = self.raw().get_full(key).unwrap().0;
+  pub fn get_by_simplex(&self, simp: &SortedSimplex) -> SimplexHandle<'m> {
+    let idx = self.raw().kidx_by_simplex(simp);
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
 

@@ -18,12 +18,12 @@ pub fn embedded_mesh_to_vtk(cells: &Skeleton, coords: &VertexCoords) -> Vtk {
   let points = IOBuffer::new(coords.matrix().iter().copied().collect());
 
   let connectivity = cells
-    .simplex_iter()
+    .iter()
     .flat_map(|simp| simp.vertices.clone())
     .map(|i| i as u64)
     .collect();
   let offsets = cells
-    .simplex_iter()
+    .iter()
     .map(|simp| simp.nvertices() as u64)
     .scan(0, |offset, nverts| {
       let this = *offset;

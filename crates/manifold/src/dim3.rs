@@ -32,14 +32,15 @@ impl TriangleSurface3D {
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_skeleton(topology: Skeleton, coords: VertexCoords) -> Self {
-    assert!(topology.dim() == 2, "Topology is not 2D.");
+  pub fn from_coord_skeleton(skeleton: Skeleton, coords: VertexCoords) -> Self {
+    assert!(skeleton.dim() == 2, "Topology is not 2D.");
     assert!(coords.dim() <= 3, "Skeleton is not embeddable in 3D.");
     let coords = coords.embed_euclidean(3);
 
     // TODO: is this good?
-    let triangles = topology
-      .into_simplex_iter()
+    let triangles = skeleton
+      .into_index_set()
+      .into_iter()
       .map(|simp| {
         let mut vertices: [usize; 3] = simp.vertices.clone().try_into().unwrap();
         let coord_simp = SimplexCoords::from_mesh_simplex(&simp, &coords);
@@ -66,7 +67,7 @@ impl TriangleSurface3D {
 
   pub fn into_coord_complex(self) -> (Complex, VertexCoords) {
     let (skeleton, coords) = self.into_coord_skeleton();
-    let complex = Complex::from_cell_skeleton(skeleton);
+    let complex = Complex::from_cells(skeleton);
     (complex, coords)
   }
 

@@ -160,7 +160,7 @@ impl CartesianMeshInfo {
 impl CartesianMeshInfo {
   pub fn compute_coord_complex(&self) -> (Complex, VertexCoords) {
     let (skeleton, coords) = self.compute_coord_cells();
-    let complex = Complex::from_cell_skeleton(skeleton);
+    let complex = Complex::from_cells(skeleton);
     (complex, coords)
   }
   pub fn compute_coord_cells(&self) -> (Skeleton, VertexCoords) {
@@ -249,10 +249,7 @@ mod test {
       &[0, 4, 5, 7],
       &[0, 4, 6, 7],
     ];
-    let cells: Vec<_> = mesh
-      .simplex_iter()
-      .map(|s| s.vertices.clone().into_vec())
-      .collect();
+    let cells: Vec<_> = mesh.iter().map(|s| s.vertices.clone().into_vec()).collect();
     assert_eq!(cells, expected_cells);
   }
 
@@ -284,10 +281,7 @@ mod test {
       &[4, 5, 8],
       &[4, 7, 8],
     ];
-    let cells: Vec<_> = mesh
-      .simplex_iter()
-      .map(|s| s.vertices.clone().into_vec())
-      .collect();
+    let cells: Vec<_> = mesh.iter().map(|s| s.vertices.clone().into_vec()).collect();
     assert_eq!(cells, expected_simplicies);
   }
 }

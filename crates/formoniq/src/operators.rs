@@ -9,7 +9,7 @@ use {
     Dim,
   },
   multi_index::{factorial, sign::Sign},
-  whitney::WhitneyId,
+  whitney::WhitneyRefLsf,
 };
 
 use std::sync::LazyLock;
@@ -125,7 +125,7 @@ impl ElMatProvider for HodgeMassElmat {
     let wedge_terms: Vec<_> = simplicies
       .iter()
       .cloned()
-      .map(|simp| WhitneyId::new(dim, simp).wedge_terms().collect())
+      .map(|simp| WhitneyRefLsf::new(dim, simp).wedge_terms().collect())
       .collect();
 
     let mut elmat = na::DMatrix::zeros(simplicies.len(), simplicies.len());
@@ -239,7 +239,7 @@ mod test {
   use common::linalg::assert_mat_eq;
   use exterior::term::RiemannianMetricExt;
   use manifold::{geometry::metric::SimplexGeometry, topology::simplex::subsimplicies};
-  use whitney::WhitneyId;
+  use whitney::WhitneyRefLsf;
 
   #[test]
   fn dif_dif0_is_laplace_beltrami() {
@@ -305,7 +305,7 @@ mod test {
         let difdif = CodifDifElmat(grade).eval(&geometry);
 
         let difwhitneys: Vec<_> = subsimplicies(dim, grade)
-          .map(|simp| WhitneyId::new(dim, simp).dif())
+          .map(|simp| WhitneyRefLsf::new(dim, simp).dif())
           .collect();
         let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
