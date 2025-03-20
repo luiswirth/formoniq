@@ -1,10 +1,6 @@
 use crate::{
   geometry::coord::VertexCoords,
-  topology::{
-    complex::Complex,
-    simplex::{Simplex, SortedSimplex},
-    skeleton::Skeleton,
-  },
+  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
 
@@ -182,7 +178,7 @@ impl CartesianMeshInfo {
 
     let dim = self.dim();
     let nsimplicies = factorial(dim) * nboxes;
-    let mut simplicies: Vec<SortedSimplex> = Vec::with_capacity(nsimplicies);
+    let mut simplicies: Vec<Simplex> = Vec::with_capacity(nsimplicies);
 
     // iterate through all boxes that make up the mesh
     for ibox in 0..nboxes {
@@ -210,7 +206,9 @@ impl CartesianMeshInfo {
           simplex.push(ivertex);
         }
 
-        Simplex::from(simplex).assume_sorted()
+        let simplex = Simplex::from(simplex);
+        assert!(simplex.is_sorted());
+        simplex
       });
 
       simplicies.extend(cube_simplicies);
@@ -249,7 +247,7 @@ mod test {
       &[0, 4, 5, 7],
       &[0, 4, 6, 7],
     ];
-    let cells: Vec<_> = mesh.iter().map(|s| s.vertices.clone().into_vec()).collect();
+    let cells: Vec<_> = mesh.into_iter().map(|s| s.vertices).collect();
     assert_eq!(cells, expected_cells);
   }
 
@@ -281,7 +279,7 @@ mod test {
       &[4, 5, 8],
       &[4, 7, 8],
     ];
-    let cells: Vec<_> = mesh.iter().map(|s| s.vertices.clone().into_vec()).collect();
+    let cells: Vec<_> = mesh.into_iter().map(|s| s.vertices).collect();
     assert_eq!(cells, expected_simplicies);
   }
 }

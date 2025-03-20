@@ -71,19 +71,19 @@ pub fn bary0_local<'a>(coord: impl Into<LocalCoordRef<'a>>) -> f64 {
 }
 
 #[derive(Debug, Clone)]
-pub struct WhitneyRefLsf<O: IndexKind> {
+pub struct WhitneyRefLsf {
   dim_cell: Dim,
-  dof_simp: Simplex<O>,
+  dof_simp: Simplex,
 }
-impl<O: IndexKind> WhitneyRefLsf<O> {
-  pub fn new(dim_cell: Dim, dof_simp: Simplex<O>) -> Self {
+impl WhitneyRefLsf {
+  pub fn new(dim_cell: Dim, dof_simp: Simplex) -> Self {
     Self { dim_cell, dof_simp }
   }
   pub fn grade(&self) -> ExteriorGrade {
     self.dof_simp.dim()
   }
   /// The difbarys of the vertices of the DOF simplex.
-  pub fn difbarys(&self) -> impl Iterator<Item = LocalMultiForm> + use<'_, O> {
+  pub fn difbarys(&self) -> impl Iterator<Item = LocalMultiForm> + use<'_> {
     self
       .dof_simp
       .vertices
@@ -102,7 +102,7 @@ impl<O: IndexKind> WhitneyRefLsf<O> {
       .filter_map(|(pos, difbary)| (pos != iterm).then_some(difbary));
     MultiForm::wedge_big(wedge).unwrap_or(MultiForm::one(dim_cell))
   }
-  pub fn wedge_terms(&self) -> impl ExactSizeIterator<Item = LocalMultiForm> + use<'_, O> {
+  pub fn wedge_terms(&self) -> impl ExactSizeIterator<Item = LocalMultiForm> + use<'_> {
     (0..self.dof_simp.nvertices()).map(move |iwedge| self.wedge_term(iwedge))
   }
 
@@ -117,7 +117,7 @@ impl<O: IndexKind> WhitneyRefLsf<O> {
   }
 }
 
-impl<O: IndexKind> ExteriorField for WhitneyRefLsf<O> {
+impl ExteriorField for WhitneyRefLsf {
   type Variance = variance::Co;
   fn dim(&self) -> exterior::Dim {
     self.dim_cell
@@ -132,7 +132,7 @@ impl<O: IndexKind> ExteriorField for WhitneyRefLsf<O> {
     let dim = self.dim_cell;
     let grade = self.grade();
     let mut form = MultiForm::zero(dim, grade);
-    for (iterm, vertex) in self.dof_simp.vertices.iter().enumerate() {
+    for (iterm, &vertex) in self.dof_simp.vertices.iter().enumerate() {
       let sign = Sign::from_parity(iterm);
       let wedge = self.wedge_term(iterm);
 
@@ -143,12 +143,12 @@ impl<O: IndexKind> ExteriorField for WhitneyRefLsf<O> {
   }
 }
 
-pub struct WhitneyCoordLsf<O: IndexKind> {
+pub struct WhitneyCoordLsf {
   pub cell_coords: SimplexCoords,
-  pub ref_lsf: WhitneyRefLsf<O>,
+  pub ref_lsf: WhitneyRefLsf,
 }
-impl<O: IndexKind> WhitneyCoordLsf<O> {
-  pub fn new(cell_coords: SimplexCoords, dof_simp: Simplex<O>) -> Self {
+impl WhitneyCoordLsf {
+  pub fn new(cell_coords: SimplexCoords, dof_simp: Simplex) -> Self {
     let ref_lsf = WhitneyRefLsf::new(cell_coords.dim_intrinsic(), dof_simp);
     Self {
       cell_coords,
@@ -156,7 +156,7 @@ impl<O: IndexKind> WhitneyCoordLsf<O> {
     }
   }
 }
-impl<O: IndexKind> ExteriorField for WhitneyCoordLsf<O> {
+impl ExteriorField for WhitneyCoordLsf {
   type Variance = variance::Co;
   fn dim(&self) -> exterior::Dim {
     self.ref_lsf.dim()

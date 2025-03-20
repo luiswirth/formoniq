@@ -51,7 +51,7 @@ pub fn read_skeleton_from_file(path: impl AsRef<Path>) -> io::Result<Skeleton> {
       .collect();
     let simplex = Simplex::from(simplex);
 
-    skeleton.push(simplex.into_sorted());
+    skeleton.push(simplex.sorted());
   }
   Ok(Skeleton::new(skeleton))
 }

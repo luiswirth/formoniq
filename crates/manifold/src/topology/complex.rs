@@ -88,7 +88,7 @@ impl Complex {
       let sup_boundary = sup.simplex_set().boundary();
       for sub in sup_boundary {
         let sign = sub.sign.as_f64();
-        let isub = subs.get_by_simplex(&sub.into_simplex()).kidx();
+        let isub = subs.get_by_simplex(&sub.simplex).kidx();
         mat.push(isub, isup, sign);
       }
     }

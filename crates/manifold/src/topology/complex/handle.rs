@@ -1,10 +1,5 @@
-use multi_index::variants::IncreasingSet;
-
 use crate::{
-  topology::{
-    simplex::{Simplex, SortedSimplex},
-    skeleton::Skeleton,
-  },
+  topology::{simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
 
@@ -109,7 +104,7 @@ impl<'m> SimplexHandle<'m> {
   pub fn nvertices(&self) -> usize {
     self.simplex_set().nvertices()
   }
-  pub fn simplex_set(&self) -> &'m SortedSimplex {
+  pub fn simplex_set(&self) -> &'m Simplex {
     self.complex.skeletons[self.dim()]
       .0
       .simplex_by_kidx(self.kidx())
@@ -124,7 +119,7 @@ impl<'m> SimplexHandle<'m> {
         let idx = self
           .complex
           .skeleton(self.dim() + 1)
-          .get_by_simplex(&sup.into_simplex())
+          .get_by_simplex(&sup.simplex)
           .kidx();
 
         idxs.push(idx);
@@ -142,7 +137,7 @@ impl<'m> SimplexHandle<'m> {
       let idx = self
         .complex
         .skeleton(self.dim() - 1)
-        .get_by_simplex(&sub.into_simplex())
+        .get_by_simplex(&sub.simplex)
         .kidx();
       idxs.push(idx);
       signs.push(sign);
@@ -168,7 +163,7 @@ impl<'m> SimplexHandle<'m> {
       .simplex_set()
       .vertices
       .iter()
-      .map(|v| SimplexIdx::new(0, v).handle(self.complex))
+      .map(|&v| SimplexIdx::new(0, v).handle(self.complex))
   }
 
   /// The dim-subsimplicies of this simplex.
@@ -243,7 +238,7 @@ impl<'m> SkeletonHandle<'m> {
   pub fn get_by_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
-  pub fn get_by_simplex(&self, simp: &SortedSimplex) -> SimplexHandle<'m> {
+  pub fn get_by_simplex(&self, simp: &Simplex) -> SimplexHandle<'m> {
     let idx = self.raw().kidx_by_simplex(simp);
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
@@ -251,7 +246,7 @@ impl<'m> SkeletonHandle<'m> {
   pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m>> + '_ {
     (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
-  pub fn set_iter(&self) -> impl ExactSizeIterator<Item = &Simplex<IncreasingSet>> + '_ {
+  pub fn set_iter(&self) -> impl ExactSizeIterator<Item = &Simplex> + '_ {
     self.handle_iter().map(|s| s.simplex_set())
   }
 }

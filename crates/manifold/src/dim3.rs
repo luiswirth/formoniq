@@ -58,7 +58,7 @@ impl TriangleSurface3D {
     let simps = self
       .triangles
       .into_iter()
-      .map(|tria| Simplex::from(tria).into_sorted())
+      .map(|tria| Simplex::from(tria).sorted())
       .collect();
     let skeleton = Skeleton::new(simps);
     let coords = self.coords;

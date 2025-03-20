@@ -1,24 +1,26 @@
-use super::{
-  complex::handle::KSimplexIdx,
-  simplex::{Simplex, SortedSimplex},
-};
+use super::{complex::handle::KSimplexIdx, simplex::Simplex};
 use crate::Dim;
 
 use indexmap::IndexSet;
 
-/// A container for simplicies of the same dimension.
+/// A container for sorted simplicies of the same dimension.
 #[derive(Default, Debug, Clone)]
 pub struct Skeleton {
-  simplicies: IndexSet<SortedSimplex>,
+  /// Every simplex is sorted.
+  simplicies: IndexSet<Simplex>,
   nvertices: usize,
 }
 impl Skeleton {
-  pub fn new(simplicies: Vec<SortedSimplex>) -> Self {
+  pub fn new(simplicies: Vec<Simplex>) -> Self {
     Self::try_new(simplicies).unwrap()
   }
-  pub fn try_new(simplicies: Vec<SortedSimplex>) -> Option<Self> {
+  /// Every simplex must be sorted.
+  pub fn try_new(simplicies: Vec<Simplex>) -> Option<Self> {
     let dim = simplicies[0].dim();
     if !simplicies.iter().map(|simp| simp.dim()).all(|d| d == dim) {
+      return None;
+    }
+    if !simplicies.iter().all(|simp| simp.is_sorted()) {
       return None;
     }
     let nvertices = simplicies
@@ -54,24 +56,33 @@ impl Skeleton {
     self.nvertices
   }
   #[must_use]
-  pub fn simplicies(&self) -> &IndexSet<SortedSimplex> {
+  pub fn simplicies(&self) -> &IndexSet<Simplex> {
     &self.simplicies
   }
   #[must_use]
-  pub fn iter(&self) -> indexmap::set::Iter<'_, SortedSimplex> {
+  pub fn iter(&self) -> indexmap::set::Iter<'_, Simplex> {
     self.simplicies.iter()
   }
-  pub fn insert(&mut self, simp: SortedSimplex) -> (KSimplexIdx, bool) {
+  pub fn insert(&mut self, simp: Simplex) -> (KSimplexIdx, bool) {
+    assert!(simp.is_sorted());
     self.simplicies.insert_full(simp)
   }
-  pub fn into_index_set(self) -> IndexSet<SortedSimplex> {
+  pub fn into_index_set(self) -> IndexSet<Simplex> {
     self.simplicies
   }
 
-  pub fn simplex_by_kidx(&self, idx: KSimplexIdx) -> &SortedSimplex {
+  pub fn simplex_by_kidx(&self, idx: KSimplexIdx) -> &Simplex {
     self.simplicies.get_index(idx).unwrap()
   }
-  pub fn kidx_by_simplex(&self, simp: &SortedSimplex) -> KSimplexIdx {
+  pub fn kidx_by_simplex(&self, simp: &Simplex) -> KSimplexIdx {
     self.simplicies.get_index_of(simp).unwrap()
+  }
+}
+
+impl IntoIterator for Skeleton {
+  type Item = Simplex;
+  type IntoIter = indexmap::set::IntoIter<Self::Item>;
+  fn into_iter(self) -> Self::IntoIter {
+    self.simplicies.into_iter()
   }
 }

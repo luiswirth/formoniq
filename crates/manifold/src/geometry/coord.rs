@@ -4,9 +4,11 @@ pub mod quadrature;
 use itertools::Itertools;
 use local::SimplexCoords;
 
-use crate::{geometry::metric::MeshEdgeLengths, topology::complex::Complex, Dim};
-
-pub type VertexIdx = usize;
+use crate::{
+  geometry::metric::MeshEdgeLengths,
+  topology::{complex::Complex, VertexIdx},
+  Dim,
+};
 
 pub type Coord = na::DVector<f64>;
 pub type CoordRef<'a> = na::DVectorView<'a, f64>;
