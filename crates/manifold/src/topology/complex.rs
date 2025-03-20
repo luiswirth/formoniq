@@ -4,24 +4,22 @@ pub mod handle;
 use attribute::KSimplexCollection;
 use handle::SimplexIdx;
 
-use super::{
-  simplex::{graded_subsimplicies, SortedSimplex},
-  skeleton::Skeleton,
-};
+use super::{simplex::Simplex, skeleton::Skeleton};
 use crate::Dim;
 
 use common::sparse::SparseMatrix;
 
-use indexmap::IndexMap;
 use itertools::Itertools;
 use std::sync::LazyLock;
 
 /// A simplicial manifold complex.
-#[derive(Debug, Clone)]
+#[derive(Default, Debug, Clone)]
 pub struct Complex {
-  skeletons: Vec<ComplexSkeleton>,
+  skeletons: Vec<(Skeleton, SkeletonData)>,
 }
-pub type ComplexSkeleton = IndexMap<SortedSimplex, SimplexData>;
+
+#[derive(Default, Debug, Clone)]
+pub struct SkeletonData(Vec<SimplexData>);
 
 #[derive(Default, Debug, Clone)]
 pub struct SimplexData {
@@ -29,18 +27,8 @@ pub struct SimplexData {
 }
 
 impl Complex {
-  pub fn new(skeletons: Vec<ComplexSkeleton>) -> Self {
-    Self { skeletons }
-  }
-
   pub fn standard(dim: Dim) -> Self {
-    let data = SimplexData {
-      cocells: vec![SimplexIdx::new(dim, 0)],
-    };
-    let skeletons = graded_subsimplicies(dim)
-      .map(|simps| simps.map(|simp| (simp, data.clone())).collect())
-      .collect();
-    Self::new(skeletons)
+    Self::from_cells(Skeleton::standard(dim))
   }
 
   pub fn dim(&self) -> Dim {
@@ -130,30 +118,40 @@ impl Complex {
 }
 
 impl Complex {
-  pub fn from_cell_skeleton(cells: Skeleton) -> Self {
+  pub fn from_cells(cells: Skeleton) -> Self {
     let dim = cells.dim();
-    let cells = cells.into_simplicies();
 
-    let mut skeletons = vec![ComplexSkeleton::new(); dim + 1];
+    let mut skeletons = vec![(Skeleton::default(), SkeletonData::default()); dim + 1];
+    skeletons[0].0 = Skeleton::new((0..cells.nvertices()).map(Simplex::single).collect());
+    skeletons[0].1 = SkeletonData(
+      (0..cells.nvertices())
+        .map(|_| SimplexData::default())
+        .collect(),
+    );
+
     for (icell, cell) in cells.iter().enumerate() {
-      for (dim_sub, subs) in skeletons.iter_mut().enumerate() {
+      for (dim_sub, (sub_skeleton, sub_skeleton_data)) in skeletons.iter_mut().enumerate() {
         for sub in cell.subsimps(dim_sub) {
-          let sub = subs.entry(sub.clone()).or_insert(SimplexData::default());
-          sub.cocells.push(SimplexIdx::new(dim, icell));
+          let (sub_idx, is_new) = sub_skeleton.insert(sub);
+          let sub_data = if is_new {
+            sub_skeleton_data.0.push(SimplexData::default());
+            sub_skeleton_data.0.last_mut().unwrap()
+          } else {
+            &mut sub_skeleton_data.0[sub_idx]
+          };
+          sub_data.cocells.push(SimplexIdx::new(dim, icell));
         }
       }
     }
 
-    // TODO: verify correct!
-    // sort vertices
-    skeletons[0].sort_by(|v0, _, v1, _| v0.vertices[0].cmp(&v1.vertices[0]));
-
     // Topology checks.
-    let facets = &skeletons[dim - 1];
-    for (_, SimplexData { cocells }) in facets {
-      let nparents = cocells.len();
-      let is_manifold = nparents == 2 || nparents == 1;
-      assert!(is_manifold, "Topology must be manifold.");
+    if dim >= 1 {
+      let facet_data = &skeletons[dim - 1].1;
+      for SimplexData { cocells } in &facet_data.0 {
+        let nparents = cocells.len();
+        let is_manifold = nparents == 2 || nparents == 1;
+        assert!(is_manifold, "Topology must be manifold.");
+      }
     }
 
     Self { skeletons }

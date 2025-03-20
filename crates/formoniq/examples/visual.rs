@@ -21,7 +21,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let ncells_axis = 10;
   let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_cells();
-  let topology = Complex::from_cell_skeleton(topology);
+  let topology = Complex::from_cells(topology);
   let _metric = coords.to_edge_lengths(&topology);
 
   manifold::io::save_skeleton_to_file(&topology, dim, format!("{path}/cells.skel"))?;

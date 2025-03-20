@@ -1,38 +1,57 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use {formoniq::problems::hodge_laplace, whitney::cochain::Cochain};
+use {
+  formoniq::{fe::reconstruct_at_mesh_cells_barycenters, problems::hodge_laplace},
+  std::io::BufWriter,
+  whitney::cochain::Cochain,
+};
 
 use std::fs;
+use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let path = "out/laplacian_evp";
-  let _ = fs::remove_dir_all(path);
-  fs::create_dir_all(path).unwrap();
+  let out_path = "out/laplacian_evp";
+  let _ = fs::remove_dir_all(out_path);
+  fs::create_dir_all(out_path).unwrap();
 
-  let dim = 2;
   let grade = 1;
   let neigen = 10;
 
-  let (topology, coords) =
-    manifold::io::gmsh::gmsh2coord_complex(&fs::read("/home/luis/annulus/annulus2.msh")?);
+  for mesh_file in fs::read_dir("/home/luis/thesis/mesh/gmsh/torus/")? {
+    let mesh_file = mesh_file?;
+    let file_name = mesh_file.file_name().into_string().unwrap();
+    let out_path = format!("{out_path}/{file_name}");
+    let _ = fs::remove_dir_all(&out_path);
+    fs::create_dir_all(&out_path).unwrap();
 
-  //let ncells_axis = 10;
-  //let (topology, coords) = CartesianMeshInfo::new_unit(dim, ncells_axis).compute_coord_complex();
+    //  manifold::io::blender::obj2coord_complex(&fs::read_to_string("/home/luis/dl/torus-naked.obj")?);
+    let (topology, coords) = manifold::io::gmsh::gmsh2coord_complex(&fs::read(mesh_file.path())?);
+    fs::write(
+      format!("{out_path}/mesh.obj"),
+      manifold::io::blender::coord_complex2obj(&topology, &coords),
+    )?;
 
-  let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths(&topology);
 
-  manifold::io::save_skeleton_to_file(&topology, dim, format!("{path}/cells.skel"))?;
-  manifold::io::save_skeleton_to_file(&topology, 1, format!("{path}/edges.skel"))?;
-  manifold::io::save_coords_to_file(&coords, format!("{path}/vertices.coords"))?;
+    let (eigenvals, _, eigenfuncs) =
+      hodge_laplace::solve_hodge_laplace_evp(&topology, &metric, grade, neigen);
+    for (ieigen, (&eigenval, eigenfunc)) in
+      eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate()
+    {
+      println!("eigenval={eigenval:.3}");
+      let eigenfunc = Cochain::new(grade, eigenfunc.into_owned());
+      let cell_values = reconstruct_at_mesh_cells_barycenters(&eigenfunc, &topology, &coords);
 
-  let (eigenvals, _, eigenfuncs) =
-    hodge_laplace::solve_hodge_laplace_evp(&topology, &metric, grade, neigen);
-  for (ieigen, (&eigenval, eigenfunc)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate()
-  {
-    println!("eigenval={eigenval:.3}");
-    let eigenfunc = Cochain::new(grade, eigenfunc.into_owned());
-    whitney::io::save_cochain_to_file(&eigenfunc, format!("{path}/eigenfunc{ieigen}.cochain"))?;
+      let file = fs::File::create(format!("{out_path}/sol{ieigen}_facevectors.txt"))?;
+      let mut writer = BufWriter::new(file);
+      for cell_value in cell_values {
+        for comp in cell_value.coeffs() {
+          write!(writer, "{comp:.6} ")?;
+        }
+        writeln!(writer)?;
+      }
+    }
   }
   Ok(())
 }

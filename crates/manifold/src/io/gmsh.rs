@@ -7,7 +7,7 @@ use multi_index::sign::Sign;
 
 pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, VertexCoords) {
   let (cells, coords) = gmsh2coord_cells(bytes);
-  let complex = Complex::from_cell_skeleton(cells);
+  let complex = Complex::from_cells(cells);
   (complex, coords)
 }
 

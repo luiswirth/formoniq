@@ -1,7 +1,14 @@
+use crate::topology::complex::Complex;
 use crate::{dim3::TriangleSurface3D, geometry::coord::VertexCoords};
 
 use std::fmt::Write;
 use std::path::Path;
+
+pub fn coord_complex2obj(complex: &Complex, coords: &VertexCoords) -> String {
+  let surface =
+    TriangleSurface3D::from_coord_skeleton(complex.cells().raw().clone(), coords.clone());
+  to_obj_string(&surface)
+}
 
 pub fn to_obj_string(surface: &TriangleSurface3D) -> String {
   let mut string = String::new();
@@ -13,6 +20,11 @@ pub fn to_obj_string(surface: &TriangleSurface3D) -> String {
     writeln!(string, "f {} {} {}", t[0] + 1, t[1] + 1, t[2] + 1).unwrap();
   }
   string
+}
+
+pub fn obj2coord_complex(obj_string: &str) -> (Complex, VertexCoords) {
+  let surface = from_obj_string(obj_string);
+  surface.into_coord_complex()
 }
 
 pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {

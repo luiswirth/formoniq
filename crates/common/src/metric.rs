@@ -125,27 +125,15 @@ impl RiemannianMetric {
   }
 }
 
-pub struct AffineDiffeomorphism {
-  translation: na::DVector<f64>,
-  linear: na::DMatrix<f64>,
-  linear_svd: Option<na::SVD<f64, na::Dyn, na::Dyn>>,
-  linear_inv: na::DMatrix<f64>,
+pub struct AffineTransform {
+  pub translation: na::DVector<f64>,
+  pub linear: na::DMatrix<f64>,
 }
-impl AffineDiffeomorphism {
-  pub fn from_forward(translation: na::DVector<f64>, linear: na::DMatrix<f64>) -> Self {
-    let linear_svd = linear.is_empty().then(|| linear.clone().svd(true, true));
-    let linear_inv = if linear.is_empty() {
-      na::DMatrix::zeros(0, 0)
-    } else if linear.is_square() {
-      linear.clone().try_inverse().unwrap()
-    } else {
-      linear.clone().pseudo_inverse(1e-12).unwrap()
-    };
+impl AffineTransform {
+  pub fn new(translation: na::DVector<f64>, linear: na::DMatrix<f64>) -> Self {
     Self {
       translation,
       linear,
-      linear_svd,
-      linear_inv,
     }
   }
 
@@ -153,12 +141,23 @@ impl AffineDiffeomorphism {
     &self.linear * coord + &self.translation
   }
   pub fn apply_backward(&self, coord: na::DVectorView<f64>) -> na::DVector<f64> {
-    let Some(svd) = &self.linear_svd else {
-      return Default::default();
-    };
-    svd.solve(&(coord - &self.translation), 1e-12).unwrap()
+    if self.linear.is_empty() {
+      return na::DVector::default();
+    }
+    self
+      .linear
+      .clone()
+      .svd(true, true)
+      .solve(&(coord - &self.translation), 1e-12)
+      .unwrap()
   }
-  pub fn linear_inv(&self) -> &na::DMatrix<f64> {
-    &self.linear_inv
+
+  pub fn pseudo_inverse(&self) -> Self {
+    let linear = self.linear.clone().pseudo_inverse(1e-12).unwrap();
+    let translation = &linear * &self.translation;
+    Self {
+      translation,
+      linear,
+    }
   }
 }

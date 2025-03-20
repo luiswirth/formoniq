@@ -30,8 +30,6 @@ impl ManifoldComplexExt for Complex {
 }
 
 pub trait CoordSimplexExt {
-  fn difbary(&self, i: usize) -> MultiForm;
-  fn difbarys(&self) -> Vec<MultiForm>;
   fn spanning_multivector(&self) -> MultiVector;
 }
 impl CoordSimplexExt for SimplexCoords {
@@ -41,19 +39,6 @@ impl CoordSimplexExt for SimplexCoords {
       .column_iter()
       .map(|v| MultiVector::line(v.into_owned()));
     MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_embedded()))
-  }
-
-  fn difbary(&self, i: usize) -> MultiForm {
-    let gradbary = self.gradbary(i);
-    MultiForm::line(gradbary)
-  }
-
-  fn difbarys(&self) -> Vec<MultiForm> {
-    let gradbarys = self.gradbarys();
-    gradbarys
-      .column_iter()
-      .map(|g| MultiForm::line(g.into_owned()))
-      .collect()
   }
 }
 
@@ -86,11 +71,11 @@ pub fn bary0_local<'a>(coord: impl Into<LocalCoordRef<'a>>) -> f64 {
 }
 
 #[derive(Debug, Clone)]
-pub struct WhitneyId<O: IndexKind> {
+pub struct WhitneyRefLsf<O: IndexKind> {
   dim_cell: Dim,
   dof_simp: Simplex<O>,
 }
-impl<O: IndexKind> WhitneyId<O> {
+impl<O: IndexKind> WhitneyRefLsf<O> {
   pub fn new(dim_cell: Dim, dof_simp: Simplex<O>) -> Self {
     Self { dim_cell, dof_simp }
   }
@@ -121,7 +106,7 @@ impl<O: IndexKind> WhitneyId<O> {
     (0..self.dof_simp.nvertices()).map(move |iwedge| self.wedge_term(iwedge))
   }
 
-  /// The constant exterior derivative of the Whitney form.
+  /// The constant exterior derivative of the Whitney LSF.
   pub fn dif(&self) -> LocalMultiForm {
     let dim = self.dim_cell;
     let grade = self.grade();
@@ -132,7 +117,7 @@ impl<O: IndexKind> WhitneyId<O> {
   }
 }
 
-impl<O: IndexKind> ExteriorField for WhitneyId<O> {
+impl<O: IndexKind> ExteriorField for WhitneyRefLsf<O> {
   type Variance = variance::Co;
   fn dim(&self) -> exterior::Dim {
     self.dim_cell
@@ -158,28 +143,31 @@ impl<O: IndexKind> ExteriorField for WhitneyId<O> {
   }
 }
 
-pub struct CoordWhitneyForm<O: IndexKind> {
+pub struct WhitneyCoordLsf<O: IndexKind> {
   pub cell_coords: SimplexCoords,
-  pub id: WhitneyId<O>,
+  pub ref_lsf: WhitneyRefLsf<O>,
 }
-impl<O: IndexKind> CoordWhitneyForm<O> {
+impl<O: IndexKind> WhitneyCoordLsf<O> {
   pub fn new(cell_coords: SimplexCoords, dof_simp: Simplex<O>) -> Self {
-    let id = WhitneyId::new(cell_coords.dim_intrinsic(), dof_simp);
-    Self { cell_coords, id }
+    let ref_lsf = WhitneyRefLsf::new(cell_coords.dim_intrinsic(), dof_simp);
+    Self {
+      cell_coords,
+      ref_lsf,
+    }
   }
 }
-impl<O: IndexKind> ExteriorField for CoordWhitneyForm<O> {
+impl<O: IndexKind> ExteriorField for WhitneyCoordLsf<O> {
   type Variance = variance::Co;
   fn dim(&self) -> exterior::Dim {
-    self.id.dim()
+    self.ref_lsf.dim()
   }
   fn grade(&self) -> ExteriorGrade {
-    self.id.grade()
+    self.ref_lsf.grade()
   }
   /// Pullback!
   fn at_point<'a>(&self, coord_global: impl Into<EmbeddingCoordRef<'a>>) -> MultiForm {
-    let coord_local = self.cell_coords.chart_map(coord_global);
-    let value_local = self.id.at_point(&coord_local);
+    let coord_local = self.cell_coords.global2local(coord_global);
+    let value_local = self.ref_lsf.at_point(&coord_local);
     value_local.precompose(&self.cell_coords.linear_transform())
   }
 }
@@ -206,7 +194,7 @@ mod test {
 
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {
-          let whitney_form = WhitneyId::new(dim, dof_simp.simplex_set().clone());
+          let whitney_form = WhitneyRefLsf::new(dim, dof_simp.simplex_set().clone());
 
           for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;
