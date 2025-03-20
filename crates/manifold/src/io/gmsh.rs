@@ -71,7 +71,7 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, VertexCoords) {
 
   let skeleton = skeleton
     .into_iter()
-    .map(|simp| simp.into_simplex().into_sorted())
+    .map(|simp| simp.simplex.sorted())
     .collect();
   let skeleton = Skeleton::new(skeleton);
 

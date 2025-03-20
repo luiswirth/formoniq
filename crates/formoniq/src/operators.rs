@@ -4,7 +4,7 @@ use {
     geometry::metric::SimplexGeometry,
     topology::{
       complex::{DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
-      simplex::{nsubsimplicies, subsimplicies},
+      simplex::{nsubsimplicies, standard_subsimps},
     },
     Dim,
   },
@@ -120,7 +120,7 @@ impl ElMatProvider for HodgeMassElmat {
     let scalar_mass = ScalarMassElmat.eval(geometry);
 
     let nvertices = grade + 1;
-    let simplicies: Vec<_> = subsimplicies(dim, grade).collect();
+    let simplicies: Vec<_> = standard_subsimps(dim, grade).collect();
 
     let wedge_terms: Vec<_> = simplicies
       .iter()
@@ -238,7 +238,7 @@ mod test {
 
   use common::linalg::assert_mat_eq;
   use exterior::term::RiemannianMetricExt;
-  use manifold::{geometry::metric::SimplexGeometry, topology::simplex::subsimplicies};
+  use manifold::{geometry::metric::SimplexGeometry, topology::simplex::standard_subsimps};
   use whitney::WhitneyRefLsf;
 
   #[test]
@@ -304,7 +304,7 @@ mod test {
       for grade in 0..dim {
         let difdif = CodifDifElmat(grade).eval(&geometry);
 
-        let difwhitneys: Vec<_> = subsimplicies(dim, grade)
+        let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
           .map(|simp| WhitneyRefLsf::new(dim, simp).dif())
           .collect();
         let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());

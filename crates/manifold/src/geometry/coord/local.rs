@@ -12,7 +12,7 @@ use common::{
   linalg::DMatrixExt,
   metric::{AffineTransform, RiemannianMetric},
 };
-use multi_index::{sign::Sign, variants::IndexKind};
+use multi_index::sign::Sign;
 use tracing::warn;
 
 #[derive(Debug, Clone)]
@@ -33,12 +33,9 @@ impl SimplexCoords {
     }
     Self::new(vertices)
   }
-  pub fn from_mesh_simplex<O>(simp: &Simplex<O>, mesh_coords: &VertexCoords) -> SimplexCoords
-  where
-    O: IndexKind,
-  {
+  pub fn from_mesh_simplex(simp: &Simplex, mesh_coords: &VertexCoords) -> SimplexCoords {
     let mut vert_coords = na::DMatrix::zeros(mesh_coords.dim(), simp.nvertices());
-    for (i, v) in simp.vertices.iter().enumerate() {
+    for (i, &v) in simp.vertices.iter().enumerate() {
       vert_coords.set_column(i, &mesh_coords.coord(v));
     }
     SimplexCoords::new(vert_coords)
