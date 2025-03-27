@@ -86,7 +86,6 @@ impl WhitneyRefLsf {
   pub fn difbarys(&self) -> impl Iterator<Item = LocalMultiForm> + use<'_> {
     self
       .dof_simp
-      .vertices
       .clone()
       .into_iter()
       .map(move |ibary| difbary_local(ibary, self.dim_cell))
@@ -194,7 +193,7 @@ mod test {
 
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {
-          let whitney_form = WhitneyRefLsf::new(dim, dof_simp.simplex_set().clone());
+          let whitney_form = WhitneyRefLsf::new(dim, dof_simp.raw().clone());
 
           for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;

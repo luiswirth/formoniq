@@ -140,7 +140,7 @@ pub fn de_rham_map(
   let cochain = topology
     .skeleton(form.grade())
     .handle_iter()
-    .map(|simp| SimplexCoords::from_mesh_simplex(simp.simplex_set(), coords))
+    .map(|simp| SimplexCoords::from_mesh_simplex(simp.raw(), coords))
     .map(|simp| de_rahm_map_local(form, &simp))
     .collect::<Vec<_>>()
     .into();

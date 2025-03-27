@@ -11,30 +11,35 @@ pub struct Skeleton {
   nvertices: usize,
 }
 impl Skeleton {
-  pub fn new(simplicies: Vec<Simplex>) -> Self {
-    Self::try_new(simplicies).unwrap()
-  }
   /// Every simplex must be sorted.
-  pub fn try_new(simplicies: Vec<Simplex>) -> Option<Self> {
+  pub fn new(simplicies: Vec<Simplex>) -> Self {
+    assert!(!simplicies.is_empty(), "Skeleton must not be empty");
     let dim = simplicies[0].dim();
-    if !simplicies.iter().map(|simp| simp.dim()).all(|d| d == dim) {
-      return None;
-    }
-    if !simplicies.iter().all(|simp| simp.is_sorted()) {
-      return None;
-    }
-    let nvertices = simplicies
-      .iter()
-      .map(|simp| simp.vertices.iter().max().unwrap())
-      .max()
-      .unwrap()
-      + 1;
+    assert!(
+      simplicies.iter().map(|simp| simp.dim()).all(|d| d == dim),
+      "Skeleton simplicies must have same dimension."
+    );
+    assert!(
+      simplicies.iter().all(|simp| simp.is_sorted()),
+      "Skeleton simplicies must be sorted."
+    );
+    let nvertices = if dim == 0 {
+      assert!(simplicies.iter().enumerate().all(|(i, simp)| simp[0] == i));
+      simplicies.len()
+    } else {
+      simplicies
+        .iter()
+        .map(|simp| simp.iter().max().expect("Simplex is not empty."))
+        .max()
+        .expect("Simplicies is not empty.")
+        + 1
+    };
 
     let simplicies = IndexSet::from_iter(simplicies);
-    Some(Self {
+    Self {
       simplicies,
       nvertices,
-    })
+    }
   }
   pub fn standard(dim: Dim) -> Skeleton {
     Self::new(vec![Simplex::standard(dim)])

@@ -35,7 +35,7 @@ impl SimplexCoords {
   }
   pub fn from_mesh_simplex(simp: &Simplex, mesh_coords: &VertexCoords) -> SimplexCoords {
     let mut vert_coords = na::DMatrix::zeros(mesh_coords.dim(), simp.nvertices());
-    for (i, &v) in simp.vertices.iter().enumerate() {
+    for (i, v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &mesh_coords.coord(v));
     }
     SimplexCoords::new(vert_coords)
@@ -148,7 +148,7 @@ impl SimplexCoords {
 
   pub fn subsimps(&self, dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
     Simplex::standard(self.nvertices())
-      .subsimps(dim)
+      .substrings(dim)
       .map(|edge| Self::from_mesh_simplex(&edge, &self.vertices))
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexCoords> + use<'_> {
@@ -211,7 +211,7 @@ pub trait SimplexHandleExt {
 }
 impl<'c> SimplexHandleExt for SimplexHandle<'c> {
   fn coord_simplex(&self, coords: &VertexCoords) -> SimplexCoords {
-    SimplexCoords::from_mesh_simplex(self.simplex_set(), coords)
+    SimplexCoords::from_mesh_simplex(self.raw(), coords)
   }
 }
 

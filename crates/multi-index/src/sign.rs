@@ -19,7 +19,7 @@ impl Sign {
     Some(Self::from_bool(f > 0.0))
   }
 
-  /// useful for permutation parity
+  /// permutation parity
   pub fn from_parity(n: usize) -> Self {
     match n % 2 {
       0 => Self::Pos,
