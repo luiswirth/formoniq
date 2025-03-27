@@ -14,4 +14,3 @@ itertools = "0.13.0"
 tracing = "0.1.40"
 
 mshio = "0.4.2"
-vtkio = "0.6.3"
