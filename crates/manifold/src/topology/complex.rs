@@ -30,7 +30,6 @@ impl Complex {
   pub fn standard(dim: Dim) -> Self {
     Self::from_cells(Skeleton::standard(dim))
   }
-
   pub fn dim(&self) -> Dim {
     self.skeletons.len() - 1
   }
@@ -47,7 +46,7 @@ impl Complex {
     self
       .facets()
       .handle_iter()
-      .filter(|f| f.anti_boundary().len() == 1)
+      .filter(|f| f.cocells().count() == 1)
       .collect()
   }
 
@@ -56,7 +55,7 @@ impl Complex {
       .boundary_facets()
       .handle_iter(self)
       // the boundary has only one parent cell by definition
-      .map(|facet| facet.anti_boundary().kidxs()[0])
+      .map(|facet| facet.cocells().next().unwrap().kidx())
       .unique()
       .collect();
     KSimplexCollection::new(cells, self.dim())
@@ -68,7 +67,7 @@ impl Complex {
     let vertices = self
       .boundary_facets()
       .handle_iter(self)
-      .flat_map(|facet| facet.simplex_set().vertices.clone())
+      .flat_map(|facet| facet.raw().vertices.clone())
       .unique()
       .collect();
     KSimplexCollection::new(vertices, 0)
@@ -85,7 +84,7 @@ impl Complex {
     let subs = &self.skeleton(dim - 1);
     let mut mat = SparseMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.handle_iter().enumerate() {
-      let sup_boundary = sup.simplex_set().boundary();
+      let sup_boundary = sup.raw().boundary();
       for sub in sup_boundary {
         let sign = sub.sign.as_f64();
         let isub = subs.get_by_simplex(&sub.simplex).kidx();
@@ -131,7 +130,7 @@ impl Complex {
 
     for (icell, cell) in cells.iter().enumerate() {
       for (dim_sub, (sub_skeleton, sub_skeleton_data)) in skeletons.iter_mut().enumerate() {
-        for sub in cell.subsimps(dim_sub) {
+        for sub in cell.substrings(dim_sub) {
           let (sub_idx, is_new) = sub_skeleton.insert(sub);
           let sub_data = if is_new {
             sub_skeleton_data.0.push(SimplexData::default());
@@ -191,7 +190,7 @@ mod test {
     for dim_sub in 0..=dim {
       let skeleton = complex.skeleton(dim_sub);
       for simp in skeleton.handle_iter() {
-        let simp_vertices = simp.simplex_set();
+        let simp_vertices = simp.raw();
         print!("{simp_vertices:?},");
       }
       println!();
@@ -201,26 +200,20 @@ mod test {
     for dim_sub in 0..=dim {
       let subs: Vec<_> = cell.subsimps(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplicies(dim, dim_sub));
-      let subs_vertices: Vec<_> = cell_simplex.subsimps(dim_sub).collect();
+      let subs_vertices: Vec<_> = cell_simplex.substrings(dim_sub).collect();
       assert_eq!(
-        subs
-          .iter()
-          .map(|sub| sub.simplex_set().clone())
-          .collect::<Vec<_>>(),
+        subs.iter().map(|sub| sub.raw().clone()).collect::<Vec<_>>(),
         subs_vertices
       );
 
       for (isub, sub) in subs.iter().enumerate() {
         let sub_vertices = &subs_vertices[isub];
         for dim_sup in dim_sub..dim {
-          let sups: Vec<_> = sub.sups(dim_sup);
-          let sups_vertices = sups
-            .iter()
-            .map(|sub| sub.simplex_set().clone())
-            .collect::<Vec<_>>();
+          let sups: Vec<_> = sub.supersimps(dim_sup);
+          let sups_vertices = sups.iter().map(|sub| sub.raw().clone()).collect::<Vec<_>>();
           sups_vertices
             .iter()
-            .all(|sup| sub_vertices.is_subsimp_of(sup) && sup.is_subsimp_of(&cell_simplex));
+            .all(|sup| sub_vertices.is_substring_of(sup) && sup.is_substring_of(&cell_simplex));
         }
       }
     }

@@ -57,9 +57,7 @@ pub fn reconstruct_at_coord<'a>(
 
   let mut fe_value = MultiForm::zero(topology.dim(), grade);
   for dof_simp in cell.subsimps(grade) {
-    let local_dof_simp = cell
-      .simplex_set()
-      .global_to_local_subsimp(dof_simp.simplex_set());
+    let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
 
     let dof_value = cochain[dof_simp]
       * WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
@@ -82,9 +80,7 @@ pub fn reconstruct_at_mesh_cells_barycenters(
     .map(|cell| {
       let mut value = MultiForm::zero(topology.dim(), grade);
       for dof_simp in cell.subsimps(grade) {
-        let local_dof_simp = cell
-          .simplex_set()
-          .global_to_local_subsimp(dof_simp.simplex_set());
+        let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
 
         let barycenter = cell.coord_simplex(coords).barycenter();
 
@@ -119,9 +115,7 @@ pub fn reconstruct_at_mesh_cells_vertices(
             .map(|dof_simp| {
               let coeff = cochain[dof_simp];
 
-              let local_dof_simp = cell
-                .simplex_set()
-                .global_to_local_subsimp(dof_simp.simplex_set());
+              let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
               //dbg!(cell.simplex_set().vertices.indices());
               //dbg!(dof_simp.simplex_set().vertices.indices());
               //dbg!(&local_dof_simp.vertices.indices());

@@ -144,9 +144,7 @@ impl ElMatProvider for HodgeMassElmat {
 
             let inner = wedge_inners[(avertex, bvertex)];
 
-            sum += sign.as_f64()
-              * inner
-              * scalar_mass[(asimp.vertices[avertex], bsimp.vertices[bvertex])];
+            sum += sign.as_f64() * inner * scalar_mass[(asimp[avertex], bsimp[bvertex])];
           }
         }
 

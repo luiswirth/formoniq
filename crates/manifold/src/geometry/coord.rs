@@ -114,7 +114,7 @@ impl VertexCoords {
     let edges = topology.edges();
     let mut edge_lengths = na::DVector::zeros(edges.len());
     for (iedge, edge) in edges.set_iter().enumerate() {
-      let [vi, vj] = edge.vertices.clone().try_into().unwrap();
+      let [vi, vj] = edge.clone().try_into().unwrap();
       let length = (self.coord(vj) - self.coord(vi)).norm();
       edge_lengths[iedge] = length;
     }

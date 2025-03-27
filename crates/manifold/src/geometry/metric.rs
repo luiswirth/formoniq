@@ -1,7 +1,7 @@
 use crate::{
   topology::{
     complex::{handle::SimplexHandle, Complex},
-    simplex::{nedges, nsubsimplicies},
+    simplex::nedges,
   },
   Dim,
 };
@@ -164,7 +164,7 @@ impl SimplexEdgeLengths {
     Self { edge_lengths, dim }
   }
   pub fn standard(dim: Dim) -> SimplexEdgeLengths {
-    let nedges = nsubsimplicies(dim, 1);
+    let nedges = nedges(dim);
     let edge_lengths: Vec<f64> = (0..dim)
       .map(|_| 1.0)
       .chain((dim..nedges).map(|_| SQRT_2))
