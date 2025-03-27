@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use faer::linalg::solvers::Solve;
+
 pub trait CumsumExt {
   fn cumsum(self) -> impl Iterator<Item = usize>;
 }
@@ -117,17 +119,15 @@ impl FaerLu {
     let raw = nalgebra2faer(a).sp_lu().unwrap();
     Self { raw }
   }
-
   pub fn solve(&self, b: &na::DVector<f64>) -> na::DVector<f64> {
-    use faer::solvers::SpSolver as _;
-
-    let b = faer::col::from_slice(b.as_slice());
-    na::DVector::from_vec(self.raw.solve(b).as_slice().to_vec())
+    let b = faer::Col::from_fn(b.nrows(), |i| b[i]);
+    let x = self.raw.solve(b);
+    na::DVector::from_iterator(x.nrows(), x.iter().copied())
   }
 }
 
 pub struct FaerCholesky {
-  raw: faer::sparse::linalg::solvers::Cholesky<usize, f64>,
+  raw: faer::sparse::linalg::solvers::Llt<usize, f64>,
 }
 impl FaerCholesky {
   pub fn new(a: nas::CsrMatrix<f64>) -> Self {
@@ -136,10 +136,9 @@ impl FaerCholesky {
   }
 
   pub fn solve(&self, b: &na::DVector<f64>) -> na::DVector<f64> {
-    use faer::solvers::SpSolver as _;
-
-    let b = faer::col::from_slice(b.as_slice());
-    na::DVector::from_vec(self.raw.solve(b).as_slice().to_vec())
+    let b = faer::Col::from_fn(b.nrows(), |i| b[i]);
+    let x = self.raw.solve(b);
+    na::DVector::from_iterator(x.nrows(), x.iter().copied())
   }
 }
 

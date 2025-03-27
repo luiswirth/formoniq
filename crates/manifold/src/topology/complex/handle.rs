@@ -66,7 +66,7 @@ pub struct SimplexHandle<'c> {
   complex: &'c Complex,
   idx: SimplexIdx,
 }
-impl<'m> std::fmt::Debug for SimplexHandle<'m> {
+impl std::fmt::Debug for SimplexHandle<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)

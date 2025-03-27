@@ -8,4 +8,4 @@ common = { path = "../common" }
 
 nalgebra = "0.33.2"
 
-itertools = "0.13.0"
+itertools = "0.14.0"
