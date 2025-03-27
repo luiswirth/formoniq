@@ -209,7 +209,7 @@ pub fn ref_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
 pub trait SimplexHandleExt {
   fn coord_simplex(&self, coords: &VertexCoords) -> SimplexCoords;
 }
-impl<'c> SimplexHandleExt for SimplexHandle<'c> {
+impl SimplexHandleExt for SimplexHandle<'_> {
   fn coord_simplex(&self, coords: &VertexCoords) -> SimplexCoords {
     SimplexCoords::from_mesh_simplex(self.raw(), coords)
   }

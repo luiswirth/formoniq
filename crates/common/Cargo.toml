@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 nalgebra = "0.33.2"
 nalgebra-sparse = "0.10.0"
-faer = "0.19.4"
-faer-ext = "0.3.0"
+faer = "0.21.9"
+faer-ext = "0.5.0"
 
-itertools = "0.13.0"
+itertools = "0.14.0"
 num-integer = "0.1.46"
 
 num-traits = "0.2.19"

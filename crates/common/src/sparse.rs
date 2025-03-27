@@ -1,6 +1,7 @@
 use crate::util::{CumsumExt, IterAllEqExt};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use itertools::Itertools;
 use std::{
   fs::File,
   io::{BufReader, BufWriter, Write},
@@ -123,8 +124,16 @@ impl SparseMatrix {
   }
 
   pub fn to_faer_csc(&self) -> faer::sparse::SparseColMat<usize, f64> {
-    faer::sparse::SparseColMat::try_new_from_triplets(self.nrows, self.ncols, &self.triplets)
-      .unwrap()
+    faer::sparse::SparseColMat::try_new_from_triplets(
+      self.nrows,
+      self.ncols,
+      &self
+        .triplets
+        .iter()
+        .map(|t| faer::sparse::Triplet::new(t.0, t.1, t.2))
+        .collect_vec(),
+    )
+    .unwrap()
   }
 
   /// Returns `None` if matrix is not diagonal.
