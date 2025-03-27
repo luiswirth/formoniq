@@ -3,8 +3,6 @@ use crate::{
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
 
-use multi_index::sign::Sign;
-
 pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, VertexCoords) {
   let (cells, coords) = gmsh2coord_cells(bytes);
   let complex = Complex::from_cells(cells);
@@ -51,14 +49,11 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, VertexCoords) {
     };
     for e in block.elements {
       let simplex: Vec<_> = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      // NOTE: gmsh always produces positively oriented cells
-      // TODO: only assume Pos for cells(!) not all simplicies.
-      let simplex = Simplex::from(simplex).with_sign(Sign::Pos);
+      let simplex = Simplex::from(simplex);
       simplex_acc.push(simplex);
     }
   }
 
-  // TODO: create complex from all given simplicies (also subs)
   let skeleton = if !quads.is_empty() {
     quads
   } else if !trias.is_empty() {
@@ -69,11 +64,5 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, VertexCoords) {
     panic!("Failed to construct Triangulation from gmsh.");
   };
 
-  let skeleton = skeleton
-    .into_iter()
-    .map(|simp| simp.simplex.sorted())
-    .collect();
-  let skeleton = Skeleton::new(skeleton);
-
-  (skeleton, mesh_vertices)
+  (Skeleton::new(skeleton), mesh_vertices)
 }

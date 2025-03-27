@@ -1,10 +1,7 @@
+use common::combo::{binomial, sort_signed, Sign};
+
 use super::VertexIdx;
 use crate::Dim;
-
-use multi_index::{
-  binomial,
-  sign::{sort_signed, Sign},
-};
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Simplex {

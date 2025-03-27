@@ -106,6 +106,6 @@ impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
     let coord_ref = self.affine_transform.apply_backward(coord_global);
     let form_ref = self.form.at_point(&coord_ref);
     let linear_inv = self.affine_transform.linear.clone().try_inverse().unwrap();
-    form_ref.precompose(&linear_inv)
+    form_ref.precompose_form(&linear_inv)
   }
 }

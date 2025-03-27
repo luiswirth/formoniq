@@ -6,6 +6,5 @@ members = [
   "crates/whitney",
   "crates/exterior",
   "crates/manifold",
-  "crates/multi-index",
   "crates/common",
 ]

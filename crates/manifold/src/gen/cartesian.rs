@@ -1,10 +1,11 @@
+use common::combo::factorial;
+use itertools::Itertools;
+
 use crate::{
   geometry::coord::VertexCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
-
-use multi_index::{factorial, MultiIndex};
 
 /// converts linear index to cartesian index
 ///
@@ -188,18 +189,16 @@ impl CartesianMeshInfo {
       let ivertex_origin =
         cartesian_index2linear_index(vertex_icart_origin.clone(), self.nvertices_axis());
 
-      let basisdirs = MultiIndex::increasing(dim);
-
       // Construct all $d!$ simplexes that make up the current box.
       // Each permutation of the basis directions (dimensions) gives rise to one simplex.
-      let cube_simplicies = basisdirs.permutations().map(|basisdirs| {
+      let cube_simplicies = (0..dim).permutations(dim).map(|basisdirs| {
         // Construct simplex by adding all shifted vertices.
         let mut simplex = vec![ivertex_origin];
 
         // Add every shift (according to permutation) to vertex iteratively.
         // Every shift step gives us one vertex.
         let mut vertex_icart = vertex_icart_origin.clone();
-        for basisdir in basisdirs.set.iter() {
+        for &basisdir in basisdirs.iter() {
           vertex_icart[basisdir] += 1;
 
           let ivertex = cartesian_index2linear_index(vertex_icart.clone(), self.nvertices_axis());

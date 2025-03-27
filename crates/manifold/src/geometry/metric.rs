@@ -6,8 +6,10 @@ use crate::{
   Dim,
 };
 
-use common::metric::RiemannianMetric;
-use multi_index::{factorial, MultiIndex};
+use common::{
+  combo::{factorial, lex_rank},
+  metric::RiemannianMetric,
+};
 
 use itertools::Itertools;
 use std::f64::consts::SQRT_2;
@@ -260,10 +262,7 @@ pub fn compute_regge_metric(edge_lengths: &SimplexEdgeLengths, dim: Dim) -> Riem
 
       let vi = i + 1;
       let vj = j + 1;
-      // TODO: can we compute this more directly?
-      let eij = MultiIndex::from([vi, vj])
-        .assume_sorted()
-        .lex_rank(nvertices);
+      let eij = lex_rank(&[vi, vj], nvertices);
       let lij = edge_lengths[eij];
 
       let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));

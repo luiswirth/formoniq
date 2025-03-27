@@ -157,7 +157,7 @@ pub fn de_rahm_map_local(
   let f = |coord: CoordRef| {
     differential_form
       .at_point(simplex.local2global(coord).as_view())
-      .on_multivector(&multivector)
+      .apply_form_on_multivector(&multivector)
   };
   let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());
   barycentric_quadrature(&f, &std_simp)

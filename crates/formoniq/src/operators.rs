@@ -1,4 +1,5 @@
 use {
+  common::combo::{factorial, Sign},
   exterior::{term::RiemannianMetricExt, ExteriorGrade},
   manifold::{
     geometry::metric::SimplexGeometry,
@@ -8,7 +9,6 @@ use {
     },
     Dim,
   },
-  multi_index::{factorial, sign::Sign},
   whitney::WhitneyRefLsf,
 };
 

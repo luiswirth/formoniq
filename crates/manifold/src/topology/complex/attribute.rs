@@ -1,11 +1,10 @@
-use multi_index::sign::Sign;
-
-use crate::Dim;
-
 use super::{
   handle::{KSimplexIdx, SimplexHandle, SimplexIdx},
   Complex,
 };
+use crate::Dim;
+
+use common::combo::Sign;
 
 pub struct KSimplexCollection {
   kidxs: Vec<KSimplexIdx>,

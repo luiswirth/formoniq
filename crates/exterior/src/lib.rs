@@ -1,62 +1,14 @@
 extern crate nalgebra as na;
 
 pub mod field;
+pub mod list;
 pub mod term;
 
+use common::combo::binomial;
 use term::ExteriorTerm;
-
-use multi_index::binomial;
 
 pub type Dim = usize;
 pub type ExteriorGrade = usize;
-
-pub type MultiVectorList = ExteriorElementList;
-pub type MultiFormList = ExteriorElementList;
-
-#[derive(Debug, Clone)]
-pub struct ExteriorElementList {
-  coeffs: na::DMatrix<f64>,
-  dim: Dim,
-  grade: ExteriorGrade,
-}
-
-impl ExteriorElementList {
-  pub fn new(coeffs: na::DMatrix<f64>, dim: Dim, grade: ExteriorGrade) -> Self {
-    assert_eq!(coeffs.nrows(), binomial(dim, grade));
-    Self { coeffs, dim, grade }
-  }
-
-  pub fn dim(&self) -> Dim {
-    self.dim
-  }
-  pub fn grade(&self) -> ExteriorGrade {
-    self.grade
-  }
-  pub fn coeffs(&self) -> &na::DMatrix<f64> {
-    &self.coeffs
-  }
-  pub fn into_coeffs(self) -> na::DMatrix<f64> {
-    self.coeffs
-  }
-}
-
-impl FromIterator<ExteriorElement> for ExteriorElementList {
-  fn from_iter<T: IntoIterator<Item = ExteriorElement>>(iter: T) -> Self {
-    let mut iter = iter.into_iter();
-    let first = iter.next().unwrap();
-    let dim = first.dim();
-    let grade = first.grade();
-    let mut coeffs = na::DMatrix::zeros(first.coeffs.len(), 1);
-    coeffs.set_column(0, &first.coeffs);
-    for (i, elem) in iter.enumerate() {
-      assert!(elem.dim() == dim);
-      assert!(elem.grade() == grade);
-      coeffs = coeffs.insert_column(i + 1, 0.0);
-      coeffs.set_column(i + 1, &elem.coeffs);
-    }
-    Self::new(coeffs, dim, grade)
-  }
-}
 
 /// An element of an exterior algebra.
 #[derive(Debug, Clone)]
@@ -281,22 +233,10 @@ impl std::iter::Sum for ExteriorElement {
 pub type MultiVector = ExteriorElement;
 pub type MultiForm = ExteriorElement;
 impl MultiForm {
-  pub fn standard_volume_form(dim: Dim) -> Self {
-    let grade = dim;
-    let coeff = na::dvector![1.0];
-    Self::new(coeff, dim, grade)
-  }
-
-  pub fn volume_form(gramian: &na::DMatrix<f64>) -> Self {
-    let dim = gramian.nrows();
-    let det_sqrt = gramian.determinant().sqrt();
-    det_sqrt * Self::standard_volume_form(dim)
-  }
-
   /// Precompose k-form by some linear map.
   ///
-  /// Needed for pullback/pushforward of differential k-form.
-  pub fn precompose(&self, linear_map: &na::DMatrix<f64>) -> Self {
+  /// Needed for pullback of differential k-form.
+  pub fn precompose_form(&self, linear_map: &na::DMatrix<f64>) -> Self {
     self
       .basis_iter()
       .map(|(coeff, basis)| {
@@ -311,7 +251,7 @@ impl MultiForm {
       .sum()
   }
 
-  pub fn on_multivector(&self, kvector: &MultiVector) -> f64 {
+  pub fn apply_form_on_multivector(&self, kvector: &MultiVector) -> f64 {
     assert!(self.dim == kvector.dim && self.grade == kvector.grade);
     self.coeffs.dot(&kvector.coeffs)
   }

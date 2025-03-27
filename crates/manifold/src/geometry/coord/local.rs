@@ -9,10 +9,10 @@ use crate::{
 };
 
 use common::{
+  combo::Sign,
   linalg::DMatrixExt,
   metric::{AffineTransform, RiemannianMetric},
 };
-use multi_index::sign::Sign;
 use tracing::warn;
 
 #[derive(Debug, Clone)]

@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 exterior = { path = "../exterior" }
 manifold = { path = "../manifold" }
-multi-index = { path = "../multi-index" }
 common = { path = "../common" }
 
 nalgebra = "0.33.2"

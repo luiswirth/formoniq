@@ -4,7 +4,10 @@ pub mod cochain;
 pub mod io;
 
 use {
-  common::sparse::SparseMatrix,
+  common::{
+    combo::{factorial, Sign},
+    sparse::SparseMatrix,
+  },
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
     geometry::coord::{
@@ -14,7 +17,6 @@ use {
     topology::{complex::Complex, simplex::Simplex},
     Dim,
   },
-  multi_index::{factorial, sign::Sign, variants::IndexKind},
 };
 
 pub type LocalMultiForm = MultiForm;
@@ -61,7 +63,7 @@ pub fn difbarys_local(dim: Dim) -> impl ExactSizeIterator<Item = LocalMultiForm>
   let nvertices = dim + 1;
   (0..nvertices).map(move |ibary| difbary_local(ibary, dim))
 }
-pub fn difbary_wedge_local<O: IndexKind>(dim: Dim) -> LocalMultiForm {
+pub fn difbary_wedge_local(dim: Dim) -> LocalMultiForm {
   MultiForm::wedge_big(difbarys_local(dim)).unwrap_or(MultiForm::one(dim))
 }
 
@@ -165,7 +167,7 @@ impl ExteriorField for WhitneyCoordLsf {
   fn at_point<'a>(&self, coord_global: impl Into<EmbeddingCoordRef<'a>>) -> MultiForm {
     let coord_local = self.cell_coords.global2local(coord_global);
     let value_local = self.ref_lsf.at_point(&coord_local);
-    value_local.precompose(&self.cell_coords.linear_transform())
+    value_local.precompose_form(&self.cell_coords.linear_transform())
   }
 }
 
@@ -175,12 +177,9 @@ mod test {
 
   use super::*;
 
-  use {
-    manifold::{
-      geometry::coord::{local::SimplexHandleExt, VertexCoords},
-      topology::complex::Complex,
-    },
-    multi_index::sign::Sign,
+  use manifold::{
+    geometry::coord::{local::SimplexHandleExt, VertexCoords},
+    topology::complex::Complex,
   };
 
   #[test]
