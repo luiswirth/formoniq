@@ -1,7 +1,4 @@
-use crate::{
-  variance::{self, VarianceMarker},
-  Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList,
-};
+use crate::{Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList};
 
 use common::metric::RiemannianMetric;
 use multi_index::{
@@ -9,25 +6,15 @@ use multi_index::{
   sign::{sort_signed, Sign},
 };
 
-use std::marker::PhantomData;
-
-pub type MultiVectorTerm = ExteriorTerm<variance::Contra>;
-pub type MultiFormTerm = ExteriorTerm<variance::Co>;
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ExteriorTerm<V: VarianceMarker> {
+pub struct ExteriorTerm {
   indices: Vec<usize>,
   dim: Dim,
-  variance: PhantomData<V>,
 }
 
-impl<V: VarianceMarker> ExteriorTerm<V> {
+impl ExteriorTerm {
   pub fn new(indices: Vec<usize>, dim: Dim) -> Self {
-    Self {
-      indices,
-      dim,
-      variance: PhantomData,
-    }
+    Self { indices, dim }
   }
   pub fn top(dim: Dim) -> Self {
     Self::new((0..dim).collect(), dim)
@@ -71,14 +58,14 @@ impl<V: VarianceMarker> ExteriorTerm<V> {
   }
 }
 
-impl<V: VarianceMarker> std::ops::Index<usize> for ExteriorTerm<V> {
+impl std::ops::Index<usize> for ExteriorTerm {
   type Output = usize;
   fn index(&self, index: usize) -> &Self::Output {
     &self.indices[index]
   }
 }
 
-impl<V: VarianceMarker> ExteriorTerm<V> {
+impl ExteriorTerm {
   pub fn from_lex_rank(dim: Dim, grade: ExteriorGrade, mut rank: usize) -> Self {
     let mut indices = Vec::with_capacity(grade);
     let mut start = 0;
@@ -129,26 +116,20 @@ impl<V: VarianceMarker> ExteriorTerm<V> {
   }
 }
 
-impl<V: VarianceMarker> std::ops::Mul<ExteriorTerm<V>> for f64 {
-  type Output = ExteriorElement<V>;
-  fn mul(self, term: ExteriorTerm<V>) -> Self::Output {
+impl std::ops::Mul<ExteriorTerm> for f64 {
+  type Output = ExteriorElement;
+  fn mul(self, term: ExteriorTerm) -> Self::Output {
     let coeff = self;
     coeff * ExteriorElement::from(term)
   }
 }
 
-pub fn exterior_bases<V: VarianceMarker>(
-  dim: Dim,
-  grade: ExteriorGrade,
-) -> impl Iterator<Item = ExteriorTerm<V>> {
+pub fn exterior_bases(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = ExteriorTerm> {
   itertools::Itertools::combinations(0..dim, grade)
     .map(move |indices| ExteriorTerm::new(indices, dim))
 }
 
-pub fn exterior_terms<V: VarianceMarker>(
-  dim: Dim,
-  grade: ExteriorGrade,
-) -> impl Iterator<Item = ExteriorTerm<V>> {
+pub fn exterior_terms(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = ExteriorTerm> {
   itertools::Itertools::permutations(0..dim, grade)
     .map(move |indices| ExteriorTerm::new(indices, dim))
 }
@@ -165,7 +146,7 @@ pub trait RiemannianMetricExt {
 impl RiemannianMetricExt for RiemannianMetric {
   fn multi_form_gramian(&self, k: ExteriorGrade) -> na::DMatrix<f64> {
     let n = self.dim();
-    let bases: Vec<_> = exterior_bases::<variance::Co>(n, k).collect();
+    let bases: Vec<_> = exterior_bases(n, k).collect();
     let covector_gramian = self.covector_gramian();
 
     let mut multi_form_gramian = na::DMatrix::zeros(bases.len(), bases.len());

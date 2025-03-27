@@ -5,7 +5,7 @@ pub mod io;
 
 use {
   common::sparse::SparseMatrix,
-  exterior::{field::ExteriorField, variance, ExteriorGrade, MultiForm, MultiVector},
+  exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
     geometry::coord::{
       local::{is_bary_inside, local_to_bary_coords, SimplexCoords},
@@ -117,7 +117,6 @@ impl WhitneyRefLsf {
 }
 
 impl ExteriorField for WhitneyRefLsf {
-  type Variance = variance::Co;
   fn dim(&self) -> exterior::Dim {
     self.dim_cell
   }
@@ -156,7 +155,6 @@ impl WhitneyCoordLsf {
   }
 }
 impl ExteriorField for WhitneyCoordLsf {
-  type Variance = variance::Co;
   fn dim(&self) -> exterior::Dim {
     self.ref_lsf.dim()
   }

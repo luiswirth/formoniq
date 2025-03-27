@@ -1,44 +1,34 @@
 use common::metric::AffineTransform;
 
-use crate::{
-  variance::{self, VarianceMarker},
-  Dim, ExteriorElement, ExteriorGrade,
-};
-
-use std::marker::PhantomData;
+use crate::{Dim, ExteriorElement, ExteriorGrade};
 
 pub trait ExteriorField {
-  type Variance: VarianceMarker;
   fn dim(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
-  fn at_point<'a>(
-    &self,
-    coord: impl Into<na::DVectorView<'a, f64>>,
-  ) -> ExteriorElement<Self::Variance>;
+  fn at_point<'a>(&self, coord: impl Into<na::DVectorView<'a, f64>>) -> ExteriorElement;
 }
 
 // Trait aliases.
-pub trait MultiVectorField: ExteriorField<Variance = variance::Contra> {}
-impl<T: ExteriorField<Variance = variance::Contra>> MultiVectorField for T {}
-pub trait MultiFormField: ExteriorField<Variance = variance::Co> {}
-impl<T: ExteriorField<Variance = variance::Co>> MultiFormField for T {}
+pub trait MultiVectorField: ExteriorField {}
+impl<T: ExteriorField> MultiVectorField for T {}
+pub trait MultiFormField: ExteriorField {}
+impl<T: ExteriorField> MultiFormField for T {}
 pub trait DifferentialMultiForm: MultiFormField {}
 impl<T: MultiFormField> DifferentialMultiForm for T {}
 
-pub type DiffFormClosure = ExteriorFieldClosure<variance::Co>;
+pub type DiffFormClosure = ExteriorFieldClosure;
 
 #[allow(clippy::type_complexity)]
-pub struct ExteriorFieldClosure<V: VarianceMarker> {
-  closure: Box<dyn Fn(na::DVectorView<f64>) -> ExteriorElement<V>>,
+pub struct ExteriorFieldClosure {
+  closure: Box<dyn Fn(na::DVectorView<f64>) -> ExteriorElement>,
   dim: Dim,
   grade: ExteriorGrade,
-  variance: PhantomData<V>,
 }
 
 #[allow(clippy::type_complexity)]
-impl<V: VarianceMarker> ExteriorFieldClosure<V> {
+impl ExteriorFieldClosure {
   pub fn new(
-    closure: Box<dyn Fn(na::DVectorView<f64>) -> ExteriorElement<V>>,
+    closure: Box<dyn Fn(na::DVectorView<f64>) -> ExteriorElement>,
     dim: Dim,
     grade: ExteriorGrade,
   ) -> Self {
@@ -46,7 +36,6 @@ impl<V: VarianceMarker> ExteriorFieldClosure<V> {
       closure,
       dim,
       grade,
-      variance: PhantomData,
     }
   }
 }
@@ -81,18 +70,14 @@ impl DiffFormClosure {
     Self::scalar(move |x| (&center - x).norm(), dim)
   }
 }
-impl<V: VarianceMarker> ExteriorField for ExteriorFieldClosure<V> {
-  type Variance = V;
+impl ExteriorField for ExteriorFieldClosure {
   fn dim(&self) -> Dim {
     self.dim
   }
   fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn at_point<'a>(
-    &self,
-    coord: impl Into<na::DVectorView<'a, f64>>,
-  ) -> ExteriorElement<Self::Variance> {
+  fn at_point<'a>(&self, coord: impl Into<na::DVectorView<'a, f64>>) -> ExteriorElement {
     (self.closure)(coord.into())
   }
 }
@@ -110,17 +95,13 @@ impl<F: DifferentialMultiForm> FormPushforward<F> {
   }
 }
 impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
-  type Variance = variance::Co;
   fn dim(&self) -> Dim {
     self.form.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.form.grade()
   }
-  fn at_point<'a>(
-    &self,
-    coord_global: impl Into<na::DVectorView<'a, f64>>,
-  ) -> ExteriorElement<Self::Variance> {
+  fn at_point<'a>(&self, coord_global: impl Into<na::DVectorView<'a, f64>>) -> ExteriorElement {
     let coord_global = coord_global.into();
     let coord_ref = self.affine_transform.apply_backward(coord_global);
     let form_ref = self.form.at_point(&coord_ref);
