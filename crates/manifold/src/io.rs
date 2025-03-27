@@ -1,6 +1,5 @@
 pub mod blender;
 pub mod gmsh;
-pub mod vtk;
 
 use std::{
   fs::File,
