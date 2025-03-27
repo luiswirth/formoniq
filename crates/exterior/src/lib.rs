@@ -4,10 +4,10 @@ pub mod field;
 pub mod term;
 pub mod variance;
 
-use term::{ExteriorBase, ExteriorTermExt, ScaledExteriorTerm};
+use term::ExteriorTerm;
 use variance::VarianceMarker;
 
-use multi_index::{binomial, variants::IndexKind, MultiIndex};
+use multi_index::binomial;
 
 use std::marker::PhantomData;
 
@@ -121,7 +121,7 @@ impl<V: VarianceMarker> ExteriorElement<V> {
     self.coeffs
   }
 
-  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorBase<V>)> + use<'_, V> {
+  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorTerm<V>)> + use<'_, V> {
     let dim = self.dim;
     let grade = self.grade;
     self
@@ -130,18 +130,18 @@ impl<V: VarianceMarker> ExteriorElement<V> {
       .copied()
       .enumerate()
       .map(move |(i, coeff)| {
-        let basis = MultiIndex::from_lex_rank(dim, grade, i).ext(dim);
+        let basis = ExteriorTerm::from_lex_rank(dim, grade, i);
         (coeff, basis)
       })
   }
 
   pub fn basis_iter_mut(
     &mut self,
-  ) -> impl Iterator<Item = (&mut f64, ExteriorBase<V>)> + use<'_, V> {
+  ) -> impl Iterator<Item = (&mut f64, ExteriorTerm<V>)> + use<'_, V> {
     let dim = self.dim;
     let grade = self.grade;
     self.coeffs.iter_mut().enumerate().map(move |(i, coeff)| {
-      let basis = MultiIndex::from_lex_rank(dim, grade, i).ext(dim);
+      let basis = ExteriorTerm::from_lex_rank(dim, grade, i);
       (coeff, basis)
     })
   }
@@ -165,14 +165,8 @@ impl<V: VarianceMarker> ExteriorElement<V> {
           continue;
         }
 
-        if let Some(merged_basis) = self_basis
-          .indices()
-          .clone()
-          .union(other_basis.indices().clone())
-          .try_into_sorted_signed()
-        {
-          let sign = merged_basis.sign;
-          let merged_basis = merged_basis.set.lex_rank(dim);
+        if let Some((sign, merged_basis)) = self_basis.clone().wedge(other_basis).canonical() {
+          let merged_basis = merged_basis.lex_rank();
           new_coeffs[merged_basis] += sign.as_f64() * self_coeff * other_coeff;
         }
       }
@@ -229,36 +223,27 @@ impl<V: VarianceMarker> std::ops::Mul<ExteriorElement<V>> for f64 {
   }
 }
 
-impl<V: VarianceMarker, O: IndexKind> std::ops::AddAssign<ScaledExteriorTerm<V, O>>
-  for ExteriorElement<V>
-{
-  fn add_assign(&mut self, term: ScaledExteriorTerm<V, O>) {
-    let term = term.into_canonical();
-    self[term.term] += term.coeff;
-  }
-}
-
-impl<V: VarianceMarker, O: IndexKind> From<ScaledExteriorTerm<V, O>> for ExteriorElement<V> {
-  fn from(term: ScaledExteriorTerm<V, O>) -> Self {
-    let term = term.into_canonical();
-    let mut element = Self::zero(term.dim(), term.grade());
-    element[term.term] += term.coeff;
-    element
-  }
-}
-
-impl<V: VarianceMarker> std::ops::Index<ExteriorBase<V>> for ExteriorElement<V> {
+impl<V: VarianceMarker> std::ops::Index<ExteriorTerm<V>> for ExteriorElement<V> {
   type Output = f64;
-  fn index(&self, index: ExteriorBase<V>) -> &Self::Output {
-    assert!(index.grade() == self.grade);
-    let index = index.indices().lex_rank(self.dim);
-    &self.coeffs[index]
+  fn index(&self, term: ExteriorTerm<V>) -> &Self::Output {
+    assert!(
+      term.is_basis(),
+      "Can only index exterior element with exterior basis term."
+    );
+    assert!(term.dim() == self.dim());
+    assert!(term.grade() == self.grade());
+    &self.coeffs[term.lex_rank()]
   }
 }
-impl<V: VarianceMarker> std::ops::IndexMut<ExteriorBase<V>> for ExteriorElement<V> {
-  fn index_mut(&mut self, index: ExteriorBase<V>) -> &mut Self::Output {
-    let index = index.indices().lex_rank(self.dim);
-    &mut self.coeffs[index]
+impl<V: VarianceMarker> std::ops::IndexMut<ExteriorTerm<V>> for ExteriorElement<V> {
+  fn index_mut(&mut self, term: ExteriorTerm<V>) -> &mut Self::Output {
+    assert!(
+      term.is_basis(),
+      "Can only index exterior element with exterior basis term."
+    );
+    assert!(term.dim() == self.dim());
+    assert!(term.grade() == self.grade());
+    &mut self.coeffs[term.lex_rank()]
   }
 }
 impl<V: VarianceMarker> std::ops::Index<usize> for ExteriorElement<V> {
@@ -268,10 +253,31 @@ impl<V: VarianceMarker> std::ops::Index<usize> for ExteriorElement<V> {
   }
 }
 
-impl<V: VarianceMarker, O: IndexKind> std::iter::FromIterator<ScaledExteriorTerm<V, O>>
-  for ExteriorElement<V>
-{
-  fn from_iter<T: IntoIterator<Item = ScaledExteriorTerm<V, O>>>(iter: T) -> Self {
+impl<V: VarianceMarker> From<ExteriorTerm<V>> for ExteriorElement<V> {
+  fn from(term: ExteriorTerm<V>) -> Self {
+    let mut element = Self::zero(term.dim(), term.grade());
+    if let Some((sign, basis)) = term.canonical() {
+      element[basis] = sign.as_f64();
+    }
+    element
+  }
+}
+
+impl<V: VarianceMarker> std::ops::AddAssign<ExteriorTerm<V>> for ExteriorElement<V> {
+  fn add_assign(&mut self, term: ExteriorTerm<V>) {
+    self[term] += 1.0;
+  }
+}
+impl<V: VarianceMarker> std::ops::Add<ExteriorTerm<V>> for ExteriorElement<V> {
+  type Output = ExteriorElement<V>;
+  fn add(mut self, term: ExteriorTerm<V>) -> Self::Output {
+    self += term;
+    self
+  }
+}
+
+impl<V: VarianceMarker> std::iter::FromIterator<ExteriorTerm<V>> for ExteriorElement<V> {
+  fn from_iter<T: IntoIterator<Item = ExteriorTerm<V>>>(iter: T) -> Self {
     let mut iter = iter.into_iter();
     let first = iter.next().unwrap();
     let mut element = Self::from(first);
@@ -317,7 +323,6 @@ impl MultiForm {
         coeff
           * MultiForm::wedge_big(
             basis
-              .indices()
               .iter()
               .map(|i| MultiForm::line(linear_map.row(i).transpose())),
           )
@@ -329,13 +334,6 @@ impl MultiForm {
   pub fn on_multivector(&self, kvector: &MultiVector) -> f64 {
     assert!(self.dim == kvector.dim && self.grade == kvector.grade);
     self.coeffs.dot(&kvector.coeffs)
-  }
-
-  pub fn hodge_star(&self, gramian: &na::DMatrix<f64>) -> Self {
-    self
-      .basis_iter()
-      .map(|(coeff, basis)| (coeff * basis).hodge_star(gramian))
-      .fold(Self::one(self.dim), |acc, a| acc + a)
   }
 }
 
