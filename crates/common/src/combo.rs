@@ -1,3 +1,25 @@
+//! Combinatorics
+
+pub fn binomial(n: usize, k: usize) -> usize {
+  num_integer::binomial(n, k)
+}
+pub fn factorial(num: usize) -> usize {
+  (1..=num).product()
+}
+
+pub fn lex_rank(indices: &[usize], n: usize) -> usize {
+  let k = indices.len();
+
+  let mut rank = 0;
+  for (i, &index) in indices.iter().enumerate() {
+    let start = if i == 0 { 0 } else { indices[i - 1] + 1 };
+    for s in start..index {
+      rank += binomial(n - s - 1, k - i - 1);
+    }
+  }
+  rank
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
 pub enum Sign {
   #[default]

@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-multi-index = { path = "../multi-index" }
 common = { path = "../common" }
 
 nalgebra = "0.33.2"

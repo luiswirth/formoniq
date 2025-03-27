@@ -1,9 +1,8 @@
-use crate::{Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiFormList};
+use crate::{list::MultiFormList, Dim, ExteriorElement, ExteriorGrade, MultiForm};
 
-use common::metric::RiemannianMetric;
-use multi_index::{
-  binomial,
-  sign::{sort_signed, Sign},
+use common::{
+  combo::{binomial, lex_rank, sort_signed, Sign},
+  metric::RiemannianMetric,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -19,6 +18,7 @@ impl ExteriorTerm {
   pub fn top(dim: Dim) -> Self {
     Self::new((0..dim).collect(), dim)
   }
+
   pub fn indices(&self) -> &[usize] {
     &self.indices
   }
@@ -92,17 +92,7 @@ impl ExteriorTerm {
 
   pub fn lex_rank(&self) -> usize {
     assert!(self.is_basis(), "Lex rank only available for basis terms.");
-    let dim = self.dim();
-    let grade = self.grade();
-
-    let mut rank = 0;
-    for (i, index) in self.iter().enumerate() {
-      let start = if i == 0 { 0 } else { self[i - 1] + 1 };
-      for s in start..index {
-        rank += binomial(dim - s - 1, grade - i - 1);
-      }
-    }
-    rank
+    lex_rank(&self.indices, self.dim())
   }
 
   pub fn graded_lex_rank(&self) -> usize {
@@ -191,8 +181,7 @@ impl RiemannianMetricExt for RiemannianMetric {
 
 #[cfg(test)]
 mod test {
-  use common::{linalg::assert_mat_eq, metric::RiemannianMetric};
-  use multi_index::binomial;
+  use common::{combo::binomial, linalg::assert_mat_eq, metric::RiemannianMetric};
 
   use super::RiemannianMetricExt;
 
