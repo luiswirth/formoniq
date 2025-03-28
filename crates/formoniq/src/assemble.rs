@@ -1,12 +1,13 @@
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
-use common::{sparse::SparseMatrix, util};
+use common::{sparse::CooMatrixExt, util};
+use itertools::{multizip, Itertools};
 use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
 use rayon::prelude::*;
 use std::collections::HashSet;
 
-pub type GalMat = SparseMatrix;
+pub type GalMat = nas::CooMatrix<f64>;
 pub type GalVec = na::DVector<f64>;
 
 /// Assembly algorithm for the Galerkin Matrix.
@@ -46,7 +47,8 @@ pub fn assemble_galmat(
     })
     .collect();
 
-  SparseMatrix::new(nsimps_row, nsimps_col, triplets)
+  let (rows, cols, values) = triplets.into_iter().multiunzip();
+  GalMat::try_from_triplets(nsimps_row, nsimps_col, rows, cols, values).unwrap()
 }
 
 /// Assembly algorithm for the Galerkin Vector.
@@ -91,26 +93,25 @@ pub fn drop_boundary_dofs_galmat(complex: &Complex, galmat: &mut GalMat) {
   drop_dofs_galmat(&complex.boundary_vertices().kidx_iter().collect(), galmat)
 }
 
-pub fn drop_dofs_galmat(dofs: &HashSet<DofIdx>, galmat: &mut SparseMatrix) {
+pub fn drop_dofs_galmat(dofs: &HashSet<DofIdx>, galmat: &mut GalMat) {
   assert!(galmat.nrows() == galmat.ncols());
   let ndofs_old = galmat.ncols();
   let ndofs_new = ndofs_old - dofs.len();
 
-  let (_, _, triplets) = std::mem::take(galmat).into_parts();
+  let (rows, cols, values) = std::mem::replace(galmat, GalMat::new(0, 0)).disassemble();
 
-  let mut triplets: Vec<_> = triplets
-    .into_iter()
+  let (rows, cols, values): (Vec<_>, Vec<_>, Vec<_>) = multizip((rows, cols, values))
     .filter(|(r, c, _)| !dofs.contains(r) && !dofs.contains(c))
-    .collect();
+    .map(|(mut r, mut c, v)| {
+      let diffr = dofs.iter().filter(|&&idof| idof < r).count();
+      let diffc = dofs.iter().filter(|&&idof| idof < c).count();
+      r -= diffr;
+      c -= diffc;
+      (r, c, v)
+    })
+    .multiunzip();
 
-  for (r, c, _) in &mut triplets {
-    let diffr = dofs.iter().filter(|&idof| idof < r).count();
-    let diffc = dofs.iter().filter(|&idof| idof < c).count();
-    *r -= diffr;
-    *c -= diffc;
-  }
-
-  *galmat = SparseMatrix::new(ndofs_new, ndofs_new, triplets);
+  *galmat = GalMat::try_from_triplets(ndofs_new, ndofs_new, rows, cols, values).unwrap();
 }
 
 pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
@@ -134,7 +135,7 @@ pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na:
 
 pub fn enforce_homogeneous_dirichlet_bc(
   complex: &Complex,
-  galmat: &mut SparseMatrix,
+  galmat: &mut GalMat,
   galvec: &mut na::DVector<f64>,
 ) {
   let boundary_vertices = complex.boundary_vertices();
@@ -144,7 +145,7 @@ pub fn enforce_homogeneous_dirichlet_bc(
 pub fn enforce_dirichlet_bc<F>(
   complex: &Complex,
   boundary_coeff_map: F,
-  galmat: &mut SparseMatrix,
+  galmat: &mut GalMat,
   galvec: &mut na::DVector<f64>,
 ) where
   F: Fn(DofIdx) -> f64,
@@ -158,7 +159,7 @@ pub fn enforce_dirichlet_bc<F>(
   fix_dofs_coeff(&dof_coeffs, galmat, galvec);
 }
 
-pub fn fix_dofs_zero(dofs: &[DofIdx], galmat: &mut SparseMatrix, galvec: &mut na::DVector<f64>) {
+pub fn fix_dofs_zero(dofs: &[DofIdx], galmat: &mut GalMat, galvec: &mut na::DVector<f64>) {
   let ndofs = galmat.nrows();
   let dof_flags = util::indicies_to_flags(dofs, ndofs);
   galmat.set_zero(|i, j| dof_flags[i] || dof_flags[j]);
@@ -175,7 +176,7 @@ pub fn fix_dofs_zero(dofs: &[DofIdx], galmat: &mut SparseMatrix, galvec: &mut na
 /// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
 pub fn fix_dofs_coeff(
   dof_coeffs: &[(DofIdx, f64)],
-  galmat: &mut SparseMatrix,
+  galmat: &mut GalMat,
   galvec: &mut na::DVector<f64>,
 ) {
   let ndofs = galmat.nrows();
@@ -185,7 +186,8 @@ pub fn fix_dofs_coeff(
     na::DVector::from_iterator(ndofs, dof_coeffs_opt.iter().map(|v| v.unwrap_or(0.0)));
 
   // Modify galvec.
-  *galvec -= galmat.to_nalgebra_csr() * dof_coeffs_zeroed;
+  let galmat_csr = nas::CsrMatrix::from(&*galmat);
+  *galvec -= galmat_csr * dof_coeffs_zeroed;
 
   // Set galvec to prescribed coefficents.
   dof_coeffs.iter().for_each(|&(i, v)| galvec[i] = v);
@@ -203,7 +205,7 @@ pub fn fix_dofs_coeff(
 //#[allow(unused_variables, unreachable_code)]
 pub fn fix_dofs_coeff_alt(
   dof_coeffs: &[(DofIdx, f64)],
-  galmat: &mut SparseMatrix,
+  galmat: &mut GalMat,
   galvec: &mut na::DVector<f64>,
 ) {
   tracing::warn!("use of `fix_dofs_coeff_alt` probably doesn't work.");

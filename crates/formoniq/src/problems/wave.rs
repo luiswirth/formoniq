@@ -38,13 +38,15 @@ where
 {
   let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
   let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
-  let mut force = mass.to_nalgebra_csr() * force_data.coeffs();
+
+  let mass_csr = nas::CsrMatrix::from(&mass);
+  let mut force = &mass_csr * force_data.coeffs();
 
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut force);
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut force);
 
-  let laplace = laplace.to_nalgebra_csr();
-  let mass = mass.to_nalgebra_csr();
+  let laplace = nas::CsrMatrix::from(&laplace);
+  let mass = mass_csr;
 
   let mass_cholesky = FaerCholesky::new(mass.clone());
 

@@ -51,8 +51,8 @@ fn main() {
       assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut laplace, &mut source);
       assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut mass, &mut source);
 
-      let laplace = laplace.to_nalgebra_csr();
-      let mass = mass.to_nalgebra_csr();
+      let laplace = nas::CsrMatrix::from(&laplace);
+      let mass = nas::CsrMatrix::from(&mass);
 
       let lse_matrix = &mass + dt * &laplace;
       let lse_cholesky = FaerCholesky::new(lse_matrix);

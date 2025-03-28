@@ -28,13 +28,14 @@ where
 {
   let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
   let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
-  let mut source = mass.to_nalgebra_csr() * source_data.coeffs;
+  let mass_csr = nas::CsrMatrix::from(&mass);
+  let mut source = &mass_csr * &source_data.coeffs;
 
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut source);
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut source);
 
-  let laplace = laplace.to_nalgebra_csr();
-  let mass = mass.to_nalgebra_csr();
+  let laplace = nas::CsrMatrix::from(&laplace);
+  let mass = mass_csr;
 
   let lse_matrix = &mass + diffusion_coeff * dt * &laplace;
   let lse_cholesky = FaerCholesky::new(lse_matrix);
