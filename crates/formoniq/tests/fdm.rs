@@ -201,11 +201,11 @@ fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> na::DMatrix<f64> {
   let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
-  let mut galmat = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat)
-    .to_nalgebra_dense();
-  let mut galvec = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat)
-    .to_nalgebra_dense()
-    * na::DVector::from_element(topology.vertices().len(), 1.0);
+  let galmat = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat);
+  let mut galmat = na::DMatrix::from(&galmat);
+  let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
+  let mass = na::DMatrix::from(&mass);
+  let mut galvec = mass * na::DVector::from_element(topology.vertices().len(), 1.0);
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat
 }

@@ -4,12 +4,13 @@ use crate::{
 };
 
 use {
-  common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix},
+  common::sparse::{petsc_ghiep, petsc_saddle_point},
   exterior::ExteriorGrade,
   manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
   whitney::{cochain::Cochain, ManifoldComplexExt},
 };
 
+use common::sparse::CooMatrixExt;
 use itertools::Itertools;
 use std::mem;
 
@@ -23,7 +24,7 @@ pub fn solve_hodge_laplace_source(
 
   let galmats = MixedGalmats::compute(topology, geometry, grade);
 
-  let mass_u = galmats.mass_u.to_nalgebra_csr();
+  let mass_u = nas::CsrMatrix::from(&galmats.mass_u);
   let mass_harmonics = &mass_u * &harmonics;
 
   let sigma_len = galmats.sigma_len();
@@ -48,7 +49,7 @@ pub fn solve_hodge_laplace_source(
     galmat.push(r, c, v);
   }
 
-  let galmat = galmat.to_nalgebra_csr();
+  let galmat = nas::CsrMatrix::from(&galmat);
 
   let galvec = mass_u * source_data.coeffs;
   #[allow(clippy::toplevel_ref_arg)]
@@ -104,18 +105,14 @@ pub fn solve_hodge_laplace_evp(
 
   let sigma_len = galmats.sigma_len();
   let u_len = galmats.u_len();
-  let mut rhs = SparseMatrix::zeros(sigma_len + u_len, sigma_len + u_len);
-  for &(mut r, mut c, v) in galmats.mass_u.triplets() {
+  let mut rhs = nas::CooMatrix::zeros(sigma_len + u_len, sigma_len + u_len);
+  for (mut r, mut c, &v) in galmats.mass_u.triplet_iter() {
     r += sigma_len;
     c += sigma_len;
     rhs.push(r, c, v);
   }
 
-  let (eigenvals, eigenvectors) = petsc_ghiep(
-    &lhs.to_nalgebra_csr(),
-    &rhs.to_nalgebra_csr(),
-    neigen_values,
-  );
+  let (eigenvals, eigenvectors) = petsc_ghiep(&(&lhs).into(), &(&rhs).into(), neigen_values);
 
   let eigen_sigmas = eigenvectors.rows(0, sigma_len).into_owned();
   let eigen_us = eigenvectors.rows(sigma_len, u_len).into_owned();
@@ -134,36 +131,34 @@ impl MixedGalmats {
     assert!(grade <= topology.dim());
 
     let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
-    let mass_u_csr = mass_u.to_nalgebra_csr();
+    let mass_u_csr = nas::CsrMatrix::from(&mass_u);
 
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
       let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1));
 
-      let exdif_sigma = topology
-        .exterior_derivative_operator(grade - 1)
-        .to_nalgebra_csr();
+      let exdif_sigma = topology.exterior_derivative_operator(grade - 1);
+      let exdif_sigma = nas::CsrMatrix::from(&exdif_sigma);
 
       let dif_sigma = &mass_u_csr * &exdif_sigma;
-      let dif_sigma = SparseMatrix::from_nalgebra_csr(dif_sigma);
+      let dif_sigma = nas::CooMatrix::from(&dif_sigma);
 
       let codif_u = &exdif_sigma.transpose() * &mass_u_csr;
-      let codif_u = SparseMatrix::from_nalgebra_csr(codif_u);
+      let codif_u = nas::CooMatrix::from(&codif_u);
 
       (mass_sigma, dif_sigma, codif_u)
     } else {
-      (GalMat::default(), GalMat::default(), GalMat::default())
+      (GalMat::new(0, 0), GalMat::new(0, 0), GalMat::new(0, 0))
     };
 
     let codifdif_u = if grade < topology.dim() {
-      let mass_plus =
-        assemble_galmat(topology, geometry, HodgeMassElmat(grade + 1)).to_nalgebra_csr();
-      let exdif_u = topology
-        .exterior_derivative_operator(grade)
-        .to_nalgebra_csr();
+      let mass_plus = assemble_galmat(topology, geometry, HodgeMassElmat(grade + 1));
+      let mass_plus = nas::CsrMatrix::from(&mass_plus);
+      let exdif_u = topology.exterior_derivative_operator(grade);
+      let exdif_u = nas::CsrMatrix::from(&exdif_u);
       let codifdif_u = exdif_u.transpose() * mass_plus * exdif_u;
-      SparseMatrix::from_nalgebra_csr(codifdif_u)
+      nas::CooMatrix::from(&codifdif_u)
     } else {
-      GalMat::default()
+      GalMat::new(0, 0)
     };
 
     Self {
@@ -182,7 +177,7 @@ impl MixedGalmats {
     self.mass_u.nrows()
   }
 
-  pub fn mixed_hodge_laplacian(&self) -> SparseMatrix {
+  pub fn mixed_hodge_laplacian(&self) -> nas::CooMatrix<f64> {
     let Self {
       mass_sigma,
       dif_sigma,
@@ -191,6 +186,6 @@ impl MixedGalmats {
       ..
     } = self;
     let codif_u = codif_u.clone();
-    SparseMatrix::block(&[&[mass_sigma, &(-codif_u)], &[dif_sigma, codifdif_u]])
+    nas::CooMatrix::block(&[&[mass_sigma, &(codif_u.neg())], &[dif_sigma, codifdif_u]])
   }
 }

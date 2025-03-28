@@ -18,7 +18,8 @@ use {
 };
 
 pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
-  let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim)).to_nalgebra_csr();
+  let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim));
+  let mass = nas::CsrMatrix::from(&mass);
   //fe.coeffs().transpose() * mass * fe.coeffs()
   ((mass.transpose() * fe.coeffs()).transpose() * fe.coeffs())
     .x
@@ -26,9 +27,10 @@ pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> 
 }
 
 pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
-  let difdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim)).to_nalgebra_csr();
+  let codifdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim));
+  let codifdif = nas::CsrMatrix::from(&codifdif);
   //fe.coeffs().transpose() * difdif * fe.coeffs()
-  ((difdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())
+  ((codifdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())
     .x
     .sqrt()
 }

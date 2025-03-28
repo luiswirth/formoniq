@@ -7,8 +7,6 @@ use handle::{SimplexIdx, SkeletonHandle};
 use super::{simplex::Simplex, skeleton::Skeleton};
 use crate::Dim;
 
-use common::sparse::SparseMatrix;
-
 use itertools::Itertools;
 use std::sync::LazyLock;
 
@@ -98,15 +96,15 @@ impl Complex {
   }
 
   /// $diff^k: Delta_k -> Delta_(k-1)$
-  pub fn boundary_operator(&self, dim: Dim) -> SparseMatrix {
+  pub fn boundary_operator(&self, dim: Dim) -> nas::CooMatrix<f64> {
     let sups = &self.skeleton(dim);
 
     if dim == 0 {
-      return SparseMatrix::zeros(0, sups.len());
+      return nas::CooMatrix::zeros(0, sups.len());
     }
 
     let subs = &self.skeleton(dim - 1);
-    let mut mat = SparseMatrix::zeros(subs.len(), sups.len());
+    let mut mat = nas::CooMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.handle_iter().enumerate() {
       let sup_boundary = sup.raw().boundary();
       for sub in sup_boundary {
@@ -125,8 +123,8 @@ impl Complex {
   /// Computed using simplicial homology.
   pub fn homology_dim(&self, dim: Dim) -> usize {
     // TODO: use sparse matrix!
-    let boundary_this = self.boundary_operator(dim).to_nalgebra_dense();
-    let boundary_plus = self.boundary_operator(dim + 1).to_nalgebra_dense();
+    let boundary_this = na::DMatrix::from(&self.boundary_operator(dim));
+    let boundary_plus = na::DMatrix::from(&self.boundary_operator(dim + 1));
 
     const RANK_TOL: f64 = 1e-12;
 
@@ -192,7 +190,7 @@ pub static LOCAL_BOUNDARY_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> = Lazy
     .enumerate()
     .map(|(dim, complex)| {
       (0..=dim)
-        .map(|sub_dim| complex.boundary_operator(sub_dim).to_nalgebra_dense())
+        .map(|sub_dim| na::DMatrix::from(&complex.boundary_operator(sub_dim)))
         .collect()
     })
     .collect()

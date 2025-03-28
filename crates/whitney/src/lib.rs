@@ -1,4 +1,5 @@
 extern crate nalgebra as na;
+extern crate nalgebra_sparse as nas;
 
 pub mod cochain;
 pub mod io;
@@ -6,7 +7,7 @@ pub mod io;
 use {
   common::{
     combo::{factorial, Sign},
-    sparse::SparseMatrix,
+    sparse::CooMatrixExt,
   },
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
@@ -22,11 +23,11 @@ use {
 pub type LocalMultiForm = MultiForm;
 
 pub trait ManifoldComplexExt {
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix;
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> nas::CooMatrix<f64>;
 }
 impl ManifoldComplexExt for Complex {
   /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> SparseMatrix {
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> nas::CooMatrix<f64> {
     self.boundary_operator(grade + 1).transpose()
   }
 }

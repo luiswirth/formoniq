@@ -1,71 +1,71 @@
 use crate::util::{CumsumExt, IterAllEqExt};
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use itertools::Itertools;
 use std::{
   fs::File,
   io::{BufReader, BufWriter, Write},
+  mem,
 };
 
-#[derive(Default, Debug, Clone)]
-pub struct SparseMatrix {
-  nrows: usize,
-  ncols: usize,
-  triplets: Vec<(usize, usize, f64)>,
+pub trait CooMatrixExt {
+  fn neg(self) -> Self;
+  fn block(block_grid: &[&[&Self]]) -> Self;
+  fn set_zero<F>(&mut self, predicate: F)
+  where
+    F: Fn(usize, usize) -> bool;
+  fn grow(&mut self, nrows_added: usize, ncols_added: usize);
+  fn transpose(self) -> Self;
 }
 
-impl SparseMatrix {
-  pub fn zeros(nrows: usize, ncols: usize) -> Self {
-    Self::new(nrows, ncols, Vec::new())
+impl CooMatrixExt for nas::CooMatrix<f64> {
+  fn grow(&mut self, nrows_added: usize, ncols_added: usize) {
+    let nrows = self.nrows() + nrows_added;
+    let ncols = self.ncols() + ncols_added;
+    let (rows, cols, values) = mem::replace(self, Self::new(0, 0)).disassemble();
+    *self = Self::try_from_triplets(nrows, ncols, rows, cols, values).unwrap()
   }
-  pub fn new(nrows: usize, ncols: usize, triplets: Vec<(usize, usize, f64)>) -> Self {
-    Self {
-      nrows,
-      ncols,
-      triplets,
+
+  fn transpose(self) -> Self {
+    let nrows = self.nrows();
+    let ncols = self.ncols();
+    let (rows, cols, values) = self.disassemble();
+    Self::try_from_triplets(ncols, nrows, cols, rows, values).unwrap()
+  }
+
+  fn neg(self) -> Self {
+    let nrows = self.nrows();
+    let ncols = self.ncols();
+    let (rows, cols, mut values) = self.disassemble();
+    for value in &mut values {
+      *value = -*value;
     }
+    Self::try_from_triplets(nrows, ncols, rows, cols, values).unwrap()
   }
 
-  pub fn nrows(&self) -> usize {
-    self.nrows
-  }
-  pub fn ncols(&self) -> usize {
-    self.ncols
-  }
-  pub fn triplets(&self) -> &[(usize, usize, f64)] {
-    &self.triplets
-  }
-
-  pub fn into_parts(self) -> (usize, usize, Vec<(usize, usize, f64)>) {
-    (self.nrows, self.ncols, self.triplets)
-  }
-
-  pub fn push(&mut self, r: usize, c: usize, v: f64) {
-    assert!(r <= self.nrows() && c <= self.ncols());
-    if v != 0.0 {
-      self.triplets.push((r, c, v));
-    }
-  }
-
-  pub fn set_zero<F>(&mut self, predicate: F)
+  fn set_zero<F>(&mut self, predicate: F)
   where
     F: Fn(usize, usize) -> bool,
   {
+    let nrows = self.nrows();
+    let ncols = self.ncols();
+    let (mut rows, mut cols, mut vals) = mem::replace(self, Self::new(0, 0)).disassemble();
     let mut i = 0;
-    while i < self.triplets.len() {
-      let triplet = self.triplets[i];
-      let r = triplet.0;
-      let c = triplet.1;
+    while i < rows.len() {
+      let r = rows[i];
+      let c = cols[i];
       if predicate(r, c) {
-        self.triplets.swap_remove(i);
+        rows.swap_remove(i);
+        cols.swap_remove(i);
+        vals.swap_remove(i);
       } else {
         i += 1;
       }
     }
+    *self = Self::try_from_triplets(nrows, ncols, rows, cols, vals).unwrap()
   }
 
   /// Concatenates a matrix block grid row-wise and column-wise, automatically computing offsets.
-  pub fn block(block_grid: &[&[&Self]]) -> Self {
+  fn block(block_grid: &[&[&Self]]) -> Self {
     block_grid
       .iter()
       .map(|row| row.len())
@@ -99,103 +99,13 @@ impl SparseMatrix {
         let row_offset = row_offsets[i];
         let col_offset = col_offsets[j];
 
-        for &(r, c, v) in block.triplets() {
+        for (r, c, &v) in block.triplet_iter() {
           result.push(row_offset + r, col_offset + c, v);
         }
       }
     }
 
     result
-  }
-
-  pub fn from_nalgebra_coo(nalgebra: nas::CooMatrix<f64>) -> Self {
-    let mut triplets = Vec::new();
-    for (row, col, &value) in nalgebra.triplet_iter() {
-      triplets.push((row, col, value));
-    }
-    Self::new(nalgebra.nrows(), nalgebra.ncols(), triplets)
-  }
-  pub fn to_nalgebra_coo(&self) -> nas::CooMatrix<f64> {
-    let rows = self.triplets.iter().map(|t| t.0).collect();
-    let cols = self.triplets.iter().map(|t| t.1).collect();
-    let vals = self.triplets.iter().map(|t| t.2).collect();
-    nas::CooMatrix::try_from_triplets(self.nrows, self.ncols, rows, cols, vals).unwrap()
-  }
-
-  pub fn from_nalgebra_csr(nalgebra: nas::CsrMatrix<f64>) -> Self {
-    Self::from_nalgebra_coo((&nalgebra).into())
-  }
-  pub fn to_nalgebra_csr(&self) -> nas::CsrMatrix<f64> {
-    (&self.to_nalgebra_coo()).into()
-  }
-
-  pub fn from_nalgebra_dense(nalgebra: na::DMatrix<f64>) -> Self {
-    Self::from_nalgebra_coo((&nalgebra).into())
-  }
-  pub fn to_nalgebra_dense(&self) -> na::DMatrix<f64> {
-    (&self.to_nalgebra_coo()).into()
-  }
-
-  pub fn to_faer_csc(&self) -> faer::sparse::SparseColMat<usize, f64> {
-    faer::sparse::SparseColMat::try_new_from_triplets(
-      self.nrows,
-      self.ncols,
-      &self
-        .triplets
-        .iter()
-        .map(|t| faer::sparse::Triplet::new(t.0, t.1, t.2))
-        .collect_vec(),
-    )
-    .unwrap()
-  }
-
-  /// Returns `None` if matrix is not diagonal.
-  pub fn try_into_diagonal(self) -> Option<na::DVector<f64>> {
-    let mut diagonal = na::DVector::zeros(self.nrows.max(self.ncols));
-    for (r, c, v) in self.triplets {
-      if r == c {
-        diagonal[r] += v;
-      } else {
-        println!("not diag ({r},{c})");
-        return None;
-      }
-    }
-    Some(diagonal)
-  }
-
-  pub fn mul_left_by_diagonal(&self, diagonal: &na::DVector<f64>) -> Self {
-    let triplets = self
-      .triplets
-      .iter()
-      .map(|&(r, c, mut v)| {
-        v *= diagonal[r];
-        (r, c, v)
-      })
-      .collect();
-    Self::new(self.nrows, self.ncols, triplets)
-  }
-
-  pub fn transpose(&self) -> SparseMatrix {
-    let mut triplets = self.triplets.clone();
-    for t in &mut triplets {
-      std::mem::swap(&mut t.0, &mut t.1);
-    }
-    Self::new(self.ncols, self.nrows, triplets)
-  }
-
-  pub fn grow(&mut self, nrows_added: usize, ncols_added: usize) {
-    self.nrows += nrows_added;
-    self.ncols += ncols_added;
-  }
-}
-
-impl std::ops::Neg for SparseMatrix {
-  type Output = SparseMatrix;
-  fn neg(mut self) -> Self::Output {
-    for (_, _, v) in &mut self.triplets {
-      *v *= -1.0;
-    }
-    self
   }
 }
 

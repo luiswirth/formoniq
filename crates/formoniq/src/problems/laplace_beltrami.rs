@@ -24,13 +24,13 @@ where
 {
   let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
 
-  let mass =
-    assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat).to_nalgebra_csr();
+  let mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
+  let mass = nas::CsrMatrix::from(&mass);
   let mut source = mass * source_data.coeffs;
 
   assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source);
 
-  let laplace = laplace.to_nalgebra_csr();
+  let laplace = nas::CsrMatrix::from(&laplace);
   let sol = FaerCholesky::new(laplace).solve(&source);
   Cochain::new(0, sol)
 }
@@ -46,8 +46,8 @@ pub fn solve_laplace_beltrami_evp(
   let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(
-    &laplace_galmat.to_nalgebra_csr(),
-    &mass_galmat.to_nalgebra_csr(),
+    &nas::CsrMatrix::from(&laplace_galmat),
+    &nas::CsrMatrix::from(&mass_galmat),
     neigen_values,
   );
 
