@@ -2,7 +2,7 @@ pub mod attribute;
 pub mod handle;
 
 use attribute::KSimplexCollection;
-use handle::SimplexIdx;
+use handle::{SimplexIdx, SkeletonHandle};
 
 use super::{simplex::Simplex, skeleton::Skeleton};
 use crate::Dim;
@@ -24,6 +24,30 @@ pub struct SkeletonData(Vec<SimplexData>);
 #[derive(Default, Debug, Clone)]
 pub struct SimplexData {
   pub cocells: Vec<SimplexIdx>,
+}
+
+impl Complex {
+  pub fn skeletons(&self) -> impl Iterator<Item = SkeletonHandle> {
+    (0..=self.dim()).map(|d| SkeletonHandle::new(self, d))
+  }
+  pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
+    SkeletonHandle::new(self, dim)
+  }
+  pub fn nsimplicies(&self, dim: Dim) -> usize {
+    self.skeleton(dim).len()
+  }
+  pub fn vertices(&self) -> SkeletonHandle {
+    self.skeleton(0)
+  }
+  pub fn edges(&self) -> SkeletonHandle {
+    self.skeleton(1)
+  }
+  pub fn facets(&self) -> SkeletonHandle {
+    self.skeleton(self.dim() - 1)
+  }
+  pub fn cells(&self) -> SkeletonHandle {
+    self.skeleton(self.dim())
+  }
 }
 
 impl Complex {
