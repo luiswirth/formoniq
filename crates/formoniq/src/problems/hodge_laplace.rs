@@ -1,13 +1,13 @@
 use crate::{
   assemble::{assemble_galmat, GalMat},
-  operators::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat},
+  operators::HodgeMassElmat,
 };
 
 use {
   common::sparse::{petsc_ghiep, petsc_saddle_point, SparseMatrix},
   exterior::ExteriorGrade,
   manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
-  whitney::cochain::Cochain,
+  whitney::{cochain::Cochain, ManifoldComplexExt},
 };
 
 use itertools::Itertools;
@@ -131,17 +131,40 @@ pub struct MixedGalmats {
 }
 impl MixedGalmats {
   pub fn compute(topology: &Complex, geometry: &MeshEdgeLengths, grade: ExteriorGrade) -> Self {
+    assert!(grade <= topology.dim());
+
+    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
+    let mass_u_csr = mass_u.to_nalgebra_csr();
+
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      (
-        assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1)),
-        assemble_galmat(topology, geometry, DifElmat(grade)),
-        assemble_galmat(topology, geometry, CodifElmat(grade)),
-      )
+      let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1));
+
+      let exdif_sigma = topology
+        .exterior_derivative_operator(grade - 1)
+        .to_nalgebra_csr();
+
+      let dif_sigma = &mass_u_csr * &exdif_sigma;
+      let dif_sigma = SparseMatrix::from_nalgebra_csr(dif_sigma);
+
+      let codif_u = &exdif_sigma.transpose() * &mass_u_csr;
+      let codif_u = SparseMatrix::from_nalgebra_csr(codif_u);
+
+      (mass_sigma, dif_sigma, codif_u)
     } else {
       (GalMat::default(), GalMat::default(), GalMat::default())
     };
-    let difdif_u = assemble_galmat(topology, geometry, CodifDifElmat(grade));
-    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
+
+    let difdif_u = if grade < topology.dim() {
+      let mass_plus =
+        assemble_galmat(topology, geometry, HodgeMassElmat(grade + 1)).to_nalgebra_csr();
+      let dif = topology
+        .exterior_derivative_operator(grade)
+        .to_nalgebra_csr();
+      let difdif_u = dif.transpose() * mass_plus * dif;
+      SparseMatrix::from_nalgebra_csr(difdif_u)
+    } else {
+      GalMat::default()
+    };
 
     Self {
       mass_sigma,
