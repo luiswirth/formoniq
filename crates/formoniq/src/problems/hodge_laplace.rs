@@ -126,7 +126,7 @@ pub struct MixedGalmats {
   mass_sigma: GalMat,
   dif_sigma: GalMat,
   codif_u: GalMat,
-  difdif_u: GalMat,
+  codifdif_u: GalMat,
   mass_u: GalMat,
 }
 impl MixedGalmats {
@@ -154,14 +154,14 @@ impl MixedGalmats {
       (GalMat::default(), GalMat::default(), GalMat::default())
     };
 
-    let difdif_u = if grade < topology.dim() {
+    let codifdif_u = if grade < topology.dim() {
       let mass_plus =
         assemble_galmat(topology, geometry, HodgeMassElmat(grade + 1)).to_nalgebra_csr();
-      let dif = topology
+      let exdif_u = topology
         .exterior_derivative_operator(grade)
         .to_nalgebra_csr();
-      let difdif_u = dif.transpose() * mass_plus * dif;
-      SparseMatrix::from_nalgebra_csr(difdif_u)
+      let codifdif_u = exdif_u.transpose() * mass_plus * exdif_u;
+      SparseMatrix::from_nalgebra_csr(codifdif_u)
     } else {
       GalMat::default()
     };
@@ -170,7 +170,7 @@ impl MixedGalmats {
       mass_sigma,
       dif_sigma,
       codif_u,
-      difdif_u,
+      codifdif_u,
       mass_u,
     }
   }
@@ -187,10 +187,10 @@ impl MixedGalmats {
       mass_sigma,
       dif_sigma,
       codif_u,
-      difdif_u,
+      codifdif_u,
       ..
     } = self;
     let codif_u = codif_u.clone();
-    SparseMatrix::block(&[&[mass_sigma, &(-codif_u)], &[dif_sigma, difdif_u]])
+    SparseMatrix::block(&[&[mass_sigma, &(-codif_u)], &[dif_sigma, codifdif_u]])
   }
 }
