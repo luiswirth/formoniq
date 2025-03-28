@@ -3,33 +3,11 @@ use {
   exterior::{term::RiemannianMetricExt, ExteriorGrade},
   manifold::{
     geometry::metric::SimplexGeometry,
-    topology::{
-      complex::{DIM_PRECOMPUTED, LOCAL_BOUNDARY_OPERATORS},
-      simplex::{nsubsimplicies, standard_subsimps},
-    },
+    topology::{complex::Complex, simplex::standard_subsimps},
     Dim,
   },
-  whitney::WhitneyRefLsf,
+  whitney::{ManifoldComplexExt, WhitneyRefLsf},
 };
-
-use std::sync::LazyLock;
-
-pub static LOCAL_DIFFERENTIAL_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> =
-  LazyLock::new(|| {
-    (0..=DIM_PRECOMPUTED)
-      .map(|dim| {
-        (0..=dim)
-          .map(|rank| {
-            if rank < dim {
-              LOCAL_BOUNDARY_OPERATORS[dim][rank + 1].transpose()
-            } else {
-              na::DMatrix::zeros(0, nsubsimplicies(dim, rank))
-            }
-          })
-          .collect()
-      })
-      .collect()
-  });
 
 pub type DofIdx = usize;
 pub type DofCoeff = f64;
@@ -170,7 +148,8 @@ impl ElMatProvider for DifElmat {
   fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
     let dim = geometry.dim();
     let grade = self.0;
-    let dif = &LOCAL_DIFFERENTIAL_OPERATORS[dim][grade - 1];
+    let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
+    let dif = na::DMatrix::from(&dif);
     let mass = HodgeMassElmat(grade).eval(geometry);
     mass * dif
   }
@@ -190,7 +169,8 @@ impl ElMatProvider for CodifElmat {
   fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
     let dim = geometry.dim();
     let grade = self.0;
-    let dif = &LOCAL_DIFFERENTIAL_OPERATORS[dim][grade - 1];
+    let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
+    let dif = na::DMatrix::from(&dif);
     let codif = dif.transpose();
     let mass = HodgeMassElmat(grade).eval(geometry);
     codif * mass
@@ -211,7 +191,8 @@ impl ElMatProvider for CodifDifElmat {
   fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
     let dim = geometry.dim();
     let grade = self.0;
-    let dif = &LOCAL_DIFFERENTIAL_OPERATORS[dim][grade];
+    let dif = Complex::standard(dim).exterior_derivative_operator(grade);
+    let dif = na::DMatrix::from(&dif);
     let codif = dif.transpose();
     let mass = HodgeMassElmat(grade + 1).eval(geometry);
     codif * mass * dif

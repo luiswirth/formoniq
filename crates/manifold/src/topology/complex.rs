@@ -8,7 +8,6 @@ use super::{simplex::Simplex, skeleton::Skeleton};
 use crate::Dim;
 
 use itertools::Itertools;
-use std::sync::LazyLock;
 
 /// A simplicial manifold complex.
 #[derive(Default, Debug, Clone)]
@@ -178,23 +177,6 @@ impl Complex {
     Self { skeletons }
   }
 }
-
-pub const DIM_PRECOMPUTED: usize = 4;
-
-pub static REFERENCE_COMPLEXES: LazyLock<Vec<Complex>> =
-  LazyLock::new(|| (0..=DIM_PRECOMPUTED).map(Complex::standard).collect());
-
-pub static LOCAL_BOUNDARY_OPERATORS: LazyLock<Vec<Vec<na::DMatrix<f64>>>> = LazyLock::new(|| {
-  REFERENCE_COMPLEXES
-    .iter()
-    .enumerate()
-    .map(|(dim, complex)| {
-      (0..=dim)
-        .map(|sub_dim| na::DMatrix::from(&complex.boundary_operator(sub_dim)))
-        .collect()
-    })
-    .collect()
-});
 
 #[cfg(test)]
 mod test {
