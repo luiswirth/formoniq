@@ -108,6 +108,13 @@ impl SparseMatrix {
     result
   }
 
+  pub fn from_nalgebra_coo(nalgebra: nas::CooMatrix<f64>) -> Self {
+    let mut triplets = Vec::new();
+    for (row, col, &value) in nalgebra.triplet_iter() {
+      triplets.push((row, col, value));
+    }
+    Self::new(nalgebra.nrows(), nalgebra.ncols(), triplets)
+  }
   pub fn to_nalgebra_coo(&self) -> nas::CooMatrix<f64> {
     let rows = self.triplets.iter().map(|t| t.0).collect();
     let cols = self.triplets.iter().map(|t| t.1).collect();
@@ -115,10 +122,16 @@ impl SparseMatrix {
     nas::CooMatrix::try_from_triplets(self.nrows, self.ncols, rows, cols, vals).unwrap()
   }
 
+  pub fn from_nalgebra_csr(nalgebra: nas::CsrMatrix<f64>) -> Self {
+    Self::from_nalgebra_coo((&nalgebra).into())
+  }
   pub fn to_nalgebra_csr(&self) -> nas::CsrMatrix<f64> {
     (&self.to_nalgebra_coo()).into()
   }
 
+  pub fn from_nalgebra_dense(nalgebra: na::DMatrix<f64>) -> Self {
+    Self::from_nalgebra_coo((&nalgebra).into())
+  }
   pub fn to_nalgebra_dense(&self) -> na::DMatrix<f64> {
     (&self.to_nalgebra_coo()).into()
   }
