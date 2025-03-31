@@ -29,16 +29,16 @@ impl ExteriorTerm {
     self.dim
   }
 
+  pub fn is_basis(&self) -> bool {
+    self.is_canonical()
+  }
   pub fn is_canonical(&self) -> bool {
-    let Some((sign, canonical)) = self.clone().canonical() else {
+    let Some((sign, canonical)) = self.clone().canonicalized() else {
       return false;
     };
     sign == Sign::Pos && canonical == *self
   }
-  pub fn is_basis(&self) -> bool {
-    self.is_canonical()
-  }
-  pub fn canonical(mut self) -> Option<(Sign, Self)> {
+  pub fn canonicalized(mut self) -> Option<(Sign, Self)> {
     let sign = sort_signed(&mut self.indices);
     let len = self.indices.len();
     self.indices.dedup();
@@ -91,7 +91,6 @@ impl ExteriorTerm {
   }
 
   pub fn lex_rank(&self) -> usize {
-    assert!(self.is_basis(), "Lex rank only available for basis terms.");
     lex_rank(&self.indices, self.dim())
   }
 

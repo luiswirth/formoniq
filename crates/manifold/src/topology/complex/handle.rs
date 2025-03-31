@@ -1,9 +1,8 @@
+use super::{attribute::SparseSignChain, Complex, SimplexData};
 use crate::{
   topology::{simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
-
-use super::{attribute::SparseSignChain, Complex, SimplexData};
 
 pub type KSimplexIdx = usize;
 
@@ -174,12 +173,12 @@ impl<'m> SkeletonHandle<'m> {
     Self { complex, dim }
   }
 
-  pub fn dim(&self) -> Dim {
-    self.dim
-  }
-
   pub fn raw(&self) -> &Skeleton {
     &self.complex.skeletons[self.dim()].0
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.dim
   }
 
   pub fn len(&self) -> usize {

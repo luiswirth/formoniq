@@ -7,7 +7,15 @@ pub fn factorial(num: usize) -> usize {
   (1..=num).product()
 }
 
+pub fn is_strictly_increasing(indices: &[usize]) -> bool {
+  indices.windows(2).all(|w| w[0] < w[1])
+}
+
 pub fn lex_rank(indices: &[usize], n: usize) -> usize {
+  assert!(
+    is_strictly_increasing(indices),
+    "Lexicographical rank only available for strictly increasing multiindices"
+  );
   let k = indices.len();
 
   let mut rank = 0;
