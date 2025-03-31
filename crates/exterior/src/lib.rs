@@ -85,28 +85,29 @@ impl ExteriorElement {
     let dim = self.dim;
 
     let new_grade = self.grade + other.grade;
-    assert!(new_grade <= dim);
+    if new_grade > dim {
+      return Self::zero(dim, 0);
+    }
 
-    let new_basis_size = binomial(self.dim, new_grade);
+    let new_basis_size = binomial(dim, new_grade);
     let mut new_coeffs = na::DVector::zeros(new_basis_size);
 
     for (self_coeff, self_basis) in self.basis_iter() {
       for (other_coeff, other_basis) in other.basis_iter() {
-        if self_basis == other_basis {
-          continue;
-        }
-        if self_coeff == 0.0 || other_coeff == 0.0 {
-          continue;
-        }
+        let self_basis = self_basis.clone();
 
-        if let Some((sign, merged_basis)) = self_basis.clone().wedge(other_basis).canonical() {
+        let coeff_prod = self_coeff * other_coeff;
+        if self_basis == other_basis || coeff_prod == 0.0 {
+          continue;
+        }
+        if let Some((sign, merged_basis)) = self_basis.wedge(other_basis).canonicalized() {
           let merged_basis = merged_basis.lex_rank();
-          new_coeffs[merged_basis] += sign.as_f64() * self_coeff * other_coeff;
+          new_coeffs[merged_basis] += sign.as_f64() * coeff_prod;
         }
       }
     }
 
-    Self::new(new_coeffs, self.dim, new_grade)
+    Self::new(new_coeffs, dim, new_grade)
   }
 
   pub fn wedge_big(factors: impl IntoIterator<Item = Self>) -> Option<Self> {
@@ -190,7 +191,7 @@ impl std::ops::Index<usize> for ExteriorElement {
 impl From<ExteriorTerm> for ExteriorElement {
   fn from(term: ExteriorTerm) -> Self {
     let mut element = Self::zero(term.dim(), term.grade());
-    if let Some((sign, basis)) = term.canonical() {
+    if let Some((sign, basis)) = term.canonicalized() {
       element[basis] = sign.as_f64();
     }
     element
