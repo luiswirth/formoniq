@@ -75,8 +75,7 @@ impl SimplexCoords {
     mat
   }
   pub fn metric_tensor(&self) -> RiemannianMetric {
-    let metric = self.spanning_vectors().gramian();
-    RiemannianMetric::new(metric)
+    RiemannianMetric::from_tangent_basis(self.spanning_vectors())
   }
 
   pub fn det(&self) -> f64 {

@@ -27,7 +27,7 @@ impl RiemannianMetric {
     Self::new(metric_tensor)
   }
 
-  /// Orthonormal euclidean metric.
+  /// Orthonormal flat euclidean metric.
   pub fn standard(dim: Dim) -> Self {
     let identity = na::DMatrix::identity(dim, dim);
     let metric_tensor = identity.clone();
@@ -48,11 +48,11 @@ impl RiemannianMetric {
   pub fn inner(&self, i: usize, j: usize) -> f64 {
     self.metric_tensor[(i, j)]
   }
-  pub fn length_sqr(&self, i: usize) -> f64 {
+  pub fn length_sq(&self, i: usize) -> f64 {
     self.inner(i, i)
   }
   pub fn length(&self, i: usize) -> f64 {
-    self.length_sqr(i).sqrt()
+    self.length_sq(i).sqrt()
   }
   pub fn angle_cos(&self, i: usize, j: usize) -> f64 {
     self.inner(i, j) / self.length(i) / self.length(j)
