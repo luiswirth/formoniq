@@ -24,7 +24,7 @@ pub type EmbeddingCoordRef<'a> = CoordRef<'a>;
 
 pub type TangentVector = na::DVector<f64>;
 
-pub fn standard_coord_complex(dim: Dim) -> (Complex, VertexCoords) {
+pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
   let topology = Complex::standard(dim);
 
   let coords = topology
@@ -40,17 +40,17 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, VertexCoords) {
     })
     .collect_vec();
   let coords = na::DMatrix::from_columns(&coords);
-  let coords = VertexCoords::new(coords);
+  let coords = MeshVertexCoords::new(coords);
 
   (topology, coords)
 }
 
 #[derive(Debug, Clone)]
-pub struct VertexCoords {
+pub struct MeshVertexCoords {
   coord_matrix: na::DMatrix<f64>,
 }
 
-impl VertexCoords {
+impl MeshVertexCoords {
   pub fn standard(ndim: Dim) -> Self {
     SimplexCoords::standard(ndim).vertices
   }
@@ -73,20 +73,20 @@ impl VertexCoords {
   }
 }
 
-impl From<na::DMatrix<f64>> for VertexCoords {
+impl From<na::DMatrix<f64>> for MeshVertexCoords {
   fn from(matrix: na::DMatrix<f64>) -> Self {
     Self::new(matrix)
   }
 }
 
-impl From<&[Coord]> for VertexCoords {
+impl From<&[Coord]> for MeshVertexCoords {
   fn from(vectors: &[Coord]) -> Self {
     let matrix = na::DMatrix::from_columns(vectors);
     Self::new(matrix)
   }
 }
 
-impl VertexCoords {
+impl MeshVertexCoords {
   pub fn dim(&self) -> Dim {
     self.coord_matrix.nrows()
   }
@@ -122,8 +122,8 @@ impl VertexCoords {
   }
 }
 
-impl VertexCoords {
-  pub fn embed_euclidean(mut self, dim: Dim) -> VertexCoords {
+impl MeshVertexCoords {
+  pub fn embed_euclidean(mut self, dim: Dim) -> MeshVertexCoords {
     let old_dim = self.coord_matrix.nrows();
     self.coord_matrix = self.coord_matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self

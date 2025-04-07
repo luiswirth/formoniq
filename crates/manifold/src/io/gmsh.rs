@@ -1,16 +1,16 @@
 use crate::{
-  geometry::coord::VertexCoords,
+  geometry::coord::MeshVertexCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
 
-pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, VertexCoords) {
+pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshVertexCoords) {
   let (cells, coords) = gmsh2coord_cells(bytes);
   let complex = Complex::from_cells(cells);
   (complex, coords)
 }
 
 /// Load Gmesh `.msh` file (version 4.1).
-pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, VertexCoords) {
+pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshVertexCoords) {
   let msh = mshio::parse_msh_bytes(bytes).unwrap();
 
   let mesh_vertices = msh.data.nodes.unwrap().node_blocks;
@@ -27,7 +27,7 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, VertexCoords) {
   }
 
   let mesh_vertices = na::DMatrix::from_columns(&mesh_vertices);
-  let mesh_vertices = VertexCoords::new(mesh_vertices);
+  let mesh_vertices = MeshVertexCoords::new(mesh_vertices);
 
   let mut points = Vec::new();
   let mut edges = Vec::new();

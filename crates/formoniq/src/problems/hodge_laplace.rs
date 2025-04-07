@@ -14,12 +14,26 @@ use common::sparse::CooMatrixExt;
 use itertools::Itertools;
 use std::mem;
 
+pub fn hodge_decomposition(
+  topology: &Complex,
+  geometry: &MeshEdgeLengths,
+  cochain: Cochain,
+) -> (Cochain, Cochain, Cochain) {
+  let grade = cochain.dim();
+  let (exact_potential, coexact, harmonic) =
+    solve_hodge_laplace_source(topology, geometry, cochain);
+  let dif = nas::CsrMatrix::from(&topology.exterior_derivative_operator(grade - 1));
+  let exact = Cochain::new(grade, dif * exact_potential.coeffs.clone());
+  (exact, coexact, harmonic)
+}
+
 pub fn solve_hodge_laplace_source(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
-  grade: ExteriorGrade,
   source_data: Cochain,
 ) -> (Cochain, Cochain, Cochain) {
+  let grade = source_data.dim();
+
   let harmonics = solve_hodge_laplace_harmonics(topology, geometry, grade);
 
   let galmats = MixedGalmats::compute(topology, geometry, grade);

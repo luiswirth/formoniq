@@ -1,6 +1,6 @@
 use super::{
   BaryCoord, BaryCoordRef, Coord, CoordRef, EmbeddingCoord, EmbeddingCoordRef, LocalCoord,
-  LocalCoordRef, VertexCoords,
+  LocalCoordRef, MeshVertexCoords,
 };
 use crate::{
   geometry::metric::ref_vol,
@@ -17,7 +17,7 @@ use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct SimplexCoords {
-  pub vertices: VertexCoords,
+  pub vertices: MeshVertexCoords,
 }
 
 impl SimplexCoords {
@@ -33,7 +33,7 @@ impl SimplexCoords {
     }
     Self::new(vertices)
   }
-  pub fn from_mesh_simplex(simp: &Simplex, mesh_coords: &VertexCoords) -> SimplexCoords {
+  pub fn from_mesh_simplex(simp: &Simplex, mesh_coords: &MeshVertexCoords) -> SimplexCoords {
     let mut vert_coords = na::DMatrix::zeros(mesh_coords.dim(), simp.nvertices());
     for (i, v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &mesh_coords.coord(v));
@@ -206,10 +206,10 @@ pub fn ref_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
 }
 
 pub trait SimplexHandleExt {
-  fn coord_simplex(&self, coords: &VertexCoords) -> SimplexCoords;
+  fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords;
 }
 impl SimplexHandleExt for SimplexHandle<'_> {
-  fn coord_simplex(&self, coords: &VertexCoords) -> SimplexCoords {
+  fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
     SimplexCoords::from_mesh_simplex(self.raw(), coords)
   }
 }

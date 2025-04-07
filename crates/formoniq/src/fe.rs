@@ -9,7 +9,7 @@ use {
   exterior::{field::ExteriorField, MultiForm},
   manifold::{
     geometry::{
-      coord::{local::SimplexHandleExt, CoordRef, VertexCoords},
+      coord::{local::SimplexHandleExt, CoordRef, MeshVertexCoords},
       metric::MeshEdgeLengths,
     },
     topology::complex::Complex,
@@ -39,7 +39,7 @@ pub fn reconstruct_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
   cochain: &Cochain,
   topology: &Complex,
-  coords: &VertexCoords,
+  coords: &MeshVertexCoords,
 ) -> MultiForm {
   let coord = coord.into();
 
@@ -72,7 +72,7 @@ pub fn reconstruct_at_coord<'a>(
 pub fn reconstruct_at_mesh_cells_barycenters(
   cochain: &Cochain,
   topology: &Complex,
-  coords: &VertexCoords,
+  coords: &MeshVertexCoords,
 ) -> Vec<MultiForm> {
   let grade = cochain.dim;
 
@@ -98,7 +98,7 @@ pub fn reconstruct_at_mesh_cells_barycenters(
 pub fn reconstruct_at_mesh_cells_vertices(
   cochain: &Cochain,
   topology: &Complex,
-  coords: &VertexCoords,
+  coords: &MeshVertexCoords,
 ) -> Vec<Vec<MultiForm>> {
   let grade = cochain.dim();
 
