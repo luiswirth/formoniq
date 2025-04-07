@@ -179,7 +179,7 @@ mod test {
   use super::*;
 
   use manifold::{
-    geometry::coord::{local::SimplexHandleExt, VertexCoords},
+    geometry::coord::{local::SimplexHandleExt, MeshVertexCoords},
     topology::complex::Complex,
   };
 
@@ -187,7 +187,7 @@ mod test {
   fn whitney_basis_property() {
     for dim in 0..=4 {
       let topology = Complex::standard(dim);
-      let coords = VertexCoords::standard(dim);
+      let coords = MeshVertexCoords::standard(dim);
 
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {

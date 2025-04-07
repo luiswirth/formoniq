@@ -1,5 +1,5 @@
 use crate::{
-  geometry::coord::{local::SimplexCoords, VertexCoords},
+  geometry::coord::{local::SimplexCoords, MeshVertexCoords},
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
 
@@ -10,29 +10,29 @@ pub type TriangleTopology = Vec<[usize; 3]>;
 #[derive(Debug, Clone)]
 pub struct TriangleSurface3D {
   triangles: TriangleTopology,
-  coords: VertexCoords,
+  coords: MeshVertexCoords,
 }
 impl TriangleSurface3D {
-  pub fn new(triangles: TriangleTopology, coords: impl Into<VertexCoords>) -> Self {
+  pub fn new(triangles: TriangleTopology, coords: impl Into<MeshVertexCoords>) -> Self {
     let coords = coords.into();
     Self { triangles, coords }
   }
   pub fn triangles(&self) -> &[[usize; 3]] {
     &self.triangles
   }
-  pub fn vertex_coords(&self) -> &VertexCoords {
+  pub fn vertex_coords(&self) -> &MeshVertexCoords {
     &self.coords
   }
-  pub fn vertex_coords_mut(&mut self) -> &mut VertexCoords {
+  pub fn vertex_coords_mut(&mut self) -> &mut MeshVertexCoords {
     &mut self.coords
   }
-  pub fn into_parts(self) -> (TriangleTopology, VertexCoords) {
+  pub fn into_parts(self) -> (TriangleTopology, MeshVertexCoords) {
     (self.triangles, self.coords)
   }
 }
 
 impl TriangleSurface3D {
-  pub fn from_coord_skeleton(skeleton: Skeleton, coords: VertexCoords) -> Self {
+  pub fn from_coord_skeleton(skeleton: Skeleton, coords: MeshVertexCoords) -> Self {
     assert!(skeleton.dim() == 2, "Topology is not 2D.");
     assert!(coords.dim() <= 3, "Skeleton is not embeddable in 3D.");
     let coords = coords.embed_euclidean(3);
@@ -54,7 +54,7 @@ impl TriangleSurface3D {
     Self::new(triangles, coords)
   }
 
-  pub fn into_coord_skeleton(self) -> (Skeleton, VertexCoords) {
+  pub fn into_coord_skeleton(self) -> (Skeleton, MeshVertexCoords) {
     let simps = self
       .triangles
       .into_iter()
@@ -65,7 +65,7 @@ impl TriangleSurface3D {
     (skeleton, coords)
   }
 
-  pub fn into_coord_complex(self) -> (Complex, VertexCoords) {
+  pub fn into_coord_complex(self) -> (Complex, MeshVertexCoords) {
     let (skeleton, coords) = self.into_coord_skeleton();
     let complex = Complex::from_cells(skeleton);
     (complex, coords)

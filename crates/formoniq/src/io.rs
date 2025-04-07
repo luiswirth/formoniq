@@ -2,7 +2,7 @@ use crate::fe::reconstruct_at_mesh_cells_vertices;
 
 use {
   exterior::MultiForm,
-  manifold::{geometry::coord::VertexCoords, topology::complex::Complex},
+  manifold::{geometry::coord::MeshVertexCoords, topology::complex::Complex},
   whitney::cochain::Cochain,
 };
 
@@ -11,7 +11,7 @@ use std::{fs::File, io::BufWriter, path::Path};
 pub fn save_evaluations_to_file(
   fe: &Cochain,
   topology: &Complex,
-  coords: &VertexCoords,
+  coords: &MeshVertexCoords,
   path: impl AsRef<Path>,
 ) -> std::io::Result<()> {
   let evals = reconstruct_at_mesh_cells_vertices(fe, topology, coords);

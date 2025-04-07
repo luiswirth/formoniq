@@ -16,7 +16,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   fs::create_dir_all(path).unwrap();
 
   let dim = 2;
-  let form_grade = 1;
 
   let exact_solution = DiffFormClosure::one_form(
     |p| {
@@ -57,8 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let laplacian = de_rham_map(&laplacian, &topology, &coords);
     let exact_u = de_rham_map(&exact_solution, &topology, &coords);
 
-    let (_sigma, u, _p) =
-      hodge_laplace::solve_hodge_laplace_source(&topology, &metric, form_grade, laplacian);
+    let (_sigma, u, _p) = hodge_laplace::solve_hodge_laplace_source(&topology, &metric, laplacian);
 
     manifold::io::save_skeleton_to_file(&topology, dim, format!("{refine_path}/cells.skel"))?;
     manifold::io::save_skeleton_to_file(&topology, 1, format!("{refine_path}/edges.skel"))?;

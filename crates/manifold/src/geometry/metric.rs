@@ -27,7 +27,7 @@ pub struct SimplexGeometry {
 }
 impl SimplexGeometry {
   pub fn new(edge_lengths: SimplexEdgeLengths) -> Self {
-    let metric = compute_regge_metric(&edge_lengths, edge_lengths.dim());
+    let metric = edge_lengths.compute_regge_metric();
     Self {
       edge_lengths,
       metric,
@@ -237,6 +237,33 @@ impl SimplexEdgeLengths {
   > {
     self.edge_lengths.iter()
   }
+
+  /// Builds regge metric tensor from edge lenghts of simplex.
+  pub fn compute_regge_metric(&self) -> RiemannianMetric {
+    let dim = self.dim();
+    let nvertices = dim + 1;
+    let mut metric_tensor = na::DMatrix::zeros(dim, dim);
+    for i in 0..dim {
+      metric_tensor[(i, i)] = self[i].powi(2);
+    }
+    for i in 0..dim {
+      for j in (i + 1)..dim {
+        let l0i = self[i];
+        let l0j = self[j];
+
+        let vi = i + 1;
+        let vj = j + 1;
+        let eij = lex_rank(&[vi, vj], nvertices);
+        let lij = self[eij];
+
+        let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));
+
+        metric_tensor[(i, j)] = val;
+        metric_tensor[(j, i)] = val;
+      }
+    }
+    RiemannianMetric::new(metric_tensor)
+  }
 }
 
 impl std::ops::Index<EdgeIdx> for SimplexEdgeLengths {
@@ -244,34 +271,6 @@ impl std::ops::Index<EdgeIdx> for SimplexEdgeLengths {
   fn index(&self, iedge: EdgeIdx) -> &Self::Output {
     &self.edge_lengths[iedge]
   }
-}
-
-/// Builds regge metric tensor from edge lenghts of simplex.
-///
-/// On the simplicial manifold the edge vectors are the tangent vectors.
-pub fn compute_regge_metric(edge_lengths: &SimplexEdgeLengths, dim: Dim) -> RiemannianMetric {
-  let nvertices = dim + 1;
-  let mut metric_tensor = na::DMatrix::zeros(dim, dim);
-  for i in 0..dim {
-    metric_tensor[(i, i)] = edge_lengths[i].powi(2);
-  }
-  for i in 0..dim {
-    for j in (i + 1)..dim {
-      let l0i = edge_lengths[i];
-      let l0j = edge_lengths[j];
-
-      let vi = i + 1;
-      let vj = j + 1;
-      let eij = lex_rank(&[vi, vj], nvertices);
-      let lij = edge_lengths[eij];
-
-      let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));
-
-      metric_tensor[(i, j)] = val;
-      metric_tensor[(j, i)] = val;
-    }
-  }
-  RiemannianMetric::new(metric_tensor)
 }
 
 pub type MetricComplex = (Complex, MeshEdgeLengths);

@@ -6,7 +6,7 @@ use {
   exterior::{field::DifferentialMultiForm, Dim},
   manifold::{
     geometry::coord::{
-      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, VertexCoords,
+      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
     },
     topology::complex::{
       handle::{SimplexHandle, SimplexIdx},
@@ -135,7 +135,7 @@ impl std::ops::Sub for Cochain {
 pub fn de_rham_map(
   form: &impl DifferentialMultiForm,
   topology: &Complex,
-  coords: &VertexCoords,
+  coords: &MeshVertexCoords,
 ) -> Cochain {
   let cochain = topology
     .skeleton(form.grade())

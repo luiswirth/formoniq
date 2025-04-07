@@ -2,7 +2,7 @@ use common::combo::factorial;
 use itertools::Itertools;
 
 use crate::{
-  geometry::coord::VertexCoords,
+  geometry::coord::MeshVertexCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
@@ -155,22 +155,22 @@ impl CartesianMeshInfo {
 }
 
 impl CartesianMeshInfo {
-  pub fn compute_coord_complex(&self) -> (Complex, VertexCoords) {
+  pub fn compute_coord_complex(&self) -> (Complex, MeshVertexCoords) {
     let (skeleton, coords) = self.compute_coord_cells();
     let complex = Complex::from_cells(skeleton);
     (complex, coords)
   }
-  pub fn compute_coord_cells(&self) -> (Skeleton, VertexCoords) {
+  pub fn compute_coord_cells(&self) -> (Skeleton, MeshVertexCoords) {
     let skeleton = self.compute_cell_skeleton();
     let coords = self.compute_vertex_coords();
     (skeleton, coords)
   }
-  pub fn compute_vertex_coords(&self) -> VertexCoords {
+  pub fn compute_vertex_coords(&self) -> MeshVertexCoords {
     let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
     }
-    VertexCoords::new(coords)
+    MeshVertexCoords::new(coords)
   }
 
   pub fn compute_cell_skeleton(&self) -> Skeleton {
