@@ -118,7 +118,8 @@ impl MeshVertexCoords {
       let length = (self.coord(vj) - self.coord(vi)).norm();
       edge_lengths[iedge] = length;
     }
-    MeshEdgeLengths::new(edge_lengths)
+    // SAFETY: Edge Lengths come from a coordinate realizations.
+    MeshEdgeLengths::new_unchecked(edge_lengths)
   }
 }
 

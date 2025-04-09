@@ -4,7 +4,7 @@ extern crate nalgebra_sparse as nas;
 use common::linalg::nalgebra::assert_mat_eq;
 use formoniq::operators::{self, ElMatProvider};
 use manifold::{
-  geometry::metric::{refsimp_vol, SimplexGeometry},
+  geometry::{metric::SimplexGeometry, refsimp_vol},
   Dim,
 };
 

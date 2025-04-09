@@ -1,3 +1,4 @@
+use super::refsimp_vol;
 use crate::{
   topology::{
     complex::{
@@ -9,19 +10,12 @@ use crate::{
   Dim,
 };
 
-use common::{
-  combo::{factorialf, lex_rank},
-  gramian::Gramian,
-};
+use common::{combo::lex_rank, gramian::Gramian};
 
 use itertools::Itertools;
 use std::f64::consts::SQRT_2;
 
 pub type EdgeIdx = usize;
-
-pub fn refsimp_vol(dim: Dim) -> f64 {
-  factorialf(dim).recip()
-}
 
 #[derive(Debug, Clone)]
 pub struct SimplexGeometry {
@@ -85,12 +79,21 @@ pub struct MeshEdgeLengths {
   vector: na::DVector<f64>,
 }
 impl MeshEdgeLengths {
-  pub fn new(vector: na::DVector<f64>) -> Self {
+  pub fn new(vector: na::DVector<f64>, complex: &Complex) -> Self {
+    Self::try_new(vector, complex).expect("Edge Lengths are not coordinate realizable.")
+  }
+  pub fn try_new(vector: na::DVector<f64>, complex: &Complex) -> Option<Self> {
+    let this = Self { vector };
+    this
+      .is_coordinate_realizable(complex.cells())
+      .then_some(this)
+  }
+  pub fn new_unchecked(vector: na::DVector<f64>) -> Self {
     Self { vector }
   }
   pub fn standard(dim: usize) -> MeshEdgeLengths {
     let vector = SimplexEdgeLengths::standard(dim).into_vector();
-    Self::new(vector)
+    Self::new_unchecked(vector)
   }
   pub fn nedges(&self) -> usize {
     self.vector.len()

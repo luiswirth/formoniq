@@ -3,7 +3,7 @@ use super::{
   LocalCoordRef, MeshVertexCoords,
 };
 use crate::{
-  geometry::metric::refsimp_vol,
+  geometry::refsimp_vol,
   topology::{complex::handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
