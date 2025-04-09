@@ -1,13 +1,16 @@
 use crate::{
   topology::{
-    complex::{handle::SimplexHandle, Complex},
+    complex::{
+      handle::{SimplexHandle, SkeletonHandle},
+      Complex,
+    },
     simplex::nedges,
   },
   Dim,
 };
 
 use common::{
-  combo::{factorial, lex_rank},
+  combo::{factorialf, lex_rank},
   metric::RiemannianMetric,
 };
 
@@ -16,8 +19,8 @@ use std::f64::consts::SQRT_2;
 
 pub type EdgeIdx = usize;
 
-pub fn ref_vol(dim: Dim) -> f64 {
-  (factorial(dim) as f64).recip()
+pub fn refsimp_vol(dim: Dim) -> f64 {
+  factorialf(dim).recip()
 }
 
 #[derive(Debug, Clone)]
@@ -58,7 +61,7 @@ impl SimplexGeometry {
 
   /// The volume of this cell.
   pub fn vol(&self) -> f64 {
-    ref_vol(self.dim()) * self.metric().det_sqrt()
+    refsimp_vol(self.dim()) * self.metric().det_sqrt()
   }
 
   /// The shape regularity measure of this cell.
@@ -148,6 +151,12 @@ impl MeshEdgeLengths {
       .into();
     SimplexEdgeLengths::new(lengths, simplex.dim())
   }
+
+  pub fn is_coordinate_realizable(&self, skeleton: SkeletonHandle) -> bool {
+    skeleton
+      .handle_iter()
+      .all(|simp| self.simplex_edge_lengths(simp).is_coordinate_realizable())
+  }
 }
 impl std::ops::Index<EdgeIdx> for MeshEdgeLengths {
   type Output = f64;
@@ -158,6 +167,7 @@ impl std::ops::Index<EdgeIdx> for MeshEdgeLengths {
 
 #[derive(Debug, Clone)]
 pub struct SimplexEdgeLengths {
+  /// Lexicographically ordered binom(n+1,2) edge lengths
   edge_lengths: na::DVector<f64>,
   dim: Dim,
 }
@@ -201,6 +211,9 @@ impl SimplexEdgeLengths {
   pub fn dim(&self) -> Dim {
     self.dim
   }
+  pub fn nvertices(&self) -> usize {
+    self.dim() + 1
+  }
 
   /// The diameter of this cell.
   /// This is the maximum distance of two points inside the cell.
@@ -238,6 +251,45 @@ impl SimplexEdgeLengths {
     self.edge_lengths.iter()
   }
 
+  /// "Euclidean" distance matrix
+  pub fn distance_matrix(&self) -> na::DMatrix<f64> {
+    let mut mat = na::DMatrix::zeros(self.dim(), self.dim());
+
+    let mut idx = 0;
+    for i in 0..self.nvertices() {
+      for j in (i + 1)..self.nvertices() {
+        let dist_sqr = self.edge_lengths[idx].powi(2);
+        mat[(i, j)] = dist_sqr;
+        mat[(j, i)] = dist_sqr;
+        idx += 1;
+      }
+    }
+    mat
+  }
+
+  pub fn cayley_menger_matrix(&self) -> na::DMatrix<f64> {
+    let mat = self.distance_matrix();
+    let mat = mat.insert_row(self.dim(), 1.0);
+    let mut mat = mat.insert_column(self.dim(), 1.0);
+    mat[(self.dim(), self.dim())] = 0.0;
+    mat
+  }
+  pub fn cayley_menger_det_unscaled(&self) -> f64 {
+    self.cayley_menger_matrix().determinant()
+  }
+  pub fn cayley_menger_det(&self) -> f64 {
+    cayley_menger_factor(self.dim()) * self.cayley_menger_det_unscaled()
+  }
+  pub fn vol(&self) -> f64 {
+    self.cayley_menger_det().sqrt()
+  }
+  pub fn is_degenerate(&self) -> bool {
+    self.cayley_menger_det_unscaled().abs() <= 1e-12
+  }
+  pub fn is_coordinate_realizable(&self) -> bool {
+    self.cayley_menger_det_unscaled() >= 0.0
+  }
+
   /// Builds regge metric tensor from edge lenghts of simplex.
   pub fn compute_regge_metric(&self) -> RiemannianMetric {
     let dim = self.dim();
@@ -264,6 +316,10 @@ impl SimplexEdgeLengths {
     }
     RiemannianMetric::new(metric_tensor)
   }
+}
+
+pub fn cayley_menger_factor(dim: Dim) -> f64 {
+  -1.0f64.powi(dim as i32 + 1) * refsimp_vol(dim).powi(2) / 2f64.powi(dim as i32)
 }
 
 impl std::ops::Index<EdgeIdx> for SimplexEdgeLengths {

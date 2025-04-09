@@ -109,6 +109,8 @@ impl CooMatrixExt for nas::CooMatrix<f64> {
   }
 }
 
+const PETSC_SOLVER_PATH: &str = "./petsc-solver";
+
 const PETSC_MAT_FILE_CLASSID: i32 = 1211216;
 const PETSC_VEC_FILE_CLASSID: i32 = 1211214;
 
@@ -220,46 +222,39 @@ pub fn petsc_ghiep(
   rhs: &nas::CsrMatrix<f64>,
   neigen_values: usize,
 ) -> (na::DVector<f64>, na::DMatrix<f64>) {
-  let solver_path = "/home/luis/thesis/solvers/petsc-solver";
-  petsc_write_matrix(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
-  petsc_write_matrix(rhs, &format!("{solver_path}/in/B.bin")).unwrap();
+  petsc_write_matrix(lhs, &format!("{PETSC_SOLVER_PATH}/in/A.bin")).unwrap();
+  petsc_write_matrix(rhs, &format!("{PETSC_SOLVER_PATH}/in/B.bin")).unwrap();
 
-  let binary = "./ghiep";
+  let binary = "./ghiep.out";
   #[rustfmt::skip]
   let args = [
     "-st_pc_factor_mat_solver_type", "mumps",
     "-st_type", "sinvert",
     "-st_shift", "0.1",
     "-eps_target", "0.",
-    //"-eps_gen_non_hermitian",
     "-eps_nev", &neigen_values.to_string(),
   ];
 
   let status = std::process::Command::new(binary)
-    .current_dir(solver_path)
+    .current_dir(PETSC_SOLVER_PATH)
     .args(args)
     .status()
     .unwrap();
   assert!(status.success());
 
-  let eigenvals = petsc_read_eigenvals(&format!("{solver_path}/out/eigenvals.bin")).unwrap();
-  let eigenvecs = petsc_read_eigenvecs(&format!("{solver_path}/out/eigenvecs.bin")).unwrap();
+  let eigenvals = petsc_read_eigenvals(&format!("{PETSC_SOLVER_PATH}/out/eigenvals.bin")).unwrap();
+  let eigenvecs = petsc_read_eigenvecs(&format!("{PETSC_SOLVER_PATH}/out/eigenvecs.bin")).unwrap();
 
   (eigenvals, eigenvecs)
 }
 
 pub fn petsc_saddle_point(lhs: &nas::CsrMatrix<f64>, rhs: &na::DVector<f64>) -> na::DVector<f64> {
-  let solver_path = "/home/luis/thesis/solvers/petsc-solver";
+  petsc_write_matrix(lhs, &format!("{PETSC_SOLVER_PATH}/in/A.bin")).unwrap();
+  petsc_write_vector(rhs, &format!("{PETSC_SOLVER_PATH}/in/b.bin")).unwrap();
 
-  petsc_write_matrix(lhs, &format!("{solver_path}/in/A.bin")).unwrap();
-  petsc_write_vector(rhs, &format!("{solver_path}/in/b.bin")).unwrap();
-
-  let binary = "mpiexec";
+  let binary = "./hils.out";
   #[rustfmt::skip]
-  let args: [&str; 3] = [
-    "-n",
-    "1",
-    "./hils",
+  let args: [&str; 0] = [
     //"-ksp_type", "minres",
     //"-pc_type", "lu",
     //"-ksp_max_it", "1000",
@@ -267,11 +262,11 @@ pub fn petsc_saddle_point(lhs: &nas::CsrMatrix<f64>, rhs: &na::DVector<f64>) -> 
   ];
 
   let status = std::process::Command::new(binary)
-    .current_dir(solver_path)
+    .current_dir(PETSC_SOLVER_PATH)
     .args(args)
     .status()
     .unwrap();
   assert!(status.success());
 
-  petsc_read_vector(&format!("{solver_path}/out/x.bin")).unwrap()
+  petsc_read_vector(&format!("{PETSC_SOLVER_PATH}/out/x.bin")).unwrap()
 }

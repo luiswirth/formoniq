@@ -6,6 +6,9 @@ pub fn binomial(n: usize, k: usize) -> usize {
 pub fn factorial(num: usize) -> usize {
   (1..=num).product()
 }
+pub fn factorialf(num: usize) -> f64 {
+  factorial(num) as f64
+}
 
 pub fn is_strictly_increasing(indices: &[usize]) -> bool {
   indices.windows(2).all(|w| w[0] < w[1])
