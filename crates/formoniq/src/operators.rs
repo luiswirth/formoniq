@@ -130,7 +130,7 @@ impl ElMatProvider for HodgeMassElmat {
       }
     }
 
-    (factorial(grade) as f64).powi(2) * elmat
+    factorial(grade).pow(2) as f64 * elmat
   }
 }
 

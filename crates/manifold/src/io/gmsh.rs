@@ -49,7 +49,7 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshVertexCoords) {
     };
     for e in block.elements {
       let simplex: Vec<_> = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      let simplex = Simplex::from(simplex);
+      let simplex = Simplex::from(simplex).sorted();
       simplex_acc.push(simplex);
     }
   }

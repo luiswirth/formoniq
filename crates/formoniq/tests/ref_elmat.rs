@@ -4,7 +4,7 @@ extern crate nalgebra_sparse as nas;
 use common::linalg::assert_mat_eq;
 use formoniq::operators::{self, ElMatProvider};
 use manifold::{
-  geometry::metric::{ref_vol, SimplexGeometry},
+  geometry::metric::{refsimp_vol, SimplexGeometry},
   Dim,
 };
 
@@ -38,7 +38,7 @@ fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
     expected_elmat[(i, i)] = 1;
   }
 
-  Some(expected_elmat.cast::<f64>() * ref_vol(dim))
+  Some(expected_elmat.cast::<f64>() * refsimp_vol(dim))
 }
 
 #[test]
@@ -75,5 +75,5 @@ fn lumped_mass_refcell() {
 fn ref_lumped_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
   let nvertices = dim + 1;
   let ndofs = nvertices;
-  Some(ref_vol(dim) / ndofs as f64 * na::DMatrix::identity(ndofs, ndofs))
+  Some(refsimp_vol(dim) / ndofs as f64 * na::DMatrix::identity(ndofs, ndofs))
 }

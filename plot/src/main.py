@@ -324,7 +324,7 @@ def main():
     os.makedirs("out", exist_ok=True)
     
     import argparse
-    parser = argparse.ArgumentParser(description='Plot Whitney forms visualization')
+    parser = argparse.ArgumentParser(description='Whitney Forms Visualizer')
     parser.add_argument('path', help='Path to the input files')
     parser.add_argument('--skip-zero', action='store_true', 
                         help='Skip triangles with all zero DOFs')

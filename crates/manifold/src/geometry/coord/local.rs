@@ -3,7 +3,7 @@ use super::{
   LocalCoordRef, MeshVertexCoords,
 };
 use crate::{
-  geometry::metric::ref_vol,
+  geometry::metric::refsimp_vol,
   topology::{complex::handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
@@ -84,7 +84,7 @@ impl SimplexCoords {
     } else {
       self.spanning_vectors().gram_det_sqrt()
     };
-    ref_vol(self.dim_intrinsic()) * det
+    refsimp_vol(self.dim_intrinsic()) * det
   }
   pub fn vol(&self) -> f64 {
     self.det().abs()

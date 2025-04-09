@@ -6,7 +6,7 @@ pub mod io;
 
 use {
   common::{
-    combo::{factorial, Sign},
+    combo::{factorial, factorialf, Sign},
     sparse::CooMatrixExt,
   },
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
@@ -115,7 +115,7 @@ impl WhitneyRefLsf {
     if grade == dim {
       return MultiForm::zero(dim, grade + 1);
     }
-    (factorial(grade + 1) as f64) * MultiForm::wedge_big(self.difbarys()).unwrap()
+    factorialf(grade + 1) * MultiForm::wedge_big(self.difbarys()).unwrap()
   }
 }
 
