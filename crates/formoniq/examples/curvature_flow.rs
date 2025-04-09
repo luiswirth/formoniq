@@ -3,7 +3,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::util::FaerCholesky;
+use common::linalg::faer::FaerCholesky;
 use formoniq::{assemble, operators};
 use manifold::geometry::coord::MeshVertexCoords;
 

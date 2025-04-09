@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::linalg::assert_mat_eq;
+use common::linalg::nalgebra::assert_mat_eq;
 use formoniq::{assemble, operators};
 use manifold::{gen::cartesian::CartesianMeshInfo, Dim};
 

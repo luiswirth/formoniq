@@ -5,7 +5,7 @@ use crate::{
   operators::{self, DofCoeff},
 };
 
-use common::{sparse::petsc_ghiep, util::FaerCholesky};
+use common::linalg::{faer::FaerCholesky, petsc::petsc_ghiep};
 use manifold::{
   geometry::metric::MeshEdgeLengths,
   topology::complex::{handle::KSimplexIdx, Complex},

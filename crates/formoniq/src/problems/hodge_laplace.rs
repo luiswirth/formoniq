@@ -4,13 +4,13 @@ use crate::{
 };
 
 use {
-  common::sparse::{petsc_ghiep, petsc_saddle_point},
+  common::linalg::petsc::{petsc_ghiep, petsc_saddle_point},
   exterior::ExteriorGrade,
   manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
   whitney::{cochain::Cochain, ManifoldComplexExt},
 };
 
-use common::sparse::CooMatrixExt;
+use common::linalg::nalgebra::CooMatrixExt;
 use itertools::Itertools;
 use std::mem;
 

@@ -11,7 +11,7 @@ use crate::{
 
 use common::{
   combo::{factorialf, lex_rank},
-  metric::RiemannianMetric,
+  gramian::Gramian,
 };
 
 use itertools::Itertools;
@@ -26,30 +26,40 @@ pub fn refsimp_vol(dim: Dim) -> f64 {
 #[derive(Debug, Clone)]
 pub struct SimplexGeometry {
   edge_lengths: SimplexEdgeLengths,
-  metric: RiemannianMetric,
+  metric: Gramian,
+  inverse_metric: Gramian,
+  // TODO: add multiform gramian
+  //multiform_gramian: Gramian,
 }
 impl SimplexGeometry {
   pub fn new(edge_lengths: SimplexEdgeLengths) -> Self {
     let metric = edge_lengths.compute_regge_metric();
+    let inverse_metric = metric.clone().inverse();
     Self {
       edge_lengths,
       metric,
+      inverse_metric,
     }
   }
   pub fn standard(dim: Dim) -> Self {
     let edge_lengths = SimplexEdgeLengths::standard(dim);
-    let metric = RiemannianMetric::standard(dim);
+    let metric = Gramian::standard(dim);
+    let inverse_metric = metric.clone();
     Self {
       edge_lengths,
       metric,
+      inverse_metric,
     }
   }
 
   pub fn edge_lengths(&self) -> &SimplexEdgeLengths {
     &self.edge_lengths
   }
-  pub fn metric(&self) -> &RiemannianMetric {
+  pub fn metric(&self) -> &Gramian {
     &self.metric
+  }
+  pub fn inverse_metric(&self) -> &Gramian {
+    &self.inverse_metric
   }
   pub fn dim(&self) -> Dim {
     debug_assert_eq!(self.metric.dim(), self.edge_lengths.dim());
@@ -183,11 +193,12 @@ impl SimplexEdgeLengths {
       .collect();
     Self::new(edge_lengths.into(), dim)
   }
-  pub fn from_metric(metric: &RiemannianMetric) -> Self {
+  pub fn from_metric(metric: &Gramian) -> Self {
     let dim = metric.dim();
 
-    let edge_len =
-      |i, j| (metric.inner(i, i) + metric.inner(j, j) - 2.0 * metric.inner(i, j)).sqrt();
+    let edge_len = |i, j| {
+      (metric.basis_inner(i, i) + metric.basis_inner(j, j) - 2.0 * metric.basis_inner(i, j)).sqrt()
+    };
 
     let mut edge_lengths = na::DVector::zeros(nedges(dim));
     let mut iedge = 0;
@@ -291,7 +302,7 @@ impl SimplexEdgeLengths {
   }
 
   /// Builds regge metric tensor from edge lenghts of simplex.
-  pub fn compute_regge_metric(&self) -> RiemannianMetric {
+  pub fn compute_regge_metric(&self) -> Gramian {
     let dim = self.dim();
     let nvertices = dim + 1;
     let mut metric_tensor = na::DMatrix::zeros(dim, dim);
@@ -314,7 +325,7 @@ impl SimplexEdgeLengths {
         metric_tensor[(j, i)] = val;
       }
     }
-    RiemannianMetric::new(metric_tensor)
+    Gramian::try_new(metric_tensor).expect("Edge Lengths must be coordinate realizable.")
   }
 }
 
@@ -334,37 +345,4 @@ pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
   let topology = Complex::standard(dim);
   let edge_lengths = MeshEdgeLengths::standard(dim);
   (topology, edge_lengths)
-}
-
-#[cfg(test)]
-mod test {
-  use super::*;
-
-  #[test]
-  fn orthonormal_basis() {
-    let dim = 2;
-    let tangent_vectors = na::dmatrix![
-      1.0, 0.0;
-      1.0, 1.0;
-    ];
-    let metric = RiemannianMetric::from_tangent_basis(tangent_vectors.clone());
-    let orthonormal_basis = metric.orthonormal_basis();
-    assert!(
-      (orthonormal_basis.transpose() * metric.metric_tensor() * &orthonormal_basis
-        - na::DMatrix::identity(dim, dim))
-      .norm()
-        <= 1e-12
-    );
-
-    let orthonormal_tangent_vectors = tangent_vectors * &orthonormal_basis;
-    let orthogonal_metric = RiemannianMetric::from_tangent_basis(orthonormal_tangent_vectors);
-    assert!((orthogonal_metric.metric_tensor() - na::DMatrix::identity(dim, dim)).norm() <= 1e-12);
-
-    let vector_a = na::dvector![0.2, 5.3];
-    let vector_b = na::dvector![-1.3, 2.8];
-    let inner0 = metric.vector_inner_product(&vector_a, &vector_b);
-    let cob = metric.orthormal_change_of_basis();
-    let inner1 = (&cob * vector_a).dot(&(&cob * vector_b));
-    assert_eq!(inner0, inner1);
-  }
 }

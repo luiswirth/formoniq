@@ -7,7 +7,7 @@ pub mod io;
 use {
   common::{
     combo::{factorial, factorialf, Sign},
-    sparse::CooMatrixExt,
+    linalg::nalgebra::CooMatrixExt,
   },
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{

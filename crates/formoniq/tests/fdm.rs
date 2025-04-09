@@ -22,7 +22,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::linalg::{kronecker_sum, matrix_from_const_diagonals};
+use common::linalg::nalgebra::{kronecker_sum, matrix_from_const_diagonals};
 use formoniq::{
   assemble,
   operators::{self},

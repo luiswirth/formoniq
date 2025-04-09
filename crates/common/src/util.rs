@@ -1,7 +1,3 @@
-use std::path::Path;
-
-use faer::linalg::solvers::Solve;
-
 pub trait CumsumExt {
   fn cumsum(self) -> impl Iterator<Item = usize>;
 }
@@ -15,10 +11,10 @@ impl<I: IntoIterator<Item = usize>> CumsumExt for I {
 }
 
 pub trait IterAllEqExt<T> {
-  fn all_eq(self) -> Option<T>;
+  fn unique_eq(self) -> Option<T>;
 }
 impl<T: PartialEq, I: IntoIterator<Item = T>> IterAllEqExt<T> for I {
-  fn all_eq(self) -> Option<T> {
+  fn unique_eq(self) -> Option<T> {
     let mut iter = self.into_iter();
     let first = iter.next()?;
     iter.all(|elem| elem == first).then_some(first)
@@ -68,77 +64,6 @@ where
 {
   fn vec_into(self) -> Vec<S> {
     self.into_iter().map(|v| v.into()).collect()
-  }
-}
-
-pub fn save_vector(mu: &na::DVector<f64>, path: impl AsRef<Path>) -> std::io::Result<()> {
-  use std::io::Write;
-  let mut file = std::fs::File::create(path).unwrap();
-  for v in mu.iter() {
-    writeln!(file, "{v}")?;
-  }
-  Ok(())
-}
-
-pub fn faervec2navec(faer: &faer::Mat<f64>) -> na::DVector<f64> {
-  assert!(faer.ncols() == 1);
-  na::DVector::from_iterator(faer.nrows(), faer.row_iter().map(|r| r[0]))
-}
-
-pub fn navec2faervec(na: &na::DVector<f64>) -> faer::Mat<f64> {
-  let mut faer = faer::Mat::zeros(na.nrows(), 1);
-  for (i, &v) in na.iter().enumerate() {
-    faer[(i, 0)] = v;
-  }
-  faer
-}
-
-type SparseMatrixFaer = faer::sparse::SparseRowMat<usize, f64>;
-
-pub fn nalgebra2faer(m: nas::CsrMatrix<f64>) -> SparseMatrixFaer {
-  let nrows = m.nrows();
-  let ncols = m.ncols();
-  let (col_ptrs, row_indices, values) = m.disassemble();
-
-  let symbolic =
-    faer::sparse::SymbolicSparseRowMat::new_checked(nrows, ncols, col_ptrs, None, row_indices);
-  faer::sparse::SparseRowMat::new(symbolic, values)
-}
-
-pub fn faer2nalgebra(m: SparseMatrixFaer) -> nas::CscMatrix<f64> {
-  let (symbolic, values) = m.into_parts();
-  let (nrows, ncols, col_ptrs, _, row_indices) = symbolic.into_parts();
-  nas::CscMatrix::try_from_csc_data(nrows, ncols, col_ptrs, row_indices, values).unwrap()
-}
-
-pub struct FaerLu {
-  raw: faer::sparse::linalg::solvers::Lu<usize, f64>,
-}
-impl FaerLu {
-  pub fn new(a: nas::CsrMatrix<f64>) -> Self {
-    let raw = nalgebra2faer(a).sp_lu().unwrap();
-    Self { raw }
-  }
-  pub fn solve(&self, b: &na::DVector<f64>) -> na::DVector<f64> {
-    let b = faer::Col::from_fn(b.nrows(), |i| b[i]);
-    let x = self.raw.solve(b);
-    na::DVector::from_iterator(x.nrows(), x.iter().copied())
-  }
-}
-
-pub struct FaerCholesky {
-  raw: faer::sparse::linalg::solvers::Llt<usize, f64>,
-}
-impl FaerCholesky {
-  pub fn new(a: nas::CsrMatrix<f64>) -> Self {
-    let raw = nalgebra2faer(a).sp_cholesky(faer::Side::Upper).unwrap();
-    Self { raw }
-  }
-
-  pub fn solve(&self, b: &na::DVector<f64>) -> na::DVector<f64> {
-    let b = faer::Col::from_fn(b.nrows(), |i| b[i]);
-    let x = self.raw.solve(b);
-    na::DVector::from_iterator(x.nrows(), x.iter().copied())
   }
 }
 
