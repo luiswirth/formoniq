@@ -27,7 +27,7 @@ pub struct SimplexGeometry {
 }
 impl SimplexGeometry {
   pub fn new(edge_lengths: SimplexEdgeLengths) -> Self {
-    let metric = edge_lengths.compute_regge_metric();
+    let metric = edge_lengths.into_regge_metric();
     let inverse_metric = metric.clone().inverse();
     Self {
       edge_lengths,
@@ -162,7 +162,8 @@ impl MeshEdgeLengths {
       .map(|edge| self.length(edge.kidx()))
       .collect_vec()
       .into();
-    SimplexEdgeLengths::new(lengths, simplex.dim())
+    // SAFETY: Already checked realizability.
+    SimplexEdgeLengths::new_unchecked(lengths, simplex.dim())
   }
 
   pub fn is_coordinate_realizable(&self, skeleton: SkeletonHandle) -> bool {
@@ -186,7 +187,18 @@ pub struct SimplexEdgeLengths {
 }
 impl SimplexEdgeLengths {
   pub fn new(edge_lengths: na::DVector<f64>, dim: Dim) -> Self {
-    Self { edge_lengths, dim }
+    Self::try_new(edge_lengths, dim).expect("Simplex must be coordiante realizable.")
+  }
+  pub fn try_new(edge_lengths: na::DVector<f64>, dim: Dim) -> Option<Self> {
+    let this = Self { edge_lengths, dim };
+    this.is_coordinate_realizable().then_some(this)
+  }
+  pub fn new_unchecked(edge_lengths: na::DVector<f64>, dim: Dim) -> Self {
+    if cfg!(debug_assertions) {
+      Self::new(edge_lengths, dim)
+    } else {
+      Self { edge_lengths, dim }
+    }
   }
   pub fn standard(dim: Dim) -> SimplexEdgeLengths {
     let nedges = nedges(dim);
@@ -196,37 +208,18 @@ impl SimplexEdgeLengths {
       .collect();
     Self::new(edge_lengths.into(), dim)
   }
-  pub fn from_metric(metric: &Gramian) -> Self {
-    let dim = metric.dim();
-
-    let edge_len = |i, j| {
-      (metric.basis_inner(i, i) + metric.basis_inner(j, j) - 2.0 * metric.basis_inner(i, j)).sqrt()
-    };
-
-    let mut edge_lengths = na::DVector::zeros(nedges(dim));
-    let mut iedge = 0;
-    for i in 0..dim {
-      for j in i..dim {
-        edge_lengths[iedge] = edge_len(i, j);
-        iedge += 1;
-      }
-    }
-
-    Self::new(edge_lengths, dim)
-  }
-
-  pub fn nedges(&self) -> usize {
-    self.edge_lengths.len()
-  }
-  pub fn length(&self, iedge: EdgeIdx) -> f64 {
-    self[iedge]
-  }
 
   pub fn dim(&self) -> Dim {
     self.dim
   }
   pub fn nvertices(&self) -> usize {
     self.dim() + 1
+  }
+  pub fn nedges(&self) -> usize {
+    self.edge_lengths.len()
+  }
+  pub fn length(&self, iedge: EdgeIdx) -> f64 {
+    self[iedge]
   }
 
   /// The diameter of this cell.
@@ -264,10 +257,24 @@ impl SimplexEdgeLengths {
   > {
     self.edge_lengths.iter()
   }
+}
 
+impl std::ops::Index<EdgeIdx> for SimplexEdgeLengths {
+  type Output = f64;
+  fn index(&self, iedge: EdgeIdx) -> &Self::Output {
+    &self.edge_lengths[iedge]
+  }
+}
+
+pub fn cayley_menger_factor(dim: Dim) -> f64 {
+  -1.0f64.powi(dim as i32 + 1) * refsimp_vol(dim).powi(2) / 2f64.powi(dim as i32)
+}
+
+/// Distance Geometry
+impl SimplexEdgeLengths {
   /// "Euclidean" distance matrix
   pub fn distance_matrix(&self) -> na::DMatrix<f64> {
-    let mut mat = na::DMatrix::zeros(self.dim(), self.dim());
+    let mut mat = na::DMatrix::zeros(self.nvertices(), self.nvertices());
 
     let mut idx = 0;
     for i in 0..self.nvertices() {
@@ -288,38 +295,52 @@ impl SimplexEdgeLengths {
     mat[(self.dim(), self.dim())] = 0.0;
     mat
   }
-  pub fn cayley_menger_det_unscaled(&self) -> f64 {
-    self.cayley_menger_matrix().determinant()
-  }
   pub fn cayley_menger_det(&self) -> f64 {
-    cayley_menger_factor(self.dim()) * self.cayley_menger_det_unscaled()
+    cayley_menger_factor(self.dim()) * self.cayley_menger_matrix().determinant()
   }
   pub fn vol(&self) -> f64 {
     self.cayley_menger_det().sqrt()
   }
   pub fn is_degenerate(&self) -> bool {
-    self.cayley_menger_det_unscaled().abs() <= 1e-12
+    self.cayley_menger_det().abs() <= 1e-12
   }
   pub fn is_coordinate_realizable(&self) -> bool {
-    self.cayley_menger_det_unscaled() >= 0.0
+    self.cayley_menger_det() >= 0.0
+  }
+}
+
+impl SimplexEdgeLengths {
+  pub fn from_regge_metric(metric: &Gramian) -> Self {
+    let dim = metric.dim();
+    let edge_len = |i, j| {
+      (metric.basis_inner(i, i) + metric.basis_inner(j, j) - 2.0 * metric.basis_inner(i, j)).sqrt()
+    };
+
+    let mut edge_lengths = na::DVector::zeros(nedges(dim));
+    let mut iedge = 0;
+    for i in 0..dim {
+      for j in i..dim {
+        edge_lengths[iedge] = edge_len(i, j);
+        iedge += 1;
+      }
+    }
+
+    Self::new(edge_lengths, dim)
   }
 
-  /// Builds regge metric tensor from edge lenghts of simplex.
-  pub fn compute_regge_metric(&self) -> Gramian {
-    let dim = self.dim();
-    let nvertices = dim + 1;
-    let mut metric_tensor = na::DMatrix::zeros(dim, dim);
-    for i in 0..dim {
+  pub fn into_regge_metric(&self) -> Gramian {
+    let mut metric_tensor = na::DMatrix::zeros(self.dim(), self.dim());
+    for i in 0..self.dim() {
       metric_tensor[(i, i)] = self[i].powi(2);
     }
-    for i in 0..dim {
-      for j in (i + 1)..dim {
+    for i in 0..self.dim() {
+      for j in (i + 1)..self.dim() {
         let l0i = self[i];
         let l0j = self[j];
 
         let vi = i + 1;
         let vj = j + 1;
-        let eij = lex_rank(&[vi, vj], nvertices);
+        let eij = lex_rank(&[vi, vj], self.nvertices());
         let lij = self[eij];
 
         let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));
@@ -329,17 +350,6 @@ impl SimplexEdgeLengths {
       }
     }
     Gramian::try_new(metric_tensor).expect("Edge Lengths must be coordinate realizable.")
-  }
-}
-
-pub fn cayley_menger_factor(dim: Dim) -> f64 {
-  -1.0f64.powi(dim as i32 + 1) * refsimp_vol(dim).powi(2) / 2f64.powi(dim as i32)
-}
-
-impl std::ops::Index<EdgeIdx> for SimplexEdgeLengths {
-  type Output = f64;
-  fn index(&self, iedge: EdgeIdx) -> &Self::Output {
-    &self.edge_lengths[iedge]
   }
 }
 
