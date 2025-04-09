@@ -1,6 +1,6 @@
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
-use common::{sparse::CooMatrixExt, util};
+use common::{linalg::nalgebra::CooMatrixExt, util};
 use itertools::{multizip, Itertools};
 use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 

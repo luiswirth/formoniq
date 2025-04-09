@@ -1,8 +1,8 @@
-use crate::{list::MultiFormList, Dim, ExteriorElement, ExteriorGrade, MultiForm};
+use crate::{Dim, ExteriorElement, ExteriorGrade};
 
 use common::{
   combo::{binomial, lex_rank, sort_signed, Sign},
-  metric::RiemannianMetric,
+  gramian::Gramian,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -123,66 +123,39 @@ pub fn exterior_terms(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = Ex
     .map(move |indices| ExteriorTerm::new(indices, dim))
 }
 
-pub trait RiemannianMetricExt {
-  fn multi_form_gramian(&self, k: ExteriorGrade) -> na::DMatrix<f64>;
-  fn multi_form_inner_product_mat(&self, v: &MultiFormList, w: &MultiFormList) -> na::DMatrix<f64>;
-  fn multi_form_inner_product(&self, v: &MultiForm, w: &MultiForm) -> f64;
-  fn multi_form_norm(&self, v: &MultiForm) -> f64;
-}
+/// Construct Gramian on lexicographically ordered standard k-element standard basis from
+/// Gramian on single elements.
+pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian {
+  let dim = single_gramian.dim();
+  let bases: Vec<_> = exterior_bases(dim, grade).collect();
 
-// TODO: consider storing
-/// Gram matrix on lexicographically ordered standard k-form standard basis.
-impl RiemannianMetricExt for RiemannianMetric {
-  fn multi_form_gramian(&self, k: ExteriorGrade) -> na::DMatrix<f64> {
-    let n = self.dim();
-    let bases: Vec<_> = exterior_bases(n, k).collect();
-    let covector_gramian = self.covector_gramian();
+  let mut multi_gramian = na::DMatrix::zeros(bases.len(), bases.len());
+  let mut multi_basis_mat = na::DMatrix::zeros(grade, grade);
 
-    let mut multi_form_gramian = na::DMatrix::zeros(bases.len(), bases.len());
-    let mut multi_basis_mat = na::DMatrix::zeros(k, k);
+  for icomb in 0..bases.len() {
+    let combi = &bases[icomb];
+    for jcomb in icomb..bases.len() {
+      let combj = &bases[jcomb];
 
-    for icomb in 0..bases.len() {
-      let combi = &bases[icomb];
-      for jcomb in icomb..bases.len() {
-        let combj = &bases[jcomb];
-
-        for iicomb in 0..k {
-          let combii = combi[iicomb];
-          for jjcomb in 0..k {
-            let combjj = combj[jjcomb];
-            multi_basis_mat[(iicomb, jjcomb)] = covector_gramian[(combii, combjj)];
-          }
+      for iicomb in 0..grade {
+        let combii = combi[iicomb];
+        for jjcomb in 0..grade {
+          let combjj = combj[jjcomb];
+          multi_basis_mat[(iicomb, jjcomb)] = single_gramian[(combii, combjj)];
         }
-        let det = multi_basis_mat.determinant();
-        multi_form_gramian[(icomb, jcomb)] = det;
-        multi_form_gramian[(jcomb, icomb)] = det;
       }
+      let det = multi_basis_mat.determinant();
+      multi_gramian[(icomb, jcomb)] = det;
+      multi_gramian[(jcomb, icomb)] = det;
     }
-    multi_form_gramian
   }
-
-  fn multi_form_inner_product_mat(&self, v: &MultiFormList, w: &MultiFormList) -> na::DMatrix<f64> {
-    assert_eq!(v.dim(), w.dim());
-    assert_eq!(v.grade(), w.grade());
-    v.coeffs().transpose() * self.multi_form_gramian(v.grade()) * w.coeffs()
-  }
-
-  fn multi_form_inner_product(&self, v: &MultiForm, w: &MultiForm) -> f64 {
-    assert_eq!(v.dim(), w.dim());
-    assert_eq!(v.grade(), w.grade());
-    (v.coeffs().transpose() * self.multi_form_gramian(v.grade()) * w.coeffs()).x
-  }
-
-  fn multi_form_norm(&self, v: &MultiForm) -> f64 {
-    self.multi_form_inner_product(v, v)
-  }
+  Gramian::new_unchecked(multi_gramian)
 }
 
 #[cfg(test)]
 mod test {
-  use common::{combo::binomial, linalg::assert_mat_eq, metric::RiemannianMetric};
-
-  use super::RiemannianMetricExt;
+  use super::*;
+  use common::{combo::binomial, gramian::Gramian, linalg::nalgebra::assert_mat_eq};
 
   #[test]
   fn canonical_conversion() {
@@ -190,7 +163,7 @@ mod test {
     use super::*;
 
     let dim = 4;
-    let mut e0 = MultiForm::zero(dim, 3);
+    let mut e0 = ExteriorElement::zero(dim, 3);
     e0 += 1.0 * Ext::new(vec![2, 0, 1], dim);
     e0 += 3.0 * Ext::new(vec![1, 3, 2], dim);
     e0 += -2.0 * Ext::new(vec![0, 2, 1], dim);
@@ -204,14 +177,14 @@ mod test {
   }
 
   #[test]
-  fn multi_form_gramian_euclidean() {
+  fn multi_gramian_euclidean() {
     for n in 0..=3 {
-      let metric = RiemannianMetric::standard(n);
+      let gramian = Gramian::standard(n);
       for k in 0..=n {
         let binomial = binomial(n, k);
-        let expected_gram = na::DMatrix::identity(binomial, binomial);
-        let computed_gram = metric.multi_form_gramian(k);
-        assert_mat_eq(&computed_gram, &expected_gram, None);
+        let expected_gram = Gramian::standard(binomial);
+        let computed_gram = multi_gramian(&gramian, k);
+        assert_mat_eq(computed_gram.matrix(), expected_gram.matrix(), None);
       }
     }
   }

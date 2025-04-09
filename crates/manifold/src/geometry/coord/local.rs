@@ -8,11 +8,7 @@ use crate::{
   Dim,
 };
 
-use common::{
-  combo::Sign,
-  linalg::DMatrixExt,
-  metric::{AffineTransform, RiemannianMetric},
-};
+use common::{affine::AffineTransform, combo::Sign, gramian::Gramian};
 use tracing::warn;
 
 #[derive(Debug, Clone)]
@@ -74,15 +70,15 @@ impl SimplexCoords {
     }
     mat
   }
-  pub fn metric_tensor(&self) -> RiemannianMetric {
-    RiemannianMetric::from_tangent_basis(self.spanning_vectors())
+  pub fn metric_tensor(&self) -> Gramian {
+    Gramian::from_euclidean_vectors(self.spanning_vectors())
   }
 
   pub fn det(&self) -> f64 {
     let det = if self.is_same_dim() {
       self.spanning_vectors().determinant()
     } else {
-      self.spanning_vectors().gram_det_sqrt()
+      Gramian::from_euclidean_vectors(self.spanning_vectors()).det_sqrt()
     };
     refsimp_vol(self.dim_intrinsic()) * det
   }

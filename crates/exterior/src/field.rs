@@ -1,4 +1,4 @@
-use common::metric::AffineTransform;
+use common::affine::AffineTransform;
 
 use crate::{Dim, ExteriorElement, ExteriorGrade};
 

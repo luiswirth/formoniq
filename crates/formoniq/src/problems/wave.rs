@@ -5,7 +5,7 @@ use crate::{
   operators::{self, DofIdx},
 };
 
-use common::{linalg::quadratic_form_sparse, util::FaerCholesky};
+use common::linalg::{faer::FaerCholesky, nalgebra::quadratic_form_sparse};
 use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 use whitney::cochain::Cochain;
 

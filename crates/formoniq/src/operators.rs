@@ -1,6 +1,6 @@
 use {
   common::combo::{factorial, Sign},
-  exterior::{term::RiemannianMetricExt, ExteriorGrade},
+  exterior::{list::ExteriorElementList, term::multi_gramian, ExteriorGrade},
   manifold::{
     geometry::metric::SimplexGeometry,
     topology::{complex::Complex, simplex::standard_subsimps},
@@ -38,7 +38,7 @@ impl ElMatProvider for LaplaceBeltramiElmat {
   }
   fn eval(&self, geometry: &SimplexGeometry) -> ElMat {
     let ref_difbarys = ref_difbarys(geometry.dim());
-    geometry.vol() * geometry.metric().covector_norm_sqr(&ref_difbarys)
+    geometry.vol() * geometry.inverse_metric().norm_sq_mat(&ref_difbarys)
   }
 }
 
@@ -100,7 +100,7 @@ impl ElMatProvider for HodgeMassElmat {
     let nvertices = grade + 1;
     let simplicies: Vec<_> = standard_subsimps(dim, grade).collect();
 
-    let wedge_terms: Vec<_> = simplicies
+    let wedge_terms: Vec<ExteriorElementList> = simplicies
       .iter()
       .cloned()
       .map(|simp| WhitneyRefLsf::new(dim, simp).wedge_terms().collect())
@@ -111,9 +111,8 @@ impl ElMatProvider for HodgeMassElmat {
       for (j, bsimp) in simplicies.iter().enumerate() {
         let wedge_terms_a = &wedge_terms[i];
         let wedge_terms_b = &wedge_terms[j];
-        let wedge_inners = geometry
-          .metric()
-          .multi_form_inner_product_mat(wedge_terms_a, wedge_terms_b);
+        let wedge_inners = multi_gramian(geometry.inverse_metric(), grade)
+          .inner_mat(wedge_terms_a.coeffs(), wedge_terms_b.coeffs());
 
         let mut sum = 0.0;
         for avertex in 0..nvertices {
@@ -215,8 +214,8 @@ mod test {
   use super::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
   use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
-  use common::linalg::assert_mat_eq;
-  use exterior::term::RiemannianMetricExt;
+  use common::linalg::nalgebra::assert_mat_eq;
+  use exterior::term::multi_gramian;
   use manifold::{geometry::metric::SimplexGeometry, topology::simplex::standard_subsimps};
   use whitney::WhitneyRefLsf;
 
@@ -289,9 +288,8 @@ mod test {
         let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = geometry
-              .metric()
-              .multi_form_inner_product(awhitney, bwhitney);
+            inner[(i, j)] = multi_gramian(geometry.inverse_metric(), grade)
+              .inner(awhitney.coeffs(), bwhitney.coeffs());
           }
         }
         inner *= geometry.vol();

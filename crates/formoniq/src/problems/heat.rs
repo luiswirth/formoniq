@@ -1,12 +1,13 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
+use common::linalg::faer::FaerCholesky;
+
 use crate::{
   assemble,
   operators::{self, DofIdx},
 };
 
 use {
-  common::util::FaerCholesky,
   manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
   whitney::cochain::Cochain,
 };
