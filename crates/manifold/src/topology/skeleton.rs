@@ -1,4 +1,4 @@
-use super::{complex::handle::KSimplexIdx, simplex::Simplex};
+use super::{handle::KSimplexIdx, simplex::Simplex};
 use crate::Dim;
 
 use indexmap::IndexSet;

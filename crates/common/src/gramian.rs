@@ -9,11 +9,9 @@ pub struct Gramian {
   matrix: Matrix,
 }
 impl Gramian {
-  pub fn try_new(matrix: Matrix) -> Option<Self> {
-    matrix.is_spd().then_some(Self { matrix })
-  }
   pub fn new(matrix: Matrix) -> Self {
-    Self::try_new(matrix).expect("Matrix must be s.p.d.")
+    assert!(matrix.is_spd(), "Matrix must be s.p.d.");
+    Self { matrix }
   }
   pub fn new_unchecked(matrix: Matrix) -> Self {
     if cfg!(debug_assertions) {

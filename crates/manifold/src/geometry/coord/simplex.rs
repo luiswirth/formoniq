@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
   geometry::{metric::simplex::SimplexLengths, refsimp_vol},
-  topology::{complex::handle::SimplexHandle, simplex::Simplex},
+  topology::{handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
 
