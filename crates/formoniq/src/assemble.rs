@@ -30,7 +30,7 @@ pub fn assemble_galmat(
     .handle_iter()
     .par_bridge()
     .flat_map(|cell| {
-      let geo = geometry.simplex_geometry(cell);
+      let geo = geometry.simplex_lengths(cell);
       let elmat = elmat.eval(&geo);
 
       let row_subs: Vec<_> = cell.mesh_subsimps(row_grade).collect();
@@ -68,7 +68,7 @@ pub fn assemble_galvec(
     .handle_iter()
     .par_bridge()
     .flat_map(|cell| {
-      let geo = geometry.simplex_geometry(cell);
+      let geo = geometry.simplex_lengths(cell);
       let elvec = elvec.eval(&geo);
 
       let subs: Vec<_> = cell.mesh_subsimps(grade).collect();

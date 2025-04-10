@@ -5,7 +5,7 @@ use {
   },
   exterior::{list::ExteriorElementList, term::multi_gramian, ExteriorGrade},
   manifold::{
-    geometry::metric::simplex::SimplexGeometry,
+    geometry::metric::simplex::SimplexLengths,
     topology::{complex::Complex, simplex::standard_subsimps},
     Dim,
   },
@@ -19,13 +19,13 @@ pub type ElMat = Matrix;
 pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
-  fn eval(&self, geometry: &SimplexGeometry) -> ElMat;
+  fn eval(&self, geometry: &SimplexLengths) -> ElMat;
 }
 
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, geometry: &SimplexGeometry) -> ElVec;
+  fn eval(&self, geometry: &SimplexLengths) -> ElVec;
 }
 
 /// Exact Element Matrix Provider for the Laplace-Beltrami operator.
@@ -39,9 +39,13 @@ impl ElMatProvider for LaplaceBeltramiElmat {
   fn col_grade(&self) -> ExteriorGrade {
     0
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> ElMat {
+  fn eval(&self, geometry: &SimplexLengths) -> ElMat {
     let ref_difbarys = ref_difbarys(geometry.dim());
-    geometry.vol() * geometry.inverse_metric().norm_sq_mat(&ref_difbarys)
+    geometry.vol()
+      * geometry
+        .to_regge_metric()
+        .inverse()
+        .norm_sq_mat(&ref_difbarys)
   }
 }
 
@@ -54,7 +58,7 @@ impl ElMatProvider for ScalarMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     0
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> ElMat {
+  fn eval(&self, geometry: &SimplexLengths) -> ElMat {
     let ndofs = geometry.nvertices();
     let dim = geometry.dim();
     let v = geometry.vol() / ((dim + 1) * (dim + 2)) as f64;
@@ -74,7 +78,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     0
   }
-  fn eval(&self, geomery: &SimplexGeometry) -> ElMat {
+  fn eval(&self, geomery: &SimplexLengths) -> ElMat {
     let n = geomery.nvertices();
     let v = geomery.vol() / n as f64;
     Matrix::from_diagonal_element(n, n, v)
@@ -94,7 +98,7 @@ impl ElMatProvider for HodgeMassElmat {
   }
 
   // TODO: store precomputed values
-  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
+  fn eval(&self, geometry: &SimplexLengths) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
 
@@ -114,7 +118,7 @@ impl ElMatProvider for HodgeMassElmat {
       for (j, bsimp) in simplicies.iter().enumerate() {
         let wedge_terms_a = &wedge_terms[i];
         let wedge_terms_b = &wedge_terms[j];
-        let wedge_inners = multi_gramian(geometry.inverse_metric(), grade)
+        let wedge_inners = multi_gramian(&geometry.to_regge_metric().inverse(), grade)
           .inner_mat(wedge_terms_a.coeffs(), wedge_terms_b.coeffs());
 
         let mut sum = 0.0;
@@ -147,7 +151,7 @@ impl ElMatProvider for DifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0 - 1
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
+  fn eval(&self, geometry: &SimplexLengths) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
     let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
@@ -168,7 +172,7 @@ impl ElMatProvider for CodifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
+  fn eval(&self, geometry: &SimplexLengths) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
     let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
@@ -190,7 +194,7 @@ impl ElMatProvider for CodifDifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
+  fn eval(&self, geometry: &SimplexLengths) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
     let dif = Complex::standard(dim).exterior_derivative_operator(grade);
@@ -218,9 +222,7 @@ mod test {
   use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
   use exterior::term::multi_gramian;
-  use manifold::{
-    geometry::metric::simplex::SimplexGeometry, topology::simplex::standard_subsimps,
-  };
+  use manifold::{geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps};
   use whitney::WhitneyRefLsf;
 
   use approx::assert_relative_eq;
@@ -228,7 +230,7 @@ mod test {
   #[test]
   fn dif_dif0_is_laplace_beltrami() {
     for n in 1..=3 {
-      let geo = SimplexGeometry::standard(n);
+      let geo = SimplexLengths::standard(n);
       let hodge_laplace = CodifDifElmat(0).eval(&geo);
       let laplace_beltrami = LaplaceBeltramiElmat.eval(&geo);
       assert_relative_eq!(&hodge_laplace, &laplace_beltrami);
@@ -238,7 +240,7 @@ mod test {
   #[test]
   fn hodge_mass0_is_scalar_mass() {
     for n in 0..=3 {
-      let geo = SimplexGeometry::standard(n);
+      let geo = SimplexLengths::standard(n);
       let hodge_mass = HodgeMassElmat(0).eval(&geo);
       let scalar_mass = ScalarMassElmat.eval(&geo);
       assert_relative_eq!(&hodge_mass, &scalar_mass);
@@ -247,7 +249,7 @@ mod test {
 
   #[test]
   fn hodge_mass_n2_k1() {
-    let geo = SimplexGeometry::standard(2);
+    let geo = SimplexLengths::standard(2);
     let computed = HodgeMassElmat(1).eval(&geo);
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
@@ -259,7 +261,7 @@ mod test {
 
   #[test]
   fn dif_n2_k1() {
-    let geo = SimplexGeometry::standard(2);
+    let geo = SimplexLengths::standard(2);
     let computed = DifElmat(1).eval(&geo);
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
@@ -271,7 +273,7 @@ mod test {
 
   #[test]
   fn codif_n2_k1() {
-    let geo = SimplexGeometry::standard(2);
+    let geo = SimplexLengths::standard(2);
     let computed = CodifElmat(1).eval(&geo);
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
@@ -284,7 +286,7 @@ mod test {
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in 1..=3 {
-      let geo = SimplexGeometry::standard(dim);
+      let geo = SimplexLengths::standard(dim);
       for grade in 0..dim {
         let difdif = CodifDifElmat(grade).eval(&geo);
 
@@ -294,7 +296,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = multi_gramian(geo.inverse_metric(), grade + 1)
+            inner[(i, j)] = multi_gramian(&geo.to_regge_metric().inverse(), grade + 1)
               .inner(awhitney.coeffs(), bwhitney.coeffs());
           }
         }
