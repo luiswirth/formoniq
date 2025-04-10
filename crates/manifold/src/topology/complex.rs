@@ -1,4 +1,8 @@
-use super::{handle::{SimplexHandle, SimplexIdx, SkeletonHandle}, simplex::Simplex, skeleton::Skeleton};
+use super::{
+  handle::{SimplexIdx, SkeletonHandle},
+  simplex::Simplex,
+  skeleton::Skeleton,
+};
 use crate::Dim;
 
 use common::linalg::nalgebra::{CooMatrix, Matrix};
@@ -66,35 +70,48 @@ impl Complex {
   }
 
   pub fn has_boundary(&self) -> bool {
-    self.boundary_facets().count() > 0
+    !self.boundary_facets().is_empty()
   }
 
   /// For a d-mesh computes the boundary, which consists of facets ((d-1)-subs).
   ///
   /// The boundary facets are characterized by the fact that they
   /// only have 1 cell as super entity.
-  pub fn boundary_facets(&self) -> impl Iterator<Item = SimplexHandle> {
+  pub fn boundary_facets(&self) -> Vec<SimplexIdx> {
     self
       .facets()
       .handle_iter()
       .filter(|f| f.cocells().count() == 1)
+      .map(|f| f.idx())
+      .collect()
   }
 
-  pub fn boundary_cells(&self) -> impl Iterator<Item = SimplexHandle> {
-    let cells = self
+  pub fn boundary_cells(&self) -> Vec<SimplexIdx> {
+    self
       .boundary_facets()
+      .into_iter()
       // the boundary has only one parent cell by definition
-      .map(|facet| facet.cocells().next().unwrap().kidx())
+      .map(|facet| {
+        facet
+          .handle(self)
+          .cocells()
+          .next()
+          .expect("Boundary facets have exactly one cell.")
+          .idx()
+      })
       .unique()
+      .collect()
   }
 
   /// The vertices that lie on the boundary of the mesh.
   /// No particular order of vertices.
-  pub fn boundary_vertices(&self) -> impl Iterator<Item = SimplexHandle> {
-    let vertices = self
+  pub fn boundary_vertices(&self) -> Vec<usize> {
+    self
       .boundary_facets()
-      .flat_map(|facet| facet.vertices.clone())
+      .into_iter()
+      .flat_map(|facet| facet.handle(self).vertices.clone())
       .unique()
+      .collect()
   }
 
   /// $diff^k: Delta_k -> Delta_(k-1)$
@@ -147,14 +164,20 @@ impl Complex {
     let mut skeletons = vec![MeshSkeleton::default(); dim + 1];
     skeletons[0] = MeshSkeleton {
       skeleton: Skeleton::new((0..cells.nvertices()).map(Simplex::single).collect()),
-      mesh_data:
-      (0..cells.nvertices())
+      mesh_data: (0..cells.nvertices())
         .map(|_| SimplexMeshData::default())
         .collect(),
-      };
+    };
 
     for (icell, cell) in cells.iter().enumerate() {
-      for (dim_skeleton, MeshSkeleton {skeleton, mesh_data}) in skeletons.iter_mut().enumerate() {
+      for (
+        dim_skeleton,
+        MeshSkeleton {
+          skeleton,
+          mesh_data,
+        },
+      ) in skeletons.iter_mut().enumerate()
+      {
         for sub in cell.subsequences(dim_skeleton) {
           let (sub_idx, is_new) = skeleton.insert(sub);
           let sub_data = if is_new {

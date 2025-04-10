@@ -164,7 +164,7 @@ pub struct SkeletonHandle<'m> {
 impl std::ops::Deref for SkeletonHandle<'_> {
   type Target = Skeleton;
   fn deref(&self) -> &Self::Target {
-    &self.complex.mesh_skeleton_raw(self.dim).skeleton()
+    self.complex.mesh_skeleton_raw(self.dim).skeleton()
   }
 }
 
