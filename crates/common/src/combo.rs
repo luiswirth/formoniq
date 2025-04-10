@@ -6,6 +6,10 @@ pub fn binomial(n: usize, k: usize) -> usize {
 pub fn factorial(num: usize) -> usize {
   (1..=num).product()
 }
+pub fn nsubpermutations(n: usize, k: usize) -> usize {
+  binomial(n, k) * factorial(k)
+}
+
 pub fn factorialf(num: usize) -> f64 {
   factorial(num) as f64
 }

@@ -297,18 +297,18 @@ mod tests {
 
   #[test]
   fn compute_wedge() {
-    let a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
-    let b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
+    let a = ExteriorElement::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
+    let b = ExteriorElement::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
 
     let computed_ab = a.wedge(&b);
-    let expected_ab = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 2);
+    let expected_ab = ExteriorElement::new(na::dvector![1.0, 0.0, 0.0], 3, 2);
     assert_eq!(computed_ab.coeffs, expected_ab.coeffs);
   }
 
   #[test]
   fn wedge_antisymmetry() {
-    let form_a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
-    let form_b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
+    let form_a = ExteriorElement::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
+    let form_b = ExteriorElement::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
 
     let ab = form_a.wedge(&form_b);
     let ba = form_b.wedge(&form_a);
@@ -317,19 +317,20 @@ mod tests {
 
   #[test]
   fn wedge_with_zero() {
-    let form = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
-    let zero_form = MultiForm::zero(3, 1);
+    let form = ExteriorElement::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
+    let zero_form = ExteriorElement::zero(3, 1);
 
     let wedge_computed = form.wedge(&zero_form);
-    let wedge_expected = MultiForm::zero(3, 2);
+    let wedge_expected = ExteriorElement::zero(3, 2);
     assert_eq!(wedge_computed.coeffs, wedge_expected.coeffs);
   }
 
   #[test]
   fn wedge_grade_exceeds_dim() {
-    let a = MultiForm::new(na::dvector![1.0, 0.0], 2, 1);
-    let b = MultiForm::new(na::dvector![1.0], 2, 2);
-    let result = std::panic::catch_unwind(|| a.wedge(&b));
-    assert!(result.is_err());
+    let a = ExteriorElement::new(na::dvector![1.0, 0.0], 2, 1);
+    let b = ExteriorElement::new(na::dvector![1.0], 2, 2);
+    let computed = a.wedge(&b);
+    let expected = ExteriorElement::zero(2, 0);
+    assert_eq!(computed.coeffs, expected.coeffs);
   }
 }

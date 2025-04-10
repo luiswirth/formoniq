@@ -1,9 +1,9 @@
 use super::{
-  BaryCoord, BaryCoordRef, Coord, CoordRef, EmbeddingCoord, EmbeddingCoordRef, LocalCoord,
+  AmbientCoord, AmbientCoordRef, BaryCoord, BaryCoordRef, Coord, CoordRef, LocalCoord,
   LocalCoordRef, MeshVertexCoords,
 };
 use crate::{
-  geometry::refsimp_vol,
+  geometry::{metric::SimplexLengths, refsimp_vol},
   topology::{complex::handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
@@ -29,10 +29,10 @@ impl SimplexCoords {
     }
     Self::new(vertices)
   }
-  pub fn from_mesh_simplex(simp: &Simplex, mesh_coords: &MeshVertexCoords) -> SimplexCoords {
-    let mut vert_coords = na::DMatrix::zeros(mesh_coords.dim(), simp.nvertices());
+  pub fn from_simplex_and_coords(simp: &Simplex, coords: &MeshVertexCoords) -> SimplexCoords {
+    let mut vert_coords = na::DMatrix::zeros(coords.dim(), simp.nvertices());
     for (i, v) in simp.iter().enumerate() {
-      vert_coords.set_column(i, &mesh_coords.coord(v));
+      vert_coords.set_column(i, &coords.coord(v));
     }
     SimplexCoords::new(vert_coords)
   }
@@ -43,11 +43,11 @@ impl SimplexCoords {
   pub fn dim_intrinsic(&self) -> Dim {
     self.nvertices() - 1
   }
-  pub fn dim_embedded(&self) -> Dim {
+  pub fn dim_ambient(&self) -> Dim {
     self.vertices.dim()
   }
   pub fn is_same_dim(&self) -> bool {
-    self.dim_intrinsic() == self.dim_embedded()
+    self.dim_intrinsic() == self.dim_ambient()
   }
 
   pub fn coord(&self, ivertex: usize) -> CoordRef {
@@ -62,7 +62,7 @@ impl SimplexCoords {
     self.coord(i + 1) - self.base_vertex()
   }
   pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
-    let mut mat = na::DMatrix::zeros(self.dim_embedded(), self.dim_intrinsic());
+    let mut mat = na::DMatrix::zeros(self.dim_ambient(), self.dim_intrinsic());
     let v0 = self.base_vertex();
     for (i, vi) in self.vertices.coord_iter().skip(1).enumerate() {
       let v0i = vi - v0;
@@ -97,21 +97,21 @@ impl SimplexCoords {
     let linear = self.linear_transform();
     AffineTransform::new(translation, linear)
   }
-  pub fn local2global<'a>(&self, local: impl Into<LocalCoordRef<'a>>) -> EmbeddingCoord {
+  pub fn local2global<'a>(&self, local: impl Into<LocalCoordRef<'a>>) -> AmbientCoord {
     let local = local.into();
     self.affine_transform().apply_forward(local)
   }
-  pub fn global2local<'a>(&self, global: impl Into<EmbeddingCoordRef<'a>>) -> LocalCoord {
+  pub fn global2local<'a>(&self, global: impl Into<AmbientCoordRef<'a>>) -> LocalCoord {
     let global = global.into();
     self.affine_transform().apply_backward(global)
   }
-  pub fn global2bary<'a>(&self, global: impl Into<EmbeddingCoordRef<'a>>) -> BaryCoord {
+  pub fn global2bary<'a>(&self, global: impl Into<AmbientCoordRef<'a>>) -> BaryCoord {
     let local = self.global2local(global);
     let bary0 = 1.0 - local.sum();
     local.insert_row(0, bary0)
   }
 
-  pub fn bary2global<'a>(&self, bary: impl Into<BaryCoordRef<'a>>) -> EmbeddingCoord {
+  pub fn bary2global<'a>(&self, bary: impl Into<BaryCoordRef<'a>>) -> AmbientCoord {
     let bary = bary.into();
     self
       .vertices
@@ -131,7 +131,7 @@ impl SimplexCoords {
   }
 
   pub fn barycenter(&self) -> Coord {
-    let mut barycenter = na::DVector::zeros(self.dim_embedded());
+    let mut barycenter = na::DVector::zeros(self.dim_ambient());
     self.vertices.coord_iter().for_each(|v| barycenter += v);
     barycenter /= self.nvertices() as f64;
     barycenter
@@ -141,10 +141,11 @@ impl SimplexCoords {
     is_bary_inside(&bary)
   }
 
-  pub fn subsimps(&self, dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
-    Simplex::standard(self.nvertices())
-      .substrings(dim)
-      .map(|edge| Self::from_mesh_simplex(&edge, &self.vertices))
+  /// Here we mean subsequence simplicies.
+  pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
+    Simplex::standard(self.dim_intrinsic())
+      .subsequences(sub_dim)
+      .map(|edge| Self::from_simplex_and_coords(&edge, &self.vertices))
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexCoords> + use<'_> {
     self.subsimps(1)
@@ -163,6 +164,10 @@ impl SimplexCoords {
   pub fn flipped_orientation(mut self) -> Self {
     self.flip_orientation();
     self
+  }
+
+  pub fn to_lengths(&self) -> SimplexLengths {
+    SimplexLengths::from_coords(self)
   }
 }
 
@@ -206,7 +211,7 @@ pub trait SimplexHandleExt {
 }
 impl SimplexHandleExt for SimplexHandle<'_> {
   fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
-    SimplexCoords::from_mesh_simplex(self.raw(), coords)
+    SimplexCoords::from_simplex_and_coords(self.raw(), coords)
   }
 }
 

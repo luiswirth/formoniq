@@ -1,12 +1,13 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::linalg::nalgebra::assert_mat_eq;
 use formoniq::operators::{self, ElMatProvider};
 use manifold::{
   geometry::{metric::SimplexGeometry, refsimp_vol},
   Dim,
 };
+
+use approx::assert_relative_eq;
 
 fn check_ref_elmat<F>(elmat: impl ElMatProvider, ref_elmat: F)
 where
@@ -20,7 +21,7 @@ where
     let refcell = SimplexGeometry::standard(dim);
     let computed_elmat = elmat.eval(&refcell);
 
-    assert_mat_eq(&computed_elmat, &expected_elmat, None);
+    assert_relative_eq!(&computed_elmat, &expected_elmat);
   }
 }
 

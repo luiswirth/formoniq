@@ -13,7 +13,7 @@ use {
   manifold::{
     geometry::coord::{
       local::{is_bary_inside, local_to_bary_coords, SimplexCoords},
-      EmbeddingCoordRef, LocalCoordRef,
+      AmbientCoordRef, LocalCoordRef,
     },
     topology::{complex::Complex, simplex::Simplex},
     Dim,
@@ -41,7 +41,7 @@ impl CoordSimplexExt for SimplexCoords {
     let vectors = vectors
       .column_iter()
       .map(|v| MultiVector::line(v.into_owned()));
-    MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_embedded()))
+    MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_ambient()))
   }
 }
 
@@ -165,7 +165,7 @@ impl ExteriorField for WhitneyCoordLsf {
     self.ref_lsf.grade()
   }
   /// Pullback!
-  fn at_point<'a>(&self, coord_global: impl Into<EmbeddingCoordRef<'a>>) -> MultiForm {
+  fn at_point<'a>(&self, coord_global: impl Into<AmbientCoordRef<'a>>) -> MultiForm {
     let coord_local = self.cell_coords.global2local(coord_global);
     let value_local = self.ref_lsf.at_point(&coord_local);
     value_local.precompose_form(&self.cell_coords.linear_transform())

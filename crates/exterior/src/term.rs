@@ -155,7 +155,8 @@ pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian 
 #[cfg(test)]
 mod test {
   use super::*;
-  use common::{combo::binomial, gramian::Gramian, linalg::nalgebra::assert_mat_eq};
+  use approx::assert_relative_eq;
+  use common::{combo::binomial, gramian::Gramian};
 
   #[test]
   fn canonical_conversion() {
@@ -184,7 +185,7 @@ mod test {
         let binomial = binomial(n, k);
         let expected_gram = Gramian::standard(binomial);
         let computed_gram = multi_gramian(&gramian, k);
-        assert_mat_eq(computed_gram.matrix(), expected_gram.matrix(), None);
+        assert_relative_eq!(computed_gram.matrix(), expected_gram.matrix());
       }
     }
   }

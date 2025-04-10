@@ -127,7 +127,7 @@ impl<'m> SimplexHandle<'m> {
   pub fn subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexHandle> {
     self
       .raw()
-      .substrings(dim_sub)
+      .subsequences(dim_sub)
       .map(move |sub| self.complex.skeleton(dim_sub).get_by_simplex(&sub))
   }
 
@@ -141,7 +141,7 @@ impl<'m> SimplexHandle<'m> {
       .flat_map(|parent| {
         self
           .raw()
-          .superstrings(dim_super, parent.raw())
+          .supersequences(dim_super, parent.raw())
           .map(move |sup| self.complex.skeleton(dim_super).get_by_simplex(&sup))
       })
       .collect()
