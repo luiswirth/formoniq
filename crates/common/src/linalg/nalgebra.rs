@@ -85,39 +85,6 @@ where
   matrix
 }
 
-pub fn are_f64_eq(a: f64, b: f64, eps: Option<f64>) -> bool {
-  let eps = eps.unwrap_or(1e-12);
-  let diff = a - b;
-  diff <= eps
-}
-
-pub fn assert_f64_eq(a: f64, b: f64, eps: Option<f64>) {
-  if !are_f64_eq(a, b, eps) {
-    let diff = a - b;
-    println!("a={a:.3}");
-    println!("b={b:.3}");
-    println!("a-b={diff:.3}");
-    panic!("Matrices not equal.");
-  }
-}
-
-pub fn are_mat_eq(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, eps: Option<f64>) -> bool {
-  let eps = eps.unwrap_or(1e-12);
-  let diff = a - b;
-  let error = diff.norm();
-  error <= eps
-}
-
-pub fn assert_mat_eq(a: &na::DMatrix<f64>, b: &na::DMatrix<f64>, eps: Option<f64>) {
-  if !are_mat_eq(a, b, eps) {
-    let diff = a - b;
-    println!("a={a:.3}");
-    println!("b={b:.3}");
-    println!("a-b={diff:.3}");
-    panic!("Matrices not equal.");
-  }
-}
-
 pub fn save_vector(
   mu: &na::DVector<f64>,
   path: impl AsRef<std::path::Path>,

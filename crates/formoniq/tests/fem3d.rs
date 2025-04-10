@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::linalg::nalgebra::assert_mat_eq;
+use approx::assert_relative_eq;
 use formoniq::{assemble, operators};
 use manifold::{gen::cartesian::CartesianMeshInfo, Dim};
 
@@ -12,7 +12,7 @@ fn feec_vs_fem3d() {
   for nboxes_per_dim in 1..=10 {
     let feec = feec_galmat(nboxes_per_dim);
     let fem = fem3d_galmat(nboxes_per_dim);
-    assert_mat_eq(&feec, &fem, None);
+    assert_relative_eq!(&feec, &fem);
   }
 }
 

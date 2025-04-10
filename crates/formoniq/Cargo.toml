@@ -15,6 +15,7 @@ nalgebra-sparse = "0.10.0"
 tracing = "0.1.41"
 itertools = "0.14.0"
 rayon = "1.10.0"
+approx = "0.5.1"
 
 
 [dev-dependencies]

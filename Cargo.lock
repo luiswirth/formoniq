@@ -227,6 +227,7 @@ checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 name = "exterior"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "common",
  "itertools",
  "nalgebra",
@@ -299,6 +300,7 @@ dependencies = [
 name = "formoniq"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "common",
  "exterior",
  "itertools",
@@ -541,6 +543,7 @@ checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 name = "manifold"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "common",
  "indexmap",
  "itertools",

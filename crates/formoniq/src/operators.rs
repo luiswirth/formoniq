@@ -211,76 +211,77 @@ pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
 
 #[cfg(test)]
 mod test {
-  use super::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat};
+  use super::*;
   use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
-  use common::linalg::nalgebra::assert_mat_eq;
   use exterior::term::multi_gramian;
   use manifold::{geometry::metric::SimplexGeometry, topology::simplex::standard_subsimps};
   use whitney::WhitneyRefLsf;
 
+  use approx::assert_relative_eq;
+
   #[test]
   fn dif_dif0_is_laplace_beltrami() {
     for n in 1..=3 {
-      let complex = SimplexGeometry::standard(n);
-      let hodge_laplace = CodifDifElmat(0).eval(&complex);
-      let laplace_beltrami = LaplaceBeltramiElmat.eval(&complex);
-      assert_mat_eq(&hodge_laplace, &laplace_beltrami, None);
+      let geo = SimplexGeometry::standard(n);
+      let hodge_laplace = CodifDifElmat(0).eval(&geo);
+      let laplace_beltrami = LaplaceBeltramiElmat.eval(&geo);
+      assert_relative_eq!(&hodge_laplace, &laplace_beltrami);
     }
   }
 
   #[test]
   fn hodge_mass0_is_scalar_mass() {
     for n in 0..=3 {
-      let complex = SimplexGeometry::standard(n);
-      let hodge_mass = HodgeMassElmat(0).eval(&complex);
-      let scalar_mass = ScalarMassElmat.eval(&complex);
-      assert_mat_eq(&hodge_mass, &scalar_mass, None);
+      let geo = SimplexGeometry::standard(n);
+      let hodge_mass = HodgeMassElmat(0).eval(&geo);
+      let scalar_mass = ScalarMassElmat.eval(&geo);
+      assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }
 
   #[test]
   fn hodge_mass_n2_k1() {
-    let complex = SimplexGeometry::standard(2);
-    let computed = HodgeMassElmat(1).eval(&complex);
+    let geo = SimplexGeometry::standard(2);
+    let computed = HodgeMassElmat(1).eval(&geo);
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
       1./6.,1./3.,0.   ;
       0.   ,0.   ,1./6.;
     ];
-    assert_mat_eq(&computed, &expected, None);
+    assert_relative_eq!(&computed, &expected);
   }
 
   #[test]
   fn dif_n2_k1() {
-    let complex = SimplexGeometry::standard(2);
-    let computed = DifElmat(1).eval(&complex);
+    let geo = SimplexGeometry::standard(2);
+    let computed = DifElmat(1).eval(&geo);
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
        0.   ,-1./6.,1./6.;
     ];
-    assert_mat_eq(&computed, &expected, None);
+    assert_relative_eq!(&computed, &expected);
   }
 
   #[test]
   fn codif_n2_k1() {
-    let complex = SimplexGeometry::standard(2);
-    let computed = CodifElmat(1).eval(&complex);
+    let geo = SimplexGeometry::standard(2);
+    let computed = CodifElmat(1).eval(&geo);
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
        1./6.,  1./3., 1./6.;
     ];
-    assert_mat_eq(&computed, &expected, None);
+    assert_relative_eq!(&computed, &expected);
   }
 
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in 1..=3 {
-      let geometry = SimplexGeometry::standard(dim);
+      let geo = SimplexGeometry::standard(dim);
       for grade in 0..dim {
-        let difdif = CodifDifElmat(grade).eval(&geometry);
+        let difdif = CodifDifElmat(grade).eval(&geo);
 
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
           .map(|simp| WhitneyRefLsf::new(dim, simp).dif())
@@ -288,12 +289,12 @@ mod test {
         let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = multi_gramian(geometry.inverse_metric(), grade)
+            inner[(i, j)] = multi_gramian(geo.inverse_metric(), grade)
               .inner(awhitney.coeffs(), bwhitney.coeffs());
           }
         }
-        inner *= geometry.vol();
-        assert_mat_eq(&difdif, &inner, None);
+        inner *= geo.vol();
+        assert_relative_eq!(&difdif, &inner);
       }
     }
   }

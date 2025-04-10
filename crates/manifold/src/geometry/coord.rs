@@ -1,7 +1,6 @@
 pub mod local;
 pub mod quadrature;
 
-use itertools::Itertools;
 use local::SimplexCoords;
 
 use crate::{
@@ -9,6 +8,8 @@ use crate::{
   topology::{complex::Complex, VertexIdx},
   Dim,
 };
+
+use itertools::Itertools;
 
 pub type Coord = na::DVector<f64>;
 pub type CoordRef<'a> = na::DVectorView<'a, f64>;
@@ -19,10 +20,8 @@ pub type LocalCoordRef<'a> = CoordRef<'a>;
 pub type BaryCoord = Coord;
 pub type BaryCoordRef<'a> = CoordRef<'a>;
 
-pub type EmbeddingCoord = Coord;
-pub type EmbeddingCoordRef<'a> = CoordRef<'a>;
-
-pub type TangentVector = na::DVector<f64>;
+pub type AmbientCoord = Coord;
+pub type AmbientCoordRef<'a> = CoordRef<'a>;
 
 pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
   let topology = Complex::standard(dim);

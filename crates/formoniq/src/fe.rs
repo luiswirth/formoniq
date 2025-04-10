@@ -118,9 +118,6 @@ pub fn reconstruct_at_mesh_cells_vertices(
               let coeff = cochain[dof_simp];
 
               let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
-              //dbg!(cell.simplex_set().vertices.indices());
-              //dbg!(dof_simp.simplex_set().vertices.indices());
-              //dbg!(&local_dof_simp.vertices.indices());
               let whitney = WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp);
 
               // dof_value

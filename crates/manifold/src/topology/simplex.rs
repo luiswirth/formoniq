@@ -1,4 +1,4 @@
-use common::combo::{binomial, sort_signed, Sign};
+use common::combo::{binomial, nsubpermutations, sort_signed, Sign};
 
 use super::VertexIdx;
 use crate::Dim;
@@ -54,37 +54,35 @@ impl Simplex {
     itertools::Itertools::permutations(self.clone().into_iter(), sub_dim + 1).map(Self::from)
   }
 
-  pub fn is_substring_of(&self, other: &Self) -> bool {
-    let sub = self.clone().sorted();
-    let sup = other.clone().sorted();
-    sup
-      .vertices
-      .windows(self.nvertices())
-      .any(|w| w == sub.vertices)
+  pub fn is_subsequence_of(&self, sup: &Self) -> bool {
+    let mut sup_iter = sup.iter();
+    self.iter().all(|item| sup_iter.any(|x| x == item))
   }
-  pub fn is_superstring_of(&self, other: &Self) -> bool {
-    other.is_substring_of(other)
+  pub fn is_supersequence_of(&self, other: &Self) -> bool {
+    other.is_subsequence_of(self)
   }
-  /// The substring-simplicies of this simplex.
+  /// The subsequence-simplicies of this simplex.
   ///
-  /// These are ordered lexicographically w.r.t.
-  /// the local vertex indices.
-  /// e.g. ref_tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
-  pub fn substrings(&self, sub_dim: Dim) -> impl Iterator<Item = Self> {
+  /// These are ordered lexicographically w.r.t. the local vertex indices.
+  pub fn subsequences(&self, sub_dim: Dim) -> impl Iterator<Item = Self> {
     itertools::Itertools::combinations(self.clone().into_iter(), sub_dim + 1).map(Self::from)
   }
   pub fn boundary(&self) -> impl Iterator<Item = SignedSimplex> {
     let mut sign = Sign::from_parity(self.nvertices() - 1);
-    self.substrings(self.dim() - 1).map(move |simp| {
+    self.subsequences(self.dim() - 1).map(move |simp| {
       let this_sign = sign;
       sign.flip();
       SignedSimplex::new(simp, this_sign)
     })
   }
-  pub fn superstrings(&self, super_dim: Dim, root: &Self) -> impl Iterator<Item = Self> + use<'_> {
+  pub fn supersequences(
+    &self,
+    super_dim: Dim,
+    root: &Self,
+  ) -> impl Iterator<Item = Self> + use<'_> {
     root
-      .substrings(super_dim)
-      .filter(|sup| self.is_substring_of(sup))
+      .subsequences(super_dim)
+      .filter(|sup| self.is_subsequence_of(sup))
   }
 
   /// Computes local vertex numbers relative to sup.
@@ -193,15 +191,57 @@ impl SignedSimplex {
 }
 
 pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Simplex> {
-  Simplex::standard(dim_cell).substrings(dim_sub)
+  Simplex::standard(dim_cell).subsequences(dim_sub)
 }
 pub fn graded_subsimps(dim_cell: Dim) -> impl Iterator<Item = impl Iterator<Item = Simplex>> {
   (0..=dim_cell).map(move |d| standard_subsimps(dim_cell, d))
 }
 
-pub fn nsubsimplicies(dim_cell: Dim, dim_sub: Dim) -> usize {
+pub fn nsubsequence_simplicies(dim_cell: Dim, dim_sub: Dim) -> usize {
   binomial(dim_cell + 1, dim_sub + 1)
 }
+pub fn nsubset_simplicies(dim_cell: Dim, dim_sub: Dim) -> usize {
+  nsubpermutations(dim_cell + 1, dim_sub + 1)
+}
+
 pub fn nedges(dim_cell: Dim) -> usize {
-  nsubsimplicies(dim_cell, 1)
+  nsubsequence_simplicies(dim_cell, 1)
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::topology::simplex::nsubsequence_simplicies;
+
+  use itertools::Itertools;
+
+  #[test]
+  fn subsequence() {
+    for dim in 0..=4 {
+      let simp = Simplex::standard(dim);
+      for sub_dim in 0..=dim {
+        let subs = simp.subsequences(sub_dim).collect_vec();
+        assert_eq!(subs.len(), nsubsequence_simplicies(dim, sub_dim));
+        assert!(subs.iter().all(|sub| sub.is_subset_of(&simp)));
+        assert!(subs.iter().all(|sub| sub.is_subsequence_of(&simp)));
+      }
+    }
+  }
+
+  #[test]
+  fn subset() {
+    for dim in 0..=4 {
+      let simp = Simplex::standard(dim);
+      for sub_dim in 0..=dim {
+        let subs = simp.subsets(sub_dim).collect_vec();
+        assert_eq!(subs.len(), nsubset_simplicies(dim, sub_dim));
+        assert!(subs.iter().all(|sub| sub.is_subset_of(&simp)));
+        let nsubsequences = subs
+          .iter()
+          .filter(|sub| sub.is_subsequence_of(&simp))
+          .count();
+        assert_eq!(nsubsequences, nsubsequence_simplicies(dim, sub_dim));
+      }
+    }
+  }
 }

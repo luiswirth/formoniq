@@ -43,7 +43,7 @@ impl TriangleSurface3D {
       .into_iter()
       .map(|simp| {
         let mut vertices: [usize; 3] = simp.clone().try_into().unwrap();
-        let coord_simp = SimplexCoords::from_mesh_simplex(&simp, &coords);
+        let coord_simp = SimplexCoords::from_simplex_and_coords(&simp, &coords);
         if coord_simp.orientation().is_neg() {
           vertices.swap(1, 2);
         }
