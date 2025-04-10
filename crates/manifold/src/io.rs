@@ -28,8 +28,8 @@ pub fn save_skeleton_to_file(
 }
 
 pub fn write_skeleton<W: io::Write>(mut writer: W, skeleton: SkeletonHandle) -> io::Result<()> {
-  for simplex in skeleton.set_iter() {
-    for vertex in simplex.vertices.iter() {
+  for simplex in skeleton.iter() {
+    for vertex in simplex.raw().vertices.iter() {
       write!(writer, "{vertex} ")?;
     }
     writeln!(writer)?;

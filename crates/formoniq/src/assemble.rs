@@ -24,7 +24,7 @@ pub fn assemble_galmat(
 
   let triplets: Vec<(usize, usize, f64)> = topology
     .cells()
-    .handle_iter()
+    .iter()
     .par_bridge()
     .flat_map(|cell| {
       let geo = geometry.simplex_geometry(cell);
@@ -62,7 +62,7 @@ pub fn assemble_galvec(
 
   let entries: Vec<(usize, f64)> = topology
     .cells()
-    .handle_iter()
+    .iter()
     .par_bridge()
     .flat_map(|cell| {
       let geo = geometry.simplex_geometry(cell);

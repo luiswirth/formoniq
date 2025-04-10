@@ -1,6 +1,6 @@
-use std::mem;
-
 use crate::util::{CumsumExt, IterAllEqExt};
+
+use std::mem;
 
 pub trait DMatrixExt {
   fn is_full_rank(&self, eps: f64) -> bool;
@@ -12,7 +12,7 @@ impl DMatrixExt for na::DMatrix<f64> {
     self.rank(eps) == self.nrows().min(self.ncols())
   }
   fn is_spd(&self) -> bool {
-    self.is_square() && *self == self.transpose() && na::Cholesky::new(self.clone()).is_some()
+    na::Cholesky::new(self.clone()).is_some()
   }
   fn condition_number(self) -> f64 {
     self.norm() * self.try_inverse().unwrap().norm()

@@ -66,7 +66,7 @@ impl Complex {
   pub fn boundary_facets(&self) -> KSimplexCollection {
     self
       .facets()
-      .handle_iter()
+      .iter()
       .filter(|f| f.cocells().count() == 1)
       .collect()
   }
@@ -104,7 +104,7 @@ impl Complex {
 
     let subs = &self.skeleton(dim - 1);
     let mut mat = nas::CooMatrix::zeros(subs.len(), sups.len());
-    for (isup, sup) in sups.handle_iter().enumerate() {
+    for (isup, sup) in sups.iter().enumerate() {
       let sup_boundary = sup.raw().boundary();
       for sub in sup_boundary {
         let sign = sub.sign.as_f64();
@@ -188,12 +188,12 @@ mod test {
   fn incidence() {
     let dim = 3;
     let complex = Complex::standard(dim);
-    let cell = complex.cells().handle_iter().next().unwrap();
+    let cell = complex.cells().iter().next().unwrap();
 
     // print
     for dim_sub in 0..=dim {
       let skeleton = complex.skeleton(dim_sub);
-      for simp in skeleton.handle_iter() {
+      for simp in skeleton.iter() {
         let simp_vertices = simp.raw();
         print!("{simp_vertices:?},");
       }

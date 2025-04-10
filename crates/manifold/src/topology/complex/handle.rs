@@ -1,3 +1,5 @@
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
 use super::{attribute::SparseSignChain, Complex, SimplexData};
 use crate::{
   topology::{simplex::Simplex, skeleton::Skeleton},
@@ -196,10 +198,12 @@ impl<'m> SkeletonHandle<'m> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
 
-  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m>> + '_ {
+  pub fn iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m>> + '_ {
     (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
-  pub fn set_iter(&self) -> impl ExactSizeIterator<Item = &Simplex> + '_ {
-    self.handle_iter().map(|s| s.raw())
+  pub fn par_iter(&self) -> impl ParallelIterator<Item = SimplexHandle<'m>> + '_ {
+    (0..self.len())
+      .into_par_iter()
+      .map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
 }
