@@ -1,8 +1,8 @@
 use super::{simplex::SimplexLengths, EdgeIdx};
 use crate::{
-  topology::complex::{
+  topology::{
+    complex::Complex,
     handle::{SimplexHandle, SkeletonHandle},
-    Complex,
   },
   Dim,
 };
@@ -19,7 +19,12 @@ pub struct MeshLengths {
 }
 impl MeshLengths {
   pub fn new(vector: Vector, complex: &Complex) -> Self {
-    Self::try_new(vector, complex).expect("Edge lengths are not coordinate realizable.")
+    let this = Self { vector };
+    assert!(
+      this.is_coordinate_realizable(complex.cells()),
+      "Edge lengths are not coordinate realizable."
+    );
+    this
   }
   pub fn try_new(vector: Vector, complex: &Complex) -> Option<Self> {
     let this = Self { vector };
@@ -34,6 +39,7 @@ impl MeshLengths {
     let vector = SimplexLengths::standard(dim).into_vector();
     Self::new_unchecked(vector)
   }
+
   pub fn nedges(&self) -> usize {
     self.vector.len()
   }

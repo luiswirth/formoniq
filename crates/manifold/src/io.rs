@@ -9,11 +9,7 @@ use std::{
 
 use crate::{
   geometry::coord::mesh::MeshCoords,
-  topology::{
-    complex::{handle::SkeletonHandle, Complex},
-    simplex::Simplex,
-    skeleton::Skeleton,
-  },
+  topology::{complex::Complex, handle::SkeletonHandle, simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
 

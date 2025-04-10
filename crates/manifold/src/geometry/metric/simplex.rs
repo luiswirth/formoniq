@@ -192,7 +192,7 @@ impl SimplexLengths {
         metric_tensor[(j, i)] = val;
       }
     }
-    Gramian::try_new(metric_tensor).expect("Edge Lengths must be coordinate realizable.")
+    Gramian::new(metric_tensor)
   }
 }
 #[cfg(test)]

@@ -1,13 +1,16 @@
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-
-use super::{attribute::SparseSignChain, Complex, SimplexMeshData};
+use super::complex::{Complex, MeshSkeleton, SimplexMeshData};
 use crate::{
   topology::{simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
 
+use common::combo::Sign;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+
+/// An index identifying a simplex in a skeleton.
 pub type KSimplexIdx = usize;
 
+/// An index identifying a simplex in the mesh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SimplexIdx {
   pub dim: Dim,
@@ -37,6 +40,7 @@ impl SimplexIdx {
   }
 }
 
+/// A handle to a simplex in the mesh.
 #[derive(Copy, Clone)]
 pub struct SimplexHandle<'c> {
   complex: &'c Complex,
@@ -45,9 +49,7 @@ pub struct SimplexHandle<'c> {
 impl std::ops::Deref for SimplexHandle<'_> {
   type Target = Simplex;
   fn deref(&self) -> &Self::Target {
-    self.complex.skeletons[self.idx.dim()]
-      .0
-      .simplex_by_kidx(self.kidx())
+    self.skeleton_raw().simplex_by_kidx(self.kidx())
   }
 }
 impl std::fmt::Debug for SimplexHandle<'_> {
@@ -73,29 +75,31 @@ impl<'m> SimplexHandle<'m> {
   pub fn complex(&self) -> &'m Complex {
     self.complex
   }
+
   pub fn skeleton(&self) -> SkeletonHandle<'m> {
     self.complex.skeleton(self.dim())
   }
+  pub fn mesh_skeleton_raw(&self) -> &MeshSkeleton {
+    self.complex.mesh_skeleton_raw(self.idx.dim())
+  }
+  pub fn skeleton_raw(&self) -> &Skeleton {
+    self.mesh_skeleton_raw().skeleton()
+  }
   pub fn mesh_data(&self) -> &SimplexMeshData {
-    &self.complex.skeletons[self.dim()].1 .0[self.kidx()]
+    &self.mesh_skeleton_raw().mesh_data()[self.kidx()]
   }
 }
 
 impl SimplexHandle<'_> {
-  pub fn boundary_chain(&self) -> SparseSignChain {
-    let mut idxs = Vec::new();
-    let mut signs = Vec::new();
-    for sub in self.boundary() {
+  pub fn boundary_chain(&self) -> impl Iterator<Item = (Sign, SimplexHandle)> {
+    self.boundary().map(move |sub| {
       let sign = sub.sign;
-      let idx = self
+      let handle = self
         .complex
         .skeleton(self.dim() - 1)
-        .handle_by_simplex(&sub.simplex)
-        .kidx();
-      idxs.push(idx);
-      signs.push(sign);
-    }
-    SparseSignChain::new(self.dim() - 1, idxs, signs)
+        .handle_by_simplex(&sub.simplex);
+      (sign, handle)
+    })
   }
 
   pub fn cocells(&self) -> impl Iterator<Item = SimplexHandle> + '_ {
@@ -121,15 +125,12 @@ impl SimplexHandle<'_> {
   ///
   /// These are ordered first by cell index and then
   /// by lexicographically w.r.t. the local vertex indices.
-  pub fn mesh_supersimps(&self, dim_super: Dim) -> Vec<SimplexHandle> {
-    self
-      .cocells()
-      .flat_map(|parent| {
-        self
-          .supersequences(dim_super, &parent)
-          .map(move |sup| self.complex.skeleton(dim_super).handle_by_simplex(&sup))
-      })
-      .collect()
+  pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexHandle> {
+    self.cocells().flat_map(move |parent| {
+      self
+        .supersequences(dim_super, &parent)
+        .map(move |sup| self.complex.skeleton(dim_super).handle_by_simplex(&sup))
+    })
   }
 
   pub fn mesh_vertices(&self) -> impl Iterator<Item = SimplexHandle> {
@@ -155,6 +156,7 @@ impl std::hash::Hash for SimplexHandle<'_> {
   }
 }
 
+/// A handle to a skeleton in the mesh.
 pub struct SkeletonHandle<'m> {
   complex: &'m Complex,
   dim: Dim,
@@ -162,7 +164,7 @@ pub struct SkeletonHandle<'m> {
 impl std::ops::Deref for SkeletonHandle<'_> {
   type Target = Skeleton;
   fn deref(&self) -> &Self::Target {
-    &self.complex.skeletons[self.dim].0
+    &self.complex.mesh_skeleton_raw(self.dim).skeleton()
   }
 }
 
