@@ -1,12 +1,13 @@
 use common::linalg::nalgebra::{Matrix, Vector};
 
+use crate::dim3::TriangleSurface3D;
+use crate::geometry::coord::mesh::MeshCoords;
 use crate::topology::complex::Complex;
-use crate::{dim3::TriangleSurface3D, geometry::coord::MeshVertexCoords};
 
 use std::fmt::Write;
 use std::path::Path;
 
-pub fn coord_complex2obj(complex: &Complex, coords: &MeshVertexCoords) -> String {
+pub fn coord_complex2obj(complex: &Complex, coords: &MeshCoords) -> String {
   let surface = TriangleSurface3D::from_coord_skeleton(complex.cells().clone(), coords.clone());
   to_obj_string(&surface)
 }
@@ -23,7 +24,7 @@ pub fn to_obj_string(surface: &TriangleSurface3D) -> String {
   string
 }
 
-pub fn obj2coord_complex(obj_string: &str) -> (Complex, MeshVertexCoords) {
+pub fn obj2coord_complex(obj_string: &str) -> (Complex, MeshCoords) {
   let surface = from_obj_string(obj_string);
   surface.into_coord_complex()
 }
@@ -54,7 +55,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
   }
 
   let vertex_coords = Matrix::from_columns(&vertex_coords);
-  let vertex_coords = MeshVertexCoords::from(vertex_coords);
+  let vertex_coords = MeshCoords::from(vertex_coords);
   TriangleSurface3D::new(triangles, vertex_coords)
 }
 
@@ -89,7 +90,7 @@ pub fn write_mdd_file(
 }
 
 pub fn write_3dmesh_animation<'a, 'b>(
-  coords_frames: impl IntoIterator<Item = &'a MeshVertexCoords>,
+  coords_frames: impl IntoIterator<Item = &'a MeshCoords>,
   time_frames: impl IntoIterator<Item = f64>,
 ) {
   let mdd_frames: Vec<Vec<[f32; 3]>> = coords_frames

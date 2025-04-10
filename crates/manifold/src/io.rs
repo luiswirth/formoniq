@@ -8,7 +8,7 @@ use std::{
 };
 
 use crate::{
-  geometry::coord::MeshVertexCoords,
+  geometry::coord::mesh::MeshCoords,
   topology::{
     complex::{handle::SkeletonHandle, Complex},
     simplex::Simplex,
@@ -55,13 +55,13 @@ pub fn read_skeleton_from_file(path: impl AsRef<Path>) -> io::Result<Skeleton> {
   Ok(Skeleton::new(skeleton))
 }
 
-pub fn save_coords_to_file(coords: &MeshVertexCoords, path: impl AsRef<Path>) -> io::Result<()> {
+pub fn save_coords_to_file(coords: &MeshCoords, path: impl AsRef<Path>) -> io::Result<()> {
   let file = File::create(path)?;
   let writer = BufWriter::new(file);
   write_coords(writer, coords)
 }
 
-pub fn write_coords<W: io::Write>(mut writer: W, coords: &MeshVertexCoords) -> io::Result<()> {
+pub fn write_coords<W: io::Write>(mut writer: W, coords: &MeshCoords) -> io::Result<()> {
   for coord in coords.coord_iter() {
     for &comp in coord {
       write!(writer, "{comp:.6} ")?;

@@ -11,7 +11,7 @@ use common::linalg::{
   petsc::petsc_ghiep,
 };
 use manifold::{
-  geometry::metric::MeshEdgeLengths,
+  geometry::metric::mesh::MeshLengths,
   topology::complex::{handle::KSimplexIdx, Complex},
 };
 use whitney::cochain::Cochain;
@@ -19,7 +19,7 @@ use whitney::cochain::Cochain;
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   source_data: Cochain,
   boundary_data: F,
 ) -> Cochain
@@ -42,7 +42,7 @@ where
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   neigen_values: usize,
 ) -> (Vector, Vec<Cochain>) {
   let laplace_galmat =

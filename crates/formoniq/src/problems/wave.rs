@@ -9,7 +9,7 @@ use common::linalg::{
   faer::FaerCholesky,
   nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
 };
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
+use manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex};
 use whitney::cochain::Cochain;
 
 pub struct WaveState {
@@ -30,7 +30,7 @@ impl WaveState {
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
@@ -110,7 +110,7 @@ pub fn solve_wave_step(
 /// For explicit time stepping typically Cmax = 1.
 /// Implicit time stepping is usually more lenient, allowing bigger values.
 /// We assume here Cmax = 1, with a 5% safety margin.
-pub fn cfl_dt(mesh_geo: &MeshEdgeLengths, vel: f64) -> f64 {
+pub fn cfl_dt(mesh_geo: &MeshLengths, vel: f64) -> f64 {
   const MARGIN: f64 = 0.95;
   MARGIN * mesh_geo.mesh_width_min() / vel
 }

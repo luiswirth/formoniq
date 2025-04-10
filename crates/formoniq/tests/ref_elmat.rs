@@ -3,7 +3,7 @@ extern crate nalgebra as na;
 use common::linalg::nalgebra::Matrix;
 use formoniq::operators::{self, ElMatProvider};
 use manifold::{
-  geometry::{metric::SimplexGeometry, refsimp_vol},
+  geometry::{metric::simplex::SimplexGeometry, refsimp_vol},
   Dim,
 };
 

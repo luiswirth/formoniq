@@ -5,7 +5,7 @@ use common::{
   util,
 };
 use itertools::{multizip, Itertools};
-use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
+use manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex};
 
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -16,7 +16,7 @@ pub type GalVec = Vector;
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   elmat: impl ElMatProvider,
 ) -> GalMat {
   let row_grade = elmat.row_grade();
@@ -57,7 +57,7 @@ pub fn assemble_galmat(
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   elvec: impl ElVecProvider,
 ) -> GalVec {
   let grade = elvec.grade();

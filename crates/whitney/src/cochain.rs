@@ -1,14 +1,12 @@
 use common::linalg::nalgebra::Vector;
-use manifold::topology::skeleton::Skeleton;
+use manifold::{geometry::coord::mesh::MeshCoords, topology::skeleton::Skeleton};
 
 use crate::CoordSimplexExt;
 
 use {
   exterior::{field::DifferentialMultiForm, Dim},
   manifold::{
-    geometry::coord::{
-      local::SimplexCoords, quadrature::barycentric_quadrature, CoordRef, MeshVertexCoords,
-    },
+    geometry::coord::{quadrature::barycentric_quadrature, simplex::SimplexCoords, CoordRef},
     topology::complex::{
       handle::{SimplexHandle, SimplexIdx},
       Complex,
@@ -136,7 +134,7 @@ impl std::ops::Sub for Cochain {
 pub fn de_rham_map(
   form: &impl DifferentialMultiForm,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &MeshCoords,
 ) -> Cochain {
   let cochain = topology
     .skeleton(form.grade())

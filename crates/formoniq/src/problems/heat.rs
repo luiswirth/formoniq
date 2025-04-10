@@ -8,7 +8,7 @@ use crate::{
 };
 
 use {
-  manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
+  manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
   whitney::cochain::Cochain,
 };
 
@@ -16,7 +16,7 @@ use {
 #[allow(clippy::too_many_arguments)]
 pub fn solve_heat<F>(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   nsteps: usize,
   dt: f64,
   boundary_data: F,
