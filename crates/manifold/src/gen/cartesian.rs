@@ -1,4 +1,7 @@
-use common::combo::factorial;
+use common::{
+  combo::factorial,
+  linalg::nalgebra::{Matrix, Vector},
+};
 use itertools::Itertools;
 
 use crate::{
@@ -14,8 +17,8 @@ pub fn linear_index2cartesian_index(
   mut lin_idx: usize,
   dim_len: usize,
   dim: usize,
-) -> na::DVector<usize> {
-  let mut cart_idx = na::DVector::zeros(dim);
+) -> Vector<usize> {
+  let mut cart_idx = Vector::zeros(dim);
   for icomp in 0..dim {
     cart_idx[icomp] = lin_idx % dim_len;
     lin_idx /= dim_len;
@@ -26,7 +29,7 @@ pub fn linear_index2cartesian_index(
 /// converts cartesian index to linear index
 ///
 /// converts cartesian index in (0)^d..(dim_len)^d to linear index in 0..dim_len^d
-pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize) -> usize {
+pub fn cartesian_index2linear_index(cart_idx: Vector<usize>, dim_len: usize) -> usize {
   let dim = cart_idx.len();
   let mut lin_idx = 0;
   for icomp in (0..dim).rev() {
@@ -37,36 +40,36 @@ pub fn cartesian_index2linear_index(cart_idx: na::DVector<usize>, dim_len: usize
 }
 
 pub struct Rect {
-  min: na::DVector<f64>,
-  max: na::DVector<f64>,
+  min: Vector,
+  max: Vector,
 }
 
 impl Rect {
-  pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>) -> Self {
+  pub fn new_min_max(min: Vector, max: Vector) -> Self {
     assert!(min.len() == max.len());
     Self { min, max }
   }
   pub fn new_unit_cube(dim: Dim) -> Self {
-    let min = na::DVector::zeros(dim);
-    let max = na::DVector::from_element(dim, 1.0);
+    let min = Vector::zeros(dim);
+    let max = Vector::from_element(dim, 1.0);
     Self { min, max }
   }
   pub fn new_scaled_cube(dim: Dim, scale: f64) -> Self {
-    let min = na::DVector::zeros(dim);
-    let max = na::DVector::from_element(dim, scale);
+    let min = Vector::zeros(dim);
+    let max = Vector::from_element(dim, scale);
     Self { min, max }
   }
 
   pub fn dim(&self) -> usize {
     self.min.len()
   }
-  pub fn min(&self) -> &na::DVector<f64> {
+  pub fn min(&self) -> &Vector {
     &self.min
   }
-  pub fn max(&self) -> &na::DVector<f64> {
+  pub fn max(&self) -> &Vector {
     &self.max
   }
-  pub fn side_lengths(&self) -> na::DVector<f64> {
+  pub fn side_lengths(&self) -> Vector {
     &self.max - &self.min
   }
 }
@@ -77,7 +80,7 @@ pub struct CartesianMeshInfo {
 }
 // constructors
 impl CartesianMeshInfo {
-  pub fn new_min_max(min: na::DVector<f64>, max: na::DVector<f64>, ncells_axis: usize) -> Self {
+  pub fn new_min_max(min: Vector, max: Vector, ncells_axis: usize) -> Self {
     let rect = Rect::new_min_max(min, max);
     Self { rect, ncells_axis }
   }
@@ -98,13 +101,13 @@ impl CartesianMeshInfo {
   pub fn dim(&self) -> usize {
     self.rect.dim()
   }
-  pub fn min(&self) -> &na::DVector<f64> {
+  pub fn min(&self) -> &Vector {
     self.rect.min()
   }
-  pub fn max(&self) -> &na::DVector<f64> {
+  pub fn max(&self) -> &Vector {
     self.rect.max()
   }
-  pub fn side_lengths(&self) -> na::DVector<f64> {
+  pub fn side_lengths(&self) -> Vector {
     self.rect.side_lengths()
   }
   pub fn ncells_axis(&self) -> usize {
@@ -119,10 +122,10 @@ impl CartesianMeshInfo {
   pub fn nvertices(&self) -> usize {
     self.nvertices_axis().pow(self.dim() as u32)
   }
-  pub fn vertex_cart_idx(&self, ivertex: usize) -> na::DVector<usize> {
+  pub fn vertex_cart_idx(&self, ivertex: usize) -> Vector<usize> {
     linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim())
   }
-  pub fn vertex_pos(&self, ivertex: usize) -> na::DVector<f64> {
+  pub fn vertex_pos(&self, ivertex: usize) -> Vector {
     (self.vertex_cart_idx(ivertex).cast::<f64>() / (self.nvertices_axis() - 1) as f64)
       .component_mul(&self.side_lengths())
       + self.min()
@@ -166,7 +169,7 @@ impl CartesianMeshInfo {
     (skeleton, coords)
   }
   pub fn compute_vertex_coords(&self) -> MeshVertexCoords {
-    let mut coords = na::DMatrix::zeros(self.dim(), self.nvertices());
+    let mut coords = Matrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
     }
@@ -220,13 +223,14 @@ impl CartesianMeshInfo {
 #[cfg(test)]
 mod test {
   use super::CartesianMeshInfo;
+  use common::linalg::nalgebra::Matrix;
 
   #[test]
   fn unit_cube_mesh() {
     let (mesh, coords) = CartesianMeshInfo::new_unit(3, 1).compute_coord_cells();
 
     #[rustfmt::skip]
-    let expected_coords = na::DMatrix::from_column_slice(3, 8, &[
+    let expected_coords = Matrix::from_column_slice(3, 8, &[
       0., 0., 0.,
       1., 0., 0.,
       0., 1., 0.,
@@ -255,7 +259,7 @@ mod test {
     let (mesh, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_cells();
 
     #[rustfmt::skip]
-    let expected_coords = na::DMatrix::from_column_slice(2, 9, &[
+    let expected_coords = Matrix::from_column_slice(2, 9, &[
       0.0, 0.0,
       0.5, 0.0,
       1.0, 0.0,

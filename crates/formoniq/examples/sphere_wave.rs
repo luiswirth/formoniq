@@ -1,6 +1,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
+use common::linalg::nalgebra::Vector;
 use formoniq::problems::wave::{self, WaveState};
 use manifold::dim3::{cartesian2spherical, mesh_sphere_surface};
 use whitney::cochain::Cochain;
@@ -55,7 +56,7 @@ fn main() {
     })
     .collect::<Vec<_>>()
     .into();
-  let initial_vel = na::DVector::zeros(nvertices);
+  let initial_vel = Vector::zeros(nvertices);
   let initial_data = WaveState::new(initial_pos, initial_vel);
 
   let solution = wave::solve_wave(

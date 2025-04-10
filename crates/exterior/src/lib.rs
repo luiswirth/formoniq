@@ -4,7 +4,10 @@ pub mod field;
 pub mod list;
 pub mod term;
 
-use common::combo::binomial;
+use common::{
+  combo::binomial,
+  linalg::nalgebra::{Matrix, Vector},
+};
 use term::ExteriorTerm;
 
 pub type Dim = usize;
@@ -13,13 +16,13 @@ pub type ExteriorGrade = usize;
 /// An element of an exterior algebra.
 #[derive(Debug, Clone)]
 pub struct ExteriorElement {
-  coeffs: na::DVector<f64>,
+  coeffs: Vector,
   dim: Dim,
   grade: ExteriorGrade,
 }
 
 impl ExteriorElement {
-  pub fn new(coeffs: na::DVector<f64>, dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn new(coeffs: Vector, dim: Dim, grade: ExteriorGrade) -> Self {
     assert_eq!(coeffs.len(), binomial(dim, grade));
     Self { coeffs, dim, grade }
   }
@@ -27,19 +30,19 @@ impl ExteriorElement {
   pub fn scalar(v: f64, dim: Dim) -> ExteriorElement {
     Self::new(na::dvector![v], dim, 0)
   }
-  pub fn line(coeffs: na::DVector<f64>) -> Self {
+  pub fn line(coeffs: Vector) -> Self {
     let dim = coeffs.len();
     Self::new(coeffs, dim, 1)
   }
 
   pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {
-    Self::new(na::DVector::zeros(binomial(dim, grade)), dim, grade)
+    Self::new(Vector::zeros(binomial(dim, grade)), dim, grade)
   }
   pub fn one(dim: Dim) -> Self {
     Self::scalar(1.0, dim)
   }
 
-  pub fn into_grade1(self) -> na::DVector<f64> {
+  pub fn into_grade1(self) -> Vector {
     assert!(self.grade == 1);
     self.coeffs
   }
@@ -50,10 +53,10 @@ impl ExteriorElement {
   pub fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  pub fn coeffs(&self) -> &na::DVector<f64> {
+  pub fn coeffs(&self) -> &Vector {
     &self.coeffs
   }
-  pub fn into_coeffs(self) -> na::DVector<f64> {
+  pub fn into_coeffs(self) -> Vector {
     self.coeffs
   }
 
@@ -90,7 +93,7 @@ impl ExteriorElement {
     }
 
     let new_basis_size = binomial(dim, new_grade);
-    let mut new_coeffs = na::DVector::zeros(new_basis_size);
+    let mut new_coeffs = Vector::zeros(new_basis_size);
 
     for (self_coeff, self_basis) in self.basis_iter() {
       for (other_coeff, other_basis) in other.basis_iter() {
@@ -237,7 +240,7 @@ impl MultiForm {
   /// Precompose k-form by some linear map.
   ///
   /// Needed for pullback of differential k-form.
-  pub fn precompose_form(&self, linear_map: &na::DMatrix<f64>) -> Self {
+  pub fn precompose_form(&self, linear_map: &Matrix) -> Self {
     self
       .basis_iter()
       .map(|(coeff, basis)| {
@@ -259,11 +262,11 @@ impl MultiForm {
 }
 
 pub struct SimpleWedge {
-  factors: na::DMatrix<f64>,
+  factors: Matrix,
 }
 
 impl SimpleWedge {
-  pub fn new(factors: na::DMatrix<f64>) -> Self {
+  pub fn new(factors: Matrix) -> Self {
     Self { factors }
   }
   pub fn det(&self) -> f64 {
@@ -281,7 +284,7 @@ pub type CovectorWedge = SimpleWedge;
 impl CovectorWedge {
   pub fn evaluate(&self, vectors: &VectorWedge) -> f64 {
     let covectors = self;
-    let mut mat = na::DMatrix::zeros(covectors.factors.len(), vectors.factors.len());
+    let mut mat = Matrix::zeros(covectors.factors.len(), vectors.factors.len());
     for (i, covector) in covectors.factors.column_iter().enumerate() {
       for (j, vector) in vectors.factors.column_iter().enumerate() {
         mat[(i, j)] = covector.dot(&vector);

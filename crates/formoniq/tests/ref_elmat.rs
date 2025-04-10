@@ -1,6 +1,6 @@
 extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
 
+use common::linalg::nalgebra::Matrix;
 use formoniq::operators::{self, ElMatProvider};
 use manifold::{
   geometry::{metric::SimplexGeometry, refsimp_vol},
@@ -11,7 +11,7 @@ use approx::assert_relative_eq;
 
 fn check_ref_elmat<F>(elmat: impl ElMatProvider, ref_elmat: F)
 where
-  F: Fn(Dim) -> Option<na::DMatrix<f64>>,
+  F: Fn(Dim) -> Option<Matrix>,
 {
   for dim in 1..=10 {
     let Some(expected_elmat) = ref_elmat(dim) else {
@@ -29,9 +29,9 @@ where
 fn laplacian_refcell() {
   check_ref_elmat(operators::LaplaceBeltramiElmat, ref_laplacian);
 }
-fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
+fn ref_laplacian(dim: Dim) -> Option<Matrix> {
   let ndofs = dim + 1;
-  let mut expected_elmat = na::DMatrix::zeros(ndofs, ndofs);
+  let mut expected_elmat = Matrix::zeros(ndofs, ndofs);
   expected_elmat[(0, 0)] = dim as i32;
   for i in 1..ndofs {
     expected_elmat[(i, 0)] = -1;
@@ -46,7 +46,7 @@ fn ref_laplacian(dim: Dim) -> Option<na::DMatrix<f64>> {
 fn mass_refcell() {
   check_ref_elmat(operators::ScalarMassElmat, ref_mass);
 }
-fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
+fn ref_mass(dim: Dim) -> Option<Matrix> {
   #[rustfmt::skip]
   let mats = [
     na::dmatrix![1.0],
@@ -73,8 +73,8 @@ fn ref_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
 fn lumped_mass_refcell() {
   check_ref_elmat(operators::ScalarLumpedMassElmat, ref_lumped_mass);
 }
-fn ref_lumped_mass(dim: Dim) -> Option<na::DMatrix<f64>> {
+fn ref_lumped_mass(dim: Dim) -> Option<Matrix> {
   let nvertices = dim + 1;
   let ndofs = nvertices;
-  Some(refsimp_vol(dim) / ndofs as f64 * na::DMatrix::identity(ndofs, ndofs))
+  Some(refsimp_vol(dim) / ndofs as f64 * Matrix::identity(ndofs, ndofs))
 }

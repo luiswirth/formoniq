@@ -1,3 +1,5 @@
+use common::linalg::nalgebra::Matrix;
+
 use crate::{
   geometry::coord::MeshVertexCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
@@ -26,7 +28,7 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshVertexCoords) {
       .for_each(|coord| *coord = na::dvector![coord[0], coord[1]])
   }
 
-  let mesh_vertices = na::DMatrix::from_columns(&mesh_vertices);
+  let mesh_vertices = Matrix::from_columns(&mesh_vertices);
   let mesh_vertices = MeshVertexCoords::new(mesh_vertices);
 
   let mut points = Vec::new();

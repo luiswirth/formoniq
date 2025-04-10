@@ -1,3 +1,5 @@
+use common::linalg::nalgebra::{Matrix, Vector};
+
 use crate::topology::complex::Complex;
 use crate::{dim3::TriangleSurface3D, geometry::coord::MeshVertexCoords};
 
@@ -51,7 +53,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
     }
   }
 
-  let vertex_coords = na::DMatrix::from_columns(&vertex_coords);
+  let vertex_coords = Matrix::from_columns(&vertex_coords);
   let vertex_coords = MeshVertexCoords::from(vertex_coords);
   TriangleSurface3D::new(triangles, vertex_coords)
 }
@@ -106,7 +108,7 @@ pub fn write_3dmesh_animation<'a, 'b>(
 
 pub fn write_displacement_animation<'a>(
   base_surface: &TriangleSurface3D,
-  displacements_frames: impl IntoIterator<Item = &'a na::DVector<f64>>,
+  displacements_frames: impl IntoIterator<Item = &'a Vector>,
   frame_times: impl IntoIterator<Item = f64>,
 ) {
   let coords_frames: Vec<_> = displacements_frames

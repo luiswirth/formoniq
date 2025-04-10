@@ -1,3 +1,5 @@
+use common::linalg::nalgebra::{Vector, VectorView};
+
 use crate::{
   geometry::coord::{local::SimplexCoords, MeshVertexCoords},
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
@@ -71,7 +73,7 @@ impl TriangleSurface3D {
     (complex, coords)
   }
 
-  pub fn displace_normal<'a>(&mut self, displacements: impl Into<na::DVectorView<'a, f64>>) {
+  pub fn displace_normal<'a>(&mut self, displacements: impl Into<VectorView<'a>>) {
     let displacements = displacements.into();
 
     let mut vertex_normals = vec![na::Vector3::zeros(); self.coords.nvertices()];
@@ -132,9 +134,9 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
 
 fn subdivide(
   triangles: Vec<[usize; 3]>,
-  mut vertex_coords: Vec<na::DVector<f64>>,
+  mut vertex_coords: Vec<Vector>,
   depth: usize,
-) -> (Vec<[usize; 3]>, Vec<na::DVector<f64>>) {
+) -> (Vec<[usize; 3]>, Vec<Vector>) {
   if depth == 0 {
     return (triangles, vertex_coords);
   }
@@ -163,7 +165,7 @@ fn subdivide(
 fn get_midpoint(
   v0: usize,
   v1: usize,
-  vertices: &mut Vec<na::DVector<f64>>,
+  vertices: &mut Vec<Vector>,
   midpoints: &mut HashMap<(usize, usize), usize>,
 ) -> usize {
   let edge = if v0 < v1 { (v0, v1) } else { (v1, v0) };

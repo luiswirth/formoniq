@@ -13,6 +13,7 @@ use crate::{
 use common::{
   combo::{factorial, lex_rank},
   gramian::Gramian,
+  linalg::nalgebra::{Matrix, Vector},
 };
 
 use itertools::Itertools;
@@ -80,19 +81,19 @@ impl SimplexGeometry {
 
 #[derive(Debug, Clone)]
 pub struct MeshEdgeLengths {
-  vector: na::DVector<f64>,
+  vector: Vector,
 }
 impl MeshEdgeLengths {
-  pub fn new(vector: na::DVector<f64>, complex: &Complex) -> Self {
+  pub fn new(vector: Vector, complex: &Complex) -> Self {
     Self::try_new(vector, complex).expect("Edge lengths are not coordinate realizable.")
   }
-  pub fn try_new(vector: na::DVector<f64>, complex: &Complex) -> Option<Self> {
+  pub fn try_new(vector: Vector, complex: &Complex) -> Option<Self> {
     let this = Self { vector };
     this
       .is_coordinate_realizable(complex.cells())
       .then_some(this)
   }
-  pub fn new_unchecked(vector: na::DVector<f64>) -> Self {
+  pub fn new_unchecked(vector: Vector) -> Self {
     Self { vector }
   }
   pub fn standard(dim: usize) -> MeshEdgeLengths {
@@ -105,13 +106,13 @@ impl MeshEdgeLengths {
   pub fn length(&self, iedge: EdgeIdx) -> f64 {
     self[iedge]
   }
-  pub fn vector(&self) -> &na::DVector<f64> {
+  pub fn vector(&self) -> &Vector {
     &self.vector
   }
-  pub fn vector_mut(&mut self) -> &mut na::DVector<f64> {
+  pub fn vector_mut(&mut self) -> &mut Vector {
     &mut self.vector
   }
-  pub fn into_vector(self) -> na::DVector<f64> {
+  pub fn into_vector(self) -> Vector {
     self.vector
   }
   pub fn iter(
@@ -189,12 +190,12 @@ impl std::ops::Index<EdgeIdx> for MeshEdgeLengths {
 #[derive(Debug, Clone)]
 pub struct SimplexLengths {
   /// Lexicographically ordered binom(dim+1,2) edge lengths
-  lengths: na::DVector<f64>,
+  lengths: Vector,
   /// Dimension of the simplex.
   dim: Dim,
 }
 impl SimplexLengths {
-  pub fn new(lengths: na::DVector<f64>, dim: Dim) -> Self {
+  pub fn new(lengths: Vector, dim: Dim) -> Self {
     assert_eq!(lengths.len(), nedges(dim), "Wrong number of edges.");
     let this = Self { lengths, dim };
     assert!(
@@ -203,7 +204,7 @@ impl SimplexLengths {
     );
     this
   }
-  pub fn new_unchecked(lengths: na::DVector<f64>, dim: Dim) -> Self {
+  pub fn new_unchecked(lengths: Vector, dim: Dim) -> Self {
     if cfg!(debug_assertions) {
       Self::new(lengths, dim)
     } else {
@@ -254,13 +255,13 @@ impl SimplexLengths {
     SimplexGeometry::new(self)
   }
 
-  pub fn vector(&self) -> &na::DVector<f64> {
+  pub fn vector(&self) -> &Vector {
     &self.lengths
   }
-  pub fn vector_mut(&mut self) -> &mut na::DVector<f64> {
+  pub fn vector_mut(&mut self) -> &mut Vector {
     &mut self.lengths
   }
-  pub fn into_vector(self) -> na::DVector<f64> {
+  pub fn into_vector(self) -> Vector {
     self.lengths
   }
   pub fn iter(
@@ -286,8 +287,8 @@ impl std::ops::Index<EdgeIdx> for SimplexLengths {
 /// Distance Geometry
 impl SimplexLengths {
   /// "Euclidean" distance matrix
-  pub fn distance_matrix(&self) -> na::DMatrix<f64> {
-    let mut mat = na::DMatrix::zeros(self.nvertices(), self.nvertices());
+  pub fn distance_matrix(&self) -> Matrix {
+    let mut mat = Matrix::zeros(self.nvertices(), self.nvertices());
 
     let mut idx = 0;
     for i in 0..self.nvertices() {
@@ -300,7 +301,7 @@ impl SimplexLengths {
     }
     mat
   }
-  pub fn cayley_menger_matrix(&self) -> na::DMatrix<f64> {
+  pub fn cayley_menger_matrix(&self) -> Matrix {
     let mut mat = self.distance_matrix();
     mat = mat.insert_row(self.nvertices(), 1.0);
     mat = mat.insert_column(self.nvertices(), 1.0);
@@ -331,7 +332,7 @@ impl SimplexLengths {
       (metric.basis_inner(i, i) + metric.basis_inner(j, j) - 2.0 * metric.basis_inner(i, j)).sqrt()
     };
 
-    let mut lengths = na::DVector::zeros(nedges(dim));
+    let mut lengths = Vector::zeros(nedges(dim));
     let mut iedge = 0;
     for i in 0..dim {
       for j in i..dim {
@@ -344,7 +345,7 @@ impl SimplexLengths {
   }
 
   pub fn into_regge_metric(&self) -> Gramian {
-    let mut metric_tensor = na::DMatrix::zeros(self.dim(), self.dim());
+    let mut metric_tensor = Matrix::zeros(self.dim(), self.dim());
     for i in 0..self.dim() {
       metric_tensor[(i, i)] = self[i].powi(2);
     }

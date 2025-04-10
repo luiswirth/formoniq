@@ -5,7 +5,11 @@ use crate::{
   operators::{self, DofCoeff},
 };
 
-use common::linalg::{faer::FaerCholesky, petsc::petsc_ghiep};
+use common::linalg::{
+  faer::FaerCholesky,
+  nalgebra::{CsrMatrix, Vector},
+  petsc::petsc_ghiep,
+};
 use manifold::{
   geometry::metric::MeshEdgeLengths,
   topology::complex::{handle::KSimplexIdx, Complex},
@@ -25,12 +29,12 @@ where
   let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
 
   let mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
-  let mass = nas::CsrMatrix::from(&mass);
+  let mass = CsrMatrix::from(&mass);
   let mut source = mass * source_data.coeffs;
 
   assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source);
 
-  let laplace = nas::CsrMatrix::from(&laplace);
+  let laplace = CsrMatrix::from(&laplace);
   let sol = FaerCholesky::new(laplace).solve(&source);
   Cochain::new(0, sol)
 }
@@ -40,14 +44,14 @@ pub fn solve_laplace_beltrami_evp(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
   neigen_values: usize,
-) -> (na::DVector<f64>, Vec<Cochain>) {
+) -> (Vector, Vec<Cochain>) {
   let laplace_galmat =
     assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
   let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(
-    &nas::CsrMatrix::from(&laplace_galmat),
-    &nas::CsrMatrix::from(&mass_galmat),
+    &CsrMatrix::from(&laplace_galmat),
+    &CsrMatrix::from(&mass_galmat),
     neigen_values,
   );
 

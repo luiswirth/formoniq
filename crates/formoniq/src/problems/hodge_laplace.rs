@@ -10,7 +10,7 @@ use {
   whitney::{cochain::Cochain, ManifoldComplexExt},
 };
 
-use common::linalg::nalgebra::CooMatrixExt;
+use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
 use itertools::Itertools;
 use std::mem;
 
@@ -22,7 +22,7 @@ pub fn hodge_decomposition(
   let grade = cochain.dim();
   let (exact_potential, coexact, harmonic) =
     solve_hodge_laplace_source(topology, geometry, cochain);
-  let dif = nas::CsrMatrix::from(&topology.exterior_derivative_operator(grade - 1));
+  let dif = CsrMatrix::from(&topology.exterior_derivative_operator(grade - 1));
   let exact = Cochain::new(grade, dif * exact_potential.coeffs.clone());
   (exact, coexact, harmonic)
 }
@@ -38,7 +38,7 @@ pub fn solve_hodge_laplace_source(
 
   let galmats = MixedGalmats::compute(topology, geometry, grade);
 
-  let mass_u = nas::CsrMatrix::from(&galmats.mass_u);
+  let mass_u = CsrMatrix::from(&galmats.mass_u);
   let mass_harmonics = &mass_u * &harmonics;
 
   let sigma_len = galmats.sigma_len();
@@ -63,14 +63,14 @@ pub fn solve_hodge_laplace_source(
     galmat.push(r, c, v);
   }
 
-  let galmat = nas::CsrMatrix::from(&galmat);
+  let galmat = CsrMatrix::from(&galmat);
 
   let galvec = mass_u * source_data.coeffs;
   #[allow(clippy::toplevel_ref_arg)]
   let galvec = na::stack![
-    na::DVector::zeros(sigma_len);
+    Vector::zeros(sigma_len);
     galvec;
-    na::DVector::zeros(harmonics.ncols());
+    Vector::zeros(harmonics.ncols());
   ];
 
   let galsol = petsc_saddle_point(&galmat, &galvec);
@@ -92,14 +92,14 @@ pub fn solve_hodge_laplace_harmonics(
   topology: &Complex,
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
-) -> na::DMatrix<f64> {
+) -> Matrix {
   // TODO!!!
   //let homology_dim = topology.homology_dim(grade);
   let homology_dim = 0;
 
   if homology_dim == 0 {
     let nwhitneys = topology.nsimplicies(grade);
-    return na::DMatrix::zeros(nwhitneys, 0);
+    return Matrix::zeros(nwhitneys, 0);
   }
 
   let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(topology, geometry, grade, homology_dim);
@@ -112,14 +112,14 @@ pub fn solve_hodge_laplace_evp(
   geometry: &MeshEdgeLengths,
   grade: ExteriorGrade,
   neigen_values: usize,
-) -> (na::DVector<f64>, na::DMatrix<f64>, na::DMatrix<f64>) {
+) -> (Vector, Matrix, Matrix) {
   let galmats = MixedGalmats::compute(topology, geometry, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
 
   let sigma_len = galmats.sigma_len();
   let u_len = galmats.u_len();
-  let mut rhs = nas::CooMatrix::zeros(sigma_len + u_len, sigma_len + u_len);
+  let mut rhs = CooMatrix::zeros(sigma_len + u_len, sigma_len + u_len);
   for (mut r, mut c, &v) in galmats.mass_u.triplet_iter() {
     r += sigma_len;
     c += sigma_len;
@@ -145,19 +145,19 @@ impl MixedGalmats {
     assert!(grade <= topology.dim());
 
     let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
-    let mass_u_csr = nas::CsrMatrix::from(&mass_u);
+    let mass_u_csr = CsrMatrix::from(&mass_u);
 
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
       let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1));
 
       let exdif_sigma = topology.exterior_derivative_operator(grade - 1);
-      let exdif_sigma = nas::CsrMatrix::from(&exdif_sigma);
+      let exdif_sigma = CsrMatrix::from(&exdif_sigma);
 
       let dif_sigma = &mass_u_csr * &exdif_sigma;
-      let dif_sigma = nas::CooMatrix::from(&dif_sigma);
+      let dif_sigma = CooMatrix::from(&dif_sigma);
 
       let codif_u = &exdif_sigma.transpose() * &mass_u_csr;
-      let codif_u = nas::CooMatrix::from(&codif_u);
+      let codif_u = CooMatrix::from(&codif_u);
 
       (mass_sigma, dif_sigma, codif_u)
     } else {
@@ -166,11 +166,11 @@ impl MixedGalmats {
 
     let codifdif_u = if grade < topology.dim() {
       let mass_plus = assemble_galmat(topology, geometry, HodgeMassElmat(grade + 1));
-      let mass_plus = nas::CsrMatrix::from(&mass_plus);
+      let mass_plus = CsrMatrix::from(&mass_plus);
       let exdif_u = topology.exterior_derivative_operator(grade);
-      let exdif_u = nas::CsrMatrix::from(&exdif_u);
+      let exdif_u = CsrMatrix::from(&exdif_u);
       let codifdif_u = exdif_u.transpose() * mass_plus * exdif_u;
-      nas::CooMatrix::from(&codifdif_u)
+      CooMatrix::from(&codifdif_u)
     } else {
       GalMat::new(0, 0)
     };
@@ -191,7 +191,7 @@ impl MixedGalmats {
     self.mass_u.nrows()
   }
 
-  pub fn mixed_hodge_laplacian(&self) -> nas::CooMatrix<f64> {
+  pub fn mixed_hodge_laplacian(&self) -> CooMatrix {
     let Self {
       mass_sigma,
       dif_sigma,
@@ -200,6 +200,6 @@ impl MixedGalmats {
       ..
     } = self;
     let codif_u = codif_u.clone();
-    nas::CooMatrix::block(&[&[mass_sigma, &(codif_u.neg())], &[dif_sigma, codifdif_u]])
+    CooMatrix::block(&[&[mass_sigma, &(codif_u.neg())], &[dif_sigma, codifdif_u]])
   }
 }

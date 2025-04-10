@@ -1,3 +1,4 @@
+use common::linalg::nalgebra::CsrMatrix;
 use whitney::WhitneyCoordLsf;
 
 use crate::{
@@ -19,7 +20,7 @@ use {
 
 pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
   let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim));
-  let mass = nas::CsrMatrix::from(&mass);
+  let mass = CsrMatrix::from(&mass);
   //fe.coeffs().transpose() * mass * fe.coeffs()
   ((mass.transpose() * fe.coeffs()).transpose() * fe.coeffs())
     .x
@@ -28,7 +29,7 @@ pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> 
 
 pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
   let codifdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim));
-  let codifdif = nas::CsrMatrix::from(&codifdif);
+  let codifdif = CsrMatrix::from(&codifdif);
   //fe.coeffs().transpose() * difdif * fe.coeffs()
   ((codifdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())
     .x

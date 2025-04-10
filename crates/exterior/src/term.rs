@@ -3,6 +3,7 @@ use crate::{Dim, ExteriorElement, ExteriorGrade};
 use common::{
   combo::{binomial, lex_rank, sort_signed, Sign},
   gramian::Gramian,
+  linalg::nalgebra::Matrix,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -129,8 +130,8 @@ pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian 
   let dim = single_gramian.dim();
   let bases: Vec<_> = exterior_bases(dim, grade).collect();
 
-  let mut multi_gramian = na::DMatrix::zeros(bases.len(), bases.len());
-  let mut multi_basis_mat = na::DMatrix::zeros(grade, grade);
+  let mut multi_gramian = Matrix::zeros(bases.len(), bases.len());
+  let mut multi_basis_mat = Matrix::zeros(grade, grade);
 
   for icomb in 0..bases.len() {
     let combi = &bases[icomb];

@@ -1,6 +1,7 @@
 pub mod local;
 pub mod quadrature;
 
+use common::linalg::nalgebra::{Matrix, Vector, VectorView};
 use local::SimplexCoords;
 
 use crate::{
@@ -11,8 +12,8 @@ use crate::{
 
 use itertools::Itertools;
 
-pub type Coord = na::DVector<f64>;
-pub type CoordRef<'a> = na::DVectorView<'a, f64>;
+pub type Coord = Vector;
+pub type CoordRef<'a> = VectorView<'a>;
 
 pub type LocalCoord = Coord;
 pub type LocalCoordRef<'a> = CoordRef<'a>;
@@ -31,14 +32,14 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
     .handle_iter()
     .map(|v| v.kidx())
     .map(|v| {
-      let mut vec = na::DVector::zeros(dim);
+      let mut vec = Vector::zeros(dim);
       if v > 0 {
         vec[v - 1] = 1.0;
       }
       vec
     })
     .collect_vec();
-  let coords = na::DMatrix::from_columns(&coords);
+  let coords = Matrix::from_columns(&coords);
   let coords = MeshVertexCoords::new(coords);
 
   (topology, coords)
@@ -46,24 +47,24 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
 
 #[derive(Debug, Clone)]
 pub struct MeshVertexCoords {
-  coord_matrix: na::DMatrix<f64>,
+  coord_matrix: Matrix,
 }
 
 impl MeshVertexCoords {
   pub fn standard(ndim: Dim) -> Self {
     SimplexCoords::standard(ndim).vertices
   }
-  pub fn new(coord_matrix: na::DMatrix<f64>) -> Self {
+  pub fn new(coord_matrix: Matrix) -> Self {
     Self { coord_matrix }
   }
 
-  pub fn matrix(&self) -> &na::DMatrix<f64> {
+  pub fn matrix(&self) -> &Matrix {
     &self.coord_matrix
   }
-  pub fn matrix_mut(&mut self) -> &mut na::DMatrix<f64> {
+  pub fn matrix_mut(&mut self) -> &mut Matrix {
     &mut self.coord_matrix
   }
-  pub fn into_matrix(self) -> na::DMatrix<f64> {
+  pub fn into_matrix(self) -> Matrix {
     self.coord_matrix
   }
 
@@ -72,15 +73,15 @@ impl MeshVertexCoords {
   }
 }
 
-impl From<na::DMatrix<f64>> for MeshVertexCoords {
-  fn from(matrix: na::DMatrix<f64>) -> Self {
+impl From<Matrix> for MeshVertexCoords {
+  fn from(matrix: Matrix) -> Self {
     Self::new(matrix)
   }
 }
 
 impl From<&[Coord]> for MeshVertexCoords {
   fn from(vectors: &[Coord]) -> Self {
-    let matrix = na::DMatrix::from_columns(vectors);
+    let matrix = Matrix::from_columns(vectors);
     Self::new(matrix)
   }
 }
@@ -111,7 +112,7 @@ impl MeshVertexCoords {
 
   pub fn to_edge_lengths(&self, topology: &Complex) -> MeshEdgeLengths {
     let edges = topology.edges();
-    let mut edge_lengths = na::DVector::zeros(edges.len());
+    let mut edge_lengths = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {
       let [vi, vj] = (*edge).clone().try_into().unwrap();
       let length = (self.coord(vj) - self.coord(vi)).norm();

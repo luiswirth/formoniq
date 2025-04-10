@@ -1,6 +1,6 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
-use common::linalg::faer::FaerCholesky;
+use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
 
 use crate::{
   assemble,
@@ -29,13 +29,13 @@ where
 {
   let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
   let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
-  let mass_csr = nas::CsrMatrix::from(&mass);
+  let mass_csr = CsrMatrix::from(&mass);
   let mut source = &mass_csr * &source_data.coeffs;
 
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut source);
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut source);
 
-  let laplace = nas::CsrMatrix::from(&laplace);
+  let laplace = CsrMatrix::from(&laplace);
   let mass = mass_csr;
 
   let lse_matrix = &mass + diffusion_coeff * dt * &laplace;

@@ -1,9 +1,9 @@
 //! Linearized Mean Curvature Flow / Evolution to Minimal Surface
 
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
-use common::linalg::faer::FaerCholesky;
+use common::linalg::{
+  faer::FaerCholesky,
+  nalgebra::{CsrMatrix, Matrix, Vector},
+};
 use formoniq::{assemble, operators};
 use manifold::geometry::coord::MeshVertexCoords;
 
@@ -34,11 +34,11 @@ fn main() {
 
     let laplace = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat);
     let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
-    let source = na::DVector::zeros(nvertices);
+    let source = Vector::zeros(nvertices);
 
     let coords_initial = coords_list.first().unwrap();
     let coords_old = coords_list.last().unwrap();
-    let mut coords_new = na::DMatrix::zeros(coords_initial.dim(), nvertices);
+    let mut coords_new = Matrix::zeros(coords_initial.dim(), nvertices);
     for d in 0..coords_initial.dim() {
       let comps_initial = coords_initial.matrix().row(d).transpose();
       let comps_old = coords_old.matrix().row(d).transpose();
@@ -51,8 +51,8 @@ fn main() {
       assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut laplace, &mut source);
       assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut mass, &mut source);
 
-      let laplace = nas::CsrMatrix::from(&laplace);
-      let mass = nas::CsrMatrix::from(&mass);
+      let laplace = CsrMatrix::from(&laplace);
+      let mass = CsrMatrix::from(&mass);
 
       let lse_matrix = &mass + dt * &laplace;
       let lse_cholesky = FaerCholesky::new(lse_matrix);

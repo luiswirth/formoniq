@@ -1,7 +1,5 @@
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
 use approx::assert_relative_eq;
+use common::linalg::nalgebra::{Matrix, Vector};
 use formoniq::{assemble, operators};
 use manifold::{gen::cartesian::CartesianMeshInfo, Dim};
 
@@ -16,14 +14,14 @@ fn feec_vs_fem3d() {
   }
 }
 
-fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
+fn fem3d_galmat(nboxes_per_dim: usize) -> Matrix {
   let nvertices_per_dim = nboxes_per_dim + 1;
   let nvertices = nvertices_per_dim.pow(DIM as u32);
 
   let h = (nboxes_per_dim as f64).recip();
   let box_vol = h.powi(DIM as i32);
 
-  let mut vertex_coords = na::DMatrix::zeros(3, nvertices);
+  let mut vertex_coords = Matrix::zeros(3, nvertices);
   for zvertex in 0..nvertices_per_dim {
     for yvertex in 0..nvertices_per_dim {
       for xvertex in 0..nvertices_per_dim {
@@ -45,7 +43,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
   ];
   let tet_vol = box_vol / tets_ivertices.len() as f64;
 
-  let mut galmat = na::DMatrix::<f64>::zeros(nvertices, nvertices);
+  let mut galmat = Matrix::<f64>::zeros(nvertices, nvertices);
   for zbox in 0..nboxes_per_dim {
     for ybox in 0..nboxes_per_dim {
       for xbox in 0..nboxes_per_dim {
@@ -70,7 +68,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
           let tet_ivertices = tet_ivertices.map(|i| box_ivertices[i]);
           let tet_vertices = tet_ivertices.map(|i| vertex_coords.column(i));
 
-          let ns: Vec<na::DVector<f64>> = (0..tet_vertices.len())
+          let ns: Vec<Vector> = (0..tet_vertices.len())
             .map(|i| {
               let mut face = tet_vertices.to_vec();
               face.remove(i);
@@ -82,7 +80,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
             })
             .collect();
 
-          let mut elmat = na::DMatrix::zeros(tet_vertices.len(), tet_vertices.len());
+          let mut elmat = Matrix::zeros(tet_vertices.len(), tet_vertices.len());
           for i in 0..tet_vertices.len() {
             for j in 0..tet_vertices.len() {
               let ni = &ns[i];
@@ -105,7 +103,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
   galmat
 }
 
-fn feec_galmat(nboxes_per_dim: usize) -> na::DMatrix<f64> {
+fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);

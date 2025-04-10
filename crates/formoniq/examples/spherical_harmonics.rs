@@ -1,6 +1,3 @@
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
 use std::fs;
 
 use formoniq::problems::laplace_beltrami;

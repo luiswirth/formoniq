@@ -1,8 +1,5 @@
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
 use {
-  common::util::algebraic_convergence_rate,
+  common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
   exterior::field::DiffFormClosure,
   formoniq::{fe::l2_norm, problems::hodge_laplace},
   manifold::gen::cartesian::CartesianMeshInfo,
@@ -19,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let exact_solution = DiffFormClosure::one_form(
     |p| {
-      na::DVector::from_iterator(
+      Vector::from_iterator(
         p.len(),
         (0..p.len()).map(|i| {
           let prod = p.remove_row(i).map(|a| a.cos()).product();
@@ -32,7 +29,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
   let laplacian = DiffFormClosure::one_form(
     |p| {
-      na::DVector::from_iterator(
+      Vector::from_iterator(
         p.len(),
         (0..p.len()).map(|i| {
           let prod: f64 = p.remove_row(i).map(|a| a.cos()).product();
