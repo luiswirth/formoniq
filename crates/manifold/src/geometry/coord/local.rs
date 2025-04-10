@@ -211,7 +211,7 @@ pub trait SimplexHandleExt {
 }
 impl SimplexHandleExt for SimplexHandle<'_> {
   fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
-    SimplexCoords::from_simplex_and_coords(self.raw(), coords)
+    SimplexCoords::from_simplex_and_coords(self, coords)
   }
 }
 

@@ -42,7 +42,7 @@ fn main() {
 
   assert!(!topology.has_boundary());
   let boundary_data = |_| unreachable!();
-  let force_data = Cochain::zero(topology.cells().raw());
+  let force_data = Cochain::zero(&topology.cells());
 
   let initial_pos = coords
     .coord_iter()

@@ -24,14 +24,14 @@ pub fn assemble_galmat(
 
   let triplets: Vec<(usize, usize, f64)> = topology
     .cells()
-    .iter()
+    .handle_iter()
     .par_bridge()
     .flat_map(|cell| {
       let geo = geometry.simplex_geometry(cell);
       let elmat = elmat.eval(&geo);
 
-      let row_subs: Vec<_> = cell.subsimps(row_grade).collect();
-      let col_subs: Vec<_> = cell.subsimps(col_grade).collect();
+      let row_subs: Vec<_> = cell.mesh_subsimps(row_grade).collect();
+      let col_subs: Vec<_> = cell.mesh_subsimps(col_grade).collect();
 
       let mut local_triplets = Vec::new();
       for (ilocal, &iglobal) in row_subs.iter().enumerate() {
@@ -62,13 +62,13 @@ pub fn assemble_galvec(
 
   let entries: Vec<(usize, f64)> = topology
     .cells()
-    .iter()
+    .handle_iter()
     .par_bridge()
     .flat_map(|cell| {
       let geo = geometry.simplex_geometry(cell);
       let elvec = elvec.eval(&geo);
 
-      let subs: Vec<_> = cell.subsimps(grade).collect();
+      let subs: Vec<_> = cell.mesh_subsimps(grade).collect();
 
       let mut local_entires = Vec::new();
       for (ilocal, &iglobal) in subs.iter().enumerate() {

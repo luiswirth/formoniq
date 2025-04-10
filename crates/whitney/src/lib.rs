@@ -190,10 +190,10 @@ mod test {
       let coords = MeshVertexCoords::standard(dim);
 
       for grade in 0..=dim {
-        for dof_simp in topology.skeleton(grade).iter() {
-          let whitney_form = WhitneyRefLsf::new(dim, dof_simp.raw().clone());
+        for dof_simp in topology.skeleton(grade).handle_iter() {
+          let whitney_form = WhitneyRefLsf::new(dim, (*dof_simp).clone());
 
-          for other_simp in topology.skeleton(grade).iter() {
+          for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;
             let other_simplex = other_simp.coord_simplex(&coords);
             let discret = de_rahm_map_local(&whitney_form, &other_simplex);

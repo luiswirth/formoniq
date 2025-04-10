@@ -28,7 +28,7 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshVertexCoords) {
 
   let coords = topology
     .vertices()
-    .iter()
+    .handle_iter()
     .map(|v| v.kidx())
     .map(|v| {
       let mut vec = na::DVector::zeros(dim);
@@ -112,8 +112,8 @@ impl MeshVertexCoords {
   pub fn to_edge_lengths(&self, topology: &Complex) -> MeshEdgeLengths {
     let edges = topology.edges();
     let mut edge_lengths = na::DVector::zeros(edges.len());
-    for (iedge, edge) in edges.iter().enumerate() {
-      let [vi, vj] = edge.raw().clone().try_into().unwrap();
+    for (iedge, edge) in edges.handle_iter().enumerate() {
+      let [vi, vj] = (*edge).clone().try_into().unwrap();
       let length = (self.coord(vj) - self.coord(vi)).norm();
       edge_lengths[iedge] = length;
     }

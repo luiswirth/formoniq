@@ -51,15 +51,15 @@ pub fn reconstruct_at_coord<'a>(
   // WARN: very slow and inefficent
   let Some(cell) = topology
     .cells()
-    .iter()
+    .handle_iter()
     .find(|cell| cell.coord_simplex(coords).is_coord_inside(coord))
   else {
     return MultiForm::zero(dim, grade);
   };
 
   let mut fe_value = MultiForm::zero(topology.dim(), grade);
-  for dof_simp in cell.subsimps(grade) {
-    let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
+  for dof_simp in cell.mesh_subsimps(grade) {
+    let local_dof_simp = dof_simp.relative_to(&cell);
 
     let dof_value = cochain[dof_simp]
       * WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
@@ -78,11 +78,11 @@ pub fn reconstruct_at_mesh_cells_barycenters(
 
   topology
     .cells()
-    .iter()
+    .handle_iter()
     .map(|cell| {
       let mut value = MultiForm::zero(topology.dim(), grade);
-      for dof_simp in cell.subsimps(grade) {
-        let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
+      for dof_simp in cell.mesh_subsimps(grade) {
+        let local_dof_simp = dof_simp.relative_to(&cell);
 
         let barycenter = cell.coord_simplex(coords).barycenter();
 
@@ -104,20 +104,20 @@ pub fn reconstruct_at_mesh_cells_vertices(
 
   topology
     .cells()
-    .iter()
+    .handle_iter()
     .map(|cell| {
       cell
-        .vertices()
+        .mesh_vertices()
         .map(|vertex| {
           let coord = coords.coord(vertex.kidx());
 
           // vertex value
           cell
-            .subsimps(grade)
+            .mesh_subsimps(grade)
             .map(|dof_simp| {
               let coeff = cochain[dof_simp];
 
-              let local_dof_simp = dof_simp.raw().relative_to(cell.raw());
+              let local_dof_simp = dof_simp.relative_to(&cell);
               let whitney = WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp);
 
               // dof_value

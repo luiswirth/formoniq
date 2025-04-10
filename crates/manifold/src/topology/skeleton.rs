@@ -68,6 +68,7 @@ impl Skeleton {
   pub fn iter(&self) -> indexmap::set::Iter<'_, Simplex> {
     self.simplicies.iter()
   }
+
   pub fn insert(&mut self, simp: Simplex) -> (KSimplexIdx, bool) {
     assert!(simp.is_sorted());
     self.simplicies.insert_full(simp)
