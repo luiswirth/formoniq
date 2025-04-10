@@ -1,7 +1,4 @@
-use super::{
-  simplex::{SimplexGeometry, SimplexLengths},
-  EdgeIdx,
-};
+use super::{simplex::SimplexLengths, EdgeIdx};
 use crate::{
   topology::complex::{
     handle::{SimplexHandle, SkeletonHandle},
@@ -89,14 +86,11 @@ impl MeshLengths {
     topology
       .cells()
       .handle_iter()
-      .map(|cell| self.simplex_geometry(cell).shape_reguarity_measure())
+      .map(|cell| self.simplex_lengths(cell).shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
 
-  pub fn simplex_geometry(&self, simplex: SimplexHandle) -> SimplexGeometry {
-    self.simplex_lengths(simplex).geometry()
-  }
   pub fn simplex_lengths(&self, simplex: SimplexHandle) -> SimplexLengths {
     let lengths = simplex
       .mesh_edges()

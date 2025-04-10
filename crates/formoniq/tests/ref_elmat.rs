@@ -3,7 +3,7 @@ extern crate nalgebra as na;
 use common::linalg::nalgebra::Matrix;
 use formoniq::operators::{self, ElMatProvider};
 use manifold::{
-  geometry::{metric::simplex::SimplexGeometry, refsimp_vol},
+  geometry::{metric::simplex::SimplexLengths, refsimp_vol},
   Dim,
 };
 
@@ -18,7 +18,7 @@ where
       continue;
     };
 
-    let refcell = SimplexGeometry::standard(dim);
+    let refcell = SimplexLengths::standard(dim);
     let computed_elmat = elmat.eval(&refcell);
 
     assert_relative_eq!(&computed_elmat, &expected_elmat);

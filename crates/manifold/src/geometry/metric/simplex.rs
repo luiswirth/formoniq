@@ -1,9 +1,5 @@
 use super::EdgeIdx;
-use crate::{
-  geometry::{coord::simplex::SimplexCoords, refsimp_vol},
-  topology::simplex::nedges,
-  Dim,
-};
+use crate::{geometry::coord::simplex::SimplexCoords, topology::simplex::nedges, Dim};
 
 use common::{
   combo::{factorial, lex_rank},
@@ -13,63 +9,6 @@ use common::{
 
 use itertools::Itertools;
 use std::f64::consts::SQRT_2;
-
-#[derive(Debug, Clone)]
-pub struct SimplexGeometry {
-  lengths: SimplexLengths,
-  metric: Gramian,
-  inverse_metric: Gramian,
-  // TODO: add multiform gramian
-  //multiform_gramian: Gramian,
-}
-impl SimplexGeometry {
-  pub fn new(lengths: SimplexLengths) -> Self {
-    let metric = lengths.into_regge_metric();
-    let inverse_metric = metric.clone().inverse();
-    Self {
-      lengths,
-      metric,
-      inverse_metric,
-    }
-  }
-  pub fn standard(dim: Dim) -> Self {
-    let lengths = SimplexLengths::standard(dim);
-    let metric = Gramian::standard(dim);
-    let inverse_metric = metric.clone();
-    Self {
-      lengths,
-      metric,
-      inverse_metric,
-    }
-  }
-
-  pub fn lengths(&self) -> &SimplexLengths {
-    &self.lengths
-  }
-  pub fn metric(&self) -> &Gramian {
-    &self.metric
-  }
-  pub fn inverse_metric(&self) -> &Gramian {
-    &self.inverse_metric
-  }
-  pub fn dim(&self) -> Dim {
-    debug_assert_eq!(self.metric.dim(), self.lengths.dim());
-    self.metric.dim()
-  }
-  pub fn nvertices(&self) -> usize {
-    self.dim() + 1
-  }
-
-  /// The volume of this cell.
-  pub fn vol(&self) -> f64 {
-    refsimp_vol(self.dim()) * self.metric().det_sqrt()
-  }
-
-  /// The shape regularity measure of this cell.
-  pub fn shape_reguarity_measure(&self) -> f64 {
-    self.lengths.diameter().powi(self.dim() as i32) / self.vol()
-  }
-}
 
 /// The edge lengths of a simplex.
 ///
@@ -138,8 +77,9 @@ impl SimplexLengths {
       .unwrap()
   }
 
-  pub fn geometry(self) -> SimplexGeometry {
-    SimplexGeometry::new(self)
+  /// The shape regularity measure of this cell.
+  pub fn shape_reguarity_measure(&self) -> f64 {
+    self.diameter().powi(self.dim() as i32) / self.vol()
   }
 
   pub fn vector(&self) -> &Vector {
@@ -231,7 +171,7 @@ impl SimplexLengths {
     Self::new(lengths, dim)
   }
 
-  pub fn into_regge_metric(&self) -> Gramian {
+  pub fn to_regge_metric(&self) -> Gramian {
     let mut metric_tensor = Matrix::zeros(self.dim(), self.dim());
     for i in 0..self.dim() {
       metric_tensor[(i, i)] = self[i].powi(2);
