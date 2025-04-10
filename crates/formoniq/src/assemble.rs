@@ -93,7 +93,7 @@ pub fn assemble_galvec(
 }
 
 pub fn drop_boundary_dofs_galmat(complex: &Complex, galmat: &mut GalMat) {
-  drop_dofs_galmat(&complex.boundary_vertices().kidx_iter().collect(), galmat)
+  drop_dofs_galmat(&complex.boundary_vertices().into_iter().collect(), galmat)
 }
 
 pub fn drop_dofs_galmat(dofs: &HashSet<DofIdx>, galmat: &mut GalMat) {
@@ -122,7 +122,7 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
 }
 
 pub fn reintroduce_boundary_dofs_galsols(complex: &Complex, galsols: &mut Matrix) {
-  reintroduce_dropped_dofs_galsols(complex.boundary_vertices().kidxs().to_vec(), galsols)
+  reintroduce_dropped_dofs_galsols(complex.boundary_vertices(), galsols)
 }
 
 pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut Matrix) {
@@ -141,8 +141,7 @@ pub fn enforce_homogeneous_dirichlet_bc(
   galmat: &mut GalMat,
   galvec: &mut Vector,
 ) {
-  let boundary_vertices = complex.boundary_vertices();
-  fix_dofs_zero(boundary_vertices.kidxs(), galmat, galvec);
+  fix_dofs_zero(&complex.boundary_vertices(), galmat, galvec);
 }
 
 pub fn enforce_dirichlet_bc<F>(
@@ -155,7 +154,7 @@ pub fn enforce_dirichlet_bc<F>(
 {
   let boundary_dofs = complex.boundary_vertices();
   let dof_coeffs: Vec<_> = boundary_dofs
-    .kidx_iter()
+    .into_iter()
     .map(|idof| (idof, boundary_coeff_map(idof)))
     .collect();
 

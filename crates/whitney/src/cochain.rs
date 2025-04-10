@@ -7,9 +7,9 @@ use {
   exterior::{field::DifferentialMultiForm, Dim},
   manifold::{
     geometry::coord::{quadrature::barycentric_quadrature, simplex::SimplexCoords, CoordRef},
-    topology::complex::{
+    topology::{
+      complex::Complex,
       handle::{SimplexHandle, SimplexIdx},
-      Complex,
     },
   },
 };

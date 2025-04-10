@@ -12,7 +12,7 @@ use common::linalg::{
 };
 use manifold::{
   geometry::metric::mesh::MeshLengths,
-  topology::complex::{handle::KSimplexIdx, Complex},
+  topology::{complex::Complex, handle::KSimplexIdx},
 };
 use whitney::cochain::Cochain;
 
