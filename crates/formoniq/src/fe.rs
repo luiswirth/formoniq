@@ -51,7 +51,7 @@ pub fn reconstruct_at_coord<'a>(
   // WARN: very slow and inefficent
   let Some(cell) = topology
     .cells()
-    .handle_iter()
+    .iter()
     .find(|cell| cell.coord_simplex(coords).is_coord_inside(coord))
   else {
     return MultiForm::zero(dim, grade);
@@ -78,7 +78,7 @@ pub fn reconstruct_at_mesh_cells_barycenters(
 
   topology
     .cells()
-    .handle_iter()
+    .iter()
     .map(|cell| {
       let mut value = MultiForm::zero(topology.dim(), grade);
       for dof_simp in cell.subsimps(grade) {
@@ -104,7 +104,7 @@ pub fn reconstruct_at_mesh_cells_vertices(
 
   topology
     .cells()
-    .handle_iter()
+    .iter()
     .map(|cell| {
       cell
         .vertices()

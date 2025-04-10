@@ -289,7 +289,7 @@ mod test {
         let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = multi_gramian(geo.inverse_metric(), grade)
+            inner[(i, j)] = multi_gramian(geo.inverse_metric(), grade + 1)
               .inner(awhitney.coeffs(), bwhitney.coeffs());
           }
         }

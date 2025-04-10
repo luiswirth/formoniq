@@ -14,3 +14,4 @@ num-integer = "0.1.46"
 
 num-traits = "0.2.19"
 byteorder = "1.5.0"
+approx = "0.5.1"

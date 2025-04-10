@@ -16,6 +16,7 @@ use common::{
 };
 
 use itertools::Itertools;
+use rayon::iter::ParallelIterator;
 use std::f64::consts::SQRT_2;
 
 pub type EdgeIdx = usize;
@@ -149,7 +150,7 @@ impl MeshEdgeLengths {
   pub fn shape_regularity_measure(&self, topology: &Complex) -> f64 {
     topology
       .cells()
-      .handle_iter()
+      .iter()
       .map(|cell| self.simplex_geometry(cell).shape_reguarity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
@@ -171,7 +172,7 @@ impl MeshEdgeLengths {
 
   pub fn is_coordinate_realizable(&self, skeleton: SkeletonHandle) -> bool {
     skeleton
-      .handle_iter()
+      .par_iter()
       .all(|simp| self.simplex_lengths(simp).is_coordinate_realizable())
   }
 }

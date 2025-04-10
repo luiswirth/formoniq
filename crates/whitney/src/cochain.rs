@@ -35,7 +35,7 @@ impl Cochain {
     F: FnMut(SimplexHandle) -> f64,
   {
     let skeleton = topology.skeleton(dim);
-    let coeffs = na::DVector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
+    let coeffs = na::DVector::from_iterator(skeleton.len(), skeleton.iter().map(f));
     Self::new(dim, coeffs)
   }
 
@@ -139,7 +139,7 @@ pub fn de_rham_map(
 ) -> Cochain {
   let cochain = topology
     .skeleton(form.grade())
-    .handle_iter()
+    .iter()
     .map(|simp| SimplexCoords::from_simplex_and_coords(simp.raw(), coords))
     .map(|simp| de_rahm_map_local(form, &simp))
     .collect::<Vec<_>>()
