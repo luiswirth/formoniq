@@ -1,13 +1,10 @@
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
 pub mod cochain;
 pub mod io;
 
 use {
   common::{
     combo::{factorial, factorialf, Sign},
-    linalg::nalgebra::CooMatrixExt,
+    linalg::nalgebra::{CooMatrix, CooMatrixExt, Vector},
   },
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
@@ -23,11 +20,11 @@ use {
 pub type LocalMultiForm = MultiForm;
 
 pub trait ManifoldComplexExt {
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> nas::CooMatrix<f64>;
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> CooMatrix;
 }
 impl ManifoldComplexExt for Complex {
   /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> nas::CooMatrix<f64> {
+  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> CooMatrix {
     self.boundary_operator(grade + 1).transpose()
   }
 }
@@ -46,7 +43,7 @@ impl CoordSimplexExt for SimplexCoords {
 }
 
 pub fn difbary0_local(dim: Dim) -> LocalMultiForm {
-  let coeffs = na::DVector::from_element(dim, -1.0);
+  let coeffs = Vector::from_element(dim, -1.0);
   LocalMultiForm::line(coeffs)
 }
 pub fn difbary_local(ibary: usize, dim: Dim) -> LocalMultiForm {
@@ -55,7 +52,7 @@ pub fn difbary_local(ibary: usize, dim: Dim) -> LocalMultiForm {
   if ibary == 0 {
     difbary0_local(dim)
   } else {
-    let mut coeffs = na::DVector::zeros(dim);
+    let mut coeffs = Vector::zeros(dim);
     coeffs[ibary - 1] = 1.0;
     LocalMultiForm::line(coeffs)
   }

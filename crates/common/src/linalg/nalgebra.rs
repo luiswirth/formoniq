@@ -2,12 +2,22 @@ use crate::util::{CumsumExt, IterAllEqExt};
 
 use std::mem;
 
-pub trait DMatrixExt {
+pub type Matrix<T = f64> = na::DMatrix<T>;
+pub type Vector<T = f64> = na::DVector<T>;
+
+pub type VectorView<'a, T = f64> = na::DVectorView<'a, T>;
+pub type MatrixView<'a, T = f64> = na::DMatrixView<'a, T>;
+
+pub type CooMatrix<T = f64> = nas::CooMatrix<T>;
+pub type CsrMatrix<T = f64> = nas::CsrMatrix<T>;
+pub type CscMatrix<T = f64> = nas::CscMatrix<T>;
+
+pub trait MatrixExt {
   fn is_full_rank(&self, eps: f64) -> bool;
   fn is_spd(&self) -> bool;
   fn condition_number(self) -> f64;
 }
-impl DMatrixExt for na::DMatrix<f64> {
+impl MatrixExt for Matrix {
   fn is_full_rank(&self, eps: f64) -> bool {
     self.rank(eps) == self.nrows().min(self.ncols())
   }
@@ -19,14 +29,14 @@ impl DMatrixExt for na::DMatrix<f64> {
   }
 }
 
-pub fn bilinear_form(mat: &nas::CsrMatrix<f64>, u: &na::DVector<f64>, v: &na::DVector<f64>) -> f64 {
+pub fn bilinear_form(mat: &CsrMatrix, u: &Vector, v: &Vector) -> f64 {
   ((mat.transpose() * u).transpose() * v).x
 }
-pub fn quadratic_form_sparse(mat: &nas::CsrMatrix<f64>, u: &na::DVector<f64>) -> f64 {
+pub fn quadratic_form_sparse(mat: &CsrMatrix, u: &Vector) -> f64 {
   bilinear_form(mat, u, u)
 }
 
-pub fn kronecker_sum<T>(mats: &[na::DMatrix<T>]) -> na::DMatrix<T>
+pub fn kronecker_sum<T>(mats: &[Matrix<T>]) -> Matrix<T>
 where
   T: na::Scalar + num_traits::Zero + num_traits::One + na::ClosedMulAssign + na::ClosedAddAssign,
 {
@@ -35,18 +45,18 @@ where
 
   let eyes: Vec<_> = mats
     .iter()
-    .map(|m| na::DMatrix::identity(m.nrows(), m.nrows()))
+    .map(|m| Matrix::identity(m.nrows(), m.nrows()))
     .collect();
 
   let kron_size = mats.iter().map(|mat| mat.nrows()).product::<usize>();
-  let mut kron_sum = na::DMatrix::zeros(kron_size, kron_size);
+  let mut kron_sum = Matrix::zeros(kron_size, kron_size);
   for (dim, mat) in mats.iter().enumerate() {
     let eyes_before = eyes[..dim]
       .iter()
-      .fold(na::DMatrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
+      .fold(Matrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
     let eyes_after = eyes[dim + 1..]
       .iter()
-      .fold(na::DMatrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
+      .fold(Matrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
 
     let kron_prod = eyes_before.kronecker(mat).kronecker(&eyes_after);
     kron_sum += kron_prod;
@@ -60,11 +70,11 @@ pub fn matrix_from_const_diagonals<T>(
   offsets: &[isize],
   nrows: usize,
   ncols: usize,
-) -> na::DMatrix<T>
+) -> Matrix<T>
 where
   T: num_traits::Zero + na::Scalar + Copy,
 {
-  let mut matrix = na::DMatrix::zeros(nrows, ncols);
+  let mut matrix = Matrix::zeros(nrows, ncols);
 
   for (idiag, &offset) in offsets.iter().enumerate() {
     let [start_row, start_col] = if offset >= 0 {
@@ -85,10 +95,7 @@ where
   matrix
 }
 
-pub fn save_vector(
-  mu: &na::DVector<f64>,
-  path: impl AsRef<std::path::Path>,
-) -> std::io::Result<()> {
+pub fn save_vector(mu: &Vector, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
   use std::io::Write;
   let mut file = std::fs::File::create(path).unwrap();
   for v in mu.iter() {
@@ -107,7 +114,7 @@ pub trait CooMatrixExt {
   fn transpose(self) -> Self;
 }
 
-impl CooMatrixExt for nas::CooMatrix<f64> {
+impl CooMatrixExt for CooMatrix {
   fn grow(&mut self, nrows_added: usize, ncols_added: usize) {
     let nrows = self.nrows() + nrows_added;
     let ncols = self.ncols() + ncols_added;

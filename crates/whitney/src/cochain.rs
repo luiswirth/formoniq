@@ -1,3 +1,4 @@
+use common::linalg::nalgebra::Vector;
 use manifold::topology::skeleton::Skeleton;
 
 use crate::CoordSimplexExt;
@@ -16,16 +17,16 @@ use {
 };
 
 pub struct Cochain {
-  pub coeffs: na::DVector<f64>,
+  pub coeffs: Vector,
   pub dim: Dim,
 }
 impl Cochain {
-  pub fn new(dim: Dim, coeffs: na::DVector<f64>) -> Self {
+  pub fn new(dim: Dim, coeffs: Vector) -> Self {
     Self { dim, coeffs }
   }
   pub fn constant(value: f64, skeleton: &Skeleton) -> Self {
     let ncoeffs = skeleton.len();
-    Self::new(skeleton.dim(), na::DVector::from_element(ncoeffs, value))
+    Self::new(skeleton.dim(), Vector::from_element(ncoeffs, value))
   }
   pub fn zero(skeleton: &Skeleton) -> Self {
     Self::constant(0.0, skeleton)
@@ -35,14 +36,14 @@ impl Cochain {
     F: FnMut(SimplexHandle) -> f64,
   {
     let skeleton = topology.skeleton(dim);
-    let coeffs = na::DVector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
+    let coeffs = Vector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
     Self::new(dim, coeffs)
   }
 
   pub fn dim(&self) -> Dim {
     self.dim
   }
-  pub fn coeffs(&self) -> &na::DVector<f64> {
+  pub fn coeffs(&self) -> &Vector {
     &self.coeffs
   }
   pub fn len(&self) -> usize {

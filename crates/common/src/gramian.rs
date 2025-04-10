@@ -1,4 +1,4 @@
-use crate::linalg::nalgebra::DMatrixExt;
+use crate::linalg::nalgebra::{Matrix, MatrixExt, Vector};
 
 pub type Dim = usize;
 
@@ -6,34 +6,34 @@ pub type Dim = usize;
 #[derive(Debug, Clone)]
 pub struct Gramian {
   /// S.P.D. matrix
-  matrix: na::DMatrix<f64>,
+  matrix: Matrix,
 }
 impl Gramian {
-  pub fn try_new(matrix: na::DMatrix<f64>) -> Option<Self> {
+  pub fn try_new(matrix: Matrix) -> Option<Self> {
     matrix.is_spd().then_some(Self { matrix })
   }
-  pub fn new(matrix: na::DMatrix<f64>) -> Self {
+  pub fn new(matrix: Matrix) -> Self {
     Self::try_new(matrix).expect("Matrix must be s.p.d.")
   }
-  pub fn new_unchecked(matrix: na::DMatrix<f64>) -> Self {
+  pub fn new_unchecked(matrix: Matrix) -> Self {
     if cfg!(debug_assertions) {
       Self::new(matrix)
     } else {
       Self { matrix }
     }
   }
-  pub fn from_euclidean_vectors(vectors: na::DMatrix<f64>) -> Self {
+  pub fn from_euclidean_vectors(vectors: Matrix) -> Self {
     assert!(vectors.is_full_rank(1e-9), "Matrix must be full rank.");
     let matrix = vectors.transpose() * vectors;
     Self::new_unchecked(matrix)
   }
   /// Orthonormal euclidean metric.
   pub fn standard(dim: Dim) -> Self {
-    let matrix = na::DMatrix::identity(dim, dim);
+    let matrix = Matrix::identity(dim, dim);
     Self::new_unchecked(matrix)
   }
 
-  pub fn matrix(&self) -> &na::DMatrix<f64> {
+  pub fn matrix(&self) -> &Matrix {
     &self.matrix
   }
   pub fn dim(&self) -> Dim {
@@ -81,28 +81,28 @@ impl std::ops::Index<(usize, usize)> for Gramian {
 
 /// Inner product functionality directly on any element.
 impl Gramian {
-  pub fn inner(&self, v: &na::DVector<f64>, w: &na::DVector<f64>) -> f64 {
+  pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
     (v.transpose() * self.matrix() * w).x
   }
-  pub fn inner_mat(&self, v: &na::DMatrix<f64>, w: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+  pub fn inner_mat(&self, v: &Matrix, w: &Matrix) -> Matrix {
     v.transpose() * self.matrix() * w
   }
-  pub fn norm_sq(&self, v: &na::DVector<f64>) -> f64 {
+  pub fn norm_sq(&self, v: &Vector) -> f64 {
     self.inner(v, v)
   }
-  pub fn norm_sq_mat(&self, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+  pub fn norm_sq_mat(&self, v: &Matrix) -> Matrix {
     self.inner_mat(v, v)
   }
-  pub fn norm(&self, v: &na::DVector<f64>) -> f64 {
+  pub fn norm(&self, v: &Vector) -> f64 {
     self.inner(v, v).sqrt()
   }
-  pub fn norm_mat(&self, v: &na::DMatrix<f64>) -> na::DMatrix<f64> {
+  pub fn norm_mat(&self, v: &Matrix) -> Matrix {
     self.inner_mat(v, v).map(|v| v.sqrt())
   }
-  pub fn angle_cos(&self, v: &na::DVector<f64>, w: &na::DVector<f64>) -> f64 {
+  pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
     self.inner(v, w) / self.norm(v) / self.norm(w)
   }
-  pub fn angle(&self, v: &na::DVector<f64>, w: &na::DVector<f64>) -> f64 {
+  pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
     self.angle_cos(v, w).acos()
   }
 }

@@ -1,6 +1,3 @@
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
 use {
   formoniq::{fe::reconstruct_at_mesh_cells_barycenters, problems::hodge_laplace},
   std::io::BufWriter,

@@ -2,6 +2,7 @@ pub mod attribute;
 pub mod handle;
 
 use attribute::KSimplexCollection;
+use common::linalg::nalgebra::{CooMatrix, Matrix};
 use handle::{SimplexIdx, SkeletonHandle};
 
 use super::{simplex::Simplex, skeleton::Skeleton};
@@ -95,15 +96,15 @@ impl Complex {
   }
 
   /// $diff^k: Delta_k -> Delta_(k-1)$
-  pub fn boundary_operator(&self, dim: Dim) -> nas::CooMatrix<f64> {
+  pub fn boundary_operator(&self, dim: Dim) -> CooMatrix {
     let sups = &self.skeleton(dim);
 
     if dim == 0 {
-      return nas::CooMatrix::zeros(0, sups.len());
+      return CooMatrix::zeros(0, sups.len());
     }
 
     let subs = &self.skeleton(dim - 1);
-    let mut mat = nas::CooMatrix::zeros(subs.len(), sups.len());
+    let mut mat = CooMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.handle_iter().enumerate() {
       let sup_boundary = sup.boundary();
       for sub in sup_boundary {
@@ -122,13 +123,13 @@ impl Complex {
   /// Computed using simplicial homology.
   pub fn homology_dim(&self, dim: Dim) -> usize {
     // TODO: use sparse matrix!
-    let boundary_this = na::DMatrix::from(&self.boundary_operator(dim));
-    let boundary_plus = na::DMatrix::from(&self.boundary_operator(dim + 1));
+    let boundary_this = Matrix::from(&self.boundary_operator(dim));
+    let boundary_plus = Matrix::from(&self.boundary_operator(dim + 1));
 
     const RANK_TOL: f64 = 1e-12;
 
-    let dim_image = |op: &na::DMatrix<f64>| -> usize { op.rank(RANK_TOL) };
-    let dim_kernel = |op: &na::DMatrix<f64>| -> usize { op.ncols() - dim_image(op) };
+    let dim_image = |op: &Matrix| -> usize { op.rank(RANK_TOL) };
+    let dim_kernel = |op: &Matrix| -> usize { op.ncols() - dim_image(op) };
 
     let dim_cycles = dim_kernel(&boundary_this);
     let dim_boundaries = dim_image(&boundary_plus);

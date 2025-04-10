@@ -1,5 +1,4 @@
 extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
 
 use {
   exterior::{field::DiffFormClosure, MultiForm},

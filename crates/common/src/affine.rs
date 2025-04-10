@@ -1,21 +1,23 @@
+use crate::linalg::nalgebra::{Matrix, Vector, VectorView};
+
 pub struct AffineTransform {
-  pub translation: na::DVector<f64>,
-  pub linear: na::DMatrix<f64>,
+  pub translation: Vector,
+  pub linear: Matrix,
 }
 impl AffineTransform {
-  pub fn new(translation: na::DVector<f64>, linear: na::DMatrix<f64>) -> Self {
+  pub fn new(translation: Vector, linear: Matrix) -> Self {
     Self {
       translation,
       linear,
     }
   }
 
-  pub fn apply_forward(&self, coord: na::DVectorView<f64>) -> na::DVector<f64> {
+  pub fn apply_forward(&self, coord: VectorView) -> Vector {
     &self.linear * coord + &self.translation
   }
-  pub fn apply_backward(&self, coord: na::DVectorView<f64>) -> na::DVector<f64> {
+  pub fn apply_backward(&self, coord: VectorView) -> Vector {
     if self.linear.is_empty() {
-      return na::DVector::default();
+      return Vector::default();
     }
     self
       .linear

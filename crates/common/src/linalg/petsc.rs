@@ -5,12 +5,14 @@ use std::{
 
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 
+use super::nalgebra::{CsrMatrix, Matrix, Vector};
+
 const PETSC_SOLVER_PATH: &str = "./petsc-solver";
 
 const PETSC_MAT_FILE_CLASSID: i32 = 1211216;
 const PETSC_VEC_FILE_CLASSID: i32 = 1211214;
 
-pub fn petsc_write_matrix(matrix: &nas::CsrMatrix<f64>, filename: &str) -> std::io::Result<()> {
+pub fn petsc_write_matrix(matrix: &CsrMatrix, filename: &str) -> std::io::Result<()> {
   let file = File::create(filename)?;
   let mut writer = BufWriter::new(file);
 
@@ -43,7 +45,7 @@ pub fn petsc_write_matrix(matrix: &nas::CsrMatrix<f64>, filename: &str) -> std::
   Ok(())
 }
 
-pub fn petsc_write_vector(vector: &na::DVector<f64>, filename: &str) -> std::io::Result<()> {
+pub fn petsc_write_vector(vector: &Vector, filename: &str) -> std::io::Result<()> {
   let file = File::create(filename)?;
   let mut writer = BufWriter::new(file);
 
@@ -60,7 +62,7 @@ pub fn petsc_write_vector(vector: &na::DVector<f64>, filename: &str) -> std::io:
   Ok(())
 }
 
-pub fn petsc_read_vector(filename: &str) -> std::io::Result<na::DVector<f64>> {
+pub fn petsc_read_vector(filename: &str) -> std::io::Result<Vector> {
   let file = File::open(filename)?;
   let mut reader = BufReader::new(file);
 
@@ -69,7 +71,7 @@ pub fn petsc_read_vector(filename: &str) -> std::io::Result<na::DVector<f64>> {
 
   let nrows = reader.read_i32::<BigEndian>()? as usize;
 
-  let mut vector = na::DVector::zeros(nrows);
+  let mut vector = Vector::zeros(nrows);
   for i in 0..nrows {
     vector[i] = reader.read_f64::<BigEndian>()?;
   }
@@ -77,12 +79,12 @@ pub fn petsc_read_vector(filename: &str) -> std::io::Result<na::DVector<f64>> {
   Ok(vector)
 }
 
-pub fn petsc_read_eigenvals(filename: &str) -> std::io::Result<na::DVector<f64>> {
+pub fn petsc_read_eigenvals(filename: &str) -> std::io::Result<Vector> {
   let file = File::open(filename)?;
   let mut reader = BufReader::new(file);
 
   let neigenvals = reader.read_i32::<BigEndian>()? as usize;
-  let mut eigenvals = na::DVector::zeros(neigenvals);
+  let mut eigenvals = Vector::zeros(neigenvals);
 
   for i in 0..neigenvals {
     eigenvals[i] = reader.read_f64::<BigEndian>()?;
@@ -110,14 +112,10 @@ pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix
       data.push(reader.read_f64::<BigEndian>()?);
     }
   }
-  Ok(na::DMatrix::from_column_slice(nrows, ncols, &data))
+  Ok(Matrix::from_column_slice(nrows, ncols, &data))
 }
 
-pub fn petsc_ghiep(
-  lhs: &nas::CsrMatrix<f64>,
-  rhs: &nas::CsrMatrix<f64>,
-  neigen_values: usize,
-) -> (na::DVector<f64>, na::DMatrix<f64>) {
+pub fn petsc_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigen_values: usize) -> (Vector, Matrix) {
   petsc_write_matrix(lhs, &format!("{PETSC_SOLVER_PATH}/in/A.bin")).unwrap();
   petsc_write_matrix(rhs, &format!("{PETSC_SOLVER_PATH}/in/B.bin")).unwrap();
 
@@ -144,7 +142,7 @@ pub fn petsc_ghiep(
   (eigenvals, eigenvecs)
 }
 
-pub fn petsc_saddle_point(lhs: &nas::CsrMatrix<f64>, rhs: &na::DVector<f64>) -> na::DVector<f64> {
+pub fn petsc_saddle_point(lhs: &CsrMatrix, rhs: &Vector) -> Vector {
   petsc_write_matrix(lhs, &format!("{PETSC_SOLVER_PATH}/in/A.bin")).unwrap();
   petsc_write_vector(rhs, &format!("{PETSC_SOLVER_PATH}/in/b.bin")).unwrap();
 

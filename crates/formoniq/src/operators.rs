@@ -1,5 +1,8 @@
 use {
-  common::combo::{factorial, Sign},
+  common::{
+    combo::{factorial, Sign},
+    linalg::nalgebra::{Matrix, Vector},
+  },
   exterior::{list::ExteriorElementList, term::multi_gramian, ExteriorGrade},
   manifold::{
     geometry::metric::SimplexGeometry,
@@ -12,14 +15,14 @@ use {
 pub type DofIdx = usize;
 pub type DofCoeff = f64;
 
-pub type ElMat = na::DMatrix<f64>;
+pub type ElMat = Matrix;
 pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
   fn eval(&self, geometry: &SimplexGeometry) -> ElMat;
 }
 
-pub type ElVec = na::DVector<f64>;
+pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
   fn eval(&self, geometry: &SimplexGeometry) -> ElVec;
@@ -55,7 +58,7 @@ impl ElMatProvider for ScalarMassElmat {
     let ndofs = geometry.nvertices();
     let dim = geometry.dim();
     let v = geometry.vol() / ((dim + 1) * (dim + 2)) as f64;
-    let mut elmat = na::DMatrix::from_element(ndofs, ndofs, v);
+    let mut elmat = Matrix::from_element(ndofs, ndofs, v);
     elmat.fill_diagonal(2.0 * v);
     elmat
   }
@@ -74,7 +77,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   fn eval(&self, geomery: &SimplexGeometry) -> ElMat {
     let n = geomery.nvertices();
     let v = geomery.vol() / n as f64;
-    na::DMatrix::from_diagonal_element(n, n, v)
+    Matrix::from_diagonal_element(n, n, v)
   }
 }
 
@@ -91,7 +94,7 @@ impl ElMatProvider for HodgeMassElmat {
   }
 
   // TODO: store precomputed values
-  fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
+  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
 
@@ -106,7 +109,7 @@ impl ElMatProvider for HodgeMassElmat {
       .map(|simp| WhitneyRefLsf::new(dim, simp).wedge_terms().collect())
       .collect();
 
-    let mut elmat = na::DMatrix::zeros(simplicies.len(), simplicies.len());
+    let mut elmat = Matrix::zeros(simplicies.len(), simplicies.len());
     for (i, asimp) in simplicies.iter().enumerate() {
       for (j, bsimp) in simplicies.iter().enumerate() {
         let wedge_terms_a = &wedge_terms[i];
@@ -144,11 +147,11 @@ impl ElMatProvider for DifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0 - 1
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
+  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
     let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
-    let dif = na::DMatrix::from(&dif);
+    let dif = Matrix::from(&dif);
     let mass = HodgeMassElmat(grade).eval(geometry);
     mass * dif
   }
@@ -165,11 +168,11 @@ impl ElMatProvider for CodifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
+  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
     let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
-    let dif = na::DMatrix::from(&dif);
+    let dif = Matrix::from(&dif);
     let codif = dif.transpose();
     let mass = HodgeMassElmat(grade).eval(geometry);
     codif * mass
@@ -187,11 +190,11 @@ impl ElMatProvider for CodifDifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.0
   }
-  fn eval(&self, geometry: &SimplexGeometry) -> na::DMatrix<f64> {
+  fn eval(&self, geometry: &SimplexGeometry) -> Matrix {
     let dim = geometry.dim();
     let grade = self.0;
     let dif = Complex::standard(dim).exterior_derivative_operator(grade);
-    let dif = na::DMatrix::from(&dif);
+    let dif = Matrix::from(&dif);
     let codif = dif.transpose();
     let mass = HodgeMassElmat(grade + 1).eval(geometry);
     codif * mass * dif
@@ -200,8 +203,8 @@ impl ElMatProvider for CodifDifElmat {
 
 /// The constant exterior drivatives of the reference barycentric coordinate
 /// functions, given in the 1-form standard basis.
-pub fn ref_difbarys(n: Dim) -> na::DMatrix<f64> {
-  let mut ref_difbarys = na::DMatrix::zeros(n, n + 1);
+pub fn ref_difbarys(n: Dim) -> Matrix {
+  let mut ref_difbarys = Matrix::zeros(n, n + 1);
   for i in 0..n {
     ref_difbarys[(i, 0)] = -1.0;
     ref_difbarys[(i, i + 1)] = 1.0;
@@ -286,7 +289,7 @@ mod test {
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
           .map(|simp| WhitneyRefLsf::new(dim, simp).dif())
           .collect();
-        let mut inner = na::DMatrix::zeros(difwhitneys.len(), difwhitneys.len());
+        let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
             inner[(i, j)] = multi_gramian(geo.inverse_metric(), grade + 1)

@@ -5,21 +5,24 @@ use crate::{
   operators::{self, DofIdx},
 };
 
-use common::linalg::{faer::FaerCholesky, nalgebra::quadratic_form_sparse};
+use common::linalg::{
+  faer::FaerCholesky,
+  nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
+};
 use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 use whitney::cochain::Cochain;
 
 pub struct WaveState {
-  pub pos: na::DVector<f64>,
-  pub vel: na::DVector<f64>,
+  pub pos: Vector,
+  pub vel: Vector,
 }
 impl WaveState {
-  pub fn new(pos: na::DVector<f64>, vel: na::DVector<f64>) -> Self {
+  pub fn new(pos: Vector, vel: Vector) -> Self {
     Self { pos, vel }
   }
 
   /// The energy should be conserved from state to state.
-  pub fn energy(&self, laplace: &nas::CsrMatrix<f64>, mass: &nas::CsrMatrix<f64>) -> f64 {
+  pub fn energy(&self, laplace: &CsrMatrix, mass: &CsrMatrix) -> f64 {
     0.5 * (quadratic_form_sparse(laplace, &self.pos) + quadratic_form_sparse(mass, &self.vel))
   }
 }
@@ -39,13 +42,13 @@ where
   let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
   let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
 
-  let mass_csr = nas::CsrMatrix::from(&mass);
+  let mass_csr = CsrMatrix::from(&mass);
   let mut force = &mass_csr * force_data.coeffs();
 
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut force);
   assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut force);
 
-  let laplace = nas::CsrMatrix::from(&laplace);
+  let laplace = CsrMatrix::from(&laplace);
   let mass = mass_csr;
 
   let mass_cholesky = FaerCholesky::new(mass.clone());
@@ -80,9 +83,9 @@ where
 pub fn solve_wave_step(
   state: &WaveState,
   dt: f64,
-  forcing: &na::DVector<f64>,
-  laplace: &nas::CsrMatrix<f64>,
-  mass: &nas::CsrMatrix<f64>,
+  forcing: &Vector,
+  laplace: &CsrMatrix,
+  mass: &CsrMatrix,
   mass_cholesky: &FaerCholesky,
 ) -> WaveState {
   let WaveState { pos, vel } = state;

@@ -1,11 +1,14 @@
-use common::affine::AffineTransform;
+use common::{
+  affine::AffineTransform,
+  linalg::nalgebra::{Vector, VectorView},
+};
 
 use crate::{Dim, ExteriorElement, ExteriorGrade};
 
 pub trait ExteriorField {
   fn dim(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
-  fn at_point<'a>(&self, coord: impl Into<na::DVectorView<'a, f64>>) -> ExteriorElement;
+  fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement;
 }
 
 // Trait aliases.
@@ -20,7 +23,7 @@ pub type DiffFormClosure = ExteriorFieldClosure;
 
 #[allow(clippy::type_complexity)]
 pub struct ExteriorFieldClosure {
-  closure: Box<dyn Fn(na::DVectorView<f64>) -> ExteriorElement>,
+  closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement>,
   dim: Dim,
   grade: ExteriorGrade,
 }
@@ -28,7 +31,7 @@ pub struct ExteriorFieldClosure {
 #[allow(clippy::type_complexity)]
 impl ExteriorFieldClosure {
   pub fn new(
-    closure: Box<dyn Fn(na::DVectorView<f64>) -> ExteriorElement>,
+    closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement>,
     dim: Dim,
     grade: ExteriorGrade,
   ) -> Self {
@@ -43,16 +46,13 @@ impl ExteriorFieldClosure {
 // Convenience methods specifically for DifferentialFormClosure
 impl DiffFormClosure {
   /// Create a scalar field (0-form).
-  pub fn scalar(f: impl Fn(na::DVectorView<f64>) -> f64 + 'static, dim: Dim) -> Self {
-    let wrapper = move |x: na::DVectorView<f64>| crate::ExteriorElement::scalar(f(x), dim);
+  pub fn scalar(f: impl Fn(VectorView<f64>) -> f64 + 'static, dim: Dim) -> Self {
+    let wrapper = move |x: VectorView<f64>| crate::ExteriorElement::scalar(f(x), dim);
     Self::new(Box::new(wrapper), dim, 0)
   }
   /// Create a 1-form (covector field).
-  pub fn one_form(
-    f: impl Fn(na::DVectorView<f64>) -> na::DVector<f64> + 'static,
-    dim: Dim,
-  ) -> Self {
-    let wrapper = move |x: na::DVectorView<f64>| crate::ExteriorElement::line(f(x));
+  pub fn one_form(f: impl Fn(VectorView<f64>) -> Vector + 'static, dim: Dim) -> Self {
+    let wrapper = move |x: VectorView<f64>| crate::ExteriorElement::line(f(x));
     Self::new(Box::new(wrapper), dim, 1)
   }
 
@@ -66,7 +66,7 @@ impl DiffFormClosure {
     Self::scalar(move |x| x[icomp], dim)
   }
   /// Create a scalar field of the radial distance from a center point.
-  pub fn radial_scalar(center: na::DVector<f64>, dim: Dim) -> Self {
+  pub fn radial_scalar(center: Vector, dim: Dim) -> Self {
     Self::scalar(move |x| (&center - x).norm(), dim)
   }
 }
@@ -77,7 +77,7 @@ impl ExteriorField for ExteriorFieldClosure {
   fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn at_point<'a>(&self, coord: impl Into<na::DVectorView<'a, f64>>) -> ExteriorElement {
+  fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement {
     (self.closure)(coord.into())
   }
 }
@@ -101,7 +101,7 @@ impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
   fn grade(&self) -> ExteriorGrade {
     self.form.grade()
   }
-  fn at_point<'a>(&self, coord_global: impl Into<na::DVectorView<'a, f64>>) -> ExteriorElement {
+  fn at_point<'a>(&self, coord_global: impl Into<VectorView<'a>>) -> ExteriorElement {
     let coord_global = coord_global.into();
     let coord_ref = self.affine_transform.apply_backward(coord_global);
     let form_ref = self.form.at_point(&coord_ref);

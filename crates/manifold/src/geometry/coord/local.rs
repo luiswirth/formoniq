@@ -8,7 +8,12 @@ use crate::{
   Dim,
 };
 
-use common::{affine::AffineTransform, combo::Sign, gramian::Gramian};
+use common::{
+  affine::AffineTransform,
+  combo::Sign,
+  gramian::Gramian,
+  linalg::nalgebra::{Matrix, Vector},
+};
 use tracing::warn;
 
 #[derive(Debug, Clone)]
@@ -17,20 +22,20 @@ pub struct SimplexCoords {
 }
 
 impl SimplexCoords {
-  pub fn new(vertices: na::DMatrix<f64>) -> Self {
+  pub fn new(vertices: Matrix) -> Self {
     let vertices = vertices.into();
     Self { vertices }
   }
   pub fn standard(ndim: Dim) -> Self {
     let nvertices = ndim + 1;
-    let mut vertices = na::DMatrix::<f64>::zeros(ndim, nvertices);
+    let mut vertices = Matrix::<f64>::zeros(ndim, nvertices);
     for i in 0..ndim {
       vertices[(i, i + 1)] = 1.0;
     }
     Self::new(vertices)
   }
   pub fn from_simplex_and_coords(simp: &Simplex, coords: &MeshVertexCoords) -> SimplexCoords {
-    let mut vert_coords = na::DMatrix::zeros(coords.dim(), simp.nvertices());
+    let mut vert_coords = Matrix::zeros(coords.dim(), simp.nvertices());
     for (i, v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &coords.coord(v));
     }
@@ -57,12 +62,12 @@ impl SimplexCoords {
   pub fn base_vertex(&self) -> CoordRef {
     self.coord(0)
   }
-  pub fn spanning_vector(&self, i: usize) -> na::DVector<f64> {
+  pub fn spanning_vector(&self, i: usize) -> Vector {
     assert!(i < self.dim_intrinsic());
     self.coord(i + 1) - self.base_vertex()
   }
-  pub fn spanning_vectors(&self) -> na::DMatrix<f64> {
-    let mut mat = na::DMatrix::zeros(self.dim_ambient(), self.dim_intrinsic());
+  pub fn spanning_vectors(&self) -> Matrix {
+    let mut mat = Matrix::zeros(self.dim_ambient(), self.dim_intrinsic());
     let v0 = self.base_vertex();
     for (i, vi) in self.vertices.coord_iter().skip(1).enumerate() {
       let v0i = vi - v0;
@@ -70,6 +75,7 @@ impl SimplexCoords {
     }
     mat
   }
+
   pub fn metric_tensor(&self) -> Gramian {
     Gramian::from_euclidean_vectors(self.spanning_vectors())
   }
@@ -89,7 +95,7 @@ impl SimplexCoords {
     Sign::from_f64(self.det()).unwrap()
   }
 
-  pub fn linear_transform(&self) -> na::DMatrix<f64> {
+  pub fn linear_transform(&self) -> Matrix {
     self.spanning_vectors()
   }
   pub fn affine_transform(&self) -> AffineTransform {
@@ -123,7 +129,7 @@ impl SimplexCoords {
 
   /// Exterior derivative / total differential of barycentric coordinate functions
   /// in the rows(!) of a matrix.
-  pub fn difbarys(&self) -> na::DMatrix<f64> {
+  pub fn difbarys(&self) -> Matrix {
     let difs = self.linear_transform().pseudo_inverse(1e-12).unwrap();
     let mut grads = difs.insert_row(0, 0.0);
     grads.set_row(0, &-grads.row_sum());
@@ -131,7 +137,7 @@ impl SimplexCoords {
   }
 
   pub fn barycenter(&self) -> Coord {
-    let mut barycenter = na::DVector::zeros(self.dim_ambient());
+    let mut barycenter = Vector::zeros(self.dim_ambient());
     self.vertices.coord_iter().for_each(|v| barycenter += v);
     barycenter /= self.nvertices() as f64;
     barycenter
@@ -183,7 +189,7 @@ pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
 pub fn ref_barycenter(dim: Dim) -> Coord {
   let nvertices = dim + 1;
   let value = 1.0 / nvertices as f64;
-  na::DVector::from_element(dim, value)
+  Vector::from_element(dim, value)
 }
 pub fn ref_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
   let coord = coord.into();
@@ -195,12 +201,12 @@ pub fn ref_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
     coord[ivertex - 1]
   }
 }
-pub fn ref_gradbary(dim: Dim, ivertex: usize) -> na::DVector<f64> {
+pub fn ref_gradbary(dim: Dim, ivertex: usize) -> Vector {
   assert!(ivertex <= dim);
   if ivertex == 0 {
-    na::DVector::from_element(dim, -1.0)
+    Vector::from_element(dim, -1.0)
   } else {
-    let mut v = na::DVector::zeros(dim);
+    let mut v = Vector::zeros(dim);
     v[ivertex - 1] = 1.0;
     v
   }

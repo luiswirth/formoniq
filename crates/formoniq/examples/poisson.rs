@@ -1,9 +1,6 @@
 //! Solves a manufactored poisson problem in d dimensions
 //! and determines the algebraic convergence rate.
 
-extern crate nalgebra as na;
-extern crate nalgebra_sparse as nas;
-
 use {
   common::util::algebraic_convergence_rate,
   exterior::field::DiffFormClosure,

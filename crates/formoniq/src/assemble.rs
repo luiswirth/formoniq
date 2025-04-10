@@ -1,14 +1,17 @@
 use crate::operators::{DofIdx, ElMatProvider, ElVecProvider};
 
-use common::{linalg::nalgebra::CooMatrixExt, util};
+use common::{
+  linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector},
+  util,
+};
 use itertools::{multizip, Itertools};
 use manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex};
 
 use rayon::prelude::*;
 use std::collections::HashSet;
 
-pub type GalMat = nas::CooMatrix<f64>;
-pub type GalVec = na::DVector<f64>;
+pub type GalMat = CooMatrix;
+pub type GalVec = Vector;
 
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(
@@ -81,7 +84,7 @@ pub fn assemble_galvec(
     })
     .collect();
 
-  let mut galvec = na::DVector::zeros(nsimps);
+  let mut galvec = Vector::zeros(nsimps);
   for (irow, val) in entries {
     galvec[irow] += val;
   }
@@ -118,11 +121,11 @@ pub fn drop_dofs_galvec(dofs: &[DofIdx], galvec: &mut GalVec) {
   *galvec = std::mem::take(galvec).remove_rows_at(dofs);
 }
 
-pub fn reintroduce_boundary_dofs_galsols(complex: &Complex, galsols: &mut na::DMatrix<f64>) {
+pub fn reintroduce_boundary_dofs_galsols(complex: &Complex, galsols: &mut Matrix) {
   reintroduce_dropped_dofs_galsols(complex.boundary_vertices().kidxs().to_vec(), galsols)
 }
 
-pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na::DMatrix<f64>) {
+pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut Matrix) {
   dofs.sort_unstable();
   dofs.dedup();
 
@@ -136,7 +139,7 @@ pub fn reintroduce_dropped_dofs_galsols(mut dofs: Vec<DofIdx>, galsols: &mut na:
 pub fn enforce_homogeneous_dirichlet_bc(
   complex: &Complex,
   galmat: &mut GalMat,
-  galvec: &mut na::DVector<f64>,
+  galvec: &mut Vector,
 ) {
   let boundary_vertices = complex.boundary_vertices();
   fix_dofs_zero(boundary_vertices.kidxs(), galmat, galvec);
@@ -146,7 +149,7 @@ pub fn enforce_dirichlet_bc<F>(
   complex: &Complex,
   boundary_coeff_map: F,
   galmat: &mut GalMat,
-  galvec: &mut na::DVector<f64>,
+  galvec: &mut Vector,
 ) where
   F: Fn(DofIdx) -> f64,
 {
@@ -159,7 +162,7 @@ pub fn enforce_dirichlet_bc<F>(
   fix_dofs_coeff(&dof_coeffs, galmat, galvec);
 }
 
-pub fn fix_dofs_zero(dofs: &[DofIdx], galmat: &mut GalMat, galvec: &mut na::DVector<f64>) {
+pub fn fix_dofs_zero(dofs: &[DofIdx], galmat: &mut GalMat, galvec: &mut Vector) {
   let ndofs = galmat.nrows();
   let dof_flags = util::indicies_to_flags(dofs, ndofs);
   galmat.set_zero(|i, j| dof_flags[i] || dof_flags[j]);
@@ -174,19 +177,15 @@ pub fn fix_dofs_zero(dofs: &[DofIdx], galmat: &mut GalMat, galvec: &mut na::DVec
 /// Modifies supplied galerkin matrix and galerkin vector,
 /// such that the FE solution has the optionally given coefficents on the dofs.
 /// $mat(A_0, 0; 0, I) vec(mu_0, mu_diff) = vec(phi - A_(0 diff) gamma, gamma)$
-pub fn fix_dofs_coeff(
-  dof_coeffs: &[(DofIdx, f64)],
-  galmat: &mut GalMat,
-  galvec: &mut na::DVector<f64>,
-) {
+pub fn fix_dofs_coeff(dof_coeffs: &[(DofIdx, f64)], galmat: &mut GalMat, galvec: &mut Vector) {
   let ndofs = galmat.nrows();
 
   let dof_coeffs_opt = util::sparse_to_dense_data(dof_coeffs.to_vec(), ndofs);
   let dof_coeffs_zeroed =
-    na::DVector::from_iterator(ndofs, dof_coeffs_opt.iter().map(|v| v.unwrap_or(0.0)));
+    Vector::from_iterator(ndofs, dof_coeffs_opt.iter().map(|v| v.unwrap_or(0.0)));
 
   // Modify galvec.
-  let galmat_csr = nas::CsrMatrix::from(&*galmat);
+  let galmat_csr = CsrMatrix::from(&*galmat);
   *galvec -= galmat_csr * dof_coeffs_zeroed;
 
   // Set galvec to prescribed coefficents.
@@ -203,11 +202,7 @@ pub fn fix_dofs_coeff(
 
 /// $mat(A_0, A_(0 diff); 0, I) vec(mu_0, mu_diff) = vec(phi, gamma)$
 //#[allow(unused_variables, unreachable_code)]
-pub fn fix_dofs_coeff_alt(
-  dof_coeffs: &[(DofIdx, f64)],
-  galmat: &mut GalMat,
-  galvec: &mut na::DVector<f64>,
-) {
+pub fn fix_dofs_coeff_alt(dof_coeffs: &[(DofIdx, f64)], galmat: &mut GalMat, galvec: &mut Vector) {
   tracing::warn!("use of `fix_dofs_coeff_alt` probably doesn't work.");
 
   let ndofs = galmat.nrows();
