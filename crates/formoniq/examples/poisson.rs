@@ -9,7 +9,7 @@ use {
     problems::laplace_beltrami,
   },
   manifold::{
-    gen::cartesian::CartesianMeshInfo, geometry::metric::MeshEdgeLengths,
+    gen::cartesian::CartesianMeshInfo, geometry::metric::mesh::MeshLengths,
     topology::complex::Complex,
   },
   whitney::cochain::{de_rham_map, Cochain},
@@ -56,7 +56,7 @@ fn main() {
 
 struct PoissonWithSol {
   topology: Complex,
-  metric: MeshEdgeLengths,
+  metric: MeshLengths,
   load_data: Cochain,
   solution_exact: Cochain,
 }

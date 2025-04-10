@@ -1,9 +1,9 @@
 use super::{
-  AmbientCoord, AmbientCoordRef, BaryCoord, BaryCoordRef, Coord, CoordRef, LocalCoord,
-  LocalCoordRef, MeshVertexCoords,
+  mesh::MeshCoords, AmbientCoord, AmbientCoordRef, BaryCoord, BaryCoordRef, Coord, CoordRef,
+  LocalCoord, LocalCoordRef,
 };
 use crate::{
-  geometry::{metric::SimplexLengths, refsimp_vol},
+  geometry::{metric::simplex::SimplexLengths, refsimp_vol},
   topology::{complex::handle::SimplexHandle, simplex::Simplex},
   Dim,
 };
@@ -18,7 +18,7 @@ use tracing::warn;
 
 #[derive(Debug, Clone)]
 pub struct SimplexCoords {
-  pub vertices: MeshVertexCoords,
+  pub vertices: MeshCoords,
 }
 
 impl SimplexCoords {
@@ -34,7 +34,7 @@ impl SimplexCoords {
     }
     Self::new(vertices)
   }
-  pub fn from_simplex_and_coords(simp: &Simplex, coords: &MeshVertexCoords) -> SimplexCoords {
+  pub fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
     let mut vert_coords = Matrix::zeros(coords.dim(), simp.nvertices());
     for (i, v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &coords.coord(v));
@@ -91,6 +91,10 @@ impl SimplexCoords {
   pub fn vol(&self) -> f64 {
     self.det().abs()
   }
+  pub fn is_degenerate(&self) -> bool {
+    self.vol() <= 1e-12
+  }
+
   pub fn orientation(&self) -> Sign {
     Sign::from_f64(self.det()).unwrap()
   }
@@ -213,10 +217,10 @@ pub fn ref_gradbary(dim: Dim, ivertex: usize) -> Vector {
 }
 
 pub trait SimplexHandleExt {
-  fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords;
+  fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords;
 }
 impl SimplexHandleExt for SimplexHandle<'_> {
-  fn coord_simplex(&self, coords: &MeshVertexCoords) -> SimplexCoords {
+  fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords {
     SimplexCoords::from_simplex_and_coords(self, coords)
   }
 }

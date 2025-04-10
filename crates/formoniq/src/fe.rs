@@ -10,15 +10,15 @@ use {
   exterior::{field::ExteriorField, MultiForm},
   manifold::{
     geometry::{
-      coord::{local::SimplexHandleExt, CoordRef, MeshVertexCoords},
-      metric::MeshEdgeLengths,
+      coord::{mesh::MeshCoords, simplex::SimplexHandleExt, CoordRef},
+      metric::mesh::MeshLengths,
     },
     topology::complex::Complex,
   },
   whitney::cochain::Cochain,
 };
 
-pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
+pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 {
   let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim));
   let mass = CsrMatrix::from(&mass);
   //fe.coeffs().transpose() * mass * fe.coeffs()
@@ -27,7 +27,7 @@ pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> 
     .sqrt()
 }
 
-pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshEdgeLengths) -> f64 {
+pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 {
   let codifdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim));
   let codifdif = CsrMatrix::from(&codifdif);
   //fe.coeffs().transpose() * difdif * fe.coeffs()
@@ -40,7 +40,7 @@ pub fn reconstruct_at_coord<'a>(
   coord: impl Into<CoordRef<'a>>,
   cochain: &Cochain,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &MeshCoords,
 ) -> MultiForm {
   let coord = coord.into();
 
@@ -73,7 +73,7 @@ pub fn reconstruct_at_coord<'a>(
 pub fn reconstruct_at_mesh_cells_barycenters(
   cochain: &Cochain,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &MeshCoords,
 ) -> Vec<MultiForm> {
   let grade = cochain.dim;
 
@@ -99,7 +99,7 @@ pub fn reconstruct_at_mesh_cells_barycenters(
 pub fn reconstruct_at_mesh_cells_vertices(
   cochain: &Cochain,
   topology: &Complex,
-  coords: &MeshVertexCoords,
+  coords: &MeshCoords,
 ) -> Vec<Vec<MultiForm>> {
   let grade = cochain.dim();
 

@@ -1,4 +1,4 @@
-use super::{local::SimplexCoords, CoordRef};
+use super::{simplex::SimplexCoords, CoordRef};
 
 /// Integrates affine linear functions exactly.
 pub fn barycentric_quadrature<F>(f: &F, simplex: &SimplexCoords) -> f64

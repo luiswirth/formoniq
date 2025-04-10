@@ -5,7 +5,7 @@ use {
   },
   exterior::{list::ExteriorElementList, term::multi_gramian, ExteriorGrade},
   manifold::{
-    geometry::metric::SimplexGeometry,
+    geometry::metric::simplex::SimplexGeometry,
     topology::{complex::Complex, simplex::standard_subsimps},
     Dim,
   },
@@ -218,7 +218,9 @@ mod test {
   use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
   use exterior::term::multi_gramian;
-  use manifold::{geometry::metric::SimplexGeometry, topology::simplex::standard_subsimps};
+  use manifold::{
+    geometry::metric::simplex::SimplexGeometry, topology::simplex::standard_subsimps,
+  };
   use whitney::WhitneyRefLsf;
 
   use approx::assert_relative_eq;

@@ -9,7 +9,7 @@ use {
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
     geometry::coord::{
-      local::{is_bary_inside, local_to_bary_coords, SimplexCoords},
+      simplex::{is_bary_inside, local_to_bary_coords, SimplexCoords},
       AmbientCoordRef, LocalCoordRef,
     },
     topology::{complex::Complex, simplex::Simplex},
@@ -176,7 +176,7 @@ mod test {
   use super::*;
 
   use manifold::{
-    geometry::coord::{local::SimplexHandleExt, MeshVertexCoords},
+    geometry::coord::{mesh::MeshCoords, simplex::SimplexHandleExt},
     topology::complex::Complex,
   };
 
@@ -184,7 +184,7 @@ mod test {
   fn whitney_basis_property() {
     for dim in 0..=4 {
       let topology = Complex::standard(dim);
-      let coords = MeshVertexCoords::standard(dim);
+      let coords = MeshCoords::standard(dim);
 
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {

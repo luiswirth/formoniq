@@ -6,7 +6,7 @@ use crate::{
 use {
   common::linalg::petsc::{petsc_ghiep, petsc_saddle_point},
   exterior::ExteriorGrade,
-  manifold::{geometry::metric::MeshEdgeLengths, topology::complex::Complex},
+  manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
   whitney::{cochain::Cochain, ManifoldComplexExt},
 };
 
@@ -16,7 +16,7 @@ use std::mem;
 
 pub fn hodge_decomposition(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   cochain: Cochain,
 ) -> (Cochain, Cochain, Cochain) {
   let grade = cochain.dim();
@@ -29,7 +29,7 @@ pub fn hodge_decomposition(
 
 pub fn solve_hodge_laplace_source(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   source_data: Cochain,
 ) -> (Cochain, Cochain, Cochain) {
   let grade = source_data.dim();
@@ -90,7 +90,7 @@ pub fn solve_hodge_laplace_source(
 
 pub fn solve_hodge_laplace_harmonics(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   grade: ExteriorGrade,
 ) -> Matrix {
   // TODO!!!
@@ -109,7 +109,7 @@ pub fn solve_hodge_laplace_harmonics(
 
 pub fn solve_hodge_laplace_evp(
   topology: &Complex,
-  geometry: &MeshEdgeLengths,
+  geometry: &MeshLengths,
   grade: ExteriorGrade,
   neigen_values: usize,
 ) -> (Vector, Matrix, Matrix) {
@@ -141,7 +141,7 @@ pub struct MixedGalmats {
   mass_u: GalMat,
 }
 impl MixedGalmats {
-  pub fn compute(topology: &Complex, geometry: &MeshEdgeLengths, grade: ExteriorGrade) -> Self {
+  pub fn compute(topology: &Complex, geometry: &MeshLengths, grade: ExteriorGrade) -> Self {
     assert!(grade <= topology.dim());
 
     let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
