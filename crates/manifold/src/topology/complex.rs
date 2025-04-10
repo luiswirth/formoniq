@@ -16,10 +16,10 @@ pub struct Complex {
 }
 
 #[derive(Default, Debug, Clone)]
-pub struct SkeletonData(Vec<SimplexData>);
+pub struct SkeletonData(Vec<SimplexMeshData>);
 
 #[derive(Default, Debug, Clone)]
-pub struct SimplexData {
+pub struct SimplexMeshData {
   pub cocells: Vec<SimplexIdx>,
 }
 
@@ -66,7 +66,7 @@ impl Complex {
   pub fn boundary_facets(&self) -> KSimplexCollection {
     self
       .facets()
-      .iter()
+      .handle_iter()
       .filter(|f| f.cocells().count() == 1)
       .collect()
   }
@@ -88,7 +88,7 @@ impl Complex {
     let vertices = self
       .boundary_facets()
       .handle_iter(self)
-      .flat_map(|facet| facet.raw().vertices.clone())
+      .flat_map(|facet| facet.vertices.clone())
       .unique()
       .collect();
     KSimplexCollection::new(vertices, 0)
@@ -104,11 +104,11 @@ impl Complex {
 
     let subs = &self.skeleton(dim - 1);
     let mut mat = nas::CooMatrix::zeros(subs.len(), sups.len());
-    for (isup, sup) in sups.iter().enumerate() {
-      let sup_boundary = sup.raw().boundary();
+    for (isup, sup) in sups.handle_iter().enumerate() {
+      let sup_boundary = sup.boundary();
       for sub in sup_boundary {
         let sign = sub.sign.as_f64();
-        let isub = subs.get_by_simplex(&sub.simplex).kidx();
+        let isub = subs.handle_by_simplex(&sub.simplex).kidx();
         mat.push(isub, isup, sign);
       }
     }
@@ -145,7 +145,7 @@ impl Complex {
     skeletons[0].0 = Skeleton::new((0..cells.nvertices()).map(Simplex::single).collect());
     skeletons[0].1 = SkeletonData(
       (0..cells.nvertices())
-        .map(|_| SimplexData::default())
+        .map(|_| SimplexMeshData::default())
         .collect(),
     );
 
@@ -154,7 +154,7 @@ impl Complex {
         for sub in cell.subsequences(dim_sub) {
           let (sub_idx, is_new) = sub_skeleton.insert(sub);
           let sub_data = if is_new {
-            sub_skeleton_data.0.push(SimplexData::default());
+            sub_skeleton_data.0.push(SimplexMeshData::default());
             sub_skeleton_data.0.last_mut().unwrap()
           } else {
             &mut sub_skeleton_data.0[sub_idx]
@@ -167,7 +167,7 @@ impl Complex {
     // Topology checks.
     if dim >= 1 {
       let facet_data = &skeletons[dim - 1].1;
-      for SimplexData { cocells } in &facet_data.0 {
+      for SimplexMeshData { cocells } in &facet_data.0 {
         let nparents = cocells.len();
         let is_manifold = nparents == 2 || nparents == 1;
         assert!(is_manifold, "Topology must be manifold.");
@@ -188,13 +188,13 @@ mod test {
   fn incidence() {
     let dim = 3;
     let complex = Complex::standard(dim);
-    let cell = complex.cells().iter().next().unwrap();
+    let cell = complex.cells().handle_iter().next().unwrap();
 
     // print
     for dim_sub in 0..=dim {
       let skeleton = complex.skeleton(dim_sub);
-      for simp in skeleton.iter() {
-        let simp_vertices = simp.raw();
+      for simp in skeleton.handle_iter() {
+        let simp_vertices = &*simp;
         print!("{simp_vertices:?},");
       }
       println!();
@@ -202,20 +202,19 @@ mod test {
 
     let cell_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
-      let subs: Vec<_> = cell.subsimps(dim_sub).collect();
+      let subs: Vec<_> = cell.mesh_subsimps(dim_sub).collect();
       assert_eq!(subs.len(), nsubsequence_simplicies(dim, dim_sub));
       let subs_vertices: Vec<_> = cell_simplex.subsequences(dim_sub).collect();
       assert_eq!(
-        subs.iter().map(|sub| sub.raw().clone()).collect::<Vec<_>>(),
+        subs.iter().map(|&sub| (*sub).clone()).collect::<Vec<_>>(),
         subs_vertices
       );
 
       for (isub, sub) in subs.iter().enumerate() {
         let sub_vertices = &subs_vertices[isub];
         for dim_sup in dim_sub..dim {
-          let sups: Vec<_> = sub.supersimps(dim_sup);
-          let sups_vertices = sups.iter().map(|sub| sub.raw().clone()).collect::<Vec<_>>();
-          sups_vertices
+          let sups: Vec<_> = sub.mesh_supersimps(dim_sup);
+          sups
             .iter()
             .all(|sup| sub_vertices.is_subsequence_of(sup) && sup.is_subsequence_of(&cell_simplex));
         }
