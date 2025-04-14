@@ -9,8 +9,8 @@ use common::linalg::{
   faer::FaerCholesky,
   nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
 };
+use ddf::cochain::Cochain;
 use manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex};
-use whitney::cochain::Cochain;
 
 pub struct WaveState {
   pub pos: Vector,

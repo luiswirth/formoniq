@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-whitney = { path = "../whitney" }
+ddf = { path = "../ddf" }
 exterior = { path = "../exterior" }
 manifold = { path = "../manifold" }
 common = { path = "../common" }

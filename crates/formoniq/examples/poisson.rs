@@ -3,6 +3,7 @@
 
 use {
   common::util::algebraic_convergence_rate,
+  ddf::cochain::{de_rham_map, Cochain},
   exterior::field::DiffFormClosure,
   formoniq::{
     fe::{h1_norm, l2_norm},
@@ -12,7 +13,6 @@ use {
     gen::cartesian::CartesianMeshInfo, geometry::metric::mesh::MeshLengths,
     topology::complex::Complex,
   },
-  whitney::cochain::{de_rham_map, Cochain},
 };
 
 use std::f64::consts::TAU;

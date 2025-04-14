@@ -1,12 +1,11 @@
-use common::linalg::nalgebra::CsrMatrix;
-use whitney::WhitneyCoordLsf;
-
 use crate::{
   assemble::assemble_galmat,
   operators::{CodifDifElmat, HodgeMassElmat},
 };
 
 use {
+  common::linalg::nalgebra::CsrMatrix,
+  ddf::{cochain::Cochain, whitney::WhitneyCoordLsf},
   exterior::{field::ExteriorField, MultiForm},
   manifold::{
     geometry::{
@@ -15,7 +14,6 @@ use {
     },
     topology::complex::Complex,
   },
-  whitney::cochain::Cochain,
 };
 
 pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 {

@@ -10,11 +10,11 @@ use common::linalg::{
   nalgebra::{CsrMatrix, Vector},
   petsc::petsc_ghiep,
 };
+use ddf::cochain::Cochain;
 use manifold::{
   geometry::metric::mesh::MeshLengths,
   topology::{complex::Complex, handle::KSimplexIdx},
 };
-use whitney::cochain::Cochain;
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(

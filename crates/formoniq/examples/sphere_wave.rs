@@ -2,9 +2,9 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use common::linalg::nalgebra::Vector;
+use ddf::cochain::Cochain;
 use formoniq::problems::wave::{self, WaveState};
 use manifold::dim3::{cartesian2spherical, mesh_sphere_surface};
-use whitney::cochain::Cochain;
 
 #[allow(unused_imports)]
 use std::f64::consts::{PI, TAU};

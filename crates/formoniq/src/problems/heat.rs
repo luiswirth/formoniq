@@ -8,8 +8,8 @@ use crate::{
 };
 
 use {
+  ddf::cochain::Cochain,
   manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
-  whitney::cochain::Cochain,
 };
 
 /// times = [t_0,t_1,...,T]
