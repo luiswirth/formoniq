@@ -1,11 +1,12 @@
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
+  ddf::cochain::de_rham_map,
   exterior::field::DiffFormClosure,
   formoniq::{fe::l2_norm, problems::hodge_laplace},
   manifold::gen::cartesian::CartesianMeshInfo,
-  std::{f64::consts::PI, fs},
-  whitney::cochain::de_rham_map,
 };
+
+use std::{f64::consts::PI, fs};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let path = "out/laplacian_source";
@@ -59,8 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     manifold::io::save_skeleton_to_file(&topology, 1, format!("{refine_path}/edges.skel"))?;
     manifold::io::save_coords_to_file(&coords, format!("{refine_path}/vertices.coords"))?;
 
-    whitney::io::save_cochain_to_file(&exact_u, format!("{refine_path}/exact.cochain"))?;
-    whitney::io::save_cochain_to_file(&u, format!("{refine_path}/fe.cochain"))?;
+    ddf::io::save_cochain_to_file(&exact_u, format!("{refine_path}/exact.cochain"))?;
+    ddf::io::save_cochain_to_file(&u, format!("{refine_path}/fe.cochain"))?;
 
     let diff = exact_u - u;
     let l2_norm = l2_norm(&diff, &topology, &metric);

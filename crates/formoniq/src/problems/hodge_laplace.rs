@@ -5,9 +5,9 @@ use crate::{
 
 use {
   common::linalg::petsc::{petsc_ghiep, petsc_saddle_point},
+  ddf::{cochain::Cochain, ManifoldComplexExt},
   exterior::ExteriorGrade,
   manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
-  whitney::{cochain::Cochain, ManifoldComplexExt},
 };
 
 use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};

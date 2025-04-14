@@ -3,7 +3,7 @@ resolver = "2"
 
 members = [
   "crates/formoniq",
-  "crates/whitney",
+  "crates/ddf",
   "crates/exterior",
   "crates/manifold",
   "crates/common",
