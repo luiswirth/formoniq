@@ -1,11 +1,6 @@
-use {
-  ddf::{cochain::Cochain, reconstruct::reconstruct_at_mesh_cells_barycenters},
-  formoniq::problems::hodge_laplace,
-};
+use {ddf::cochain::Cochain, formoniq::problems::hodge_laplace};
 
 use std::fs;
-use std::io::BufWriter;
-use std::io::Write;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
   let out_path = "out/laplacian_evp";
@@ -22,7 +17,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = fs::remove_dir_all(&out_path);
     fs::create_dir_all(&out_path).unwrap();
 
-    //  manifold::io::blender::obj2coord_complex(&fs::read_to_string("/home/luis/dl/torus-naked.obj")?);
     let (topology, coords) = manifold::io::gmsh::gmsh2coord_complex(&fs::read(mesh_file.path())?);
     fs::write(
       format!("{out_path}/mesh.obj"),
@@ -36,18 +30,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (ieigen, (&eigenval, eigenfunc)) in
       eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate()
     {
-      println!("eigenval={eigenval:.3}");
-      let eigenfunc = Cochain::new(grade, eigenfunc.into_owned());
-      let cell_values = reconstruct_at_mesh_cells_barycenters(&eigenfunc, &topology, &coords);
-
-      let file = fs::File::create(format!("{out_path}/sol{ieigen}_facevectors.txt"))?;
-      let mut writer = BufWriter::new(file);
-      for cell_value in cell_values {
-        for comp in cell_value.coeffs() {
-          write!(writer, "{comp:.6} ")?;
-        }
-        writeln!(writer)?;
-      }
+      println!("ieigen={ieigen}, eigenval={eigenval:.3}");
+      let _eigenfunc = Cochain::new(grade, eigenfunc.into_owned());
     }
   }
   Ok(())

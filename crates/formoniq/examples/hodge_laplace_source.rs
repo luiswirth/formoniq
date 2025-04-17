@@ -1,6 +1,6 @@
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  ddf::cochain::de_rham_map,
+  ddf::cochain::cochain_projection,
   exterior::field::DiffFormClosure,
   formoniq::{fe::l2_norm, problems::hodge_laplace},
   manifold::gen::cartesian::CartesianMeshInfo,
@@ -51,8 +51,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    let laplacian = de_rham_map(&laplacian, &topology, &coords);
-    let exact_u = de_rham_map(&exact_solution, &topology, &coords);
+    let laplacian = cochain_projection(&laplacian, &topology, &coords);
+    let exact_u = cochain_projection(&exact_solution, &topology, &coords);
 
     let (_sigma, u, _p) = hodge_laplace::solve_hodge_laplace_source(&topology, &metric, laplacian);
 

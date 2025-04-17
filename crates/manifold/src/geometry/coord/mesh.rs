@@ -1,7 +1,10 @@
-use super::{simplex::SimplexCoords, Coord, CoordRef};
+use super::{
+  simplex::{SimplexCoords, SimplexHandleExt},
+  Coord, CoordRef,
+};
 use crate::{
   geometry::metric::mesh::MeshLengths,
-  topology::{complex::Complex, VertexIdx},
+  topology::{complex::Complex, handle::SimplexHandle, VertexIdx},
   Dim,
 };
 
@@ -93,6 +96,19 @@ impl MeshCoords {
     let old_dim = self.matrix.nrows();
     self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
     self
+  }
+}
+
+impl MeshCoords {
+  pub fn find_cell_containing<'a>(
+    &self,
+    topology: &'a Complex,
+    coord: CoordRef,
+  ) -> Option<SimplexHandle<'a>> {
+    topology
+      .cells()
+      .handle_iter()
+      .find(|cell| cell.coord_simplex(self).is_coord_inside(coord))
   }
 }
 
