@@ -21,6 +21,7 @@ impl ManifoldComplexExt for Complex {
 }
 
 pub trait CoordSimplexExt {
+  fn difbarys_ext(&self) -> Vec<LocalMultiForm>;
   fn spanning_multivector(&self) -> MultiVector;
 }
 impl CoordSimplexExt for SimplexCoords {
@@ -31,11 +32,18 @@ impl CoordSimplexExt for SimplexCoords {
       .map(|v| MultiVector::line(v.into_owned()));
     MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_ambient()))
   }
+  fn difbarys_ext(&self) -> Vec<LocalMultiForm> {
+    self
+      .difbarys()
+      .row_iter()
+      .map(|difbary| LocalMultiForm::line(difbary.transpose()))
+      .collect()
+  }
 }
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::de_rahm_map_local, whitney::WhitneyRefLsf};
+  use crate::{cochain::de_rahm_map_local, whitney::WhitneyLsf};
 
   use common::combo::Sign;
   use manifold::{
@@ -51,13 +59,13 @@ mod test {
 
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {
-          let whitney_form = WhitneyRefLsf::new(dim, (*dof_simp).clone());
+          let whitney_form = WhitneyLsf::standard(dim, (*dof_simp).clone());
 
           for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;
             let other_simplex = other_simp.coord_simplex(&coords);
             let discret = de_rahm_map_local(&whitney_form, &other_simplex);
-            let expected = Sign::from_bool(are_same_simp).as_f64();
+            let expected = are_same_simp as u8 as f64;
             let diff = (discret - expected).abs();
             const TOL: f64 = 10e-9;
             let equal = diff <= TOL;

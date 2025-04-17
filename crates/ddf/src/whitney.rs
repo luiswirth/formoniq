@@ -1,73 +1,49 @@
-use crate::LocalMultiForm;
+use crate::CoordSimplexExt;
 
 use {
-  common::{
-    combo::{factorial, factorialf, Sign},
-    linalg::nalgebra::Vector,
-  },
+  common::combo::{factorial, factorialf, Sign},
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm},
   manifold::{
     geometry::coord::{
-      simplex::{is_bary_inside, local_to_bary_coords, SimplexCoords},
-      AmbientCoordRef, LocalCoordRef,
+      simplex::{is_bary_inside, SimplexCoords},
+      AmbientCoordRef, CoordRef,
     },
     topology::simplex::Simplex,
     Dim,
   },
 };
 
-pub fn difbary0_local(dim: Dim) -> LocalMultiForm {
-  let coeffs = Vector::from_element(dim, -1.0);
-  LocalMultiForm::line(coeffs)
-}
-pub fn difbary_local(ibary: usize, dim: Dim) -> LocalMultiForm {
-  let nvertices = dim + 1;
-  assert!(ibary < nvertices);
-  if ibary == 0 {
-    difbary0_local(dim)
-  } else {
-    let mut coeffs = Vector::zeros(dim);
-    coeffs[ibary - 1] = 1.0;
-    LocalMultiForm::line(coeffs)
-  }
-}
-pub fn difbarys_local(dim: Dim) -> impl ExactSizeIterator<Item = LocalMultiForm> {
-  let nvertices = dim + 1;
-  (0..nvertices).map(move |ibary| difbary_local(ibary, dim))
-}
-pub fn difbary_wedge_local(dim: Dim) -> LocalMultiForm {
-  MultiForm::wedge_big(difbarys_local(dim)).unwrap_or(MultiForm::one(dim))
-}
-
-pub fn bary0_local<'a>(coord: impl Into<LocalCoordRef<'a>>) -> f64 {
-  let coord = coord.into();
-  1.0 - coord.sum()
-}
-
 #[derive(Debug, Clone)]
-pub struct WhitneyRefLsf {
-  dim_cell: Dim,
+pub struct WhitneyLsf {
+  cell_coords: SimplexCoords,
   dof_simp: Simplex,
 }
-impl WhitneyRefLsf {
-  pub fn new(dim_cell: Dim, dof_simp: Simplex) -> Self {
-    Self { dim_cell, dof_simp }
+impl WhitneyLsf {
+  pub fn from_coords(cell_coords: SimplexCoords, dof_simp: Simplex) -> Self {
+    Self {
+      cell_coords,
+      dof_simp,
+    }
+  }
+  pub fn standard(cell_dim: Dim, dof_simp: Simplex) -> Self {
+    Self::from_coords(SimplexCoords::standard(cell_dim), dof_simp)
   }
   pub fn grade(&self) -> ExteriorGrade {
     self.dof_simp.dim()
   }
   /// The difbarys of the vertices of the DOF simplex.
-  pub fn difbarys(&self) -> impl Iterator<Item = LocalMultiForm> + use<'_> {
+  pub fn difbarys(&self) -> impl Iterator<Item = MultiForm> + use<'_> {
     self
-      .dof_simp
-      .clone()
+      .cell_coords
+      .difbarys_ext()
       .into_iter()
-      .map(move |ibary| difbary_local(ibary, self.dim_cell))
+      .enumerate()
+      .filter_map(|(ibary, difbary)| self.dof_simp.contains(ibary).then_some(difbary))
   }
 
   /// d𝜆_i_0 ∧⋯∧̂ omit(d𝜆_i_iwedge) ∧⋯∧ d𝜆_i_dim
-  pub fn wedge_term(&self, iterm: usize) -> LocalMultiForm {
-    let dim_cell = self.dim_cell;
+  pub fn wedge_term(&self, iterm: usize) -> MultiForm {
+    let dim_cell = self.cell_coords.dim_intrinsic();
     let wedge = self
       .difbarys()
       .enumerate()
@@ -75,13 +51,13 @@ impl WhitneyRefLsf {
       .filter_map(|(pos, difbary)| (pos != iterm).then_some(difbary));
     MultiForm::wedge_big(wedge).unwrap_or(MultiForm::one(dim_cell))
   }
-  pub fn wedge_terms(&self) -> impl ExactSizeIterator<Item = LocalMultiForm> + use<'_> {
+  pub fn wedge_terms(&self) -> impl ExactSizeIterator<Item = MultiForm> + use<'_> {
     (0..self.dof_simp.nvertices()).map(move |iwedge| self.wedge_term(iwedge))
   }
 
   /// The constant exterior derivative of the Whitney LSF.
-  pub fn dif(&self) -> LocalMultiForm {
-    let dim = self.dim_cell;
+  pub fn dif(&self) -> MultiForm {
+    let dim = self.cell_coords.dim_intrinsic();
     let grade = self.grade();
     if grade == dim {
       return MultiForm::zero(dim, grade + 1);
@@ -90,18 +66,18 @@ impl WhitneyRefLsf {
   }
 }
 
-impl ExteriorField for WhitneyRefLsf {
+impl ExteriorField for WhitneyLsf {
   fn dim(&self) -> exterior::Dim {
-    self.dim_cell
+    self.cell_coords.dim_intrinsic()
   }
   fn grade(&self) -> ExteriorGrade {
     self.grade()
   }
-  fn at_point<'a>(&self, coord_local: impl Into<LocalCoordRef<'a>>) -> LocalMultiForm {
-    let barys = local_to_bary_coords(coord_local);
+  fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> MultiForm {
+    let barys = self.cell_coords.global2bary(coord);
     assert!(is_bary_inside(&barys), "Point is outside cell.");
 
-    let dim = self.dim_cell;
+    let dim = self.dim();
     let grade = self.grade();
     let mut form = MultiForm::zero(dim, grade);
     for (iterm, &vertex) in self.dof_simp.vertices.iter().enumerate() {
@@ -115,30 +91,30 @@ impl ExteriorField for WhitneyRefLsf {
   }
 }
 
-pub struct WhitneyCoordLsf {
+pub struct WhitneyPushforwardLsf {
   pub cell_coords: SimplexCoords,
-  pub ref_lsf: WhitneyRefLsf,
+  pub ref_lsf: WhitneyLsf,
 }
-impl WhitneyCoordLsf {
+impl WhitneyPushforwardLsf {
   pub fn new(cell_coords: SimplexCoords, dof_simp: Simplex) -> Self {
-    let ref_lsf = WhitneyRefLsf::new(cell_coords.dim_intrinsic(), dof_simp);
+    let ref_lsf = WhitneyLsf::standard(cell_coords.dim_intrinsic(), dof_simp);
     Self {
       cell_coords,
       ref_lsf,
     }
   }
 }
-impl ExteriorField for WhitneyCoordLsf {
+impl ExteriorField for WhitneyPushforwardLsf {
   fn dim(&self) -> exterior::Dim {
     self.ref_lsf.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.ref_lsf.grade()
   }
-  /// Pullback!
   fn at_point<'a>(&self, coord_global: impl Into<AmbientCoordRef<'a>>) -> MultiForm {
-    let coord_local = self.cell_coords.global2local(coord_global);
-    let value_local = self.ref_lsf.at_point(&coord_local);
-    value_local.precompose_form(&self.cell_coords.linear_transform())
+    let coord_ref = self.cell_coords.global2local(coord_global);
+    let value_ref = self.ref_lsf.at_point(&coord_ref);
+    // Pushforward
+    value_ref.precompose_form(&self.cell_coords.linear_transform())
   }
 }

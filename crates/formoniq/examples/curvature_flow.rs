@@ -22,6 +22,7 @@ fn main() {
   let (topology, coords) = surface.into_coord_complex();
   let mut metric = coords.to_edge_lengths(&topology);
   let nvertices = topology.vertices().len();
+  let dim = topology.dim();
 
   let mut coords_list = vec![coords];
 
@@ -32,7 +33,11 @@ fn main() {
   for istep in 0..nsteps {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
-    let laplace = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat);
+    let laplace = assemble::assemble_galmat(
+      &topology,
+      &metric,
+      operators::LaplaceBeltramiElmat::new(dim),
+    );
     let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
     let source = Vector::zeros(nvertices);
 

@@ -1,4 +1,4 @@
-use super::complex::{Complex, MeshSkeleton, SimplexMeshData};
+use super::complex::{Complex, ComplexSkeleton, SimplexComplexData};
 use crate::{
   topology::{simplex::Simplex, skeleton::Skeleton},
   Dim,
@@ -79,14 +79,14 @@ impl<'m> SimplexHandle<'m> {
   pub fn skeleton(&self) -> SkeletonHandle<'m> {
     self.complex.skeleton(self.dim())
   }
-  pub fn mesh_skeleton_raw(&self) -> &MeshSkeleton {
+  pub fn mesh_skeleton_raw(&self) -> &ComplexSkeleton {
     self.complex.mesh_skeleton_raw(self.idx.dim())
   }
   pub fn skeleton_raw(&self) -> &Skeleton {
     self.mesh_skeleton_raw().skeleton()
   }
-  pub fn mesh_data(&self) -> &SimplexMeshData {
-    &self.mesh_skeleton_raw().mesh_data()[self.kidx()]
+  pub fn mesh_data(&self) -> &SimplexComplexData {
+    &self.mesh_skeleton_raw().complex_data()[self.kidx()]
   }
 }
 

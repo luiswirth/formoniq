@@ -5,7 +5,7 @@ use crate::{
 
 use {
   common::linalg::nalgebra::CsrMatrix,
-  ddf::{cochain::Cochain, whitney::WhitneyCoordLsf},
+  ddf::{cochain::Cochain, whitney::WhitneyPushforwardLsf},
   exterior::{field::ExteriorField, MultiForm},
   manifold::{
     geometry::{
@@ -17,7 +17,11 @@ use {
 };
 
 pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 {
-  let mass = assemble_galmat(topology, geometry, HodgeMassElmat(fe.dim));
+  let mass = assemble_galmat(
+    topology,
+    geometry,
+    HodgeMassElmat::new(topology.dim(), fe.dim()),
+  );
   let mass = CsrMatrix::from(&mass);
   //fe.coeffs().transpose() * mass * fe.coeffs()
   ((mass.transpose() * fe.coeffs()).transpose() * fe.coeffs())
@@ -26,7 +30,11 @@ pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 
 }
 
 pub fn h1_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 {
-  let codifdif = assemble_galmat(topology, geometry, CodifDifElmat(fe.dim));
+  let codifdif = assemble_galmat(
+    topology,
+    geometry,
+    CodifDifElmat::new(topology.dim(), fe.dim),
+  );
   let codifdif = CsrMatrix::from(&codifdif);
   //fe.coeffs().transpose() * difdif * fe.coeffs()
   ((codifdif.transpose() * fe.coeffs()).transpose() * fe.coeffs())
@@ -61,7 +69,7 @@ pub fn reconstruct_at_coord<'a>(
     let local_dof_simp = dof_simp.relative_to(&cell);
 
     let dof_value = cochain[dof_simp]
-      * WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
+      * WhitneyPushforwardLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(coord);
     fe_value += dof_value;
   }
 
@@ -86,7 +94,8 @@ pub fn reconstruct_at_mesh_cells_barycenters(
         let barycenter = cell.coord_simplex(coords).barycenter();
 
         let dof_value = cochain[dof_simp]
-          * WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp).at_point(&barycenter);
+          * WhitneyPushforwardLsf::new(cell.coord_simplex(coords), local_dof_simp)
+            .at_point(&barycenter);
         value += dof_value;
       }
       value
@@ -117,7 +126,7 @@ pub fn reconstruct_at_mesh_cells_vertices(
               let coeff = cochain[dof_simp];
 
               let local_dof_simp = dof_simp.relative_to(&cell);
-              let whitney = WhitneyCoordLsf::new(cell.coord_simplex(coords), local_dof_simp);
+              let whitney = WhitneyPushforwardLsf::new(cell.coord_simplex(coords), local_dof_simp);
 
               // dof_value
               coeff * whitney.at_point(coord)
