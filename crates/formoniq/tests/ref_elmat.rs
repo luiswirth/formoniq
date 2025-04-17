@@ -9,14 +9,17 @@ use manifold::{
 
 use approx::assert_relative_eq;
 
-fn check_ref_elmat<F>(elmat: impl ElMatProvider, ref_elmat: F)
+fn check_ref_elmat<F, G, E>(elmat: G, ref_elmat: F)
 where
+  E: ElMatProvider,
   F: Fn(Dim) -> Option<Matrix>,
+  G: Fn(Dim) -> E,
 {
   for dim in 1..=10 {
     let Some(expected_elmat) = ref_elmat(dim) else {
       continue;
     };
+    let elmat = elmat(dim);
 
     let refcell = SimplexLengths::standard(dim);
     let computed_elmat = elmat.eval(&refcell);
@@ -27,7 +30,7 @@ where
 
 #[test]
 fn laplacian_refcell() {
-  check_ref_elmat(operators::LaplaceBeltramiElmat, ref_laplacian);
+  check_ref_elmat(operators::LaplaceBeltramiElmat::new, ref_laplacian);
 }
 fn ref_laplacian(dim: Dim) -> Option<Matrix> {
   let ndofs = dim + 1;
@@ -44,7 +47,7 @@ fn ref_laplacian(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn mass_refcell() {
-  check_ref_elmat(operators::ScalarMassElmat, ref_mass);
+  check_ref_elmat(|_| operators::ScalarMassElmat, ref_mass);
 }
 fn ref_mass(dim: Dim) -> Option<Matrix> {
   #[rustfmt::skip]
@@ -71,7 +74,7 @@ fn ref_mass(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn lumped_mass_refcell() {
-  check_ref_elmat(operators::ScalarLumpedMassElmat, ref_lumped_mass);
+  check_ref_elmat(|_| operators::ScalarLumpedMassElmat, ref_lumped_mass);
 }
 fn ref_lumped_mass(dim: Dim) -> Option<Matrix> {
   let nvertices = dim + 1;

@@ -107,6 +107,10 @@ fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
-  let galmat = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat);
+  let galmat = assemble::assemble_galmat(
+    &topology,
+    &metric,
+    operators::LaplaceBeltramiElmat::new(topology.dim()),
+  );
   (&galmat).into()
 }

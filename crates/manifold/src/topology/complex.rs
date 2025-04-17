@@ -12,25 +12,28 @@ use itertools::Itertools;
 /// A simplicial manifold complex.
 #[derive(Default, Debug, Clone)]
 pub struct Complex {
-  skeletons: Vec<MeshSkeleton>,
+  skeletons: Vec<ComplexSkeleton>,
 }
 
+/// A skeleton inside of a complex.
 #[derive(Default, Debug, Clone)]
-pub struct MeshSkeleton {
+pub struct ComplexSkeleton {
   skeleton: Skeleton,
-  mesh_data: Vec<SimplexMeshData>,
+  complex_data: SkeletonComplexData,
 }
-impl MeshSkeleton {
+impl ComplexSkeleton {
   pub fn skeleton(&self) -> &Skeleton {
     &self.skeleton
   }
-  pub fn mesh_data(&self) -> &[SimplexMeshData] {
-    &self.mesh_data
+  pub fn complex_data(&self) -> &[SimplexComplexData] {
+    &self.complex_data
   }
 }
 
+pub type SkeletonComplexData = Vec<SimplexComplexData>;
+
 #[derive(Default, Debug, Clone)]
-pub struct SimplexMeshData {
+pub struct SimplexComplexData {
   pub cocells: Vec<SimplexIdx>,
 }
 
@@ -41,7 +44,7 @@ impl Complex {
   pub fn skeleton(&self, dim: Dim) -> SkeletonHandle {
     SkeletonHandle::new(self, dim)
   }
-  pub fn mesh_skeleton_raw(&self, dim: Dim) -> &MeshSkeleton {
+  pub fn mesh_skeleton_raw(&self, dim: Dim) -> &ComplexSkeleton {
     &self.skeletons[dim]
   }
   pub fn nsimplicies(&self, dim: Dim) -> usize {
@@ -161,27 +164,27 @@ impl Complex {
   pub fn from_cells(cells: Skeleton) -> Self {
     let dim = cells.dim();
 
-    let mut skeletons = vec![MeshSkeleton::default(); dim + 1];
-    skeletons[0] = MeshSkeleton {
+    let mut skeletons = vec![ComplexSkeleton::default(); dim + 1];
+    skeletons[0] = ComplexSkeleton {
       skeleton: Skeleton::new((0..cells.nvertices()).map(Simplex::single).collect()),
-      mesh_data: (0..cells.nvertices())
-        .map(|_| SimplexMeshData::default())
+      complex_data: (0..cells.nvertices())
+        .map(|_| SimplexComplexData::default())
         .collect(),
     };
 
     for (icell, cell) in cells.iter().enumerate() {
       for (
         dim_skeleton,
-        MeshSkeleton {
+        ComplexSkeleton {
           skeleton,
-          mesh_data,
+          complex_data: mesh_data,
         },
       ) in skeletons.iter_mut().enumerate()
       {
         for sub in cell.subsequences(dim_skeleton) {
           let (sub_idx, is_new) = skeleton.insert(sub);
           let sub_data = if is_new {
-            mesh_data.push(SimplexMeshData::default());
+            mesh_data.push(SimplexComplexData::default());
             mesh_data.last_mut().unwrap()
           } else {
             &mut mesh_data[sub_idx]
@@ -193,8 +196,8 @@ impl Complex {
 
     // Topology checks.
     if dim >= 1 {
-      let facet_data = skeletons[dim - 1].mesh_data();
-      for SimplexMeshData { cocells } in facet_data {
+      let facet_data = skeletons[dim - 1].complex_data();
+      for SimplexComplexData { cocells } in facet_data {
         let nparents = cocells.len();
         let is_manifold = nparents == 2 || nparents == 1;
         assert!(is_manifold, "Topology must be manifold.");

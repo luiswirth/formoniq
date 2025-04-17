@@ -142,13 +142,14 @@ pub struct MixedGalmats {
 }
 impl MixedGalmats {
   pub fn compute(topology: &Complex, geometry: &MeshLengths, grade: ExteriorGrade) -> Self {
-    assert!(grade <= topology.dim());
+    let dim = topology.dim();
+    assert!(grade <= dim);
 
-    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat(grade));
+    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade));
     let mass_u_csr = CsrMatrix::from(&mass_u);
 
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat(grade - 1));
+      let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade - 1));
 
       let exdif_sigma = topology.exterior_derivative_operator(grade - 1);
       let exdif_sigma = CsrMatrix::from(&exdif_sigma);
@@ -165,7 +166,7 @@ impl MixedGalmats {
     };
 
     let codifdif_u = if grade < topology.dim() {
-      let mass_plus = assemble_galmat(topology, geometry, HodgeMassElmat(grade + 1));
+      let mass_plus = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade + 1));
       let mass_plus = CsrMatrix::from(&mass_plus);
       let exdif_u = topology.exterior_derivative_operator(grade);
       let exdif_u = CsrMatrix::from(&exdif_u);

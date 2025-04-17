@@ -27,7 +27,13 @@ pub fn solve_heat<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
+  let dim = topology.dim();
+
+  let mut laplace = assemble::assemble_galmat(
+    topology,
+    geometry,
+    operators::LaplaceBeltramiElmat::new(dim),
+  );
   let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
   let mass_csr = CsrMatrix::from(&mass);
   let mut source = &mass_csr * &source_data.coeffs;

@@ -26,7 +26,12 @@ pub fn solve_laplace_beltrami_source<F>(
 where
   F: Fn(KSimplexIdx) -> DofCoeff,
 {
-  let mut laplace = assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
+  let dim = topology.dim();
+  let mut laplace = assemble::assemble_galmat(
+    topology,
+    geometry,
+    operators::LaplaceBeltramiElmat::new(dim),
+  );
 
   let mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
   let mass = CsrMatrix::from(&mass);
@@ -45,8 +50,12 @@ pub fn solve_laplace_beltrami_evp(
   geometry: &MeshLengths,
   neigen_values: usize,
 ) -> (Vector, Vec<Cochain>) {
-  let laplace_galmat =
-    assemble::assemble_galmat(topology, geometry, operators::LaplaceBeltramiElmat);
+  let dim = topology.dim();
+  let laplace_galmat = assemble::assemble_galmat(
+    topology,
+    geometry,
+    operators::LaplaceBeltramiElmat::new(dim),
+  );
   let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(

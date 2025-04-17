@@ -102,6 +102,14 @@ impl SimplexCoords {
   pub fn linear_transform(&self) -> Matrix {
     self.spanning_vectors()
   }
+  pub fn inv_linear_transform(&self) -> Matrix {
+    if self.dim_intrinsic() == 0 {
+      Matrix::zeros(0, 0)
+    } else {
+      self.linear_transform().pseudo_inverse(1e-12).unwrap()
+    }
+  }
+
   pub fn affine_transform(&self) -> AffineTransform {
     let translation = self.base_vertex().into_owned();
     let linear = self.linear_transform();
@@ -134,7 +142,7 @@ impl SimplexCoords {
   /// Exterior derivative / total differential of barycentric coordinate functions
   /// in the rows(!) of a matrix.
   pub fn difbarys(&self) -> Matrix {
-    let difs = self.linear_transform().pseudo_inverse(1e-12).unwrap();
+    let difs = self.inv_linear_transform();
     let mut grads = difs.insert_row(0, 0.0);
     grads.set_row(0, &-grads.row_sum());
     grads

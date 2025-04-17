@@ -201,7 +201,11 @@ fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
-  let galmat = assemble::assemble_galmat(&topology, &metric, operators::LaplaceBeltramiElmat);
+  let galmat = assemble::assemble_galmat(
+    &topology,
+    &metric,
+    operators::LaplaceBeltramiElmat::new(dim),
+  );
   let mut galmat = Matrix::from(&galmat);
   let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
   let mass = Matrix::from(&mass);
