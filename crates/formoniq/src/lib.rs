@@ -5,5 +5,3 @@ pub mod assemble;
 pub mod fe;
 pub mod operators;
 pub mod problems;
-
-pub mod io;

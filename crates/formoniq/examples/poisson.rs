@@ -6,7 +6,7 @@ use {
   ddf::cochain::{de_rham_map, Cochain},
   exterior::field::DiffFormClosure,
   formoniq::{
-    fe::{h1_norm, l2_norm},
+    fe::{hdif_norm, l2_norm},
     problems::laplace_beltrami,
   },
   manifold::{
@@ -99,7 +99,7 @@ fn measure_convergence(refined_setups: Vec<PoissonWithSol>) {
     let conv_rate_l2 = conv_rate(&errors_l2, error_l2);
     errors_l2.push(error_l2);
 
-    let error_h1 = h1_norm(&difference, &topology, &metric);
+    let error_h1 = hdif_norm(&difference, &topology, &metric);
     let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
     errors_h1.push(error_h1);
 

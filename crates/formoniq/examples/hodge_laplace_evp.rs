@@ -1,6 +1,6 @@
 use {
-  ddf::cochain::Cochain,
-  formoniq::{fe::reconstruct_at_mesh_cells_barycenters, problems::hodge_laplace},
+  ddf::{cochain::Cochain, reconstruct::reconstruct_at_mesh_cells_barycenters},
+  formoniq::problems::hodge_laplace,
 };
 
 use std::fs;

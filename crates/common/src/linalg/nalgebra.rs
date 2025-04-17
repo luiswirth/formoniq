@@ -29,11 +29,12 @@ impl MatrixExt for Matrix {
   }
 }
 
-pub fn bilinear_form(mat: &CsrMatrix, u: &Vector, v: &Vector) -> f64 {
+pub fn bilinear_form_sparse(mat: &CsrMatrix, u: &Vector, v: &Vector) -> f64 {
+  //u.transpose() * mass * u
   ((mat.transpose() * u).transpose() * v).x
 }
 pub fn quadratic_form_sparse(mat: &CsrMatrix, u: &Vector) -> f64 {
-  bilinear_form(mat, u, u)
+  bilinear_form_sparse(mat, u, u)
 }
 
 pub fn kronecker_sum<T>(mats: &[Matrix<T>]) -> Matrix<T>

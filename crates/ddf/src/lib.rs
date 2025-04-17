@@ -1,5 +1,6 @@
 pub mod cochain;
 pub mod io;
+pub mod reconstruct;
 pub mod whitney;
 
 use {
