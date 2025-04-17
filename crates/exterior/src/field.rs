@@ -6,7 +6,8 @@ use common::{
 use crate::{Dim, ExteriorElement, ExteriorGrade};
 
 pub trait ExteriorField {
-  fn dim(&self) -> Dim;
+  fn dim_ambient(&self) -> Dim;
+  fn dim_intrinsic(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
   fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement;
 }
@@ -71,7 +72,10 @@ impl DiffFormClosure {
   }
 }
 impl ExteriorField for ExteriorFieldClosure {
-  fn dim(&self) -> Dim {
+  fn dim_ambient(&self) -> Dim {
+    self.dim
+  }
+  fn dim_intrinsic(&self) -> Dim {
     self.dim
   }
   fn grade(&self) -> ExteriorGrade {
@@ -95,8 +99,11 @@ impl<F: DifferentialMultiForm> FormPushforward<F> {
   }
 }
 impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
-  fn dim(&self) -> Dim {
-    self.form.dim()
+  fn dim_ambient(&self) -> Dim {
+    self.affine_transform.dim_image()
+  }
+  fn dim_intrinsic(&self) -> Dim {
+    self.form.dim_intrinsic()
   }
   fn grade(&self) -> ExteriorGrade {
     self.form.grade()

@@ -12,6 +12,13 @@ impl AffineTransform {
     }
   }
 
+  pub fn dim_domain(&self) -> usize {
+    self.linear.ncols()
+  }
+  pub fn dim_image(&self) -> usize {
+    self.linear.nrows()
+  }
+
   pub fn apply_forward(&self, coord: VectorView) -> Vector {
     &self.linear * coord + &self.translation
   }

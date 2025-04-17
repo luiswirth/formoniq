@@ -3,7 +3,7 @@
 
 use {
   common::util::algebraic_convergence_rate,
-  ddf::cochain::{de_rham_map, Cochain},
+  ddf::cochain::{cochain_projection, Cochain},
   exterior::field::DiffFormClosure,
   formoniq::{
     fe::{hdif_norm, l2_norm},
@@ -36,8 +36,8 @@ fn main() {
         let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
         let (topology, coords) = box_mesh.compute_coord_complex();
 
-        let solution_exact = de_rham_map(&solution_exact, &topology, &coords);
-        let laplacian = de_rham_map(&laplacian, &topology, &coords);
+        let solution_exact = cochain_projection(&solution_exact, &topology, &coords);
+        let laplacian = cochain_projection(&laplacian, &topology, &coords);
 
         let metric = coords.to_edge_lengths(&topology);
 

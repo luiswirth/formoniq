@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 
 use {
-  ddf::cochain::de_rham_map,
+  ddf::cochain::cochain_projection,
   exterior::{field::DiffFormClosure, MultiForm},
   manifold::{
     gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef, topology::complex::Complex,
@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     MultiForm::line(comps)
   };
   let form = DiffFormClosure::new(Box::new(form), dim, grade);
-  let cochain = de_rham_map(&form, &topology, &coords);
+  let cochain = cochain_projection(&form, &topology, &coords);
   ddf::io::save_cochain_to_file(&cochain, format!("{path}/proj.cochain"))?;
 
   Ok(())

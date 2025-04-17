@@ -1,3 +1,5 @@
+pub mod gsf;
+
 use crate::CoordSimplexExt;
 
 use {
@@ -67,7 +69,10 @@ impl WhitneyLsf {
 }
 
 impl ExteriorField for WhitneyLsf {
-  fn dim(&self) -> exterior::Dim {
+  fn dim_ambient(&self) -> exterior::Dim {
+    self.cell_coords.dim_ambient()
+  }
+  fn dim_intrinsic(&self) -> exterior::Dim {
     self.cell_coords.dim_intrinsic()
   }
   fn grade(&self) -> ExteriorGrade {
@@ -77,7 +82,7 @@ impl ExteriorField for WhitneyLsf {
     let barys = self.cell_coords.global2bary(coord);
     assert!(is_bary_inside(&barys), "Point is outside cell.");
 
-    let dim = self.dim();
+    let dim = self.dim_intrinsic();
     let grade = self.grade();
     let mut form = MultiForm::zero(dim, grade);
     for (iterm, &vertex) in self.dof_simp.vertices.iter().enumerate() {
@@ -105,8 +110,11 @@ impl WhitneyPushforwardLsf {
   }
 }
 impl ExteriorField for WhitneyPushforwardLsf {
-  fn dim(&self) -> exterior::Dim {
-    self.ref_lsf.dim()
+  fn dim_ambient(&self) -> exterior::Dim {
+    self.cell_coords.dim_ambient()
+  }
+  fn dim_intrinsic(&self) -> exterior::Dim {
+    self.ref_lsf.dim_intrinsic()
   }
   fn grade(&self) -> ExteriorGrade {
     self.ref_lsf.grade()

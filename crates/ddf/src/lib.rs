@@ -1,6 +1,5 @@
 pub mod cochain;
 pub mod io;
-pub mod reconstruct;
 pub mod whitney;
 
 use {
@@ -44,7 +43,7 @@ impl CoordSimplexExt for SimplexCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::de_rahm_map_local, whitney::WhitneyLsf};
+  use crate::{cochain::integrate_form_simplex, whitney::WhitneyLsf};
 
   use common::combo::Sign;
   use manifold::{
@@ -65,7 +64,7 @@ mod test {
           for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;
             let other_simplex = other_simp.coord_simplex(&coords);
-            let discret = de_rahm_map_local(&whitney_form, &other_simplex);
+            let discret = integrate_form_simplex(&whitney_form, &other_simplex);
             let expected = are_same_simp as u8 as f64;
             let diff = (discret - expected).abs();
             const TOL: f64 = 10e-9;
@@ -73,7 +72,7 @@ mod test {
             assert!(equal, "for: computed={discret} expected={expected}");
             if other_simplex.nvertices() >= 2 {
               let other_simplex_rev = other_simplex.clone().flipped_orientation();
-              let discret_rev = de_rahm_map_local(&whitney_form, &other_simplex_rev);
+              let discret_rev = integrate_form_simplex(&whitney_form, &other_simplex_rev);
               let expected_rev = Sign::Neg.as_f64() * are_same_simp as usize as f64;
               let diff_rev = (discret_rev - expected_rev).abs();
               let equal_rev = diff_rev <= TOL;
