@@ -108,7 +108,7 @@ impl MeshCoords {
     topology
       .cells()
       .handle_iter()
-      .find(|cell| cell.coord_simplex(self).is_coord_inside(coord))
+      .find(|cell| cell.coord_simplex(self).is_global_inside(coord))
   }
 }
 

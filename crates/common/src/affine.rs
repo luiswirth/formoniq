@@ -11,7 +11,6 @@ impl AffineTransform {
       linear,
     }
   }
-
   pub fn dim_domain(&self) -> usize {
     self.linear.ncols()
   }
@@ -23,8 +22,8 @@ impl AffineTransform {
     &self.linear * coord + &self.translation
   }
   pub fn apply_backward(&self, coord: VectorView) -> Vector {
-    if self.linear.is_empty() {
-      return Vector::default();
+    if self.dim_domain() == 0 {
+      return Vector::zeros(0);
     }
     self
       .linear
@@ -35,6 +34,9 @@ impl AffineTransform {
   }
 
   pub fn pseudo_inverse(&self) -> Self {
+    if self.dim_domain() == 0 {
+      return Self::new(Vector::zeros(0), Matrix::zeros(0, self.dim_image()));
+    }
     let linear = self.linear.clone().pseudo_inverse(1e-12).unwrap();
     let translation = &linear * &self.translation;
     Self {

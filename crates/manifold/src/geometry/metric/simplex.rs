@@ -153,7 +153,8 @@ pub fn cayley_menger_factor(dim: Dim) -> f64 {
 }
 
 impl SimplexLengths {
-  pub fn from_regge_metric(metric: &Gramian) -> Self {
+  /// Regge Calculus
+  pub fn from_metric_tensor(metric: &Gramian) -> Self {
     let dim = metric.dim();
     let length = |i, j| {
       (metric.basis_inner(i, i) + metric.basis_inner(j, j) - 2.0 * metric.basis_inner(i, j)).sqrt()
@@ -171,10 +172,11 @@ impl SimplexLengths {
     Self::new(lengths, dim)
   }
 
-  pub fn to_regge_metric(&self) -> Gramian {
-    let mut metric_tensor = Matrix::zeros(self.dim(), self.dim());
+  /// Regge Calculus
+  pub fn to_metric_tensor(&self) -> Gramian {
+    let mut metric = Matrix::zeros(self.dim(), self.dim());
     for i in 0..self.dim() {
-      metric_tensor[(i, i)] = self[i].powi(2);
+      metric[(i, i)] = self[i].powi(2);
     }
     for i in 0..self.dim() {
       for j in (i + 1)..self.dim() {
@@ -188,11 +190,11 @@ impl SimplexLengths {
 
         let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));
 
-        metric_tensor[(i, j)] = val;
-        metric_tensor[(j, i)] = val;
+        metric[(i, j)] = val;
+        metric[(j, i)] = val;
       }
     }
-    Gramian::new(metric_tensor)
+    Gramian::new(metric)
   }
 }
 #[cfg(test)]

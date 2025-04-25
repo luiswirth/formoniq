@@ -2,10 +2,12 @@ use crate::util::{CumsumExt, IterAllEqExt};
 
 use std::mem;
 
-pub type Matrix<T = f64> = na::DMatrix<T>;
 pub type Vector<T = f64> = na::DVector<T>;
+pub type RowVector<T = f64> = na::RowDVector<T>;
+pub type Matrix<T = f64> = na::DMatrix<T>;
 
 pub type VectorView<'a, T = f64> = na::DVectorView<'a, T>;
+pub type RowVectorView<'a, T = f64> = na::MatrixView<'a, T, na::U1, na::Dyn>;
 pub type MatrixView<'a, T = f64> = na::DMatrixView<'a, T>;
 
 pub type CooMatrix<T = f64> = nas::CooMatrix<T>;
