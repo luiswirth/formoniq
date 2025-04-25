@@ -255,9 +255,9 @@ impl MultiForm {
       .sum()
   }
 
-  pub fn apply_form_on_multivector(&self, kvector: &MultiVector) -> f64 {
-    assert!(self.dim == kvector.dim && self.grade == kvector.grade);
-    self.coeffs.dot(&kvector.coeffs)
+  pub fn apply_form_to_vector(&self, vector: &MultiVector) -> f64 {
+    assert!(self.dim == vector.dim && self.grade == vector.grade);
+    self.coeffs.dot(&vector.coeffs)
   }
 }
 

@@ -8,7 +8,7 @@ use {
   manifold::{
     geometry::coord::{
       simplex::{is_bary_inside, SimplexCoords},
-      AmbientCoordRef, CoordRef,
+      CoordRef,
     },
     topology::simplex::Simplex,
     Dim,
@@ -119,7 +119,7 @@ impl ExteriorField for WhitneyPushforwardLsf {
   fn grade(&self) -> ExteriorGrade {
     self.ref_lsf.grade()
   }
-  fn at_point<'a>(&self, coord_global: impl Into<AmbientCoordRef<'a>>) -> MultiForm {
+  fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> MultiForm {
     let coord_ref = self.cell_coords.global2local(coord_global);
     let value_ref = self.ref_lsf.at_point(&coord_ref);
     // Pushforward

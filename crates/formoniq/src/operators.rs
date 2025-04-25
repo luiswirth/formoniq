@@ -54,7 +54,7 @@ impl ElMatProvider for LaplaceBeltramiElmat {
     assert!(self.dim == geometry.dim());
     geometry.vol()
       * geometry
-        .to_regge_metric()
+        .to_metric_tensor()
         .inverse()
         .norm_sq_mat(&self.ref_difbarys)
   }
@@ -140,7 +140,7 @@ impl ElMatProvider for HodgeMassElmat {
       for (j, bsimp) in self.simplicies.iter().enumerate() {
         let wedge_terms_a = &self.wedge_terms[i];
         let wedge_terms_b = &self.wedge_terms[j];
-        let wedge_inners = multi_gramian(&geometry.to_regge_metric().inverse(), self.grade)
+        let wedge_inners = multi_gramian(&geometry.to_metric_tensor().inverse(), self.grade)
           .inner_mat(wedge_terms_a.coeffs(), wedge_terms_b.coeffs());
 
         let nvertices = self.grade + 1;
@@ -341,7 +341,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = multi_gramian(&geo.to_regge_metric().inverse(), grade + 1)
+            inner[(i, j)] = multi_gramian(&geo.to_metric_tensor().inverse(), grade + 1)
               .inner(awhitney.coeffs(), bwhitney.coeffs());
           }
         }

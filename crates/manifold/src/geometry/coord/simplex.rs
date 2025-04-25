@@ -1,6 +1,6 @@
 use super::{
-  mesh::MeshCoords, AmbientCoord, AmbientCoordRef, BaryCoord, BaryCoordRef, Coord, CoordRef,
-  LocalCoord, LocalCoordRef,
+  mesh::MeshCoords, CoTangentVector, CoTangentVectorRef, Coord, CoordRef, TangentVector,
+  TangentVectorRef,
 };
 use crate::{
   geometry::{metric::simplex::SimplexLengths, refsimp_vol},
@@ -8,6 +8,7 @@ use crate::{
   Dim,
 };
 
+use approx::assert_relative_eq;
 use common::{
   affine::AffineTransform,
   combo::Sign,
@@ -58,11 +59,11 @@ impl SimplexCoords {
   pub fn coord(&self, ivertex: usize) -> CoordRef {
     self.vertices.coord(ivertex)
   }
-
   pub fn base_vertex(&self) -> CoordRef {
     self.coord(0)
   }
-  pub fn spanning_vector(&self, i: usize) -> Vector {
+
+  pub fn spanning_vector(&self, i: usize) -> TangentVector {
     assert!(i < self.dim_intrinsic());
     self.coord(i + 1) - self.base_vertex()
   }
@@ -84,7 +85,7 @@ impl SimplexCoords {
     let det = if self.is_same_dim() {
       self.spanning_vectors().determinant()
     } else {
-      Gramian::from_euclidean_vectors(self.spanning_vectors()).det_sqrt()
+      self.metric_tensor().det_sqrt()
     };
     refsimp_vol(self.dim_intrinsic()) * det
   }
@@ -95,6 +96,7 @@ impl SimplexCoords {
     self.vol() <= 1e-12
   }
 
+  // TODO: makes only sense for coinciding ambient and intrinsic dim
   pub fn orientation(&self) -> Sign {
     Sign::from_f64(self.det()).unwrap()
   }
@@ -110,42 +112,49 @@ impl SimplexCoords {
     }
   }
 
+  /// Local2Global Tangentvector
+  pub fn pushforward_vector<'a>(&self, local: impl Into<TangentVectorRef<'a>>) -> TangentVector {
+    self.linear_transform() * local.into()
+  }
+  /// Global2Local Cotangentvector
+  pub fn pullback_covector<'a>(
+    &self,
+    global: impl Into<CoTangentVectorRef<'a>>,
+  ) -> CoTangentVector {
+    global.into() * self.linear_transform()
+  }
+
   pub fn affine_transform(&self) -> AffineTransform {
     let translation = self.base_vertex().into_owned();
     let linear = self.linear_transform();
     AffineTransform::new(translation, linear)
   }
-  pub fn local2global<'a>(&self, local: impl Into<LocalCoordRef<'a>>) -> AmbientCoord {
-    let local = local.into();
-    self.affine_transform().apply_forward(local)
+  pub fn local2global<'a>(&self, local: impl Into<CoordRef<'a>>) -> Coord {
+    self.affine_transform().apply_forward(local.into())
   }
-  pub fn global2local<'a>(&self, global: impl Into<AmbientCoordRef<'a>>) -> LocalCoord {
-    let global = global.into();
-    self.affine_transform().apply_backward(global)
+  pub fn global2local<'a>(&self, global: impl Into<CoordRef<'a>>) -> Coord {
+    self.affine_transform().apply_backward(global.into())
   }
-  pub fn global2bary<'a>(&self, global: impl Into<AmbientCoordRef<'a>>) -> BaryCoord {
-    let local = self.global2local(global);
-    let bary0 = 1.0 - local.sum();
-    local.insert_row(0, bary0)
+  pub fn global2bary<'a>(&self, global: impl Into<CoordRef<'a>>) -> Coord {
+    local2bary(&self.global2local(global))
   }
 
-  pub fn bary2global<'a>(&self, bary: impl Into<BaryCoordRef<'a>>) -> AmbientCoord {
-    let bary = bary.into();
+  pub fn bary2global<'a>(&self, bary: impl Into<CoordRef<'a>>) -> Coord {
     self
       .vertices
       .coord_iter()
-      .zip(bary.iter())
+      .zip(bary.into().iter())
       .map(|(vi, &baryi)| baryi * vi)
       .sum()
   }
 
-  /// Exterior derivative / total differential of barycentric coordinate functions
-  /// in the rows(!) of a matrix.
+  /// Total differential of barycentric coordinate functions in the rows(!) of
+  /// a matrix.
   pub fn difbarys(&self) -> Matrix {
     let difs = self.inv_linear_transform();
-    let mut grads = difs.insert_row(0, 0.0);
-    grads.set_row(0, &-grads.row_sum());
-    grads
+    let mut difs = difs.insert_row(0, 0.0);
+    difs.set_row(0, &-difs.row_sum());
+    difs
   }
 
   pub fn barycenter(&self) -> Coord {
@@ -154,12 +163,28 @@ impl SimplexCoords {
     barycenter /= self.nvertices() as f64;
     barycenter
   }
-  pub fn is_coord_inside(&self, global: CoordRef) -> bool {
-    let bary = self.global2bary(global);
-    is_bary_inside(&bary)
+  pub fn is_global_inside(&self, global: CoordRef) -> bool {
+    is_bary_inside(&self.global2bary(global))
   }
+}
+pub fn bary2local<'a>(bary: impl Into<CoordRef<'a>>) -> Coord {
+  let bary = bary.into();
+  bary.view_range(1.., ..).into()
+}
+pub fn local2bary<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
+  let local = local.into();
+  let bary0 = 1.0 - local.sum();
+  local.insert_row(0, bary0)
+}
 
-  /// Here we mean subsequence simplicies.
+pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
+  let bary = bary.into();
+  assert_relative_eq!(bary.sum(), 1.0);
+  bary.iter().all(|&b| (0.0..=1.0).contains(&b))
+}
+
+impl SimplexCoords {
+  /// Coordinate subsequence simplicies.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
     Simplex::standard(self.dim_intrinsic())
       .subsequences(sub_dim)
@@ -189,15 +214,6 @@ impl SimplexCoords {
   }
 }
 
-pub fn local_to_bary_coords<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
-  let local = local.into();
-  let bary0 = 1.0 - local.sum();
-  local.insert_row(0, bary0)
-}
-
-pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
-  bary.into().iter().all(|&b| (0.0..=1.0).contains(&b))
-}
 pub fn ref_barycenter(dim: Dim) -> Coord {
   let nvertices = dim + 1;
   let value = 1.0 / nvertices as f64;
@@ -213,12 +229,12 @@ pub fn ref_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
     coord[ivertex - 1]
   }
 }
-pub fn ref_gradbary(dim: Dim, ivertex: usize) -> Vector {
+pub fn ref_difbary(dim: Dim, ivertex: usize) -> CoTangentVector {
   assert!(ivertex <= dim);
   if ivertex == 0 {
-    Vector::from_element(dim, -1.0)
+    CoTangentVector::from_element(dim, -1.0)
   } else {
-    let mut v = Vector::zeros(dim);
+    let mut v = CoTangentVector::zeros(dim);
     v[ivertex - 1] = 1.0;
     v
   }
@@ -252,12 +268,12 @@ mod test {
   }
 
   #[test]
-  fn standard_gradbarys() {
+  fn standard_difbarys() {
     for dim in 0..=4 {
       let simp = SimplexCoords::standard(dim);
       let computed = simp.difbarys();
       for ibary in 0..simp.nvertices() {
-        let expected = ref_gradbary(dim, ibary);
+        let expected = ref_difbary(dim, ibary);
         assert_eq!(computed.column(ibary), expected);
       }
     }

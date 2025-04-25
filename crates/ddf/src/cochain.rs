@@ -153,7 +153,7 @@ pub fn integrate_form_simplex(form: &impl DifferentialMultiForm, simplex: &Simpl
   let f = |coord: CoordRef| {
     form
       .at_point(simplex.local2global(coord).as_view())
-      .apply_form_on_multivector(&multivector)
+      .apply_form_to_vector(&multivector)
   };
   let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());
   barycentric_quadrature(&f, &std_simp)
