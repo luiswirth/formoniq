@@ -2,7 +2,8 @@ use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
   ddf::cochain::cochain_projection,
   exterior::field::DiffFormClosure,
-  formoniq::{fe::l2_norm, problems::hodge_laplace},
+  formoniq::fe::fe_l2_error,
+  formoniq::problems::hodge_laplace,
   manifold::gen::cartesian::CartesianMeshInfo,
 };
 
@@ -16,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let dim = 2;
   let homology_dim = 0;
 
-  let exact_solution = DiffFormClosure::one_form(
+  let solution_exact = DiffFormClosure::one_form(
     |p| {
       Vector::from_iterator(
         p.len(),
@@ -29,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dim,
   );
 
-  let laplacian = DiffFormClosure::one_form(
+  let laplacian_exact = DiffFormClosure::one_form(
     |p| {
       Vector::from_iterator(
         p.len(),
@@ -42,7 +43,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dim,
   );
 
-  let mut errors = Vec::new();
+  let mut errors_l2 = Vec::new();
   for irefine in 0..=10 {
     let refine_path = &format!("{path}/refine{irefine}");
     fs::create_dir_all(refine_path).unwrap();
@@ -52,21 +53,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    let laplacian = cochain_projection(&laplacian, &topology, &coords, None);
-    let exact_u = cochain_projection(&exact_solution, &topology, &coords, None);
+    let laplacian_cochain = cochain_projection(&laplacian_exact, &topology, &coords, None);
+    let exact_u_cochain = cochain_projection(&solution_exact, &topology, &coords, None);
 
-    let (_sigma, u, _p) =
-      hodge_laplace::solve_hodge_laplace_source(&topology, &metric, laplacian, homology_dim);
+    let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(
+      &topology,
+      &metric,
+      laplacian_cochain,
+      homology_dim,
+    );
 
     manifold::io::save_skeleton_to_file(&topology, dim, format!("{refine_path}/cells.skel"))?;
     manifold::io::save_skeleton_to_file(&topology, 1, format!("{refine_path}/edges.skel"))?;
     manifold::io::save_coords_to_file(&coords, format!("{refine_path}/vertices.coords"))?;
 
-    ddf::io::save_cochain_to_file(&exact_u, format!("{refine_path}/exact.cochain"))?;
-    ddf::io::save_cochain_to_file(&u, format!("{refine_path}/fe.cochain"))?;
-
-    let diff = exact_u - u;
-    let l2_norm = l2_norm(&diff, &topology, &metric);
+    ddf::io::save_cochain_to_file(&exact_u_cochain, format!("{refine_path}/exact.cochain"))?;
+    ddf::io::save_cochain_to_file(&galsol, format!("{refine_path}/fe.cochain"))?;
 
     let conv_rate = |errors: &[f64], curr: f64| {
       errors
@@ -74,10 +76,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|&prev| algebraic_convergence_rate(curr, prev))
         .unwrap_or(f64::INFINITY)
     };
-    let conv_rate = conv_rate(&errors, l2_norm);
-    errors.push(l2_norm);
 
-    println!("refinement={irefine} | L2_error={l2_norm:<7.2e} | conv_rate={conv_rate:>5.2}");
+    let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &coords);
+    let conv_rate_l2 = conv_rate(&errors_l2, error_l2);
+    errors_l2.push(error_l2);
+
+    // TODO: H1 convergence
+    //let dif_galsol = galsol.dif(&topology);
+    //let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
+    //let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
+    //errors_h1.push(error_h1);
+
+    println!("refinement={irefine} | L2_error={error_l2:<7.2e} | conv_rate={conv_rate_l2:>5.2}");
   }
 
   Ok(())

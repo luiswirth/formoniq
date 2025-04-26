@@ -4,9 +4,19 @@ use crate::{
 };
 
 use {
-  common::linalg::nalgebra::{quadratic_form_sparse, CsrMatrix},
-  ddf::cochain::Cochain,
-  manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
+  common::{
+    gramian::Gramian,
+    linalg::nalgebra::{quadratic_form_sparse, CsrMatrix},
+  },
+  ddf::{cochain::Cochain, whitney::form::WhitneyForm},
+  exterior::{field::ExteriorField, term::multi_gramian},
+  manifold::{
+    geometry::{
+      coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, CoordRef},
+      metric::mesh::MeshLengths,
+    },
+    topology::complex::Complex,
+  },
 };
 
 pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 {
@@ -27,4 +37,19 @@ pub fn hdif_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f6
   );
   let codifdif = CsrMatrix::from(&codifdif);
   quadratic_form_sparse(&codifdif, fe.coeffs()).sqrt()
+}
+
+pub fn fe_l2_error<E: ExteriorField>(
+  fe_cochain: &Cochain,
+  exact: &E,
+  topology: &Complex,
+  coords: &MeshCoords,
+) -> f64 {
+  let dim = topology.dim();
+  let qr = SimplexQuadRule::order3(dim);
+  let fe_whitney = WhitneyForm::new(fe_cochain.clone(), topology, coords);
+  let inner = multi_gramian(&Gramian::standard(dim), fe_cochain.dim());
+  let error_pointwise =
+    |x: CoordRef| inner.norm_sq((exact.at_point(x) - fe_whitney.at_point(x)).coeffs());
+  qr.integrate_mesh(&error_pointwise, topology, coords).sqrt()
 }

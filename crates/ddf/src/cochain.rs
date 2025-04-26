@@ -1,4 +1,4 @@
-use common::linalg::nalgebra::Vector;
+use common::linalg::nalgebra::{CsrMatrix, Vector};
 use manifold::{
   geometry::{
     coord::{mesh::MeshCoords, quadrature::SimplexQuadRule},
@@ -7,7 +7,7 @@ use manifold::{
   topology::skeleton::Skeleton,
 };
 
-use crate::CoordSimplexExt;
+use crate::{CoordSimplexExt, ManifoldComplexExt};
 
 use {
   exterior::{field::DifferentialMultiForm, Dim},
@@ -20,6 +20,7 @@ use {
   },
 };
 
+#[derive(Debug, Clone)]
 pub struct Cochain {
   pub coeffs: Vector,
   pub dim: Dim,
@@ -55,6 +56,11 @@ impl Cochain {
   }
   pub fn is_empty(&self) -> bool {
     self.coeffs().len() == 0
+  }
+
+  pub fn dif(&self, complex: &Complex) -> Self {
+    let dif_operator = CsrMatrix::from(&complex.exterior_derivative_operator(self.dim()));
+    Cochain::new(self.dim() + 1, dif_operator * self.coeffs())
   }
 
   /// Scale this cochain by a factor, modifying it in-place
