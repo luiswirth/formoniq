@@ -21,6 +21,9 @@ pub trait MatrixExt {
 }
 impl MatrixExt for Matrix {
   fn is_full_rank(&self, eps: f64) -> bool {
+    if self.is_empty() {
+      return true;
+    }
     self.rank(eps) == self.nrows().min(self.ncols())
   }
   fn is_spd(&self) -> bool {

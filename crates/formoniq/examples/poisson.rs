@@ -36,8 +36,8 @@ fn main() {
         let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
         let (topology, coords) = box_mesh.compute_coord_complex();
 
-        let solution_exact = cochain_projection(&solution_exact, &topology, &coords);
-        let laplacian = cochain_projection(&laplacian, &topology, &coords);
+        let solution_exact = cochain_projection(&solution_exact, &topology, &coords, None);
+        let laplacian = cochain_projection(&laplacian, &topology, &coords, None);
 
         let metric = coords.to_edge_lengths(&topology);
 

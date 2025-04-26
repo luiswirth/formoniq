@@ -34,7 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     MultiForm::line(comps)
   };
   let form = DiffFormClosure::new(Box::new(form), dim, grade);
-  let cochain = cochain_projection(&form, &topology, &coords);
+  let cochain = cochain_projection(&form, &topology, &coords, None);
   ddf::io::save_cochain_to_file(&cochain, format!("{path}/proj.cochain"))?;
 
   Ok(())

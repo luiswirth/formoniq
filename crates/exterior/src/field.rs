@@ -86,11 +86,11 @@ impl ExteriorField for ExteriorFieldClosure {
   }
 }
 
-pub struct FormPushforward<F: DifferentialMultiForm> {
+pub struct FormPullback<F: DifferentialMultiForm> {
   form: F,
   affine_transform: AffineTransform,
 }
-impl<F: DifferentialMultiForm> FormPushforward<F> {
+impl<F: DifferentialMultiForm> FormPullback<F> {
   pub fn new(form: F, affine_transform: AffineTransform) -> Self {
     Self {
       form,
@@ -98,7 +98,7 @@ impl<F: DifferentialMultiForm> FormPushforward<F> {
     }
   }
 }
-impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
+impl<F: DifferentialMultiForm> ExteriorField for FormPullback<F> {
   fn dim_ambient(&self) -> Dim {
     self.affine_transform.dim_image()
   }
@@ -108,11 +108,11 @@ impl<F: DifferentialMultiForm> ExteriorField for FormPushforward<F> {
   fn grade(&self) -> ExteriorGrade {
     self.form.grade()
   }
-  fn at_point<'a>(&self, coord_global: impl Into<VectorView<'a>>) -> ExteriorElement {
-    let coord_global = coord_global.into();
-    let coord_ref = self.affine_transform.apply_backward(coord_global);
-    let form_ref = self.form.at_point(&coord_ref);
-    let linear_inv = self.affine_transform.linear.clone().try_inverse().unwrap();
-    form_ref.precompose_form(&linear_inv)
+  fn at_point<'a>(&self, local: impl Into<VectorView<'a>>) -> ExteriorElement {
+    let local = local.into();
+    let global = self.affine_transform.apply_forward(local);
+    let form_ref = self.form.at_point(&global);
+    let pushforward = &self.affine_transform.linear;
+    form_ref.precompose_form(pushforward)
   }
 }

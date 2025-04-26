@@ -14,6 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   fs::create_dir_all(path).unwrap();
 
   let dim = 2;
+  let homology_dim = 0;
 
   let exact_solution = DiffFormClosure::one_form(
     |p| {
@@ -51,10 +52,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    let laplacian = cochain_projection(&laplacian, &topology, &coords);
-    let exact_u = cochain_projection(&exact_solution, &topology, &coords);
+    let laplacian = cochain_projection(&laplacian, &topology, &coords, None);
+    let exact_u = cochain_projection(&exact_solution, &topology, &coords, None);
 
-    let (_sigma, u, _p) = hodge_laplace::solve_hodge_laplace_source(&topology, &metric, laplacian);
+    let (_sigma, u, _p) =
+      hodge_laplace::solve_hodge_laplace_source(&topology, &metric, laplacian, homology_dim);
 
     manifold::io::save_skeleton_to_file(&topology, dim, format!("{refine_path}/cells.skel"))?;
     manifold::io::save_skeleton_to_file(&topology, 1, format!("{refine_path}/edges.skel"))?;

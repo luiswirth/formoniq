@@ -214,11 +214,17 @@ impl SimplexCoords {
   }
 }
 
-pub fn ref_barycenter(dim: Dim) -> Coord {
+pub fn barycenter_local(dim: Dim) -> Coord {
   let nvertices = dim + 1;
   let value = 1.0 / nvertices as f64;
   Vector::from_element(dim, value)
 }
+pub fn barycenter_bary(dim: Dim) -> Coord {
+  let nvertices = dim + 1;
+  let value = 1.0 / nvertices as f64;
+  Vector::from_element(nvertices, value)
+}
+
 pub fn ref_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
   let coord = coord.into();
   let dim = coord.len();
