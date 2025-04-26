@@ -1,5 +1,9 @@
-use super::{simplex::barycenter_local, CoordRef};
-use crate::Dim;
+use super::{
+  mesh::MeshCoords,
+  simplex::{barycenter_local, SimplexCoords},
+  CoordRef,
+};
+use crate::{topology::complex::Complex, Dim};
 
 use common::linalg::nalgebra::{Matrix, Vector};
 
@@ -19,6 +23,7 @@ impl SimplexQuadRule {
   pub fn npoints(&self) -> usize {
     self.points.ncols()
   }
+  /// Uses a local coordinate function `f`.
   pub fn integrate<F>(&self, f: &F, vol: f64) -> f64
   where
     F: Fn(CoordRef) -> f64,
@@ -28,6 +33,21 @@ impl SimplexQuadRule {
       integral += self.weights[i] * f(self.points.column(i));
     }
     vol * integral
+  }
+  /// Uses a global coordinate function `f`.
+  pub fn integrate_mesh<F>(&self, f: &F, complex: &Complex, coords: &MeshCoords) -> f64
+  where
+    F: Fn(CoordRef) -> f64,
+  {
+    let mut integral = 0.0;
+    for cell in complex.cells().iter() {
+      let cell_coords = SimplexCoords::from_simplex_and_coords(cell, coords);
+      integral += self.integrate(
+        &|local_coord| f(cell_coords.local2global(local_coord).as_view()),
+        cell_coords.vol(),
+      );
+    }
+    integral
   }
 }
 
