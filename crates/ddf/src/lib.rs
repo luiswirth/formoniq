@@ -43,7 +43,7 @@ impl CoordSimplexExt for SimplexCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::integrate_form_simplex, whitney::WhitneyLsf};
+  use crate::{cochain::integrate_form_simplex, whitney::lsf::WhitneyLsf};
 
   use common::combo::Sign;
   use manifold::{

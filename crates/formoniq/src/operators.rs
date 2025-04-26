@@ -3,7 +3,7 @@ use {
     combo::{factorial, Sign},
     linalg::nalgebra::{Matrix, Vector},
   },
-  ddf::{whitney::WhitneyLsf, ManifoldComplexExt},
+  ddf::{whitney::lsf::WhitneyLsf, ManifoldComplexExt},
   exterior::{list::ExteriorElementList, term::multi_gramian, Dim, ExteriorGrade},
   manifold::{
     geometry::{coord::simplex::SimplexCoords, metric::simplex::SimplexLengths},
@@ -258,7 +258,7 @@ mod test {
   use super::*;
   use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
-  use ddf::whitney::WhitneyLsf;
+  use ddf::whitney::lsf::WhitneyLsf;
   use exterior::term::multi_gramian;
   use manifold::{geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps};
 
