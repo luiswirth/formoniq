@@ -142,6 +142,21 @@ impl std::ops::AddAssign<ExteriorElement> for ExteriorElement {
   }
 }
 
+impl std::ops::Sub<ExteriorElement> for ExteriorElement {
+  type Output = Self;
+  fn sub(mut self, other: ExteriorElement) -> Self::Output {
+    self -= other;
+    self
+  }
+}
+impl std::ops::SubAssign<ExteriorElement> for ExteriorElement {
+  fn sub_assign(&mut self, other: ExteriorElement) {
+    assert_eq!(self.dim, other.dim);
+    assert_eq!(self.grade, other.grade);
+    self.coeffs -= other.coeffs;
+  }
+}
+
 impl std::ops::Mul<f64> for ExteriorElement {
   type Output = Self;
   fn mul(mut self, scalar: f64) -> Self::Output {

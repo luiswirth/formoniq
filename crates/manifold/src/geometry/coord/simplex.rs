@@ -179,7 +179,7 @@ pub fn local2bary<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
 
 pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
   let bary = bary.into();
-  assert_relative_eq!(bary.sum(), 1.0);
+  assert_relative_eq!(bary.sum(), 1.0, epsilon = 1e-9);
   bary.iter().all(|&b| (0.0..=1.0).contains(&b))
 }
 

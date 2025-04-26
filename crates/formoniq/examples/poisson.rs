@@ -2,13 +2,10 @@
 //! and determines the algebraic convergence rate.
 
 use {
-  common::util::algebraic_convergence_rate,
+  common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
   ddf::cochain::cochain_projection,
   exterior::field::DiffFormClosure,
-  formoniq::{
-    fe::{hdif_norm, l2_norm},
-    problems::laplace_beltrami,
-  },
+  formoniq::{fe::fe_l2_error, problems::laplace_beltrami},
   manifold::gen::cartesian::CartesianMeshInfo,
 };
 
@@ -22,7 +19,11 @@ fn main() {
 
     // $u = sin(x_1) + sin(x_1) + ... + sin(x_d)$
     let solution_exact = DiffFormClosure::scalar(|x| x.iter().map(|x| x.sin()).sum(), dim);
-    let laplacian = DiffFormClosure::scalar(|x| x.iter().map(|x| x.sin()).sum(), dim);
+    let dif_solution_exact = DiffFormClosure::one_form(
+      |x| Vector::from_iterator(x.len(), x.iter().map(|xi| xi.cos())),
+      dim,
+    );
+    let laplacian_exact = DiffFormClosure::scalar(|x| x.iter().map(|x| x.sin()).sum(), dim);
 
     let nrefinements = 20 / dim;
     let mut errors_l2 = Vec::with_capacity(nrefinements);
@@ -34,7 +35,7 @@ fn main() {
     }
 
     print_seperator();
-    println!("| {:>2} | {:>6} | {:>6} |", "k", "L2", "H1",);
+    println!("| {:>2} | {:>6} | {:>6.2} |", "k", "L2", "H1");
     print_seperator();
 
     for refinement in 0..nrefinements {
@@ -44,20 +45,19 @@ fn main() {
       let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
       let (topology, coords) = box_mesh.compute_coord_complex();
 
-      let laplacian = cochain_projection(&laplacian, &topology, &coords, None);
-      let solution_exact = cochain_projection(&solution_exact, &topology, &coords, None);
+      let laplacian_projected = cochain_projection(&laplacian_exact, &topology, &coords, None);
+      let solution_projected = cochain_projection(&solution_exact, &topology, &coords, None);
 
       let metric = coords.to_edge_lengths(&topology);
 
-      let boundary_data = |ivertex| solution_exact[ivertex];
+      let boundary_data = |ivertex| solution_projected[ivertex];
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(
         &topology,
         &metric,
-        laplacian,
+        // TODO: this might be wrong and not the right load vector...
+        laplacian_projected,
         boundary_data,
       );
-
-      let difference = solution_exact - galsol;
 
       let conv_rate = |errors: &[f64], curr: f64| {
         errors
@@ -66,17 +66,18 @@ fn main() {
           .unwrap_or(f64::INFINITY)
       };
 
-      let error_l2 = l2_norm(&difference, &topology, &metric);
+      let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &coords);
       let conv_rate_l2 = conv_rate(&errors_l2, error_l2);
       errors_l2.push(error_l2);
 
-      let error_h1 = hdif_norm(&difference, &topology, &metric);
+      let dif_galsol = galsol.dif(&topology);
+      let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
       let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
       errors_h1.push(error_h1);
 
       println!(
         "| {:>2} | {:>6.2} | {:>6.2} |",
-        refinement, conv_rate_l2, conv_rate_h1,
+        refinement, conv_rate_l2, conv_rate_h1
       );
     }
 
