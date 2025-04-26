@@ -1,12 +1,18 @@
 use common::linalg::nalgebra::Vector;
-use manifold::{geometry::coord::mesh::MeshCoords, topology::skeleton::Skeleton};
+use manifold::{
+  geometry::{
+    coord::{mesh::MeshCoords, quadrature::SimplexQuadRule},
+    refsimp_vol,
+  },
+  topology::skeleton::Skeleton,
+};
 
 use crate::CoordSimplexExt;
 
 use {
   exterior::{field::DifferentialMultiForm, Dim},
   manifold::{
-    geometry::coord::{quadrature::barycentric_quadrature, simplex::SimplexCoords, CoordRef},
+    geometry::coord::{simplex::SimplexCoords, CoordRef},
     topology::{
       complex::Complex,
       handle::{SimplexHandle, SimplexIdx},
@@ -135,26 +141,36 @@ pub fn cochain_projection(
   form: &impl DifferentialMultiForm,
   topology: &Complex,
   coords: &MeshCoords,
+  qr: Option<&SimplexQuadRule>,
 ) -> Cochain {
   let cochain = topology
     .skeleton(form.grade())
     .handle_iter()
     .map(|simp| SimplexCoords::from_simplex_and_coords(&simp, coords))
-    .map(|simp| integrate_form_simplex(form, &simp))
+    .map(|simp| integrate_form_simplex(form, &simp, qr))
     .collect::<Vec<_>>()
     .into();
   Cochain::new(form.grade(), cochain)
 }
 
-/// Approximates the integral of a differential k-form over a k-simplex,
-/// by means of barycentric quadrature.
-pub fn integrate_form_simplex(form: &impl DifferentialMultiForm, simplex: &SimplexCoords) -> f64 {
+/// Approximates the integral of a differential k-form over a k-simplex.
+pub fn integrate_form_simplex(
+  form: &impl DifferentialMultiForm,
+  simplex: &SimplexCoords,
+  qr: Option<&SimplexQuadRule>,
+) -> f64 {
+  let dim_intrinsic = simplex.dim_intrinsic();
+
   let multivector = simplex.spanning_multivector();
   let f = |coord: CoordRef| {
     form
       .at_point(simplex.local2global(coord).as_view())
       .apply_form_to_vector(&multivector)
   };
-  let std_simp = SimplexCoords::standard(simplex.dim_intrinsic());
-  barycentric_quadrature(&f, &std_simp)
+  if let Some(qr) = qr {
+    qr.integrate(&f, refsimp_vol(dim_intrinsic))
+  } else {
+    let qr = &SimplexQuadRule::barycentric(dim_intrinsic);
+    qr.integrate(&f, refsimp_vol(dim_intrinsic))
+  }
 }
