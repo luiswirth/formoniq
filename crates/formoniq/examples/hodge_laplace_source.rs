@@ -1,3 +1,6 @@
+use exterior::ExteriorElement;
+use manifold::geometry::coord::CoordRef;
+
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
   ddf::cochain::cochain_projection,
@@ -30,6 +33,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dim,
   );
 
+  // TODO: check this!
+  let dif_solution_exact = DiffFormClosure::new(
+    Box::new(move |p: CoordRef| {
+      let dim = p.len();
+      let num_components = if dim > 1 { dim * (dim - 1) / 2 } else { 0 };
+      let mut components = Vec::with_capacity(num_components);
+
+      let sin_p: Vec<_> = p.iter().map(|&pi| pi.sin()).collect();
+      let cos_p: Vec<_> = p.iter().map(|&pi| pi.cos()).collect();
+
+      for k in 0..dim {
+        for i in (k + 1)..dim {
+          let mut prod_cos_pik = 1.0;
+          #[allow(clippy::needless_range_loop)]
+          for j in 0..dim {
+            if j != i && j != k {
+              prod_cos_pik *= cos_p[j];
+            }
+          }
+
+          let coeff = prod_cos_pik * sin_p[i] * sin_p[k] * (sin_p[k] - sin_p[i]);
+          components.push(coeff);
+        }
+      }
+      ExteriorElement::new(components.into(), dim, 2)
+    }),
+    dim,
+    2,
+  );
+
   let laplacian_exact = DiffFormClosure::one_form(
     |p| {
       Vector::from_iterator(
@@ -43,7 +76,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dim,
   );
 
+  println!("| {:>2} | {:>6} | {:>6.2} |", "k", "L2", "H1");
+
   let mut errors_l2 = Vec::new();
+  let mut errors_h1 = Vec::new();
   for irefine in 0..=10 {
     let refine_path = &format!("{path}/refine{irefine}");
     fs::create_dir_all(refine_path).unwrap();
@@ -82,12 +118,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     errors_l2.push(error_l2);
 
     // TODO: H1 convergence
-    //let dif_galsol = galsol.dif(&topology);
-    //let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
-    //let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
-    //errors_h1.push(error_h1);
+    let dif_galsol = galsol.dif(&topology);
+    let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
+    let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
+    errors_h1.push(error_h1);
 
-    println!("refinement={irefine} | L2_error={error_l2:<7.2e} | conv_rate={conv_rate_l2:>5.2}");
+    println!(
+      "| {:>2} | {:>6.2} | {:>6.2} |",
+      irefine, conv_rate_l2, conv_rate_h1
+    );
   }
 
   Ok(())
