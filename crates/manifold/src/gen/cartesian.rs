@@ -181,8 +181,8 @@ impl CartesianMeshInfo {
     let nboxes_axis = self.ncells_axis();
 
     let dim = self.dim();
-    let nsimplicies = factorial(dim) * nboxes;
-    let mut simplicies: Vec<Simplex> = Vec::with_capacity(nsimplicies);
+    let nsimplices = factorial(dim) * nboxes;
+    let mut simplices: Vec<Simplex> = Vec::with_capacity(nsimplices);
 
     // iterate through all boxes that make up the mesh
     for ibox in 0..nboxes {
@@ -194,7 +194,7 @@ impl CartesianMeshInfo {
 
       // Construct all $d!$ simplexes that make up the current box.
       // Each permutation of the basis directions (dimensions) gives rise to one simplex.
-      let cube_simplicies = (0..dim).permutations(dim).map(|basisdirs| {
+      let cube_simplices = (0..dim).permutations(dim).map(|basisdirs| {
         // Construct simplex by adding all shifted vertices.
         let mut simplex = vec![ivertex_origin];
 
@@ -213,10 +213,10 @@ impl CartesianMeshInfo {
         simplex
       });
 
-      simplicies.extend(cube_simplicies);
+      simplices.extend(cube_simplices);
     }
 
-    Skeleton::new(simplicies)
+    Skeleton::new(simplices)
   }
 }
 
@@ -272,7 +272,7 @@ mod test {
     ]);
     assert_eq!(*coords.matrix(), expected_coords);
 
-    let expected_simplicies = vec![
+    let expected_simplices = vec![
       &[0, 1, 4],
       &[0, 3, 4],
       &[1, 2, 5],
@@ -283,6 +283,6 @@ mod test {
       &[4, 7, 8],
     ];
     let cells: Vec<_> = mesh.into_iter().map(|s| s.vertices).collect();
-    assert_eq!(cells, expected_simplicies);
+    assert_eq!(cells, expected_simplices);
   }
 }

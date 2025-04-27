@@ -110,7 +110,7 @@ impl SimplexHandle<'_> {
       .map(|&cell_idx| cell_idx.handle(self.complex))
   }
 
-  /// The dim-subsimplicies of this simplex.
+  /// The dim-subsimplices of this simplex.
   ///
   /// These are ordered lexicographically w.r.t.
   /// the local vertex indices.
@@ -121,7 +121,7 @@ impl SimplexHandle<'_> {
       .map(move |sub| self.complex.skeleton(dim_sub).handle_by_simplex(&sub))
   }
 
-  /// The dim-supersimplicies of this simplex.
+  /// The dim-supersimplices of this simplex.
   ///
   /// These are ordered first by cell index and then
   /// by lexicographically w.r.t. the local vertex indices.

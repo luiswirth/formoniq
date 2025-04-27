@@ -100,7 +100,7 @@ pub fn solve_hodge_laplace_harmonics(
   homology_dim: usize,
 ) -> Matrix {
   if homology_dim == 0 {
-    let nwhitneys = topology.nsimplicies(grade);
+    let nwhitneys = topology.nsimplices(grade);
     return Matrix::zeros(nwhitneys, 0);
   }
 
