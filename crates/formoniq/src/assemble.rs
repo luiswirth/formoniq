@@ -4,6 +4,7 @@ use common::{
   linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector},
   util,
 };
+use ddf::cochain::Cochain;
 use itertools::{multizip, Itertools};
 use manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex};
 
@@ -59,7 +60,7 @@ pub fn assemble_galvec(
   topology: &Complex,
   geometry: &MeshLengths,
   elvec: impl ElVecProvider,
-) -> GalVec {
+) -> Cochain {
   let grade = elvec.grade();
   let nsimps = topology.skeleton(grade).len();
 
@@ -69,7 +70,7 @@ pub fn assemble_galvec(
     .par_bridge()
     .flat_map(|cell| {
       let geo = geometry.simplex_lengths(cell);
-      let elvec = elvec.eval(&geo);
+      let elvec = elvec.eval(&geo, &cell);
 
       let subs: Vec<_> = cell.mesh_subsimps(grade).collect();
 
@@ -89,7 +90,7 @@ pub fn assemble_galvec(
     galvec[irow] += val;
   }
 
-  galvec
+  Cochain::new(grade, galvec)
 }
 
 pub fn drop_boundary_dofs_galmat(complex: &Complex, galmat: &mut GalMat) {

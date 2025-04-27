@@ -67,7 +67,9 @@ pub fn solve_hodge_laplace_source(
 
   let galmat = CsrMatrix::from(&galmat);
 
-  let galvec = mass_u * source_data.coeffs;
+  //let galvec = mass_u * source_data.coeffs;
+  let galvec = source_data.coeffs;
+
   #[allow(clippy::toplevel_ref_arg)]
   let galvec = na::stack![
     Vector::zeros(sigma_len);

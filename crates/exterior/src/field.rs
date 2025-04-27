@@ -24,7 +24,7 @@ pub type DiffFormClosure = ExteriorFieldClosure;
 
 #[allow(clippy::type_complexity)]
 pub struct ExteriorFieldClosure {
-  closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement>,
+  closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement + Sync>,
   dim: Dim,
   grade: ExteriorGrade,
 }
@@ -32,7 +32,7 @@ pub struct ExteriorFieldClosure {
 #[allow(clippy::type_complexity)]
 impl ExteriorFieldClosure {
   pub fn new(
-    closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement>,
+    closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement + Sync>,
     dim: Dim,
     grade: ExteriorGrade,
   ) -> Self {
@@ -47,12 +47,12 @@ impl ExteriorFieldClosure {
 // Convenience methods specifically for DifferentialFormClosure
 impl DiffFormClosure {
   /// Create a scalar field (0-form).
-  pub fn scalar(f: impl Fn(VectorView<f64>) -> f64 + 'static, dim: Dim) -> Self {
+  pub fn scalar(f: impl Fn(VectorView<f64>) -> f64 + Sync + 'static, dim: Dim) -> Self {
     let wrapper = move |x: VectorView<f64>| crate::ExteriorElement::scalar(f(x), dim);
     Self::new(Box::new(wrapper), dim, 0)
   }
   /// Create a 1-form (covector field).
-  pub fn one_form(f: impl Fn(VectorView<f64>) -> Vector + 'static, dim: Dim) -> Self {
+  pub fn one_form(f: impl Fn(VectorView<f64>) -> Vector + Sync + 'static, dim: Dim) -> Self {
     let wrapper = move |x: VectorView<f64>| crate::ExteriorElement::line(f(x));
     Self::new(Box::new(wrapper), dim, 1)
   }

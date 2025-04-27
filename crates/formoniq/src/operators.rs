@@ -4,9 +4,14 @@ use {
     linalg::nalgebra::{Matrix, Vector},
   },
   ddf::{whitney::lsf::WhitneyLsf, ManifoldComplexExt},
-  exterior::{list::ExteriorElementList, term::multi_gramian, Dim, ExteriorGrade},
+  exterior::{
+    field::ExteriorField, list::ExteriorElementList, term::multi_gramian, Dim, ExteriorGrade,
+  },
   manifold::{
-    geometry::{coord::simplex::SimplexCoords, metric::simplex::SimplexLengths},
+    geometry::{
+      coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
+      metric::simplex::SimplexLengths,
+    },
     topology::{
       complex::Complex,
       simplex::{standard_subsimps, Simplex},
@@ -22,12 +27,6 @@ pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
   fn eval(&self, geometry: &SimplexLengths) -> ElMat;
-}
-
-pub type ElVec = Vector;
-pub trait ElVecProvider: Sync {
-  fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, geometry: &SimplexLengths) -> ElVec;
 }
 
 /// Exact Element Matrix Provider for the Laplace-Beltrami operator.
@@ -250,6 +249,70 @@ impl ElMatProvider for CodifDifElmat {
   fn eval(&self, geometry: &SimplexLengths) -> Matrix {
     let mass = self.mass.eval(geometry);
     &self.codif * mass * &self.dif
+  }
+}
+
+pub type ElVec = Vector;
+pub trait ElVecProvider: Sync {
+  fn grade(&self) -> ExteriorGrade;
+  fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec;
+}
+
+pub struct SourceElVec<'a, F>
+where
+  F: ExteriorField,
+{
+  source: &'a F,
+  mesh_coords: &'a MeshCoords,
+  qr: SimplexQuadRule,
+}
+impl<'a, F> SourceElVec<'a, F>
+where
+  F: ExteriorField,
+{
+  pub fn new(source: &'a F, mesh_coords: &'a MeshCoords, qr: Option<SimplexQuadRule>) -> Self {
+    let qr = qr.unwrap_or(SimplexQuadRule::barycentric(source.dim_intrinsic()));
+    Self {
+      source,
+      mesh_coords,
+      qr,
+    }
+  }
+}
+impl<F> ElVecProvider for SourceElVec<'_, F>
+where
+  F: Sync + ExteriorField,
+{
+  fn grade(&self) -> ExteriorGrade {
+    self.source.grade()
+  }
+  fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec {
+    let cell_coords = SimplexCoords::from_simplex_and_coords(topology, self.mesh_coords);
+
+    let dim = self.source.dim_intrinsic();
+    let grade = self.grade();
+    let dof_simps: Vec<_> = standard_subsimps(dim, grade).collect();
+    let whitneys: Vec<_> = dof_simps
+      .iter()
+      .cloned()
+      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
+      .collect();
+
+    let inner = multi_gramian(&geometry.to_metric_tensor(), grade);
+
+    let mut elvec = ElVec::zeros(whitneys.len());
+    for (iwhitney, whitney) in whitneys.iter().enumerate() {
+      let inner_pointwise = |local: CoordRef| {
+        let global = cell_coords.local2global(local);
+        inner.inner(
+          self.source.at_point(&global).coeffs(),
+          whitney.at_point(local).coeffs(),
+        )
+      };
+      let value = self.qr.integrate(&inner_pointwise, geometry.vol());
+      elvec[iwhitney] = value;
+    }
+    elvec
   }
 }
 
