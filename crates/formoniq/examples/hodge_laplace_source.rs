@@ -1,3 +1,4 @@
+use ddf::cochain::cochain_projection;
 use exterior::ExteriorElement;
 use formoniq::{assemble::assemble_galvec, operators::SourceElVec};
 use manifold::geometry::coord::CoordRef;
@@ -76,7 +77,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     dim,
   );
 
-  println!("| {:>2} | {:>6} | {:>6.2} |", "k", "L2", "H1");
+  println!(
+    "| {:>2} | {:8.2} | {:>6.2} | {:>8.2} | {:>6.2} |",
+    "k", "L2 err", "L2 conv", "H1 err", "H1 conv",
+  );
 
   let mut errors_l2 = Vec::new();
   let mut errors_h1 = Vec::new();
@@ -89,13 +93,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    //let source_data = cochain_projection(&laplacian_exact, &topology, &coords, None);
+    let source_data = cochain_projection(&laplacian_exact, &topology, &coords, None);
 
-    let source_data = assemble_galvec(
-      &topology,
-      &metric,
-      SourceElVec::new(&laplacian_exact, &coords, None),
-    );
+    //let source_data = assemble_galvec(
+    //  &topology,
+    //  &metric,
+    //  SourceElVec::new(
+    //    &laplacian_exact,
+    //    &coords,
+    //    None,
+    //    //Some(SimplexQuadRule::order3(dim)),
+    //  ),
+    //);
 
     let (_, galsol, _) =
       hodge_laplace::solve_hodge_laplace_source(&topology, &metric, source_data, homology_dim);
@@ -123,8 +132,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     errors_h1.push(error_h1);
 
     println!(
-      "| {:>2} | {:>6.2} | {:>6.2} |",
-      irefine, conv_rate_l2, conv_rate_h1
+      "| {:>2} | {:<8.2e} | {:>6.2} | {:<8.2e} | {:>6.2} |",
+      irefine, error_l2, conv_rate_l2, error_h1, conv_rate_h1
     );
   }
 

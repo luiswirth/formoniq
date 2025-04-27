@@ -31,17 +31,13 @@ fn main() {
     let mut errors_l2 = Vec::with_capacity(nrefinements);
     let mut errors_h1 = Vec::with_capacity(nrefinements);
 
-    fn print_seperator() {
-      let nchar = 24;
-      println!("{}", "-".repeat(nchar));
-    }
+    println!(
+      "| {:>2} | {:>8.2} | {:>6.2} | {:>8.2} | {:>6.2} |",
+      "k", "L2 err", "L2 conv", "H1 err", "H1 conv",
+    );
 
-    print_seperator();
-    println!("| {:>2} | {:>6} | {:>6.2} |", "k", "L2", "H1");
-    print_seperator();
-
-    for refinement in 0..nrefinements {
-      let nboxes_per_dim = 2usize.pow(refinement as u32);
+    for irefine in 0..nrefinements {
+      let nboxes_per_dim = 2usize.pow(irefine as u32);
 
       // Mesh of hypercube $[0, tau]^d$.
       let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
@@ -81,11 +77,9 @@ fn main() {
       errors_h1.push(error_h1);
 
       println!(
-        "| {:>2} | {:>6.2} | {:>6.2} |",
-        refinement, conv_rate_l2, conv_rate_h1
+        "| {:>2} | {:<8.2e} | {:>6.2} | {:<8.2e} | {:>6.2} |",
+        irefine, error_l2, conv_rate_l2, error_h1, conv_rate_h1
       );
     }
-
-    print_seperator();
   }
 }
