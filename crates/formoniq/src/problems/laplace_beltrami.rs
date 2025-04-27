@@ -33,9 +33,11 @@ where
     operators::LaplaceBeltramiElmat::new(dim),
   );
 
-  let mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
-  let mass = CsrMatrix::from(&mass);
-  let mut source = mass * source_data.coeffs;
+  // TODO: Figure this out.
+  //let mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
+  //let mass = CsrMatrix::from(&mass);
+  //let mut source = mass * source_data.coeffs;
+  let mut source = source_data.coeffs;
 
   assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source);
 

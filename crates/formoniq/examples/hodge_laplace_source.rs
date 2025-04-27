@@ -1,9 +1,9 @@
 use exterior::ExteriorElement;
+use formoniq::{assemble::assemble_galvec, operators::SourceElVec};
 use manifold::geometry::coord::CoordRef;
 
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  ddf::cochain::cochain_projection,
   exterior::field::DiffFormClosure,
   formoniq::fe::fe_l2_error,
   formoniq::problems::hodge_laplace,
@@ -89,21 +89,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (topology, coords) = box_mesh.compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
 
-    let laplacian_cochain = cochain_projection(&laplacian_exact, &topology, &coords, None);
-    let exact_u_cochain = cochain_projection(&solution_exact, &topology, &coords, None);
+    //let source_data = cochain_projection(&laplacian_exact, &topology, &coords, None);
 
-    let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(
+    let source_data = assemble_galvec(
       &topology,
       &metric,
-      laplacian_cochain,
-      homology_dim,
+      SourceElVec::new(&laplacian_exact, &coords, None),
     );
+
+    let (_, galsol, _) =
+      hodge_laplace::solve_hodge_laplace_source(&topology, &metric, source_data, homology_dim);
 
     manifold::io::save_skeleton_to_file(&topology, dim, format!("{refine_path}/cells.skel"))?;
     manifold::io::save_skeleton_to_file(&topology, 1, format!("{refine_path}/edges.skel"))?;
     manifold::io::save_coords_to_file(&coords, format!("{refine_path}/vertices.coords"))?;
-
-    ddf::io::save_cochain_to_file(&exact_u_cochain, format!("{refine_path}/exact.cochain"))?;
     ddf::io::save_cochain_to_file(&galsol, format!("{refine_path}/fe.cochain"))?;
 
     let conv_rate = |errors: &[f64], curr: f64| {

@@ -5,7 +5,9 @@ use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
   ddf::cochain::cochain_projection,
   exterior::field::DiffFormClosure,
-  formoniq::{fe::fe_l2_error, problems::laplace_beltrami},
+  formoniq::{
+    assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::laplace_beltrami,
+  },
   manifold::gen::cartesian::CartesianMeshInfo,
 };
 
@@ -44,18 +46,21 @@ fn main() {
       // Mesh of hypercube $[0, tau]^d$.
       let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, TAU);
       let (topology, coords) = box_mesh.compute_coord_complex();
-
-      let laplacian_projected = cochain_projection(&laplacian_exact, &topology, &coords, None);
-      let solution_projected = cochain_projection(&solution_exact, &topology, &coords, None);
-
       let metric = coords.to_edge_lengths(&topology);
 
+      let load_vector = assemble_galvec(
+        &topology,
+        &metric,
+        SourceElVec::new(&laplacian_exact, &coords, None),
+      );
+
+      let solution_projected = cochain_projection(&solution_exact, &topology, &coords, None);
       let boundary_data = |ivertex| solution_projected[ivertex];
+
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(
         &topology,
         &metric,
-        // TODO: this might be wrong and not the right load vector...
-        laplacian_projected,
+        load_vector,
         boundary_data,
       );
 
