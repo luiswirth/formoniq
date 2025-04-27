@@ -47,7 +47,7 @@ impl Complex {
   pub fn mesh_skeleton_raw(&self, dim: Dim) -> &ComplexSkeleton {
     &self.skeletons[dim]
   }
-  pub fn nsimplicies(&self, dim: Dim) -> usize {
+  pub fn nsimplices(&self, dim: Dim) -> usize {
     self.skeleton(dim).len()
   }
   pub fn vertices(&self) -> SkeletonHandle {
@@ -210,7 +210,7 @@ impl Complex {
 
 #[cfg(test)]
 mod test {
-  use crate::topology::simplex::{nsubsequence_simplicies, Simplex};
+  use crate::topology::simplex::{nsubsequence_simplices, Simplex};
 
   use super::*;
 
@@ -233,7 +233,7 @@ mod test {
     let cell_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
       let subs: Vec<_> = cell.mesh_subsimps(dim_sub).collect();
-      assert_eq!(subs.len(), nsubsequence_simplicies(dim, dim_sub));
+      assert_eq!(subs.len(), nsubsequence_simplices(dim, dim_sub));
       let subs_vertices: Vec<_> = cell_simplex.subsequences(dim_sub).collect();
       assert_eq!(
         subs.iter().map(|&sub| (*sub).clone()).collect::<Vec<_>>(),

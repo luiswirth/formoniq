@@ -61,7 +61,7 @@ impl Simplex {
   pub fn is_supersequence_of(&self, other: &Self) -> bool {
     other.is_subsequence_of(self)
   }
-  /// The subsequence-simplicies of this simplex.
+  /// The subsequence-simplices of this simplex.
   ///
   /// These are ordered lexicographically w.r.t. the local vertex indices.
   pub fn subsequences(&self, sub_dim: Dim) -> impl Iterator<Item = Self> {
@@ -197,21 +197,21 @@ pub fn graded_subsimps(dim_cell: Dim) -> impl Iterator<Item = impl Iterator<Item
   (0..=dim_cell).map(move |d| standard_subsimps(dim_cell, d))
 }
 
-pub fn nsubsequence_simplicies(dim_cell: Dim, dim_sub: Dim) -> usize {
+pub fn nsubsequence_simplices(dim_cell: Dim, dim_sub: Dim) -> usize {
   binomial(dim_cell + 1, dim_sub + 1)
 }
-pub fn nsubset_simplicies(dim_cell: Dim, dim_sub: Dim) -> usize {
+pub fn nsubset_simplices(dim_cell: Dim, dim_sub: Dim) -> usize {
   nsubpermutations(dim_cell + 1, dim_sub + 1)
 }
 
 pub fn nedges(dim_cell: Dim) -> usize {
-  nsubsequence_simplicies(dim_cell, 1)
+  nsubsequence_simplices(dim_cell, 1)
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::topology::simplex::nsubsequence_simplicies;
+  use crate::topology::simplex::nsubsequence_simplices;
 
   use itertools::Itertools;
 
@@ -221,7 +221,7 @@ mod test {
       let simp = Simplex::standard(dim);
       for sub_dim in 0..=dim {
         let subs = simp.subsequences(sub_dim).collect_vec();
-        assert_eq!(subs.len(), nsubsequence_simplicies(dim, sub_dim));
+        assert_eq!(subs.len(), nsubsequence_simplices(dim, sub_dim));
         assert!(subs.iter().all(|sub| sub.is_subset_of(&simp)));
         assert!(subs.iter().all(|sub| sub.is_subsequence_of(&simp)));
       }
@@ -234,13 +234,13 @@ mod test {
       let simp = Simplex::standard(dim);
       for sub_dim in 0..=dim {
         let subs = simp.subsets(sub_dim).collect_vec();
-        assert_eq!(subs.len(), nsubset_simplicies(dim, sub_dim));
+        assert_eq!(subs.len(), nsubset_simplices(dim, sub_dim));
         assert!(subs.iter().all(|sub| sub.is_subset_of(&simp)));
         let nsubsequences = subs
           .iter()
           .filter(|sub| sub.is_subsequence_of(&simp))
           .count();
-        assert_eq!(nsubsequences, nsubsequence_simplicies(dim, sub_dim));
+        assert_eq!(nsubsequences, nsubsequence_simplices(dim, sub_dim));
       }
     }
   }

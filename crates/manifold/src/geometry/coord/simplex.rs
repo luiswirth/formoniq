@@ -184,7 +184,7 @@ pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
 }
 
 impl SimplexCoords {
-  /// Coordinate subsequence simplicies.
+  /// Coordinate subsequence simplices.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
     Simplex::standard(self.dim_intrinsic())
       .subsequences(sub_dim)

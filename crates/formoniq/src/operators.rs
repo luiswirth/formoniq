@@ -101,13 +101,13 @@ impl ElMatProvider for ScalarLumpedMassElmat {
 pub struct HodgeMassElmat {
   dim: Dim,
   grade: ExteriorGrade,
-  simplicies: Vec<Simplex>,
+  simplices: Vec<Simplex>,
   wedge_terms: Vec<ExteriorElementList>,
 }
 impl HodgeMassElmat {
   pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
-    let simplicies: Vec<_> = standard_subsimps(dim, grade).collect();
-    let wedge_terms: Vec<ExteriorElementList> = simplicies
+    let simplices: Vec<_> = standard_subsimps(dim, grade).collect();
+    let wedge_terms: Vec<ExteriorElementList> = simplices
       .iter()
       .cloned()
       .map(|simp| WhitneyLsf::standard(dim, simp).wedge_terms().collect())
@@ -116,7 +116,7 @@ impl HodgeMassElmat {
     Self {
       dim,
       grade,
-      simplicies,
+      simplices,
       wedge_terms,
     }
   }
@@ -134,9 +134,9 @@ impl ElMatProvider for HodgeMassElmat {
 
     let scalar_mass = ScalarMassElmat.eval(geometry);
 
-    let mut elmat = Matrix::zeros(self.simplicies.len(), self.simplicies.len());
-    for (i, asimp) in self.simplicies.iter().enumerate() {
-      for (j, bsimp) in self.simplicies.iter().enumerate() {
+    let mut elmat = Matrix::zeros(self.simplices.len(), self.simplices.len());
+    for (i, asimp) in self.simplices.iter().enumerate() {
+      for (j, bsimp) in self.simplices.iter().enumerate() {
         let wedge_terms_a = &self.wedge_terms[i];
         let wedge_terms_b = &self.wedge_terms[j];
         let wedge_inners = multi_gramian(&geometry.to_metric_tensor().inverse(), self.grade)
