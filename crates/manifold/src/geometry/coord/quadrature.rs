@@ -3,7 +3,10 @@ use super::{
   simplex::{barycenter_local, SimplexCoords},
   CoordRef,
 };
-use crate::{topology::complex::Complex, Dim};
+use crate::{
+  topology::{complex::Complex, handle::SimplexHandle},
+  Dim,
+};
 
 use common::linalg::nalgebra::{Matrix, Vector};
 
@@ -24,7 +27,7 @@ impl SimplexQuadRule {
     self.points.ncols()
   }
   /// Uses a local coordinate function `f`.
-  pub fn integrate<F>(&self, f: &F, vol: f64) -> f64
+  pub fn integrate_local<F>(&self, f: &F, vol: f64) -> f64
   where
     F: Fn(CoordRef) -> f64,
   {
@@ -34,18 +37,27 @@ impl SimplexQuadRule {
     }
     vol * integral
   }
+
   /// Uses a global coordinate function `f`.
-  pub fn integrate_mesh<F>(&self, f: &F, complex: &Complex, coords: &MeshCoords) -> f64
+  pub fn integrate_coord<F>(&self, f: &F, coords: &SimplexCoords) -> f64
   where
     F: Fn(CoordRef) -> f64,
   {
+    self.integrate_local(
+      &|local_coord| f(coords.local2global(local_coord).as_view()),
+      coords.vol(),
+    )
+  }
+
+  /// Uses a global coordinate function `f`.
+  pub fn integrate_mesh<F>(&self, f: &F, complex: &Complex, coords: &MeshCoords) -> f64
+  where
+    F: Fn(CoordRef, SimplexHandle) -> f64,
+  {
     let mut integral = 0.0;
-    for cell in complex.cells().iter() {
-      let cell_coords = SimplexCoords::from_simplex_and_coords(cell, coords);
-      integral += self.integrate(
-        &|local_coord| f(cell_coords.local2global(local_coord).as_view()),
-        cell_coords.vol(),
-      );
+    for cell in complex.cells().handle_iter() {
+      let cell_coords = SimplexCoords::from_simplex_and_coords(&cell, coords);
+      integral += self.integrate_coord(&|x| f(x, cell), &cell_coords);
     }
     integral
   }
@@ -132,7 +144,7 @@ mod tests {
     let rule = SimplexQuadRule::dim0();
     let vol = refsimp_vol(0);
     let f_const = |_p: CoordRef| 1.0;
-    assert_abs_diff_eq!(rule.integrate(&f_const, vol), vol, epsilon = 1e-12);
+    assert_abs_diff_eq!(rule.integrate_local(&f_const, vol), vol, epsilon = 1e-12);
   }
 
   #[test]
@@ -142,13 +154,13 @@ mod tests {
       let vol = refsimp_vol(dim);
 
       let f_const = |_p: CoordRef| 1.0;
-      assert_abs_diff_eq!(rule.integrate(&f_const, vol), vol, epsilon = 1e-12);
+      assert_abs_diff_eq!(rule.integrate_local(&f_const, vol), vol, epsilon = 1e-12);
 
       if dim > 0 {
         let f_linear = |p: CoordRef| p[0];
         let exact_linear = vol / (dim as f64 + 1.0);
         assert_abs_diff_eq!(
-          rule.integrate(&f_linear, vol),
+          rule.integrate_local(&f_linear, vol),
           exact_linear,
           epsilon = 1e-12
         );
@@ -163,12 +175,12 @@ mod tests {
     let vol = refsimp_vol(dim);
 
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0].powi(2), vol),
+      rule.integrate_local(&|p| p[0].powi(2), vol),
       1.0 / 3.0,
       epsilon = 1e-12
     );
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0].powi(3), vol),
+      rule.integrate_local(&|p| p[0].powi(3), vol),
       0.25,
       epsilon = 1e-12
     );
@@ -181,17 +193,17 @@ mod tests {
     let vol = refsimp_vol(dim);
 
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[1].powi(2), vol),
+      rule.integrate_local(&|p| p[1].powi(2), vol),
       vol / 6.0,
       epsilon = 1e-12
     );
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0].powi(3), vol),
+      rule.integrate_local(&|p| p[0].powi(3), vol),
       vol / 10.0,
       epsilon = 1e-12
     );
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0].powi(2) * p[1], vol),
+      rule.integrate_local(&|p| p[0].powi(2) * p[1], vol),
       vol / 30.0,
       epsilon = 1e-12
     );
@@ -203,17 +215,17 @@ mod tests {
     let rule = SimplexQuadRule::order3(dim);
     let vol = refsimp_vol(dim);
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0].powi(2), vol),
+      rule.integrate_local(&|p| p[0].powi(2), vol),
       vol / 10.0,
       epsilon = 1e-12
     );
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0] * p[1], vol),
+      rule.integrate_local(&|p| p[0] * p[1], vol),
       vol / 20.0,
       epsilon = 1e-12
     );
     assert_abs_diff_eq!(
-      rule.integrate(&|p| p[0].powi(3), vol),
+      rule.integrate_local(&|p| p[0].powi(3), vol),
       vol / 20.0,
       epsilon = 1e-12
     );

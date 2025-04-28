@@ -309,7 +309,7 @@ where
           whitney.at_point(local).coeffs(),
         )
       };
-      let value = self.qr.integrate(&inner_pointwise, geometry.vol());
+      let value = self.qr.integrate_local(&inner_pointwise, geometry.vol());
       elvec[iwhitney] = value;
     }
     elvec
