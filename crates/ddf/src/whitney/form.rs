@@ -4,7 +4,7 @@ use crate::cochain::Cochain;
 use exterior::{field::ExteriorField, MultiForm};
 use manifold::{
   geometry::coord::{mesh::MeshCoords, simplex::SimplexHandleExt, CoordRef},
-  topology::complex::Complex,
+  topology::{complex::Complex, handle::SimplexHandle},
 };
 
 pub struct WhitneyForm<'a> {
@@ -48,6 +48,28 @@ impl ExteriorField for WhitneyForm<'_> {
       .mesh_coords
       .find_cell_containing(self.complex, coord)
       .unwrap();
+    let cell_coords = cell.coord_simplex(self.mesh_coords);
+
+    let mut value = MultiForm::zero(self.dim_intrinsic(), self.grade());
+    for dof_simp in cell.mesh_subsimps(self.grade()) {
+      let local_dof_simp = dof_simp.relative_to(&cell);
+
+      let lsf = WhitneyLsf::from_coords(cell_coords.clone(), local_dof_simp);
+      let lsf_value = lsf.at_point(coord);
+      let dof_value = self.cochain[dof_simp];
+      value += dof_value * lsf_value;
+    }
+    value
+  }
+}
+impl WhitneyForm<'_> {
+  pub fn eval_known_cell<'a>(
+    &self,
+    cell: SimplexHandle,
+    coord: impl Into<CoordRef<'a>>,
+  ) -> exterior::ExteriorElement {
+    let coord = coord.into();
+
     let cell_coords = cell.coord_simplex(self.mesh_coords);
 
     let mut value = MultiForm::zero(self.dim_intrinsic(), self.grade());

@@ -174,9 +174,9 @@ pub fn integrate_form_simplex(
       .apply_form_to_vector(&multivector)
   };
   if let Some(qr) = qr {
-    qr.integrate(&f, refsimp_vol(dim_intrinsic))
+    qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
   } else {
     let qr = &SimplexQuadRule::barycentric(dim_intrinsic);
-    qr.integrate(&f, refsimp_vol(dim_intrinsic))
+    qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
   }
 }
