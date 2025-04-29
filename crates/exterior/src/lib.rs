@@ -13,6 +13,10 @@ use term::ExteriorTerm;
 pub type Dim = usize;
 pub type ExteriorGrade = usize;
 
+pub fn exterior_dim(dim: Dim, grade: ExteriorGrade) -> usize {
+  binomial(dim, grade)
+}
+
 /// An element of an exterior algebra.
 #[derive(Debug, Clone)]
 pub struct ExteriorElement {
@@ -23,7 +27,7 @@ pub struct ExteriorElement {
 
 impl ExteriorElement {
   pub fn new(coeffs: Vector, dim: Dim, grade: ExteriorGrade) -> Self {
-    assert_eq!(coeffs.len(), binomial(dim, grade));
+    assert_eq!(coeffs.len(), exterior_dim(dim, grade));
     Self { coeffs, dim, grade }
   }
 
@@ -36,7 +40,7 @@ impl ExteriorElement {
   }
 
   pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {
-    Self::new(Vector::zeros(binomial(dim, grade)), dim, grade)
+    Self::new(Vector::zeros(exterior_dim(dim, grade)), dim, grade)
   }
   pub fn one(dim: Dim) -> Self {
     Self::scalar(1.0, dim)
@@ -92,7 +96,7 @@ impl ExteriorElement {
       return Self::zero(dim, 0);
     }
 
-    let new_basis_size = binomial(dim, new_grade);
+    let new_basis_size = exterior_dim(dim, new_grade);
     let mut new_coeffs = Vector::zeros(new_basis_size);
 
     for (self_coeff, self_basis) in self.basis_iter() {
