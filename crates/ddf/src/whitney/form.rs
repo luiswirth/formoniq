@@ -72,7 +72,7 @@ impl WhitneyForm<'_> {
 
     let cell_coords = cell.coord_simplex(self.mesh_coords);
 
-    let mut value = MultiForm::zero(self.dim_intrinsic(), self.grade());
+    let mut value = MultiForm::zero(self.dim_ambient(), self.grade());
     for dof_simp in cell.mesh_subsimps(self.grade()) {
       let local_dof_simp = dof_simp.relative_to(&cell);
 

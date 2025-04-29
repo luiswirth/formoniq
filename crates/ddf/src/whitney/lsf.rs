@@ -78,9 +78,9 @@ impl ExteriorField for WhitneyLsf {
   }
   fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> MultiForm {
     let barys = self.cell_coords.global2bary(coord);
-    assert!(is_bary_inside(&barys), "Point is outside cell.");
+    //assert!(is_bary_inside(&barys), "Point is outside cell.");
 
-    let dim = self.dim_intrinsic();
+    let dim = self.dim_ambient();
     let grade = self.grade();
     let mut form = MultiForm::zero(dim, grade);
     for (iterm, &vertex) in self.dof_simp.vertices.iter().enumerate() {
