@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
   geometry::{metric::simplex::SimplexLengths, refsimp_vol},
-  topology::{handle::SimplexHandle, simplex::Simplex},
+  topology::{handle::SimplexHandle, simplex::Simplex, VertexIdx},
   Dim,
 };
 
@@ -59,6 +59,12 @@ impl SimplexCoords {
   pub fn coord(&self, ivertex: usize) -> CoordRef {
     self.vertices.coord(ivertex)
   }
+  pub fn coord_iter(
+    &self,
+  ) -> na::iter::ColumnIter<'_, f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> {
+    self.vertices.coord_iter()
+  }
+
   pub fn base_vertex(&self) -> CoordRef {
     self.coord(0)
   }

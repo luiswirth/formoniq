@@ -1,11 +1,15 @@
+use common::combo::binomial;
+use exterior::exterior_dim;
+
 use {
-  common::linalg::nalgebra::Vector, ddf::cochain::Cochain, ddf::whitney::form::WhitneyForm,
-  formoniq::problems::hodge_laplace, manifold::geometry::coord::simplex::SimplexCoords,
+  ddf::cochain::Cochain, ddf::whitney::form::WhitneyForm, formoniq::problems::hodge_laplace,
+  manifold::geometry::coord::simplex::SimplexCoords,
 };
 
 use std::{
   fs::{self, File},
   io::Write,
+  path::PathBuf,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -13,24 +17,43 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let _ = fs::remove_dir_all(out_path);
   fs::create_dir_all(out_path).unwrap();
 
-  let grade = 1;
-  let neigen = 10;
-
-  let mut path = String::new();
   println!("Enter mesh file path.");
+  let mut path = String::new();
   std::io::stdin().read_line(&mut path)?;
-  path = path.trim().to_string();
-  println!("{path}");
+  let path: PathBuf = path.trim().to_string().into();
 
-  let obj_file = fs::read(path)?;
+  let file_ext = path.extension().expect("Missing file extension.");
 
-  let (topology, coords) = manifold::io::gmsh::gmsh2coord_complex(&obj_file);
+  let (topology, coords) = match file_ext.to_str().unwrap() {
+    "msh" => {
+      let gmsh_file = fs::read(path)?;
+      manifold::io::gmsh::gmsh2coord_complex(&gmsh_file)
+    }
+    "obj" => {
+      let obj_file = fs::read(path)?;
+      let obj_string = String::from_utf8(obj_file)?;
+      manifold::io::blender::obj2coord_complex(&obj_string)
+    }
+    _ => panic!("Unkown file extension."),
+  };
+
+  let ambient_dim = coords.dim();
   let metric = coords.to_edge_lengths(&topology);
 
   fs::write(
     format!("{out_path}/mesh.obj"),
     manifold::io::blender::coord_complex2obj(&topology, &coords),
   )?;
+
+  println!("Enter exterior grade.");
+  let mut grade = String::new();
+  std::io::stdin().read_line(&mut grade)?;
+  let grade: usize = grade.trim().parse()?;
+
+  println!("Enter number of eigens.");
+  let mut neigen = String::new();
+  std::io::stdin().read_line(&mut neigen)?;
+  let neigen: usize = neigen.trim().parse()?;
 
   let (eigenvals, _, eigenfuncs) =
     hodge_laplace::solve_hodge_laplace_evp(&topology, &metric, grade, neigen);
@@ -39,29 +62,29 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("ieigen={ieigen}, eigenval={eigenval:.3}");
     let eigen_cochain = Cochain::new(grade, eigenfunc.into_owned());
 
-    let mut vertex_values = vec![Vector::zeros(3); topology.vertices().len()];
+    let mut file = File::create(format!("{out_path}/eigen{ieigen}.txt"))?;
+
+    // Write header
+    for i in 0..ambient_dim {
+      write!(&mut file, "x{i} ")?;
+    }
+    for i in 0..exterior_dim(ambient_dim, grade) {
+      write!(&mut file, "v{i} ")?;
+    }
+    writeln!(&mut file)?;
+
     for cell in topology.cells().handle_iter() {
       let cell_coords = SimplexCoords::from_simplex_and_coords(&cell, &coords);
       let whitney = WhitneyForm::new(eigen_cochain.clone(), &topology, &coords);
-      for (vertex_coord, &ivertex) in cell_coords.vertices.coord_iter().zip(&cell.vertices) {
-        let vertex_value = whitney.eval_known_cell(cell, vertex_coord);
-        vertex_values[ivertex] += vertex_value.coeffs();
-      }
-    }
+      let cell_value = whitney.eval_known_cell(cell, &cell_coords.barycenter());
 
-    let mut file = File::create(format!("{out_path}/eigen{ieigen}.txt"))?;
-    writeln!(&mut file, "x y z vx vy vz")?;
-    for (vertex_value, vertex_coord) in vertex_values.iter().zip(coords.coord_iter()) {
-      writeln!(
-        file,
-        "{} {} {} {} {} {}",
-        vertex_coord[0],
-        vertex_coord[1],
-        vertex_coord[2],
-        vertex_value[0],
-        vertex_value[1],
-        vertex_value[2],
-      )?;
+      for coord in cell_coords.barycenter().iter() {
+        write!(file, "{coord:.6} ")?;
+      }
+      for comp in cell_value.coeffs() {
+        write!(file, "{comp:.6} ")?;
+      }
+      writeln!(file)?;
     }
   }
   Ok(())
