@@ -4,10 +4,7 @@ use {
   common::combo::{factorial, factorialf, Sign},
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm},
   manifold::{
-    geometry::coord::{
-      simplex::{is_bary_inside, SimplexCoords},
-      CoordRef,
-    },
+    geometry::coord::{simplex::SimplexCoords, CoordRef},
     topology::simplex::Simplex,
     Dim,
   },

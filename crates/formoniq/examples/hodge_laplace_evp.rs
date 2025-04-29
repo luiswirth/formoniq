@@ -1,9 +1,6 @@
-use common::combo::binomial;
-use exterior::exterior_dim;
-
 use {
-  ddf::cochain::Cochain, ddf::whitney::form::WhitneyForm, formoniq::problems::hodge_laplace,
-  manifold::geometry::coord::simplex::SimplexCoords,
+  ddf::cochain::Cochain, ddf::whitney::form::WhitneyForm, exterior::exterior_dim,
+  formoniq::problems::hodge_laplace, manifold::geometry::coord::simplex::SimplexCoords,
 };
 
 use std::{
