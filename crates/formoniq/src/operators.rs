@@ -298,14 +298,18 @@ where
       .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
       .collect();
 
-    let inner = multi_gramian(&geometry.to_metric_tensor(), grade);
+    let inner = multi_gramian(&geometry.to_metric_tensor().inverse(), grade);
 
     let mut elvec = ElVec::zeros(whitneys.len());
     for (iwhitney, whitney) in whitneys.iter().enumerate() {
       let inner_pointwise = |local: CoordRef| {
         let global = cell_coords.local2global(local);
         inner.inner(
-          self.source.at_point(&global).coeffs(),
+          self
+            .source
+            .at_point(&global)
+            .precompose_form(&cell_coords.linear_transform())
+            .coeffs(),
           whitney.at_point(local).coeffs(),
         )
       };

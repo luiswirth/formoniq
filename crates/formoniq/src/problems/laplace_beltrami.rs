@@ -1,7 +1,7 @@
 //! Module for the Poisson Equation, the prototypical ellipitic PDE.
 
 use crate::{
-  assemble,
+  assemble::{self, GalVec},
   operators::{self, DofCoeff},
 };
 
@@ -20,7 +20,7 @@ use manifold::{
 pub fn solve_laplace_beltrami_source<F>(
   topology: &Complex,
   geometry: &MeshLengths,
-  source_data: Cochain,
+  mut source_galvec: GalVec,
   boundary_data: F,
 ) -> Cochain
 where
@@ -33,16 +33,10 @@ where
     operators::LaplaceBeltramiElmat::new(dim),
   );
 
-  // TODO: Figure this out.
-  //let mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
-  //let mass = CsrMatrix::from(&mass);
-  //let mut source = mass * source_data.coeffs;
-  let mut source = source_data.coeffs;
-
-  assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source);
+  assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source_galvec);
 
   let laplace = CsrMatrix::from(&laplace);
-  let sol = FaerCholesky::new(laplace).solve(&source);
+  let sol = FaerCholesky::new(laplace).solve(&source_galvec);
   Cochain::new(0, sol)
 }
 
