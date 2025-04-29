@@ -1,4 +1,3 @@
-use ddf::cochain::cochain_projection;
 use exterior::ExteriorElement;
 use formoniq::{assemble::assemble_galvec, operators::SourceElVec};
 use manifold::geometry::coord::CoordRef;
@@ -19,6 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let _ = fs::remove_dir_all(path);
   fs::create_dir_all(path).unwrap();
 
+  let grade = 1;
   let homology_dim = 0;
 
   for dim in 2_usize..=3 {
@@ -94,18 +94,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       let (topology, coords) = box_mesh.compute_coord_complex();
       let metric = coords.to_edge_lengths(&topology);
 
-      // RHS Problem: Projection variant
-      //let source_data = cochain_projection(&laplacian_exact, &topology, &coords, None);
-
-      // RHS Problem: Quadrature variant
       let source_data = assemble_galvec(
         &topology,
         &metric,
         SourceElVec::new(&laplacian_exact, &coords, None),
       );
 
-      let (_, galsol, _) =
-        hodge_laplace::solve_hodge_laplace_source(&topology, &metric, source_data, homology_dim);
+      let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(
+        &topology,
+        &metric,
+        source_data,
+        grade,
+        homology_dim,
+      );
 
       let conv_rate = |errors: &[f64], curr: f64| {
         errors

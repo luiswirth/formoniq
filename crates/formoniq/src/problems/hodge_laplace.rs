@@ -1,5 +1,5 @@
 use crate::{
-  assemble::{assemble_galmat, GalMat},
+  assemble::{assemble_galmat, GalMat, GalVec},
   operators::HodgeMassElmat,
 };
 
@@ -14,28 +14,13 @@ use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vecto
 use itertools::Itertools;
 use std::mem;
 
-pub fn hodge_decomposition(
-  topology: &Complex,
-  geometry: &MeshLengths,
-  cochain: Cochain,
-  homology_dim: usize,
-) -> (Cochain, Cochain, Cochain) {
-  let grade = cochain.dim();
-  let (exact_potential, coexact, harmonic) =
-    solve_hodge_laplace_source(topology, geometry, cochain, homology_dim);
-  let dif = CsrMatrix::from(&topology.exterior_derivative_operator(grade - 1));
-  let exact = Cochain::new(grade, dif * exact_potential.coeffs.clone());
-  (exact, coexact, harmonic)
-}
-
 pub fn solve_hodge_laplace_source(
   topology: &Complex,
   geometry: &MeshLengths,
-  source_data: Cochain,
+  source_galvec: GalVec,
+  grade: ExteriorGrade,
   homology_dim: usize,
 ) -> (Cochain, Cochain, Cochain) {
-  let grade = source_data.dim();
-
   let harmonics = solve_hodge_laplace_harmonics(topology, geometry, grade, homology_dim);
 
   let galmats = MixedGalmats::compute(topology, geometry, grade);
@@ -65,22 +50,16 @@ pub fn solve_hodge_laplace_source(
     galmat.push(r, c, v);
   }
 
-  let galmat = CsrMatrix::from(&galmat);
-
-  // RHS Problem: Projection variant
-  //let galvec = mass_u * source_data.coeffs;
-
-  // RHS Problem: Quadrature variant
-  let galvec = source_data.coeffs;
+  let system_matrix = CsrMatrix::from(&galmat);
 
   #[allow(clippy::toplevel_ref_arg)]
-  let galvec = na::stack![
+  let rhs = na::stack![
     Vector::zeros(sigma_len);
-    galvec;
+    source_galvec;
     Vector::zeros(harmonics.ncols());
   ];
 
-  let galsol = petsc_saddle_point(&galmat, &galvec);
+  let galsol = petsc_saddle_point(&system_matrix, &rhs);
   let sigma = Cochain::new(grade - 1, galsol.view_range(..sigma_len, 0).into_owned());
   let u = Cochain::new(
     grade,

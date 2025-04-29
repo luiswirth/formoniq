@@ -4,7 +4,6 @@ use common::{
   linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector},
   util,
 };
-use ddf::cochain::Cochain;
 use itertools::{multizip, Itertools};
 use manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex};
 
@@ -12,8 +11,6 @@ use rayon::prelude::*;
 use std::collections::HashSet;
 
 pub type GalMat = CooMatrix;
-pub type GalVec = Vector;
-
 /// Assembly algorithm for the Galerkin Matrix.
 pub fn assemble_galmat(
   topology: &Complex,
@@ -55,12 +52,13 @@ pub fn assemble_galmat(
   GalMat::try_from_triplets(nsimps_row, nsimps_col, rows, cols, values).unwrap()
 }
 
+pub type GalVec = Vector;
 /// Assembly algorithm for the Galerkin Vector.
 pub fn assemble_galvec(
   topology: &Complex,
   geometry: &MeshLengths,
   elvec: impl ElVecProvider,
-) -> Cochain {
+) -> GalVec {
   let grade = elvec.grade();
   let nsimps = topology.skeleton(grade).len();
 
@@ -89,8 +87,7 @@ pub fn assemble_galvec(
   for (irow, val) in entries {
     galvec[irow] += val;
   }
-
-  Cochain::new(grade, galvec)
+  galvec
 }
 
 pub fn drop_boundary_dofs_galmat(complex: &Complex, galmat: &mut GalMat) {

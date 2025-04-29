@@ -124,8 +124,8 @@ pub fn exterior_terms(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = Ex
     .map(move |indices| ExteriorTerm::new(indices, dim))
 }
 
-/// Construct Gramian on lexicographically ordered standard k-element standard basis from
-/// Gramian on single elements.
+/// Construct Gramian on lexicographically ordered standard k-element standard
+/// basis from Gramian on single elements.
 pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian {
   let dim = single_gramian.dim();
   let bases: Vec<_> = exterior_bases(dim, grade).collect();
