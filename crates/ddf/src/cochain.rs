@@ -58,8 +58,8 @@ impl Cochain {
     self.coeffs().len() == 0
   }
 
-  pub fn dif(&self, complex: &Complex) -> Self {
-    let dif_operator = CsrMatrix::from(&complex.exterior_derivative_operator(self.dim()));
+  pub fn dif(&self, topology: &Complex) -> Self {
+    let dif_operator = CsrMatrix::from(&topology.exterior_derivative_operator(self.dim()));
     Cochain::new(self.dim() + 1, dif_operator * self.coeffs())
   }
 
