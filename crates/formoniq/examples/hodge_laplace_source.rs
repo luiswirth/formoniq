@@ -1,13 +1,10 @@
-use exterior::ExteriorElement;
-use formoniq::{assemble::assemble_galvec, operators::SourceElVec};
-use manifold::geometry::coord::CoordRef;
-
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  exterior::field::DiffFormClosure,
-  formoniq::fe::fe_l2_error,
-  formoniq::problems::hodge_laplace,
-  manifold::gen::cartesian::CartesianMeshInfo,
+  exterior::{field::DiffFormClosure, ExteriorElement},
+  formoniq::{
+    assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,
+  },
+  manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef},
 };
 
 use std::{f64::consts::PI, fs};
@@ -80,11 +77,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!(
       "| {:>2} | {:8} | {:>7} | {:>8} | {:>7} |",
-      "k", "L2 err", "L2 conv", "H1 err", "H1 conv",
+      "k", "L2 err", "L2 conv", "Hd err", "Hd conv",
     );
 
     let mut errors_l2 = Vec::new();
-    let mut errors_h1 = Vec::new();
+    let mut errors_hd = Vec::new();
     for irefine in 0..=(15 / dim as u32) {
       let refine_path = &format!("{path}/refine{irefine}");
       fs::create_dir_all(refine_path).unwrap();
@@ -120,13 +117,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       errors_l2.push(error_l2);
 
       let dif_galsol = galsol.dif(&topology);
-      let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
-      let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
-      errors_h1.push(error_h1);
+      let error_hd = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
+      let conv_rate_hd = conv_rate(&errors_hd, error_hd);
+      errors_hd.push(error_hd);
 
       println!(
         "| {:>2} | {:<8.2e} | {:>7.2} | {:<8.2e} | {:>7.2} |",
-        irefine, error_l2, conv_rate_l2, error_h1, conv_rate_h1
+        irefine, error_l2, conv_rate_l2, error_hd, conv_rate_hd
       );
     }
   }
