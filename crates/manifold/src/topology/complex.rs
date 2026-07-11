@@ -5,7 +5,7 @@ use super::{
 };
 use crate::Dim;
 
-use common::linalg::nalgebra::{CooMatrix, Matrix};
+use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, Matrix};
 
 use itertools::Itertools;
 
@@ -138,6 +138,14 @@ impl Complex {
     mat
   }
 
+  /// $dif^k: Delta^k -> Delta^(k+1)$
+  ///
+  /// The coboundary operator, which is the discrete exterior derivative
+  /// on cochains. It is the transpose of the boundary operator.
+  pub fn coboundary_operator(&self, dim: Dim) -> CooMatrix {
+    self.boundary_operator(dim + 1).transpose()
+  }
+
   /// Dimension of the k-th homology group.
   ///
   /// k-th Betti number.
@@ -210,9 +218,21 @@ impl Complex {
 
 #[cfg(test)]
 mod test {
-  use crate::topology::simplex::{nsubsequence_simplices, Simplex};
+  use crate::topology::simplex::{nsubsequence_simplices, standard_boundary_operator, Simplex};
 
   use super::*;
+
+  #[test]
+  fn standard_boundary_operator_agrees_with_complex() {
+    for dim in 1..=4 {
+      let complex = Complex::standard(dim);
+      for k in 0..=dim {
+        let combinatorial = standard_boundary_operator(dim, k);
+        let from_complex = Matrix::from(&complex.boundary_operator(k));
+        assert_eq!(combinatorial, from_complex);
+      }
+    }
+  }
 
   #[test]
   fn incidence() {

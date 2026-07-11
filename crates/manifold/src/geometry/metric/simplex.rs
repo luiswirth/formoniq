@@ -172,6 +172,11 @@ impl SimplexLengths {
     Self::new(lengths, dim)
   }
 
+  /// Inverse metric tensor: the induced inner product on covectors.
+  pub fn inverse_metric_tensor(&self) -> Gramian {
+    self.to_metric_tensor().inverse()
+  }
+
   /// Regge Calculus
   pub fn to_metric_tensor(&self) -> Gramian {
     let mut metric = Matrix::zeros(self.dim(), self.dim());

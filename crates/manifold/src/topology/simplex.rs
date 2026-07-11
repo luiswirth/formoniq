@@ -1,4 +1,7 @@
-use common::combo::{binomial, nsubpermutations, sort_signed, Sign};
+use common::{
+  combo::{binomial, nsubpermutations, sort_signed, Sign},
+  linalg::nalgebra::Matrix,
+};
 
 use super::VertexIdx;
 use crate::Dim;
@@ -36,12 +39,6 @@ impl Simplex {
   }
   pub fn is_permutation_of(&self, other: &Self) -> bool {
     self.set_eq(other)
-  }
-  pub fn permutations(&self) -> impl Iterator<Item = SignedSimplex> {
-    self
-      .subsets(self.dim())
-      .enumerate()
-      .map(|(i, simp)| SignedSimplex::new(simp, Sign::from_parity(i)))
   }
 
   pub fn is_subset_of(&self, other: &Self) -> bool {
@@ -192,6 +189,28 @@ impl SignedSimplex {
 
 pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Simplex> {
   Simplex::standard(dim_cell).subsequences(dim_sub)
+}
+
+/// $diff^k: Delta_k (Delta^n) -> Delta_(k-1) (Delta^n)$
+///
+/// Matrix of the boundary operator between the lexicographically ordered
+/// subsimplices of the standard `dim_cell`-simplex.
+/// Purely combinatorial: no complex data structure needed.
+pub fn standard_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
+  let sups: Vec<_> = standard_subsimps(dim_cell, dim_simp).collect();
+  if dim_simp == 0 {
+    return Matrix::zeros(0, sups.len());
+  }
+
+  let subs: Vec<_> = standard_subsimps(dim_cell, dim_simp - 1).collect();
+  let mut mat = Matrix::zeros(subs.len(), sups.len());
+  for (isup, sup) in sups.iter().enumerate() {
+    for sub in sup.boundary() {
+      let isub = subs.iter().position(|s| *s == sub.simplex).unwrap();
+      mat[(isub, isup)] = sub.sign.as_f64();
+    }
+  }
+  mat
 }
 pub fn graded_subsimps(dim_cell: Dim) -> impl Iterator<Item = impl Iterator<Item = Simplex>> {
   (0..=dim_cell).map(move |d| standard_subsimps(dim_cell, d))
