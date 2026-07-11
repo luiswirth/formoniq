@@ -3,7 +3,6 @@ use crate::{Dim, ExteriorElement, ExteriorGrade};
 use common::{
   combo::{binomial, lex_rank, sort_signed, Sign},
   gramian::Gramian,
-  linalg::nalgebra::Matrix,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -106,31 +105,11 @@ pub fn exterior_bases(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = Ex
 
 /// Construct Gramian on lexicographically ordered standard k-element standard
 /// basis from Gramian on single elements.
+///
+/// The inner product on $Lambda^k$ is the exterior power of the inner product,
+/// $inner(e_I, e_J)_(Lambda^k) = det [inner(e_i, e_j)]_(i in I, j in J)$.
 pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian {
-  let dim = single_gramian.dim();
-  let bases: Vec<_> = exterior_bases(dim, grade).collect();
-
-  let mut multi_gramian = Matrix::zeros(bases.len(), bases.len());
-  let mut multi_basis_mat = Matrix::zeros(grade, grade);
-
-  for icomb in 0..bases.len() {
-    let combi = &bases[icomb];
-    for jcomb in icomb..bases.len() {
-      let combj = &bases[jcomb];
-
-      for iicomb in 0..grade {
-        let combii = combi[iicomb];
-        for jjcomb in 0..grade {
-          let combjj = combj[jjcomb];
-          multi_basis_mat[(iicomb, jjcomb)] = single_gramian[(combii, combjj)];
-        }
-      }
-      let det = multi_basis_mat.determinant();
-      multi_gramian[(icomb, jcomb)] = det;
-      multi_gramian[(jcomb, icomb)] = det;
-    }
-  }
-  Gramian::new_unchecked(multi_gramian)
+  Gramian::new_unchecked(crate::exterior_power(single_gramian.matrix(), grade))
 }
 
 #[cfg(test)]
