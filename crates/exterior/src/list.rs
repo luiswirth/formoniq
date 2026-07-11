@@ -34,18 +34,12 @@ impl ExteriorElementList {
 
 impl FromIterator<ExteriorElement> for ExteriorElementList {
   fn from_iter<T: IntoIterator<Item = ExteriorElement>>(iter: T) -> Self {
-    let mut iter = iter.into_iter();
-    let first = iter.next().unwrap();
+    let elements: Vec<_> = iter.into_iter().collect();
+    let first = elements.first().expect("List must not be empty.");
     let dim = first.dim();
     let grade = first.grade();
-    let mut coeffs = Matrix::zeros(first.coeffs.len(), 1);
-    coeffs.set_column(0, &first.coeffs);
-    for (i, elem) in iter.enumerate() {
-      assert!(elem.dim() == dim);
-      assert!(elem.grade() == grade);
-      coeffs = coeffs.insert_column(i + 1, 0.0);
-      coeffs.set_column(i + 1, &elem.coeffs);
-    }
-    Self::new(coeffs, dim, grade)
+    assert!(elements.iter().all(|e| e.dim() == dim && e.grade() == grade));
+    let columns: Vec<_> = elements.iter().map(|e| e.coeffs().column(0)).collect();
+    Self::new(Matrix::from_columns(&columns), dim, grade)
   }
 }

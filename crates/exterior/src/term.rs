@@ -86,23 +86,8 @@ impl ExteriorTerm {
     Self::new(indices, dim)
   }
 
-  pub fn from_graded_lex_rank(dim: Dim, grade: ExteriorGrade, mut rank: usize) -> Self {
-    rank -= Self::graded_lex_rank_offset(dim, grade);
-    Self::from_lex_rank(dim, grade, rank)
-  }
-
   pub fn lex_rank(&self) -> usize {
     lex_rank(&self.indices, self.dim())
-  }
-
-  pub fn graded_lex_rank(&self) -> usize {
-    let dim = self.dim();
-    let grade = self.grade();
-    Self::graded_lex_rank_offset(dim, grade) + self.lex_rank()
-  }
-
-  fn graded_lex_rank_offset(dim: usize, grade: usize) -> usize {
-    (0..grade).map(|s| binomial(dim, s)).sum()
   }
 }
 
@@ -116,11 +101,6 @@ impl std::ops::Mul<ExteriorTerm> for f64 {
 
 pub fn exterior_bases(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = ExteriorTerm> {
   itertools::Itertools::combinations(0..dim, grade)
-    .map(move |indices| ExteriorTerm::new(indices, dim))
-}
-
-pub fn exterior_terms(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = ExteriorTerm> {
-  itertools::Itertools::permutations(0..dim, grade)
     .map(move |indices| ExteriorTerm::new(indices, dim))
 }
 
