@@ -106,19 +106,44 @@ impl Complex {
       .collect()
   }
 
-  /// The vertices that lie on the boundary of the mesh.
-  /// No particular order of vertices.
-  pub fn boundary_vertices(&self) -> Vec<usize> {
+  /// The dim-simplices that lie on the boundary of the mesh:
+  /// the subsimplices of the boundary facets.
+  ///
+  /// These span the boundary subcomplex; their complement spans the
+  /// relative cochain complex of the pair $(K, diff K)$.
+  pub fn boundary_simplices(&self, dim: Dim) -> Vec<SimplexIdx> {
     self
       .boundary_facets()
       .into_iter()
-      .flat_map(|facet| facet.handle(self).vertices.clone())
+      .flat_map(|facet| {
+        facet
+          .handle(self)
+          .mesh_subsimps(dim)
+          .map(|sub| sub.idx())
+          .collect::<Vec<_>>()
+      })
       .unique()
+      .sorted_by_key(|idx| idx.kidx)
+      .collect()
+  }
+
+  /// The vertices that lie on the boundary of the mesh.
+  pub fn boundary_vertices(&self) -> Vec<usize> {
+    self
+      .boundary_simplices(0)
+      .into_iter()
+      .map(|idx| idx.kidx)
       .collect()
   }
 
   /// $diff^k: Delta_k -> Delta_(k-1)$
+  ///
+  /// The chain complex extends by zero: outside $0 <= k <= n$ the operator
+  /// maps to/from the zero space.
   pub fn boundary_operator(&self, dim: Dim) -> CooMatrix {
+    if dim == self.dim() + 1 {
+      return CooMatrix::zeros(self.nsimplices(self.dim()), 0);
+    }
     let sups = &self.skeleton(dim);
 
     if dim == 0 {
@@ -158,7 +183,13 @@ impl Complex {
 
     const RANK_TOL: f64 = 1e-12;
 
-    let dim_image = |op: &Matrix| -> usize { op.rank(RANK_TOL) };
+    let dim_image = |op: &Matrix| -> usize {
+      if op.is_empty() {
+        0
+      } else {
+        op.rank(RANK_TOL)
+      }
+    };
     let dim_kernel = |op: &Matrix| -> usize { op.ncols() - dim_image(op) };
 
     let dim_cycles = dim_kernel(&boundary_this);
@@ -221,6 +252,36 @@ mod test {
   use crate::topology::simplex::{nsubsequence_simplices, standard_boundary_operator, Simplex};
 
   use super::*;
+
+  /// $dif compose dif = 0$: the defining law of a cochain complex.
+  #[test]
+  fn coboundary_squares_to_zero() {
+    use crate::gen::cartesian::CartesianMeshInfo;
+    use common::linalg::nalgebra::CsrMatrix;
+
+    for dim in 1..=3 {
+      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      for k in 0..dim.saturating_sub(1) {
+        let dif_k = CsrMatrix::from(&topology.coboundary_operator(k));
+        let dif_kk = CsrMatrix::from(&topology.coboundary_operator(k + 1));
+        let dif_dif = dif_kk * dif_k;
+        assert!(dif_dif.values().iter().all(|&v| v == 0.0));
+      }
+    }
+  }
+
+  #[test]
+  fn boundary_simplices_facets_are_boundary_facets() {
+    for dim in 1..=3 {
+      let (topology, _) =
+        crate::gen::cartesian::CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      assert_eq!(topology.boundary_simplices(dim - 1), {
+        let mut facets = topology.boundary_facets();
+        facets.sort_by_key(|idx| idx.kidx);
+        facets
+      });
+    }
+  }
 
   #[test]
   fn standard_boundary_operator_agrees_with_complex() {
