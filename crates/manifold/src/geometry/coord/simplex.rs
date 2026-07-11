@@ -190,11 +190,14 @@ pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
 }
 
 impl SimplexCoords {
-  /// Coordinate subsequence simplices.
+  /// Coordinate subsimplices.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
-    Simplex::standard(self.dim_intrinsic())
-      .subsequences(sub_dim)
-      .map(|edge| Self::from_simplex_and_coords(&edge, &self.vertices))
+    let simp = Simplex::standard(self.dim_intrinsic());
+    simp
+      .subsimps(sub_dim)
+      .collect::<Vec<_>>()
+      .into_iter()
+      .map(|sub| Self::from_simplex_and_coords(&sub, &self.vertices))
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexCoords> + use<'_> {
     self.subsimps(1)
