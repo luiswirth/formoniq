@@ -3,7 +3,7 @@
 
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  ddf::cochain::cochain_projection,
+  ddf::derham::derham_map,
   exterior::field::DiffFormClosure,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::laplace_beltrami,
@@ -51,7 +51,7 @@ fn main() {
         SourceElVec::new(&laplacian_exact, &coords, None),
       );
 
-      let solution_projected = cochain_projection(&solution_exact, &topology, &coords, None);
+      let solution_projected = derham_map(&solution_exact, &topology, &coords, None);
       let boundary_data = |ivertex| solution_projected[ivertex];
 
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(

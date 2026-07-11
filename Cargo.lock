@@ -145,6 +145,7 @@ dependencies = [
 name = "ddf"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "common",
  "exterior",
  "manifold",
