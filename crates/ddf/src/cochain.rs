@@ -1,22 +1,13 @@
 use common::linalg::nalgebra::{CsrMatrix, Vector};
-use manifold::{
-  geometry::{
-    coord::{mesh::MeshCoords, quadrature::SimplexQuadRule},
-    refsimp_vol,
-  },
-  topology::skeleton::Skeleton,
-};
-
-use crate::CoordSimplexExt;
 
 use {
-  exterior::{field::DifferentialMultiForm, ExteriorGrade},
+  exterior::ExteriorGrade,
   manifold::{
-    geometry::coord::{simplex::SimplexCoords, CoordRef},
     topology::{
       complex::Complex,
       handle::{SimplexHandle, SimplexIdx},
     },
+    topology::skeleton::Skeleton,
   },
 };
 
@@ -141,42 +132,3 @@ impl std::ops::Sub for Cochain {
   }
 }
 
-/// Discretize continuous coordinate-based differential k-form into
-/// discrete k-cochain on CoordComplex via integration over k-simplex.
-pub fn cochain_projection(
-  form: &impl DifferentialMultiForm,
-  topology: &Complex,
-  coords: &MeshCoords,
-  qr: Option<&SimplexQuadRule>,
-) -> Cochain {
-  let cochain = topology
-    .skeleton(form.grade())
-    .handle_iter()
-    .map(|simp| SimplexCoords::from_simplex_and_coords(&simp, coords))
-    .map(|simp| integrate_form_simplex(form, &simp, qr))
-    .collect::<Vec<_>>()
-    .into();
-  Cochain::new(form.grade(), cochain)
-}
-
-/// Approximates the integral of a differential k-form over a k-simplex.
-pub fn integrate_form_simplex(
-  form: &impl DifferentialMultiForm,
-  simplex: &SimplexCoords,
-  qr: Option<&SimplexQuadRule>,
-) -> f64 {
-  let dim_intrinsic = simplex.dim_intrinsic();
-
-  let multivector = simplex.spanning_multivector();
-  let f = |coord: CoordRef| {
-    form
-      .at_point(simplex.local2global(coord).as_view())
-      .apply_form_to_vector(&multivector)
-  };
-  if let Some(qr) = qr {
-    qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
-  } else {
-    let qr = &SimplexQuadRule::barycentric(dim_intrinsic);
-    qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
-  }
-}
