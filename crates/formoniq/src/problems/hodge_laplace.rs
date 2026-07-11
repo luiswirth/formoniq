@@ -1,13 +1,12 @@
 use crate::{
-  assemble::{assemble_galmat, GalMat, GalVec},
-  operators::HodgeMassElmat,
+  assemble::{GalMat, GalVec},
+  whitney_complex::WhitneyComplex,
 };
 
 use {
   common::linalg::petsc::{petsc_ghiep, petsc_saddle_point},
   ddf::cochain::Cochain,
   exterior::ExteriorGrade,
-  manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
 };
 
 use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
@@ -15,15 +14,14 @@ use itertools::Itertools;
 use std::mem;
 
 pub fn solve_hodge_laplace_source(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   source_galvec: GalVec,
   grade: ExteriorGrade,
   homology_dim: usize,
 ) -> (Cochain, Cochain, Cochain) {
-  let harmonics = solve_hodge_laplace_harmonics(topology, geometry, grade, homology_dim);
+  let harmonics = solve_hodge_laplace_harmonics(fes, grade, homology_dim);
 
-  let galmats = MixedGalmats::compute(topology, geometry, grade);
+  let galmats = MixedGalmats::compute(fes, grade);
 
   let mass_u = CsrMatrix::from(&galmats.mass_u);
   let mass_harmonics = &mass_u * &harmonics;
@@ -75,28 +73,26 @@ pub fn solve_hodge_laplace_source(
 }
 
 pub fn solve_hodge_laplace_harmonics(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   grade: ExteriorGrade,
   homology_dim: usize,
 ) -> Matrix {
   if homology_dim == 0 {
-    let nwhitneys = topology.nsimplices(grade);
+    let nwhitneys = fes.ndofs(grade);
     return Matrix::zeros(nwhitneys, 0);
   }
 
-  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(topology, geometry, grade, homology_dim);
+  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(fes, grade, homology_dim);
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   harmonics
 }
 
 pub fn solve_hodge_laplace_evp(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   grade: ExteriorGrade,
   neigen_values: usize,
 ) -> (Vector, Matrix, Matrix) {
-  let galmats = MixedGalmats::compute(topology, geometry, grade);
+  let galmats = MixedGalmats::compute(fes, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
 
@@ -124,18 +120,16 @@ pub struct MixedGalmats {
   mass_u: GalMat,
 }
 impl MixedGalmats {
-  pub fn compute(topology: &Complex, geometry: &MeshLengths, grade: ExteriorGrade) -> Self {
-    let dim = topology.dim();
-    assert!(grade <= dim);
+  pub fn compute(fes: WhitneyComplex, grade: ExteriorGrade) -> Self {
+    assert!(grade <= fes.dim());
 
-    let mass_u = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade));
+    let mass_u = fes.mass(grade);
     let mass_u_csr = CsrMatrix::from(&mass_u);
 
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade - 1));
+      let mass_sigma = fes.mass(grade - 1);
 
-      let exdif_sigma = topology.coboundary_operator(grade - 1);
-      let exdif_sigma = CsrMatrix::from(&exdif_sigma);
+      let exdif_sigma = fes.dif(grade - 1);
 
       let dif_sigma = &mass_u_csr * &exdif_sigma;
       let dif_sigma = CooMatrix::from(&dif_sigma);
@@ -148,13 +142,8 @@ impl MixedGalmats {
       (GalMat::new(0, 0), GalMat::new(0, 0), GalMat::new(0, 0))
     };
 
-    let codifdif_u = if grade < topology.dim() {
-      let mass_plus = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade + 1));
-      let mass_plus = CsrMatrix::from(&mass_plus);
-      let exdif_u = topology.coboundary_operator(grade);
-      let exdif_u = CsrMatrix::from(&exdif_u);
-      let codifdif_u = exdif_u.transpose() * mass_plus * exdif_u;
-      CooMatrix::from(&codifdif_u)
+    let codifdif_u = if grade < fes.dim() {
+      fes.codif_dif(grade)
     } else {
       GalMat::new(0, 0)
     };
