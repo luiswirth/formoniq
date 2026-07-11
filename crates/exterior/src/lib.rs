@@ -280,39 +280,6 @@ impl MultiForm {
   }
 }
 
-pub struct SimpleWedge {
-  factors: Matrix,
-}
-
-impl SimpleWedge {
-  pub fn new(factors: Matrix) -> Self {
-    Self { factors }
-  }
-  pub fn det(&self) -> f64 {
-    self.factors.determinant()
-  }
-  pub fn vol(&self) -> f64 {
-    self.det().abs()
-  }
-}
-
-pub type VectorWedge = SimpleWedge;
-impl VectorWedge {}
-
-pub type CovectorWedge = SimpleWedge;
-impl CovectorWedge {
-  pub fn evaluate(&self, vectors: &VectorWedge) -> f64 {
-    let covectors = self;
-    let mut mat = Matrix::zeros(covectors.factors.len(), vectors.factors.len());
-    for (i, covector) in covectors.factors.column_iter().enumerate() {
-      for (j, vector) in vectors.factors.column_iter().enumerate() {
-        mat[(i, j)] = covector.dot(&vector);
-      }
-    }
-    mat.determinant()
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
