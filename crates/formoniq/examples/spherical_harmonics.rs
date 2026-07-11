@@ -1,6 +1,6 @@
 use std::fs;
 
-use formoniq::problems::laplace_beltrami;
+use formoniq::{problems::laplace_beltrami, whitney_complex::WhitneyComplex};
 use manifold::dim3::mesh_sphere_surface;
 
 fn main() {
@@ -13,7 +13,7 @@ fn main() {
   let metric = coords.to_edge_lengths(&topology);
 
   let (eigenvals, eigenfuncs) =
-    laplace_beltrami::solve_laplace_beltrami_evp(&topology, &metric, 10);
+    laplace_beltrami::solve_laplace_beltrami_evp(WhitneyComplex::new(&topology, &metric), 10);
 
   for (i, (&eigenval, eigenfunc)) in eigenvals.iter().zip(eigenfuncs).enumerate() {
     println!("eigenval={eigenval:.2}");

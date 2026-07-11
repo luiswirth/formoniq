@@ -2,7 +2,8 @@
 
 use crate::{
   assemble::{self, GalVec},
-  operators::{self, DofCoeff},
+  operators::DofCoeff,
+  whitney_complex::WhitneyComplex,
 };
 
 use common::linalg::{
@@ -11,29 +12,25 @@ use common::linalg::{
   petsc::petsc_ghiep,
 };
 use ddf::cochain::Cochain;
-use manifold::{
-  geometry::metric::mesh::MeshLengths,
-  topology::{complex::Complex, handle::KSimplexIdx},
-};
+use manifold::topology::handle::KSimplexIdx;
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
 pub fn solve_laplace_beltrami_source<F>(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   mut source_galvec: GalVec,
   boundary_data: F,
 ) -> Cochain
 where
   F: Fn(KSimplexIdx) -> DofCoeff,
 {
-  let dim = topology.dim();
-  let mut laplace = assemble::assemble_galmat(
-    topology,
-    geometry,
-    operators::LaplaceBeltramiElmat::new(dim),
-  );
+  let mut laplace = fes.codif_dif(0);
 
-  assemble::enforce_dirichlet_bc(topology, boundary_data, &mut laplace, &mut source_galvec);
+  assemble::enforce_dirichlet_bc(
+    fes.topology(),
+    boundary_data,
+    &mut laplace,
+    &mut source_galvec,
+  );
 
   let laplace = CsrMatrix::from(&laplace);
   let sol = FaerCholesky::new(laplace).solve(&source_galvec);
@@ -42,17 +39,11 @@ where
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   neigen_values: usize,
 ) -> (Vector, Vec<Cochain>) {
-  let dim = topology.dim();
-  let laplace_galmat = assemble::assemble_galmat(
-    topology,
-    geometry,
-    operators::LaplaceBeltramiElmat::new(dim),
-  );
-  let mass_galmat = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
+  let laplace_galmat = fes.codif_dif(0);
+  let mass_galmat = fes.mass(0);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(
     &CsrMatrix::from(&laplace_galmat),

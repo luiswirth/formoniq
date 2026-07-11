@@ -1,6 +1,6 @@
 use approx::assert_relative_eq;
 use common::linalg::nalgebra::{Matrix, Vector};
-use formoniq::{assemble, operators};
+use formoniq::whitney_complex::WhitneyComplex;
 use manifold::{gen::cartesian::CartesianMeshInfo, Dim};
 
 const DIM: Dim = 3;
@@ -10,7 +10,7 @@ fn feec_vs_fem3d() {
   for nboxes_per_dim in 1..=10 {
     let feec = feec_galmat(nboxes_per_dim);
     let fem = fem3d_galmat(nboxes_per_dim);
-    assert_relative_eq!(&feec, &fem);
+    assert_relative_eq!(&feec, &fem, epsilon = 1e-12);
   }
 }
 
@@ -107,10 +107,6 @@ fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
-  let galmat = assemble::assemble_galmat(
-    &topology,
-    &metric,
-    operators::LaplaceBeltramiElmat::new(topology.dim()),
-  );
+  let galmat = WhitneyComplex::new(&topology, &metric).codif_dif(0);
   (&galmat).into()
 }

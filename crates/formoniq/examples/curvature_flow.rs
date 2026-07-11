@@ -4,7 +4,7 @@ use common::linalg::{
   faer::FaerCholesky,
   nalgebra::{CsrMatrix, Matrix, Vector},
 };
-use formoniq::{assemble, operators};
+use formoniq::{assemble, whitney_complex::WhitneyComplex};
 use manifold::geometry::coord::mesh::MeshCoords;
 
 #[allow(unused_imports)]
@@ -22,7 +22,6 @@ fn main() {
   let (topology, coords) = surface.into_coord_complex();
   let mut metric = coords.to_edge_lengths(&topology);
   let nvertices = topology.vertices().len();
-  let dim = topology.dim();
 
   let mut coords_list = vec![coords];
 
@@ -33,12 +32,9 @@ fn main() {
   for istep in 0..nsteps {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
-    let laplace = assemble::assemble_galmat(
-      &topology,
-      &metric,
-      operators::LaplaceBeltramiElmat::new(dim),
-    );
-    let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
+    let fes = WhitneyComplex::new(&topology, &metric);
+    let laplace = fes.codif_dif(0);
+    let mass = fes.mass(0);
     let source = Vector::zeros(nvertices);
 
     let coords_initial = coords_list.first().unwrap();

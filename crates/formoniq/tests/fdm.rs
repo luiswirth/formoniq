@@ -23,10 +23,7 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use common::linalg::nalgebra::{kronecker_sum, matrix_from_const_diagonals, Matrix, Vector};
-use formoniq::{
-  assemble,
-  operators::{self},
-};
+use formoniq::whitney_complex::WhitneyComplex;
 use manifold::{gen::cartesian::CartesianMeshInfo, Dim};
 
 use std::sync::LazyLock;
@@ -201,14 +198,9 @@ fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
   let (topology, coords) = box_mesh.compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
-  let galmat = assemble::assemble_galmat(
-    &topology,
-    &metric,
-    operators::LaplaceBeltramiElmat::new(dim),
-  );
-  let mut galmat = Matrix::from(&galmat);
-  let mass = assemble::assemble_galmat(&topology, &metric, operators::ScalarMassElmat);
-  let mass = Matrix::from(&mass);
+  let fes = WhitneyComplex::new(&topology, &metric);
+  let mut galmat = Matrix::from(&fes.codif_dif(0));
+  let mass = Matrix::from(&fes.mass(0));
   let mut galvec = mass * Vector::from_element(topology.vertices().len(), 1.0);
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat
