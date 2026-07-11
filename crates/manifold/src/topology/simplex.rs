@@ -1,18 +1,41 @@
 use common::{
-  combo::{binomial, nsubpermutations, sort_signed, Sign},
+  combo::{binomial, combinations, Combination, Sign},
   linalg::nalgebra::Matrix,
 };
 
 use super::VertexIdx;
 use crate::Dim;
 
+/// An abstract simplex: a strictly increasing list of vertex indices.
+///
+/// Always the canonical (sorted) representative of its vertex set;
+/// orientation is not encoded in the ordering but carried explicitly as a
+/// [`Sign`] (see [`SignedSimplex`]).
+///
+/// Combinatorially, a mesh simplex is a monotone injection of the local
+/// positions ${0, dots, k}$ into the vertex alphabet: all sign combinatorics
+/// (boundary, subsimplices) happens positionally in [`Combination`] and is
+/// mapped through the vertex list by [`Self::select`].
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Simplex {
   pub vertices: Vec<VertexIdx>,
 }
 impl Simplex {
   pub fn new(vertices: Vec<VertexIdx>) -> Self {
+    assert!(
+      vertices.windows(2).all(|w| w[0] < w[1]),
+      "Simplex vertices must be strictly increasing."
+    );
     Self { vertices }
+  }
+  /// Canonicalize an arbitrarily ordered vertex list into the sign of its
+  /// permutation and the sorted simplex.
+  ///
+  /// Panics on repeated vertices (degenerate simplex).
+  pub fn from_word(mut vertices: Vec<VertexIdx>) -> (Sign, Self) {
+    let sign = common::combo::sort_signed(&mut vertices);
+    let simplex = Self::new(vertices);
+    (sign, simplex)
   }
   pub fn standard(dim: Dim) -> Self {
     Self::new((0..dim + 1).collect())
@@ -31,69 +54,59 @@ impl Simplex {
   pub fn dim(&self) -> Dim {
     self.nvertices() - 1
   }
+  pub fn contains(&self, ivertex: VertexIdx) -> bool {
+    self.vertices.binary_search(&ivertex).is_ok()
+  }
 }
 
+/// The positional combinatorics, mapped through the vertex alphabet.
 impl Simplex {
-  pub fn set_eq(&self, other: &Self) -> bool {
-    self.clone().sorted() == other.clone().sorted()
-  }
-  pub fn is_permutation_of(&self, other: &Self) -> bool {
-    self.set_eq(other)
-  }
-
-  pub fn is_subset_of(&self, other: &Self) -> bool {
-    self.iter().all(|v| other.contains(v))
-  }
-  pub fn is_superset_of(&self, other: &Self) -> bool {
-    other.is_subset_of(self)
-  }
-  pub fn subsets(&self, sub_dim: Dim) -> impl Iterator<Item = Self> {
-    itertools::Itertools::permutations(self.clone().into_iter(), sub_dim + 1).map(Self::from)
+  /// The subsimplex at the given positions: the image of a combination of
+  /// positions under the monotone vertex map.
+  pub fn select(&self, positions: Combination) -> Self {
+    Self::new(positions.iter().map(|p| self.vertices[p]).collect())
   }
 
-  pub fn is_subsequence_of(&self, sup: &Self) -> bool {
+  /// The local positions of this simplex's vertices within a supersimplex.
+  pub fn relative_to(&self, sup: &Self) -> Combination {
+    Combination::from_increasing(self.iter().map(|v| {
+      sup
+        .vertices
+        .binary_search(&v)
+        .expect("Not a subsimplex.")
+    }))
+  }
+
+  pub fn is_subsimplex_of(&self, sup: &Self) -> bool {
     let mut sup_iter = sup.iter();
-    self.iter().all(|item| sup_iter.any(|x| x == item))
+    self.iter().all(|v| sup_iter.any(|s| s == v))
   }
-  pub fn is_supersequence_of(&self, other: &Self) -> bool {
-    other.is_subsequence_of(self)
-  }
-  /// The subsequence-simplices of this simplex.
-  ///
-  /// These are ordered lexicographically w.r.t. the local vertex indices.
-  pub fn subsequences(&self, sub_dim: Dim) -> impl Iterator<Item = Self> {
-    itertools::Itertools::combinations(self.clone().into_iter(), sub_dim + 1).map(Self::from)
-  }
-  pub fn boundary(&self) -> impl Iterator<Item = SignedSimplex> {
-    let mut sign = Sign::from_parity(self.nvertices() - 1);
-    self.subsequences(self.dim() - 1).map(move |simp| {
-      let this_sign = sign;
-      sign.flip();
-      SignedSimplex::new(simp, this_sign)
-    })
-  }
-  pub fn supersequences(
-    &self,
-    super_dim: Dim,
-    root: &Self,
-  ) -> impl Iterator<Item = Self> + use<'_> {
-    root
-      .subsequences(super_dim)
-      .filter(|sup| self.is_subsequence_of(sup))
+  pub fn is_supersimplex_of(&self, sub: &Self) -> bool {
+    sub.is_subsimplex_of(self)
   }
 
-  /// Computes local vertex numbers relative to sup.
-  pub fn relative_to(&self, sup: &Self) -> Simplex {
-    let local = self
-      .iter()
-      .map(|iglobal| {
-        sup
-          .iter()
-          .position(|iother| iglobal == iother)
-          .expect("Not a subset.")
-      })
-      .collect();
-    Simplex::new(local)
+  /// The subsimplices of the given dimension, in colexicographic order of
+  /// their local positions.
+  pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = Self> + use<'_> {
+    combinations(self.nvertices(), sub_dim + 1).map(|positions| self.select(positions))
+  }
+
+  /// The boundary $diff sigma = sum_i (-1)^i (sigma without v_i)$:
+  /// alternating positional deletions.
+  pub fn boundary(&self) -> impl Iterator<Item = SignedSimplex> + use<'_> {
+    Combination::full(self.nvertices())
+      .deletions()
+      .map(|(sign, _, positions)| self.select(positions).with_sign(sign))
+  }
+
+  pub fn supersimps<'a>(
+    &'a self,
+    super_dim: Dim,
+    root: &'a Self,
+  ) -> impl Iterator<Item = Self> + 'a {
+    root
+      .subsimps(super_dim)
+      .filter(|sup| self.is_subsimplex_of(sup))
   }
 }
 
@@ -120,6 +133,12 @@ impl From<Simplex> for Vec<usize> {
     simp.vertices
   }
 }
+impl From<Combination> for Simplex {
+  /// A local simplex: the combination's indices as vertices.
+  fn from(combination: Combination) -> Self {
+    Self::new(combination.iter().collect())
+  }
+}
 impl<const N: usize> From<[usize; N]> for Simplex {
   fn from(vertices: [usize; N]) -> Self {
     Self::new(vertices.to_vec())
@@ -138,43 +157,6 @@ impl std::ops::Index<usize> for Simplex {
     &self.vertices[index]
   }
 }
-impl std::ops::IndexMut<usize> for Simplex {
-  fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-    &mut self.vertices[index]
-  }
-}
-
-impl Simplex {
-  pub fn is_sorted(&self) -> bool {
-    self.vertices.is_sorted()
-  }
-  pub fn sort(&mut self) {
-    self.vertices.sort_unstable()
-  }
-  pub fn sorted(mut self) -> Self {
-    self.sort();
-    self
-  }
-  pub fn sort_signed(&mut self) -> Sign {
-    sort_signed(&mut self.vertices)
-  }
-
-  /// Orientation relative to sorted permutation.
-  pub fn orientation_rel_sorted(&self) -> Sign {
-    self.clone().sort_signed()
-  }
-  pub fn orientation_eq(&self, other: &Self) -> bool {
-    assert!(self.set_eq(other));
-    self.orientation_rel_sorted() == other.orientation_rel_sorted()
-  }
-
-  pub fn swap(&mut self, i: usize, j: usize) {
-    self.vertices.swap(i, j)
-  }
-  pub fn contains(&self, ivertex: VertexIdx) -> bool {
-    self.vertices.contains(&ivertex)
-  }
-}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct SignedSimplex {
@@ -187,80 +169,77 @@ impl SignedSimplex {
   }
 }
 
-pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Simplex> {
-  Simplex::standard(dim_cell).subsequences(dim_sub)
+/// The subsimplices of the standard simplex: local vertex sets,
+/// in colexicographic order.
+pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
+  combinations(dim_cell + 1, dim_sub + 1)
+}
+pub fn graded_subsimps(dim_cell: Dim) -> impl Iterator<Item = impl Iterator<Item = Combination>> {
+  (0..=dim_cell).map(move |d| standard_subsimps(dim_cell, d))
+}
+
+pub fn nsubsimplices(dim_cell: Dim, dim_sub: Dim) -> usize {
+  binomial(dim_cell + 1, dim_sub + 1)
+}
+pub fn nedges(dim_cell: Dim) -> usize {
+  nsubsimplices(dim_cell, 1)
 }
 
 /// $diff^k: Delta_k (Delta^n) -> Delta_(k-1) (Delta^n)$
 ///
-/// Matrix of the boundary operator between the lexicographically ordered
+/// Matrix of the boundary operator between the colexicographically ordered
 /// subsimplices of the standard `dim_cell`-simplex.
-/// Purely combinatorial: no complex data structure needed.
+///
+/// Unaugmented: the boundary of vertices is zero, not the augmentation map
+/// to the (-1)-simplex that [`common::combo::boundary_matrix`] computes.
 pub fn standard_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
-  let sups: Vec<_> = standard_subsimps(dim_cell, dim_simp).collect();
   if dim_simp == 0 {
-    return Matrix::zeros(0, sups.len());
+    return Matrix::zeros(0, dim_cell + 1);
   }
-
-  let subs: Vec<_> = standard_subsimps(dim_cell, dim_simp - 1).collect();
-  let mut mat = Matrix::zeros(subs.len(), sups.len());
-  for (isup, sup) in sups.iter().enumerate() {
-    for sub in sup.boundary() {
-      let isub = subs.iter().position(|s| *s == sub.simplex).unwrap();
-      mat[(isub, isup)] = sub.sign.as_f64();
-    }
-  }
-  mat
-}
-pub fn graded_subsimps(dim_cell: Dim) -> impl Iterator<Item = impl Iterator<Item = Simplex>> {
-  (0..=dim_cell).map(move |d| standard_subsimps(dim_cell, d))
-}
-
-pub fn nsubsequence_simplices(dim_cell: Dim, dim_sub: Dim) -> usize {
-  binomial(dim_cell + 1, dim_sub + 1)
-}
-pub fn nsubset_simplices(dim_cell: Dim, dim_sub: Dim) -> usize {
-  nsubpermutations(dim_cell + 1, dim_sub + 1)
-}
-
-pub fn nedges(dim_cell: Dim) -> usize {
-  nsubsequence_simplices(dim_cell, 1)
+  common::combo::boundary_matrix(dim_cell + 1, dim_simp + 1)
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::topology::simplex::nsubsequence_simplices;
 
   use itertools::Itertools;
 
   #[test]
-  fn subsequence() {
+  fn subsimps() {
     for dim in 0..=4 {
       let simp = Simplex::standard(dim);
       for sub_dim in 0..=dim {
-        let subs = simp.subsequences(sub_dim).collect_vec();
-        assert_eq!(subs.len(), nsubsequence_simplices(dim, sub_dim));
-        assert!(subs.iter().all(|sub| sub.is_subset_of(&simp)));
-        assert!(subs.iter().all(|sub| sub.is_subsequence_of(&simp)));
+        let subs = simp.subsimps(sub_dim).collect_vec();
+        assert_eq!(subs.len(), nsubsimplices(dim, sub_dim));
+        assert!(subs.iter().all(|sub| sub.is_subsimplex_of(&simp)));
+        assert!(subs
+          .iter()
+          .all(|sub| sub.relative_to(&simp) == Combination::from_increasing(sub.iter())));
       }
     }
   }
 
   #[test]
-  fn subset() {
-    for dim in 0..=4 {
-      let simp = Simplex::standard(dim);
-      for sub_dim in 0..=dim {
-        let subs = simp.subsets(sub_dim).collect_vec();
-        assert_eq!(subs.len(), nsubset_simplices(dim, sub_dim));
-        assert!(subs.iter().all(|sub| sub.is_subset_of(&simp)));
-        let nsubsequences = subs
-          .iter()
-          .filter(|sub| sub.is_subsequence_of(&simp))
-          .count();
-        assert_eq!(nsubsequences, nsubsequence_simplices(dim, sub_dim));
+  fn from_word_orientation() {
+    let (sign, simp) = Simplex::from_word(vec![2, 0, 1]);
+    assert_eq!(sign, Sign::Pos);
+    assert_eq!(simp, Simplex::from([0, 1, 2]));
+    let (sign, _) = Simplex::from_word(vec![1, 0, 2]);
+    assert_eq!(sign, Sign::Neg);
+  }
+
+  /// The boundary of the boundary is zero.
+  #[test]
+  fn boundary_of_boundary_cancels() {
+    use std::collections::HashMap;
+    let simp = Simplex::standard(3);
+    let mut chain: HashMap<Simplex, i32> = HashMap::new();
+    for face in simp.boundary() {
+      for subface in face.simplex.boundary() {
+        *chain.entry(subface.simplex).or_default() += (face.sign * subface.sign).as_i32();
       }
     }
+    assert!(chain.values().all(|&c| c == 0));
   }
 }

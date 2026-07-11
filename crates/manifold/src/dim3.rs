@@ -60,7 +60,7 @@ impl TriangleSurface3D {
     let simps = self
       .triangles
       .into_iter()
-      .map(|tria| Simplex::from(tria).sorted())
+      .map(|tria| Simplex::from_word(tria.to_vec()).1)
       .collect();
     let skeleton = Skeleton::new(simps);
     let coords = self.coords;

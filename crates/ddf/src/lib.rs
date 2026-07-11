@@ -39,7 +39,7 @@ impl CoordSimplexExt for SimplexCoords {
 mod test {
   use crate::{derham::integrate_form_simplex, whitney::lsf::WhitneyLsf};
 
-  use common::combo::Sign;
+  use common::combo::{Combination, Sign};
   use manifold::{
     geometry::coord::{mesh::MeshCoords, simplex::SimplexHandleExt},
     topology::complex::Complex,
@@ -53,7 +53,8 @@ mod test {
 
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {
-          let whitney_form = WhitneyLsf::standard(dim, (*dof_simp).clone());
+          let whitney_form =
+            WhitneyLsf::standard(dim, Combination::from_increasing(dof_simp.iter()));
 
           for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;

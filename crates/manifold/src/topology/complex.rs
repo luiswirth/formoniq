@@ -220,7 +220,7 @@ impl Complex {
         },
       ) in skeletons.iter_mut().enumerate()
       {
-        for sub in cell.subsequences(dim_skeleton) {
+        for sub in cell.subsimps(dim_skeleton) {
           let (sub_idx, is_new) = skeleton.insert(sub);
           let sub_data = if is_new {
             mesh_data.push(SimplexComplexData::default());
@@ -249,7 +249,7 @@ impl Complex {
 
 #[cfg(test)]
 mod test {
-  use crate::topology::simplex::{nsubsequence_simplices, standard_boundary_operator, Simplex};
+  use crate::topology::simplex::{nsubsimplices, standard_boundary_operator, Simplex};
 
   use super::*;
 
@@ -314,8 +314,8 @@ mod test {
     let cell_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
       let subs: Vec<_> = cell.mesh_subsimps(dim_sub).collect();
-      assert_eq!(subs.len(), nsubsequence_simplices(dim, dim_sub));
-      let subs_vertices: Vec<_> = cell_simplex.subsequences(dim_sub).collect();
+      assert_eq!(subs.len(), nsubsimplices(dim, dim_sub));
+      let subs_vertices: Vec<_> = cell_simplex.subsimps(dim_sub).collect();
       assert_eq!(
         subs.iter().map(|&sub| (*sub).clone()).collect::<Vec<_>>(),
         subs_vertices
@@ -327,7 +327,7 @@ mod test {
           let sups: Vec<_> = sub.mesh_supersimps(dim_sup).collect();
           sups
             .iter()
-            .all(|sup| sub_vertices.is_subsequence_of(sup) && sup.is_subsequence_of(&cell_simplex));
+            .all(|sup| sub_vertices.is_subsimplex_of(sup) && sup.is_subsimplex_of(&cell_simplex));
         }
       }
     }

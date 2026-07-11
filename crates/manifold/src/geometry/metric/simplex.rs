@@ -2,7 +2,7 @@ use super::EdgeIdx;
 use crate::{geometry::coord::simplex::SimplexCoords, topology::simplex::nedges, Dim};
 
 use common::{
-  combo::{factorial, lex_rank},
+  combo::{combinations, factorial, Combination},
   gramian::Gramian,
   linalg::nalgebra::{Matrix, Vector},
 };
@@ -15,10 +15,16 @@ use std::f64::consts::SQRT_2;
 /// Intrinsic geometry can be derived from this.
 #[derive(Debug, Clone)]
 pub struct SimplexLengths {
-  /// Lexicographically ordered binom(dim+1,2) edge lengths
+  /// The binom(dim+1,2) edge lengths, on the colexicographically ordered
+  /// vertex pairs: the same order as [`Simplex::subsimps`] with dim 1.
   lengths: Vector,
   /// Dimension of the simplex.
   dim: Dim,
+}
+
+/// The edge index of a vertex pair: the colexicographic rank.
+pub fn edge_index(vi: usize, vj: usize) -> EdgeIdx {
+  Combination::from_increasing([vi, vj]).rank()
 }
 impl SimplexLengths {
   pub fn new(lengths: Vector, dim: Dim) -> Self {
@@ -38,10 +44,10 @@ impl SimplexLengths {
     }
   }
   pub fn standard(dim: Dim) -> SimplexLengths {
-    let nedges = nedges(dim);
-    let lengths: Vec<f64> = (0..dim)
-      .map(|_| 1.0)
-      .chain((dim..nedges).map(|_| SQRT_2))
+    // Edges containing the origin vertex are unit; all others connect two
+    // standard basis vertices and have length sqrt(2).
+    let lengths: Vec<f64> = combinations(dim + 1, 2)
+      .map(|edge| if edge.contains(0) { 1.0 } else { SQRT_2 })
       .collect();
 
     Self::new_unchecked(lengths.into(), dim)
@@ -117,14 +123,11 @@ impl SimplexLengths {
   pub fn distance_matrix(&self) -> Matrix {
     let mut mat = Matrix::zeros(self.nvertices(), self.nvertices());
 
-    let mut idx = 0;
-    for i in 0..self.nvertices() {
-      for j in (i + 1)..self.nvertices() {
-        let dist_sqr = self.lengths[idx].powi(2);
-        mat[(i, j)] = dist_sqr;
-        mat[(j, i)] = dist_sqr;
-        idx += 1;
-      }
+    for (iedge, edge) in combinations(self.nvertices(), 2).enumerate() {
+      let (vi, vj) = (edge.index_at(0), edge.index_at(1));
+      let dist_sq = self.lengths[iedge].powi(2);
+      mat[(vi, vj)] = dist_sq;
+      mat[(vj, vi)] = dist_sq;
     }
     mat
   }
@@ -154,19 +157,23 @@ pub fn cayley_menger_factor(dim: Dim) -> f64 {
 
 impl SimplexLengths {
   /// Regge Calculus
+  ///
+  /// The spanning (basis) vector $e_i$ points from vertex $0$ to vertex
+  /// $i + 1$, so edges from the origin are basis norms and
+  /// $|v_j - v_i|^2 = g_(i-1,i-1) + g_(j-1,j-1) - 2 g_(i-1,j-1)$ otherwise.
   pub fn from_metric_tensor(metric: &Gramian) -> Self {
     let dim = metric.dim();
-    let length = |i, j| {
-      (metric.basis_inner(i, i) + metric.basis_inner(j, j) - 2.0 * metric.basis_inner(i, j)).sqrt()
-    };
 
     let mut lengths = Vector::zeros(nedges(dim));
-    let mut iedge = 0;
-    for i in 0..dim {
-      for j in i..dim {
-        lengths[iedge] = length(i, j);
-        iedge += 1;
-      }
+    for (iedge, edge) in combinations(dim + 1, 2).enumerate() {
+      let (vi, vj) = (edge.index_at(0), edge.index_at(1));
+      let length_sq = if vi == 0 {
+        metric.basis_inner(vj - 1, vj - 1)
+      } else {
+        metric.basis_inner(vi - 1, vi - 1) + metric.basis_inner(vj - 1, vj - 1)
+          - 2.0 * metric.basis_inner(vi - 1, vj - 1)
+      };
+      lengths[iedge] = length_sq.sqrt();
     }
 
     Self::new(lengths, dim)
@@ -181,17 +188,13 @@ impl SimplexLengths {
   pub fn to_metric_tensor(&self) -> Gramian {
     let mut metric = Matrix::zeros(self.dim(), self.dim());
     for i in 0..self.dim() {
-      metric[(i, i)] = self[i].powi(2);
+      metric[(i, i)] = self[edge_index(0, i + 1)].powi(2);
     }
     for i in 0..self.dim() {
       for j in (i + 1)..self.dim() {
-        let l0i = self[i];
-        let l0j = self[j];
-
-        let vi = i + 1;
-        let vj = j + 1;
-        let eij = lex_rank(&[vi, vj], self.nvertices());
-        let lij = self[eij];
+        let l0i = self[edge_index(0, i + 1)];
+        let l0j = self[edge_index(0, j + 1)];
+        let lij = self[edge_index(i + 1, j + 1)];
 
         let val = 0.5 * (l0i.powi(2) + l0j.powi(2) - lij.powi(2));
 
@@ -208,6 +211,16 @@ mod test {
   use crate::geometry::coord::simplex::SimplexCoords;
 
   use approx::assert_relative_eq;
+
+  /// from_metric_tensor and to_metric_tensor are inverse.
+  #[test]
+  fn metric_tensor_roundtrip() {
+    for dim in 1..=4 {
+      let lengths = SimplexLengths::standard(dim);
+      let roundtrip = SimplexLengths::from_metric_tensor(&lengths.to_metric_tensor());
+      assert_relative_eq!(lengths.vector(), roundtrip.vector(), epsilon = 1e-12);
+    }
+  }
 
   #[test]
   fn ref_coord_vs_ref_lengths() {

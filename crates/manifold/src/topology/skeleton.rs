@@ -3,25 +3,19 @@ use crate::Dim;
 
 use indexmap::IndexSet;
 
-/// A container for sorted simplices of the same dimension.
+/// A container for simplices of the same dimension.
 #[derive(Default, Debug, Clone)]
 pub struct Skeleton {
-  /// Every simplex is sorted.
   simplices: IndexSet<Simplex>,
   nvertices: usize,
 }
 impl Skeleton {
-  /// Every simplex must be sorted.
   pub fn new(simplices: Vec<Simplex>) -> Self {
     assert!(!simplices.is_empty(), "Skeleton must not be empty");
     let dim = simplices[0].dim();
     assert!(
       simplices.iter().map(|simp| simp.dim()).all(|d| d == dim),
       "Skeleton simplices must have same dimension."
-    );
-    assert!(
-      simplices.iter().all(|simp| simp.is_sorted()),
-      "Skeleton simplices must be sorted."
     );
     let nvertices = if dim == 0 {
       assert!(simplices.iter().enumerate().all(|(i, simp)| simp[0] == i));
@@ -70,7 +64,6 @@ impl Skeleton {
   }
 
   pub fn insert(&mut self, simp: Simplex) -> (KSimplexIdx, bool) {
-    assert!(simp.is_sorted());
     self.simplices.insert_full(simp)
   }
   pub fn into_index_set(self) -> IndexSet<Simplex> {

@@ -117,7 +117,7 @@ impl SimplexHandle<'_> {
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
   pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexHandle> {
     self
-      .subsequences(dim_sub)
+      .subsimps(dim_sub)
       .map(move |sub| self.complex.skeleton(dim_sub).handle_by_simplex(&sub))
   }
 
@@ -127,8 +127,9 @@ impl SimplexHandle<'_> {
   /// by lexicographically w.r.t. the local vertex indices.
   pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexHandle> {
     self.cocells().flat_map(move |parent| {
-      self
-        .supersequences(dim_super, &parent)
+      let sups: Vec<_> = self.supersimps(dim_super, &parent).collect();
+      sups
+        .into_iter()
         .map(move |sup| self.complex.skeleton(dim_super).handle_by_simplex(&sup))
     })
   }

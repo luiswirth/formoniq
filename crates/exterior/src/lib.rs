@@ -2,25 +2,34 @@ extern crate nalgebra as na;
 
 pub mod field;
 pub mod list;
-pub mod term;
 
 use common::{
-  combo::binomial,
+  combo::{binomial, combinations, Combination, Sign},
+  gramian::Gramian,
   linalg::nalgebra::{Matrix, Vector},
 };
-use term::{exterior_bases, ExteriorTerm};
 
 pub type Dim = usize;
 pub type ExteriorGrade = usize;
+
+/// A basis blade $e_(i_1) wedge dots.c wedge e_(i_k)$ of the exterior
+/// algebra: a strictly increasing multi-index.
+pub type Blade = Combination;
 
 pub fn exterior_dim(dim: Dim, grade: ExteriorGrade) -> usize {
   binomial(dim, grade)
 }
 
+/// The basis blades of $Lambda^k (RR^n)$ in colexicographic order:
+/// the order of the coefficients of an [`ExteriorElement`].
+pub fn exterior_bases(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = Blade> {
+  combinations(dim, grade)
+}
+
 /// The exterior power functor $Lambda^k$ applied to a linear map.
 ///
-/// Matrix of $Lambda^k A$ in the lexicographically ordered bases of $k$-blades:
-/// the $k$-th compound matrix of all $k times k$ minors,
+/// Matrix of $Lambda^k A$ in the colexicographically ordered bases of
+/// $k$-blades: the $k$-th compound matrix of all $k times k$ minors,
 /// $(Lambda^k A)_(I J) = det A[I, J]$.
 ///
 /// Functoriality $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$ is the
@@ -28,8 +37,8 @@ pub fn exterior_dim(dim: Dim, grade: ExteriorGrade) -> usize {
 /// $Lambda^k$ (multi_gramian), the pullback of $k$-forms (precompose_form)
 /// and the coefficients of a wedge of vectors (spanning multivector).
 pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
-  let row_bases: Vec<_> = exterior_bases(linear_map.nrows(), grade).collect();
-  let col_bases: Vec<_> = exterior_bases(linear_map.ncols(), grade).collect();
+  let row_bases: Vec<Blade> = exterior_bases(linear_map.nrows(), grade).collect();
+  let col_bases: Vec<Blade> = exterior_bases(linear_map.ncols(), grade).collect();
 
   let mut power = Matrix::zeros(row_bases.len(), col_bases.len());
   let mut minor = Matrix::zeros(grade, grade);
@@ -46,7 +55,18 @@ pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
   power
 }
 
+/// Construct Gramian on colexicographically ordered basis blades from the
+/// Gramian on single elements.
+///
+/// The inner product on $Lambda^k$ is the exterior power of the inner product,
+/// $inner(e_I, e_J)_(Lambda^k) = det [inner(e_i, e_j)]_(i in I, j in J)$.
+pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian {
+  Gramian::new_unchecked(exterior_power(single_gramian.matrix(), grade))
+}
+
 /// An element of an exterior algebra.
+///
+/// Coefficients on the colexicographically ordered basis blades.
 #[derive(Debug, Clone)]
 pub struct ExteriorElement {
   coeffs: Vector,
@@ -75,6 +95,13 @@ impl ExteriorElement {
     Self::scalar(1.0, dim)
   }
 
+  /// A single basis blade with the given sign.
+  pub fn from_blade_signed(dim: Dim, sign: Sign, blade: Blade) -> Self {
+    let mut element = Self::zero(dim, blade.card());
+    element[blade] = sign.as_f64();
+    element
+  }
+
   pub fn into_grade1(self) -> Vector {
     assert!(self.grade == 1);
     self.coeffs
@@ -93,27 +120,12 @@ impl ExteriorElement {
     self.coeffs
   }
 
-  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, ExteriorTerm)> + '_ {
-    let dim = self.dim;
-    let grade = self.grade;
+  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, Blade)> + '_ {
     self
       .coeffs
       .iter()
       .copied()
-      .enumerate()
-      .map(move |(i, coeff)| {
-        let basis = ExteriorTerm::from_lex_rank(dim, grade, i);
-        (coeff, basis)
-      })
-  }
-
-  pub fn basis_iter_mut(&mut self) -> impl Iterator<Item = (&mut f64, ExteriorTerm)> + '_ {
-    let dim = self.dim;
-    let grade = self.grade;
-    self.coeffs.iter_mut().enumerate().map(move |(i, coeff)| {
-      let basis = ExteriorTerm::from_lex_rank(dim, grade, i);
-      (coeff, basis)
-    })
+      .zip(exterior_bases(self.dim, self.grade))
   }
 
   pub fn wedge(&self, other: &Self) -> Self {
@@ -121,24 +133,17 @@ impl ExteriorElement {
     let dim = self.dim;
 
     let new_grade = self.grade + other.grade;
-    if new_grade > dim {
-      return Self::zero(dim, 0);
-    }
+    assert!(new_grade <= dim, "Wedge grade exceeds dimension.");
 
-    let new_basis_size = exterior_dim(dim, new_grade);
-    let mut new_coeffs = Vector::zeros(new_basis_size);
+    let mut new_coeffs = Vector::zeros(exterior_dim(dim, new_grade));
 
-    for (self_coeff, self_basis) in self.basis_iter() {
-      for (other_coeff, other_basis) in other.basis_iter() {
-        let self_basis = self_basis.clone();
-
-        let coeff_prod = self_coeff * other_coeff;
-        if self_basis == other_basis || coeff_prod == 0.0 {
-          continue;
-        }
-        if let Some((sign, merged_basis)) = self_basis.wedge(other_basis).canonicalized() {
-          let merged_basis = merged_basis.lex_rank();
-          new_coeffs[merged_basis] += sign.as_f64() * coeff_prod;
+    for (self_coeff, self_blade) in self.basis_iter() {
+      if self_coeff == 0.0 {
+        continue;
+      }
+      for (other_coeff, other_blade) in other.basis_iter() {
+        if let Some((sign, merged)) = self_blade.union_signed(other_blade) {
+          new_coeffs[merged.rank()] += sign.as_f64() * self_coeff * other_coeff;
         }
       }
     }
@@ -209,27 +214,19 @@ impl std::ops::Mul<ExteriorElement> for f64 {
   }
 }
 
-impl std::ops::Index<ExteriorTerm> for ExteriorElement {
+impl std::ops::Index<Blade> for ExteriorElement {
   type Output = f64;
-  fn index(&self, term: ExteriorTerm) -> &Self::Output {
-    assert!(
-      term.is_basis(),
-      "Can only index exterior element with exterior basis term."
-    );
-    assert!(term.dim() == self.dim());
-    assert!(term.grade() == self.grade());
-    &self.coeffs[term.lex_rank()]
+  fn index(&self, blade: Blade) -> &Self::Output {
+    assert!(blade.card() == self.grade);
+    assert!(blade.iter().all(|i| i < self.dim));
+    &self.coeffs[blade.rank()]
   }
 }
-impl std::ops::IndexMut<ExteriorTerm> for ExteriorElement {
-  fn index_mut(&mut self, term: ExteriorTerm) -> &mut Self::Output {
-    assert!(
-      term.is_basis(),
-      "Can only index exterior element with exterior basis term."
-    );
-    assert!(term.dim() == self.dim());
-    assert!(term.grade() == self.grade());
-    &mut self.coeffs[term.lex_rank()]
+impl std::ops::IndexMut<Blade> for ExteriorElement {
+  fn index_mut(&mut self, blade: Blade) -> &mut Self::Output {
+    assert!(blade.card() == self.grade);
+    assert!(blade.iter().all(|i| i < self.dim));
+    &mut self.coeffs[blade.rank()]
   }
 }
 impl std::ops::Index<usize> for ExteriorElement {
@@ -239,38 +236,6 @@ impl std::ops::Index<usize> for ExteriorElement {
   }
 }
 
-impl From<ExteriorTerm> for ExteriorElement {
-  fn from(term: ExteriorTerm) -> Self {
-    let mut element = Self::zero(term.dim(), term.grade());
-    if let Some((sign, basis)) = term.canonicalized() {
-      element[basis] = sign.as_f64();
-    }
-    element
-  }
-}
-
-impl std::ops::AddAssign<ExteriorTerm> for ExteriorElement {
-  fn add_assign(&mut self, term: ExteriorTerm) {
-    self[term] += 1.0;
-  }
-}
-impl std::ops::Add<ExteriorTerm> for ExteriorElement {
-  type Output = ExteriorElement;
-  fn add(mut self, term: ExteriorTerm) -> Self::Output {
-    self += term;
-    self
-  }
-}
-
-impl std::iter::FromIterator<ExteriorTerm> for ExteriorElement {
-  fn from_iter<T: IntoIterator<Item = ExteriorTerm>>(iter: T) -> Self {
-    let mut iter = iter.into_iter();
-    let first = iter.next().unwrap();
-    let mut element = Self::from(first);
-    iter.for_each(|term| element += term);
-    element
-  }
-}
 impl std::iter::Sum for ExteriorElement {
   fn sum<I: Iterator<Item = Self>>(iter: I) -> Self {
     let mut iter = iter.into_iter();
@@ -360,9 +325,9 @@ mod tests {
         let computed = form.precompose_form(&a);
         let expected: ExteriorElement = form
           .basis_iter()
-          .map(|(coeff, basis)| {
+          .map(|(coeff, blade)| {
             coeff
-              * MultiForm::wedge_big(basis.iter().map(|i| MultiForm::line(a.row(i).transpose())))
+              * MultiForm::wedge_big(blade.iter().map(|i| MultiForm::line(a.row(i).transpose())))
                 .unwrap_or(ExteriorElement::one(m))
           })
           .sum();
@@ -377,7 +342,11 @@ mod tests {
     let b = ExteriorElement::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
 
     let computed_ab = a.wedge(&b);
-    let expected_ab = ExteriorElement::new(na::dvector![1.0, 0.0, 0.0], 3, 2);
+    let expected_ab = ExteriorElement::from_blade_signed(
+      3,
+      Sign::Pos,
+      Blade::from_increasing([0, 1]),
+    );
     assert_eq!(computed_ab.coeffs, expected_ab.coeffs);
   }
 
@@ -401,12 +370,38 @@ mod tests {
     assert_eq!(wedge_computed.coeffs, wedge_expected.coeffs);
   }
 
+  /// Signed sums of arbitrarily ordered wedge words canonicalize correctly.
   #[test]
-  fn wedge_grade_exceeds_dim() {
-    let a = ExteriorElement::new(na::dvector![1.0, 0.0], 2, 1);
-    let b = ExteriorElement::new(na::dvector![1.0], 2, 2);
-    let computed = a.wedge(&b);
-    let expected = ExteriorElement::zero(2, 0);
-    assert_eq!(computed.coeffs, expected.coeffs);
+  fn canonical_conversion() {
+    let dim = 4;
+    let mut e0 = ExteriorElement::zero(dim, 3);
+    for (coeff, word) in [
+      (1.0, vec![2, 0, 1]),
+      (3.0, vec![1, 3, 2]),
+      (-2.0, vec![0, 2, 1]),
+      (3.0, vec![0, 1, 2]),
+    ] {
+      let (sign, blade) = Blade::from_word(word).unwrap();
+      e0[blade] += sign.as_f64() * coeff;
+    }
+
+    let mut e1 = ExteriorElement::zero(dim, 3);
+    e1[Blade::from_increasing([0, 1, 2])] = 6.0;
+    e1[Blade::from_increasing([1, 2, 3])] = -3.0;
+
+    assert!(e0.eq_epsilon(&e1, 1e-12));
+  }
+
+  #[test]
+  fn multi_gramian_euclidean() {
+    use common::gramian::Gramian;
+    for n in 0..=3 {
+      let gramian = Gramian::standard(n);
+      for k in 0..=n {
+        let expected_gram = Gramian::standard(binomial(n, k));
+        let computed_gram = multi_gramian(&gramian, k);
+        assert_relative_eq!(computed_gram.matrix(), expected_gram.matrix());
+      }
+    }
   }
 }

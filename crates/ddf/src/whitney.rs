@@ -50,7 +50,7 @@ mod test {
         // dif(W c) = sum_sigma c_sigma dif(W_sigma): elementwise constant.
         let mut dif_of_interpolation = MultiForm::zero(dim, grade + 1);
         for dof_simp in cell.mesh_subsimps(grade) {
-          let lsf = WhitneyLsf::standard(dim, (*dof_simp).clone());
+          let lsf = WhitneyLsf::standard(dim, dof_simp.relative_to(&cell));
           dif_of_interpolation += cochain[dof_simp] * lsf.dif();
         }
 
