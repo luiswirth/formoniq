@@ -5,7 +5,7 @@ use crate::{
 
 use {
   common::linalg::petsc::{petsc_ghiep, petsc_saddle_point},
-  ddf::{cochain::Cochain, ManifoldComplexExt},
+  ddf::cochain::Cochain,
   exterior::ExteriorGrade,
   manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
 };
@@ -134,7 +134,7 @@ impl MixedGalmats {
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
       let mass_sigma = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade - 1));
 
-      let exdif_sigma = topology.exterior_derivative_operator(grade - 1);
+      let exdif_sigma = topology.coboundary_operator(grade - 1);
       let exdif_sigma = CsrMatrix::from(&exdif_sigma);
 
       let dif_sigma = &mass_u_csr * &exdif_sigma;
@@ -151,7 +151,7 @@ impl MixedGalmats {
     let codifdif_u = if grade < topology.dim() {
       let mass_plus = assemble_galmat(topology, geometry, HodgeMassElmat::new(dim, grade + 1));
       let mass_plus = CsrMatrix::from(&mass_plus);
-      let exdif_u = topology.exterior_derivative_operator(grade);
+      let exdif_u = topology.coboundary_operator(grade);
       let exdif_u = CsrMatrix::from(&exdif_u);
       let codifdif_u = exdif_u.transpose() * mass_plus * exdif_u;
       CooMatrix::from(&codifdif_u)
