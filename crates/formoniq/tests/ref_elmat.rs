@@ -30,7 +30,7 @@ where
 
 #[test]
 fn laplacian_refcell() {
-  check_ref_elmat(operators::LaplaceBeltramiElmat::new, ref_laplacian);
+  check_ref_elmat(|dim| operators::CodifDifElmat::new(dim, 0), ref_laplacian);
 }
 fn ref_laplacian(dim: Dim) -> Option<Matrix> {
   let ndofs = dim + 1;
@@ -47,7 +47,7 @@ fn ref_laplacian(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn mass_refcell() {
-  check_ref_elmat(|_| operators::ScalarMassElmat, ref_mass);
+  check_ref_elmat(|dim| operators::HodgeMassElmat::new(dim, 0), ref_mass);
 }
 fn ref_mass(dim: Dim) -> Option<Matrix> {
   #[rustfmt::skip]

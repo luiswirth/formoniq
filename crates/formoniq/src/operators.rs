@@ -26,53 +26,17 @@ pub trait ElMatProvider: Sync {
   fn eval(&self, geometry: &SimplexLengths) -> ElMat;
 }
 
-/// Exact Element Matrix Provider for the Laplace-Beltrami operator.
+/// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
 ///
-/// $A = [(dif lambda_tau, dif lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
-pub struct LaplaceBeltramiElmat {
-  dim: Dim,
-  ref_difbarys: Matrix,
-}
-impl LaplaceBeltramiElmat {
-  pub fn new(dim: Dim) -> Self {
-    let ref_difbarys = SimplexCoords::standard(dim).difbarys().transpose();
-    Self { dim, ref_difbarys }
-  }
-}
-impl ElMatProvider for LaplaceBeltramiElmat {
-  fn row_grade(&self) -> ExteriorGrade {
-    0
-  }
-  fn col_grade(&self) -> ExteriorGrade {
-    0
-  }
-  fn eval(&self, geometry: &SimplexLengths) -> ElMat {
-    assert!(self.dim == geometry.dim());
-    geometry.vol()
-      * geometry
-        .to_metric_tensor()
-        .inverse()
-        .norm_sq_mat(&self.ref_difbarys)
-  }
-}
-
-/// Exact Element Matrix Provider for scalar mass bilinear form.
-pub struct ScalarMassElmat;
-impl ElMatProvider for ScalarMassElmat {
-  fn row_grade(&self) -> ExteriorGrade {
-    0
-  }
-  fn col_grade(&self) -> ExteriorGrade {
-    0
-  }
-  fn eval(&self, geometry: &SimplexLengths) -> ElMat {
-    let ndofs = geometry.nvertices();
-    let dim = geometry.dim();
-    let v = geometry.vol() / ((dim + 1) * (dim + 2)) as f64;
-    let mut elmat = Matrix::from_element(ndofs, ndofs, v);
-    elmat.fill_diagonal(2.0 * v);
-    elmat
-  }
+/// Exact closed form: $vol(K) (1 + delta_(i j)) / ((n+1)(n+2))$.
+/// The barycentric building block of the Hodge mass matrix.
+fn scalar_mass_elmat(geometry: &SimplexLengths) -> ElMat {
+  let ndofs = geometry.nvertices();
+  let dim = geometry.dim();
+  let v = geometry.vol() / ((dim + 1) * (dim + 2)) as f64;
+  let mut elmat = Matrix::from_element(ndofs, ndofs, v);
+  elmat.fill_diagonal(2.0 * v);
+  elmat
 }
 
 /// Approximated Element Matrix Provider for scalar mass bilinear form,
@@ -129,15 +93,15 @@ impl ElMatProvider for HodgeMassElmat {
   fn eval(&self, geometry: &SimplexLengths) -> Matrix {
     assert_eq!(self.dim, geometry.dim());
 
-    let scalar_mass = ScalarMassElmat.eval(geometry);
+    let scalar_mass = scalar_mass_elmat(geometry);
+    let form_gramian = multi_gramian(&geometry.inverse_metric_tensor(), self.grade);
 
     let mut elmat = Matrix::zeros(self.simplices.len(), self.simplices.len());
     for (i, asimp) in self.simplices.iter().enumerate() {
       for (j, bsimp) in self.simplices.iter().enumerate() {
         let wedge_terms_a = &self.wedge_terms[i];
         let wedge_terms_b = &self.wedge_terms[j];
-        let wedge_inners = multi_gramian(&geometry.to_metric_tensor().inverse(), self.grade)
-          .inner_mat(wedge_terms_a.coeffs(), wedge_terms_b.coeffs());
+        let wedge_inners = form_gramian.inner_mat(wedge_terms_a.coeffs(), wedge_terms_b.coeffs());
 
         let nvertices = self.grade + 1;
         let mut sum = 0.0;
@@ -258,17 +222,23 @@ where
   source: &'a F,
   mesh_coords: &'a MeshCoords,
   qr: SimplexQuadRule,
+  whitneys: Vec<WhitneyLsf>,
 }
 impl<'a, F> SourceElVec<'a, F>
 where
   F: ExteriorField,
 {
   pub fn new(source: &'a F, mesh_coords: &'a MeshCoords, qr: Option<SimplexQuadRule>) -> Self {
-    let qr = qr.unwrap_or(SimplexQuadRule::barycentric(source.dim_intrinsic()));
+    let dim = source.dim_intrinsic();
+    let qr = qr.unwrap_or(SimplexQuadRule::barycentric(dim));
+    let whitneys = standard_subsimps(dim, source.grade())
+      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
+      .collect();
     Self {
       source,
       mesh_coords,
       qr,
+      whitneys,
     }
   }
 }
@@ -282,19 +252,10 @@ where
   fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec {
     let cell_coords = SimplexCoords::from_simplex_and_coords(topology, self.mesh_coords);
 
-    let dim = self.source.dim_intrinsic();
-    let grade = self.grade();
-    let dof_simps: Vec<_> = standard_subsimps(dim, grade).collect();
-    let whitneys: Vec<_> = dof_simps
-      .iter()
-      .cloned()
-      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
-      .collect();
+    let inner = multi_gramian(&geometry.inverse_metric_tensor(), self.grade());
 
-    let inner = multi_gramian(&geometry.to_metric_tensor().inverse(), grade);
-
-    let mut elvec = ElVec::zeros(whitneys.len());
-    for (iwhitney, whitney) in whitneys.iter().enumerate() {
+    let mut elvec = ElVec::zeros(self.whitneys.len());
+    for (iwhitney, whitney) in self.whitneys.iter().enumerate() {
       let inner_pointwise = |local: CoordRef| {
         let global = cell_coords.local2global(local);
         inner.inner(
@@ -316,7 +277,6 @@ where
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::operators::{ElMatProvider, LaplaceBeltramiElmat, ScalarMassElmat};
 
   use ddf::whitney::lsf::WhitneyLsf;
   use exterior::term::multi_gramian;
@@ -325,23 +285,11 @@ mod test {
   use approx::assert_relative_eq;
 
   #[test]
-  fn codifdif0_is_laplace_beltrami() {
-    let grade = 0;
-    for dim in 1..=3 {
-      let geo = SimplexLengths::standard(dim);
-      let hodge_laplace = CodifDifElmat::new(dim, grade).eval(&geo);
-      let laplace_beltrami = LaplaceBeltramiElmat::new(dim).eval(&geo);
-      assert_relative_eq!(&hodge_laplace, &laplace_beltrami);
-    }
-  }
-
-  #[test]
   fn hodge_mass0_is_scalar_mass() {
-    let grade = 0;
     for dim in 0..=3 {
       let geo = SimplexLengths::standard(dim);
-      let hodge_mass = HodgeMassElmat::new(dim, grade).eval(&geo);
-      let scalar_mass = ScalarMassElmat.eval(&geo);
+      let hodge_mass = HodgeMassElmat::new(dim, 0).eval(&geo);
+      let scalar_mass = scalar_mass_elmat(&geo);
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }
@@ -401,7 +349,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = multi_gramian(&geo.to_metric_tensor().inverse(), grade + 1)
+            inner[(i, j)] = multi_gramian(&geo.inverse_metric_tensor(), grade + 1)
               .inner(awhitney.coeffs(), bwhitney.coeffs());
           }
         }
