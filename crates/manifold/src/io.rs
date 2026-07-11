@@ -46,7 +46,7 @@ pub fn read_skeleton_from_file(path: impl AsRef<Path>) -> io::Result<Skeleton> {
       .collect();
     let simplex = Simplex::from(simplex);
 
-    skeleton.push(simplex.sorted());
+    skeleton.push(Simplex::from_word(simplex.vertices).1);
   }
   Ok(Skeleton::new(skeleton))
 }

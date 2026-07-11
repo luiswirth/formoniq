@@ -1,11 +1,11 @@
 use {
   common::{
-    combo::{factorial, Sign},
+    combo::{factorial, Combination, Sign},
     linalg::nalgebra::{Matrix, Vector},
   },
   ddf::whitney::lsf::WhitneyLsf,
   exterior::{
-    field::ExteriorField, list::ExteriorElementList, term::multi_gramian, Dim, ExteriorGrade,
+    field::ExteriorField, list::ExteriorElementList, multi_gramian, Dim, ExteriorGrade,
   },
   manifold::{
     geometry::{
@@ -62,7 +62,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
 pub struct HodgeMassElmat {
   dim: Dim,
   grade: ExteriorGrade,
-  simplices: Vec<Simplex>,
+  simplices: Vec<Combination>,
   wedge_terms: Vec<ExteriorElementList>,
 }
 impl HodgeMassElmat {
@@ -70,8 +70,7 @@ impl HodgeMassElmat {
     let simplices: Vec<_> = standard_subsimps(dim, grade).collect();
     let wedge_terms: Vec<ExteriorElementList> = simplices
       .iter()
-      .cloned()
-      .map(|simp| WhitneyLsf::standard(dim, simp).wedge_terms().collect())
+      .map(|&simp| WhitneyLsf::standard(dim, simp).wedge_terms().collect())
       .collect();
 
     Self {
@@ -111,7 +110,8 @@ impl ElMatProvider for HodgeMassElmat {
 
             let inner = wedge_inners[(avertex, bvertex)];
 
-            sum += sign.as_f64() * inner * scalar_mass[(asimp[avertex], bsimp[bvertex])];
+            sum +=
+              sign.as_f64() * inner * scalar_mass[(asimp.index_at(avertex), bsimp.index_at(bvertex))];
           }
         }
 
@@ -279,7 +279,7 @@ mod test {
   use super::*;
 
   use ddf::whitney::lsf::WhitneyLsf;
-  use exterior::term::multi_gramian;
+  use exterior::multi_gramian;
   use manifold::{geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps};
 
   use approx::assert_relative_eq;

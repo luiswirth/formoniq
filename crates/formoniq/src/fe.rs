@@ -3,7 +3,7 @@ use manifold::topology::handle::SimplexHandle;
 use {
   common::gramian::Gramian,
   ddf::{cochain::Cochain, whitney::form::WhitneyForm},
-  exterior::{field::ExteriorField, term::multi_gramian},
+  exterior::{field::ExteriorField, multi_gramian},
   manifold::{
     geometry::coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, CoordRef},
     topology::complex::Complex,
