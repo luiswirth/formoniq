@@ -25,7 +25,7 @@ pub fn l2_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f64 
   let mass = assemble_galmat(
     topology,
     geometry,
-    HodgeMassElmat::new(topology.dim(), fe.dim()),
+    HodgeMassElmat::new(topology.dim(), fe.grade()),
   );
   let mass = CsrMatrix::from(&mass);
   quadratic_form_sparse(&mass, fe.coeffs()).sqrt()
@@ -35,7 +35,7 @@ pub fn hdif_norm(fe: &Cochain, topology: &Complex, geometry: &MeshLengths) -> f6
   let codifdif = assemble_galmat(
     topology,
     geometry,
-    CodifDifElmat::new(topology.dim(), fe.dim),
+    CodifDifElmat::new(topology.dim(), fe.grade),
   );
   let codifdif = CsrMatrix::from(&codifdif);
   quadratic_form_sparse(&codifdif, fe.coeffs()).sqrt()
@@ -50,7 +50,7 @@ pub fn fe_l2_error<E: ExteriorField>(
   let dim = topology.dim();
   let qr = SimplexQuadRule::order3(dim);
   let fe_whitney = WhitneyForm::new(fe_cochain.clone(), topology, coords);
-  let inner = multi_gramian(&Gramian::standard(dim), fe_cochain.dim());
+  let inner = multi_gramian(&Gramian::standard(dim), fe_cochain.grade());
   let error_pointwise = |x: CoordRef, cell: SimplexHandle| {
     inner.norm_sq((exact.at_point(x) - fe_whitney.eval_known_cell(cell, x)).coeffs())
   };
