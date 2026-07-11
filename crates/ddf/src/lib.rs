@@ -1,4 +1,7 @@
+extern crate nalgebra as na;
+
 pub mod cochain;
+pub mod derham;
 pub mod io;
 pub mod whitney;
 
@@ -34,7 +37,7 @@ impl CoordSimplexExt for SimplexCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::integrate_form_simplex, whitney::lsf::WhitneyLsf};
+  use crate::{derham::integrate_form_simplex, whitney::lsf::WhitneyLsf};
 
   use common::combo::Sign;
   use manifold::{
