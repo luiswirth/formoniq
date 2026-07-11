@@ -3,7 +3,7 @@ pub mod io;
 pub mod whitney;
 
 use {
-  exterior::{MultiForm, MultiVector},
+  exterior::{exterior_power, MultiForm, MultiVector},
   manifold::geometry::coord::simplex::SimplexCoords,
 };
 
@@ -14,12 +14,14 @@ pub trait CoordSimplexExt {
   fn spanning_multivector(&self) -> MultiVector;
 }
 impl CoordSimplexExt for SimplexCoords {
+  /// The single blade $v_1 wedge dots.c wedge v_k$ of the spanning vectors:
+  /// its coefficients are the $k$-minors, the single column
+  /// $Lambda^k V in RR^(binom(n,k) times 1)$.
   fn spanning_multivector(&self) -> MultiVector {
     let vectors = self.spanning_vectors();
-    let vectors = vectors
-      .column_iter()
-      .map(|v| MultiVector::line(v.into_owned()));
-    MultiVector::wedge_big(vectors).unwrap_or(MultiVector::one(self.dim_ambient()))
+    let grade = self.dim_intrinsic();
+    let coeffs = exterior_power(&vectors, grade).column(0).into_owned();
+    MultiVector::new(coeffs, self.dim_ambient(), grade)
   }
   fn difbarys_ext(&self) -> Vec<LocalMultiForm> {
     self

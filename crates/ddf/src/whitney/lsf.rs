@@ -117,7 +117,7 @@ impl ExteriorField for WhitneyPushforwardLsf {
   fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> MultiForm {
     let coord_ref = self.cell_coords.global2local(coord_global);
     let value_ref = self.ref_lsf.at_point(&coord_ref);
-    // Pushforward
-    value_ref.precompose_form(&self.cell_coords.linear_transform())
+    // Pushforward: pullback along the inverse map.
+    value_ref.precompose_form(&self.cell_coords.inv_linear_transform())
   }
 }

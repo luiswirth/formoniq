@@ -8,13 +8,42 @@ use common::{
   combo::binomial,
   linalg::nalgebra::{Matrix, Vector},
 };
-use term::ExteriorTerm;
+use term::{exterior_bases, ExteriorTerm};
 
 pub type Dim = usize;
 pub type ExteriorGrade = usize;
 
 pub fn exterior_dim(dim: Dim, grade: ExteriorGrade) -> usize {
   binomial(dim, grade)
+}
+
+/// The exterior power functor $Lambda^k$ applied to a linear map.
+///
+/// Matrix of $Lambda^k A$ in the lexicographically ordered bases of $k$-blades:
+/// the $k$-th compound matrix of all $k times k$ minors,
+/// $(Lambda^k A)_(I J) = det A[I, J]$.
+///
+/// Functoriality $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$ is the
+/// Cauchy-Binet formula. This single primitive induces the inner product on
+/// $Lambda^k$ (multi_gramian), the pullback of $k$-forms (precompose_form)
+/// and the coefficients of a wedge of vectors (spanning multivector).
+pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
+  let row_bases: Vec<_> = exterior_bases(linear_map.nrows(), grade).collect();
+  let col_bases: Vec<_> = exterior_bases(linear_map.ncols(), grade).collect();
+
+  let mut power = Matrix::zeros(row_bases.len(), col_bases.len());
+  let mut minor = Matrix::zeros(grade, grade);
+  for (i, row_basis) in row_bases.iter().enumerate() {
+    for (j, col_basis) in col_bases.iter().enumerate() {
+      for (ii, row) in row_basis.iter().enumerate() {
+        for (jj, col) in col_basis.iter().enumerate() {
+          minor[(ii, jj)] = linear_map[(row, col)];
+        }
+      }
+      power[(i, j)] = minor.determinant();
+    }
+  }
+  power
 }
 
 /// An element of an exterior algebra.
@@ -256,22 +285,15 @@ impl std::iter::Sum for ExteriorElement {
 pub type MultiVector = ExteriorElement;
 pub type MultiForm = ExteriorElement;
 impl MultiForm {
-  /// Precompose k-form by some linear map.
+  /// Precompose k-form by some linear map: the pullback of differential
+  /// k-forms.
   ///
-  /// Needed for pullback of differential k-form.
+  /// The contravariant functor $Lambda^k$ acting on coefficients,
+  /// $c mapsto (Lambda^k A)^T c$.
   pub fn precompose_form(&self, linear_map: &Matrix) -> Self {
-    self
-      .basis_iter()
-      .map(|(coeff, basis)| {
-        coeff
-          * MultiForm::wedge_big(
-            basis
-              .iter()
-              .map(|i| MultiForm::line(linear_map.row(i).transpose())),
-          )
-          .unwrap_or(ExteriorElement::one(self.dim))
-      })
-      .sum()
+    assert_eq!(self.dim, linear_map.nrows());
+    let coeffs = exterior_power(linear_map, self.grade).transpose() * &self.coeffs;
+    Self::new(coeffs, linear_map.ncols(), self.grade)
   }
 
   pub fn apply_form_to_vector(&self, vector: &MultiVector) -> f64 {
@@ -283,6 +305,71 @@ impl MultiForm {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  use approx::assert_relative_eq;
+
+  /// Deterministic full-rank-ish test matrix.
+  fn test_matrix(nrows: usize, ncols: usize, seed: usize) -> Matrix {
+    Matrix::from_fn(nrows, ncols, |i, j| {
+      ((seed + 3 * i + 7 * j) % 5) as f64 / 5.0 + if i == j { 1.0 } else { 0.0 }
+    })
+  }
+
+  /// Functoriality of the exterior power: the Cauchy-Binet formula
+  /// $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$.
+  #[test]
+  fn exterior_power_functoriality() {
+    for (n, m) in [(2, 2), (3, 3), (4, 4), (2, 3), (3, 2), (2, 4)] {
+      let a = test_matrix(n, m, 1);
+      let b = test_matrix(m, n, 2);
+      for k in 0..=n.min(m) {
+        let power_ab = exterior_power(&(&a * &b), k);
+        let power_a_power_b = exterior_power(&a, k) * exterior_power(&b, k);
+        assert_relative_eq!(power_ab, power_a_power_b, epsilon = 1e-12);
+      }
+    }
+  }
+
+  /// $Lambda^n A = det A$ and $Lambda^k id = id$.
+  #[test]
+  fn exterior_power_det_and_identity() {
+    for n in 1..=4 {
+      let a = test_matrix(n, n, 3);
+      assert_relative_eq!(exterior_power(&a, n)[(0, 0)], a.determinant(), epsilon = 1e-12);
+      for k in 0..=n {
+        let id = Matrix::identity(n, n);
+        assert_relative_eq!(
+          exterior_power(&id, k),
+          Matrix::identity(exterior_dim(n, k), exterior_dim(n, k))
+        );
+      }
+    }
+  }
+
+  /// The pullback is the same as wedging the pulled-back constituent 1-forms.
+  #[test]
+  fn precompose_is_wedge_of_pullbacks() {
+    for (n, m) in [(2, 2), (3, 3), (3, 2), (4, 3)] {
+      let a = test_matrix(n, m, 4);
+      for k in 0..=n.min(m) {
+        let form = ExteriorElement::new(
+          Vector::from_fn(exterior_dim(n, k), |i, _| (i + 1) as f64),
+          n,
+          k,
+        );
+        let computed = form.precompose_form(&a);
+        let expected: ExteriorElement = form
+          .basis_iter()
+          .map(|(coeff, basis)| {
+            coeff
+              * MultiForm::wedge_big(basis.iter().map(|i| MultiForm::line(a.row(i).transpose())))
+                .unwrap_or(ExteriorElement::one(m))
+          })
+          .sum();
+        assert_relative_eq!(computed.coeffs(), expected.coeffs(), epsilon = 1e-12);
+      }
+    }
+  }
 
   #[test]
   fn compute_wedge() {
