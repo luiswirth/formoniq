@@ -1,6 +1,7 @@
 use {
   ddf::cochain::Cochain, ddf::whitney::form::WhitneyForm, exterior::exterior_dim,
-  formoniq::problems::hodge_laplace, manifold::geometry::coord::simplex::SimplexCoords,
+  formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
+  manifold::geometry::coord::simplex::SimplexCoords,
 };
 
 use std::{
@@ -53,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   let neigen: usize = neigen.trim().parse()?;
 
   let (eigenvals, _, eigenfuncs) =
-    hodge_laplace::solve_hodge_laplace_evp(&topology, &metric, grade, neigen);
+    hodge_laplace::solve_hodge_laplace_evp(WhitneyComplex::new(&topology, &metric), grade, neigen);
   for (ieigen, (&eigenval, eigenfunc)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate()
   {
     println!("ieigen={ieigen}, eigenval={eigenval:.3}");

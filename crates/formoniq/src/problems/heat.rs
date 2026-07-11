@@ -2,21 +2,13 @@
 
 use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
 
-use crate::{
-  assemble,
-  operators::{self, DofIdx},
-};
+use crate::{assemble, operators::DofIdx, whitney_complex::WhitneyComplex};
 
-use {
-  ddf::cochain::Cochain,
-  manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex},
-};
+use ddf::cochain::Cochain;
 
 /// times = [t_0,t_1,...,T]
-#[allow(clippy::too_many_arguments)]
 pub fn solve_heat<F>(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   nsteps: usize,
   dt: f64,
   boundary_data: F,
@@ -27,14 +19,10 @@ pub fn solve_heat<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let dim = topology.dim();
+  let topology = fes.topology();
 
-  let mut laplace = assemble::assemble_galmat(
-    topology,
-    geometry,
-    operators::LaplaceBeltramiElmat::new(dim),
-  );
-  let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
+  let mut laplace = fes.codif_dif(0);
+  let mut mass = fes.mass(0);
   let mass_csr = CsrMatrix::from(&mass);
   let mut source = &mass_csr * &source_data.coeffs;
 

@@ -1,16 +1,13 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
-use crate::{
-  assemble,
-  operators::{self, DofIdx},
-};
+use crate::{assemble, operators::DofIdx, whitney_complex::WhitneyComplex};
 
 use common::linalg::{
   faer::FaerCholesky,
   nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
 };
 use ddf::cochain::Cochain;
-use manifold::{geometry::metric::mesh::MeshLengths, topology::complex::Complex};
+use manifold::geometry::metric::mesh::MeshLengths;
 
 pub struct WaveState {
   pub pos: Vector,
@@ -29,8 +26,7 @@ impl WaveState {
 
 /// times = [t_0,t_1,...,T]
 pub fn solve_wave<F>(
-  topology: &Complex,
-  geometry: &MeshLengths,
+  fes: WhitneyComplex,
   times: &[f64],
   boundary_data: F,
   initial_data: WaveState,
@@ -39,13 +35,9 @@ pub fn solve_wave<F>(
 where
   F: Fn(DofIdx) -> f64,
 {
-  let dim = topology.dim();
-  let mut laplace = assemble::assemble_galmat(
-    topology,
-    geometry,
-    operators::LaplaceBeltramiElmat::new(dim),
-  );
-  let mut mass = assemble::assemble_galmat(topology, geometry, operators::ScalarMassElmat);
+  let topology = fes.topology();
+  let mut laplace = fes.codif_dif(0);
+  let mut mass = fes.mass(0);
 
   let mass_csr = CsrMatrix::from(&mass);
   let mut force = &mass_csr * force_data.coeffs();

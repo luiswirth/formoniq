@@ -3,6 +3,7 @@ use {
   exterior::{field::DiffFormClosure, ExteriorElement},
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,
+    whitney_complex::WhitneyComplex,
   },
   manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef},
 };
@@ -98,8 +99,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       );
 
       let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(
-        &topology,
-        &metric,
+        WhitneyComplex::new(&topology, &metric),
         source_data,
         grade,
         homology_dim,

@@ -3,7 +3,10 @@ extern crate nalgebra_sparse as nas;
 
 use common::linalg::nalgebra::Vector;
 use ddf::cochain::Cochain;
-use formoniq::problems::wave::{self, WaveState};
+use formoniq::{
+  problems::wave::{self, WaveState},
+  whitney_complex::WhitneyComplex,
+};
 use manifold::dim3::{cartesian2spherical, mesh_sphere_surface};
 
 #[allow(unused_imports)]
@@ -60,8 +63,7 @@ fn main() {
   let initial_data = WaveState::new(initial_pos, initial_vel);
 
   let solution = wave::solve_wave(
-    &topology,
-    &metric,
+    WhitneyComplex::new(&topology, &metric),
     &times,
     boundary_data,
     initial_data,

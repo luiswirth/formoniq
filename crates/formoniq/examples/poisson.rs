@@ -7,6 +7,7 @@ use {
   exterior::field::DiffFormClosure,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::laplace_beltrami,
+    whitney_complex::WhitneyComplex,
   },
   manifold::gen::cartesian::CartesianMeshInfo,
 };
@@ -54,8 +55,7 @@ fn main() {
       let boundary_data = |ivertex| solution_projected[ivertex];
 
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(
-        &topology,
-        &metric,
+        WhitneyComplex::new(&topology, &metric),
         load_vector,
         boundary_data,
       );
