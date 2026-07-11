@@ -37,13 +37,13 @@ pub fn exterior_bases(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = Bl
 /// $Lambda^k$ (multi_gramian), the pullback of $k$-forms (precompose_form)
 /// and the coefficients of a wedge of vectors (spanning multivector).
 pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
-  let row_bases: Vec<Blade> = exterior_bases(linear_map.nrows(), grade).collect();
-  let col_bases: Vec<Blade> = exterior_bases(linear_map.ncols(), grade).collect();
+  let nrows = exterior_dim(linear_map.nrows(), grade);
+  let ncols = exterior_dim(linear_map.ncols(), grade);
 
-  let mut power = Matrix::zeros(row_bases.len(), col_bases.len());
+  let mut power = Matrix::zeros(nrows, ncols);
   let mut minor = Matrix::zeros(grade, grade);
-  for (i, row_basis) in row_bases.iter().enumerate() {
-    for (j, col_basis) in col_bases.iter().enumerate() {
+  for (i, row_basis) in exterior_bases(linear_map.nrows(), grade).enumerate() {
+    for (j, col_basis) in exterior_bases(linear_map.ncols(), grade).enumerate() {
       for (ii, row) in row_basis.iter().enumerate() {
         for (jj, col) in col_basis.iter().enumerate() {
           minor[(ii, jj)] = linear_map[(row, col)];
@@ -158,6 +158,32 @@ impl ExteriorElement {
     Some(prod)
   }
 
+  /// The interior product (contraction) $iota_v: Lambda^k -> Lambda^(k-1)$
+  /// with a vector.
+  ///
+  /// Metric-free. An antiderivation of degree -1 with $iota_v^2 = 0$: the
+  /// dual of the wedge. On blades it is the alternating-deletion pattern of
+  /// the simplicial boundary, weighted by the vector components -- with the
+  /// all-ones vector it IS the boundary operator, $diff = iota_bb(1)$.
+  ///
+  /// Read as: a k-form contracted by a tangent vector, or equally a
+  /// k-vector contracted by a covector.
+  pub fn interior_product(&self, vector: &Vector) -> Self {
+    assert_eq!(vector.len(), self.dim);
+    assert!(self.grade >= 1, "Interior product needs grade >= 1.");
+
+    let mut contraction = Self::zero(self.dim, self.grade - 1);
+    for (coeff, blade) in self.basis_iter() {
+      if coeff == 0.0 {
+        continue;
+      }
+      for (sign, index, deleted) in blade.deletions() {
+        contraction.coeffs[deleted.rank()] += sign.as_f64() * vector[index] * coeff;
+      }
+    }
+    contraction
+  }
+
   pub fn eq_epsilon(&self, other: &Self, eps: f64) -> bool {
     self.dim == other.dim
       && self.grade == other.grade
@@ -265,6 +291,31 @@ impl MultiForm {
     assert!(self.dim == vector.dim && self.grade == vector.grade);
     self.coeffs.dot(&vector.coeffs)
   }
+
+  /// The Hodge star $star: Lambda^k -> Lambda^(n-k)$, defined by
+  /// $alpha wedge star beta = inner(alpha, beta)_g vol_g$ for all $alpha$.
+  ///
+  /// Metric-dependent: takes the metric tensor $g$ on tangent vectors.
+  /// The inner product on k-forms is $Lambda^k g^(-1)$ and the volume form
+  /// is $sqrt(det g) dif x^(1 dots n)$; the positively oriented standard
+  /// basis is assumed. In coefficients,
+  /// $(star beta)_(I^c) = sqrt(det g) med epsilon(I, I^c) (Lambda^k g^(-1) beta)_I$,
+  /// so for the Euclidean metric the star is exactly the signed complement
+  /// of each basis blade ([`Combination::complement_signed`]).
+  pub fn hodge_star(&self, metric: &Gramian) -> Self {
+    let dim = self.dim;
+    assert_eq!(metric.dim(), dim);
+
+    let form_gramian = multi_gramian(&metric.clone().inverse(), self.grade);
+    let weighted = metric.det_sqrt() * (form_gramian.matrix() * &self.coeffs);
+
+    let mut star = Self::zero(dim, dim - self.grade);
+    for (blade, &coeff) in exterior_bases(dim, self.grade).zip(weighted.iter()) {
+      let (sign, complement) = blade.complement_signed(dim);
+      star.coeffs[complement.rank()] = sign.as_f64() * coeff;
+    }
+    star
+  }
 }
 
 #[cfg(test)]
@@ -332,6 +383,134 @@ mod tests {
           })
           .sum();
         assert_relative_eq!(computed.coeffs(), expected.coeffs(), epsilon = 1e-12);
+      }
+    }
+  }
+
+  fn test_element(dim: Dim, grade: ExteriorGrade, seed: usize) -> ExteriorElement {
+    ExteriorElement::new(
+      Vector::from_fn(exterior_dim(dim, grade), |i, _| {
+        ((seed + 5 * i) % 7) as f64 - 3.0
+      }),
+      dim,
+      grade,
+    )
+  }
+  /// A non-trivial s.p.d. metric tensor.
+  fn test_metric(dim: Dim) -> Gramian {
+    let a = test_matrix(dim, dim, 5);
+    Gramian::new(a.transpose() * a + Matrix::identity(dim, dim))
+  }
+
+  /// For the Euclidean metric the Hodge star is the signed complement of
+  /// each basis blade.
+  #[test]
+  fn hodge_star_euclidean_is_signed_complement() {
+    for dim in 1..=4 {
+      let euclidean = Gramian::standard(dim);
+      for grade in 0..=dim {
+        for blade in exterior_bases(dim, grade) {
+          let element = ExteriorElement::from_blade_signed(dim, Sign::Pos, blade);
+          let star = element.hodge_star(&euclidean);
+          let (sign, complement) = blade.complement_signed(dim);
+          let expected = ExteriorElement::from_blade_signed(dim, sign, complement);
+          assert_relative_eq!(star.coeffs(), expected.coeffs());
+        }
+      }
+    }
+  }
+
+  /// $star star = (-1)^(k(n-k))$ on any Riemannian metric.
+  #[test]
+  fn hodge_star_involution() {
+    for dim in 1..=4 {
+      for metric in [Gramian::standard(dim), test_metric(dim)] {
+        for grade in 0..=dim {
+          let element = test_element(dim, grade, 2);
+          let star_star = element.hodge_star(&metric).hodge_star(&metric);
+          let sign = Sign::from_parity(grade * (dim - grade));
+          assert_relative_eq!(
+            star_star.coeffs(),
+            &(sign.as_f64() * element).coeffs(),
+            epsilon = 1e-12
+          );
+        }
+      }
+    }
+  }
+
+  /// The defining property $alpha wedge star beta = inner(alpha, beta)_g vol_g$,
+  /// tying together wedge, multi_gramian and hodge_star.
+  #[test]
+  fn wedge_with_star_is_inner_times_volume() {
+    for dim in 1..=4 {
+      for metric in [Gramian::standard(dim), test_metric(dim)] {
+        for grade in 0..=dim {
+          let alpha = test_element(dim, grade, 3);
+          let beta = test_element(dim, grade, 4);
+
+          let wedge = alpha.wedge(&beta.hodge_star(&metric));
+
+          let inner = multi_gramian(&metric.clone().inverse(), grade)
+            .inner(alpha.coeffs(), beta.coeffs());
+          let volume = metric.det_sqrt();
+
+          assert_eq!(wedge.grade(), dim);
+          assert_relative_eq!(wedge[0], inner * volume, epsilon = 1e-12);
+        }
+      }
+    }
+  }
+
+  /// $iota_v$ is an antiderivation:
+  /// $iota_v (alpha wedge beta) = (iota_v alpha) wedge beta
+  ///   + (-1)^k alpha wedge (iota_v beta)$.
+  #[test]
+  fn interior_product_antiderivation() {
+    for dim in 2..=4 {
+      let vector = Vector::from_fn(dim, |i, _| (i + 1) as f64);
+      for grade_a in 1..dim {
+        for grade_b in 1..=(dim - grade_a) {
+          let alpha = test_element(dim, grade_a, 5);
+          let beta = test_element(dim, grade_b, 6);
+
+          let lhs = alpha.wedge(&beta).interior_product(&vector);
+          let sign = Sign::from_parity(grade_a);
+          let rhs = alpha.interior_product(&vector).wedge(&beta)
+            + sign.as_f64() * alpha.wedge(&beta.interior_product(&vector));
+          assert_relative_eq!(lhs.coeffs(), rhs.coeffs(), epsilon = 1e-12);
+        }
+      }
+    }
+  }
+
+  /// $iota_v compose iota_v = 0$ -- the same law as $diff compose diff = 0$.
+  #[test]
+  fn interior_product_squares_to_zero() {
+    for dim in 2..=4 {
+      let vector = Vector::from_fn(dim, |i, _| (2 * i + 1) as f64);
+      for grade in 2..=dim {
+        let element = test_element(dim, grade, 7);
+        let twice = element.interior_product(&vector).interior_product(&vector);
+        assert_relative_eq!(twice.coeffs().norm(), 0.0);
+      }
+    }
+  }
+
+  /// The interior product is adjoint to wedging with the flat of the vector:
+  /// $inner(iota_v alpha, beta) = inner(alpha, v^flat wedge beta)$ (Euclidean).
+  #[test]
+  fn interior_product_adjoint_to_wedge() {
+    for dim in 2..=4 {
+      let vector = Vector::from_fn(dim, |i, _| (i + 2) as f64);
+      let vector_flat = ExteriorElement::line(vector.clone());
+      for grade in 1..=dim {
+        let alpha = test_element(dim, grade, 8);
+        let beta = test_element(dim, grade - 1, 9);
+
+        let lhs = alpha.interior_product(&vector).coeffs().dot(beta.coeffs());
+        let rhs = alpha.coeffs().dot(vector_flat.wedge(&beta).coeffs());
+        assert_relative_eq!(lhs, rhs, epsilon = 1e-12);
       }
     }
   }
