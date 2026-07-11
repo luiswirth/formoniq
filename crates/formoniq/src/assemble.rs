@@ -23,10 +23,9 @@ pub fn assemble_galmat(
   let nsimps_row = topology.skeleton(row_grade).len();
   let nsimps_col = topology.skeleton(col_grade).len();
 
-  let triplets: Vec<(usize, usize, f64)> = topology
-    .cells()
-    .handle_iter()
-    .par_bridge()
+  let cells = topology.cells();
+  let triplets: Vec<(usize, usize, f64)> = cells
+    .handle_par_iter()
     .flat_map(|cell| {
       let geo = geometry.simplex_lengths(cell);
       let elmat = elmat.eval(&geo);
@@ -62,10 +61,9 @@ pub fn assemble_galvec(
   let grade = elvec.grade();
   let nsimps = topology.skeleton(grade).len();
 
-  let entries: Vec<(usize, f64)> = topology
-    .cells()
-    .handle_iter()
-    .par_bridge()
+  let cells = topology.cells();
+  let entries: Vec<(usize, f64)> = cells
+    .handle_par_iter()
     .flat_map(|cell| {
       let geo = geometry.simplex_lengths(cell);
       let elvec = elvec.eval(&geo, &cell);
