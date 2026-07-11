@@ -7,10 +7,10 @@ use manifold::{
   topology::skeleton::Skeleton,
 };
 
-use crate::{CoordSimplexExt, ManifoldComplexExt};
+use crate::CoordSimplexExt;
 
 use {
-  exterior::{field::DifferentialMultiForm, Dim},
+  exterior::{field::DifferentialMultiForm, ExteriorGrade},
   manifold::{
     geometry::coord::{simplex::SimplexCoords, CoordRef},
     topology::{
@@ -23,11 +23,11 @@ use {
 #[derive(Debug, Clone)]
 pub struct Cochain {
   pub coeffs: Vector,
-  pub dim: Dim,
+  pub grade: ExteriorGrade,
 }
 impl Cochain {
-  pub fn new(dim: Dim, coeffs: Vector) -> Self {
-    Self { dim, coeffs }
+  pub fn new(grade: ExteriorGrade, coeffs: Vector) -> Self {
+    Self { grade, coeffs }
   }
   pub fn constant(value: f64, skeleton: &Skeleton) -> Self {
     let ncoeffs = skeleton.len();
@@ -36,17 +36,17 @@ impl Cochain {
   pub fn zero(skeleton: &Skeleton) -> Self {
     Self::constant(0.0, skeleton)
   }
-  pub fn from_function<F>(f: F, dim: Dim, topology: &Complex) -> Self
+  pub fn from_function<F>(f: F, grade: ExteriorGrade, topology: &Complex) -> Self
   where
     F: FnMut(SimplexHandle) -> f64,
   {
-    let skeleton = topology.skeleton(dim);
+    let skeleton = topology.skeleton(grade);
     let coeffs = Vector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
-    Self::new(dim, coeffs)
+    Self::new(grade, coeffs)
   }
 
-  pub fn dim(&self) -> Dim {
-    self.dim
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
   }
   pub fn coeffs(&self) -> &Vector {
     &self.coeffs
@@ -59,8 +59,8 @@ impl Cochain {
   }
 
   pub fn dif(&self, topology: &Complex) -> Self {
-    let dif_operator = CsrMatrix::from(&topology.exterior_derivative_operator(self.dim()));
-    Cochain::new(self.dim() + 1, dif_operator * self.coeffs())
+    let dif_operator = CsrMatrix::from(&topology.coboundary_operator(self.grade()));
+    Cochain::new(self.grade() + 1, dif_operator * self.coeffs())
   }
 
   /// Scale this cochain by a factor, modifying it in-place
@@ -71,26 +71,26 @@ impl Cochain {
 
   /// Create a new cochain by scaling this one.
   pub fn scaled(&self, factor: f64) -> Self {
-    Self::new(self.dim, &self.coeffs * factor)
+    Self::new(self.grade, &self.coeffs * factor)
   }
 
   pub fn component_mul(&self, other: &Self) -> Self {
-    assert_eq!(self.dim, other.dim);
+    assert_eq!(self.grade, other.grade);
     let coeffs = self.coeffs.component_mul(&other.coeffs);
-    Self::new(self.dim, coeffs)
+    Self::new(self.grade, coeffs)
   }
 }
 
 impl std::ops::Index<SimplexIdx> for Cochain {
   type Output = f64;
   fn index(&self, idx: SimplexIdx) -> &Self::Output {
-    assert!(idx.dim() == self.dim());
+    assert!(idx.dim() == self.grade());
     &self.coeffs[idx.kidx]
   }
 }
 impl std::ops::IndexMut<SimplexIdx> for Cochain {
   fn index_mut(&mut self, idx: SimplexIdx) -> &mut Self::Output {
-    assert!(idx.dim() == self.dim());
+    assert!(idx.dim() == self.grade());
     &mut self.coeffs[idx.kidx]
   }
 }
@@ -98,13 +98,13 @@ impl std::ops::IndexMut<SimplexIdx> for Cochain {
 impl std::ops::Index<SimplexHandle<'_>> for Cochain {
   type Output = f64;
   fn index(&self, handle: SimplexHandle<'_>) -> &Self::Output {
-    assert!(handle.dim() == self.dim());
+    assert!(handle.dim() == self.grade());
     &self.coeffs[handle.kidx()]
   }
 }
 impl std::ops::IndexMut<SimplexHandle<'_>> for Cochain {
   fn index_mut(&mut self, idx: SimplexHandle<'_>) -> &mut Self::Output {
-    assert!(idx.dim() == self.dim());
+    assert!(idx.dim() == self.grade());
     &mut self.coeffs[idx.kidx()]
   }
 }
@@ -129,7 +129,7 @@ impl std::ops::MulAssign<f64> for Cochain {
 }
 impl std::ops::SubAssign for Cochain {
   fn sub_assign(&mut self, rhs: Self) {
-    assert!(self.dim == rhs.dim);
+    assert!(self.grade == rhs.grade);
     self.coeffs -= rhs.coeffs;
   }
 }

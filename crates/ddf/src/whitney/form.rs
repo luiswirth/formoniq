@@ -37,7 +37,7 @@ impl ExteriorField for WhitneyForm<'_> {
     self.complex.dim()
   }
   fn grade(&self) -> exterior::ExteriorGrade {
-    self.cochain.dim()
+    self.cochain.grade()
   }
   /// Global position
   fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> exterior::ExteriorElement {
@@ -107,7 +107,7 @@ impl ExteriorField for DifWhitneyForm<'_> {
     self.complex.dim()
   }
   fn grade(&self) -> exterior::ExteriorGrade {
-    self.cochain.dim()
+    self.cochain.grade()
   }
   /// Global position
   fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> exterior::ExteriorElement {

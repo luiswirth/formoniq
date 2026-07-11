@@ -1,6 +1,6 @@
 use crate::cochain::Cochain;
 
-use manifold::Dim;
+use exterior::ExteriorGrade;
 
 use std::{
   fs::File,
@@ -8,7 +8,7 @@ use std::{
   path::Path,
 };
 
-pub fn read_cochain_from_file(path: impl AsRef<Path>, dim: Dim) -> io::Result<Cochain> {
+pub fn read_cochain_from_file(path: impl AsRef<Path>, grade: ExteriorGrade) -> io::Result<Cochain> {
   let file = File::open(path)?;
   let reader = BufReader::new(file);
 
@@ -21,7 +21,7 @@ pub fn read_cochain_from_file(path: impl AsRef<Path>, dim: Dim) -> io::Result<Co
     }
   }
 
-  Ok(Cochain::new(dim, coeffs.into()))
+  Ok(Cochain::new(grade, coeffs.into()))
 }
 pub fn save_cochain_to_file(cochain: &Cochain, path: impl AsRef<Path>) -> std::io::Result<()> {
   let file = File::create(path)?;

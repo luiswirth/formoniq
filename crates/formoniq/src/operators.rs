@@ -3,7 +3,7 @@ use {
     combo::{factorial, Sign},
     linalg::nalgebra::{Matrix, Vector},
   },
-  ddf::{whitney::lsf::WhitneyLsf, ManifoldComplexExt},
+  ddf::whitney::lsf::WhitneyLsf,
   exterior::{
     field::ExteriorField, list::ExteriorElementList, term::multi_gramian, Dim, ExteriorGrade,
   },
@@ -12,10 +12,7 @@ use {
       coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
       metric::simplex::SimplexLengths,
     },
-    topology::{
-      complex::Complex,
-      simplex::{standard_subsimps, Simplex},
-    },
+    topology::simplex::{standard_boundary_operator, standard_subsimps, Simplex},
   },
 };
 
@@ -172,8 +169,7 @@ pub struct DifElmat {
 impl DifElmat {
   pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
     let mass = HodgeMassElmat::new(dim, grade);
-    let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
-    let dif = Matrix::from(&dif);
+    let dif = standard_boundary_operator(dim, grade).transpose();
     Self { mass, dif }
   }
 }
@@ -201,9 +197,7 @@ pub struct CodifElmat {
 impl CodifElmat {
   pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
     let mass = HodgeMassElmat::new(dim, grade);
-    let dif = Complex::standard(dim).exterior_derivative_operator(grade - 1);
-    let dif = Matrix::from(&dif);
-    let codif = dif.transpose();
+    let codif = standard_boundary_operator(dim, grade);
     Self { mass, codif }
   }
 }
@@ -231,8 +225,7 @@ pub struct CodifDifElmat {
 impl CodifDifElmat {
   pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
     let mass = HodgeMassElmat::new(dim, grade + 1);
-    let dif = Complex::standard(dim).exterior_derivative_operator(grade);
-    let dif = Matrix::from(&dif);
+    let dif = standard_boundary_operator(dim, grade + 1).transpose();
     let codif = dif.transpose();
 
     Self { mass, dif, codif }

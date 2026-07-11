@@ -3,22 +3,11 @@ pub mod io;
 pub mod whitney;
 
 use {
-  common::linalg::nalgebra::{CooMatrix, CooMatrixExt},
-  exterior::{ExteriorGrade, MultiForm, MultiVector},
-  manifold::{geometry::coord::simplex::SimplexCoords, topology::complex::Complex},
+  exterior::{MultiForm, MultiVector},
+  manifold::geometry::coord::simplex::SimplexCoords,
 };
 
 pub type LocalMultiForm = MultiForm;
-
-pub trait ManifoldComplexExt {
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> CooMatrix;
-}
-impl ManifoldComplexExt for Complex {
-  /// $dif^k: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$
-  fn exterior_derivative_operator(&self, grade: ExteriorGrade) -> CooMatrix {
-    self.boundary_operator(grade + 1).transpose()
-  }
-}
 
 pub trait CoordSimplexExt {
   fn difbarys_ext(&self) -> Vec<LocalMultiForm>;
