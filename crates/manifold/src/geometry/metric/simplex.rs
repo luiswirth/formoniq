@@ -3,7 +3,7 @@ use crate::{geometry::coord::simplex::SimplexCoords, topology::simplex::nedges, 
 
 use common::{
   combo::{combinations, factorial, Combination},
-  gramian::Gramian,
+  gramian::{Gramian, RiemannianMetric},
   linalg::nalgebra::{Matrix, Vector},
 };
 
@@ -182,6 +182,12 @@ impl SimplexLengths {
   /// Inverse metric tensor: the induced inner product on covectors.
   pub fn inverse_metric_tensor(&self) -> Gramian {
     self.to_metric_tensor().inverse()
+  }
+
+  /// The full Riemannian metric: the Gramian on tangent vectors together
+  /// with its inverse on covectors.
+  pub fn riemannian_metric(&self) -> RiemannianMetric {
+    RiemannianMetric::new(self.to_metric_tensor())
   }
 
   /// Regge Calculus
