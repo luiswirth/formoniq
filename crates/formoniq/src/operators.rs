@@ -1,12 +1,10 @@
 use {
   common::{
-    combo::{factorial, Combination, Sign},
+    combo::{factorial, Combination},
     linalg::nalgebra::{Matrix, Vector},
   },
   ddf::whitney::lsf::WhitneyLsf,
-  exterior::{
-    field::ExteriorField, list::ExteriorElementList, multi_gramian, Dim, ExteriorGrade,
-  },
+  exterior::{exterior_power, field::ExteriorField, multi_gramian, Dim, ExteriorGrade},
   manifold::{
     geometry::{
       coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
@@ -63,21 +61,21 @@ pub struct HodgeMassElmat {
   dim: Dim,
   grade: ExteriorGrade,
   simplices: Vec<Combination>,
-  wedge_terms: Vec<ExteriorElementList>,
+  /// $Lambda^k$ of the reference barycentric differentials: the pullback
+  /// matrix taking formal barycentric $k$-blades to reference $k$-forms.
+  difbarys_power: Matrix,
 }
 impl HodgeMassElmat {
   pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
     let simplices: Vec<_> = standard_subsimps(dim, grade).collect();
-    let wedge_terms: Vec<ExteriorElementList> = simplices
-      .iter()
-      .map(|&simp| WhitneyLsf::standard(dim, simp).wedge_terms().collect())
-      .collect();
+    let ref_difbarys = SimplexCoords::standard(dim).difbarys();
+    let difbarys_power = exterior_power(&ref_difbarys, grade);
 
     Self {
       dim,
       grade,
       simplices,
-      wedge_terms,
+      difbarys_power,
     }
   }
 }
@@ -93,28 +91,26 @@ impl ElMatProvider for HodgeMassElmat {
     assert_eq!(self.dim, geometry.dim());
 
     let scalar_mass = scalar_mass_elmat(geometry);
-    let form_gramian = multi_gramian(&geometry.inverse_metric_tensor(), self.grade);
+    let metric = geometry.riemannian_metric();
+    let form_gramian = multi_gramian(metric.covector_gramian(), self.grade);
+
+    // Inner products of the pulled-back barycentric k-blades
+    // $lambda^* (e_I)$: one Cauchy-Binet sandwich for all Whitney wedge
+    // terms at once.
+    let blade_inners =
+      &self.difbarys_power * form_gramian.matrix() * self.difbarys_power.transpose();
 
     let mut elmat = Matrix::zeros(self.simplices.len(), self.simplices.len());
     for (i, asimp) in self.simplices.iter().enumerate() {
       for (j, bsimp) in self.simplices.iter().enumerate() {
-        let wedge_terms_a = &self.wedge_terms[i];
-        let wedge_terms_b = &self.wedge_terms[j];
-        let wedge_inners = form_gramian.inner_mat(wedge_terms_a.coeffs(), wedge_terms_b.coeffs());
-
-        let nvertices = self.grade + 1;
         let mut sum = 0.0;
-        for avertex in 0..nvertices {
-          for bvertex in 0..nvertices {
-            let sign = Sign::from_parity(avertex + bvertex);
-
-            let inner = wedge_inners[(avertex, bvertex)];
-
-            sum +=
-              sign.as_f64() * inner * scalar_mass[(asimp.index_at(avertex), bsimp.index_at(bvertex))];
+        for (asign, avertex, arest) in asimp.deletions() {
+          for (bsign, bvertex, brest) in bsimp.deletions() {
+            sum += (asign * bsign).as_f64()
+              * blade_inners[(arest.rank(), brest.rank())]
+              * scalar_mass[(avertex, bvertex)];
           }
         }
-
         elmat[(i, j)] = sum;
       }
     }
@@ -252,7 +248,7 @@ where
   fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec {
     let cell_coords = SimplexCoords::from_simplex_and_coords(topology, self.mesh_coords);
 
-    let inner = multi_gramian(&geometry.inverse_metric_tensor(), self.grade());
+    let inner = multi_gramian(geometry.riemannian_metric().covector_gramian(), self.grade());
 
     let mut elvec = ElVec::zeros(self.whitneys.len());
     for (iwhitney, whitney) in self.whitneys.iter().enumerate() {
@@ -262,7 +258,7 @@ where
           self
             .source
             .at_point(&global)
-            .precompose_form(&cell_coords.linear_transform())
+            .pullback(&cell_coords.linear_transform())
             .coeffs(),
           whitney.at_point(local).coeffs(),
         )
@@ -279,7 +275,6 @@ mod test {
   use super::*;
 
   use ddf::whitney::lsf::WhitneyLsf;
-  use exterior::multi_gramian;
   use manifold::{geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps};
 
   use approx::assert_relative_eq;
@@ -349,8 +344,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = multi_gramian(&geo.inverse_metric_tensor(), grade + 1)
-              .inner(awhitney.coeffs(), bwhitney.coeffs());
+            inner[(i, j)] = awhitney.inner(bwhitney, &geo.riemannian_metric());
           }
         }
         inner *= geo.vol();

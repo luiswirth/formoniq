@@ -15,7 +15,7 @@
 use crate::{cochain::Cochain, CoordSimplexExt};
 
 use {
-  exterior::field::DifferentialMultiForm,
+  exterior::field::ExteriorField,
   manifold::{
     geometry::{
       coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
@@ -28,7 +28,7 @@ use {
 /// The de Rham map: discretize a continuous differential k-form into a
 /// k-cochain by integrating it over each k-simplex of the mesh.
 pub fn derham_map(
-  form: &impl DifferentialMultiForm,
+  form: &impl ExteriorField,
   topology: &Complex,
   coords: &MeshCoords,
   qr: Option<&SimplexQuadRule>,
@@ -45,7 +45,7 @@ pub fn derham_map(
 
 /// Approximates the integral of a differential k-form over a k-simplex.
 pub fn integrate_form_simplex(
-  form: &impl DifferentialMultiForm,
+  form: &impl ExteriorField,
   simplex: &SimplexCoords,
   qr: Option<&SimplexQuadRule>,
 ) -> f64 {
@@ -55,7 +55,7 @@ pub fn integrate_form_simplex(
   let f = |coord: CoordRef| {
     form
       .at_point(simplex.local2global(coord).as_view())
-      .apply_form_to_vector(&multivector)
+      .pairing(&multivector)
   };
   if let Some(qr) = qr {
     qr.integrate_local(&f, refsimp_vol(dim_intrinsic))

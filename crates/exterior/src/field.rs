@@ -3,39 +3,29 @@ use common::{
   linalg::nalgebra::{Vector, VectorView},
 };
 
-use crate::{Dim, ExteriorElement, ExteriorGrade};
+use crate::{Dim, ExteriorGrade, MultiForm};
 
+/// A differential form: a multiform field over a manifold.
 pub trait ExteriorField {
   fn dim_ambient(&self) -> Dim;
   fn dim_intrinsic(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
-  fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement;
+  fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> MultiForm;
 }
-
-// Trait aliases.
-pub trait MultiVectorField: ExteriorField {}
-impl<T: ExteriorField> MultiVectorField for T {}
-pub trait MultiFormField: ExteriorField {}
-impl<T: ExteriorField> MultiFormField for T {}
-pub trait DifferentialMultiForm: MultiFormField {}
-impl<T: MultiFormField> DifferentialMultiForm for T {}
 
 pub type DiffFormClosure = ExteriorFieldClosure;
 
-#[allow(clippy::type_complexity)]
+/// A pointwise evaluation rule for a differential form.
+pub type FormClosure = Box<dyn Fn(VectorView<f64>) -> MultiForm + Sync>;
+
 pub struct ExteriorFieldClosure {
-  closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement + Sync>,
+  closure: FormClosure,
   dim: Dim,
   grade: ExteriorGrade,
 }
 
-#[allow(clippy::type_complexity)]
 impl ExteriorFieldClosure {
-  pub fn new(
-    closure: Box<dyn Fn(VectorView<f64>) -> ExteriorElement + Sync>,
-    dim: Dim,
-    grade: ExteriorGrade,
-  ) -> Self {
+  pub fn new(closure: FormClosure, dim: Dim, grade: ExteriorGrade) -> Self {
     Self {
       closure,
       dim,
@@ -48,12 +38,12 @@ impl ExteriorFieldClosure {
 impl DiffFormClosure {
   /// Create a scalar field (0-form).
   pub fn scalar(f: impl Fn(VectorView<f64>) -> f64 + Sync + 'static, dim: Dim) -> Self {
-    let wrapper = move |x: VectorView<f64>| crate::ExteriorElement::scalar(f(x), dim);
+    let wrapper = move |x: VectorView<f64>| MultiForm::scalar(f(x), dim);
     Self::new(Box::new(wrapper), dim, 0)
   }
   /// Create a 1-form (covector field).
   pub fn one_form(f: impl Fn(VectorView<f64>) -> Vector + Sync + 'static, dim: Dim) -> Self {
-    let wrapper = move |x: VectorView<f64>| crate::ExteriorElement::line(f(x));
+    let wrapper = move |x: VectorView<f64>| MultiForm::line(f(x));
     Self::new(Box::new(wrapper), dim, 1)
   }
 
@@ -81,16 +71,17 @@ impl ExteriorField for ExteriorFieldClosure {
   fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement {
+  fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> MultiForm {
     (self.closure)(coord.into())
   }
 }
 
-pub struct FormPullback<F: DifferentialMultiForm> {
+/// The pullback of a differential form along an affine map.
+pub struct FormPullback<F: ExteriorField> {
   form: F,
   affine_transform: AffineTransform,
 }
-impl<F: DifferentialMultiForm> FormPullback<F> {
+impl<F: ExteriorField> FormPullback<F> {
   pub fn new(form: F, affine_transform: AffineTransform) -> Self {
     Self {
       form,
@@ -98,7 +89,7 @@ impl<F: DifferentialMultiForm> FormPullback<F> {
     }
   }
 }
-impl<F: DifferentialMultiForm> ExteriorField for FormPullback<F> {
+impl<F: ExteriorField> ExteriorField for FormPullback<F> {
   fn dim_ambient(&self) -> Dim {
     self.affine_transform.dim_image()
   }
@@ -108,11 +99,10 @@ impl<F: DifferentialMultiForm> ExteriorField for FormPullback<F> {
   fn grade(&self) -> ExteriorGrade {
     self.form.grade()
   }
-  fn at_point<'a>(&self, local: impl Into<VectorView<'a>>) -> ExteriorElement {
+  fn at_point<'a>(&self, local: impl Into<VectorView<'a>>) -> MultiForm {
     let local = local.into();
     let global = self.affine_transform.apply_forward(local);
-    let form_ref = self.form.at_point(&global);
-    let pushforward = &self.affine_transform.linear;
-    form_ref.precompose_form(pushforward)
+    let form_value = self.form.at_point(&global);
+    form_value.pullback(&self.affine_transform.linear)
   }
 }
