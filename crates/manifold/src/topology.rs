@@ -1,3 +1,4 @@
+pub mod boundary;
 pub mod complex;
 pub mod handle;
 pub mod simplex;

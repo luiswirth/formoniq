@@ -95,7 +95,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       let source_data = assemble_galvec(
         &topology,
         &metric,
-        SourceElVec::new(&laplacian_exact, &coords, None),
+        SourceElVec::new(&laplacian_exact, &coords, topology.dim(), None),
       );
 
       let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(

@@ -45,7 +45,6 @@ fn main() {
   let times: Vec<_> = (0..=nsteps).map(|istep| istep as f64 * dt).collect();
 
   assert!(!topology.has_boundary());
-  let boundary_data = |_| unreachable!();
   let force_data = Cochain::zero(&topology.cells());
 
   let initial_pos = coords
@@ -65,7 +64,6 @@ fn main() {
   let solution = wave::solve_wave(
     WhitneyComplex::new(&topology, &metric),
     &times,
-    boundary_data,
     initial_data,
     force_data,
   );

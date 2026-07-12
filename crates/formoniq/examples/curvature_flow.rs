@@ -2,9 +2,10 @@
 
 use common::linalg::{
   faer::FaerCholesky,
-  nalgebra::{CsrMatrix, Matrix, Vector},
+  nalgebra::{CsrMatrix, Matrix},
 };
-use formoniq::{assemble, whitney_complex::WhitneyComplex};
+use ddf::cochain::Cochain;
+use formoniq::{bc, whitney_complex::WhitneyComplex};
 use manifold::geometry::coord::mesh::MeshCoords;
 
 #[allow(unused_imports)]
@@ -33,34 +34,30 @@ fn main() {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
     let fes = WhitneyComplex::new(&topology, &metric);
-    let laplace = fes.codif_dif(0);
-    let mass = fes.mass(0);
-    let source = Vector::zeros(nvertices);
+    let laplace = CsrMatrix::from(&fes.codif_dif(0));
+    let mass = CsrMatrix::from(&fes.mass(0));
+    let system = &mass + dt * &laplace;
+    let boundary = fes.boundary();
+    let relative = fes.relative();
 
     let coords_initial = coords_list.first().unwrap();
     let coords_old = coords_list.last().unwrap();
     let mut coords_new = Matrix::zeros(coords_initial.dim(), nvertices);
     for d in 0..coords_initial.dim() {
-      let comps_initial = coords_initial.matrix().row(d).transpose();
+      let comps_initial = Cochain::new(0, coords_initial.matrix().row(d).transpose());
       let comps_old = coords_old.matrix().row(d).transpose();
 
-      let mut laplace = laplace.clone();
-      let mut mass = mass.clone();
-      let mut source = source.clone();
-
-      let boundary_data = |inode| comps_initial[inode];
-      assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut laplace, &mut source);
-      assemble::enforce_dirichlet_bc(&topology, boundary_data, &mut mass, &mut source);
-
-      let laplace = CsrMatrix::from(&laplace);
-      let mass = CsrMatrix::from(&mass);
-
-      let lse_matrix = &mass + dt * &laplace;
-      let lse_cholesky = FaerCholesky::new(lse_matrix);
-
-      let rhs = &mass * comps_old + dt * &source;
-      let comps_new = lse_cholesky.solve(&rhs).transpose();
-      coords_new.row_mut(d).copy_from(&comps_new);
+      let rhs = &mass * comps_old;
+      let comps_new = match &boundary {
+        // Boundary held fixed at the initial position.
+        Some(boundary) => {
+          let boundary_values = boundary.trace_cochain(&comps_initial);
+          bc::solve_with_essential_bc(&relative, boundary, system.clone(), &rhs, &boundary_values)
+            .coeffs
+        }
+        None => FaerCholesky::new(system.clone()).solve(&rhs),
+      };
+      coords_new.row_mut(d).copy_from(&comps_new.transpose());
     }
 
     let coords_new = MeshCoords::new(coords_new);

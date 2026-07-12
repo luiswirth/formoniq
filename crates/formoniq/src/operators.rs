@@ -14,9 +14,6 @@ use {
   },
 };
 
-pub type DofIdx = usize;
-pub type DofCoeff = f64;
-
 pub type ElMat = Matrix;
 pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
@@ -224,11 +221,18 @@ impl<'a, F> SourceElVec<'a, F>
 where
   F: ExteriorField,
 {
-  pub fn new(source: &'a F, mesh_coords: &'a MeshCoords, qr: Option<SimplexQuadRule>) -> Self {
-    let dim = source.dim_intrinsic();
-    let qr = qr.unwrap_or(SimplexQuadRule::barycentric(dim));
-    let whitneys = standard_subsimps(dim, source.grade())
-      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
+  /// `dim_cells` is the dimension of the mesh cells assembled over:
+  /// the topology dimension, which for boundary assembly is smaller than
+  /// the ambient dimension of the source field.
+  pub fn new(
+    source: &'a F,
+    mesh_coords: &'a MeshCoords,
+    dim_cells: Dim,
+    qr: Option<SimplexQuadRule>,
+  ) -> Self {
+    let qr = qr.unwrap_or(SimplexQuadRule::barycentric(dim_cells));
+    let whitneys = standard_subsimps(dim_cells, source.grade())
+      .map(|dof_simp| WhitneyLsf::standard(dim_cells, dof_simp))
       .collect();
     Self {
       source,
