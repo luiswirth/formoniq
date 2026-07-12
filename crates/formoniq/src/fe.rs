@@ -17,7 +17,7 @@ pub fn fe_l2_error<E: ExteriorField>(
   coords: &MeshCoords,
 ) -> f64 {
   let dim = topology.dim();
-  let qr = SimplexQuadRule::order3(dim);
+  let qr = SimplexQuadRule::degree(dim, 3);
   let fe_whitney = WhitneyForm::new(fe_cochain.clone(), topology, coords);
   let inner = multi_gramian(&Gramian::standard(dim), fe_cochain.grade());
   let error_pointwise = |x: CoordRef, cell: SimplexHandle| {

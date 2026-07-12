@@ -63,7 +63,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
     let source = DiffFormClosure::coordinate_component(0, dim);
-    let qr = manifold::geometry::coord::quadrature::SimplexQuadRule::order3(dim);
+    let qr = manifold::geometry::coord::quadrature::SimplexQuadRule::degree(dim, 3);
     let mut rhs = assemble::assemble_galvec(
       &topology,
       &metric,
