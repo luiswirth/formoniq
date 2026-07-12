@@ -230,7 +230,7 @@ where
     dim_cells: Dim,
     qr: Option<SimplexQuadRule>,
   ) -> Self {
-    let qr = qr.unwrap_or(SimplexQuadRule::barycentric(dim_cells));
+    let qr = qr.unwrap_or(SimplexQuadRule::degree(dim_cells, 1));
     let whitneys = standard_subsimps(dim_cells, source.grade())
       .map(|dof_simp| WhitneyLsf::standard(dim_cells, dof_simp))
       .collect();
