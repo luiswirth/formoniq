@@ -1,24 +1,96 @@
-use super::{
-  mesh::MeshCoords,
-  simplex::{barycenter_local, SimplexCoords},
-  CoordRef,
-};
+//! Quadrature on the reference simplex, in every dimension.
+//!
+//! One principled construction covers all dimensions and orders: the
+//! Grundmann-Möller rules (SIAM J. Numer. Anal. 15, 1978), a single closed
+//! formula giving symmetric rules exact for polynomials of any odd degree
+//! on the n-simplex.
+
+use super::{mesh::MeshCoords, simplex::SimplexCoords, CoordRef};
 use crate::{
   topology::{complex::Complex, handle::SimplexHandle},
   Dim,
 };
 
-use common::linalg::nalgebra::{Matrix, Vector};
+use common::{
+  combo::{binomial, factorialf},
+  linalg::nalgebra::{Matrix, Vector},
+};
 
 /// A quadrature rule defined on the reference simplex.
 ///
 /// Can be used to integrate functions defined on the reference simplex.
 pub struct SimplexQuadRule {
   /// Points in local coordinates.
-  points: na::DMatrix<f64>,
+  points: Matrix,
   /// Normalized weights that sum to 1.
-  weights: na::DVector<f64>,
+  weights: Vector,
 }
+
+impl SimplexQuadRule {
+  /// The Grundmann-Möller rule of index `s` on the `dim`-simplex:
+  /// exact for polynomials of degree $d = 2s + 1$, in every dimension.
+  ///
+  /// $integral_Delta f approx sum_(i=0)^s w_i sum_(|beta| = s-i)
+  ///   f((2 beta + bb(1)) \/ (d + n - 2i))$
+  /// over barycentric lattice points $beta in NN_0^(n+1)$, with
+  /// $w_i = (-1)^i 2^(-2s) (d + n - 2i)^d \/ (i! (d + n - i)!)$.
+  pub fn grundmann_moeller(dim: Dim, s: usize) -> Self {
+    let n = dim;
+    let d = 2 * s + 1;
+
+    let npoints: usize = (0..=s).map(|i| binomial(s - i + n, n)).sum();
+    let mut points = Matrix::zeros(n, npoints);
+    let mut weights = Vector::zeros(npoints);
+
+    let mut ipoint = 0;
+    for i in 0..=s {
+      let denominator = (d + n - 2 * i) as f64;
+      let weight = (-1.0f64).powi(i as i32) * 2.0f64.powi(-2 * (s as i32))
+        * denominator.powi(d as i32)
+        / (factorialf(i) * factorialf(d + n - i));
+
+      for beta in compositions(s - i, n + 1) {
+        // Barycentric point (2 beta + 1) / denominator;
+        // local coordinates drop the 0th barycentric coordinate.
+        for icomp in 0..n {
+          points[(icomp, ipoint)] = (2 * beta[icomp + 1] + 1) as f64 / denominator;
+        }
+        weights[ipoint] = weight;
+        ipoint += 1;
+      }
+    }
+
+    // The formula integrates over the unnormalized reference simplex of
+    // volume 1/n!; normalize the weights to sum to 1.
+    weights /= weights.sum();
+
+    Self { points, weights }
+  }
+
+  /// The (minimal-index) Grundmann-Möller rule exact for polynomials of the
+  /// given degree.
+  pub fn degree(dim: Dim, degree: usize) -> Self {
+    Self::grundmann_moeller(dim, degree / 2)
+  }
+}
+
+/// All $beta in NN_0^"nparts"$ with $|beta| = "total"$.
+fn compositions(total: usize, nparts: usize) -> Vec<Vec<usize>> {
+  if nparts == 1 {
+    return vec![vec![total]];
+  }
+  (0..=total)
+    .flat_map(|first| {
+      compositions(total - first, nparts - 1)
+        .into_iter()
+        .map(move |mut rest| {
+          rest.insert(0, first);
+          rest
+        })
+    })
+    .collect()
+}
+
 impl SimplexQuadRule {
   pub fn dim(&self) -> Dim {
     self.points.nrows()
@@ -63,171 +135,66 @@ impl SimplexQuadRule {
   }
 }
 
-impl SimplexQuadRule {
-  pub fn dim0() -> Self {
-    let points = Matrix::zeros(0, 1);
-    let weights = na::dvector![1.0];
-    Self { points, weights }
-  }
-
-  /// Integrates 1st order affine linear functions exactly.
-  pub fn barycentric(dim: Dim) -> Self {
-    let barycenter = barycenter_local(dim);
-    let points = Matrix::from_columns(&[barycenter]);
-    let weight = 1.0;
-    let weights = Vector::from_element(1, weight);
-    Self { points, weights }
-  }
-
-  pub fn vertices(dim: Dim) -> Self {
-    let nvertices = dim + 1;
-    let mut points = Matrix::zeros(dim, nvertices);
-    for ivertex in 1..nvertices {
-      points[(ivertex - 1, ivertex)] = 1.0;
-    }
-    let weight = (nvertices as f64).recip();
-    let weights = Vector::from_element(nvertices, weight);
-    Self { points, weights }
-  }
-}
-
-impl SimplexQuadRule {
-  pub fn order3(dim: Dim) -> Self {
-    match dim {
-      0 => Self::dim0(),
-      1 => Self::dim1_order3(),
-      2 => Self::dim2_order3(),
-      3 => Self::dim3_order3(),
-      _ => unimplemented!("No order 3 Quadrature available for dim {dim}."),
-    }
-  }
-
-  /// Simposons Rule
-  pub fn dim1_order3() -> Self {
-    let points = na::dmatrix![0.0, 0.5, 1.0];
-    let weights = na::dvector![1.0 / 6.0, 4.0 / 6.0, 1.0 / 6.0];
-    Self { points, weights }
-  }
-  pub fn dim2_order3() -> Self {
-    let points = na::dmatrix![
-      1.0/3.0, 1.0/5.0, 3.0/5.0, 1.0/5.0;
-      1.0/3.0, 1.0/5.0, 1.0/5.0, 3.0/5.0;
-    ];
-    let weights = na::dvector![-27.0 / 48.0, 25.0 / 48.0, 25.0 / 48.0, 25.0 / 48.0];
-    Self { points, weights }
-  }
-  pub fn dim3_order3() -> Self {
-    let a: f64 = 1.0 / 4.0; // centroid
-    let b: f64 = 1.0 / 6.0;
-    let c: f64 = 1.0 / 2.0;
-
-    let points = na::dmatrix![
-        a, b, c, b, b;
-        a, b, b, c, b;
-        a, b, b, b, c;
-    ];
-    let weights = na::dvector![-4.0 / 5.0, 9.0 / 20.0, 9.0 / 20.0, 9.0 / 20.0, 9.0 / 20.0];
-    Self { points, weights }
-  }
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
   use crate::geometry::refsimp_vol;
+
   use approx::assert_abs_diff_eq;
+  use itertools::Itertools;
 
-  // Assume: type CoordRef<'a> = &'a na::DVectorSlice<'a, f64>;
-
-  #[test]
-  fn test_dim0() {
-    let rule = SimplexQuadRule::dim0();
-    let vol = refsimp_vol(0);
-    let f_const = |_p: CoordRef| 1.0;
-    assert_abs_diff_eq!(rule.integrate_local(&f_const, vol), vol, epsilon = 1e-12);
+  /// The exact integral of a barycentric monomial over the reference simplex:
+  /// $integral_Delta lambda^alpha = n! alpha_0 ! dots.c alpha_n ! /
+  /// (n + |alpha|)! dot vol$.
+  fn exact_barycentric_monomial(alpha: &[usize]) -> f64 {
+    let n = alpha.len() - 1;
+    let total: usize = alpha.iter().sum();
+    let numerator: f64 = factorialf(n) * alpha.iter().map(|&a| factorialf(a)).product::<f64>();
+    numerator / factorialf(n + total) * refsimp_vol(n)
   }
 
+  /// Grundmann-Möller integrates every barycentric monomial of degree
+  /// <= 2s + 1 exactly, in every dimension.
   #[test]
-  fn test_barycentric() {
-    for dim in 1..=3 {
-      let rule = SimplexQuadRule::barycentric(dim);
-      let vol = refsimp_vol(dim);
-
-      let f_const = |_p: CoordRef| 1.0;
-      assert_abs_diff_eq!(rule.integrate_local(&f_const, vol), vol, epsilon = 1e-12);
-
-      if dim > 0 {
-        let f_linear = |p: CoordRef| p[0];
-        let exact_linear = vol / (dim as f64 + 1.0);
-        assert_abs_diff_eq!(
-          rule.integrate_local(&f_linear, vol),
-          exact_linear,
-          epsilon = 1e-12
-        );
+  fn grundmann_moeller_is_exact_on_polynomials() {
+    for dim in 0..=4 {
+      for s in 0..=3 {
+        let quadrule = SimplexQuadRule::grundmann_moeller(dim, s);
+        let max_degree = 2 * s + 1;
+        for degree in 0..=max_degree {
+          for alpha in compositions(degree, dim + 1) {
+            let monomial = |p: CoordRef| -> f64 {
+              let bary0 = 1.0 - p.sum();
+              let mut value = bary0.powi(alpha[0] as i32);
+              for icomp in 0..dim {
+                value *= p[icomp].powi(alpha[icomp + 1] as i32);
+              }
+              value
+            };
+            let computed = quadrule.integrate_local(&monomial, refsimp_vol(dim));
+            let exact = exact_barycentric_monomial(&alpha);
+            assert_abs_diff_eq!(computed, exact, epsilon = 1e-12);
+          }
+        }
       }
     }
   }
 
+  /// The degree constructor guarantees the requested exactness.
   #[test]
-  fn test_order3_dim1() {
-    let dim = 1;
-    let rule = SimplexQuadRule::order3(dim);
-    let vol = refsimp_vol(dim);
-
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0].powi(2), vol),
-      1.0 / 3.0,
-      epsilon = 1e-12
-    );
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0].powi(3), vol),
-      0.25,
-      epsilon = 1e-12
-    );
-  }
-
-  #[test]
-  fn test_order3_dim2() {
-    let dim = 2;
-    let rule = SimplexQuadRule::order3(dim);
-    let vol = refsimp_vol(dim);
-
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[1].powi(2), vol),
-      vol / 6.0,
-      epsilon = 1e-12
-    );
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0].powi(3), vol),
-      vol / 10.0,
-      epsilon = 1e-12
-    );
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0].powi(2) * p[1], vol),
-      vol / 30.0,
-      epsilon = 1e-12
-    );
-  }
-
-  #[test]
-  fn test_order3_dim3() {
-    let dim = 3;
-    let rule = SimplexQuadRule::order3(dim);
-    let vol = refsimp_vol(dim);
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0].powi(2), vol),
-      vol / 10.0,
-      epsilon = 1e-12
-    );
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0] * p[1], vol),
-      vol / 20.0,
-      epsilon = 1e-12
-    );
-    assert_abs_diff_eq!(
-      rule.integrate_local(&|p| p[0].powi(3), vol),
-      vol / 20.0,
-      epsilon = 1e-12
-    );
+  fn degree_constructor_is_exact() {
+    for dim in 1..=3 {
+      for degree in 0..=5 {
+        let quadrule = SimplexQuadRule::degree(dim, degree);
+        let monomial = |p: CoordRef| p[0].powi(degree as i32);
+        let alpha: Vec<usize> = std::iter::once(0)
+          .chain(std::iter::once(degree))
+          .chain(std::iter::repeat_n(0, dim - 1))
+          .collect_vec();
+        let computed = quadrule.integrate_local(&monomial, refsimp_vol(dim));
+        let exact = exact_barycentric_monomial(&alpha);
+        assert_abs_diff_eq!(computed, exact, epsilon = 1e-12);
+      }
+    }
   }
 }

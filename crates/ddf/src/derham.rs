@@ -60,7 +60,7 @@ pub fn integrate_form_simplex(
   if let Some(qr) = qr {
     qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
   } else {
-    let qr = &SimplexQuadRule::barycentric(dim_intrinsic);
+    let qr = &SimplexQuadRule::degree(dim_intrinsic, 1);
     qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
   }
 }
