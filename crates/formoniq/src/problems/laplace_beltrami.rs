@@ -1,40 +1,35 @@
 //! Module for the Poisson Equation, the prototypical ellipitic PDE.
 
 use crate::{
-  assemble::{self, GalVec},
-  operators::DofCoeff,
-  whitney_complex::WhitneyComplex,
+  assemble::GalVec,
+  bc,
+  whitney_complex::{BoundaryWhitneyComplex, WhitneyComplex},
 };
 
 use common::linalg::{
-  faer::FaerCholesky,
   nalgebra::{CsrMatrix, Vector},
   petsc::petsc_ghiep,
 };
 use ddf::cochain::Cochain;
-use manifold::topology::handle::KSimplexIdx;
 
 /// Source problem of Laplace-Beltrami operator. Also known as Poisson Problem.
-pub fn solve_laplace_beltrami_source<F>(
+///
+/// Essential boundary condition $"tr" u = g$ with `boundary_values` a
+/// 0-cochain on the trace complex, imposed by affine lifting.
+pub fn solve_laplace_beltrami_source(
   fes: WhitneyComplex,
-  mut source_galvec: GalVec,
-  boundary_data: F,
-) -> Cochain
-where
-  F: Fn(KSimplexIdx) -> DofCoeff,
-{
-  let mut laplace = fes.codif_dif(0);
-
-  assemble::enforce_dirichlet_bc(
-    fes.topology(),
-    boundary_data,
-    &mut laplace,
-    &mut source_galvec,
-  );
-
-  let laplace = CsrMatrix::from(&laplace);
-  let sol = FaerCholesky::new(laplace).solve(&source_galvec);
-  Cochain::new(0, sol)
+  boundary: &BoundaryWhitneyComplex,
+  source_galvec: GalVec,
+  boundary_values: &Cochain,
+) -> Cochain {
+  let laplace = CsrMatrix::from(&fes.codif_dif(0));
+  bc::solve_with_essential_bc(
+    &fes.relative(),
+    boundary,
+    laplace,
+    &source_galvec,
+    boundary_values,
+  )
 }
 
 /// Eigenvalue problem of Laplace-Beltrami operator.

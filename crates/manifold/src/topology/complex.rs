@@ -81,6 +81,10 @@ impl Complex {
   /// The boundary facets are characterized by the fact that they
   /// only have 1 cell as super entity.
   pub fn boundary_facets(&self) -> Vec<SimplexIdx> {
+    // A 0-dimensional complex is closed.
+    if self.dim() == 0 {
+      return Vec::new();
+    }
     self
       .facets()
       .handle_iter()

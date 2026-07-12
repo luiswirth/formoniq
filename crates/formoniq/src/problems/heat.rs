@@ -1,39 +1,34 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
-use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
+use common::linalg::nalgebra::CsrMatrix;
 
-use crate::{assemble, operators::DofIdx, whitney_complex::WhitneyComplex};
+use crate::{
+  bc::LiftedSystem,
+  whitney_complex::{BoundaryWhitneyComplex, WhitneyComplex},
+};
 
 use ddf::cochain::Cochain;
 
-/// times = [t_0,t_1,...,T]
-pub fn solve_heat<F>(
+/// Implicit Euler for the heat equation, with the essential boundary
+/// condition $"tr" u = g$ held fixed in time (affine lifting, factorized
+/// once).
+#[allow(clippy::too_many_arguments)]
+pub fn solve_heat(
   fes: WhitneyComplex,
+  boundary: &BoundaryWhitneyComplex,
   nsteps: usize,
   dt: f64,
-  boundary_data: F,
+  boundary_values: &Cochain,
   initial_data: Cochain,
   source_data: Cochain,
   diffusion_coeff: f64,
-) -> Vec<Cochain>
-where
-  F: Fn(DofIdx) -> f64,
-{
-  let topology = fes.topology();
+) -> Vec<Cochain> {
+  let laplace = CsrMatrix::from(&fes.codif_dif(0));
+  let mass = CsrMatrix::from(&fes.mass(0));
+  let system = &mass + diffusion_coeff * dt * &laplace;
 
-  let mut laplace = fes.codif_dif(0);
-  let mut mass = fes.mass(0);
-  let mass_csr = CsrMatrix::from(&mass);
-  let mut source = &mass_csr * &source_data.coeffs;
-
-  assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut source);
-  assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut source);
-
-  let laplace = CsrMatrix::from(&laplace);
-  let mass = mass_csr;
-
-  let lse_matrix = &mass + diffusion_coeff * dt * &laplace;
-  let lse_cholesky = FaerCholesky::new(lse_matrix);
+  let lifted = LiftedSystem::new(&fes.relative(), boundary, system, boundary_values);
+  let source = &mass * &source_data.coeffs;
 
   let mut solution = Vec::with_capacity(nsteps + 1);
   solution.push(initial_data);
@@ -44,9 +39,7 @@ where
 
     let prev = solution.last().unwrap().coeffs();
     let rhs = &mass * prev + dt * &source;
-    let next = lse_cholesky.solve(&rhs);
-
-    solution.push(Cochain::new(0, next));
+    solution.push(lifted.solve(&rhs));
   }
 
   solution

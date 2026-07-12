@@ -12,7 +12,7 @@ use {
   exterior::ExteriorGrade,
   manifold::{
     geometry::metric::mesh::MeshLengths,
-    topology::{complex::Complex, handle::KSimplexIdx},
+    topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx},
     Dim,
   },
 };
@@ -93,6 +93,56 @@ impl<'a> WhitneyComplex<'a> {
   /// The relative complex of the pair $(K, diff K)$.
   pub fn relative(self) -> RelativeWhitneyComplex<'a> {
     RelativeWhitneyComplex::new(self)
+  }
+
+  /// The Whitney complex of the boundary $diff K$ with the induced metric,
+  /// together with the trace map. `None` on closed manifolds.
+  pub fn boundary(&self) -> Option<BoundaryWhitneyComplex> {
+    let boundary = self.topology.boundary_complex()?;
+    let geometry = boundary.trace_lengths(self.geometry);
+    Some(BoundaryWhitneyComplex { boundary, geometry })
+  }
+}
+
+/// The Whitney complex of the boundary $diff K$: the cokernel of the short
+/// exact sequence $0 -> C^k (K, diff K) -> C^k (K) -->^"tr" C^k (diff K) -> 0$,
+/// carrying the geometry induced from the parent mesh.
+pub struct BoundaryWhitneyComplex {
+  boundary: BoundaryComplex,
+  geometry: MeshLengths,
+}
+
+impl BoundaryWhitneyComplex {
+  /// The Whitney complex of $diff K$ itself: everything (mass matrices,
+  /// de Rham maps, norms) applies to the boundary as to any other mesh.
+  pub fn fes(&self) -> WhitneyComplex {
+    WhitneyComplex::new(self.boundary.complex(), &self.geometry)
+  }
+  pub fn topology(&self) -> &Complex {
+    self.boundary.complex()
+  }
+  pub fn geometry(&self) -> &MeshLengths {
+    &self.geometry
+  }
+  pub fn boundary_complex(&self) -> &BoundaryComplex {
+    &self.boundary
+  }
+  pub fn ndofs(&self, grade: ExteriorGrade) -> usize {
+    self.boundary.complex().nsimplices(grade)
+  }
+
+  /// The trace $"tr": C^k (K) -> C^k (diff K)$, a cochain map.
+  pub fn trace(&self, grade: ExteriorGrade) -> CsrMatrix {
+    CsrMatrix::from(&self.boundary.trace_operator(grade))
+  }
+  /// Restrict a cochain on $K$ to the boundary.
+  pub fn trace_cochain(&self, u: &Cochain) -> Cochain {
+    Cochain::new(u.grade(), self.trace(u.grade()) * u.coeffs())
+  }
+  /// Extend a boundary cochain by zero onto the full mesh: $"tr"^T$,
+  /// the canonical affine lift of essential boundary values.
+  pub fn extend_cochain(&self, g: &Cochain) -> Cochain {
+    Cochain::new(g.grade(), self.trace(g.grade()).transpose() * g.coeffs())
   }
 }
 
