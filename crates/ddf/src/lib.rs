@@ -6,14 +6,11 @@ pub mod io;
 pub mod whitney;
 
 use {
-  exterior::{exterior_power, MultiForm, MultiVector},
+  exterior::{exterior_power, MultiVector},
   manifold::geometry::coord::simplex::SimplexCoords,
 };
 
-pub type LocalMultiForm = MultiForm;
-
 pub trait CoordSimplexExt {
-  fn difbarys_ext(&self) -> Vec<LocalMultiForm>;
   fn spanning_multivector(&self) -> MultiVector;
 }
 impl CoordSimplexExt for SimplexCoords {
@@ -25,13 +22,6 @@ impl CoordSimplexExt for SimplexCoords {
     let grade = self.dim_intrinsic();
     let coeffs = exterior_power(&vectors, grade).column(0).into_owned();
     MultiVector::new(coeffs, self.dim_ambient(), grade)
-  }
-  fn difbarys_ext(&self) -> Vec<LocalMultiForm> {
-    self
-      .difbarys()
-      .row_iter()
-      .map(|difbary| LocalMultiForm::line(difbary.transpose()))
-      .collect()
   }
 }
 

@@ -77,6 +77,51 @@ impl std::ops::Index<(usize, usize)> for Gramian {
   }
 }
 
+/// A Riemannian metric: the Gramian on tangent vectors together with its
+/// inverse, the induced Gramian on covectors.
+///
+/// Keeping both eliminates the recurring question of whether a computation
+/// needs $g$ or $g^(-1)$: contravariant quantities (vectors) are measured by
+/// [`Self::vector_gramian`], covariant ones (forms) by
+/// [`Self::covector_gramian`].
+#[derive(Debug, Clone)]
+pub struct RiemannianMetric {
+  vector_gramian: Gramian,
+  covector_gramian: Gramian,
+}
+impl RiemannianMetric {
+  pub fn new(vector_gramian: Gramian) -> Self {
+    let covector_gramian = vector_gramian.clone().inverse();
+    Self {
+      vector_gramian,
+      covector_gramian,
+    }
+  }
+  /// Orthonormal euclidean metric.
+  pub fn standard(dim: Dim) -> Self {
+    Self {
+      vector_gramian: Gramian::standard(dim),
+      covector_gramian: Gramian::standard(dim),
+    }
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.vector_gramian.dim()
+  }
+  /// The metric tensor $g$: the inner product on tangent vectors.
+  pub fn vector_gramian(&self) -> &Gramian {
+    &self.vector_gramian
+  }
+  /// The inverse metric tensor $g^(-1)$: the inner product on covectors.
+  pub fn covector_gramian(&self) -> &Gramian {
+    &self.covector_gramian
+  }
+  /// $sqrt(det g)$: the volume scaling factor of the metric.
+  pub fn det_sqrt(&self) -> f64 {
+    self.vector_gramian.det_sqrt()
+  }
+}
+
 /// Inner product functionality directly on any element.
 impl Gramian {
   pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {

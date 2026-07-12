@@ -1,32 +1,46 @@
-use crate::CoordSimplexExt;
-
 use {
-  common::combo::{factorial, factorialf, Combination, Sign},
-  exterior::{field::ExteriorField, ExteriorGrade, MultiForm},
+  common::{
+    combo::{factorialf, Combination, Sign},
+    linalg::nalgebra::Matrix,
+  },
+  exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
   manifold::{
     geometry::coord::{simplex::SimplexCoords, CoordRef},
     Dim,
   },
 };
 
-/// The Whitney local shape function $W_sigma$ of a DOF subsimplex:
+/// The Whitney local shape function $W_sigma$ of a DOF subsimplex.
 ///
-/// $W_sigma = k! sum_i (-1)^i lambda_(sigma_i)
-///   dif lambda_(sigma_0) wedge dots.c hat(dif lambda_(sigma_i)) dots.c wedge dif lambda_(sigma_k)$
+/// Work in the formal barycentric space $Lambda(RR^(n+1))$, where the
+/// vertex set $sigma$ is a blade $e_sigma$ and the barycentric coordinates
+/// $lambda(x)$ are a vector. Then the Whitney form is the pullback along
+/// the barycentric coordinate map of the Koszul contraction of the blade:
 ///
-/// built from the alternating deletions of the DOF vertex set: the same
-/// boundary pattern as the simplicial $diff$.
+/// $W_sigma = k! med lambda^* (iota_(lambda(x)) e_sigma)
+///   = k! sum_i (-1)^i lambda_(sigma_i)
+///     dif lambda_(sigma_0) wedge dots.c hat(dif lambda_(sigma_i)) dots.c wedge dif lambda_(sigma_k)$
+///
+/// The contraction $iota_lambda$ is the Koszul operator $kappa$ of FEEC:
+/// together with the pullback $lambda^*$ it generates the whole
+/// $cal(P)_r^- Lambda^k$ family, of which the Whitney forms are the
+/// lowest-order case.
 #[derive(Debug, Clone)]
 pub struct WhitneyLsf {
   cell_coords: SimplexCoords,
   /// The local vertex set of the DOF subsimplex.
   dof_simp: Combination,
+  /// The differential of the barycentric coordinate map
+  /// $lambda: RR^n -> RR^(n+1)$: the rows are the $dif lambda_i$.
+  difbarys: Matrix,
 }
 impl WhitneyLsf {
   pub fn from_coords(cell_coords: SimplexCoords, dof_simp: Combination) -> Self {
+    let difbarys = cell_coords.difbarys();
     Self {
       cell_coords,
       dof_simp,
+      difbarys,
     }
   }
   pub fn standard(cell_dim: Dim, dof_simp: Combination) -> Self {
@@ -35,39 +49,22 @@ impl WhitneyLsf {
   pub fn grade(&self) -> ExteriorGrade {
     self.dof_simp.card() - 1
   }
-  /// The difbarys of the vertices of the DOF simplex.
-  pub fn difbarys(&self) -> impl Iterator<Item = MultiForm> + use<'_> {
-    self
-      .cell_coords
-      .difbarys_ext()
-      .into_iter()
-      .enumerate()
-      .filter_map(|(ibary, difbary)| self.dof_simp.contains(ibary).then_some(difbary))
-  }
 
-  /// $dif lambda_(sigma_0) wedge dots.c hat(dif lambda_(sigma_iterm)) dots.c wedge dif lambda_(sigma_k)$
-  pub fn wedge_term(&self, iterm: usize) -> MultiForm {
-    let dim_cell = self.cell_coords.dim_intrinsic();
-    let wedge = self
-      .difbarys()
-      .enumerate()
-      // leave off i'th difbary
-      .filter_map(|(pos, difbary)| (pos != iterm).then_some(difbary));
-    MultiForm::wedge_big(wedge).unwrap_or(MultiForm::one(dim_cell))
-  }
-  pub fn wedge_terms(&self) -> impl ExactSizeIterator<Item = MultiForm> + use<'_> {
-    (0..self.dof_simp.card()).map(move |iwedge| self.wedge_term(iwedge))
+  /// The DOF vertex set as a blade in the formal barycentric space
+  /// $Lambda^(k+1) (RR^(n+1))$.
+  fn barycentric_blade(&self) -> MultiForm {
+    let nvertices = self.cell_coords.nvertices();
+    MultiForm::from_blade_signed(nvertices, Sign::Pos, self.dof_simp)
   }
 
   /// The constant exterior derivative of the Whitney LSF,
-  /// $dif W_sigma = (k+1)! dif lambda_(sigma_0) wedge dots.c wedge dif lambda_(sigma_k)$.
+  /// $dif W_sigma = (k+1)! med lambda^* (e_sigma)
+  /// = (k+1)! dif lambda_(sigma_0) wedge dots.c wedge dif lambda_(sigma_k)$.
+  ///
+  /// Vanishes automatically for the top grade, where $Lambda^(k+1) (RR^n)$
+  /// is the zero space.
   pub fn dif(&self) -> MultiForm {
-    let dim = self.cell_coords.dim_intrinsic();
-    let grade = self.grade();
-    if grade == dim {
-      return MultiForm::zero(dim, grade + 1);
-    }
-    factorialf(grade + 1) * MultiForm::wedge_big(self.difbarys()).unwrap()
+    factorialf(self.grade() + 1) * self.barycentric_blade().pullback(&self.difbarys)
   }
 }
 
@@ -82,19 +79,9 @@ impl ExteriorField for WhitneyLsf {
     self.grade()
   }
   fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> MultiForm {
-    let barys = self.cell_coords.global2bary(coord);
-
-    let dim = self.dim_ambient();
-    let grade = self.grade();
-    let mut form = MultiForm::zero(dim, grade);
-    for (iterm, vertex) in self.dof_simp.iter().enumerate() {
-      let sign = Sign::from_parity(iterm);
-      let wedge = self.wedge_term(iterm);
-
-      let bary = barys[vertex];
-      form += sign.as_f64() * bary * wedge;
-    }
-    (factorial(grade) as f64) * form
+    let barys = MultiVector::line(self.cell_coords.global2bary(coord));
+    let koszul = self.barycentric_blade().interior_product(&barys);
+    factorialf(self.grade()) * koszul.pullback(&self.difbarys)
   }
 }
 
@@ -124,7 +111,7 @@ impl ExteriorField for WhitneyPushforwardLsf {
   fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> MultiForm {
     let coord_ref = self.cell_coords.global2local(coord_global);
     let value_ref = self.ref_lsf.at_point(&coord_ref);
-    // Pushforward: pullback along the inverse map.
-    value_ref.precompose_form(&self.cell_coords.inv_linear_transform())
+    // Pushforward of a form: pullback along the inverse map.
+    value_ref.pullback(&self.cell_coords.inv_linear_transform())
   }
 }

@@ -37,7 +37,7 @@ impl<'a> WhitneyForm<'a> {
     &self,
     cell: SimplexHandle,
     coord: impl Into<CoordRef<'b>>,
-  ) -> exterior::ExteriorElement {
+  ) -> MultiForm {
     let coord = coord.into();
 
     let cell_coords = cell.coord_simplex(self.mesh_coords);
@@ -65,7 +65,7 @@ impl ExteriorField for WhitneyForm<'_> {
     self.cochain.grade()
   }
   /// Global position
-  fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> exterior::ExteriorElement {
+  fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> MultiForm {
     let coord = coord.into();
 
     // WARN: This is slow!
