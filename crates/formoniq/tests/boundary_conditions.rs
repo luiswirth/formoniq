@@ -28,7 +28,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
     let boundary = fes.boundary().unwrap();
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, None);
+    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
     let laplace = CsrMatrix::from(&fes.codif_dif(0));
@@ -54,7 +54,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     let boundary = fes.boundary().unwrap();
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, None);
+    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
 
     // System: (grad u, grad v) + (u, v).
     let system =
@@ -118,7 +118,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
     let gamma_dirichlet = fes.boundary_part(dirichlet_facets);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, None);
+    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
     let laplace = CsrMatrix::from(&fes.codif_dif(0));
@@ -152,7 +152,7 @@ fn robin_reproduces_linear_solution() {
     let fes = WhitneyComplex::new(&topology, &metric);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, None);
+    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
 
     let alpha = 1.0;
     // h = du/dn + alpha u: constant on each Robin face.
