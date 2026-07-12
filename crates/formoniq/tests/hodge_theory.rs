@@ -166,34 +166,37 @@ fn relative_inclusion_is_cochain_map() {
   }
 }
 
-/// Homogeneous Dirichlet Poisson via the relative complex agrees with the
-/// DOF-surgery path (enforce_homogeneous_dirichlet_bc).
+/// Homogeneous essential BCs via the affine-lifting interface agree with
+/// the direct solve on the relative complex.
 #[test]
-fn relative_complex_solves_dirichlet_poisson() {
+fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use common::linalg::faer::FaerCholesky;
+  use common::linalg::nalgebra::Vector;
   use exterior::field::DiffFormClosure;
-  use formoniq::{assemble, operators::SourceElVec};
+  use formoniq::{assemble, bc, operators::SourceElVec};
 
   let dim = 2;
   let (topology, coords) = CartesianMeshInfo::new_unit(dim, 4).compute_coord_complex();
   let metric = coords.to_edge_lengths(&topology);
   let fes = WhitneyComplex::new(&topology, &metric);
+  let boundary = fes.boundary().unwrap();
 
   let source = DiffFormClosure::constant_scalar(1.0, dim);
-  let galvec = assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, &coords, None));
+  let galvec =
+    assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, &coords, dim, None));
 
-  // DOF surgery path.
-  let mut laplace_surgery = fes.codif_dif(0);
-  let mut rhs_surgery = galvec.clone();
-  assemble::enforce_homogeneous_dirichlet_bc(&topology, &mut laplace_surgery, &mut rhs_surgery);
-  let sol_surgery = FaerCholesky::new(CsrMatrix::from(&laplace_surgery)).solve(&rhs_surgery);
+  // Affine-lifting path with zero boundary values.
+  let zero_values = Cochain::new(0, Vector::zeros(boundary.ndofs(0)));
+  let laplace = CsrMatrix::from(&fes.codif_dif(0));
+  let sol_lifted =
+    bc::solve_with_essential_bc(&fes.relative(), &boundary, laplace, &galvec, &zero_values);
 
-  // Relative complex path: solve on C^0(K, dK), extend by zero.
+  // Direct solve on C^0(K, dK), extended by zero.
   let relative: RelativeWhitneyComplex = fes.relative();
   let laplace_relative = CsrMatrix::from(&relative.codif_dif(0));
   let rhs_relative = relative.restrict(&Cochain::new(0, galvec));
   let sol_relative = FaerCholesky::new(laplace_relative).solve(rhs_relative.coeffs());
   let sol_relative = relative.extend_by_zero(&Cochain::new(0, sol_relative));
 
-  assert_relative_eq!(sol_surgery, sol_relative.coeffs, epsilon = 1e-10);
+  assert_relative_eq!(sol_lifted.coeffs, sol_relative.coeffs, epsilon = 1e-10);
 }

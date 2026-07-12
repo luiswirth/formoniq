@@ -1,6 +1,6 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
-use crate::{assemble, operators::DofIdx, whitney_complex::WhitneyComplex};
+use crate::whitney_complex::WhitneyComplex;
 
 use common::linalg::{
   faer::FaerCholesky,
@@ -25,30 +25,32 @@ impl WaveState {
 }
 
 /// times = [t_0,t_1,...,T]
-pub fn solve_wave<F>(
+///
+/// On a mesh with boundary, the boundary is held fixed at the initial
+/// position: the velocity is constrained to the relative complex
+/// (homogeneous essential condition).
+pub fn solve_wave(
   fes: WhitneyComplex,
   times: &[f64],
-  boundary_data: F,
   initial_data: WaveState,
   force_data: Cochain,
-) -> Vec<WaveState>
-where
-  F: Fn(DofIdx) -> f64,
-{
-  let topology = fes.topology();
-  let mut laplace = fes.codif_dif(0);
-  let mut mass = fes.mass(0);
+) -> Vec<WaveState> {
+  let laplace = CsrMatrix::from(&fes.codif_dif(0));
+  let mass = CsrMatrix::from(&fes.mass(0));
 
-  let mass_csr = CsrMatrix::from(&mass);
-  let mut force = &mass_csr * force_data.coeffs();
+  let force = &mass * force_data.coeffs();
 
-  assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut laplace, &mut force);
-  assemble::enforce_dirichlet_bc(topology, &boundary_data, &mut mass, &mut force);
-
-  let laplace = CsrMatrix::from(&laplace);
-  let mass = mass_csr;
-
-  let mass_cholesky = FaerCholesky::new(mass.clone());
+  // Velocity mass matrix, constrained to the relative complex on meshes
+  // with boundary: E (E^T M E)^-1 E^T.
+  let inclusion = fes
+    .boundary()
+    .is_some()
+    .then(|| fes.relative().inclusion(0));
+  let velocity_mass = match &inclusion {
+    Some(incl) => incl.transpose() * &mass * incl,
+    None => mass.clone(),
+  };
+  let mass_cholesky = FaerCholesky::new(velocity_mass);
 
   const ENERGY_TOLERANCE: f64 = 0.1; // 10%
   let initial_energy = initial_data.energy(&laplace, &mass);
@@ -64,7 +66,7 @@ where
     let dt = t1 - t0;
 
     let prev = solution.last().unwrap();
-    let next = solve_wave_step(prev, dt, &force, &laplace, &mass, &mass_cholesky);
+    let next = solve_wave_step(prev, dt, &force, &laplace, &mass, &mass_cholesky, &inclusion);
 
     let energy = next.energy(&laplace, &mass);
     if (energy - initial_energy).abs() >= ENERGY_TOLERANCE * initial_energy {
@@ -84,15 +86,15 @@ pub fn solve_wave_step(
   laplace: &CsrMatrix,
   mass: &CsrMatrix,
   mass_cholesky: &FaerCholesky,
+  inclusion: &Option<CsrMatrix>,
 ) -> WaveState {
   let WaveState { pos, vel } = state;
 
-  //let vel_half_step = mass_cholesky.solve(&(mass * vel + 0.5 * dt * (forcing - laplace * pos)));
-  //let pos = pos + dt * &vel_half_step;
-  //let vel = mass_cholesky.solve(&(mass * vel_half_step + 0.5 * dt * (forcing - laplace * pos)));
-
   let rhs = mass * vel + dt * (forcing - laplace * pos);
-  let vel = mass_cholesky.solve(&rhs);
+  let vel = match inclusion {
+    Some(incl) => incl * mass_cholesky.solve(&(incl.transpose() * rhs)),
+    None => mass_cholesky.solve(&rhs),
+  };
   let pos = pos + dt * &vel;
 
   WaveState { pos, vel }

@@ -113,9 +113,6 @@ pub fn save_vector(mu: &Vector, path: impl AsRef<std::path::Path>) -> std::io::R
 pub trait CooMatrixExt {
   fn neg(self) -> Self;
   fn block(block_grid: &[&[&Self]]) -> Self;
-  fn set_zero<F>(&mut self, predicate: F)
-  where
-    F: Fn(usize, usize) -> bool;
   fn grow(&mut self, nrows_added: usize, ncols_added: usize);
   fn transpose(self) -> Self;
 }
@@ -143,28 +140,6 @@ impl CooMatrixExt for CooMatrix {
       *value = -*value;
     }
     Self::try_from_triplets(nrows, ncols, rows, cols, values).unwrap()
-  }
-
-  fn set_zero<F>(&mut self, predicate: F)
-  where
-    F: Fn(usize, usize) -> bool,
-  {
-    let nrows = self.nrows();
-    let ncols = self.ncols();
-    let (mut rows, mut cols, mut vals) = mem::replace(self, Self::new(0, 0)).disassemble();
-    let mut i = 0;
-    while i < rows.len() {
-      let r = rows[i];
-      let c = cols[i];
-      if predicate(r, c) {
-        rows.swap_remove(i);
-        cols.swap_remove(i);
-        vals.swap_remove(i);
-      } else {
-        i += 1;
-      }
-    }
-    *self = Self::try_from_triplets(nrows, ncols, rows, cols, vals).unwrap()
   }
 
   /// Concatenates a matrix block grid row-wise and column-wise, automatically computing offsets.

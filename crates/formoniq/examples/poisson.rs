@@ -48,16 +48,19 @@ fn main() {
       let load_vector = assemble_galvec(
         &topology,
         &metric,
-        SourceElVec::new(&laplacian_exact, &coords, None),
+        SourceElVec::new(&laplacian_exact, &coords, topology.dim(), None),
       );
 
+      let fes = WhitneyComplex::new(&topology, &metric);
+      let boundary = fes.boundary().unwrap();
       let solution_projected = derham_map(&solution_exact, &topology, &coords, None);
-      let boundary_data = |ivertex| solution_projected[ivertex];
+      let boundary_values = boundary.trace_cochain(&solution_projected);
 
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(
-        WhitneyComplex::new(&topology, &metric),
+        fes,
+        &boundary,
         load_vector,
-        boundary_data,
+        &boundary_values,
       );
 
       let conv_rate = |errors: &[f64], curr: f64| {
