@@ -84,34 +84,3 @@ impl ExteriorField for WhitneyLsf {
     factorialf(self.grade()) * koszul.pullback(&self.difbarys)
   }
 }
-
-pub struct WhitneyPushforwardLsf {
-  pub cell_coords: SimplexCoords,
-  pub ref_lsf: WhitneyLsf,
-}
-impl WhitneyPushforwardLsf {
-  pub fn new(cell_coords: SimplexCoords, dof_simp: Combination) -> Self {
-    let ref_lsf = WhitneyLsf::standard(cell_coords.dim_intrinsic(), dof_simp);
-    Self {
-      cell_coords,
-      ref_lsf,
-    }
-  }
-}
-impl ExteriorField for WhitneyPushforwardLsf {
-  fn dim_ambient(&self) -> exterior::Dim {
-    self.cell_coords.dim_ambient()
-  }
-  fn dim_intrinsic(&self) -> exterior::Dim {
-    self.ref_lsf.dim_intrinsic()
-  }
-  fn grade(&self) -> ExteriorGrade {
-    self.ref_lsf.grade()
-  }
-  fn at_point<'a>(&self, coord_global: impl Into<CoordRef<'a>>) -> MultiForm {
-    let coord_ref = self.cell_coords.global2local(coord_global);
-    let value_ref = self.ref_lsf.at_point(&coord_ref);
-    // Pushforward of a form: pullback along the inverse map.
-    value_ref.pullback(&self.cell_coords.inv_linear_transform())
-  }
-}
