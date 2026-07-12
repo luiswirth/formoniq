@@ -12,7 +12,11 @@ use {
   exterior::ExteriorGrade,
   manifold::{
     geometry::metric::mesh::MeshLengths,
-    topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx},
+    topology::{
+      boundary::BoundaryComplex,
+      complex::Complex,
+      handle::{KSimplexIdx, SimplexIdx},
+    },
     Dim,
   },
 };
@@ -94,13 +98,38 @@ impl<'a> WhitneyComplex<'a> {
   pub fn relative(self) -> RelativeWhitneyComplex<'a> {
     RelativeWhitneyComplex::new(self)
   }
+  /// The relative complex of the pair $(K, Gamma)$ for a boundary part
+  /// $Gamma subset.eq diff K$: mixed boundary conditions constrain only the
+  /// DOFs on $Gamma$.
+  pub fn relative_to(self, constrained: &BoundaryWhitneyComplex) -> RelativeWhitneyComplex<'a> {
+    RelativeWhitneyComplex::with_constrained(self, |grade| {
+      if grade <= constrained.topology().dim() {
+        constrained
+          .boundary_complex()
+          .parent_kidxs(grade)
+          .iter()
+          .copied()
+          .collect()
+      } else {
+        HashSet::new()
+      }
+    })
+  }
 
   /// The Whitney complex of the boundary $diff K$ with the induced metric,
   /// together with the trace map. `None` on closed manifolds.
   pub fn boundary(&self) -> Option<BoundaryWhitneyComplex> {
-    let boundary = self.topology.boundary_complex()?;
+    let facets = self.topology.boundary_facets();
+    (!facets.is_empty()).then(|| self.boundary_part(facets))
+  }
+
+  /// The Whitney complex of a boundary part $Gamma subset.eq diff K$
+  /// (a set of boundary facets): the carrier of one kind of mixed boundary
+  /// condition.
+  pub fn boundary_part(&self, facets: Vec<SimplexIdx>) -> BoundaryWhitneyComplex {
+    let boundary = self.topology.facet_subcomplex(facets);
     let geometry = boundary.trace_lengths(self.geometry);
-    Some(BoundaryWhitneyComplex { boundary, geometry })
+    BoundaryWhitneyComplex { boundary, geometry }
   }
 }
 
@@ -163,17 +192,28 @@ pub struct RelativeWhitneyComplex<'a> {
 }
 
 impl<'a> RelativeWhitneyComplex<'a> {
+  /// Constrain the full boundary $diff K$.
   pub fn new(full: WhitneyComplex<'a>) -> Self {
+    Self::with_constrained(full, |grade| {
+      full
+        .topology()
+        .boundary_simplices(grade)
+        .into_iter()
+        .map(|idx| idx.kidx)
+        .collect()
+    })
+  }
+  /// Constrain the given simplices per grade (the closure of the Dirichlet
+  /// boundary part).
+  fn with_constrained(
+    full: WhitneyComplex<'a>,
+    constrained: impl Fn(ExteriorGrade) -> HashSet<KSimplexIdx>,
+  ) -> Self {
     let interior_simps = (0..=full.dim())
       .map(|grade| {
-        let boundary: HashSet<KSimplexIdx> = full
-          .topology()
-          .boundary_simplices(grade)
-          .into_iter()
-          .map(|idx| idx.kidx)
-          .collect();
+        let constrained = constrained(grade);
         (0..full.ndofs(grade))
-          .filter(|kidx| !boundary.contains(kidx))
+          .filter(|kidx| !constrained.contains(kidx))
           .collect()
       })
       .collect();

@@ -11,6 +11,16 @@
 //! Natural (Neumann) conditions appear as a boundary load in the right-hand
 //! side, $integral_(diff K) angle.l "tr" v, h angle.r vol_(diff K)$:
 //! homogeneous natural conditions are "do nothing".
+//!
+//! Mixed conditions partition the boundary facets into parts
+//! $Gamma_D union Gamma_N$: constrain the relative complex of the pair
+//! $(K, Gamma_D)$ ([`WhitneyComplex::relative_to`]) and add the Neumann
+//! load on $Gamma_N$. Robin conditions
+//! $alpha "tr" u + h_"flux" = h$ add the boundary mass
+//! $alpha "tr"^T M_(diff K) "tr"$ ([`boundary_mass`]) to the system and the
+//! load of $h$ to the right-hand side.
+//!
+//! [`WhitneyComplex::relative_to`]: crate::whitney_complex::WhitneyComplex::relative_to
 
 use crate::{
   assemble::assemble_galvec,
@@ -24,8 +34,8 @@ use {
     nalgebra::{CsrMatrix, Vector},
   },
   ddf::cochain::Cochain,
-  exterior::field::ExteriorField,
-  manifold::geometry::coord::mesh::MeshCoords,
+  exterior::{field::ExteriorField, ExteriorGrade},
+  manifold::geometry::coord::{mesh::MeshCoords, quadrature::SimplexQuadRule},
 };
 
 /// A Galerkin system with essential boundary conditions imposed by affine
@@ -96,9 +106,20 @@ pub fn neumann_load(
   boundary: &BoundaryWhitneyComplex,
   parent_coords: &MeshCoords,
   data: &(impl ExteriorField + Sync),
+  qr: Option<SimplexQuadRule>,
 ) -> Vector {
   let boundary_coords = boundary.boundary_complex().trace_coords(parent_coords);
-  let elvec = SourceElVec::new(data, &boundary_coords, boundary.topology().dim(), None);
+  let elvec = SourceElVec::new(data, &boundary_coords, boundary.topology().dim(), qr);
   let load = assemble_galvec(boundary.topology(), boundary.geometry(), elvec);
   boundary.trace(data.grade()).transpose() * load
+}
+
+/// The boundary mass matrix $"tr"^T M_(diff K)^k "tr"$ of the bilinear form
+/// $integral_(diff K) angle.l "tr" u, "tr" v angle.r vol_(diff K)$:
+/// scaled by the impedance $alpha$ and added to the system matrix, this
+/// imposes a Robin condition.
+pub fn boundary_mass(boundary: &BoundaryWhitneyComplex, grade: ExteriorGrade) -> CsrMatrix {
+  let trace = boundary.trace(grade);
+  let mass = CsrMatrix::from(&boundary.fes().mass(grade));
+  trace.transpose() * mass * trace
 }

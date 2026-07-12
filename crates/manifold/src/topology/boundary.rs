@@ -22,9 +22,13 @@ use crate::{
 
 use common::linalg::nalgebra::{CooMatrix, Matrix};
 
-/// The boundary $diff K$ as a complex in its own right: a closed
-/// $(n-1)$-manifold with its own (monotone) vertex numbering, together with
-/// the simplex-wise inclusion into the parent complex.
+/// A codimension-1 subcomplex of $K$ as a complex in its own right, with
+/// its own (monotone) vertex numbering and the simplex-wise inclusion into
+/// the parent complex.
+///
+/// For the full boundary $diff K$ this is a closed $(n-1)$-manifold; a
+/// subset $Gamma$ of the boundary facets gives the boundary part of mixed
+/// boundary conditions.
 pub struct BoundaryComplex {
   complex: Complex,
   /// Per grade: boundary k-simplex index -> parent k-simplex index.
@@ -42,20 +46,34 @@ impl Complex {
     if facets.is_empty() {
       return None;
     }
+    Some(self.facet_subcomplex(facets))
+  }
 
-    // Monotone vertex renumbering: sorted parent boundary vertices -> 0..m.
-    let parent_vertices: Vec<VertexIdx> = self.boundary_vertices();
-    let to_boundary = |parent: VertexIdx| -> VertexIdx {
+  /// The subcomplex spanned by the given facets: for a subset
+  /// $Gamma subset.eq diff K$ of the boundary facets this is the boundary
+  /// part carrying mixed (Dirichlet/Neumann/Robin) boundary conditions.
+  pub fn facet_subcomplex(&self, facets: Vec<SimplexIdx>) -> BoundaryComplex {
+    assert!(!facets.is_empty(), "Facet subcomplex must not be empty.");
+    assert!(facets.iter().all(|f| f.dim == self.dim() - 1));
+
+    // Monotone vertex renumbering: sorted parent vertices -> 0..m.
+    let mut parent_vertices: Vec<VertexIdx> = facets
+      .iter()
+      .flat_map(|facet| facet.handle(self).vertices.clone())
+      .collect();
+    parent_vertices.sort_unstable();
+    parent_vertices.dedup();
+    let to_local = |parent: VertexIdx| -> VertexIdx {
       parent_vertices
         .binary_search(&parent)
-        .expect("Vertex lies on the boundary.")
+        .expect("Vertex lies on the subcomplex.")
     };
 
     let cells: Vec<Simplex> = facets
       .into_iter()
       .map(|facet| {
         let facet = facet.handle(self);
-        Simplex::new(facet.iter().map(to_boundary).collect())
+        Simplex::new(facet.iter().map(to_local).collect())
       })
       .collect();
     let complex = Complex::from_cells(Skeleton::new(cells));
@@ -75,11 +93,11 @@ impl Complex {
       .collect();
     let parent_nsimplices = (0..=complex.dim()).map(|k| self.nsimplices(k)).collect();
 
-    Some(BoundaryComplex {
+    BoundaryComplex {
       complex,
       parent_kidxs,
       parent_nsimplices,
-    })
+    }
   }
 }
 

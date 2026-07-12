@@ -200,3 +200,102 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   assert_relative_eq!(sol_lifted.coeffs, sol_relative.coeffs, epsilon = 1e-10);
 }
+
+/// The long exact sequence of the pair $(K, diff K)$,
+///
+/// $dots.c -> H^k (K, diff K) -> H^k (K) -> H^k (diff K) -> H^(k+1) (K, diff K) -> dots.c$
+///
+/// on an annulus (square with a square hole). Exactness forces the
+/// alternating sum of all dimensions to vanish, and the three Betti
+/// families have their known values: absolute $(1, 1, 0)$, relative
+/// $(0, 1, 1)$ (Lefschetz duality) and boundary $(2, 2)$ (two circles).
+/// Both the absolute and the relative harmonic spaces match -- including a
+/// genuinely nontrivial harmonic 1-form around the hole.
+#[test]
+fn long_exact_sequence_of_the_pair_annulus() {
+  use manifold::{
+    geometry::coord::simplex::SimplexCoords,
+    topology::{complex::Complex, skeleton::Skeleton},
+  };
+
+  // Annulus: 3x3 boxes with the middle box removed.
+  let (square, coords) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+  let cells: Vec<_> = square
+    .cells()
+    .handle_iter()
+    .filter(|cell| {
+      let barycenter = SimplexCoords::from_simplex_and_coords(cell, &coords).barycenter();
+      let inside = |x: f64| 1.0 / 3.0 < x && x < 2.0 / 3.0;
+      !(inside(barycenter[0]) && inside(barycenter[1]))
+    })
+    .map(|cell| (*cell).clone())
+    .collect();
+  let topology = Complex::from_cells(Skeleton::new(cells));
+  let metric = coords.to_edge_lengths(&topology);
+  let fes = WhitneyComplex::new(&topology, &metric);
+  let dim = topology.dim();
+
+  // Absolute cohomology and harmonics.
+  let mut betti_abs = Vec::new();
+  for k in 0..=dim {
+    let betti = topology.homology_dim(k);
+    let dif = (k < dim).then(|| dense(&fes.dif(k)));
+    let dif_prev = (k > 0).then(|| dense(&fes.dif(k - 1)));
+    let mass = Matrix::from(&fes.mass(k));
+    assert_eq!(
+      harmonic_space_dim(fes.ndofs(k), dif, dif_prev, mass),
+      betti,
+      "absolute k={k}"
+    );
+    betti_abs.push(betti);
+  }
+  assert_eq!(betti_abs, vec![1, 1, 0]);
+
+  // Relative cohomology and harmonics.
+  let relative = fes.relative();
+  let ndofs_rel: Vec<_> = (0..=dim).map(|k| relative.ndofs(k)).collect();
+  let difs_rel: Vec<Matrix> = (0..=dim)
+    .map(|k| {
+      if k < dim {
+        dense(&relative.dif(k))
+      } else {
+        Matrix::zeros(0, ndofs_rel[k])
+      }
+    })
+    .collect();
+  let mut betti_rel = Vec::new();
+  for k in 0..=dim {
+    let betti = cohomology_dim(&difs_rel, &ndofs_rel, k);
+    let dif = (k < dim).then(|| difs_rel[k].clone());
+    let dif_prev = (k > 0).then(|| difs_rel[k - 1].clone());
+    let mass = Matrix::from(&relative.mass(k));
+    assert_eq!(
+      harmonic_space_dim(ndofs_rel[k], dif, dif_prev, mass),
+      betti,
+      "relative k={k}"
+    );
+    betti_rel.push(betti);
+  }
+  assert_eq!(betti_rel, vec![0, 1, 1]);
+
+  // Boundary cohomology: two circles.
+  let boundary = topology.boundary_complex().unwrap();
+  let betti_bdry: Vec<_> = (0..=boundary.dim())
+    .map(|k| boundary.complex().homology_dim(k))
+    .collect();
+  assert_eq!(betti_bdry, vec![2, 2]);
+
+  // Exactness of the long exact sequence forces the alternating sum of all
+  // dimensions to vanish.
+  let mut alternating_sum: i64 = 0;
+  for k in 0..=dim {
+    let bdry = if k <= boundary.dim() {
+      betti_bdry[k] as i64
+    } else {
+      0
+    };
+    let sign = if k % 2 == 0 { 1 } else { -1 };
+    alternating_sum += sign * (betti_rel[k] as i64 - betti_abs[k] as i64 + bdry);
+  }
+  assert_eq!(alternating_sum, 0);
+}

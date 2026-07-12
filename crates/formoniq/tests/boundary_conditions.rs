@@ -9,7 +9,7 @@
 extern crate nalgebra as na;
 
 use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
-use ddf::derham::derham_map;
+use ddf::{cochain::Cochain, derham::derham_map};
 use exterior::field::DiffFormClosure;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use manifold::gen::cartesian::CartesianMeshInfo;
@@ -84,10 +84,120 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
       },
       dim,
     );
-    rhs += bc::neumann_load(&boundary, &coords, &flux);
+    rhs += bc::neumann_load(&boundary, &coords, &flux, None);
 
     let solution = FaerCholesky::new(system).solve(&rhs);
 
     assert_relative_eq!(solution, exact_cochain.coeffs, epsilon = 1e-9);
+  }
+}
+
+/// Mixed boundary conditions: Dirichlet on the faces $x_1 = 0, 1$
+/// (where $u = x_1$ is 0 resp. 1), natural on the remaining faces
+/// (where $diff u \/ diff n = 0$, homogeneous: do nothing).
+/// The exact solution $u = x_1$ is reproduced.
+#[test]
+fn mixed_dirichlet_neumann_reproduces_linear_solution() {
+  use manifold::geometry::coord::simplex::SimplexCoords;
+
+  for dim in 2..=3 {
+    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let metric = coords.to_edge_lengths(&topology);
+    let fes = WhitneyComplex::new(&topology, &metric);
+
+    // Partition of the boundary facets by their barycenter.
+    let dirichlet_facets: Vec<_> = topology
+      .boundary_facets()
+      .into_iter()
+      .filter(|facet| {
+        let facet_coords = SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
+        let x = facet_coords.barycenter()[0];
+        x <= 1e-12 || x >= 1.0 - 1e-12
+      })
+      .collect();
+    let gamma_dirichlet = fes.boundary_part(dirichlet_facets);
+
+    let exact = DiffFormClosure::coordinate_component(0, dim);
+    let exact_cochain = derham_map(&exact, &topology, &coords, None);
+    let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
+
+    let laplace = CsrMatrix::from(&fes.codif_dif(0));
+    let rhs = common::linalg::nalgebra::Vector::zeros(fes.ndofs(0));
+
+    let solution = bc::solve_with_essential_bc(
+      &fes.relative_to(&gamma_dirichlet),
+      &gamma_dirichlet,
+      laplace,
+      &rhs,
+      &boundary_values,
+    );
+
+    assert_relative_eq!(solution.coeffs, exact_cochain.coeffs, epsilon = 1e-10);
+  }
+}
+
+/// Robin boundary condition $diff u \/ diff n + alpha "tr" u = h$ with
+/// $alpha = 1$ and $h$ manufactured from $u = x_1$. In 1d on the whole
+/// boundary; in higher dimensions on the faces $x_1 = 0, 1$ (where $h$ is
+/// per-face constant), combined with Dirichlet on the remaining faces --
+/// all three condition kinds in one problem. The exact solution is
+/// reproduced.
+#[test]
+fn robin_reproduces_linear_solution() {
+  use manifold::geometry::coord::simplex::SimplexCoords;
+
+  for dim in 1..=3 {
+    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let metric = coords.to_edge_lengths(&topology);
+    let fes = WhitneyComplex::new(&topology, &metric);
+
+    let exact = DiffFormClosure::coordinate_component(0, dim);
+    let exact_cochain = derham_map(&exact, &topology, &coords, None);
+
+    let alpha = 1.0;
+    // h = du/dn + alpha u: constant on each Robin face.
+    let robin_data = DiffFormClosure::scalar(
+      move |p| {
+        if p[0] <= 1e-12 {
+          -1.0 + alpha * 0.0
+        } else {
+          1.0 + alpha * 1.0
+        }
+      },
+      dim,
+    );
+
+    let is_x_facet = |facet: &manifold::topology::handle::SimplexIdx| {
+      let facet_coords =
+        SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
+      let x = facet_coords.barycenter()[0];
+      x <= 1e-12 || x >= 1.0 - 1e-12
+    };
+    let (robin_facets, dirichlet_facets): (Vec<_>, Vec<_>) = topology
+      .boundary_facets()
+      .into_iter()
+      .partition(is_x_facet);
+
+    let gamma_robin = fes.boundary_part(robin_facets);
+    let system =
+      CsrMatrix::from(&fes.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
+    let rhs = bc::neumann_load(&gamma_robin, &coords, &robin_data, None);
+
+    let solution = if dirichlet_facets.is_empty() {
+      // 1d: pure Robin.
+      Cochain::new(0, FaerCholesky::new(system).solve(&rhs))
+    } else {
+      let gamma_dirichlet = fes.boundary_part(dirichlet_facets);
+      let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
+      bc::solve_with_essential_bc(
+        &fes.relative_to(&gamma_dirichlet),
+        &gamma_dirichlet,
+        system,
+        &rhs,
+        &boundary_values,
+      )
+    };
+
+    assert_relative_eq!(solution.coeffs, exact_cochain.coeffs, epsilon = 1e-9);
   }
 }
