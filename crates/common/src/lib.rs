@@ -7,3 +7,6 @@ pub mod gramian;
 
 pub mod linalg;
 pub mod util;
+
+/// The dimension of a space or object.
+pub type Dim = usize;
