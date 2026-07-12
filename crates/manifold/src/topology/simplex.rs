@@ -174,10 +174,6 @@ impl SignedSimplex {
 pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
   combinations(dim_cell + 1, dim_sub + 1)
 }
-pub fn graded_subsimps(dim_cell: Dim) -> impl Iterator<Item = impl Iterator<Item = Combination>> {
-  (0..=dim_cell).map(move |d| standard_subsimps(dim_cell, d))
-}
-
 pub fn nsubsimplices(dim_cell: Dim, dim_sub: Dim) -> usize {
   binomial(dim_cell + 1, dim_sub + 1)
 }

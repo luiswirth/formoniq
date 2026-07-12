@@ -179,11 +179,6 @@ impl SimplexLengths {
     Self::new(lengths, dim)
   }
 
-  /// Inverse metric tensor: the induced inner product on covectors.
-  pub fn inverse_metric_tensor(&self) -> Gramian {
-    self.to_metric_tensor().inverse()
-  }
-
   /// The full Riemannian metric: the Gramian on tangent vectors together
   /// with its inverse on covectors.
   pub fn riemannian_metric(&self) -> RiemannianMetric {

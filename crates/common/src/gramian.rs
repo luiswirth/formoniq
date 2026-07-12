@@ -1,6 +1,7 @@
-use crate::linalg::nalgebra::{Matrix, MatrixExt, Vector};
-
-pub type Dim = usize;
+use crate::{
+  linalg::nalgebra::{Matrix, MatrixExt, Vector},
+  Dim,
+};
 
 /// A Gram Matrix represent an inner product expressed in a basis.
 #[derive(Debug, Clone)]
@@ -56,18 +57,6 @@ impl Gramian {
 impl Gramian {
   pub fn basis_inner(&self, i: usize, j: usize) -> f64 {
     self.matrix[(i, j)]
-  }
-  pub fn basis_norm_sq(&self, i: usize) -> f64 {
-    self.basis_inner(i, i)
-  }
-  pub fn basis_norm(&self, i: usize) -> f64 {
-    self.basis_norm_sq(i).sqrt()
-  }
-  pub fn basis_angle_cos(&self, i: usize, j: usize) -> f64 {
-    self.basis_inner(i, j) / self.basis_norm(i) / self.basis_norm(j)
-  }
-  pub fn basis_angle(&self, i: usize, j: usize) -> f64 {
-    self.basis_angle_cos(i, j).acos()
   }
 }
 impl std::ops::Index<(usize, usize)> for Gramian {
@@ -127,25 +116,10 @@ impl Gramian {
   pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
     (v.transpose() * self.matrix() * w).x
   }
-  pub fn inner_mat(&self, v: &Matrix, w: &Matrix) -> Matrix {
-    v.transpose() * self.matrix() * w
-  }
   pub fn norm_sq(&self, v: &Vector) -> f64 {
     self.inner(v, v)
   }
-  pub fn norm_sq_mat(&self, v: &Matrix) -> Matrix {
-    self.inner_mat(v, v)
-  }
   pub fn norm(&self, v: &Vector) -> f64 {
     self.inner(v, v).sqrt()
-  }
-  pub fn norm_mat(&self, v: &Matrix) -> Matrix {
-    self.inner_mat(v, v).map(|v| v.sqrt())
-  }
-  pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
-    self.inner(v, w) / self.norm(v) / self.norm(w)
-  }
-  pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
-    self.angle_cos(v, w).acos()
   }
 }

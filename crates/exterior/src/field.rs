@@ -13,18 +13,17 @@ pub trait ExteriorField {
   fn at_point<'a>(&self, coord: impl Into<VectorView<'a>>) -> MultiForm;
 }
 
-pub type DiffFormClosure = ExteriorFieldClosure;
-
 /// A pointwise evaluation rule for a differential form.
 pub type FormClosure = Box<dyn Fn(VectorView<f64>) -> MultiForm + Sync>;
 
-pub struct ExteriorFieldClosure {
+/// A differential form given by a pointwise closure.
+pub struct DiffFormClosure {
   closure: FormClosure,
   dim: Dim,
   grade: ExteriorGrade,
 }
 
-impl ExteriorFieldClosure {
+impl DiffFormClosure {
   pub fn new(closure: FormClosure, dim: Dim, grade: ExteriorGrade) -> Self {
     Self {
       closure,
@@ -34,7 +33,6 @@ impl ExteriorFieldClosure {
   }
 }
 
-// Convenience methods specifically for DifferentialFormClosure
 impl DiffFormClosure {
   /// Create a scalar field (0-form).
   pub fn scalar(f: impl Fn(VectorView<f64>) -> f64 + Sync + 'static, dim: Dim) -> Self {
@@ -61,7 +59,7 @@ impl DiffFormClosure {
     Self::scalar(move |x| (&center - x).norm(), dim)
   }
 }
-impl ExteriorField for ExteriorFieldClosure {
+impl ExteriorField for DiffFormClosure {
   fn dim_ambient(&self) -> Dim {
     self.dim
   }

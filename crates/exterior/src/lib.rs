@@ -10,7 +10,7 @@ use common::{
 
 use std::marker::PhantomData;
 
-pub type Dim = usize;
+pub use common::Dim;
 pub type ExteriorGrade = usize;
 
 /// A basis blade $e_(i_1) wedge dots.c wedge e_(i_k)$ of the exterior
