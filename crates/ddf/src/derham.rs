@@ -26,30 +26,34 @@ use {
 };
 
 /// The de Rham map: discretize a continuous differential k-form into a
-/// k-cochain by integrating it over each k-simplex of the mesh.
+/// k-cochain by integrating it over each k-simplex of the mesh, with
+/// quadrature exact for polynomial integrands of the given degree.
 pub fn derham_map(
   form: &impl ExteriorField,
   topology: &Complex,
   coords: &MeshCoords,
-  qr: Option<&SimplexQuadRule>,
+  quad_degree: usize,
 ) -> Cochain {
+  let qr = SimplexQuadRule::degree(form.grade(), quad_degree);
   let cochain = topology
     .skeleton(form.grade())
     .handle_iter()
     .map(|simp| SimplexCoords::from_simplex_and_coords(&simp, coords))
-    .map(|simp| integrate_form_simplex(form, &simp, qr))
+    .map(|simp| integrate_form_simplex(form, &simp, &qr))
     .collect::<Vec<_>>()
     .into();
   Cochain::new(form.grade(), cochain)
 }
 
 /// Approximates the integral of a differential k-form over a k-simplex.
+/// The quadrature rule must match the simplex dimension.
 pub fn integrate_form_simplex(
   form: &impl ExteriorField,
   simplex: &SimplexCoords,
-  qr: Option<&SimplexQuadRule>,
+  qr: &SimplexQuadRule,
 ) -> f64 {
   let dim_intrinsic = simplex.dim_intrinsic();
+  assert_eq!(qr.dim(), dim_intrinsic);
 
   let multivector = simplex.spanning_multivector();
   let f = |coord: CoordRef| {
@@ -57,12 +61,7 @@ pub fn integrate_form_simplex(
       .at_point(simplex.local2global(coord).as_view())
       .pairing(&multivector)
   };
-  if let Some(qr) = qr {
-    qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
-  } else {
-    let qr = &SimplexQuadRule::degree(dim_intrinsic, 1);
-    qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
-  }
+  qr.integrate_local(&f, refsimp_vol(dim_intrinsic))
 }
 
 #[cfg(test)]
@@ -138,8 +137,8 @@ mod test {
       let dim = form.dim_intrinsic();
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
 
-      let dif_of_projected = derham_map(&form, &topology, &coords, None).dif(&topology);
-      let projected_dif = derham_map(&dif_form, &topology, &coords, None);
+      let dif_of_projected = derham_map(&form, &topology, &coords, 1).dif(&topology);
+      let projected_dif = derham_map(&dif_form, &topology, &coords, 1);
 
       assert_eq!(dif_of_projected.grade, projected_dif.grade);
       assert_relative_eq!(

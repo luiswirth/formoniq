@@ -53,7 +53,7 @@ fn main() {
 
       let fes = WhitneyComplex::new(&topology, &metric);
       let boundary = fes.boundary().unwrap();
-      let solution_projected = derham_map(&solution_exact, &topology, &coords, None);
+      let solution_projected = derham_map(&solution_exact, &topology, &coords, 1);
       let boundary_values = boundary.trace_cochain(&solution_projected);
 
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(
