@@ -48,18 +48,14 @@ impl<'a> WhitneyForm<'a> {
     }
   }
 
-  pub fn eval_known_cell<'b>(
-    &self,
-    cell: SimplexRef,
-    coord: impl Into<CoordRef<'b>>,
-  ) -> MultiForm {
+  pub fn eval_known_cell<'b>(&self, cell: SimplexRef, coord: impl Into<CoordRef<'b>>) -> MultiForm {
     let coord = coord.into();
 
     let cell_coords = cell.coord_simplex(self.mesh_coords);
 
     let mut value = MultiForm::zero(self.dim_ambient(), self.grade());
-    for dof_simp in cell.mesh_subsimps(self.grade()) {
-      let local_dof_simp = dof_simp.relative_to(&cell);
+    for dof_simp in cell.faces(self.grade()) {
+      let local_dof_simp = dof_simp.simplex().relative_to(cell.simplex());
 
       let lsf = WhitneyLsf::from_coords(cell_coords.clone(), local_dof_simp);
       let lsf_value = lsf.at_point(coord);

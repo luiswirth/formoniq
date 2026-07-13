@@ -82,7 +82,7 @@ impl MeshCoords {
     let edges = topology.edges();
     let mut edge_lengths = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {
-      let [vi, vj] = (*edge).clone().try_into().unwrap();
+      let [vi, vj] = edge.simplex().clone().try_into().unwrap();
       let length = (self.coord(vj) - self.coord(vi)).norm();
       edge_lengths[iedge] = length;
     }

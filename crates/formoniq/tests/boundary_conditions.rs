@@ -115,7 +115,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
       .into_iter()
       .filter(|facet| {
         let facet_coords =
-          SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
+          SimplexCoords::from_simplex_and_coords(facet.handle(&topology).simplex(), &coords);
         let x = facet_coords.barycenter()[0];
         x <= 1e-12 || x >= 1.0 - 1e-12
       })
@@ -173,7 +173,8 @@ fn robin_reproduces_linear_solution() {
     );
 
     let is_x_facet = |facet: &manifold::topology::handle::SimplexIdx| {
-      let facet_coords = SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
+      let facet_coords =
+        SimplexCoords::from_simplex_and_coords(facet.handle(&topology).simplex(), &coords);
       let x = facet_coords.barycenter()[0];
       x <= 1e-12 || x >= 1.0 - 1e-12
     };

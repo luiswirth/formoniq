@@ -74,7 +74,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     writeln!(&mut file)?;
 
     for cell in topology.cells().handle_iter() {
-      let cell_coords = SimplexCoords::from_simplex_and_coords(&cell, &coords);
+      let cell_coords = SimplexCoords::from_simplex_and_coords(cell.simplex(), &coords);
       let whitney = WhitneyForm::new(eigen_cochain.clone(), &topology, &coords);
       let cell_value = whitney.eval_known_cell(cell, &cell_coords.barycenter());
 

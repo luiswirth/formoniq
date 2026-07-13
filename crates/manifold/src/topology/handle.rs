@@ -1,17 +1,19 @@
 use super::complex::{Complex, ComplexSkeleton, SimplexComplexData};
 use crate::{
-  topology::{simplex::Simplex, skeleton::Skeleton},
+  topology::{simplex::Simplex, skeleton::Skeleton, VertexIdx},
   Dim,
 };
 
 use common::combo::Sign;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use std::collections::BTreeSet;
+
 /// An index identifying a simplex in a skeleton.
 pub type KSimplexIdx = usize;
 
 /// An index identifying a simplex in the mesh.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct SimplexIdx {
   pub dim: Dim,
   pub kidx: KSimplexIdx,
@@ -46,21 +48,16 @@ pub struct SimplexRef<'c> {
   complex: &'c Complex,
   idx: SimplexIdx,
 }
-impl std::ops::Deref for SimplexRef<'_> {
-  type Target = Simplex;
-  fn deref(&self) -> &Self::Target {
-    self.skeleton_raw().simplex_by_kidx(self.kidx())
-  }
-}
 impl std::fmt::Debug for SimplexRef<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexRef")
       .field("idx", &self.idx)
-      .field("complex", &std::ptr::from_ref::<Complex>(self.complex))
+      .field("vertices", &self.simplex().vertices)
       .finish()
   }
 }
 
+/// Identity and the escape hatch to the raw combinatorial atom.
 impl<'m> SimplexRef<'m> {
   pub fn new(complex: &'m Complex, idx: SimplexIdx) -> Self {
     idx.assert_valid(complex);
@@ -72,75 +69,164 @@ impl<'m> SimplexRef<'m> {
   pub fn kidx(&self) -> KSimplexIdx {
     self.idx.kidx
   }
+  pub fn dim(&self) -> Dim {
+    self.idx.dim
+  }
   pub fn complex(&self) -> &'m Complex {
     self.complex
   }
 
+  /// The underlying combinatorial simplex (its sorted vertex set): the escape
+  /// hatch from ref-world down to the raw atom. Navigation lives on the ref;
+  /// the pure combinatorics lives on [`Simplex`].
+  pub fn simplex(&self) -> &'m Simplex {
+    self
+      .complex
+      .mesh_skeleton_raw(self.idx.dim)
+      .skeleton()
+      .simplex_by_kidx(self.idx.kidx)
+  }
+  pub fn nvertices(&self) -> usize {
+    self.simplex().nvertices()
+  }
+  pub fn contains(&self, vertex: VertexIdx) -> bool {
+    self.simplex().contains(vertex)
+  }
+
   pub fn skeleton(&self) -> SkeletonRef<'m> {
-    self.complex.skeleton(self.dim())
+    self.complex.skeleton(self.idx.dim)
   }
-  pub fn complex_skeleton(&self) -> &ComplexSkeleton {
-    self.complex.complex_skeleton(self.idx.dim())
+  pub fn mesh_skeleton_raw(&self) -> &'m ComplexSkeleton {
+    self.complex.mesh_skeleton_raw(self.idx.dim)
   }
-  pub fn skeleton_raw(&self) -> &Skeleton {
-    self.complex_skeleton().skeleton()
+  pub fn skeleton_raw(&self) -> &'m Skeleton {
+    self.mesh_skeleton_raw().skeleton()
   }
-  pub fn mesh_data(&self) -> &SimplexComplexData {
-    &self.complex_skeleton().complex_data()[self.kidx()]
+  pub(crate) fn mesh_data(&self) -> &'m SimplexComplexData {
+    &self.mesh_skeleton_raw().complex_data()[self.idx.kidx]
   }
 }
 
-impl SimplexRef<'_> {
-  pub fn boundary_chain(&self) -> impl Iterator<Item = (Sign, SimplexRef<'_>)> {
-    self.boundary().map(move |sub| {
-      let sign = sub.sign;
-      let handle = self
-        .complex
-        .skeleton(self.dim() - 1)
-        .handle_by_simplex(&sub.simplex);
-      (sign, handle)
-    })
+/// Navigation: every method returns other [`SimplexRef`]s, so a ref reads like
+/// a simplex you can walk the complex from. Down-incidence is pure
+/// combinatorics on the vertex set; up-incidence is looked up through the
+/// stored cell incidence.
+impl<'m> SimplexRef<'m> {
+  // --- down-incidence ---
+
+  /// The vertices of this simplex, as 0-simplex refs.
+  pub fn vertices(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    let complex = self.complex;
+    self
+      .simplex()
+      .iter()
+      .map(move |v| SimplexIdx::new(0, v).handle(complex))
+  }
+  /// The edges of this simplex.
+  pub fn edges(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    self.faces(1)
+  }
+  /// The `dim`-dimensional faces (subsimplices) of this simplex.
+  pub fn faces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
+    let complex = self.complex;
+    self
+      .simplex()
+      .subsimps(dim)
+      .map(move |sub| complex.skeleton(dim).handle_by_simplex(&sub))
+  }
+  /// The facets: the codimension-1 faces. Empty for a vertex.
+  pub fn facets(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    let below = self.idx.dim.checked_sub(1);
+    below.into_iter().flat_map(move |d| self.faces(d))
+  }
+  /// The signed boundary $diff sigma$: each facet with its incidence sign.
+  pub fn boundary(self) -> impl Iterator<Item = (Sign, SimplexRef<'m>)> {
+    let complex = self.complex;
+    let below = self.idx.dim.wrapping_sub(1);
+    let has_boundary = self.idx.dim >= 1;
+    self
+      .simplex()
+      .boundary()
+      .filter(move |_| has_boundary)
+      .map(move |signed| {
+        (
+          signed.sign,
+          complex.skeleton(below).handle_by_simplex(&signed.simplex),
+        )
+      })
   }
 
-  pub fn cocells(&self) -> impl Iterator<Item = SimplexRef<'_>> + '_ {
+  // --- up-incidence ---
+
+  /// The cells (top-dimensional cofaces) containing this simplex.
+  pub fn cells(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    let complex = self.complex;
     self
       .mesh_data()
       .cocells
       .iter()
-      .map(|&cell_idx| cell_idx.handle(self.complex))
+      .map(move |&idx| idx.handle(complex))
+  }
+  /// The `dim`-dimensional cofaces (supersimplices) of this simplex.
+  pub fn cofaces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
+    let complex = self.complex;
+    let simplex = self.simplex();
+    let mut sups: Vec<Simplex> = self
+      .cells()
+      .flat_map(|cell| simplex.supersimps(dim, cell.simplex()).collect::<Vec<_>>())
+      .collect();
+    sups.sort_unstable();
+    sups.dedup();
+    sups
+      .into_iter()
+      .map(move |sup| complex.skeleton(dim).handle_by_simplex(&sup))
   }
 
-  /// The dim-subsimplices of this simplex.
-  ///
-  /// These are ordered lexicographically w.r.t. the local vertex indices,
-  /// e.g. `tet.mesh_subsimps(1)` yields the edges
-  /// `(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)`.
-  pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexRef<'_>> {
-    self
-      .subsimps(dim_sub)
-      .map(move |sub| self.complex.skeleton(dim_sub).handle_by_simplex(&sub))
-  }
+  // --- neighborhoods ---
 
-  /// The dim-supersimplices of this simplex.
-  ///
-  /// These are ordered first by cell index and then
-  /// by lexicographically w.r.t. the local vertex indices.
-  pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexRef<'_>> {
-    self.cocells().flat_map(move |parent| {
-      let sups: Vec<_> = self.supersimps(dim_super, &parent).collect();
-      sups
-        .into_iter()
-        .map(move |sup| self.complex.skeleton(dim_super).handle_by_simplex(&sup))
-    })
+  /// The open star: every coface of every dimension (this simplex included).
+  pub fn star(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    (self.idx.dim..=self.complex.dim()).flat_map(move |d| self.cofaces(d).collect::<Vec<_>>())
   }
-
-  pub fn mesh_vertices(&self) -> impl Iterator<Item = SimplexRef<'_>> {
-    self
-      .iter()
-      .map(|v| SimplexIdx::new(0, v).handle(self.complex))
+  /// The link: the faces opposite this simplex across the cells containing it
+  /// (the boundary of the star). For a vertex of a triangulation, the
+  /// surrounding polygon.
+  pub fn link(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    let complex = self.complex;
+    let own: BTreeSet<VertexIdx> = self.simplex().iter().collect();
+    let mut result: BTreeSet<SimplexIdx> = BTreeSet::new();
+    for cell in self.cells() {
+      let opposite: Vec<VertexIdx> = cell.simplex().iter().filter(|v| !own.contains(v)).collect();
+      let opposite = Simplex::new(opposite);
+      for d in 0..opposite.nvertices() {
+        for face in opposite.subsimps(d) {
+          result.insert(complex.skeleton(d).handle_by_simplex(&face).idx());
+        }
+      }
+    }
+    result.into_iter().map(move |idx| idx.handle(complex))
   }
-  pub fn mesh_edges(&self) -> impl Iterator<Item = SimplexRef<'_>> {
-    self.mesh_subsimps(1)
+  /// The neighbors of a cell: the cells sharing a facet with it (the
+  /// dual-graph adjacency). Intended for top-dimensional simplices.
+  pub fn neighbors(self) -> impl Iterator<Item = SimplexRef<'m>> {
+    let complex = self.complex;
+    let this = self.idx;
+    let mut cells: BTreeSet<KSimplexIdx> = BTreeSet::new();
+    for facet in self.facets() {
+      for cell in facet.cells() {
+        if cell.idx() != this {
+          cells.insert(cell.kidx());
+        }
+      }
+    }
+    let top = self.complex.dim();
+    cells
+      .into_iter()
+      .map(move |kidx| SimplexIdx::new(top, kidx).handle(complex))
+  }
+  /// Whether this facet lies on the boundary (has a single cell).
+  pub fn is_boundary(&self) -> bool {
+    self.cells().count() == 1
   }
 }
 

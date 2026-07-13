@@ -99,7 +99,7 @@ impl MeshLengths {
 
   pub fn simplex_lengths(&self, simplex: SimplexRef) -> SimplexLengths {
     let lengths = simplex
-      .mesh_edges()
+      .edges()
       .map(|edge| self.length(edge.kidx()))
       .collect_vec()
       .into();
