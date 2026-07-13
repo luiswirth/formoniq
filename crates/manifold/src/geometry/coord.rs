@@ -1,3 +1,4 @@
+pub mod locate;
 pub mod mesh;
 pub mod quadrature;
 pub mod simplex;
