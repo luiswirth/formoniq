@@ -4,7 +4,11 @@ use super::{
 };
 use crate::{
   geometry::metric::mesh::MeshLengths,
-  topology::{complex::Complex, handle::SimplexRef, simplex::Simplex, VertexIdx},
+  topology::{
+    data::SkeletonData,
+    handle::{KSimplexIdx, SimplexRef},
+    {complex::Complex, simplex::Simplex, VertexIdx},
+  },
   Dim,
 };
 
@@ -38,6 +42,21 @@ impl MeshCoords {
 
   pub fn swap_coords(&mut self, icol: usize, jcol: usize) {
     self.matrix.swap_columns(icol, jcol);
+  }
+}
+
+/// Vertex coordinates are grade-0 data on the mesh, stored as the columns of a
+/// matrix: `at` returns a column *view*, not an owned point.
+impl SkeletonData for MeshCoords {
+  type Item<'a> = CoordRef<'a>;
+  fn grade(&self) -> Dim {
+    0
+  }
+  fn len(&self) -> usize {
+    self.nvertices()
+  }
+  fn at(&self, kidx: KSimplexIdx) -> CoordRef<'_> {
+    self.matrix.column(kidx)
   }
 }
 
