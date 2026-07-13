@@ -8,6 +8,8 @@ use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, Matrix};
 
 use itertools::Itertools;
 
+use std::sync::OnceLock;
+
 /// A simplicial manifold complex.
 ///
 /// Its skeletons are derived from the cells and stored in canonical colex
@@ -15,11 +17,17 @@ use itertools::Itertools;
 /// (a simplex's cells, cofaces, neighbors) is the intersection of the
 /// vertex-cell lists over the simplex's vertices, and all down-incidence is
 /// pure combinatorics on the vertex set.
+///
+/// The boundary operators $diff_k$ -- which double as the oriented incidence
+/// backbone -- are computed lazily on first use and cached.
 #[derive(Default, Debug, Clone)]
 pub struct Complex {
   skeletons: Vec<Skeleton>,
   /// Per vertex, by kidx: the sorted list of cells containing it.
   vertex_cells: Vec<Vec<KSimplexIdx>>,
+  /// Cached boundary operators $diff_k: C_k -> C_(k-1)$, indexed by $k$ in
+  /// `0..=dim + 1`.
+  boundary_operators: Vec<OnceLock<CooMatrix>>,
 }
 
 impl Complex {
@@ -129,21 +137,25 @@ impl Complex {
       .collect()
   }
 
-  /// $diff^k: Delta_k -> Delta_(k-1)$
+  /// $diff_k: Delta_k -> Delta_(k-1)$, cached after first use.
   ///
   /// The chain complex extends by zero: outside $0 <= k <= n$ the operator
   /// maps to/from the zero space.
-  pub fn boundary_operator(&self, grade: Dim) -> CooMatrix {
-    if grade == self.dim() + 1 {
+  pub fn boundary_operator(&self, dim: Dim) -> &CooMatrix {
+    self.boundary_operators[dim].get_or_init(|| self.compute_boundary_operator(dim))
+  }
+
+  fn compute_boundary_operator(&self, dim: Dim) -> CooMatrix {
+    if dim == self.dim() + 1 {
       return CooMatrix::zeros(self.nsimplices(self.dim()), 0);
     }
-    let sups = &self.skeleton(grade);
+    let sups = &self.skeleton(dim);
 
-    if grade == 0 {
+    if dim == 0 {
       return CooMatrix::zeros(0, sups.len());
     }
 
-    let subs = &self.skeleton(grade - 1);
+    let subs = &self.skeleton(dim - 1);
     let mut mat = CooMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.handle_iter().enumerate() {
       for (sign, sub) in sup.boundary() {
@@ -157,8 +169,8 @@ impl Complex {
   ///
   /// The coboundary operator, which is the discrete exterior derivative
   /// on cochains. It is the transpose of the boundary operator.
-  pub fn coboundary_operator(&self, grade: Dim) -> CooMatrix {
-    self.boundary_operator(grade + 1).transpose()
+  pub fn coboundary_operator(&self, dim: Dim) -> CooMatrix {
+    self.boundary_operator(dim + 1).clone().transpose()
   }
 
   /// Dimension of the k-th homology group.
@@ -168,8 +180,8 @@ impl Complex {
   /// Computed using simplicial homology.
   pub fn homology_dim(&self, dim: Dim) -> usize {
     // TODO: use sparse matrix!
-    let boundary_this = Matrix::from(&self.boundary_operator(dim));
-    let boundary_plus = Matrix::from(&self.boundary_operator(dim + 1));
+    let boundary_this = Matrix::from(self.boundary_operator(dim));
+    let boundary_plus = Matrix::from(self.boundary_operator(dim + 1));
 
     const RANK_TOL: f64 = 1e-12;
 
@@ -240,6 +252,7 @@ impl Complex {
     Self {
       skeletons,
       vertex_cells,
+      boundary_operators: (0..dim + 2).map(|_| OnceLock::new()).collect(),
     }
   }
 }
@@ -314,7 +327,7 @@ mod test {
       let complex = Complex::standard(dim);
       for k in 0..=dim {
         let combinatorial = standard_boundary_operator(dim, k);
-        let from_complex = Matrix::from(&complex.boundary_operator(k));
+        let from_complex = Matrix::from(complex.boundary_operator(k));
         assert_eq!(combinatorial, from_complex);
       }
     }
