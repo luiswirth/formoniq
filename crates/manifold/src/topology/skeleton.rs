@@ -20,8 +20,9 @@ impl Skeleton {
         .all(|d| d == dim),
       "Skeleton simplices must have same dimension."
     );
-    // Canonical ordering: colexicographic by vertex set.
+    // Canonical ordering: colexicographic by vertex set, deduplicated.
     simplices.sort_unstable();
+    simplices.dedup();
     let nvertices = if dim == 0 {
       assert!(
         simplices.iter().enumerate().all(|(i, simp)| simp[0] == i),
@@ -44,15 +45,6 @@ impl Skeleton {
     }
   }
 
-  /// Build directly from simplices already in the desired (colex) order,
-  /// preserving `nvertices`. Trusts the caller; used to re-key a skeleton
-  /// after canonical reordering.
-  pub(crate) fn from_ordered(simplices: Vec<Simplex>, nvertices: usize) -> Self {
-    Self {
-      simplices: IndexSet::from_iter(simplices),
-      nvertices,
-    }
-  }
   pub fn standard(dim: Dim) -> Skeleton {
     Self::new(vec![Simplex::standard(dim)])
   }

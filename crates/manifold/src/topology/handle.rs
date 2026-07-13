@@ -1,4 +1,4 @@
-use super::complex::{Complex, ComplexSkeleton, SimplexComplexData};
+use super::complex::Complex;
 use crate::{
   topology::{simplex::Simplex, skeleton::Skeleton, VertexIdx},
   Dim,
@@ -82,8 +82,7 @@ impl<'m> SimplexRef<'m> {
   pub fn simplex(&self) -> &'m Simplex {
     self
       .complex
-      .mesh_skeleton_raw(self.idx.dim)
-      .skeleton()
+      .skeleton_raw(self.idx.dim)
       .simplex_by_kidx(self.idx.kidx)
   }
   pub fn nvertices(&self) -> usize {
@@ -96,14 +95,8 @@ impl<'m> SimplexRef<'m> {
   pub fn skeleton(&self) -> SkeletonRef<'m> {
     self.complex.skeleton(self.idx.dim)
   }
-  pub fn mesh_skeleton_raw(&self) -> &'m ComplexSkeleton {
-    self.complex.mesh_skeleton_raw(self.idx.dim)
-  }
   pub fn skeleton_raw(&self) -> &'m Skeleton {
-    self.mesh_skeleton_raw().skeleton()
-  }
-  pub(crate) fn mesh_data(&self) -> &'m SimplexComplexData {
-    &self.mesh_skeleton_raw().complex_data()[self.idx.kidx]
+    self.complex.skeleton_raw(self.idx.dim)
   }
 }
 
@@ -158,14 +151,26 @@ impl<'m> SimplexRef<'m> {
 
   // --- up-incidence ---
 
-  /// The cells (top-dimensional cofaces) containing this simplex.
+  /// The cells (top-dimensional cofaces) containing this simplex: the
+  /// intersection of the vertex-cell lists over its vertices.
   pub fn cells(self) -> impl Iterator<Item = SimplexRef<'m>> {
     let complex = self.complex;
-    self
-      .mesh_data()
-      .cocells
-      .iter()
-      .map(move |&idx| idx.handle(complex))
+    let top = complex.dim();
+    let mut vertices = self.simplex().iter();
+    let cells: Vec<KSimplexIdx> = match vertices.next() {
+      None => Vec::new(),
+      Some(v0) => {
+        let mut shared = complex.vertex_cells(v0).to_vec();
+        for v in vertices {
+          let others = complex.vertex_cells(v);
+          shared.retain(|cell| others.binary_search(cell).is_ok());
+        }
+        shared
+      }
+    };
+    cells
+      .into_iter()
+      .map(move |kidx| SimplexIdx::new(top, kidx).handle(complex))
   }
   /// The `dim`-dimensional cofaces (supersimplices) of this simplex.
   pub fn cofaces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
@@ -251,7 +256,7 @@ pub struct SkeletonRef<'m> {
 impl std::ops::Deref for SkeletonRef<'_> {
   type Target = Skeleton;
   fn deref(&self) -> &Self::Target {
-    self.complex.complex_skeleton(self.dim).skeleton()
+    self.complex.skeleton_raw(self.dim)
   }
 }
 
