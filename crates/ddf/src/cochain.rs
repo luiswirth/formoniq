@@ -6,7 +6,7 @@ use {
     topology::skeleton::Skeleton,
     topology::{
       complex::Complex,
-      handle::{SimplexRef, SimplexIdx},
+      handle::{SimplexIdx, SimplexRef},
     },
   },
 };

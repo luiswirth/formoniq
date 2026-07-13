@@ -88,7 +88,7 @@ impl Complex {
     self
       .facets()
       .handle_iter()
-      .filter(|f| f.cocells().count() == 1)
+      .filter(|f| f.cells().count() == 1)
       .map(|f| f.idx())
       .collect()
   }
@@ -101,7 +101,7 @@ impl Complex {
       .map(|facet| {
         facet
           .handle(self)
-          .cocells()
+          .cells()
           .next()
           .expect("Boundary facets have exactly one cell.")
           .idx()
@@ -122,7 +122,7 @@ impl Complex {
       .flat_map(|facet| {
         facet
           .handle(self)
-          .mesh_subsimps(dim)
+          .faces(dim)
           .map(|sub| sub.idx())
           .collect::<Vec<_>>()
       })
@@ -157,11 +157,8 @@ impl Complex {
     let subs = &self.skeleton(grade - 1);
     let mut mat = CooMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.handle_iter().enumerate() {
-      let sup_boundary = sup.boundary();
-      for sub in sup_boundary {
-        let sign = sub.sign.as_f64();
-        let isub = subs.handle_by_simplex(&sub.simplex).kidx();
-        mat.push(isub, isup, sign);
+      for (sign, sub) in sup.boundary() {
+        mat.push(sub.kidx(), isup, sign.as_f64());
       }
     }
     mat
@@ -393,21 +390,67 @@ mod test {
 
     let cell_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
-      let subs: Vec<_> = cell.mesh_subsimps(dim_sub).collect();
+      let subs: Vec<_> = cell.faces(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplices(dim, dim_sub));
       let subs_vertices: Vec<_> = cell_simplex.subsimps(dim_sub).collect();
       assert_eq!(
-        subs.iter().map(|&sub| (*sub).clone()).collect::<Vec<_>>(),
+        subs
+          .iter()
+          .map(|sub| sub.simplex().clone())
+          .collect::<Vec<_>>(),
         subs_vertices
       );
 
       for (isub, sub) in subs.iter().enumerate() {
         let sub_vertices = &subs_vertices[isub];
         for dim_sup in dim_sub..dim {
-          for sup in sub.mesh_supersimps(dim_sup) {
-            assert!(sub_vertices.is_subsimplex_of(&sup) && sup.is_subsimplex_of(&cell_simplex));
+          for sup in sub.cofaces(dim_sup) {
+            assert!(
+              sub_vertices.is_subsimplex_of(sup.simplex())
+                && sup.simplex().is_subsimplex_of(&cell_simplex)
+            );
           }
         }
+      }
+    }
+  }
+
+  /// Navigation on a triangulation: facets, neighbors, star and link behave
+  /// as their topological definitions demand.
+  #[test]
+  fn ref_navigation() {
+    use crate::gen::cartesian::CartesianMeshInfo;
+
+    let (topology, _) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+
+    for cell in topology.cells().handle_iter() {
+      // A triangle has 3 facets (edges) and at most 3 neighbors across them.
+      assert_eq!(cell.facets().count(), 3);
+      assert!(cell.neighbors().count() <= 3);
+      // Neighbors share a facet and are distinct cells.
+      for nb in cell.neighbors() {
+        assert_eq!(nb.dim(), 2);
+        assert_ne!(nb.idx(), cell.idx());
+        let shared = cell
+          .facets()
+          .filter(|f| nb.facets().any(|g| g.idx() == f.idx()));
+        assert_eq!(shared.count(), 1);
+      }
+      // The star of a top cell is just itself.
+      assert_eq!(cell.star().count(), 1);
+    }
+
+    // Boundary edges have a single cell; interior edges two.
+    assert!(topology.edges().handle_iter().any(|e| e.is_boundary()));
+    for edge in topology.edges().handle_iter() {
+      assert_eq!(edge.cells().count(), if edge.is_boundary() { 1 } else { 2 });
+    }
+
+    // The link of a vertex never touches the vertex itself; its star does.
+    for vertex in topology.vertices().handle_iter() {
+      assert!(vertex.star().any(|s| s.idx() == vertex.idx()));
+      for linked in vertex.link() {
+        assert!(!linked.simplex().contains(vertex.kidx()));
       }
     }
   }

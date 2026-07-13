@@ -128,7 +128,7 @@ impl SimplexQuadRule {
   {
     let mut integral = 0.0;
     for cell in complex.cells().handle_iter() {
-      let cell_coords = SimplexCoords::from_simplex_and_coords(&cell, coords);
+      let cell_coords = SimplexCoords::from_simplex_and_coords(cell.simplex(), coords);
       integral += self.integrate_coord(&|x| f(x, cell), &cell_coords);
     }
     integral

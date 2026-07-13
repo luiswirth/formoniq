@@ -232,11 +232,11 @@ fn long_exact_sequence_of_the_pair_annulus() {
     .cells()
     .handle_iter()
     .filter(|cell| {
-      let barycenter = SimplexCoords::from_simplex_and_coords(cell, &coords).barycenter();
+      let barycenter = SimplexCoords::from_simplex_and_coords(cell.simplex(), &coords).barycenter();
       let inside = |x: f64| 1.0 / 3.0 < x && x < 2.0 / 3.0;
       !(inside(barycenter[0]) && inside(barycenter[1]))
     })
-    .map(|cell| (*cell).clone())
+    .map(|cell| cell.simplex().clone())
     .collect();
   let topology = Complex::from_cells(Skeleton::new(cells));
   let metric = coords.to_edge_lengths(&topology);

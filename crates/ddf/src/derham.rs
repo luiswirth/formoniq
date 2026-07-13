@@ -38,7 +38,7 @@ pub fn derham_map(
   let cochain = topology
     .skeleton(form.grade())
     .handle_iter()
-    .map(|simp| SimplexCoords::from_simplex_and_coords(&simp, coords))
+    .map(|simp| SimplexCoords::from_simplex_and_coords(simp.simplex(), coords))
     .map(|simp| integrate_form_simplex(form, &simp, &qr))
     .collect::<Vec<_>>()
     .into();

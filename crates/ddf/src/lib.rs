@@ -44,7 +44,7 @@ mod test {
       for grade in 0..=dim {
         for dof_simp in topology.skeleton(grade).handle_iter() {
           let whitney_form =
-            WhitneyLsf::standard(dim, Combination::from_increasing(dof_simp.iter()));
+            WhitneyLsf::standard(dim, Combination::from_increasing(dof_simp.simplex().iter()));
 
           for other_simp in topology.skeleton(grade).handle_iter() {
             let are_same_simp = dof_simp == other_simp;

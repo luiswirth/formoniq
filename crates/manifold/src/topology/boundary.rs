@@ -59,7 +59,7 @@ impl Complex {
     // Monotone vertex renumbering: sorted parent vertices -> 0..m.
     let mut parent_vertices: Vec<VertexIdx> = facets
       .iter()
-      .flat_map(|facet| facet.handle(self).vertices.clone())
+      .flat_map(|facet| facet.handle(self).simplex().vertices.clone())
       .collect();
     parent_vertices.sort_unstable();
     parent_vertices.dedup();
@@ -73,7 +73,7 @@ impl Complex {
       .into_iter()
       .map(|facet| {
         let facet = facet.handle(self);
-        Simplex::new(facet.iter().map(to_local).collect())
+        Simplex::new(facet.simplex().iter().map(to_local).collect())
       })
       .collect();
     let complex = Complex::from_cells(Skeleton::new(cells));

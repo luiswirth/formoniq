@@ -260,7 +260,7 @@ pub trait SimplexRefExt {
 }
 impl SimplexRefExt for SimplexRef<'_> {
   fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords {
-    SimplexCoords::from_simplex_and_coords(self, coords)
+    SimplexCoords::from_simplex_and_coords(self.simplex(), coords)
   }
 }
 
