@@ -10,7 +10,7 @@ pub struct Skeleton {
   nvertices: usize,
 }
 impl Skeleton {
-  pub fn new(simplices: Vec<Simplex>) -> Self {
+  pub fn new(mut simplices: Vec<Simplex>) -> Self {
     assert!(!simplices.is_empty(), "Skeleton must not be empty");
     let dim = simplices[0].dim();
     assert!(
@@ -20,8 +20,13 @@ impl Skeleton {
         .all(|d| d == dim),
       "Skeleton simplices must have same dimension."
     );
+    // Canonical ordering: colexicographic by vertex set.
+    simplices.sort_unstable();
     let nvertices = if dim == 0 {
-      assert!(simplices.iter().enumerate().all(|(i, simp)| simp[0] == i));
+      assert!(
+        simplices.iter().enumerate().all(|(i, simp)| simp[0] == i),
+        "0-simplices must be the contiguous vertices 0..n."
+      );
       simplices.len()
     } else {
       simplices
@@ -35,6 +40,16 @@ impl Skeleton {
     let simplices = IndexSet::from_iter(simplices);
     Self {
       simplices,
+      nvertices,
+    }
+  }
+
+  /// Build directly from simplices already in the desired (colex) order,
+  /// preserving `nvertices`. Trusts the caller; used to re-key a skeleton
+  /// after canonical reordering.
+  pub(crate) fn from_ordered(simplices: Vec<Simplex>, nvertices: usize) -> Self {
+    Self {
+      simplices: IndexSet::from_iter(simplices),
       nvertices,
     }
   }
