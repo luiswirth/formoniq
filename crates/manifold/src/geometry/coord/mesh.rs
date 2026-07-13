@@ -1,10 +1,10 @@
 use super::{
-  simplex::{SimplexCoords, SimplexHandleExt},
+  simplex::{SimplexCoords, SimplexRefExt},
   Coord, CoordRef,
 };
 use crate::{
   geometry::metric::mesh::MeshLengths,
-  topology::{complex::Complex, handle::SimplexHandle, simplex::Simplex, VertexIdx},
+  topology::{complex::Complex, handle::SimplexRef, simplex::Simplex, VertexIdx},
   Dim,
 };
 
@@ -104,7 +104,7 @@ impl MeshCoords {
     &self,
     topology: &'a Complex,
     coord: CoordRef,
-  ) -> Option<SimplexHandle<'a>> {
+  ) -> Option<SimplexRef<'a>> {
     topology
       .cells()
       .handle_iter()

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
   geometry::{metric::simplex::SimplexLengths, refsimp_vol},
-  topology::{handle::SimplexHandle, simplex::Simplex},
+  topology::{handle::SimplexRef, simplex::Simplex},
   Dim,
 };
 
@@ -255,10 +255,10 @@ pub fn ref_difbary(dim: Dim, ivertex: usize) -> CoTangentVector {
   }
 }
 
-pub trait SimplexHandleExt {
+pub trait SimplexRefExt {
   fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords;
 }
-impl SimplexHandleExt for SimplexHandle<'_> {
+impl SimplexRefExt for SimplexRef<'_> {
   fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords {
     SimplexCoords::from_simplex_and_coords(self, coords)
   }
