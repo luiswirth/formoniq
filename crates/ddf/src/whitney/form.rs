@@ -3,8 +3,8 @@ use crate::cochain::Cochain;
 
 use exterior::{field::ExteriorField, MultiForm};
 use manifold::{
-  geometry::coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexHandleExt, CoordRef},
-  topology::{complex::Complex, handle::SimplexHandle},
+  geometry::coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt, CoordRef},
+  topology::{complex::Complex, handle::SimplexRef},
 };
 
 /// The Whitney interpolation $W c = sum_sigma c_sigma W_sigma$ of a cochain:
@@ -50,7 +50,7 @@ impl<'a> WhitneyForm<'a> {
 
   pub fn eval_known_cell<'b>(
     &self,
-    cell: SimplexHandle,
+    cell: SimplexRef,
     coord: impl Into<CoordRef<'b>>,
   ) -> MultiForm {
     let coord = coord.into();

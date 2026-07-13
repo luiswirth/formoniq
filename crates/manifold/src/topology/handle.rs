@@ -35,33 +35,33 @@ impl SimplexIdx {
   pub fn assert_valid(self, mesh: &Complex) {
     assert!(self.is_valid(mesh), "Not a valid simplex index.");
   }
-  pub fn handle(self, complex: &Complex) -> SimplexHandle<'_> {
-    SimplexHandle::new(complex, self)
+  pub fn handle(self, complex: &Complex) -> SimplexRef<'_> {
+    SimplexRef::new(complex, self)
   }
 }
 
 /// A handle to a simplex in the mesh.
 #[derive(Copy, Clone)]
-pub struct SimplexHandle<'c> {
+pub struct SimplexRef<'c> {
   complex: &'c Complex,
   idx: SimplexIdx,
 }
-impl std::ops::Deref for SimplexHandle<'_> {
+impl std::ops::Deref for SimplexRef<'_> {
   type Target = Simplex;
   fn deref(&self) -> &Self::Target {
     self.skeleton_raw().simplex_by_kidx(self.kidx())
   }
 }
-impl std::fmt::Debug for SimplexHandle<'_> {
+impl std::fmt::Debug for SimplexRef<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    f.debug_struct("SimplexHandle")
+    f.debug_struct("SimplexRef")
       .field("idx", &self.idx)
       .field("complex", &std::ptr::from_ref::<Complex>(self.complex))
       .finish()
   }
 }
 
-impl<'m> SimplexHandle<'m> {
+impl<'m> SimplexRef<'m> {
   pub fn new(complex: &'m Complex, idx: SimplexIdx) -> Self {
     idx.assert_valid(complex);
     Self { complex, idx }
@@ -76,7 +76,7 @@ impl<'m> SimplexHandle<'m> {
     self.complex
   }
 
-  pub fn skeleton(&self) -> SkeletonHandle<'m> {
+  pub fn skeleton(&self) -> SkeletonRef<'m> {
     self.complex.skeleton(self.dim())
   }
   pub fn complex_skeleton(&self) -> &ComplexSkeleton {
@@ -90,8 +90,8 @@ impl<'m> SimplexHandle<'m> {
   }
 }
 
-impl SimplexHandle<'_> {
-  pub fn boundary_chain(&self) -> impl Iterator<Item = (Sign, SimplexHandle<'_>)> {
+impl SimplexRef<'_> {
+  pub fn boundary_chain(&self) -> impl Iterator<Item = (Sign, SimplexRef<'_>)> {
     self.boundary().map(move |sub| {
       let sign = sub.sign;
       let handle = self
@@ -102,7 +102,7 @@ impl SimplexHandle<'_> {
     })
   }
 
-  pub fn cocells(&self) -> impl Iterator<Item = SimplexHandle<'_>> + '_ {
+  pub fn cocells(&self) -> impl Iterator<Item = SimplexRef<'_>> + '_ {
     self
       .mesh_data()
       .cocells
@@ -115,7 +115,7 @@ impl SimplexHandle<'_> {
   /// These are ordered lexicographically w.r.t. the local vertex indices,
   /// e.g. `tet.mesh_subsimps(1)` yields the edges
   /// `(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)`.
-  pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexHandle<'_>> {
+  pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexRef<'_>> {
     self
       .subsimps(dim_sub)
       .map(move |sub| self.complex.skeleton(dim_sub).handle_by_simplex(&sub))
@@ -125,7 +125,7 @@ impl SimplexHandle<'_> {
   ///
   /// These are ordered first by cell index and then
   /// by lexicographically w.r.t. the local vertex indices.
-  pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexHandle<'_>> {
+  pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexRef<'_>> {
     self.cocells().flat_map(move |parent| {
       let sups: Vec<_> = self.supersimps(dim_super, &parent).collect();
       sups
@@ -134,23 +134,23 @@ impl SimplexHandle<'_> {
     })
   }
 
-  pub fn mesh_vertices(&self) -> impl Iterator<Item = SimplexHandle<'_>> {
+  pub fn mesh_vertices(&self) -> impl Iterator<Item = SimplexRef<'_>> {
     self
       .iter()
       .map(|v| SimplexIdx::new(0, v).handle(self.complex))
   }
-  pub fn mesh_edges(&self) -> impl Iterator<Item = SimplexHandle<'_>> {
+  pub fn mesh_edges(&self) -> impl Iterator<Item = SimplexRef<'_>> {
     self.mesh_subsimps(1)
   }
 }
 
-impl PartialEq for SimplexHandle<'_> {
+impl PartialEq for SimplexRef<'_> {
   fn eq(&self, other: &Self) -> bool {
     std::ptr::eq(self.complex, other.complex) && self.idx == other.idx
   }
 }
-impl Eq for SimplexHandle<'_> {}
-impl std::hash::Hash for SimplexHandle<'_> {
+impl Eq for SimplexRef<'_> {}
+impl std::hash::Hash for SimplexRef<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
     std::ptr::from_ref::<Complex>(self.complex).hash(state);
     self.idx.hash(state);
@@ -158,33 +158,33 @@ impl std::hash::Hash for SimplexHandle<'_> {
 }
 
 /// A handle to a skeleton in the mesh.
-pub struct SkeletonHandle<'m> {
+pub struct SkeletonRef<'m> {
   complex: &'m Complex,
   dim: Dim,
 }
-impl std::ops::Deref for SkeletonHandle<'_> {
+impl std::ops::Deref for SkeletonRef<'_> {
   type Target = Skeleton;
   fn deref(&self) -> &Self::Target {
     self.complex.complex_skeleton(self.dim).skeleton()
   }
 }
 
-impl<'m> SkeletonHandle<'m> {
+impl<'m> SkeletonRef<'m> {
   pub fn new(complex: &'m Complex, dim: Dim) -> Self {
     assert!(dim <= complex.dim());
     Self { complex, dim }
   }
-  pub fn handle_by_kidx(&self, idx: KSimplexIdx) -> SimplexHandle<'m> {
+  pub fn handle_by_kidx(&self, idx: KSimplexIdx) -> SimplexRef<'m> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
-  pub fn handle_by_simplex(&self, simp: &Simplex) -> SimplexHandle<'m> {
+  pub fn handle_by_simplex(&self, simp: &Simplex) -> SimplexRef<'m> {
     let idx = self.kidx_by_simplex(simp);
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
-  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexHandle<'m>> + '_ {
+  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexRef<'m>> + '_ {
     (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
-  pub fn handle_par_iter(&self) -> impl ParallelIterator<Item = SimplexHandle<'m>> + '_ {
+  pub fn handle_par_iter(&self) -> impl ParallelIterator<Item = SimplexRef<'m>> + '_ {
     (0..self.len())
       .into_par_iter()
       .map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))

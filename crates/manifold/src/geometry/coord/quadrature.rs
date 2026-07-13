@@ -7,7 +7,7 @@
 
 use super::{mesh::MeshCoords, simplex::SimplexCoords, CoordRef};
 use crate::{
-  topology::{complex::Complex, handle::SimplexHandle},
+  topology::{complex::Complex, handle::SimplexRef},
   Dim,
 };
 
@@ -124,7 +124,7 @@ impl SimplexQuadRule {
   /// Uses a global coordinate function `f`.
   pub fn integrate_mesh<F>(&self, f: &F, complex: &Complex, coords: &MeshCoords) -> f64
   where
-    F: Fn(CoordRef, SimplexHandle) -> f64,
+    F: Fn(CoordRef, SimplexRef) -> f64,
   {
     let mut integral = 0.0;
     for cell in complex.cells().handle_iter() {

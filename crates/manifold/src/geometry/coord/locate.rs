@@ -21,7 +21,7 @@
 //! only if it also lies within tolerance of the cell's affine hull.
 
 use super::{
-  simplex::{local2bary, SimplexHandleExt},
+  simplex::{local2bary, SimplexRefExt},
   Coord, CoordRef,
 };
 use crate::{

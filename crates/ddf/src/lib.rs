@@ -31,7 +31,7 @@ mod test {
 
   use common::combo::{Combination, Sign};
   use manifold::{
-    geometry::coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexHandleExt},
+    geometry::coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexRefExt},
     topology::complex::Complex,
   };
 

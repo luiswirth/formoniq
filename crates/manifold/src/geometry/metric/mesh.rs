@@ -2,7 +2,7 @@ use super::{simplex::SimplexLengths, EdgeIdx};
 use crate::{
   topology::{
     complex::Complex,
-    handle::{SimplexHandle, SkeletonHandle},
+    handle::{SimplexRef, SkeletonRef},
   },
   Dim,
 };
@@ -97,7 +97,7 @@ impl MeshLengths {
       .unwrap()
   }
 
-  pub fn simplex_lengths(&self, simplex: SimplexHandle) -> SimplexLengths {
+  pub fn simplex_lengths(&self, simplex: SimplexRef) -> SimplexLengths {
     let lengths = simplex
       .mesh_edges()
       .map(|edge| self.length(edge.kidx()))
@@ -107,7 +107,7 @@ impl MeshLengths {
     SimplexLengths::new_unchecked(lengths, simplex.dim())
   }
 
-  pub fn is_coordinate_realizable(&self, skeleton: SkeletonHandle) -> bool {
+  pub fn is_coordinate_realizable(&self, skeleton: SkeletonRef) -> bool {
     skeleton
       .handle_par_iter()
       .all(|simp| self.simplex_lengths(simp).is_coordinate_realizable())

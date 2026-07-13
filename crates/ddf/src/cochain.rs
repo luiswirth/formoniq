@@ -6,7 +6,7 @@ use {
     topology::skeleton::Skeleton,
     topology::{
       complex::Complex,
-      handle::{SimplexHandle, SimplexIdx},
+      handle::{SimplexRef, SimplexIdx},
     },
   },
 };
@@ -33,7 +33,7 @@ impl Cochain {
   }
   pub fn from_function<F>(f: F, grade: ExteriorGrade, topology: &Complex) -> Self
   where
-    F: FnMut(SimplexHandle) -> f64,
+    F: FnMut(SimplexRef) -> f64,
   {
     let skeleton = topology.skeleton(grade);
     let coeffs = Vector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
@@ -81,15 +81,15 @@ impl std::ops::IndexMut<SimplexIdx> for Cochain {
   }
 }
 
-impl std::ops::Index<SimplexHandle<'_>> for Cochain {
+impl std::ops::Index<SimplexRef<'_>> for Cochain {
   type Output = f64;
-  fn index(&self, handle: SimplexHandle<'_>) -> &Self::Output {
+  fn index(&self, handle: SimplexRef<'_>) -> &Self::Output {
     assert_eq!(handle.dim(), self.grade());
     &self.coeffs[handle.kidx()]
   }
 }
-impl std::ops::IndexMut<SimplexHandle<'_>> for Cochain {
-  fn index_mut(&mut self, idx: SimplexHandle<'_>) -> &mut Self::Output {
+impl std::ops::IndexMut<SimplexRef<'_>> for Cochain {
+  fn index_mut(&mut self, idx: SimplexRef<'_>) -> &mut Self::Output {
     assert_eq!(idx.dim(), self.grade());
     &mut self.coeffs[idx.kidx()]
   }

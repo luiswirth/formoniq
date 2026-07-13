@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
   geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, handle::SkeletonHandle, simplex::Simplex, skeleton::Skeleton},
+  topology::{complex::Complex, handle::SkeletonRef, simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
 
@@ -23,7 +23,7 @@ pub fn save_skeleton_to_file(
   write_skeleton(writer, topology.skeleton(dim))
 }
 
-pub fn write_skeleton<W: io::Write>(mut writer: W, skeleton: SkeletonHandle) -> io::Result<()> {
+pub fn write_skeleton<W: io::Write>(mut writer: W, skeleton: SkeletonRef) -> io::Result<()> {
   for simplex in skeleton.handle_iter() {
     for vertex in &simplex.vertices {
       write!(writer, "{vertex} ")?;

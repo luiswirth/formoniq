@@ -1,5 +1,5 @@
 use super::{
-  handle::{SimplexIdx, SkeletonHandle},
+  handle::{SimplexIdx, SkeletonRef},
   simplex::Simplex,
   skeleton::Skeleton,
 };
@@ -38,11 +38,11 @@ pub struct SimplexComplexData {
 }
 
 impl Complex {
-  pub fn skeletons(&self) -> impl Iterator<Item = SkeletonHandle<'_>> {
-    (0..=self.dim()).map(|d| SkeletonHandle::new(self, d))
+  pub fn skeletons(&self) -> impl Iterator<Item = SkeletonRef<'_>> {
+    (0..=self.dim()).map(|d| SkeletonRef::new(self, d))
   }
-  pub fn skeleton(&self, dim: Dim) -> SkeletonHandle<'_> {
-    SkeletonHandle::new(self, dim)
+  pub fn skeleton(&self, dim: Dim) -> SkeletonRef<'_> {
+    SkeletonRef::new(self, dim)
   }
   pub fn complex_skeleton(&self, dim: Dim) -> &ComplexSkeleton {
     &self.skeletons[dim]
@@ -50,16 +50,16 @@ impl Complex {
   pub fn nsimplices(&self, dim: Dim) -> usize {
     self.skeleton(dim).len()
   }
-  pub fn vertices(&self) -> SkeletonHandle<'_> {
+  pub fn vertices(&self) -> SkeletonRef<'_> {
     self.skeleton(0)
   }
-  pub fn edges(&self) -> SkeletonHandle<'_> {
+  pub fn edges(&self) -> SkeletonRef<'_> {
     self.skeleton(1)
   }
-  pub fn facets(&self) -> SkeletonHandle<'_> {
+  pub fn facets(&self) -> SkeletonRef<'_> {
     self.skeleton(self.dim() - 1)
   }
-  pub fn cells(&self) -> SkeletonHandle<'_> {
+  pub fn cells(&self) -> SkeletonRef<'_> {
     self.skeleton(self.dim())
   }
 }
