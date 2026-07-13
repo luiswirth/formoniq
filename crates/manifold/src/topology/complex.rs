@@ -1,6 +1,5 @@
 use super::{
-  handle::{SimplexIdx, SkeletonRef},
-  simplex::Simplex,
+  handle::{KSimplexIdx, SimplexIdx, SkeletonRef},
   skeleton::Skeleton,
 };
 use crate::Dim;
@@ -10,31 +9,17 @@ use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, Matrix};
 use itertools::Itertools;
 
 /// A simplicial manifold complex.
+///
+/// Its skeletons are derived from the cells and stored in canonical colex
+/// order. The only incidence stored is vertex → cells; all other up-incidence
+/// (a simplex's cells, cofaces, neighbors) is the intersection of the
+/// vertex-cell lists over the simplex's vertices, and all down-incidence is
+/// pure combinatorics on the vertex set.
 #[derive(Default, Debug, Clone)]
 pub struct Complex {
-  skeletons: Vec<ComplexSkeleton>,
-}
-
-/// A skeleton inside of a complex.
-#[derive(Default, Debug, Clone)]
-pub struct ComplexSkeleton {
-  skeleton: Skeleton,
-  complex_data: SkeletonComplexData,
-}
-impl ComplexSkeleton {
-  pub fn skeleton(&self) -> &Skeleton {
-    &self.skeleton
-  }
-  pub fn complex_data(&self) -> &[SimplexComplexData] {
-    &self.complex_data
-  }
-}
-
-pub type SkeletonComplexData = Vec<SimplexComplexData>;
-
-#[derive(Default, Debug, Clone)]
-pub struct SimplexComplexData {
-  pub cocells: Vec<SimplexIdx>,
+  skeletons: Vec<Skeleton>,
+  /// Per vertex, by kidx: the sorted list of cells containing it.
+  vertex_cells: Vec<Vec<KSimplexIdx>>,
 }
 
 impl Complex {
@@ -44,8 +29,12 @@ impl Complex {
   pub fn skeleton(&self, dim: Dim) -> SkeletonRef<'_> {
     SkeletonRef::new(self, dim)
   }
-  pub fn complex_skeleton(&self, dim: Dim) -> &ComplexSkeleton {
+  pub fn skeleton_raw(&self, dim: Dim) -> &Skeleton {
     &self.skeletons[dim]
+  }
+  /// The cells containing the given vertex, by kidx (sorted).
+  pub fn vertex_cells(&self, vertex: KSimplexIdx) -> &[KSimplexIdx] {
+    &self.vertex_cells[vertex]
   }
   pub fn nsimplices(&self, dim: Dim) -> usize {
     self.skeleton(dim).len()
@@ -218,92 +207,41 @@ impl Complex {
       "Mesh vertices must be contiguous and fully used (no dangling vertices)."
     );
 
-    let mut skeletons = vec![ComplexSkeleton::default(); dim + 1];
-    skeletons[0] = ComplexSkeleton {
-      skeleton: Skeleton::new((0..cells.nvertices()).map(Simplex::single).collect()),
-      complex_data: (0..cells.nvertices())
-        .map(|_| SimplexComplexData::default())
-        .collect(),
-    };
+    // Every skeleton, derived and canonically colex-ordered: the deduplicated
+    // d-subsimplices of all cells. `Skeleton::new` sorts and dedups.
+    let skeletons: Vec<Skeleton> = (0..=dim)
+      .map(|d| Skeleton::new(cells.iter().flat_map(|cell| cell.subsimps(d)).collect()))
+      .collect();
 
-    for (icell, cell) in cells.iter().enumerate() {
-      for (
-        dim_skeleton,
-        ComplexSkeleton {
-          skeleton,
-          complex_data: mesh_data,
-        },
-      ) in skeletons.iter_mut().enumerate()
-      {
-        for sub in cell.subsimps(dim_skeleton) {
-          let (sub_idx, is_new) = skeleton.insert(sub);
-          let sub_data = if is_new {
-            mesh_data.push(SimplexComplexData::default());
-            mesh_data.last_mut().unwrap()
-          } else {
-            &mut mesh_data[sub_idx]
-          };
-          sub_data.cocells.push(SimplexIdx::new(dim, icell));
-        }
+    // Vertex -> cells incidence, built from the final (colex) cell order, so
+    // each list is sorted.
+    let mut vertex_cells = vec![Vec::new(); skeletons[0].len()];
+    for (icell, cell) in skeletons[dim].iter().enumerate() {
+      for v in cell.iter() {
+        vertex_cells[v].push(icell);
       }
     }
 
-    // Topology checks.
+    // Manifold check: every facet is shared by one or two cells.
     if dim >= 1 {
-      let facet_data = skeletons[dim - 1].complex_data();
-      for SimplexComplexData { cocells } in facet_data {
-        let nparents = cocells.len();
-        let is_manifold = nparents == 2 || nparents == 1;
-        assert!(is_manifold, "Topology must be manifold.");
-      }
-    }
-
-    Self { skeletons }.into_colex_ordered()
-  }
-
-  /// Re-key every skeleton into canonical colexicographic order. The cell
-  /// indices referenced by `cocells` are remapped to the new cell order, so
-  /// all incidence stays consistent. Idempotent.
-  fn into_colex_ordered(mut self) -> Self {
-    let dim = self.dim();
-
-    // Permutation sorting the top (cell) skeleton, and its inverse
-    // old-cell-index -> new-cell-index.
-    let cell_perm = colex_permutation(self.skeletons[dim].skeleton());
-    let mut cell_new_of_old = vec![0usize; cell_perm.len()];
-    for (new, &old) in cell_perm.iter().enumerate() {
-      cell_new_of_old[old] = new;
-    }
-
-    // Reorder each skeleton and its parallel complex data by colex.
-    for cs in &mut self.skeletons {
-      let perm = colex_permutation(&cs.skeleton);
-      let old: Vec<Simplex> = cs.skeleton.iter().cloned().collect();
-      let nvertices = cs.skeleton.nvertices();
-      let simplices = perm.iter().map(|&o| old[o].clone()).collect();
-      cs.complex_data = perm.iter().map(|&o| cs.complex_data[o].clone()).collect();
-      cs.skeleton = Skeleton::from_ordered(simplices, nvertices);
-    }
-
-    // Remap the cell indices stored in every cocell to the new cell order.
-    for cs in &mut self.skeletons {
-      for data in &mut cs.complex_data {
-        for cocell in &mut data.cocells {
-          cocell.kidx = cell_new_of_old[cocell.kidx];
+      let facets = &skeletons[dim - 1];
+      let mut nparents = vec![0usize; facets.len()];
+      for cell in skeletons[dim].iter() {
+        for facet in cell.subsimps(dim - 1) {
+          nparents[facets.kidx_by_simplex(&facet)] += 1;
         }
       }
+      assert!(
+        nparents.iter().all(|&n| n == 1 || n == 2),
+        "Topology must be manifold."
+      );
     }
 
-    self
+    Self {
+      skeletons,
+      vertex_cells,
+    }
   }
-}
-
-/// The permutation `new_pos -> old_kidx` that orders a skeleton's simplices
-/// colexicographically.
-fn colex_permutation(skeleton: &Skeleton) -> Vec<usize> {
-  let mut perm: Vec<usize> = (0..skeleton.len()).collect();
-  perm.sort_by(|&a, &b| skeleton.simplex_by_kidx(a).cmp(skeleton.simplex_by_kidx(b)));
-  perm
 }
 
 #[cfg(test)]
