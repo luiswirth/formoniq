@@ -2,7 +2,8 @@ use super::{simplex::SimplexLengths, EdgeIdx};
 use crate::{
   topology::{
     complex::Complex,
-    handle::{SimplexRef, SkeletonRef},
+    data::SkeletonData,
+    handle::{KSimplexIdx, SimplexRef, SkeletonRef},
   },
   Dim,
 };
@@ -16,6 +17,20 @@ use rayon::iter::ParallelIterator;
 #[derive(Debug, Clone)]
 pub struct MeshLengths {
   vector: Vector,
+}
+
+/// Edge lengths are grade-1 data on the mesh: one scalar per edge.
+impl SkeletonData for MeshLengths {
+  type Item<'a> = &'a f64;
+  fn grade(&self) -> Dim {
+    1
+  }
+  fn len(&self) -> usize {
+    self.vector.len()
+  }
+  fn at(&self, kidx: KSimplexIdx) -> &f64 {
+    &self.vector[kidx]
+  }
 }
 impl MeshLengths {
   pub fn new(vector: Vector, complex: &Complex) -> Self {
@@ -125,4 +140,30 @@ pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
   let topology = Complex::standard(dim);
   let lengths = MeshLengths::standard(dim);
   (topology, lengths)
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::gen::cartesian::CartesianMeshInfo;
+
+  /// Coordinates and edge lengths read uniformly as data on simplices:
+  /// coords (grade 0) return a column view, lengths (grade 1) a scalar ref.
+  #[test]
+  fn geometry_as_simplex_data() {
+    let (topology, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_complex();
+    let lengths = coords.to_edge_lengths(&topology);
+
+    assert_eq!(SkeletonData::grade(&coords), 0);
+    assert_eq!(SkeletonData::grade(&lengths), 1);
+
+    for vertex in topology.vertices().handle_iter() {
+      assert_eq!(coords.at_ref(vertex), coords.coord(vertex.kidx()));
+    }
+    for edge in topology.edges().handle_iter() {
+      let [vi, vj] = edge.simplex().clone().try_into().unwrap();
+      let expected = (coords.coord(vj) - coords.coord(vi)).norm();
+      assert_eq!(*lengths.at_ref(edge), expected);
+    }
+  }
 }
