@@ -1,7 +1,7 @@
 use common::linalg::nalgebra::Matrix;
 
 use crate::{
-  geometry::coord::mesh::MeshCoords,
+  geometry::coord::mesh::{close_vertex_gaps, MeshCoords},
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
 
@@ -56,7 +56,7 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshCoords) {
     }
   }
 
-  let skeleton = if !quads.is_empty() {
+  let cells = if !quads.is_empty() {
     quads
   } else if !trias.is_empty() {
     trias
@@ -66,5 +66,7 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshCoords) {
     panic!("Failed to construct Triangulation from gmsh.");
   };
 
-  (Skeleton::new(skeleton), mesh_vertices)
+  // Gmsh may carry nodes not referenced by any cell; drop them and renumber.
+  let (cells, mesh_vertices) = close_vertex_gaps(cells, &mesh_vertices);
+  (Skeleton::new(cells), mesh_vertices)
 }

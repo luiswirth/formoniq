@@ -207,6 +207,20 @@ impl Complex {
   pub fn from_cells(cells: Skeleton) -> Self {
     let dim = cells.dim();
 
+    // Vertices must be contiguous and fully used: labels 0..nvertices, each
+    // appearing in some cell. External imports should close gaps first (see
+    // `geometry::coord::mesh::close_vertex_gaps`).
+    let mut vertex_used = vec![false; cells.nvertices()];
+    for cell in cells.iter() {
+      for v in cell.iter() {
+        vertex_used[v] = true;
+      }
+    }
+    assert!(
+      vertex_used.iter().all(|&used| used),
+      "Mesh vertices must be contiguous and fully used (no dangling vertices)."
+    );
+
     let mut skeletons = vec![ComplexSkeleton::default(); dim + 1];
     skeletons[0] = ComplexSkeleton {
       skeleton: Skeleton::new((0..cells.nvertices()).map(Simplex::single).collect()),
@@ -247,8 +261,52 @@ impl Complex {
       }
     }
 
-    Self { skeletons }
+    Self { skeletons }.into_colex_ordered()
   }
+
+  /// Re-key every skeleton into canonical colexicographic order. The cell
+  /// indices referenced by `cocells` are remapped to the new cell order, so
+  /// all incidence stays consistent. Idempotent.
+  fn into_colex_ordered(mut self) -> Self {
+    let dim = self.dim();
+
+    // Permutation sorting the top (cell) skeleton, and its inverse
+    // old-cell-index -> new-cell-index.
+    let cell_perm = colex_permutation(self.skeletons[dim].skeleton());
+    let mut cell_new_of_old = vec![0usize; cell_perm.len()];
+    for (new, &old) in cell_perm.iter().enumerate() {
+      cell_new_of_old[old] = new;
+    }
+
+    // Reorder each skeleton and its parallel complex data by colex.
+    for cs in &mut self.skeletons {
+      let perm = colex_permutation(&cs.skeleton);
+      let old: Vec<Simplex> = cs.skeleton.iter().cloned().collect();
+      let nvertices = cs.skeleton.nvertices();
+      let simplices = perm.iter().map(|&o| old[o].clone()).collect();
+      cs.complex_data = perm.iter().map(|&o| cs.complex_data[o].clone()).collect();
+      cs.skeleton = Skeleton::from_ordered(simplices, nvertices);
+    }
+
+    // Remap the cell indices stored in every cocell to the new cell order.
+    for cs in &mut self.skeletons {
+      for data in &mut cs.complex_data {
+        for cocell in &mut data.cocells {
+          cocell.kidx = cell_new_of_old[cocell.kidx];
+        }
+      }
+    }
+
+    self
+  }
+}
+
+/// The permutation `new_pos -> old_kidx` that orders a skeleton's simplices
+/// colexicographically.
+fn colex_permutation(skeleton: &Skeleton) -> Vec<usize> {
+  let mut perm: Vec<usize> = (0..skeleton.len()).collect();
+  perm.sort_by(|&a, &b| skeleton.simplex_by_kidx(a).cmp(skeleton.simplex_by_kidx(b)));
+  perm
 }
 
 #[cfg(test)]
@@ -256,6 +314,34 @@ mod test {
   use crate::topology::simplex::{nsubsimplices, standard_boundary_operator, Simplex};
 
   use super::*;
+
+  /// Every skeleton is in canonical colexicographic order, and the vertices
+  /// are contiguous and fully used. This is the ordering contract the file
+  /// formats and cochain indexing rely on.
+  #[test]
+  fn skeletons_are_colex_ordered_and_vertices_contiguous() {
+    use crate::gen::cartesian::CartesianMeshInfo;
+
+    for dim in 1..=3 {
+      let (topology, _) = CartesianMeshInfo::new_unit(dim, 3).compute_coord_complex();
+
+      // Vertices are exactly 0..nvertices, each labelled by its own kidx.
+      let vertices = topology.skeleton(0);
+      for (kidx, vertex) in vertices.iter().enumerate() {
+        assert_eq!(vertex.vertices, vec![kidx]);
+      }
+
+      // Each skeleton is strictly increasing in colex order.
+      for k in 0..=dim {
+        let skeleton = topology.skeleton(k);
+        let simplices: Vec<_> = skeleton.iter().collect();
+        assert!(
+          simplices.windows(2).all(|w| w[0] < w[1]),
+          "skeleton {k} is not colex-ordered"
+        );
+      }
+    }
+  }
 
   /// $dif compose dif = 0$: the defining law of a cochain complex.
   #[test]

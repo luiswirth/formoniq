@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
   geometry::metric::mesh::MeshLengths,
-  topology::{complex::Complex, handle::SimplexHandle, VertexIdx},
+  topology::{complex::Complex, handle::SimplexHandle, simplex::Simplex, VertexIdx},
   Dim,
 };
 
@@ -110,6 +110,27 @@ impl MeshCoords {
       .handle_iter()
       .find(|cell| cell.coord_simplex(self).is_global_inside(coord))
   }
+}
+
+/// Relabel vertices so they are contiguous and fully used: drop any vertex
+/// absent from the cells and renumber the rest to $0..m$, closing gaps. The
+/// renumbering is monotone (preserves increasing vertex order within cells) and
+/// applied in lockstep to the coordinates. Idempotent on an already-gapless
+/// mesh. Meant for external imports (e.g. Gmsh) before building a [`Complex`].
+pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simplex>, MeshCoords) {
+  let mut used: Vec<VertexIdx> = cells.iter().flat_map(|cell| cell.iter()).collect();
+  used.sort_unstable();
+  used.dedup();
+
+  let relabel = |v: VertexIdx| used.binary_search(&v).expect("vertex is used");
+  let cells = cells
+    .into_iter()
+    .map(|cell| Simplex::new(cell.iter().map(relabel).collect()))
+    .collect();
+
+  let columns: Vec<_> = used.iter().map(|&v| coords.coord(v)).collect();
+  let coords = MeshCoords::new(Matrix::from_columns(&columns));
+  (cells, coords)
 }
 
 pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {

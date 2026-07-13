@@ -114,6 +114,20 @@ impl Simplex {
     self.vertices.iter().copied()
   }
 }
+
+/// Simplices are ordered **colexicographically**: compare from the largest
+/// vertex downward. For same-cardinality simplices this is the order of their
+/// colex rank, so sorting a skeleton by this order is the canonical numbering.
+impl Ord for Simplex {
+  fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    self.vertices.iter().rev().cmp(other.vertices.iter().rev())
+  }
+}
+impl PartialOrd for Simplex {
+  fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    Some(self.cmp(other))
+  }
+}
 impl IntoIterator for Simplex {
   type Item = usize;
   type IntoIter = std::vec::IntoIter<Self::Item>;

@@ -206,12 +206,13 @@ mod test {
     ]);
     assert_eq!(*coords.matrix(), expected_coords);
 
+    // Cells in canonical colexicographic order.
     let expected_cells = vec![
       &[0, 1, 3, 7],
-      &[0, 1, 5, 7],
       &[0, 2, 3, 7],
-      &[0, 2, 6, 7],
+      &[0, 1, 5, 7],
       &[0, 4, 5, 7],
+      &[0, 2, 6, 7],
       &[0, 4, 6, 7],
     ];
     let cells: Vec<_> = mesh.into_iter().map(|s| s.vertices).collect();
