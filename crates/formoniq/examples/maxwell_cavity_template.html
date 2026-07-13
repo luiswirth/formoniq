@@ -1,0 +1,371 @@
+<style>
+  :root {
+    --ground: #0a0d13;
+    --panel: #0f141d;
+    --panel-2: #131a25;
+    --line: #232c3c;
+    --text: #ccd5e2;
+    --dim: #7c8798;
+    --accent: #4bd6e8;
+    --accent-soft: rgba(75, 214, 232, 0.14);
+    --screen: #05070b;
+    --shadow: rgba(0, 0, 0, 0.5);
+    color-scheme: dark;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --ground: #eef1f6;
+      --panel: #ffffff;
+      --panel-2: #f4f6fb;
+      --line: #d9dfe9;
+      --text: #1a2230;
+      --dim: #5c6675;
+      --accent: #0e8fa6;
+      --accent-soft: rgba(14, 143, 166, 0.12);
+      --shadow: rgba(30, 40, 60, 0.16);
+      color-scheme: light;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground: #0a0d13; --panel: #0f141d; --panel-2: #131a25; --line: #232c3c;
+    --text: #ccd5e2; --dim: #7c8798; --accent: #4bd6e8; --accent-soft: rgba(75,214,232,0.14);
+    --shadow: rgba(0,0,0,0.5); color-scheme: dark;
+  }
+  :root[data-theme="light"] {
+    --ground: #eef1f6; --panel: #ffffff; --panel-2: #f4f6fb; --line: #d9dfe9;
+    --text: #1a2230; --dim: #5c6675; --accent: #0e8fa6; --accent-soft: rgba(14,143,166,0.12);
+    --shadow: rgba(30,40,60,0.16); color-scheme: light;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: clamp(20px, 4vw, 44px) 20px 56px;
+  }
+
+  .eyebrow {
+    font-family: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+  h1 {
+    font-size: clamp(28px, 5.5vw, 40px);
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    font-weight: 650;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+  .lede {
+    color: var(--dim);
+    font-size: 15px;
+    max-width: 60ch;
+    margin: 0 0 26px;
+  }
+
+  .stage {
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 18px 40px -24px var(--shadow);
+  }
+  .screen {
+    position: relative;
+    flex: 1 1 auto;
+    aspect-ratio: 1 / 1;
+    border-radius: 9px;
+    overflow: hidden;
+    background: var(--screen);
+    border: 1px solid var(--line);
+  }
+  #field { display: block; width: 100%; height: 100%; }
+  .corner {
+    position: absolute;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10.5px;
+    color: rgba(200, 213, 226, 0.55);
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+  .corner.bl { left: 7px; bottom: 5px; }
+  .corner.tl { left: 7px; top: 5px; }
+  .corner.br { right: 7px; bottom: 5px; }
+
+  .bar {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    width: 34px;
+    flex: 0 0 auto;
+  }
+  .bar canvas { width: 14px; flex: 1 1 auto; border-radius: 3px; border: 1px solid var(--line); }
+  .bar .cap {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px;
+    color: var(--dim);
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-top: 14px;
+    padding: 4px 2px;
+  }
+  button.play {
+    appearance: none;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--text);
+    width: 42px; height: 42px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  button.play:hover { border-color: var(--accent); background: var(--accent-soft); }
+  button.play:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  button.play svg { width: 16px; height: 16px; fill: var(--text); }
+
+  input[type="range"] {
+    -webkit-appearance: none; appearance: none;
+    flex: 1 1 auto;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--line);
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; appearance: none;
+    width: 15px; height: 15px; border-radius: 50%;
+    background: var(--accent);
+    border: 2px solid var(--ground);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 15px; height: 15px; border: 2px solid var(--ground);
+    border-radius: 50%; background: var(--accent);
+  }
+  input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+  .readout {
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12.5px;
+    font-variant-numeric: tabular-nums;
+    color: var(--dim);
+    white-space: nowrap;
+    min-width: 8.5ch;
+    text-align: right;
+  }
+  .readout b { color: var(--text); font-weight: 600; }
+
+  .notes {
+    margin-top: 26px;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  }
+  .note {
+    border-left: 2px solid var(--line);
+    padding: 2px 0 2px 14px;
+  }
+  .note h3 {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 5px;
+    font-weight: 600;
+  }
+  .note p { margin: 0; font-size: 13.5px; color: var(--dim); }
+  .note p b { color: var(--text); font-weight: 600; }
+  .kbd {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 0.9em;
+    color: var(--text);
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 0 5px;
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Finite Element Exterior Calculus &middot; formoniq</p>
+  <h1>Maxwell in a resonant cavity</h1>
+  <p class="lede">
+    The magnetic field <b>B</b> of a light pulse rattling inside a
+    perfect-conductor box. Computed as a discrete differential form on a
+    triangular mesh, evolved by a structure-preserving leapfrog scheme, and
+    reconstructed to a continuous field for this picture.
+  </p>
+
+  <div class="stage">
+    <div class="screen">
+      <canvas id="field" width="480" height="480"></canvas>
+      <span class="corner bl">0</span>
+      <span class="corner tl">y = &pi;</span>
+      <span class="corner br">x = &pi;</span>
+    </div>
+    <div class="bar">
+      <span class="cap">+</span>
+      <canvas id="cbar" width="14" height="240"></canvas>
+      <span class="cap">&minus;</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="play" id="play" aria-label="Play or pause">
+      <svg id="icon" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="2" width="4" height="12"/><rect x="9" y="2" width="4" height="12"/></svg>
+    </button>
+    <input type="range" id="seek" min="0" max="1" value="0" step="1" aria-label="Seek through time" />
+    <span class="readout">t = <b id="tval">0.00</b></span>
+  </div>
+
+  <div class="notes">
+    <div class="note">
+      <h3>The field</h3>
+      <p><b>B</b> is a scalar 2-form here (out-of-plane). Blue and orange are
+      opposite signs; dark is zero. Wavefronts radiate from the pulse and
+      reflect off the walls into a standing interference pattern.</p>
+    </div>
+    <div class="note">
+      <h3>Exactly conserved</h3>
+      <p>Because <span class="kbd">d&thinsp;&SmallCircle;&thinsp;d = 0</span>,
+      the discrete Gauss law <b>dB = 0</b> holds to roundoff for all time — no
+      magnetic monopoles ever appear.</p>
+    </div>
+    <div class="note">
+      <h3>How it's drawn</h3>
+      <p>Each frame samples the Whitney reconstruction of the magnetic
+      2-cochain on a grid — the FEEC <b>representation formula</b> — located
+      through a bounding-volume hierarchy.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const META = __META_JSON__;
+    const B64 = "__DATA_B64__";
+
+    // Decode the base64 payload into a signed byte array of the field frames.
+    const bin = atob(B64);
+    const field = new Int8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) field[i] = (bin.charCodeAt(i) << 24) >> 24;
+
+    const { nx, ny, nframes, dtFrame } = META;
+
+    // Glow diverging colormap: blue for negative, warm orange for positive,
+    // near-black at zero, blooming toward white at the crests.
+    const DARK = [8, 11, 17];
+    const NEG = [61, 123, 255];
+    const POS = [255, 106, 61];
+    function cmap(t, out, o) {
+      const m = Math.min(1, Math.abs(t));
+      const base = t < 0 ? NEG : POS;
+      const glow = Math.pow(m, 4) * 0.65;
+      for (let c = 0; c < 3; c++) {
+        let v = DARK[c] + (base[c] - DARK[c]) * m;
+        v = v + (255 - v) * glow;
+        out[o + c] = v;
+      }
+      out[o + 3] = 255;
+    }
+
+    const display = document.getElementById("field");
+    const dctx = display.getContext("2d");
+    const off = document.createElement("canvas");
+    off.width = nx; off.height = ny;
+    const octx = off.getContext("2d");
+    const img = octx.createImageData(nx, ny);
+
+    function drawFrame(f) {
+      const base = f * nx * ny;
+      for (let jy = 0; jy < ny; jy++) {
+        // Flip vertically so physical +y points up.
+        const row = (ny - 1 - jy) * nx;
+        const src = base + jy * nx;
+        for (let ix = 0; ix < nx; ix++) {
+          cmap(field[src + ix] / 127, img.data, (row + ix) * 4);
+        }
+      }
+      octx.putImageData(img, 0, 0);
+      dctx.imageSmoothingEnabled = true;
+      dctx.imageSmoothingQuality = "high";
+      dctx.clearRect(0, 0, display.width, display.height);
+      dctx.drawImage(off, 0, 0, display.width, display.height);
+    }
+
+    // Colorbar.
+    (function () {
+      const cb = document.getElementById("cbar");
+      const cx = cb.getContext("2d");
+      const g = cx.createImageData(1, cb.height);
+      const px = [0, 0, 0, 0];
+      for (let y = 0; y < cb.height; y++) {
+        cmap(1 - 2 * y / (cb.height - 1), px, 0);
+        for (let c = 0; c < 4; c++) g.data[y * 4 + c] = px[c];
+      }
+      cx.putImageData(g, 0, 0);
+    })();
+
+    // Playback.
+    const seek = document.getElementById("seek");
+    const tval = document.getElementById("tval");
+    const playBtn = document.getElementById("play");
+    const icon = document.getElementById("icon");
+    seek.max = String(nframes - 1);
+
+    let frame = 0;
+    let playing = false;
+    let last = 0;
+    const fps = 24;
+
+    const PAUSE = '<rect x="3" y="2" width="4" height="12"/><rect x="9" y="2" width="4" height="12"/>';
+    const PLAY = '<path d="M3 2 L13 8 L3 14 Z"/>';
+
+    function show(f) {
+      frame = ((f % nframes) + nframes) % nframes;
+      drawFrame(frame);
+      seek.value = String(frame);
+      tval.textContent = (frame * dtFrame).toFixed(2);
+    }
+    function setPlaying(p) {
+      playing = p;
+      icon.innerHTML = p ? PAUSE : PLAY;
+      if (p) { last = performance.now(); requestAnimationFrame(tick); }
+    }
+    function tick(now) {
+      if (!playing) return;
+      if (now - last >= 1000 / fps) { last = now; show(frame + 1); }
+      requestAnimationFrame(tick);
+    }
+
+    playBtn.addEventListener("click", () => setPlaying(!playing));
+    seek.addEventListener("input", () => { setPlaying(false); show(+seek.value); });
+
+    show(0);
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduced) setPlaying(false); else setPlaying(true);
+  })();
+</script>
