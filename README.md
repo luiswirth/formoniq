@@ -60,3 +60,8 @@ Hodge-Laplace problem with the first-order Whitney basis. The current version is
 a rebuild toward the more general library described above.
 
 Paper: [arXiv:2506.02429](https://arxiv.org/abs/2506.02429)
+
+## License
+
+Dual-licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE),
+at your option.
