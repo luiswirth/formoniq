@@ -28,9 +28,9 @@ Strict crate ladder, each layer adding exactly one thing:
 
 | crate      | is                                  | key contents |
 | ---------- | ----------------------------------- | ------------ |
-| `common`   | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, linalg backends (nalgebra/faer/petsc), `Dim` |
+| `common`   | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, `coord::Coords<S>` (coordinates tagged by their space), linalg backends (nalgebra/faer/petsc), `Dim` |
 | `exterior` | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `field::CoordField<V>` (flat, mesh-independent) |
-| `manifold` | the simplicial Riemannian manifold  | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `point::MeshPoint` (the barycentric chart) |
+| `manifold` | the simplicial Riemannian manifold  | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
 | `ddf`      | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with `Pullback`/`Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
 | `formoniq` | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
 
@@ -45,9 +45,16 @@ dependencies to make a method fit.
 
 Composition therefore reaches down from above: a free function in the joining
 crate by default, or a thin `...Ext` trait where method syntax carries the math
-better — `CoordSimplexExt` (an `exterior` construction on a `manifold` simplex),
-`SimplexRefExt` (geometry methods on a topology handle, which is how invariant 1
-is upheld inside `manifold`, below crate granularity).
+better — `CoordFieldExt::pullback_on` and `SectionExt::sampled_on` (an `exterior`
+field meeting a `manifold` mesh, in `ddf`), `SimplexRefExt` (geometry methods on a
+topology handle, which is how invariant 1 is upheld inside `manifold`, below
+crate granularity).
+
+The rule bites *within* a crate too, not just between crates. `metric` must not
+import `coord`: an embedding induces a metric, a metric induces no embedding, so
+`impl Geometry for MeshCoords` belongs on the `coord` side. And the atlas sits
+below both — the reference cell, its barycentric coordinates and quadrature over
+it need neither a metric nor an embedding, so they must live in neither layer.
 
 ## The load-bearing invariants
 
@@ -67,17 +74,44 @@ and passes tests.
    it must not sit in the core path. A feature that only works on embedded
    meshes is an unfinished feature.
 
-   A **point of the simplicial manifold** is therefore `MeshPoint` — a cell plus
-   barycentric coordinates, the chart of the piecewise-affine atlas — never a
-   global coordinate, which on a Regge manifold does not exist. A **field** is a
-   `Section<V>`: a section of the exterior bundle, evaluated at a `MeshPoint`,
-   valued in the reference frame of that cell's chart. The flat `CoordField<V>`
-   of analytic data (exact solutions, sources) is a *different* concept, and
-   reaches the mesh only through the pullback adapter. Sampling back into
-   ambient coordinates (`Sampler`) is not canonical — it extends the value along
-   the chart pseudo-inverse — and is confined to I/O.
+   A **point of the simplicial manifold** is therefore `MeshPoint` — a `Chart`
+   plus barycentric coordinates — never a global coordinate, which on a Regge
+   manifold does not exist. A **field** is a `Section<V>`: a section of the
+   exterior bundle, evaluated at a `MeshPoint`, valued in the reference frame of
+   that chart. The flat `CoordField<V>` of analytic data (exact solutions,
+   sources) is a *different* concept, and reaches the mesh only through the
+   pullback adapter. Sampling back into ambient coordinates (`Sampler`) is not
+   canonical — it extends the value along the pseudo-inverse of the cell
+   parametrization — and is confined to I/O.
 
-3. **Variance is type-level.** `ExteriorElement<Covariant>` (multiforms) and
+   **The cells are an atlas** (`manifold::atlas`), and it is a real one. A
+   `Chart` *is* a cell, top-dimensional by construction — a face carries no
+   chart, so there is no frame on one in which to express a value. Two charts
+   overlap in the face they share, and the `Transition` between them is the
+   affine relabelling of barycentric weights: metric-free, exact, and obeying the
+   cocycle law. Its differential is the change of frame on the tangent space of
+   the overlap, which is why only the *tangential* part of a section is
+   chart-independent — and hence why the de Rham map is well defined on a face
+   while a pointwise Whitney value is not. Anything claiming chart-independence
+   owes a `Transition` argument.
+
+   The chart's own structure — reference vertices, barycentric differentials,
+   volume, quadrature — is a function of `Dim` alone (the `ref_*` functions), and
+   deliberately so: **every chart of the atlas is the same chart up to the
+   labelling of its vertices.** That is exactly why element matrices are computed
+   once on the reference cell and reused on every cell of the mesh. What differs
+   between charts is the labelling, and the labelling is what a `Transition` is
+   made of. Do not bind reference-cell data to a cell.
+
+3. **Coordinate spaces are type-level.** Barycentric weights `Bary`
+   ($lambda in RR^(n+1)$), the cartesian `Local` coordinates of a chart
+   ($x in RR^n$) and the `Ambient` coordinates of an embedding ($RR^N$) are three
+   different spaces, and `common::coord::Coords<S>` tags each with the space it
+   lives in. The maps between them therefore have to be written down, and the
+   wrong composition does not compile. A bare `Vector` is a displacement or raw
+   linear algebra, never a point.
+
+4. **Variance is type-level.** `ExteriorElement<Covariant>` (multiforms) and
    `ExteriorElement<Contravariant>` (multivectors) stand on fully equal footing.
    The type parameter is what makes the functorial direction (pullback vs.
    pushforward), the duality pairing, the musical isomorphisms and the choice of
@@ -87,13 +121,13 @@ and passes tests.
    only for `Covariant`, so the type system — not a convention — is what stops a
    multivector field from being pulled back.
 
-4. **Metric-free stays metric-free.** The exterior derivative, the boundary
+5. **Metric-free stays metric-free.** The exterior derivative, the boundary
    operator, the wedge, the interior product, the duality pairing and the de Rham
    map involve *no* metric. Only the Hodge star, the musicals and inner products
    do. Do not let a `RiemannianMetric` leak into a signature that does not
    mathematically need one.
 
-5. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
+6. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
    runtime dispatch, in anything on the assembly hot path. HPC is a requirement,
    not an afterthought (`rayon`-parallel assembly is already the norm).
 
@@ -162,11 +196,22 @@ affine, not linear, and "piecewise linear FEM" is the classical abuse. Don't
 inherit it — the affine/linear distinction is exactly why barycentric
 coordinates are the right chart.
 
+**A chart and a parametrization point opposite ways.** A *chart* maps the
+manifold **out to** coordinates; a *parametrization* maps coordinates **in to**
+the manifold. They are inverse, and the direction is the whole content of the
+words. The `Chart` of a cell is barycentric, intrinsic, and exists on every
+geometry. The `SimplexCoords` of a cell is its affine *parametrization*
+$hat(K) -> RR^N$, which presupposes an embedding — never call it a chart. A
+curvilinear coordinate system on the manifold being approximated (spherical on
+$S^2$, polar on a disk) is likewise a parametrization: it is written
+$(theta, phi) |-> RR^3$, and the fact that it must carry its own inverse as
+separate data is the tell that the inverse is the chart.
+
 **Mesh, simplicial manifold, manifold are three different objects.** The *mesh*
 **is** the simplicial complex — one object, two words, never used as though they
 were two things. The *simplicial manifold* is that complex realized with a
-geometry: the piecewise-affine object, on which `MeshPoint` is a point and a
-`Section` is a field. The *manifold* is the continuous thing the simplicial one
+geometry: the piecewise-affine object, on which `Chart` is a chart, `MeshPoint` a
+point and `Section` a field. The *manifold* is the continuous thing the simplicial one
 approximates — possibly smooth, possibly given by a parametrization, possibly
 identical to the simplicial one. What is exact on the simplicial manifold need
 not be exact on the manifold, and a name that blurs the two hides precisely that
