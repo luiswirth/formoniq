@@ -102,7 +102,7 @@ impl TriangleSurface3D {
   }
 }
 
-/// Returns $[r, theta, phi]$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
+/// Returns $\[r, theta, phi\]$ with $r in \[0,oo), theta in \[0,pi\], phi in \[0, tau)$
 pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
   let r = p.norm();
   let theta = (p.z / r).acos(); // [0,pi]
@@ -110,7 +110,7 @@ pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
   [r, theta, phi]
 }
 
-/// Takes $(r, theta, phi)$ with $r in [0,oo), theta in [0,pi], phi in [0, tau)$
+/// Takes $(r, theta, phi)$ with $r in \[0,oo), theta in \[0,pi\], phi in \[0, tau)$
 pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
   let x = r * theta.sin() * phi.cos();
   let y = r * theta.sin() * phi.sin();

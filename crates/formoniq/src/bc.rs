@@ -1,24 +1,14 @@
-//! Boundary conditions via the short exact sequence of the pair,
+//! Boundary conditions for the Whitney complex.
 //!
-//! $0 -> C^k (K, diff K) -->^E C^k (K) -->^"tr" C^k (diff K) -> 0$
-//!
-//! Essential (Dirichlet) conditions constrain the trace, $"tr" u = g$:
+//! Essential (Dirichlet) conditions constrain the trace $"tr" u = g$:
 //! homogeneous ones restrict to the relative complex (the kernel of the
 //! trace), inhomogeneous ones are reduced to homogeneous by the affine
-//! lifting $u = hat(g) + E u_0$ with the zero-extension lift
-//! $hat(g) = "tr"^T g$.
+//! lifting $u = hat(g) + E u_0$ with the zero-extension $hat(g) = "tr"^T g$.
 //!
-//! Natural (Neumann) conditions appear as a boundary load in the right-hand
-//! side, $integral_(diff K) angle.l "tr" v, h angle.r vol_(diff K)$:
-//! homogeneous natural conditions are "do nothing".
-//!
-//! Mixed conditions partition the boundary facets into parts
-//! $Gamma_D union Gamma_N$: constrain the relative complex of the pair
-//! $(K, Gamma_D)$ ([`WhitneyComplex::relative_to`]) and add the Neumann
-//! load on $Gamma_N$. Robin conditions
-//! $alpha "tr" u + h_"flux" = h$ add the boundary mass
-//! $alpha "tr"^T M_(diff K) "tr"$ ([`boundary_mass`]) to the system and the
-//! load of $h$ to the right-hand side.
+//! Natural (Neumann) conditions add a boundary load to the right-hand side
+//! ([`neumann_load`]); homogeneous ones are "do nothing". Robin conditions
+//! add the boundary mass ([`boundary_mass`]). Mixed conditions partition the
+//! boundary facets and combine the two ([`WhitneyComplex::relative_to`]).
 //!
 //! [`WhitneyComplex::relative_to`]: crate::whitney_complex::WhitneyComplex::relative_to
 

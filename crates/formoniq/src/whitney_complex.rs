@@ -133,8 +133,7 @@ impl<'a> WhitneyComplex<'a> {
   }
 }
 
-/// The Whitney complex of the boundary $diff K$: the cokernel of the short
-/// exact sequence $0 -> C^k (K, diff K) -> C^k (K) -->^"tr" C^k (diff K) -> 0$,
+/// The Whitney complex of the boundary $diff K$ (the image of the trace map),
 /// carrying the geometry induced from the parent mesh.
 pub struct BoundaryWhitneyComplex {
   boundary: BoundaryComplex,
@@ -142,8 +141,7 @@ pub struct BoundaryWhitneyComplex {
 }
 
 impl BoundaryWhitneyComplex {
-  /// The Whitney complex of $diff K$ itself: everything (mass matrices,
-  /// de Rham maps, norms) applies to the boundary as to any other mesh.
+  /// The Whitney complex of $diff K$ itself, treated as any other mesh.
   pub fn whitney_complex(&self) -> WhitneyComplex<'_> {
     WhitneyComplex::new(self.boundary.complex(), &self.geometry)
   }
@@ -175,15 +173,13 @@ impl BoundaryWhitneyComplex {
   }
 }
 
-/// The relative Whitney complex of the pair $(K, diff K)$:
-/// Whitney forms with vanishing trace on the boundary.
+/// The relative Whitney complex of the pair $(K, diff K)$: the subcomplex of
+/// cochains with vanishing trace on the boundary, realizing essential
+/// (homogeneous Dirichlet) conditions for every grade at once.
 ///
-/// The subcomplex of cochains vanishing on all boundary simplices. This
-/// realizes essential (homogeneous Dirichlet) boundary conditions for every
-/// grade at once, replacing ad-hoc DOF surgery: all operators are conjugates
-/// $E^T A E$ by the inclusion $E: C^k (K, diff K) arrow.hook C^k (K)$.
-///
-/// On a boundaryless mesh this coincides with the full complex.
+/// All operators are conjugates $E^T A E$ by the inclusion
+/// $E: C^k (K, diff K) arrow.hook C^k (K)$. On a boundaryless mesh this
+/// coincides with the full complex.
 pub struct RelativeWhitneyComplex<'a> {
   full: WhitneyComplex<'a>,
   /// Per grade: sorted indices of the interior (non-boundary) simplices,
