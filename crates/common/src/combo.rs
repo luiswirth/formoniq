@@ -36,10 +36,9 @@ pub enum Sign {
 
 impl Sign {
   pub fn from_bool(b: bool) -> Self {
-    if b {
-      Self::Pos
-    } else {
-      Self::Neg
+    match b {
+      true => Self::Pos,
+      false => Self::Neg,
     }
   }
   pub fn from_f64(f: f64) -> Option<Self> {
