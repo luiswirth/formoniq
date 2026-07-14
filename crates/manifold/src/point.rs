@@ -24,7 +24,10 @@
 //! $lambda_0 = 1 - sum_i x_i$.
 
 use crate::{
-  topology::handle::{SimplexIdx, SimplexRef},
+  topology::{
+    complex::Complex,
+    handle::{SimplexIdx, SimplexRef},
+  },
   Dim,
 };
 
@@ -41,6 +44,16 @@ pub type BaryRef<'a> = VectorView<'a>;
 /// Regge edge lengths or bare cell metrics alike. Points on a shared face have
 /// more than one such representation, one per incident cell; they agree on
 /// everything the transition maps preserve.
+///
+/// The cell must be a **cell** of the complex the point is used with -- a
+/// top-dimensional simplex -- because the charts of the atlas are the cells and
+/// nothing else. A point of a face is represented by a supporting cell and the
+/// barycentric coordinates it has *in that cell*, which is exactly what
+/// `derham_map` does when it integrates over a face. A [`SimplexIdx`] of lower
+/// dimension is not a stricter case to be supported: a face carries no chart,
+/// so there is no frame in which to express a value there. Since a `MeshPoint`
+/// does not know its [`Complex`], that contract is checked where it can be --
+/// in [`chart`](Self::chart), the one place a point meets a complex.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MeshPoint {
   pub cell: SimplexIdx,
@@ -59,6 +72,20 @@ impl MeshPoint {
   /// The barycenter of a cell.
   pub fn barycenter(cell: SimplexIdx) -> Self {
     Self::new(cell, barycenter_bary(cell.dim()))
+  }
+
+  /// The chart this point lives in: the cell of the complex, as a handle.
+  ///
+  /// The single crossing from a point to the complex it belongs to, and hence
+  /// the only place the atlas contract can be enforced -- the cell of a
+  /// `MeshPoint` is top-dimensional, since the charts are the cells.
+  pub fn chart<'m>(&self, complex: &'m Complex) -> SimplexRef<'m> {
+    assert_eq!(
+      self.cell.dim(),
+      complex.dim(),
+      "A MeshPoint sits in a cell: the charts of the atlas are top-dimensional."
+    );
+    self.cell.handle(complex)
   }
 
   /// The dimension of the manifold, which is that of the containing cell.
@@ -157,6 +184,20 @@ mod test {
   use super::*;
 
   use approx::assert_relative_eq;
+
+  /// The charts of the atlas are the cells: resolving a point whose simplex is
+  /// a face, not a cell, is a contract violation and not a supported case.
+  ///
+  /// There is no frame on a face in which to express a value -- which is why a
+  /// point of a face is carried by a *supporting cell* instead.
+  #[test]
+  #[should_panic(expected = "charts of the atlas are top-dimensional")]
+  fn chart_rejects_a_face() {
+    let complex = Complex::standard(2);
+    let edge = complex.skeleton(1).handle_iter().next().unwrap();
+    let point = MeshPoint::barycenter(edge.idx());
+    point.chart(&complex);
+  }
 
   /// The two chart coordinate systems are mutually inverse.
   #[test]

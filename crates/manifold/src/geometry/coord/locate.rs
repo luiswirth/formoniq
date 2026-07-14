@@ -315,7 +315,7 @@ mod test {
           (Some(_), Some(loc)) => {
             // The located cell must actually contain x, and its barycentric
             // coordinates must reconstruct the point.
-            let simp = loc.cell.handle(&topology).coord_simplex(&coords);
+            let simp = loc.chart(&topology).coord_simplex(&coords);
             assert!(simp.is_global_inside(x.as_view()), "dim={dim} x={x:?}");
             let reconstructed = simp.bary2global(loc.bary.as_view());
             assert!((reconstructed - &x).norm() < 1e-9);
