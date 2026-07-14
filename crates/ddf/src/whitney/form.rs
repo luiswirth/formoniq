@@ -1,113 +1,82 @@
-use super::lsf::WhitneyLsf;
-use crate::cochain::Cochain;
-
 use {
-  exterior::MultiForm,
+  common::{
+    combo::{factorial_f64, Combination, Sign},
+    linalg::nalgebra::Matrix,
+  },
+  exterior::{ExteriorGrade, MultiForm, MultiVector},
   manifold::{
-    point::MeshPoint,
-    topology::{complex::Complex, simplex::standard_subsimps},
+    point::{ref_difbarys, BaryRef},
+    Dim,
   },
 };
 
-/// The Whitney interpolation $W c = sum_sigma c_sigma W_sigma$ of a cochain:
-/// a piecewise linear differential form on the simplicial manifold.
+/// The Whitney form $W_sigma$ of a DOF subsimplex, on the reference cell: the
+/// basis of the lowest-order trimmed space $P^-_1 Lambda^k$, dual to the
+/// degrees of freedom, $integral_tau W_sigma = delta_(sigma tau)$.
 ///
-/// This is the FEEC representation formula, reconstructing a genuine
-/// differential form from a cochain. It is intrinsic -- the cochain and the
-/// [`Complex`] are all it takes, since the local shape functions are pure
-/// combinatorics of the reference cell -- so a Whitney form exists on a mesh
-/// that carries only Regge edge lengths, or no geometry at all.
+/// Work in the formal barycentric space $Lambda(RR^(n+1))$, where the
+/// vertex set $sigma$ is a blade $e_sigma$ and the barycentric coordinates
+/// $lambda(x)$ are a vector. Then the Whitney form is the pullback along
+/// the barycentric coordinate map of the Koszul contraction of the blade:
 ///
-/// Evaluation in ambient coordinates is a strictly separate concern:
-/// [`Sampler`](crate::field::Sampler).
-pub struct WhitneyForm<'a> {
-  cochain: Cochain,
-  complex: &'a Complex,
-  /// The LSFs of the DOF subsimplices, in the colex order of their local
-  /// vertex sets: the same order the faces of a cell come in.
-  lsfs: Vec<WhitneyLsf>,
+/// $W_sigma = k! med lambda^* (iota_(lambda(x)) e_sigma)
+///   = k! sum_i (-1)^i lambda_(sigma_i)
+///     dif lambda_(sigma_0) wedge dots.c hat(dif lambda_(sigma_i)) dots.c wedge dif lambda_(sigma_k)$
+///
+/// The contraction $iota_lambda$ is the Koszul operator $kappa$ of FEEC.
+///
+/// Purely combinatorial: the barycentric differentials of the reference cell
+/// are the constant [`ref_difbarys`], so a Whitney form depends on nothing but
+/// the cell dimension and the DOF vertex set -- no coordinates, no metric.
+/// This is what lets them live on a bare Regge manifold.
+#[derive(Debug, Clone)]
+pub struct WhitneyForm {
+  cell_dim: Dim,
+  /// The local vertex set of the DOF subsimplex.
+  dof_simp: Combination,
+  /// The differential of the barycentric coordinate map
+  /// $lambda: RR^n -> RR^(n+1)$: the rows are the $dif lambda_i$.
+  difbarys: Matrix,
 }
-
-impl<'a> WhitneyForm<'a> {
-  pub fn new(cochain: Cochain, complex: &'a Complex) -> Self {
-    let lsfs = standard_subsimps(complex.dim(), cochain.grade())
-      .map(|dof_simp| WhitneyLsf::standard(complex.dim(), dof_simp))
-      .collect();
+impl WhitneyForm {
+  pub fn standard(cell_dim: Dim, dof_simp: Combination) -> Self {
     Self {
-      cochain,
-      complex,
-      lsfs,
+      cell_dim,
+      dof_simp,
+      difbarys: ref_difbarys(cell_dim),
     }
   }
 
-  pub fn cochain(&self) -> &Cochain {
-    &self.cochain
+  pub fn cell_dim(&self) -> Dim {
+    self.cell_dim
   }
-  pub fn complex(&self) -> &'a Complex {
-    self.complex
+  pub fn grade(&self) -> ExteriorGrade {
+    self.dof_simp.card() - 1
   }
-
-  /// The exterior derivative: since $W$ is a cochain map, this is the
-  /// interpolation of the coboundary, $dif (W c) = W (dif c)$.
-  pub fn dif(&self) -> Self {
-    Self::new(self.cochain.dif(self.complex), self.complex)
+  pub fn nvertices(&self) -> usize {
+    self.cell_dim + 1
   }
 
-  /// The value at a point of the manifold, in the reference frame of its cell.
-  pub fn eval(&self, point: &MeshPoint) -> MultiForm {
-    let cell = point.cell.handle(self.complex);
-    let mut value = MultiForm::zero(self.complex.dim(), self.cochain.grade());
-    for (dof_simp, lsf) in cell.faces(self.cochain.grade()).zip(&self.lsfs) {
-      value += self.cochain[dof_simp] * lsf.at_bary(point.bary());
-    }
-    value
+  /// The DOF vertex set as a blade in the formal barycentric space
+  /// $Lambda^(k+1) (RR^(n+1))$.
+  fn barycentric_blade(&self) -> MultiForm {
+    MultiForm::from_blade_signed(self.nvertices(), Sign::Pos, self.dof_simp)
   }
-}
 
-#[cfg(test)]
-mod test {
-  use super::*;
+  /// The value at a point of the reference cell, in its reference frame.
+  pub fn at_bary<'a>(&self, bary: impl Into<BaryRef<'a>>) -> MultiForm {
+    let bary = MultiVector::line(bary.into().into_owned());
+    let koszul = self.barycentric_blade().interior_product(&bary);
+    factorial_f64(self.grade()) * koszul.pullback(&self.difbarys)
+  }
 
-  use crate::{cochain::Cochain, field::ExteriorField};
-
-  use {
-    common::linalg::nalgebra::Vector,
-    exterior::MultiForm,
-    manifold::{point::MeshPoint, topology::complex::Complex},
-  };
-
-  /// $dif compose W = W compose dif$: Whitney interpolation is a cochain map.
+  /// The constant exterior derivative
+  /// $dif W_sigma = (k+1)! med lambda^* (e_sigma)
+  /// = (k+1)! dif lambda_(sigma_0) wedge dots.c wedge dif lambda_(sigma_k)$.
   ///
-  /// The exterior derivative of the interpolation of a cochain is the
-  /// interpolation of its coboundary. Evaluated pointwise on the standard
-  /// cell: $dif (W c) = sum_sigma c_sigma dif W_sigma$ against $W (dif c)$.
-  #[test]
-  fn whitney_interpolation_is_cochain_map() {
-    for dim in 1..=3 {
-      let topology = Complex::standard(dim);
-      let cell = topology.cells().handle_iter().next().unwrap();
-
-      for grade in 0..dim {
-        let ndofs = topology.nsimplices(grade);
-        let cochain = Cochain::new(
-          grade,
-          Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i + 1) as f64)),
-        );
-
-        // dif(W c) = sum_sigma c_sigma dif(W_sigma): elementwise constant.
-        let mut dif_of_interpolation = MultiForm::zero(dim, grade + 1);
-        for dof_simp in cell.faces(grade) {
-          let lsf = WhitneyLsf::standard(dim, dof_simp.simplex().relative_to(cell.simplex()));
-          dif_of_interpolation += cochain[dof_simp] * lsf.dif();
-        }
-
-        // W(dif c) evaluated anywhere in the cell.
-        let interpolation_of_dif = WhitneyForm::new(cochain, &topology)
-          .dif()
-          .at(&MeshPoint::barycenter(cell.idx()));
-
-        assert!(dif_of_interpolation.eq_epsilon(&interpolation_of_dif, 1e-12));
-      }
-    }
+  /// Vanishes automatically for the top grade, where $Lambda^(k+1) (RR^n)$
+  /// is the zero space.
+  pub fn dif(&self) -> MultiForm {
+    factorial_f64(self.grade() + 1) * self.barycentric_blade().pullback(&self.difbarys)
   }
 }
