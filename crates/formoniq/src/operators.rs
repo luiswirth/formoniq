@@ -7,8 +7,8 @@ use {
   ddf::{section::Section, whitney::form::WhitneyForm},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
   manifold::{
-    geometry::{cell_volume, coord::quadrature::SimplexQuadRule, coord::CoordRef},
-    point::{ref_difbarys, MeshPoint},
+    atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
+    geometry::cell_volume,
     topology::{
       handle::SimplexRef,
       simplex::{standard_boundary_operator, standard_subsimps},
@@ -244,16 +244,15 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 
     let mut elvec = ElVec::zeros(self.whitneys.len());
     for (iwhitney, whitney) in self.whitneys.iter().enumerate() {
-      let inner_pointwise = |local: CoordRef| {
-        let point = MeshPoint::from_local(cell.idx(), local);
+      let inner_pointwise = |point: &MeshPoint| {
         inner.inner(
-          self.source.at(&point).coeffs(),
+          self.source.at(point).coeffs(),
           whitney.at_bary(point.bary()).coeffs(),
         )
       };
       elvec[iwhitney] = self
         .qr
-        .integrate_local(&inner_pointwise, cell_volume(metric));
+        .integrate_cell(cell.idx(), &inner_pointwise, cell_volume(metric));
     }
     elvec
   }

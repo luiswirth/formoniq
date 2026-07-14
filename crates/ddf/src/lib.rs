@@ -1,3 +1,14 @@
+//! Discrete differential forms: the exterior algebra, over the simplicial
+//! manifold.
+//!
+//! `ddf` is the crate that *joins* [`exterior`] and [`manifold`], and it exists
+//! because neither may depend on the other. A [`Cochain`](cochain::Cochain) is
+//! the discrete form; a [`Section`](section::Section) is the continuous field it
+//! reconstructs to, evaluated at a [`MeshPoint`](manifold::atlas::MeshPoint) and
+//! valued in the reference frame of that point's chart. The two are related by
+//! the [`derham`] map and the [`whitney`] interpolation, which are inverse in
+//! the one direction that matters ($R compose W = id$) and cochain maps in both.
+
 extern crate nalgebra as na;
 
 pub mod cochain;
@@ -5,26 +16,6 @@ pub mod derham;
 pub mod io;
 pub mod section;
 pub mod whitney;
-
-use {
-  exterior::{exterior_power, MultiVector},
-  manifold::geometry::coord::simplex::SimplexCoords,
-};
-
-pub trait CoordSimplexExt {
-  fn spanning_multivector(&self) -> MultiVector;
-}
-impl CoordSimplexExt for SimplexCoords {
-  /// The single blade $v_1 wedge dots.c wedge v_k$ of the spanning vectors:
-  /// its coefficients are the $k$-minors, the single column
-  /// $Lambda^k V in RR^(binom(n,k) times 1)$.
-  fn spanning_multivector(&self) -> MultiVector {
-    let vectors = self.spanning_vectors();
-    let grade = self.dim_intrinsic();
-    let coeffs = exterior_power(&vectors, grade).column(0).into_owned();
-    MultiVector::new(coeffs, self.dim_ambient(), grade)
-  }
-}
 
 #[cfg(test)]
 mod test {

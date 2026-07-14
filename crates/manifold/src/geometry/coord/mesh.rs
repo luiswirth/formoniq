@@ -70,7 +70,7 @@ impl SkeletonData for MeshCoords {
     self.nvertices()
   }
   fn at(&self, kidx: KSimplexIdx) -> CoordRef<'_> {
-    self.matrix.column(kidx)
+    CoordRef::new(self.matrix.column(kidx))
   }
 }
 
@@ -82,8 +82,8 @@ impl From<Matrix> for MeshCoords {
 
 impl From<&[Coord]> for MeshCoords {
   fn from(vectors: &[Coord]) -> Self {
-    let matrix = Matrix::from_columns(vectors);
-    Self::new(matrix)
+    let columns: Vec<_> = vectors.iter().map(Coord::vector).cloned().collect();
+    Self::new(Matrix::from_columns(&columns))
   }
 }
 
@@ -96,13 +96,11 @@ impl MeshCoords {
   }
 
   pub fn coord(&self, ivertex: VertexIdx) -> CoordRef<'_> {
-    self.matrix.column(ivertex)
+    CoordRef::new(self.matrix.column(ivertex))
   }
 
-  pub fn coord_iter(
-    &self,
-  ) -> na::iter::ColumnIter<'_, f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> {
-    self.matrix.column_iter()
+  pub fn coord_iter(&self) -> impl ExactSizeIterator<Item = CoordRef<'_>> {
+    self.matrix.column_iter().map(CoordRef::new)
   }
 
   pub fn coord_iter_mut(
@@ -161,7 +159,7 @@ pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simpl
     .map(|cell| Simplex::new(cell.iter().map(relabel).collect()))
     .collect();
 
-  let columns: Vec<_> = used.iter().map(|&v| coords.coord(v)).collect();
+  let columns: Vec<_> = used.iter().map(|&v| coords.coord(v).view()).collect();
   let coords = MeshCoords::new(Matrix::from_columns(&columns));
   (cells, coords)
 }

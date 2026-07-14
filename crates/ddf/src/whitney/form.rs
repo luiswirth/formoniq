@@ -5,7 +5,7 @@ use {
   },
   exterior::{ExteriorGrade, MultiForm, MultiVector},
   manifold::{
-    point::{ref_difbarys, BaryRef},
+    atlas::{ref_difbarys, BaryRef},
     Dim,
   },
 };
@@ -65,7 +65,7 @@ impl WhitneyForm {
 
   /// The value at a point of the reference cell, in its reference frame.
   pub fn at_bary<'a>(&self, bary: impl Into<BaryRef<'a>>) -> MultiForm {
-    let bary = MultiVector::line(bary.into().into_owned());
+    let bary = MultiVector::line(bary.into().view().into_owned());
     let koszul = self.barycentric_blade().interior_product(&bary);
     factorial_f64(self.grade()) * koszul.pullback(&self.difbarys)
   }

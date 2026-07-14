@@ -27,17 +27,17 @@
 use crate::whitney::interpolant::WhitneyInterpolant;
 
 use {
-  common::{gramian::RiemannianMetric, linalg::nalgebra::VectorView},
+  common::gramian::RiemannianMetric,
   exterior::{
     field::CoordField, Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm,
     MultiVector, Variance,
   },
   manifold::{
+    atlas::MeshPoint,
     geometry::{
-      coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
+      coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt, CoordRef},
       metric::Geometry,
     },
-    point::MeshPoint,
     topology::complex::Complex,
   },
 };
@@ -100,9 +100,12 @@ impl<F: CoordField<Covariant>> Section<Covariant> for Pullback<'_, F> {
     self.field.grade()
   }
   fn at(&self, point: &MeshPoint) -> MultiForm {
-    let chart = point.chart(self.topology).coord_simplex(self.coords);
-    let global = chart.bary2global(point.bary());
-    self.field.at(&global).pullback(&chart.linear_transform())
+    let parametrization = point.chart(self.topology).cell().coord_simplex(self.coords);
+    let global = parametrization.bary2global(point.bary());
+    self
+      .field
+      .at(&global)
+      .pullback(&parametrization.linear_transform())
   }
 }
 
@@ -156,7 +159,7 @@ impl<'a, F: Section<Covariant>> Sampler<'a, F> {
   }
 
   /// The point of the manifold at a global coordinate; `None` outside the mesh.
-  pub fn locate<'b>(&self, coord: impl Into<VectorView<'b>>) -> Option<MeshPoint> {
+  pub fn locate<'b>(&self, coord: impl Into<CoordRef<'b>>) -> Option<MeshPoint> {
     let coord = coord.into();
     match self.locator {
       Some(locator) => locator.locate(coord),
@@ -174,13 +177,16 @@ impl<'a, F: Section<Covariant>> Sampler<'a, F> {
 
   /// The value at a mesh point, expressed in the ambient frame.
   pub fn at_point(&self, point: &MeshPoint) -> MultiForm {
-    let chart = point.chart(self.topology).coord_simplex(self.coords);
-    self.field.at(point).pullback(&chart.inv_linear_transform())
+    let parametrization = point.chart(self.topology).cell().coord_simplex(self.coords);
+    self
+      .field
+      .at(point)
+      .pullback(&parametrization.inv_linear_transform())
   }
 
   /// The value at a global coordinate, in the ambient frame;
   /// `None` outside the mesh.
-  pub fn at_global<'b>(&self, coord: impl Into<VectorView<'b>>) -> Option<MultiForm> {
+  pub fn at_global<'b>(&self, coord: impl Into<CoordRef<'b>>) -> Option<MultiForm> {
     self.locate(coord).map(|point| self.at_point(&point))
   }
 }
@@ -231,7 +237,7 @@ pub struct MetricOp<'a, F, G> {
 }
 impl<'a, F, G: Geometry> MetricOp<'a, F, G> {
   fn cell_metric(&self, point: &MeshPoint) -> RiemannianMetric {
-    self.geometry.cell_metric(point.chart(self.topology))
+    self.geometry.cell_metric(point.chart(self.topology).cell())
   }
 }
 
@@ -349,16 +355,19 @@ mod test {
   use {
     common::linalg::nalgebra::Vector,
     exterior::field::DiffFormClosure,
-    manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::locate::PointLocator},
+    manifold::{
+      gen::cartesian::CartesianMeshInfo,
+      geometry::coord::{locate::PointLocator, Coord},
+    },
   };
 
   use approx::assert_relative_eq;
 
   /// A grid of sample points, kept off cell faces and triangulation diagonals.
-  fn probe_points(dim: Dim, samples: usize) -> impl Iterator<Item = Vector> {
+  fn probe_points(dim: Dim, samples: usize) -> impl Iterator<Item = Coord> {
     let phase = [0.017, 0.113, 0.237];
     (0..samples.pow(dim as u32)).map(move |flat| {
-      Vector::from_iterator(
+      Coord::from_iterator(
         dim,
         (0..dim).map(|d| {
           let i = flat / samples.pow(d as u32) % samples;
@@ -376,7 +385,7 @@ mod test {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 3).compute_coord_complex();
       let locator = PointLocator::new(&topology, &coords);
 
-      let field = DiffFormClosure::one_form(|p| p.clone_owned(), dim);
+      let field = DiffFormClosure::one_form(|p| p.vector().clone(), dim);
       let cochain = derham_map(&field.pullback_on(&topology, &coords), &topology, 2);
       let whitney = WhitneyInterpolant::new(cochain, &topology);
 
@@ -406,7 +415,7 @@ mod test {
       let locator = PointLocator::new(&topology, &coords);
 
       let field = DiffFormClosure::one_form(
-        |p| Vector::from_iterator(p.len(), p.iter().map(|x| (2.0 * x).sin())),
+        |p| Vector::from_iterator(p.dim(), p.iter().map(|x| (2.0 * x).sin())),
         dim,
       );
       let pulled = field.pullback_on(&topology, &coords);
@@ -427,7 +436,7 @@ mod test {
   #[test]
   fn hodge_star_field_involution() {
     use common::combo::Sign;
-    use manifold::point::MeshPoint;
+    use manifold::atlas::MeshPoint;
 
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();

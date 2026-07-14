@@ -68,7 +68,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     // quadratic, so an order-3 quadrature keeps it exact.
     let source = DiffFormClosure::coordinate_component(0, dim);
     let source = source.pullback_on(&topology, &coords);
-    let qr = manifold::geometry::coord::quadrature::SimplexQuadRule::degree(dim, 3);
+    let qr = manifold::atlas::SimplexQuadRule::degree(dim, 3);
     let mut rhs =
       assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, Some(qr)));
 

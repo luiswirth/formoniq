@@ -1,4 +1,4 @@
-use common::linalg::nalgebra::{Vector, VectorView};
+use common::linalg::nalgebra::{Matrix, Vector, VectorView};
 
 use crate::{
   geometry::coord::{mesh::MeshCoords, simplex::SimplexCoords},
@@ -124,12 +124,12 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
   let vertex_coords = ICOSAHEDRON_SURFACE
     .vertex_coords()
     .coord_iter()
-    .map(na::Matrix::into_owned)
+    .map(|v| v.view().into_owned())
     .collect();
 
   let (triangles, vertex_coords) = subdivide(triangles, vertex_coords, nsubdivisions);
 
-  TriangleSurface3D::new(triangles, vertex_coords.as_slice())
+  TriangleSurface3D::new(triangles, Matrix::from_columns(&vertex_coords))
 }
 
 fn subdivide(
@@ -228,5 +228,5 @@ static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
     [ 9, 8, 1],
   ];
 
-  TriangleSurface3D::new(triangles, vertex_coords.as_slice())
+  TriangleSurface3D::new(triangles, Matrix::from_columns(&vertex_coords))
 });

@@ -30,12 +30,8 @@ use {
   ddf::{cochain::Cochain, section::Section, whitney::interpolant::WhitneyInterpolant},
   exterior::{multiform_gramian, Covariant},
   manifold::{
-    geometry::{
-      cell_volume,
-      coord::{quadrature::SimplexQuadRule, CoordRef},
-      metric::Geometry,
-    },
-    point::MeshPoint,
+    atlas::{MeshPoint, SimplexQuadRule},
+    geometry::{cell_volume, metric::Geometry},
     topology::complex::Complex,
   },
 };
@@ -66,11 +62,9 @@ pub fn fe_l2_error<F: Section<Covariant>>(
     .map(|cell| {
       let metric = geometry.cell_metric(cell);
       let inner = multiform_gramian(&metric, grade);
-      let error_pointwise = |local: CoordRef| {
-        let point = MeshPoint::from_local(cell.idx(), local);
-        inner.norm_sq((exact.at(&point) - fe_whitney.at(&point)).coeffs())
-      };
-      qr.integrate_local(&error_pointwise, cell_volume(&metric))
+      let error_pointwise =
+        |point: &MeshPoint| inner.norm_sq((exact.at(point) - fe_whitney.at(point)).coeffs());
+      qr.integrate_cell(cell.idx(), &error_pointwise, cell_volume(&metric))
     })
     .sum();
 

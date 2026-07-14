@@ -4,7 +4,7 @@ use {
   ddf::whitney::interpolant::WhitneyInterpolant,
   exterior::exterior_dim,
   formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
-  manifold::{geometry::coord::simplex::SimplexRefExt, point::MeshPoint},
+  manifold::{atlas::MeshPoint, geometry::coord::simplex::SimplexRefExt},
 };
 
 use std::{

@@ -25,7 +25,7 @@ use {
   },
   ddf::{cochain::Cochain, section::Section},
   exterior::{Covariant, ExteriorGrade},
-  manifold::geometry::coord::quadrature::SimplexQuadRule,
+  manifold::atlas::SimplexQuadRule,
 };
 
 /// A Galerkin system with essential boundary conditions imposed by affine

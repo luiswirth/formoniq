@@ -20,9 +20,9 @@
 //! dimension below ambient, e.g. a surface in space) a query point is accepted
 //! only if it also lies within tolerance of the cell's affine hull.
 
-use super::{simplex::SimplexRefExt, Coord, CoordRef};
+use super::{simplex::SimplexRefExt, CoordRef};
 use crate::{
-  point::{local2bary, MeshPoint},
+  atlas::{local2bary, Bary, Local, MeshPoint},
   topology::{complex::Complex, handle::SimplexIdx},
   Dim,
 };
@@ -48,9 +48,9 @@ impl Aabb {
       max: self.max.sup(&other.max),
     }
   }
-  fn extend_point(&mut self, p: CoordRef) {
-    self.min = self.min.inf(&p.clone_owned());
-    self.max = self.max.sup(&p.clone_owned());
+  fn extend_point(&mut self, p: &Vector) {
+    self.min = self.min.inf(p);
+    self.max = self.max.sup(p);
   }
   /// Whether $x$ lies in the box, grown by an absolute tolerance.
   fn contains(&self, x: CoordRef, eps: f64) -> bool {
@@ -90,7 +90,7 @@ impl BvhNode {
 /// hull (nonzero only on embedded manifolds).
 struct CellAffine {
   kidx: usize,
-  base: Coord,
+  base: Vector,
   /// The spanning vectors $A$ (ambient x intrinsic).
   spanning: Matrix,
   /// The pseudo-inverse $A^+$ (intrinsic x ambient).
@@ -129,14 +129,14 @@ impl PointLocator {
       let simp = cell.coord_simplex(coords);
       let mut bbox = Aabb::empty(ambient);
       for v in simp.coord_iter() {
-        bbox.extend_point(v);
+        bbox.extend_point(&v.view().into_owned());
       }
       total = total.union(&bbox);
       centroids.push(0.5 * (&bbox.min + &bbox.max));
       boxes.push(bbox);
       cells.push(CellAffine {
         kidx: cell.kidx(),
-        base: simp.base_vertex().into_owned(),
+        base: simp.base_vertex().view().into_owned(),
         spanning: simp.linear_transform(),
         inv: simp.inv_linear_transform(),
       });
@@ -206,13 +206,13 @@ impl PointLocator {
 
   /// The barycentric coordinates of `x` in cell `prim`, if `x` lies inside it
   /// (and, on an embedded manifold, within tolerance of its affine hull).
-  fn try_barycentric(&self, prim: usize, x: CoordRef) -> Option<Coord> {
+  fn try_barycentric(&self, prim: usize, x: CoordRef) -> Option<Bary> {
     let cell = &self.cells[prim];
-    let offset = x - &cell.base;
-    let local = &cell.inv * &offset;
+    let offset = x.view() - &cell.base;
+    let local = Local::new(&cell.inv * &offset);
 
     if self.embedded {
-      let residual = (&offset - &cell.spanning * &local).norm();
+      let residual = (&offset - &cell.spanning * local.vector()).norm();
       if residual > self.eps {
         return None;
       }
@@ -232,7 +232,7 @@ fn build(
   order_slice: &mut [usize],
   offset: usize,
   boxes: &[Aabb],
-  centroids: &[Coord],
+  centroids: &[Vector],
 ) -> usize {
   let bbox = order_slice
     .iter()
@@ -252,7 +252,7 @@ fn build(
   // Split along the longest axis of the centroid bounds.
   let mut cbounds = Aabb::empty(centroids[order_slice[0]].len());
   for &i in order_slice.iter() {
-    cbounds.extend_point(centroids[i].as_view());
+    cbounds.extend_point(&centroids[i]);
   }
   let axis = (0..cbounds.min.len())
     .max_by(|&a, &b| {
@@ -285,7 +285,7 @@ fn build(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianMeshInfo;
+  use crate::{gen::cartesian::CartesianMeshInfo, geometry::coord::Coord};
 
   /// The BVH locator agrees with the brute-force linear scan on every query,
   /// and reports points outside the mesh as such.
@@ -315,10 +315,10 @@ mod test {
           (Some(_), Some(loc)) => {
             // The located cell must actually contain x, and its barycentric
             // coordinates must reconstruct the point.
-            let simp = loc.chart(&topology).coord_simplex(&coords);
+            let simp = loc.chart(&topology).cell().coord_simplex(&coords);
             assert!(simp.is_global_inside(x.as_view()), "dim={dim} x={x:?}");
-            let reconstructed = simp.bary2global(loc.bary.as_view());
-            assert!((reconstructed - &x).norm() < 1e-9);
+            let reconstructed = simp.bary2global(loc.bary());
+            assert!((&reconstructed - &x).norm() < 1e-9);
           }
           (None, None) => {}
           (a, b) => panic!(

@@ -59,7 +59,7 @@ pub fn save_coords_to_file(coords: &MeshCoords, path: impl AsRef<Path>) -> io::R
 
 pub fn write_coords<W: io::Write>(mut writer: W, coords: &MeshCoords) -> io::Result<()> {
   for coord in coords.coord_iter() {
-    for &comp in coord {
+    for comp in coord.view().iter() {
       write!(writer, "{comp:.6} ")?;
     }
     writeln!(writer)?;
