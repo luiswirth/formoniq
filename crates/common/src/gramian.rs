@@ -53,10 +53,24 @@ impl Gramian {
   }
 }
 
-/// Inner product functionality directly on the basis.
+/// Inner product functionality expressed directly in terms of the basis.
 impl Gramian {
   pub fn basis_inner(&self, i: usize, j: usize) -> f64 {
     self.matrix[(i, j)]
+  }
+  pub fn basis_norm_sq(&self, i: usize) -> f64 {
+    self.basis_inner(i, i)
+  }
+  pub fn basis_norm(&self, i: usize) -> f64 {
+    self.basis_norm_sq(i).sqrt()
+  }
+  /// Cosine of the angle between basis vectors `i` and `j`.
+  pub fn basis_angle_cos(&self, i: usize, j: usize) -> f64 {
+    self.basis_inner(i, j) / self.basis_norm(i) / self.basis_norm(j)
+  }
+  /// Angle (in radians) between basis vectors `i` and `j`.
+  pub fn basis_angle(&self, i: usize, j: usize) -> f64 {
+    self.basis_angle_cos(i, j).acos()
   }
 }
 impl std::ops::Index<(usize, usize)> for Gramian {
@@ -111,15 +125,108 @@ impl RiemannianMetric {
   }
 }
 
-/// Inner product functionality directly on any element.
+/// Metric operations on tangent vectors (contravariant quantities), measured
+/// by the metric tensor $g$. These are the canonical Riemannian measurements
+/// of directions and lengths; the dual operations on covectors are available
+/// through [`Self::covector_gramian`].
+impl RiemannianMetric {
+  /// Inner product $g(v, w)$ of two tangent vectors.
+  pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
+    self.vector_gramian.inner(v, w)
+  }
+  /// Squared length $g(v, v)$ of a tangent vector.
+  pub fn norm_sq(&self, v: &Vector) -> f64 {
+    self.vector_gramian.norm_sq(v)
+  }
+  /// Length $sqrt(g(v, v))$ of a tangent vector.
+  pub fn norm(&self, v: &Vector) -> f64 {
+    self.vector_gramian.norm(v)
+  }
+  /// Cosine of the angle between two tangent vectors.
+  pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
+    self.vector_gramian.angle_cos(v, w)
+  }
+  /// Angle (in radians) between two tangent vectors.
+  pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
+    self.vector_gramian.angle(v, w)
+  }
+}
+
+/// Inner product functionality on arbitrary elements.
 impl Gramian {
   pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
     (v.transpose() * self.matrix() * w).x
   }
+  /// Gram matrix of two families of vectors (given as columns): `vᵀ G w`.
+  pub fn inner_mat(&self, v: &Matrix, w: &Matrix) -> Matrix {
+    v.transpose() * self.matrix() * w
+  }
   pub fn norm_sq(&self, v: &Vector) -> f64 {
     self.inner(v, v)
   }
+  /// Elementwise squared norms of a family of vectors (given as columns).
+  pub fn norm_sq_mat(&self, v: &Matrix) -> Matrix {
+    self.inner_mat(v, v)
+  }
   pub fn norm(&self, v: &Vector) -> f64 {
     self.inner(v, v).sqrt()
+  }
+  /// Elementwise norms of a family of vectors (given as columns).
+  pub fn norm_mat(&self, v: &Matrix) -> Matrix {
+    self.inner_mat(v, v).map(f64::sqrt)
+  }
+  /// Cosine of the angle between `v` and `w`.
+  pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
+    self.inner(v, w) / self.norm(v) / self.norm(w)
+  }
+  /// Angle (in radians) between `v` and `w`.
+  pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
+    self.angle_cos(v, w).acos()
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::linalg::nalgebra::Vector;
+  use std::f64::consts::FRAC_PI_2;
+
+  #[test]
+  fn euclidean_angles_and_norms() {
+    let g = Gramian::standard(2);
+    let e0 = Vector::from_column_slice(&[1.0, 0.0]);
+    let e1 = Vector::from_column_slice(&[0.0, 1.0]);
+
+    assert!((g.norm(&e0) - 1.0).abs() < 1e-12);
+    assert!((g.angle(&e0, &e1) - FRAC_PI_2).abs() < 1e-12);
+    assert!(g.angle_cos(&e0, &e1).abs() < 1e-12);
+    assert!(g.angle(&e0, &e0).abs() < 1e-12);
+  }
+
+  #[test]
+  fn nonstandard_metric_angle_matches_definition() {
+    // A metric that stretches the second axis; the coordinate axes stay
+    // g-orthogonal, but a diagonal vector no longer bisects them.
+    let g = Gramian::new(Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 4.0]));
+    let v = Vector::from_column_slice(&[1.0, 1.0]);
+    let w = Vector::from_column_slice(&[1.0, 0.0]);
+
+    // g(v, w) = 1, |v|_g = sqrt(5), |w|_g = 1.
+    assert!((g.inner(&v, &w) - 1.0).abs() < 1e-12);
+    assert!((g.norm(&v) - 5.0_f64.sqrt()).abs() < 1e-12);
+    assert!((g.angle_cos(&v, &w) - 1.0 / 5.0_f64.sqrt()).abs() < 1e-12);
+  }
+
+  #[test]
+  fn riemannian_metric_measures_tangent_vectors_with_g() {
+    let g = Gramian::new(Matrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 3.0]));
+    let metric = RiemannianMetric::new(g.clone());
+    let v = Vector::from_column_slice(&[1.0, 1.0]);
+    let w = Vector::from_column_slice(&[1.0, -1.0]);
+
+    // Convenience methods on the metric agree with the tangent (vector) Gramian.
+    assert!((metric.inner(&v, &w) - g.inner(&v, &w)).abs() < 1e-12);
+    assert!((metric.norm(&v) - g.norm(&v)).abs() < 1e-12);
+    assert!((metric.angle(&v, &w) - g.angle(&v, &w)).abs() < 1e-12);
   }
 }
