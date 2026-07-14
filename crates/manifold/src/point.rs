@@ -1,9 +1,14 @@
 //! A point of the simplicial manifold, in the barycentric chart.
 //!
-//! The simplicial complex, realized geometrically, is a piecewise-flat
-//! manifold whose atlas is its cells: each cell is a chart, and the transition
-//! maps between overlapping cells are the affine gluings of shared faces. A
-//! point of the manifold is therefore intrinsically a pair
+//! The cells of the complex are an atlas: each cell is a chart, and the
+//! transition maps between overlapping cells are the affine gluings of shared
+//! faces. The atlas is therefore **piecewise affine** -- a statement about the
+//! maps, which needs no metric. (Give it one, and the simplicial manifold it
+//! presents is piecewise *flat*: curvature vanishes on the cell interiors and
+//! concentrates on the codimension-2 hinges. That is a statement about the
+//! geometry, and it is not this module's business.)
+//!
+//! A point of the simplicial manifold is thus intrinsically a pair
 //! $(K, lambda)$ of a cell and the barycentric coordinates within it -- a
 //! [`MeshPoint`].
 //!

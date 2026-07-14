@@ -23,7 +23,7 @@ use {
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  ddf::{cochain::Cochain, field::ExteriorField},
+  ddf::{cochain::Cochain, section::Section},
   exterior::{Covariant, ExteriorGrade},
   manifold::geometry::coord::quadrature::SimplexQuadRule,
 };
@@ -103,10 +103,10 @@ pub fn solve_with_essential_bc(
 /// $h = diff u \/ diff n$. Homogeneous natural conditions need no call.
 pub fn neumann_load(
   boundary: &BoundaryWhitneyComplex,
-  data: &(impl ExteriorField<Covariant> + Sync),
+  data: &(impl Section<Covariant> + Sync),
   qr: Option<SimplexQuadRule>,
 ) -> Vector {
-  assert_eq!(data.dim_intrinsic(), boundary.topology().dim());
+  assert_eq!(data.dim(), boundary.topology().dim());
   let elvec = SourceElVec::new(data, qr);
   let load = assemble_galvec(boundary.topology(), boundary.geometry(), elvec);
   boundary.trace(data.grade()).transpose() * load

@@ -4,7 +4,7 @@ use {
     combo::{factorial, Combination},
     linalg::nalgebra::{Matrix, Vector},
   },
-  ddf::{field::ExteriorField, whitney::lsf::WhitneyLsf},
+  ddf::{section::Section, whitney::form::WhitneyForm},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
   manifold::{
     geometry::{cell_volume, coord::quadrature::SimplexQuadRule, coord::CoordRef},
@@ -219,14 +219,14 @@ pub trait ElVecProvider: Sync {
 pub struct SourceElVec<'a, F> {
   source: &'a F,
   qr: SimplexQuadRule,
-  whitneys: Vec<WhitneyLsf>,
+  whitneys: Vec<WhitneyForm>,
 }
-impl<'a, F: ExteriorField<Covariant>> SourceElVec<'a, F> {
+impl<'a, F: Section<Covariant>> SourceElVec<'a, F> {
   pub fn new(source: &'a F, qr: Option<SimplexQuadRule>) -> Self {
-    let dim = source.dim_intrinsic();
+    let dim = source.dim();
     let qr = qr.unwrap_or(SimplexQuadRule::degree(dim, 1));
     let whitneys = standard_subsimps(dim, source.grade())
-      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
+      .map(|dof_simp| WhitneyForm::standard(dim, dof_simp))
       .collect();
     Self {
       source,
@@ -235,7 +235,7 @@ impl<'a, F: ExteriorField<Covariant>> SourceElVec<'a, F> {
     }
   }
 }
-impl<F: Sync + ExteriorField<Covariant>> ElVecProvider for SourceElVec<'_, F> {
+impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
@@ -263,7 +263,7 @@ impl<F: Sync + ExteriorField<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 mod test {
   use super::*;
 
-  use ddf::whitney::lsf::WhitneyLsf;
+  use ddf::whitney::form::WhitneyForm;
   use manifold::{geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps};
 
   use approx::assert_relative_eq;
@@ -328,7 +328,7 @@ mod test {
         let difdif = CodifDifElmat::new(dim, grade).eval(&geo.riemannian_metric());
 
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
-          .map(|simp| WhitneyLsf::standard(dim, simp).dif())
+          .map(|simp| WhitneyForm::standard(dim, simp).dif())
           .collect();
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {

@@ -25,7 +25,7 @@
 extern crate nalgebra as na;
 
 use common::linalg::nalgebra::Vector;
-use ddf::{cochain::Cochain, derham::derham_map_coord};
+use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
 use exterior::field::DiffFormClosure;
 use formoniq::{
   problems::maxwell::{
@@ -69,7 +69,7 @@ fn main() {
     },
     dim,
   );
-  let e0 = derham_map_coord(&e_field, &topology, &coords, 3);
+  let e0 = derham_map(&e_field.pullback_on(&topology, &coords), &topology, 3);
   let b0 = Cochain::new(2, Vector::zeros(fes.ndofs(2)));
   let initial = MaxwellState::new(e0, b0);
 
@@ -122,7 +122,7 @@ fn main() {
   let ops = MaxwellOperators::new(&fes, medium);
   let stiffness = ops.stiffness();
 
-  let e0 = derham_map_coord(&e_field, &topology, &coords, 3);
+  let e0 = derham_map(&e_field.pullback_on(&topology, &coords), &topology, 3);
   let e_dot0 = Cochain::new(1, Vector::zeros(fes.ndofs(1)));
   let initial = CurlCurlState::new(e0, e_dot0);
 

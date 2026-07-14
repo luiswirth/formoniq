@@ -5,7 +5,7 @@
 //! We discretize this problem on a tensor-product mesh with $n$ subdivisions,
 //! resulting in $h=1$, making $h$-scaling irrelevant.
 //! The Mesh vertices are ordered lexicographically.
-//! Piecewise-linear FEM and FDM should give rise to the same LSE,
+//! Piecewise-affine FEM and FDM should give rise to the same LSE,
 //! since both are solving for values at the mesh vertices.
 //! The LSE rows might be scaled differently between the two,
 //! so we convert the LSE into a canonical normalized form,

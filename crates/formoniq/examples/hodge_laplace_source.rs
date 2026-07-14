@@ -1,6 +1,6 @@
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  ddf::field::CoordFieldExt,
+  ddf::section::CoordFieldExt,
   exterior::{field::DiffFormClosure, ExteriorElement},
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,

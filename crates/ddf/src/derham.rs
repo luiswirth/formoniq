@@ -10,7 +10,8 @@
 //! - $R compose dif = dif compose R$: Stokes' theorem
 //!   (test `derham_map_is_cochain_map`, below).
 //! - $dif compose W = W compose dif$: Whitney forms are a subcomplex
-//!   (test `whitney_interpolation_is_cochain_map` in [`crate::whitney::form`]).
+//!   (test `whitney_interpolation_is_cochain_map` in
+//!   [`crate::whitney::interpolant`]).
 //!
 //! The integral $integral_sigma omega$ of a $k$-form over a $k$-simplex is
 //! **metric-free** -- it pairs the form with the tangent blade of the simplex,
@@ -22,7 +23,7 @@
 //! gluing that fixes $sigma$, and the pairing sees only the part of $omega$
 //! tangential to $sigma$, on which the charts agree.
 
-use crate::{field::ExteriorField, CoordSimplexExt};
+use crate::{section::Section, CoordSimplexExt};
 
 use {
   common::combo::Combination,
@@ -40,13 +41,19 @@ use {
 
 use crate::cochain::Cochain;
 
-/// The de Rham map: discretize a differential $k$-form on the manifold into a
-/// $k$-cochain by integrating it over each $k$-simplex of the mesh, with
+/// The de Rham map: discretize a differential $k$-form on the simplicial
+/// manifold into a $k$-cochain by integrating it over each $k$-simplex, with
 /// quadrature exact for polynomial integrands of the given degree.
 ///
-/// Metric-free, and defined on any geometry -- including none at all.
+/// Metric-free, and defined on any geometry -- including none at all. An
+/// analytic form given in coordinates reaches this through the pullback, so
+/// that $R (phi^* omega)$ reads as the composition it is:
+///
+/// ```ignore
+/// derham_map(&omega.pullback_on(&topology, &coords), &topology, 1)
+/// ```
 pub fn derham_map(
-  field: &impl ExteriorField<Covariant>,
+  field: &impl Section<Covariant>,
   topology: &Complex,
   quad_degree: usize,
 ) -> Cochain {
@@ -68,17 +75,6 @@ pub fn derham_map(
   Cochain::new(grade, coeffs)
 }
 
-/// The de Rham map of a coordinate form, pulled back onto the mesh.
-pub fn derham_map_coord(
-  field: &impl exterior::field::CoordField<Covariant>,
-  topology: &Complex,
-  coords: &MeshCoords,
-  quad_degree: usize,
-) -> Cochain {
-  use crate::field::CoordFieldExt;
-  derham_map(&field.pullback_on(topology, coords), topology, quad_degree)
-}
-
 /// The face of the reference $n$-simplex spanned by the given local vertex
 /// positions: the image of a face of a cell under that cell's chart.
 ///
@@ -98,7 +94,7 @@ pub fn reference_face(cell_dim: Dim, positions: &Combination) -> SimplexCoords {
 /// quadrature of the duality pairing against the face's tangent blade --
 /// no metric anywhere.
 pub fn integrate_over_face(
-  field: &impl ExteriorField<Covariant>,
+  field: &impl Section<Covariant>,
   cell: SimplexIdx,
   face: &SimplexCoords,
   qr: &SimplexQuadRule,
@@ -118,6 +114,8 @@ pub fn integrate_over_face(
 #[cfg(test)]
 mod test {
   use super::*;
+
+  use crate::section::CoordFieldExt;
 
   use {
     common::linalg::nalgebra::Vector,
@@ -176,8 +174,9 @@ mod test {
       let dim = exterior::field::CoordField::dim(&form);
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
 
-      let dif_of_projected = derham_map_coord(&form, &topology, &coords, 1).dif(&topology);
-      let projected_dif = derham_map_coord(&dif_form, &topology, &coords, 1);
+      let dif_of_projected =
+        derham_map(&form.pullback_on(&topology, &coords), &topology, 1).dif(&topology);
+      let projected_dif = derham_map(&dif_form.pullback_on(&topology, &coords), &topology, 1);
 
       assert_eq!(dif_of_projected.grade(), projected_dif.grade());
       assert_relative_eq!(
@@ -196,8 +195,6 @@ mod test {
   /// the reference-frame implementation legitimate.
   #[test]
   fn derham_map_is_independent_of_supporting_cell() {
-    use crate::field::CoordFieldExt;
-
     for dim in 2..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
       let field = DiffFormClosure::one_form(

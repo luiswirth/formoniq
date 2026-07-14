@@ -3,7 +3,7 @@
 
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  ddf::{derham::derham_map, field::CoordFieldExt},
+  ddf::{derham::derham_map, section::CoordFieldExt},
   exterior::field::DiffFormClosure,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::laplace_beltrami,
