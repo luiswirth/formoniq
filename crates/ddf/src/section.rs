@@ -100,7 +100,7 @@ impl<F: CoordField<Covariant>> Section<Covariant> for Pullback<'_, F> {
     self.field.grade()
   }
   fn at(&self, point: &MeshPoint) -> MultiForm {
-    let chart = point.cell.handle(self.topology).coord_simplex(self.coords);
+    let chart = point.chart(self.topology).coord_simplex(self.coords);
     let global = chart.bary2global(point.bary());
     self.field.at(&global).pullback(&chart.linear_transform())
   }
@@ -174,7 +174,7 @@ impl<'a, F: Section<Covariant>> Sampler<'a, F> {
 
   /// The value at a mesh point, expressed in the ambient frame.
   pub fn at_point(&self, point: &MeshPoint) -> MultiForm {
-    let chart = point.cell.handle(self.topology).coord_simplex(self.coords);
+    let chart = point.chart(self.topology).coord_simplex(self.coords);
     self.field.at(point).pullback(&chart.inv_linear_transform())
   }
 
@@ -231,7 +231,7 @@ pub struct MetricOp<'a, F, G> {
 }
 impl<'a, F, G: Geometry> MetricOp<'a, F, G> {
   fn cell_metric(&self, point: &MeshPoint) -> RiemannianMetric {
-    self.geometry.cell_metric(point.cell.handle(self.topology))
+    self.geometry.cell_metric(point.chart(self.topology))
   }
 }
 
