@@ -144,31 +144,27 @@ fn laplace_matrix_1d_interior(nvertices: usize) -> Matrix<i32> {
 
 #[test]
 fn feec_vs_fdm_interior() {
-  let mut equal = true;
   // TODO: increase numbers, once performance allows
   for nboxes_per_dim in 1..=2 {
     for dim in 1..=4 {
       let nvertices_per_dim = nboxes_per_dim + 1;
       let feec = feec_galmat_interior(dim, nboxes_per_dim);
       let fdm = ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nvertices_per_dim; dim]);
-      equal &= compare_system_matrics(&feec, &fdm);
+      assert_eq!(feec, fdm, "dim={dim} nboxes_per_dim={nboxes_per_dim}");
     }
   }
-  assert!(equal);
 }
 
 // TODO: get this right!
 //#[test]
 #[allow(dead_code)]
 fn feec_vs_fdm_boundary() {
-  let mut equal = true;
   for dim in 1..=3 {
     let feec = feec_galmat_boundary(dim);
     let feec = cast_int(feec);
     let fdm = ndimensionalize_operator(|_| laplace_matrix_1d_boundary(), &vec![1; dim]);
-    equal &= compare_system_matrics(&feec, &fdm);
+    assert_eq!(feec, fdm, "dim={dim}");
   }
-  assert!(equal);
 }
 
 /// Galmat from normalized LSE, where RHS galvec would be constant 1.
@@ -211,19 +207,6 @@ fn normalize_galerkin_lse(galmat: &mut Matrix, galvec: &mut Vector) {
     galmat_row /= *galvec_entry;
     *galvec_entry = 1.0;
   }
-}
-
-#[must_use]
-fn compare_system_matrics(feec: &Matrix<i32>, fdm: &Matrix<i32>) -> bool {
-  let diff = feec - fdm;
-  let equal = diff.iter().all(|&e| e == 0);
-  if !equal {
-    println!("FEEC:\n{feec}");
-    println!("FDM:\n{fdm}");
-    println!("diff:\n{diff}");
-    return false;
-  }
-  true
 }
 
 fn cast_int(mat: Matrix) -> Matrix<i32> {
