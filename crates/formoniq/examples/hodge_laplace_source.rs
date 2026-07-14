@@ -1,5 +1,6 @@
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
+  ddf::field::CoordFieldExt,
   exterior::{field::DiffFormClosure, ExteriorElement},
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,
@@ -36,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let dif_solution_exact = DiffFormClosure::new(
-      Box::new(move |p: CoordRef| {
+      move |p: CoordRef| {
         let dim = p.len();
         let ncomponents = if dim > 1 { dim * (dim - 1) / 2 } else { 0 };
         let mut components = Vec::with_capacity(ncomponents);
@@ -58,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
           }
         }
         ExteriorElement::new(components.into(), dim, 2)
-      }),
+      },
       dim,
       2,
     );
@@ -92,11 +93,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       let (topology, coords) = box_mesh.compute_coord_complex();
       let metric = coords.to_edge_lengths(&topology);
 
-      let source_data = assemble_galvec(
-        &topology,
-        &metric,
-        SourceElVec::new(&laplacian_exact, &coords, topology.dim(), None),
-      );
+      // The coordinate fields become fields on the manifold by pullback along
+      // the cell charts; everything downstream is intrinsic.
+      let solution_exact = solution_exact.pullback_on(&topology, &coords);
+      let dif_solution_exact = dif_solution_exact.pullback_on(&topology, &coords);
+      let laplacian_exact = laplacian_exact.pullback_on(&topology, &coords);
+
+      let source_data =
+        assemble_galvec(&topology, &metric, SourceElVec::new(&laplacian_exact, None));
 
       let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(
         WhitneyComplex::new(&topology, &metric),
@@ -111,12 +115,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
       };
 
-      let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &coords);
+      let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &metric);
       let conv_rate_l2 = conv_rate(&errors_l2, error_l2);
       errors_l2.push(error_l2);
 
       let dif_galsol = galsol.dif(&topology);
-      let error_hd = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
+      let error_hd = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &metric);
       let conv_rate_hd = conv_rate(&errors_hd, error_hd);
       errors_hd.push(error_hd);
 

@@ -4,11 +4,11 @@ use super::{
 };
 use crate::{
   geometry::{metric::simplex::SimplexLengths, refsimp_vol},
+  point::{is_bary_inside, local2bary},
   topology::{handle::SimplexRef, simplex::Simplex},
   Dim,
 };
 
-use approx::assert_relative_eq;
 use common::{
   affine::AffineTransform,
   combo::Sign,
@@ -173,22 +173,6 @@ impl SimplexCoords {
     is_bary_inside(&self.global2bary(global))
   }
 }
-pub fn bary2local<'a>(bary: impl Into<CoordRef<'a>>) -> Coord {
-  let bary = bary.into();
-  bary.view_range(1.., ..).into()
-}
-pub fn local2bary<'a>(local: impl Into<CoordRef<'a>>) -> Coord {
-  let local = local.into();
-  let bary0 = 1.0 - local.sum();
-  local.insert_row(0, bary0)
-}
-
-pub fn is_bary_inside<'a>(bary: impl Into<CoordRef<'a>>) -> bool {
-  let bary = bary.into();
-  assert_relative_eq!(bary.sum(), 1.0, epsilon = 1e-9);
-  bary.iter().all(|&b| (0.0..=1.0).contains(&b))
-}
-
 impl SimplexCoords {
   /// Coordinate subsimplices.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords> + use<'_> {
@@ -223,38 +207,6 @@ impl SimplexCoords {
   }
 }
 
-pub fn barycenter_local(dim: Dim) -> Coord {
-  let nvertices = dim + 1;
-  let value = 1.0 / nvertices as f64;
-  Vector::from_element(dim, value)
-}
-pub fn barycenter_bary(dim: Dim) -> Coord {
-  let nvertices = dim + 1;
-  let value = 1.0 / nvertices as f64;
-  Vector::from_element(nvertices, value)
-}
-
-pub fn ref_bary<'a>(ivertex: usize, coord: impl Into<CoordRef<'a>>) -> f64 {
-  let coord = coord.into();
-  let dim = coord.len();
-  assert!(ivertex <= dim);
-  if ivertex == 0 {
-    1.0 - coord.sum()
-  } else {
-    coord[ivertex - 1]
-  }
-}
-pub fn ref_difbary(dim: Dim, ivertex: usize) -> CoTangentVector {
-  assert!(ivertex <= dim);
-  if ivertex == 0 {
-    CoTangentVector::from_element(dim, -1.0)
-  } else {
-    let mut v = CoTangentVector::zeros(dim);
-    v[ivertex - 1] = 1.0;
-    v
-  }
-}
-
 pub trait SimplexRefExt {
   fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords;
 }
@@ -267,7 +219,12 @@ impl SimplexRefExt for SimplexRef<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::point::{ref_bary, ref_difbarys};
 
+  use approx::assert_relative_eq;
+
+  /// The standard simplex is the coordinate realization of the reference
+  /// chart: its global coordinates *are* the local ones.
   #[test]
   fn standard_barys() {
     for dim in 0..=4 {
@@ -282,15 +239,14 @@ mod test {
     }
   }
 
+  /// The barycentric differentials of the standard simplex are the
+  /// metric-free reference ones -- which is what lets the intrinsic Whitney
+  /// forms use [`ref_difbarys`] and never touch coordinates.
   #[test]
   fn standard_difbarys() {
     for dim in 0..=4 {
-      let simp = SimplexCoords::standard(dim);
-      let computed = simp.difbarys();
-      for ibary in 0..simp.nvertices() {
-        let expected = ref_difbary(dim, ibary);
-        assert_relative_eq!(computed.row(ibary).into_owned(), expected, epsilon = 1e-12);
-      }
+      let computed = SimplexCoords::standard(dim).difbarys();
+      assert_relative_eq!(computed, ref_difbarys(dim), epsilon = 1e-12);
     }
   }
 }

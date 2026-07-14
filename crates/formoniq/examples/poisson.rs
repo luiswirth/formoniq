@@ -3,7 +3,7 @@
 
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
-  ddf::derham::derham_map,
+  ddf::{derham::derham_map, field::CoordFieldExt},
   exterior::field::DiffFormClosure,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::laplace_beltrami,
@@ -45,15 +45,18 @@ fn main() {
       let (topology, coords) = box_mesh.compute_coord_complex();
       let metric = coords.to_edge_lengths(&topology);
 
-      let load_vector = assemble_galvec(
-        &topology,
-        &metric,
-        SourceElVec::new(&laplacian_exact, &coords, topology.dim(), None),
-      );
+      // The coordinate fields become fields on the manifold by pullback along
+      // the cell charts; everything downstream is intrinsic.
+      let solution_exact = solution_exact.pullback_on(&topology, &coords);
+      let dif_solution_exact = dif_solution_exact.pullback_on(&topology, &coords);
+      let laplacian_exact = laplacian_exact.pullback_on(&topology, &coords);
+
+      let load_vector =
+        assemble_galvec(&topology, &metric, SourceElVec::new(&laplacian_exact, None));
 
       let whitney = WhitneyComplex::new(&topology, &metric);
       let boundary = whitney.boundary().unwrap();
-      let solution_projected = derham_map(&solution_exact, &topology, &coords, 1);
+      let solution_projected = derham_map(&solution_exact, &topology, 1);
       let boundary_values = boundary.trace_cochain(&solution_projected);
 
       let galsol = laplace_beltrami::solve_laplace_beltrami_source(
@@ -69,12 +72,12 @@ fn main() {
         })
       };
 
-      let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &coords);
+      let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &metric);
       let conv_rate_l2 = conv_rate(&errors_l2, error_l2);
       errors_l2.push(error_l2);
 
       let dif_galsol = galsol.dif(&topology);
-      let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &coords);
+      let error_h1 = fe_l2_error(&dif_galsol, &dif_solution_exact, &topology, &metric);
       let conv_rate_h1 = conv_rate(&errors_h1, error_h1);
       errors_h1.push(error_h1);
 

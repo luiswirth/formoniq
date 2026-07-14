@@ -20,11 +20,9 @@
 //! dimension below ambient, e.g. a surface in space) a query point is accepted
 //! only if it also lies within tolerance of the cell's affine hull.
 
-use super::{
-  simplex::{local2bary, SimplexRefExt},
-  Coord, CoordRef,
-};
+use super::{simplex::SimplexRefExt, Coord, CoordRef};
 use crate::{
+  point::{local2bary, MeshPoint},
   topology::{complex::Complex, handle::SimplexIdx},
   Dim,
 };
@@ -99,14 +97,6 @@ struct CellAffine {
   inv: Matrix,
 }
 
-/// A located point: the containing cell and the barycentric coordinates of the
-/// point within it.
-#[derive(Debug, Clone)]
-pub struct CellLocation {
-  pub cell: SimplexIdx,
-  pub bary: Coord,
-}
-
 /// A bounding-volume hierarchy over the cells of a coordinate mesh, answering
 /// point-containment queries in logarithmic time. Build once, query many times.
 pub struct PointLocator {
@@ -178,9 +168,13 @@ impl PointLocator {
     }
   }
 
-  /// Locate the cell containing `x`, together with the barycentric coordinates
-  /// of `x` within it. `None` if `x` lies outside the mesh.
-  pub fn locate<'a>(&self, x: impl Into<CoordRef<'a>>) -> Option<CellLocation> {
+  /// The point of the manifold at the global coordinate `x`: the containing
+  /// cell and the barycentric coordinates within it. `None` if `x` lies
+  /// outside the mesh.
+  ///
+  /// This is the inverse of the embedding, and the bridge from a coordinate
+  /// domain into the intrinsic chart the fields actually live on.
+  pub fn locate<'a>(&self, x: impl Into<CoordRef<'a>>) -> Option<MeshPoint> {
     let x = x.into();
     if self.cells.is_empty() {
       return None;
@@ -196,10 +190,8 @@ impl PointLocator {
         BvhNode::Leaf { start, count, .. } => {
           for &prim in &self.order[*start..*start + *count] {
             if let Some(bary) = self.try_barycentric(prim, x) {
-              return Some(CellLocation {
-                cell: SimplexIdx::new(self.cell_dim, self.cells[prim].kidx),
-                bary,
-              });
+              let cell = SimplexIdx::new(self.cell_dim, self.cells[prim].kidx);
+              return Some(MeshPoint::new(cell, bary));
             }
           }
         }

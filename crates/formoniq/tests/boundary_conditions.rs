@@ -9,7 +9,7 @@
 extern crate nalgebra as na;
 
 use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
-use ddf::{cochain::Cochain, derham::derham_map};
+use ddf::{cochain::Cochain, derham::derham_map_coord, field::CoordFieldExt};
 use exterior::field::DiffFormClosure;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use manifold::gen::cartesian::CartesianMeshInfo;
@@ -28,7 +28,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
     let boundary = whitney.boundary().unwrap();
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
+    let exact_cochain = derham_map_coord(&exact, &topology, &coords, 1);
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
     let laplace = CsrMatrix::from(&whitney.codif_dif(0));
@@ -59,7 +59,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     let boundary = whitney.boundary().unwrap();
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
+    let exact_cochain = derham_map_coord(&exact, &topology, &coords, 1);
 
     // System: (grad u, grad v) + (u, v).
     let system = CsrMatrix::from(&whitney.codif_dif(0)) + CsrMatrix::from(&whitney.mass(0));
@@ -67,12 +67,10 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
     let source = DiffFormClosure::coordinate_component(0, dim);
+    let source = source.pullback_on(&topology, &coords);
     let qr = manifold::geometry::coord::quadrature::SimplexQuadRule::degree(dim, 3);
-    let mut rhs = assemble::assemble_galvec(
-      &topology,
-      &metric,
-      SourceElVec::new(&source, &coords, dim, Some(qr)),
-    );
+    let mut rhs =
+      assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, Some(qr)));
 
     // Natural boundary load: h = du/dn = -1 on x_1 = 0, +1 on x_1 = 1,
     // 0 on the remaining faces.
@@ -88,7 +86,11 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
       },
       dim,
     );
-    rhs += bc::neumann_load(&boundary, &coords, &flux, None);
+    // The boundary data is a field on the boundary manifold, reached from the
+    // ambient flux by pullback against the trace coordinates.
+    let boundary_coords = boundary.boundary_complex().trace_coords(&coords);
+    let flux = flux.pullback_on(boundary.topology(), &boundary_coords);
+    rhs += bc::neumann_load(&boundary, &flux, None);
 
     let solution = FaerCholesky::new(system).solve(&rhs);
 
@@ -123,7 +125,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
     let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
+    let exact_cochain = derham_map_coord(&exact, &topology, &coords, 1);
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
     let laplace = CsrMatrix::from(&whitney.codif_dif(0));
@@ -157,7 +159,7 @@ fn robin_reproduces_linear_solution() {
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
-    let exact_cochain = derham_map(&exact, &topology, &coords, 1);
+    let exact_cochain = derham_map_coord(&exact, &topology, &coords, 1);
 
     let alpha = 1.0;
     // h = du/dn + alpha u: constant on each Robin face.
@@ -184,7 +186,9 @@ fn robin_reproduces_linear_solution() {
     let gamma_robin = whitney.boundary_part(robin_facets);
     let system =
       CsrMatrix::from(&whitney.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
-    let rhs = bc::neumann_load(&gamma_robin, &coords, &robin_data, None);
+    let boundary_coords = gamma_robin.boundary_complex().trace_coords(&coords);
+    let robin_data = robin_data.pullback_on(gamma_robin.topology(), &boundary_coords);
+    let rhs = bc::neumann_load(&gamma_robin, &robin_data, None);
 
     let solution = if dirichlet_facets.is_empty() {
       // 1d: pure Robin.
