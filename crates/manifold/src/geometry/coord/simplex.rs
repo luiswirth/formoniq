@@ -56,7 +56,7 @@ impl SimplexCoords {
     self.dim_intrinsic() == self.dim_ambient()
   }
 
-  pub fn coord(&self, ivertex: usize) -> CoordRef {
+  pub fn coord(&self, ivertex: usize) -> CoordRef<'_> {
     self.vertices.coord(ivertex)
   }
   pub fn coord_iter(
@@ -65,7 +65,7 @@ impl SimplexCoords {
     self.vertices.coord_iter()
   }
 
-  pub fn base_vertex(&self) -> CoordRef {
+  pub fn base_vertex(&self) -> CoordRef<'_> {
     self.coord(0)
   }
 

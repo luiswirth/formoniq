@@ -77,7 +77,6 @@ mod test {
     manifold::gen::cartesian::CartesianMeshInfo,
   };
 
-
   use approx::assert_relative_eq;
 
   /// $R compose dif = dif compose R$: the de Rham map is a cochain map.

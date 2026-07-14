@@ -66,7 +66,15 @@ pub fn solve_wave(
     let dt = t1 - t0;
 
     let prev = solution.last().unwrap();
-    let next = solve_wave_step(prev, dt, &force, &laplace, &mass, &mass_cholesky, &inclusion);
+    let next = solve_wave_step(
+      prev,
+      dt,
+      &force,
+      &laplace,
+      &mass,
+      &mass_cholesky,
+      &inclusion,
+    );
 
     let energy = next.energy(&laplace, &mass);
     if (energy - initial_energy).abs() >= ENERGY_TOLERANCE * initial_energy {

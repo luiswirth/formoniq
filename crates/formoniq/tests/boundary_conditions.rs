@@ -57,8 +57,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact, &topology, &coords, 1);
 
     // System: (grad u, grad v) + (u, v).
-    let system =
-      CsrMatrix::from(&fes.codif_dif(0)) + CsrMatrix::from(&fes.mass(0));
+    let system = CsrMatrix::from(&fes.codif_dif(0)) + CsrMatrix::from(&fes.mass(0));
 
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
@@ -110,7 +109,8 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
       .boundary_facets()
       .into_iter()
       .filter(|facet| {
-        let facet_coords = SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
+        let facet_coords =
+          SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
         let x = facet_coords.barycenter()[0];
         x <= 1e-12 || x >= 1.0 - 1e-12
       })
@@ -168,19 +168,15 @@ fn robin_reproduces_linear_solution() {
     );
 
     let is_x_facet = |facet: &manifold::topology::handle::SimplexIdx| {
-      let facet_coords =
-        SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
+      let facet_coords = SimplexCoords::from_simplex_and_coords(&facet.handle(&topology), &coords);
       let x = facet_coords.barycenter()[0];
       x <= 1e-12 || x >= 1.0 - 1e-12
     };
-    let (robin_facets, dirichlet_facets): (Vec<_>, Vec<_>) = topology
-      .boundary_facets()
-      .into_iter()
-      .partition(is_x_facet);
+    let (robin_facets, dirichlet_facets): (Vec<_>, Vec<_>) =
+      topology.boundary_facets().into_iter().partition(is_x_facet);
 
     let gamma_robin = fes.boundary_part(robin_facets);
-    let system =
-      CsrMatrix::from(&fes.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
+    let system = CsrMatrix::from(&fes.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
     let rhs = bc::neumann_load(&gamma_robin, &coords, &robin_data, None);
 
     let solution = if dirichlet_facets.is_empty() {

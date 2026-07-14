@@ -252,7 +252,10 @@ where
   fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec {
     let cell_coords = SimplexCoords::from_simplex_and_coords(topology, self.mesh_coords);
 
-    let inner = multi_gramian(geometry.riemannian_metric().covector_gramian(), self.grade());
+    let inner = multi_gramian(
+      geometry.riemannian_metric().covector_gramian(),
+      self.grade(),
+    );
 
     let mut elvec = ElVec::zeros(self.whitneys.len());
     for (iwhitney, whitney) in self.whitneys.iter().enumerate() {

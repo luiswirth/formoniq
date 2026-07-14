@@ -123,7 +123,10 @@ impl BoundaryComplex {
   /// the boundary simplices. A cochain map, $"tr" compose dif = dif compose "tr"$,
   /// and the cokernel projection of the relative inclusion.
   pub fn trace_operator(&self, grade: Dim) -> CooMatrix {
-    let mut trace = CooMatrix::new(self.parent_kidxs[grade].len(), self.parent_nsimplices[grade]);
+    let mut trace = CooMatrix::new(
+      self.parent_kidxs[grade].len(),
+      self.parent_nsimplices[grade],
+    );
     for (boundary_kidx, &parent_kidx) in self.parent_kidxs[grade].iter().enumerate() {
       trace.push(boundary_kidx, parent_kidx, 1.0);
     }
@@ -178,7 +181,11 @@ mod test {
         } else {
           (k == 0 || k == dim - 1) as usize
         };
-        assert_eq!(boundary.complex().homology_dim(k), expected, "dim={dim} k={k}");
+        assert_eq!(
+          boundary.complex().homology_dim(k),
+          expected,
+          "dim={dim} k={k}"
+        );
       }
     }
   }
