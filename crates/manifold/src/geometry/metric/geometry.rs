@@ -6,10 +6,9 @@
 //! It is implemented by every geometry representation, related by the
 //! derivation chain coords $->$ edge lengths $->$ per-cell metric:
 //!
-//! - [`MeshCoords`](crate::geometry::coord::mesh::MeshCoords): extrinsic
-//!   embedding (grade-0 data), which induces the metric.
-//! - [`MeshLengths`](super::mesh::MeshLengths): intrinsic Regge edge lengths
-//!   (grade-1 data).
+//! - [`MeshCoords`]: extrinsic embedding (grade-0 data), which induces the
+//!   metric.
+//! - [`MeshLengths`]: intrinsic Regge edge lengths (grade-1 data).
 //! - [`CellGramians`]: the metric tensors themselves as per-cell data (grade
 //!   n) -- the most local, coordinate-free geometry, living natively on the
 //!   cell skeleton with no need of a global edge indexing.
