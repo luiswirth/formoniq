@@ -37,11 +37,11 @@ Strict crate ladder, each layer adding exactly one thing:
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `manifold` never about forms.
 
-**Dependencies flow down; concepts float up.** A concept belongs in the lowest
-crate (or module) that can express it with the dependencies it already has. If
-expressing it there would need a new downward dependency, it belongs one level
-up instead, in the crate that joins the two — which is why `ddf` exists. Never
-widen a lower crate's dependencies to make a method fit.
+**Concepts float up.** A concept belongs in the lowest crate (or module) that can
+express it with the dependencies it already has. If expressing it there would
+need a new downward dependency, it belongs one level up instead, in the crate
+that joins the two — which is why `ddf` exists. Never widen a lower crate's
+dependencies to make a method fit.
 
 Composition therefore reaches down from above: a free function in the joining
 crate by default, or a thin `...Ext` trait where method syntax carries the math
@@ -158,12 +158,10 @@ who shows up.
   reason has to stand on its own.
 - **Verify before asserting.** Every number, flag and capability gets checked
   against the code first. A confident unverified specific is worse than none.
-- **Never reproduce from memory what has a canonical source.** License texts,
-  version pins, dependency and CI action versions, external APIs, standards:
-  fetch them, do not recall them. Recall yields the plausible, not the correct,
-  and the two are indistinguishable on the page — a license reconstructed from
-  memory or a version pinned to whatever was current a year ago is a defect that
-  survives review precisely because it looks right.
+- **Fetch, don't recall.** Anything with a canonical source — a license text, a
+  version pin, a CI action version, an external API — is retrieved, never
+  reproduced from memory. Recall yields the plausible, which is indistinguishable
+  from the correct on the page, and therefore survives review.
 - **Keep the tooling out of the content.** AI assistance here is deliberate and
   disclosed, in commit trailers. That is what transparency looks like; it does
   not mean narrating the assistant inside a README, an issue or a doc comment.
@@ -199,6 +197,9 @@ cargo test --workspace                 # law tests + integration tests; stay gre
 cargo doc --workspace --no-deps        # doc comments carry the math: no warnings,
                                        # intra-doc links must resolve
 ```
+
+CI runs the same four on every push and pull request; a red build is a broken
+commit, not a flaky one.
 
 The examples are the end-to-end check and are run by hand:
 
