@@ -158,6 +158,12 @@ who shows up.
   reason has to stand on its own.
 - **Verify before asserting.** Every number, flag and capability gets checked
   against the code first. A confident unverified specific is worse than none.
+- **Never reproduce from memory what has a canonical source.** License texts,
+  version pins, dependency and CI action versions, external APIs, standards:
+  fetch them, do not recall them. Recall yields the plausible, not the correct,
+  and the two are indistinguishable on the page — a license reconstructed from
+  memory or a version pinned to whatever was current a year ago is a defect that
+  survives review precisely because it looks right.
 - **Keep the tooling out of the content.** AI assistance here is deliberate and
   disclosed, in commit trailers. That is what transparency looks like; it does
   not mean narrating the assistant inside a README, an issue or a doc comment.
