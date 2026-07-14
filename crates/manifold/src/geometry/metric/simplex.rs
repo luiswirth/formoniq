@@ -16,7 +16,8 @@ use std::f64::consts::SQRT_2;
 #[derive(Debug, Clone)]
 pub struct SimplexLengths {
   /// The binom(dim+1,2) edge lengths, on the colexicographically ordered
-  /// vertex pairs: the same order as [`Simplex::subsimps`] with dim 1.
+  /// vertex pairs: the same order as
+  /// [`Simplex::subsimps`](crate::topology::simplex::Simplex::subsimps) with dim 1.
   lengths: Vector,
   /// Dimension of the simplex.
   dim: Dim,

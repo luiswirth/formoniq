@@ -75,10 +75,7 @@ pub type MultiForm = ExteriorElement<Covariant>;
 /// $(Lambda^k A)_(I J) = det A[I, J]$.
 ///
 /// Functoriality $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$ is the
-/// Cauchy-Binet formula. This single primitive acts covariantly on
-/// multivectors ([`MultiVector::pushforward`]), contravariantly on
-/// multiforms ([`MultiForm::pullback`]) and induces the inner product on
-/// $Lambda^k$ ([`multi_gramian`]).
+/// Cauchy-Binet formula.
 pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
   let nrows = exterior_dim(linear_map.nrows(), grade);
   let ncols = exterior_dim(linear_map.ncols(), grade);
@@ -269,13 +266,8 @@ impl<V: Variance> ExteriorElement<V> {
   /// $alpha wedge star beta = inner(alpha, beta) vol$ for all $alpha$,
   /// where $vol$ is the unit-volume element of this variance.
   ///
-  /// Metric-dependent and variance-uniform: with $G$ the variance-appropriate
-  /// Gramian ($g$ for multivectors, $g^(-1)$ for multiforms),
-  ///
-  /// $(star beta)_(I^c) = epsilon(I, I^c) (Lambda^k G beta)_I \/ sqrt(det G)$
-  ///
-  /// The positively oriented standard basis is assumed. For the Euclidean
-  /// metric the star is exactly the signed complement of each basis blade
+  /// Assumes the positively oriented standard basis. For the Euclidean metric
+  /// the star is exactly the signed complement of each basis blade
   /// ([`Combination::complement_signed`]).
   pub fn hodge_star(&self, metric: &RiemannianMetric) -> Self {
     let dim = self.dim;
