@@ -21,10 +21,7 @@ use {
 ///   = k! sum_i (-1)^i lambda_(sigma_i)
 ///     dif lambda_(sigma_0) wedge dots.c hat(dif lambda_(sigma_i)) dots.c wedge dif lambda_(sigma_k)$
 ///
-/// The contraction $iota_lambda$ is the Koszul operator $kappa$ of FEEC:
-/// together with the pullback $lambda^*$ it generates the whole
-/// $cal(P)_r^- Lambda^k$ family, of which the Whitney forms are the
-/// lowest-order case.
+/// The contraction $iota_lambda$ is the Koszul operator $kappa$ of FEEC.
 #[derive(Debug, Clone)]
 pub struct WhitneyLsf {
   cell_coords: SimplexCoords,
