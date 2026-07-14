@@ -19,7 +19,9 @@ use common::combo::Combination;
 ///
 /// A tolerance is unavoidable here: whether a point lies *on* a face is an
 /// equality test on floating-point weights, and it is what decides whether a
-/// [`Transition`] into a neighbouring chart exists at all.
+/// [`Transition`] into a neighbouring chart exists at all. It is the same
+/// question [`super::is_bary_inside`] asks of the closed cell,
+/// and it is answered with the same tolerance.
 pub const BARY_EPS: f64 = 1e-12;
 
 /// A point of the simplicial manifold: a cell together with the barycentric

@@ -102,10 +102,19 @@ pub fn local2bary<'a>(local: impl Into<LocalRef<'a>>) -> Bary {
 
 /// Whether the barycentric weights lie in the closed reference cell, rather
 /// than in the affine extension of the chart beyond it.
+///
+/// The weights sum to one -- that is what makes them barycentric -- so the
+/// closed cell is cut out by their nonnegativity alone, and the upper bound
+/// $lambda_i <= 1$ is implied rather than tested. Nonnegativity is tested up to
+/// [`BARY_EPS`], because the weights vanishing on a face are only ever
+/// floating-point zero, and a point of a face is a point of the cell.
 pub fn is_bary_inside<'a>(bary: impl Into<BaryRef<'a>>) -> bool {
   let bary = bary.into();
-  approx::assert_relative_eq!(bary.view().sum(), 1.0, epsilon = 1e-9);
-  bary.view().iter().all(|&b| (0.0..=1.0).contains(&b))
+  debug_assert!(
+    approx::relative_eq!(bary.view().sum(), 1.0, epsilon = 1e-9),
+    "Barycentric weights must sum to one."
+  );
+  bary.view().iter().all(|&b| b >= -BARY_EPS)
 }
 
 pub fn barycenter_bary(dim: Dim) -> Bary {
