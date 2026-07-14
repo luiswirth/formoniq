@@ -305,16 +305,6 @@ mod test {
     let complex = Complex::standard(dim);
     let cell = complex.cells().handle_iter().next().unwrap();
 
-    // print
-    for dim_sub in 0..=dim {
-      let skeleton = complex.skeleton(dim_sub);
-      for simp in skeleton.handle_iter() {
-        let simp_vertices = &*simp;
-        print!("{simp_vertices:?},");
-      }
-      println!();
-    }
-
     let cell_simplex = Simplex::standard(dim);
     for dim_sub in 0..=dim {
       let subs: Vec<_> = cell.mesh_subsimps(dim_sub).collect();
@@ -328,10 +318,9 @@ mod test {
       for (isub, sub) in subs.iter().enumerate() {
         let sub_vertices = &subs_vertices[isub];
         for dim_sup in dim_sub..dim {
-          let sups: Vec<_> = sub.mesh_supersimps(dim_sup).collect();
-          sups
-            .iter()
-            .all(|sup| sub_vertices.is_subsimplex_of(sup) && sup.is_subsimplex_of(&cell_simplex));
+          for sup in sub.mesh_supersimps(dim_sup) {
+            assert!(sub_vertices.is_subsimplex_of(&sup) && sup.is_subsimplex_of(&cell_simplex));
+          }
         }
       }
     }
