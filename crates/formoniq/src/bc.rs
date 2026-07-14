@@ -23,9 +23,9 @@ use {
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  ddf::cochain::Cochain,
-  exterior::{field::ExteriorField, ExteriorGrade},
-  manifold::geometry::coord::{mesh::MeshCoords, quadrature::SimplexQuadRule},
+  ddf::{cochain::Cochain, field::ExteriorField},
+  exterior::{Covariant, ExteriorGrade},
+  manifold::geometry::coord::quadrature::SimplexQuadRule,
 };
 
 /// A Galerkin system with essential boundary conditions imposed by affine
@@ -89,17 +89,25 @@ pub fn solve_with_essential_bc(
 /// $[integral_(diff K) angle.l "tr" W_sigma, h angle.r vol_(diff K)]_sigma$,
 /// to be added to the right-hand side of the unconstrained system.
 ///
-/// The data $h$ is a $k$-form field on the boundary (in ambient
-/// coordinates); for the scalar Laplacian ($k = 0$) it is the outward flux
+/// The data $h$ is a $k$-form field on the boundary manifold $diff K$ -- not
+/// on the parent mesh -- since the load is an integral over $diff K$ and only
+/// the trace of $h$ enters it. A form given in the ambient coordinates of the
+/// parent reaches it through the pullback adapter against the trace coords:
+///
+/// ```ignore
+/// let boundary_coords = boundary.boundary_complex().trace_coords(&coords);
+/// let h = flux.pullback_on(boundary.topology(), &boundary_coords);
+/// ```
+///
+/// For the scalar Laplacian ($k = 0$) the data is the outward flux
 /// $h = diff u \/ diff n$. Homogeneous natural conditions need no call.
 pub fn neumann_load(
   boundary: &BoundaryWhitneyComplex,
-  parent_coords: &MeshCoords,
-  data: &(impl ExteriorField + Sync),
+  data: &(impl ExteriorField<Covariant> + Sync),
   qr: Option<SimplexQuadRule>,
 ) -> Vector {
-  let boundary_coords = boundary.boundary_complex().trace_coords(parent_coords);
-  let elvec = SourceElVec::new(data, &boundary_coords, boundary.topology().dim(), qr);
+  assert_eq!(data.dim_intrinsic(), boundary.topology().dim());
+  let elvec = SourceElVec::new(data, qr);
   let load = assemble_galvec(boundary.topology(), boundary.geometry(), elvec);
   boundary.trace(data.grade()).transpose() * load
 }

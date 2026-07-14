@@ -29,9 +29,9 @@ Strict crate ladder, each layer adding exactly one thing:
 | crate      | is                                  | key contents |
 | ---------- | ----------------------------------- | ------------ |
 | `common`   | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, linalg backends (nalgebra/faer/petsc), `Dim` |
-| `exterior` | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star |
-| `manifold` | the simplicial Riemannian manifold  | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
-| `ddf`      | discrete differential forms         | `Cochain`, `whitney::` (`WhitneyLsf`, `WhitneyForm`), `derham::derham_map` |
+| `exterior` | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `field::CoordField<V>` (flat, mesh-independent) |
+| `manifold` | the simplicial Riemannian manifold  | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `point::MeshPoint` (the barycentric chart) |
+| `ddf`      | discrete differential forms         | `Cochain`, `field::ExteriorField<V>` (sections over the manifold) with `Pullback`/`Sampler`, `whitney::` (`WhitneyLsf`, `WhitneyForm`), `derham::derham_map` |
 | `formoniq` | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
@@ -67,13 +67,25 @@ and passes tests.
    it must not sit in the core path. A feature that only works on embedded
    meshes is an unfinished feature.
 
+   A **point of the manifold** is therefore `MeshPoint` — a cell plus
+   barycentric coordinates, the chart of the piecewise-flat atlas — never a
+   global coordinate, which on a Regge manifold does not exist. A **field** is
+   an `ExteriorField<V>`: a section of the exterior bundle, evaluated at a
+   `MeshPoint`, valued in the reference frame of that cell's chart. The flat
+   `CoordField<V>` of analytic data (exact solutions, sources) is a *different*
+   concept, and reaches the mesh only through the pullback adapter. Sampling
+   back into ambient coordinates (`Sampler`) is not canonical — it extends the
+   value along the chart pseudo-inverse — and is confined to I/O.
+
 3. **Variance is type-level.** `ExteriorElement<Covariant>` (multiforms) and
    `ExteriorElement<Contravariant>` (multivectors) stand on fully equal footing.
    The type parameter is what makes the functorial direction (pullback vs.
    pushforward), the duality pairing, the musical isomorphisms and the choice of
    $g$ vs. $g^(-1)$ correct *by construction*. Never collapse the two, and never
    pick the Gramian by hand — go through `V::gramian` / `multiform_gramian` /
-   `multivector_gramian`.
+   `multivector_gramian`. Fields inherit this: `Pullback` implements
+   `ExteriorField` only for `Covariant`, so the type system — not a convention —
+   is what stops a multivector field from being pulled back.
 
 4. **Metric-free stays metric-free.** The exterior derivative, the boundary
    operator, the wedge, the interior product, the duality pairing and the de Rham
