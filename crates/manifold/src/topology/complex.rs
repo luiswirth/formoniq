@@ -44,7 +44,7 @@ impl Complex {
   pub fn skeleton(&self, dim: Dim) -> SkeletonHandle<'_> {
     SkeletonHandle::new(self, dim)
   }
-  pub fn mesh_skeleton_raw(&self, dim: Dim) -> &ComplexSkeleton {
+  pub fn complex_skeleton(&self, dim: Dim) -> &ComplexSkeleton {
     &self.skeletons[dim]
   }
   pub fn nsimplices(&self, dim: Dim) -> usize {
@@ -144,17 +144,17 @@ impl Complex {
   ///
   /// The chain complex extends by zero: outside $0 <= k <= n$ the operator
   /// maps to/from the zero space.
-  pub fn boundary_operator(&self, dim: Dim) -> CooMatrix {
-    if dim == self.dim() + 1 {
+  pub fn boundary_operator(&self, grade: Dim) -> CooMatrix {
+    if grade == self.dim() + 1 {
       return CooMatrix::zeros(self.nsimplices(self.dim()), 0);
     }
-    let sups = &self.skeleton(dim);
+    let sups = &self.skeleton(grade);
 
-    if dim == 0 {
+    if grade == 0 {
       return CooMatrix::zeros(0, sups.len());
     }
 
-    let subs = &self.skeleton(dim - 1);
+    let subs = &self.skeleton(grade - 1);
     let mut mat = CooMatrix::zeros(subs.len(), sups.len());
     for (isup, sup) in sups.handle_iter().enumerate() {
       let sup_boundary = sup.boundary();
@@ -171,8 +171,8 @@ impl Complex {
   ///
   /// The coboundary operator, which is the discrete exterior derivative
   /// on cochains. It is the transpose of the boundary operator.
-  pub fn coboundary_operator(&self, dim: Dim) -> CooMatrix {
-    self.boundary_operator(dim + 1).transpose()
+  pub fn coboundary_operator(&self, grade: Dim) -> CooMatrix {
+    self.boundary_operator(grade + 1).transpose()
   }
 
   /// Dimension of the k-th homology group.

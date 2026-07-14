@@ -24,20 +24,25 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
-    let fes = WhitneyComplex::new(&topology, &metric);
-    let boundary = fes.boundary().unwrap();
+    let whitney = WhitneyComplex::new(&topology, &metric);
+    let boundary = whitney.boundary().unwrap();
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
     let exact_cochain = derham_map(&exact, &topology, &coords, 1);
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
-    let laplace = CsrMatrix::from(&fes.codif_dif(0));
-    let rhs = common::linalg::nalgebra::Vector::zeros(fes.ndofs(0));
+    let laplace = CsrMatrix::from(&whitney.codif_dif(0));
+    let rhs = common::linalg::nalgebra::Vector::zeros(whitney.ndofs(0));
 
-    let solution =
-      bc::solve_with_essential_bc(&fes.relative(), &boundary, laplace, &rhs, &boundary_values);
+    let solution = bc::solve_with_essential_bc(
+      &whitney.relative(),
+      &boundary,
+      laplace,
+      &rhs,
+      &boundary_values,
+    );
 
-    assert_relative_eq!(solution.coeffs, exact_cochain.coeffs, epsilon = 1e-10);
+    assert_relative_eq!(solution.coeffs(), exact_cochain.coeffs(), epsilon = 1e-10);
   }
 }
 
@@ -50,14 +55,14 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
-    let fes = WhitneyComplex::new(&topology, &metric);
-    let boundary = fes.boundary().unwrap();
+    let whitney = WhitneyComplex::new(&topology, &metric);
+    let boundary = whitney.boundary().unwrap();
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
     let exact_cochain = derham_map(&exact, &topology, &coords, 1);
 
     // System: (grad u, grad v) + (u, v).
-    let system = CsrMatrix::from(&fes.codif_dif(0)) + CsrMatrix::from(&fes.mass(0));
+    let system = CsrMatrix::from(&whitney.codif_dif(0)) + CsrMatrix::from(&whitney.mass(0));
 
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
@@ -87,7 +92,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 
     let solution = FaerCholesky::new(system).solve(&rhs);
 
-    assert_relative_eq!(solution, exact_cochain.coeffs, epsilon = 1e-9);
+    assert_relative_eq!(solution, exact_cochain.coeffs(), epsilon = 1e-9);
   }
 }
 
@@ -102,7 +107,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
   for dim in 2..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
-    let fes = WhitneyComplex::new(&topology, &metric);
+    let whitney = WhitneyComplex::new(&topology, &metric);
 
     // Partition of the boundary facets by their barycenter.
     let dirichlet_facets: Vec<_> = topology
@@ -115,24 +120,24 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
         x <= 1e-12 || x >= 1.0 - 1e-12
       })
       .collect();
-    let gamma_dirichlet = fes.boundary_part(dirichlet_facets);
+    let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
     let exact_cochain = derham_map(&exact, &topology, &coords, 1);
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
-    let laplace = CsrMatrix::from(&fes.codif_dif(0));
-    let rhs = common::linalg::nalgebra::Vector::zeros(fes.ndofs(0));
+    let laplace = CsrMatrix::from(&whitney.codif_dif(0));
+    let rhs = common::linalg::nalgebra::Vector::zeros(whitney.ndofs(0));
 
     let solution = bc::solve_with_essential_bc(
-      &fes.relative_to(&gamma_dirichlet),
+      &whitney.relative_to(&gamma_dirichlet),
       &gamma_dirichlet,
       laplace,
       &rhs,
       &boundary_values,
     );
 
-    assert_relative_eq!(solution.coeffs, exact_cochain.coeffs, epsilon = 1e-10);
+    assert_relative_eq!(solution.coeffs(), exact_cochain.coeffs(), epsilon = 1e-10);
   }
 }
 
@@ -149,7 +154,7 @@ fn robin_reproduces_linear_solution() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
-    let fes = WhitneyComplex::new(&topology, &metric);
+    let whitney = WhitneyComplex::new(&topology, &metric);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);
     let exact_cochain = derham_map(&exact, &topology, &coords, 1);
@@ -175,18 +180,19 @@ fn robin_reproduces_linear_solution() {
     let (robin_facets, dirichlet_facets): (Vec<_>, Vec<_>) =
       topology.boundary_facets().into_iter().partition(is_x_facet);
 
-    let gamma_robin = fes.boundary_part(robin_facets);
-    let system = CsrMatrix::from(&fes.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
+    let gamma_robin = whitney.boundary_part(robin_facets);
+    let system =
+      CsrMatrix::from(&whitney.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
     let rhs = bc::neumann_load(&gamma_robin, &coords, &robin_data, None);
 
     let solution = if dirichlet_facets.is_empty() {
       // 1d: pure Robin.
       Cochain::new(0, FaerCholesky::new(system).solve(&rhs))
     } else {
-      let gamma_dirichlet = fes.boundary_part(dirichlet_facets);
+      let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
       let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
       bc::solve_with_essential_bc(
-        &fes.relative_to(&gamma_dirichlet),
+        &whitney.relative_to(&gamma_dirichlet),
         &gamma_dirichlet,
         system,
         &rhs,
@@ -194,6 +200,6 @@ fn robin_reproduces_linear_solution() {
       )
     };
 
-    assert_relative_eq!(solution.coeffs, exact_cochain.coeffs, epsilon = 1e-9);
+    assert_relative_eq!(solution.coeffs(), exact_cochain.coeffs(), epsilon = 1e-9);
   }
 }

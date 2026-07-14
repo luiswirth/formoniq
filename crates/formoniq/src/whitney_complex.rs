@@ -144,7 +144,7 @@ pub struct BoundaryWhitneyComplex {
 impl BoundaryWhitneyComplex {
   /// The Whitney complex of $diff K$ itself: everything (mass matrices,
   /// de Rham maps, norms) applies to the boundary as to any other mesh.
-  pub fn fes(&self) -> WhitneyComplex<'_> {
+  pub fn whitney_complex(&self) -> WhitneyComplex<'_> {
     WhitneyComplex::new(self.boundary.complex(), &self.geometry)
   }
   pub fn topology(&self) -> &Complex {

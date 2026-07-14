@@ -3,8 +3,8 @@ pub mod metric;
 
 use crate::Dim;
 
-use common::combo::factorialf;
+use common::combo::factorial_f64;
 
 pub fn refsimp_vol(dim: Dim) -> f64 {
-  factorialf(dim).recip()
+  factorial_f64(dim).recip()
 }

@@ -30,22 +30,22 @@ impl WaveState {
 /// position: the velocity is constrained to the relative complex
 /// (homogeneous essential condition).
 pub fn solve_wave(
-  fes: WhitneyComplex,
+  whitney: WhitneyComplex,
   times: &[f64],
   initial_data: WaveState,
   force_data: Cochain,
 ) -> Vec<WaveState> {
-  let laplace = CsrMatrix::from(&fes.codif_dif(0));
-  let mass = CsrMatrix::from(&fes.mass(0));
+  let laplace = CsrMatrix::from(&whitney.codif_dif(0));
+  let mass = CsrMatrix::from(&whitney.mass(0));
 
   let force = &mass * force_data.coeffs();
 
   // Velocity mass matrix, constrained to the relative complex on meshes
   // with boundary: E (E^T M E)^-1 E^T.
-  let inclusion = fes
+  let inclusion = whitney
     .boundary()
     .is_some()
-    .then(|| fes.relative().inclusion(0));
+    .then(|| whitney.relative().inclusion(0));
   let velocity_mass = match &inclusion {
     Some(incl) => incl.transpose() * &mass * incl,
     None => mass.clone(),
