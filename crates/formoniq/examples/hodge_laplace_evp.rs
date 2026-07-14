@@ -1,5 +1,7 @@
 use {
-  ddf::cochain::Cochain, ddf::whitney::form::WhitneyForm, exterior::exterior_dim,
+  ddf::cochain::Cochain,
+  ddf::whitney::form::WhitneyForm,
+  exterior::exterior_dim,
   formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
   manifold::geometry::coord::simplex::SimplexCoords,
 };

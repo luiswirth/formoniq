@@ -458,7 +458,11 @@ mod tests {
   fn exterior_power_det_and_identity() {
     for n in 1..=4 {
       let a = test_matrix(n, n, 3);
-      assert_relative_eq!(exterior_power(&a, n)[(0, 0)], a.determinant(), epsilon = 1e-12);
+      assert_relative_eq!(
+        exterior_power(&a, n)[(0, 0)],
+        a.determinant(),
+        epsilon = 1e-12
+      );
       for k in 0..=n {
         let id = Matrix::identity(n, n);
         assert_relative_eq!(
@@ -666,8 +670,7 @@ mod tests {
     let b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
 
     let computed_ab = a.wedge(&b);
-    let expected_ab =
-      MultiForm::from_blade_signed(3, Sign::Pos, Blade::from_increasing([0, 1]));
+    let expected_ab = MultiForm::from_blade_signed(3, Sign::Pos, Blade::from_increasing([0, 1]));
     assert_eq!(computed_ab.coeffs, expected_ab.coeffs);
   }
 

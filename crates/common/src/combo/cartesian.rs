@@ -42,10 +42,11 @@ pub fn corner_offset(corner: Combination, strides: &[usize]) -> usize {
 /// The per-axis strides of the linear index of a cartesian grid:
 /// $"stride"_i = "radix"^i$.
 pub fn strides(radix: usize, dim: usize) -> Vec<usize> {
-  (0..dim).scan(1, |stride, _| {
-    let this = *stride;
-    *stride *= radix;
-    Some(this)
-  })
-  .collect()
+  (0..dim)
+    .scan(1, |stride, _| {
+      let this = *stride;
+      *stride *= radix;
+      Some(this)
+    })
+    .collect()
 }
