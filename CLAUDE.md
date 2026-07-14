@@ -210,6 +210,11 @@ cargo run --release --example hodge_laplace_source
 Commit messages: `scope: imperative summary`, e.g. `manifold: cache boundary
 operators lazily`. Keep commits structurally coherent — one idea each.
 
+A change to the design is not finished until this file reflects it, in the same
+commit. Where CLAUDE.md and the code disagree, one of them is a bug — and it is
+usually worth asking which, because an invariant that the code has quietly
+outgrown is a design decision nobody made deliberately.
+
 ## Origin
 
 v0.1 was a BSc-thesis implementation, focused on the elliptic Hodge-Laplace
