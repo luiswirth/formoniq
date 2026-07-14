@@ -14,7 +14,7 @@ use ddf::cochain::Cochain;
 /// once).
 #[allow(clippy::too_many_arguments)]
 pub fn solve_heat(
-  fes: WhitneyComplex,
+  whitney: WhitneyComplex,
   boundary: &BoundaryWhitneyComplex,
   nsteps: usize,
   dt: f64,
@@ -23,12 +23,12 @@ pub fn solve_heat(
   source_data: Cochain,
   diffusion_coeff: f64,
 ) -> Vec<Cochain> {
-  let laplace = CsrMatrix::from(&fes.codif_dif(0));
-  let mass = CsrMatrix::from(&fes.mass(0));
+  let laplace = CsrMatrix::from(&whitney.codif_dif(0));
+  let mass = CsrMatrix::from(&whitney.mass(0));
   let system = &mass + diffusion_coeff * dt * &laplace;
 
-  let lifted = LiftedSystem::new(&fes.relative(), boundary, system, boundary_values);
-  let source = &mass * &source_data.coeffs;
+  let lifted = LiftedSystem::new(&whitney.relative(), boundary, system, boundary_values);
+  let source = &mass * source_data.coeffs();
 
   let mut solution = Vec::with_capacity(nsteps + 1);
   solution.push(initial_data);

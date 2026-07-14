@@ -12,7 +12,7 @@ use crate::{
 };
 
 use common::{
-  combo::{binomial, factorialf},
+  combo::{binomial, factorial_f64},
   linalg::nalgebra::{Matrix, Vector},
 };
 
@@ -47,7 +47,7 @@ impl SimplexQuadRule {
       let denominator = (d + n - 2 * i) as f64;
       let weight =
         (-1.0f64).powi(i as i32) * 2.0f64.powi(-2 * (s as i32)) * denominator.powi(d as i32)
-          / (factorialf(i) * factorialf(d + n - i));
+          / (factorial_f64(i) * factorial_f64(d + n - i));
 
       for beta in compositions(s - i, n + 1) {
         // Barycentric point (2 beta + 1) / denominator;
@@ -149,8 +149,9 @@ mod tests {
   fn exact_barycentric_monomial(alpha: &[usize]) -> f64 {
     let n = alpha.len() - 1;
     let total: usize = alpha.iter().sum();
-    let numerator: f64 = factorialf(n) * alpha.iter().map(|&a| factorialf(a)).product::<f64>();
-    numerator / factorialf(n + total) * refsimp_vol(n)
+    let numerator: f64 =
+      factorial_f64(n) * alpha.iter().map(|&a| factorial_f64(a)).product::<f64>();
+    numerator / factorial_f64(n + total) * refsimp_vol(n)
   }
 
   /// Grundmann-Möller integrates every barycentric monomial of degree

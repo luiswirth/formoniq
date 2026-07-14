@@ -63,7 +63,7 @@ impl LiftedSystem {
     boundary_values: &Cochain,
   ) -> Self {
     let grade = boundary_values.grade();
-    let lift = boundary.extend_cochain(boundary_values).coeffs;
+    let lift = boundary.extend_cochain(boundary_values).into_coeffs();
     let inclusion = relative.inclusion(grade);
     let system_relative = inclusion.transpose() * &system * &inclusion;
     let cholesky = FaerCholesky::new(system_relative);
@@ -120,6 +120,6 @@ pub fn neumann_load(
 /// imposes a Robin condition.
 pub fn boundary_mass(boundary: &BoundaryWhitneyComplex, grade: ExteriorGrade) -> CsrMatrix {
   let trace = boundary.trace(grade);
-  let mass = CsrMatrix::from(&boundary.fes().mass(grade));
+  let mass = CsrMatrix::from(&boundary.whitney_complex().mass(grade));
   trace.transpose() * mass * trace
 }

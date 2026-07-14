@@ -23,7 +23,7 @@ pub fn binomial(n: usize, k: usize) -> usize {
 pub fn factorial(num: usize) -> usize {
   (1..=num).product()
 }
-pub fn factorialf(num: usize) -> f64 {
+pub fn factorial_f64(num: usize) -> f64 {
   factorial(num) as f64
 }
 
@@ -112,12 +112,14 @@ impl std::fmt::Display for Sign {
   }
 }
 
-/// Returns the sorted permutation of `a` and the sign of the permutation.
+/// Sorts `a` in place and returns the sign (parity) of the sorting
+/// permutation.
 pub fn sort_signed<T: Ord>(a: &mut [T]) -> Sign {
   Sign::from_parity(sort_count_swaps(a))
 }
 
-/// Returns the sorted permutation of `a` and the number of swaps.
+/// Sorts `a` in place and returns the number of swaps (adjacent
+/// transpositions) performed.
 pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
   let mut nswaps = 0;
 

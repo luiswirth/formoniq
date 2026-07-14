@@ -11,10 +11,14 @@ use {
   },
 };
 
+/// A $k$-cochain: one real coefficient per $k$-simplex of the skeleton.
+///
+/// An element of the cochain space $C^k$, hence a vector space over the
+/// simplices of a fixed grade.
 #[derive(Debug, Clone)]
 pub struct Cochain {
-  pub coeffs: Vector,
-  pub grade: ExteriorGrade,
+  coeffs: Vector,
+  grade: ExteriorGrade,
 }
 impl Cochain {
   pub fn new(grade: ExteriorGrade, coeffs: Vector) -> Self {
@@ -42,33 +46,24 @@ impl Cochain {
   pub fn coeffs(&self) -> &Vector {
     &self.coeffs
   }
+  pub fn coeffs_mut(&mut self) -> &mut Vector {
+    &mut self.coeffs
+  }
+  pub fn into_coeffs(self) -> Vector {
+    self.coeffs
+  }
   pub fn len(&self) -> usize {
     self.coeffs.len()
   }
   pub fn is_empty(&self) -> bool {
-    self.coeffs().len() == 0
+    self.coeffs.is_empty()
   }
 
+  /// The discrete exterior derivative $dif: C^k -> C^(k+1)$: the coboundary
+  /// operator applied to this cochain's coefficients.
   pub fn dif(&self, topology: &Complex) -> Self {
     let dif_operator = CsrMatrix::from(&topology.coboundary_operator(self.grade()));
     Cochain::new(self.grade() + 1, dif_operator * self.coeffs())
-  }
-
-  /// Scale this cochain by a factor, modifying it in-place
-  pub fn scale(&mut self, factor: f64) -> &mut Self {
-    self.coeffs *= factor;
-    self
-  }
-
-  /// Create a new cochain by scaling this one.
-  pub fn scaled(&self, factor: f64) -> Self {
-    Self::new(self.grade, &self.coeffs * factor)
-  }
-
-  pub fn component_mul(&self, other: &Self) -> Self {
-    assert_eq!(self.grade, other.grade);
-    let coeffs = self.coeffs.component_mul(&other.coeffs);
-    Self::new(self.grade, coeffs)
   }
 }
 
@@ -109,13 +104,39 @@ impl std::ops::Index<usize> for Cochain {
 
 impl std::ops::Mul<f64> for Cochain {
   type Output = Cochain;
-  fn mul(self, rhs: f64) -> Self::Output {
-    self.scaled(rhs)
+  fn mul(mut self, rhs: f64) -> Self::Output {
+    self *= rhs;
+    self
+  }
+}
+impl std::ops::Mul<Cochain> for f64 {
+  type Output = Cochain;
+  fn mul(self, rhs: Cochain) -> Self::Output {
+    rhs * self
   }
 }
 impl std::ops::MulAssign<f64> for Cochain {
   fn mul_assign(&mut self, rhs: f64) {
-    self.scale(rhs);
+    self.coeffs *= rhs;
+  }
+}
+impl std::ops::Neg for Cochain {
+  type Output = Self;
+  fn neg(self) -> Self::Output {
+    Self::new(self.grade, -self.coeffs)
+  }
+}
+impl std::ops::AddAssign for Cochain {
+  fn add_assign(&mut self, rhs: Self) {
+    assert_eq!(self.grade, rhs.grade);
+    self.coeffs += rhs.coeffs;
+  }
+}
+impl std::ops::Add for Cochain {
+  type Output = Self;
+  fn add(mut self, rhs: Self) -> Self::Output {
+    self += rhs;
+    self
   }
 }
 impl std::ops::SubAssign for Cochain {
