@@ -1,7 +1,7 @@
 use {
   ddf::cochain::Cochain,
-  ddf::field::ExteriorFieldExt,
-  ddf::whitney::form::WhitneyForm,
+  ddf::section::SectionExt,
+  ddf::whitney::interpolant::WhitneyInterpolant,
   exterior::exterior_dim,
   formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
   manifold::{geometry::coord::simplex::SimplexRefExt, point::MeshPoint},
@@ -77,7 +77,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Sampling in ambient coordinates: the reference-frame value of the
     // eigenform is extended to the ambient frame through the chart, which is
     // an I/O concern and lives outside the intrinsic core.
-    let whitney = WhitneyForm::new(eigen_cochain, &topology);
+    let whitney = WhitneyInterpolant::new(eigen_cochain, &topology);
     let sampler = whitney.sampled_on(&topology, &coords);
 
     for cell in topology.cells().handle_iter() {

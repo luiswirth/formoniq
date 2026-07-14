@@ -31,7 +31,7 @@ Strict crate ladder, each layer adding exactly one thing:
 | `common`   | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, linalg backends (nalgebra/faer/petsc), `Dim` |
 | `exterior` | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `field::CoordField<V>` (flat, mesh-independent) |
 | `manifold` | the simplicial Riemannian manifold  | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `point::MeshPoint` (the barycentric chart) |
-| `ddf`      | discrete differential forms         | `Cochain`, `field::ExteriorField<V>` (sections over the manifold) with `Pullback`/`Sampler`, `whitney::` (`WhitneyLsf`, `WhitneyForm`), `derham::derham_map` |
+| `ddf`      | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with `Pullback`/`Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
 | `formoniq` | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
@@ -67,15 +67,15 @@ and passes tests.
    it must not sit in the core path. A feature that only works on embedded
    meshes is an unfinished feature.
 
-   A **point of the manifold** is therefore `MeshPoint` — a cell plus
-   barycentric coordinates, the chart of the piecewise-flat atlas — never a
-   global coordinate, which on a Regge manifold does not exist. A **field** is
-   an `ExteriorField<V>`: a section of the exterior bundle, evaluated at a
-   `MeshPoint`, valued in the reference frame of that cell's chart. The flat
-   `CoordField<V>` of analytic data (exact solutions, sources) is a *different*
-   concept, and reaches the mesh only through the pullback adapter. Sampling
-   back into ambient coordinates (`Sampler`) is not canonical — it extends the
-   value along the chart pseudo-inverse — and is confined to I/O.
+   A **point of the simplicial manifold** is therefore `MeshPoint` — a cell plus
+   barycentric coordinates, the chart of the piecewise-affine atlas — never a
+   global coordinate, which on a Regge manifold does not exist. A **field** is a
+   `Section<V>`: a section of the exterior bundle, evaluated at a `MeshPoint`,
+   valued in the reference frame of that cell's chart. The flat `CoordField<V>`
+   of analytic data (exact solutions, sources) is a *different* concept, and
+   reaches the mesh only through the pullback adapter. Sampling back into
+   ambient coordinates (`Sampler`) is not canonical — it extends the value along
+   the chart pseudo-inverse — and is confined to I/O.
 
 3. **Variance is type-level.** `ExteriorElement<Covariant>` (multiforms) and
    `ExteriorElement<Contravariant>` (multivectors) stand on fully equal footing.
@@ -83,9 +83,9 @@ and passes tests.
    pushforward), the duality pairing, the musical isomorphisms and the choice of
    $g$ vs. $g^(-1)$ correct *by construction*. Never collapse the two, and never
    pick the Gramian by hand — go through `V::gramian` / `multiform_gramian` /
-   `multivector_gramian`. Fields inherit this: `Pullback` implements
-   `ExteriorField` only for `Covariant`, so the type system — not a convention —
-   is what stops a multivector field from being pulled back.
+   `multivector_gramian`. Sections inherit this: `Pullback` implements `Section`
+   only for `Covariant`, so the type system — not a convention — is what stops a
+   multivector field from being pulled back.
 
 4. **Metric-free stays metric-free.** The exterior derivative, the boundary
    operator, the wedge, the interior product, the duality pairing and the de Rham
@@ -147,7 +147,30 @@ Go through `common::linalg` rather than reaching for a backend directly.
 
 **Naming reflects the mathematics.** `SimplexRef`, `Cochain`, `MultiForm`,
 `CellGramians` — a reader who knows the math should recognize every type
-immediately, and one who does not should be able to look it up.
+immediately, and one who does not should be able to look it up. Where a word has
+a precise meaning, it is used precisely, and two words that mean different things
+never stand in for each other:
+
+**Affine, flat, linear are three different claims.** *Affine* is about the
+**maps**: the cell charts are $x |-> v_0 + A x$, the barycentric weights are an
+affine combination, the transition maps are affine gluings. It is metric-free,
+and it is what the atlas is — *piecewise affine*, never "piecewise flat". *Flat*
+is about the **curvature**, so it presupposes a metric: a Regge manifold is
+piecewise flat, curvature vanishing on cell interiors and concentrating on the
+codimension-2 hinges. *Linear* is neither, and is wrong here: $lambda_i$ is
+affine, not linear, and "piecewise linear FEM" is the classical abuse. Don't
+inherit it — the affine/linear distinction is exactly why barycentric
+coordinates are the right chart.
+
+**Mesh, simplicial manifold, manifold are three different objects.** The *mesh*
+**is** the simplicial complex — one object, two words, never used as though they
+were two things. The *simplicial manifold* is that complex realized with a
+geometry: the piecewise-affine object, on which `MeshPoint` is a point and a
+`Section` is a field. The *manifold* is the continuous thing the simplicial one
+approximates — possibly smooth, possibly given by a parametrization, possibly
+identical to the simplicial one. What is exact on the simplicial manifold need
+not be exact on the manifold, and a name that blurs the two hides precisely that
+gap.
 
 **Rust style.** 2-space indent (`rustfmt.toml`); clean under default clippy
 lints, with `clippy::pedantic` applied selectively rather than enforced.

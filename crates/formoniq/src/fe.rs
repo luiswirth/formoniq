@@ -5,7 +5,7 @@
 //! three routes, and they are genuinely different maps:
 //!
 //! - $W: C^k -> cal(W) Lambda^k$, the Whitney *interpolation*
-//!   ([`WhitneyForm`]): the reconstruction of a form from a cochain, the
+//!   ([`WhitneyInterpolant`]): the reconstruction of a form from a cochain, the
 //!   right inverse of $R$.
 //! - $R: L^2 Lambda^k -> C^k$, the *de Rham map*
 //!   ([`derham_map`](ddf::derham::derham_map)): integration over the
@@ -27,7 +27,7 @@ use {
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  ddf::{cochain::Cochain, field::ExteriorField, whitney::form::WhitneyForm},
+  ddf::{cochain::Cochain, section::Section, whitney::interpolant::WhitneyInterpolant},
   exterior::{multiform_gramian, Covariant},
   manifold::{
     geometry::{
@@ -49,7 +49,7 @@ use crate::{assemble::assemble_galvec, operators::SourceElVec, whitney_complex::
 /// each cell by the induced inner product $Lambda^k g^(-1)$ of that cell's
 /// metric. On a curved (embedded) mesh this is the only correct thing to do --
 /// the flat ambient Gramian would measure the wrong norm.
-pub fn fe_l2_error<F: ExteriorField<Covariant>>(
+pub fn fe_l2_error<F: Section<Covariant>>(
   fe_cochain: &Cochain,
   exact: &F,
   topology: &Complex,
@@ -58,7 +58,7 @@ pub fn fe_l2_error<F: ExteriorField<Covariant>>(
   let dim = topology.dim();
   let grade = fe_cochain.grade();
   let qr = SimplexQuadRule::degree(dim, 3);
-  let fe_whitney = WhitneyForm::new(fe_cochain.clone(), topology);
+  let fe_whitney = WhitneyInterpolant::new(fe_cochain.clone(), topology);
 
   let error_sq: f64 = topology
     .cells()
@@ -88,7 +88,7 @@ pub fn fe_l2_error<F: ExteriorField<Covariant>>(
 ///
 /// Unlike the de Rham map this is defined for any $L^2$ form, but it does not
 /// commute with $dif$ and it costs a global solve. See the module docs.
-pub fn l2_projection<F: Sync + ExteriorField<Covariant>>(
+pub fn l2_projection<F: Sync + Section<Covariant>>(
   field: &F,
   whitney: WhitneyComplex,
   qr: Option<SimplexQuadRule>,
@@ -107,7 +107,7 @@ pub fn l2_projection<F: Sync + ExteriorField<Covariant>>(
 mod test {
   use super::*;
 
-  use ddf::field::CoordFieldExt;
+  use ddf::section::CoordFieldExt;
   use exterior::field::DiffFormClosure;
   use manifold::gen::cartesian::CartesianMeshInfo;
 
@@ -132,7 +132,7 @@ mod test {
           Vector::from_iterator(ndofs, (0..ndofs).map(|i| ((i % 7) as f64) - 3.0)),
         );
 
-        let field = WhitneyForm::new(cochain.clone(), &topology);
+        let field = WhitneyInterpolant::new(cochain.clone(), &topology);
         let qr = SimplexQuadRule::degree(dim, 3);
         let projected = l2_projection(&field, whitney, Some(qr));
 

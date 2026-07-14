@@ -2,8 +2,8 @@ extern crate nalgebra as na;
 
 pub mod cochain;
 pub mod derham;
-pub mod field;
 pub mod io;
+pub mod section;
 pub mod whitney;
 
 use {
@@ -28,7 +28,7 @@ impl CoordSimplexExt for SimplexCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::Cochain, derham::derham_map, whitney::form::WhitneyForm};
+  use crate::{cochain::Cochain, derham::derham_map, whitney::interpolant::WhitneyInterpolant};
 
   use {
     common::linalg::nalgebra::Vector,
@@ -64,7 +64,7 @@ mod test {
           coeffs[idof] = 1.0;
           let basis_cochain = Cochain::new(grade, coeffs);
 
-          let whitney = WhitneyForm::new(basis_cochain.clone(), &topology);
+          let whitney = WhitneyInterpolant::new(basis_cochain.clone(), &topology);
           let roundtrip = derham_map(&whitney, &topology, 1);
 
           assert_relative_eq!(roundtrip.coeffs(), basis_cochain.coeffs(), epsilon = 1e-9);

@@ -3,11 +3,11 @@
 //! A [`CoordField`] is mesh-independent analytic data: an exact solution, a
 //! source term, a boundary flux, given as a function of a point of
 //! $Omega subset RR^n$. It is *not* the discrete-differential-form notion of a
-//! field -- a section of the exterior bundle over a manifold, which lives one
-//! crate up in `ddf` and has no global coordinate to be a function of. The two
-//! are connected by the variance-directed functor: covariant coordinate fields
-//! pull back onto the manifold along the chart, contravariant ones are pushed
-//! forward off it.
+//! field -- a `Section` of the exterior bundle over the simplicial manifold,
+//! which lives one crate up in `ddf` and has no global coordinate to be a
+//! function of. The two are connected by the variance-directed functor:
+//! covariant coordinate fields pull back onto the manifold along the chart,
+//! contravariant ones are pushed forward off it.
 
 use common::linalg::nalgebra::{Vector, VectorView};
 

@@ -1,12 +1,13 @@
 //! Sections of the exterior bundles over the simplicial manifold.
 //!
-//! An [`ExteriorField`] is the discrete-geometry notion of a field: a section
-//! of $Lambda^k T^* M$ (covariant: a differential form) or $Lambda^k T M$
-//! (contravariant: a multivector field) over the piecewise-flat manifold $M$
-//! carried by the mesh. It is evaluated at a [`MeshPoint`] -- a cell together
-//! with barycentric coordinates -- and its value is expressed in the
-//! **reference frame of that cell's chart**, so it needs no embedding and no
-//! global coordinate system. Fields therefore work verbatim on a purely
+//! A [`Section`] is the discrete-geometry notion of a field: a section of
+//! $Lambda^k T^* M$ (covariant: a differential form) or $Lambda^k T M$
+//! (contravariant: a multivector field) over the simplicial manifold $M$ --
+//! the piecewise-affine object the mesh *is*, as opposed to whatever smooth
+//! manifold it may be approximating. It is evaluated at a [`MeshPoint`] -- a
+//! cell together with barycentric coordinates -- and its value is expressed in
+//! the **reference frame of that cell's chart**, so it needs no embedding and
+//! no global coordinate system. Sections therefore work verbatim on a purely
 //! metric (Regge) manifold, where no global coordinate exists at all.
 //!
 //! The flat, mesh-independent [`CoordField`]s of the `exterior` crate connect
@@ -14,16 +15,16 @@
 //!
 //! - covariant: a coordinate form **pulls back** onto the manifold along the
 //!   cell chart ([`Pullback`], canonical and metric-free);
-//! - contravariant: the direction reverses, so a mesh multivector field is
-//!   what pushes forward into ambient space instead.
+//! - contravariant: the direction reverses, so a multivector field on the
+//!   manifold is what pushes forward into ambient space instead.
 //!
-//! The type system enforces this: [`Pullback`] implements [`ExteriorField`]
-//! only for [`Covariant`]. The opposite direction, sampling a mesh field back
-//! into ambient coordinates ([`Sampler`]), is not canonical for forms -- it
-//! extends the value by zero on the normal space through the chart
-//! pseudo-inverse -- and is confined to visualization and I/O.
+//! The type system enforces this: [`Pullback`] implements [`Section`] only for
+//! [`Covariant`]. The opposite direction, sampling a section back into ambient
+//! coordinates ([`Sampler`]), is not canonical for forms -- it extends the
+//! value by zero on the normal space through the chart pseudo-inverse -- and is
+//! confined to visualization and I/O.
 
-use crate::whitney::form::WhitneyForm;
+use crate::whitney::interpolant::WhitneyInterpolant;
 
 use {
   common::{gramian::RiemannianMetric, linalg::nalgebra::VectorView},
@@ -49,14 +50,15 @@ use {
 /// containing cell's chart, hence lives in $Lambda^k (RR^n)$ for the intrinsic
 /// dimension $n$ of the manifold -- never in an ambient space.
 ///
-/// Fields need not be continuous across cells: the Whitney forms have only the
-/// tangential continuity their conformity requires. What all fields here do
-/// share is that the quantities extracted from them -- the integral over a
+/// Sections need not be continuous across cells: the Whitney forms have only
+/// the tangential continuity their conformity requires. What all sections here
+/// do share is that the quantities extracted from them -- the integral over a
 /// face in the de Rham map, the $L^2$ inner product over a cell -- are
 /// chart-independent.
-pub trait ExteriorField<V: Variance> {
-  /// The dimension of the manifold, which is that of the cell charts.
-  fn dim_intrinsic(&self) -> Dim;
+pub trait Section<V: Variance> {
+  /// The dimension of the simplicial manifold, which is that of the cell
+  /// charts.
+  fn dim(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
   fn at(&self, point: &MeshPoint) -> ExteriorElement<V>;
 }
@@ -90,8 +92,8 @@ impl<'a, F: CoordField<Covariant>> Pullback<'a, F> {
   }
 }
 
-impl<F: CoordField<Covariant>> ExteriorField<Covariant> for Pullback<'_, F> {
-  fn dim_intrinsic(&self) -> Dim {
+impl<F: CoordField<Covariant>> Section<Covariant> for Pullback<'_, F> {
+  fn dim(&self) -> Dim {
     self.topology.dim()
   }
   fn grade(&self) -> ExteriorGrade {
@@ -116,7 +118,7 @@ pub trait CoordFieldExt: Sized + CoordField<Covariant> {
 }
 impl<F: CoordField<Covariant>> CoordFieldExt for F {}
 
-/// The ambient-coordinate sampling of a mesh field: the inverse road, taken
+/// The ambient-coordinate sampling of a section: the inverse road, taken
 /// only for visualization and I/O.
 ///
 /// Locates the global point in the mesh, evaluates the field in the cell
@@ -137,7 +139,7 @@ pub struct Sampler<'a, F> {
   locator: Option<&'a PointLocator>,
 }
 
-impl<'a, F: ExteriorField<Covariant>> Sampler<'a, F> {
+impl<'a, F: Section<Covariant>> Sampler<'a, F> {
   pub fn new(field: &'a F, topology: &'a Complex, coords: &'a MeshCoords) -> Self {
     Self {
       field,
@@ -183,13 +185,13 @@ impl<'a, F: ExteriorField<Covariant>> Sampler<'a, F> {
   }
 }
 
-/// Sample a mesh field in ambient coordinates: `f.sampled_on(&topology, &coords)`.
-pub trait ExteriorFieldExt: Sized + ExteriorField<Covariant> {
+/// Sample a section in ambient coordinates: `f.sampled_on(&topology, &coords)`.
+pub trait SectionExt: Sized + Section<Covariant> {
   fn sampled_on<'a>(&'a self, topology: &'a Complex, coords: &'a MeshCoords) -> Sampler<'a, Self> {
     Sampler::new(self, topology, coords)
   }
 }
-impl<F: ExteriorField<Covariant>> ExteriorFieldExt for F {}
+impl<F: Section<Covariant>> SectionExt for F {}
 
 /// The pointwise wedge $alpha wedge beta$ of two fields of the same variance.
 ///
@@ -204,9 +206,9 @@ impl<A, B> Wedge<A, B> {
     Self { left, right }
   }
 }
-impl<V: Variance, A: ExteriorField<V>, B: ExteriorField<V>> ExteriorField<V> for Wedge<A, B> {
-  fn dim_intrinsic(&self) -> Dim {
-    self.left.dim_intrinsic()
+impl<V: Variance, A: Section<V>, B: Section<V>> Section<V> for Wedge<A, B> {
+  fn dim(&self) -> Dim {
+    self.left.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.left.grade() + self.right.grade()
@@ -236,9 +238,9 @@ impl<'a, F, G: Geometry> MetricOp<'a, F, G> {
 /// The musical isomorphism $sharp$ applied pointwise: a differential form
 /// becomes a multivector field, on fully equal footing.
 pub struct Sharp<'a, F, G>(MetricOp<'a, F, G>);
-impl<F: ExteriorField<Covariant>, G: Geometry> ExteriorField<Contravariant> for Sharp<'_, F, G> {
-  fn dim_intrinsic(&self) -> Dim {
-    self.0.field.dim_intrinsic()
+impl<F: Section<Covariant>, G: Geometry> Section<Contravariant> for Sharp<'_, F, G> {
+  fn dim(&self) -> Dim {
+    self.0.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.0.field.grade()
@@ -251,9 +253,9 @@ impl<F: ExteriorField<Covariant>, G: Geometry> ExteriorField<Contravariant> for 
 /// The musical isomorphism $flat$ applied pointwise: a multivector field
 /// becomes a differential form.
 pub struct Flat<'a, F, G>(MetricOp<'a, F, G>);
-impl<F: ExteriorField<Contravariant>, G: Geometry> ExteriorField<Covariant> for Flat<'_, F, G> {
-  fn dim_intrinsic(&self) -> Dim {
-    self.0.field.dim_intrinsic()
+impl<F: Section<Contravariant>, G: Geometry> Section<Covariant> for Flat<'_, F, G> {
+  fn dim(&self) -> Dim {
+    self.0.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.0.field.grade()
@@ -266,12 +268,12 @@ impl<F: ExteriorField<Contravariant>, G: Geometry> ExteriorField<Covariant> for 
 /// The Hodge star $star: Lambda^k -> Lambda^(n-k)$ applied pointwise,
 /// preserving the variance.
 pub struct HodgeStar<'a, F, G>(MetricOp<'a, F, G>);
-impl<V: Variance, F: ExteriorField<V>, G: Geometry> ExteriorField<V> for HodgeStar<'_, F, G> {
-  fn dim_intrinsic(&self) -> Dim {
-    self.0.field.dim_intrinsic()
+impl<V: Variance, F: Section<V>, G: Geometry> Section<V> for HodgeStar<'_, F, G> {
+  fn dim(&self) -> Dim {
+    self.0.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
-    self.0.field.dim_intrinsic() - self.0.field.grade()
+    self.0.field.dim() - self.0.field.grade()
   }
   fn at(&self, point: &MeshPoint) -> ExteriorElement<V> {
     self
@@ -283,8 +285,8 @@ impl<V: Variance, F: ExteriorField<V>, G: Geometry> ExteriorField<V> for HodgeSt
 }
 
 /// The pointwise combinators, in method position: `omega.sharp(&topology, &geometry)`.
-pub trait FieldOps<V: Variance>: Sized + ExteriorField<V> {
-  fn wedge<B: ExteriorField<V>>(self, other: B) -> Wedge<Self, B> {
+pub trait SectionOps<V: Variance>: Sized + Section<V> {
+  fn wedge<B: Section<V>>(self, other: B) -> Wedge<Self, B> {
     Wedge::new(self, other)
   }
   fn hodge_star<'a, G: Geometry>(
@@ -299,11 +301,11 @@ pub trait FieldOps<V: Variance>: Sized + ExteriorField<V> {
     })
   }
 }
-impl<V: Variance, F: ExteriorField<V>> FieldOps<V> for F {}
+impl<V: Variance, F: Section<V>> SectionOps<V> for F {}
 
 /// The musicals, which change the variance and so cannot sit on the
-/// variance-generic [`FieldOps`].
-pub trait SharpOp: Sized + ExteriorField<Covariant> {
+/// variance-generic [`SectionOps`].
+pub trait SharpOp: Sized + Section<Covariant> {
   fn sharp<'a, G: Geometry>(self, topology: &'a Complex, geometry: &'a G) -> Sharp<'a, Self, G> {
     Sharp(MetricOp {
       field: self,
@@ -312,9 +314,9 @@ pub trait SharpOp: Sized + ExteriorField<Covariant> {
     })
   }
 }
-impl<F: ExteriorField<Covariant>> SharpOp for F {}
+impl<F: Section<Covariant>> SharpOp for F {}
 
-pub trait FlatOp: Sized + ExteriorField<Contravariant> {
+pub trait FlatOp: Sized + Section<Contravariant> {
   fn flat<'a, G: Geometry>(self, topology: &'a Complex, geometry: &'a G) -> Flat<'a, Self, G> {
     Flat(MetricOp {
       field: self,
@@ -323,11 +325,11 @@ pub trait FlatOp: Sized + ExteriorField<Contravariant> {
     })
   }
 }
-impl<F: ExteriorField<Contravariant>> FlatOp for F {}
+impl<F: Section<Contravariant>> FlatOp for F {}
 
-/// The Whitney interpolation of a cochain, as a field on the manifold.
-impl ExteriorField<Covariant> for WhitneyForm<'_> {
-  fn dim_intrinsic(&self) -> Dim {
+/// The Whitney interpolation of a cochain, as a section of the manifold.
+impl Section<Covariant> for WhitneyInterpolant<'_> {
+  fn dim(&self) -> Dim {
     self.complex().dim()
   }
   fn grade(&self) -> ExteriorGrade {
@@ -376,7 +378,7 @@ mod test {
 
       let field = DiffFormClosure::one_form(|p| p.clone_owned(), dim);
       let cochain = derham_map(&field.pullback_on(&topology, &coords), &topology, 2);
-      let whitney = WhitneyForm::new(cochain, &topology);
+      let whitney = WhitneyInterpolant::new(cochain, &topology);
 
       let scan = whitney.sampled_on(&topology, &coords);
       let fast = whitney
@@ -437,8 +439,8 @@ mod test {
           grade,
           Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i % 5) as f64 - 2.0)),
         );
-        let whitney = WhitneyForm::new(cochain, &topology);
-        let star_star = WhitneyForm::new(whitney.cochain().clone(), &topology)
+        let whitney = WhitneyInterpolant::new(cochain, &topology);
+        let star_star = WhitneyInterpolant::new(whitney.cochain().clone(), &topology)
           .hodge_star(&topology, &lengths)
           .hodge_star(&topology, &lengths);
 
