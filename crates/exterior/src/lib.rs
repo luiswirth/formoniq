@@ -107,6 +107,22 @@ pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian 
   Gramian::new_unchecked(exterior_power(single_gramian.matrix(), grade))
 }
 
+/// The induced inner product on multivectors $Lambda^k V$: $Lambda^k g$.
+///
+/// The variance-correct counterpart of [`multiform_gramian`]; the single
+/// source of truth for which metric Gramian measures multivectors.
+pub fn multivector_gramian(metric: &RiemannianMetric, grade: ExteriorGrade) -> Gramian {
+  multi_gramian(metric.vector_gramian(), grade)
+}
+
+/// The induced inner product on multiforms $Lambda^k V^*$: $Lambda^k g^(-1)$.
+///
+/// The variance-correct counterpart of [`multivector_gramian`]; the single
+/// source of truth for which metric Gramian measures multiforms.
+pub fn multiform_gramian(metric: &RiemannianMetric, grade: ExteriorGrade) -> Gramian {
+  multi_gramian(metric.covector_gramian(), grade)
+}
+
 /// An element of an exterior algebra, of the given [`Variance`].
 ///
 /// Coefficients on the colexicographically ordered basis blades.

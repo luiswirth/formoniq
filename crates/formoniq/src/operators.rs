@@ -4,7 +4,7 @@ use {
     linalg::nalgebra::{Matrix, Vector},
   },
   ddf::whitney::lsf::WhitneyLsf,
-  exterior::{exterior_power, field::ExteriorField, multi_gramian, Dim, ExteriorGrade},
+  exterior::{exterior_power, field::ExteriorField, multiform_gramian, Dim, ExteriorGrade},
   manifold::{
     geometry::{
       coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
@@ -89,7 +89,7 @@ impl ElMatProvider for HodgeMassElmat {
 
     let scalar_mass = scalar_mass_elmat(geometry);
     let metric = geometry.riemannian_metric();
-    let form_gramian = multi_gramian(metric.covector_gramian(), self.grade);
+    let form_gramian = multiform_gramian(&metric, self.grade);
 
     // Inner products of the pulled-back barycentric k-blades
     // $lambda^* (e_I)$: one Cauchy-Binet sandwich for all Whitney wedge
@@ -252,10 +252,7 @@ where
   fn eval(&self, geometry: &SimplexLengths, cell: &Simplex) -> ElVec {
     let cell_coords = SimplexCoords::from_simplex_and_coords(cell, self.mesh_coords);
 
-    let inner = multi_gramian(
-      geometry.riemannian_metric().covector_gramian(),
-      self.grade(),
-    );
+    let inner = multiform_gramian(&geometry.riemannian_metric(), self.grade());
 
     let mut elvec = ElVec::zeros(self.whitneys.len());
     for (iwhitney, whitney) in self.whitneys.iter().enumerate() {
