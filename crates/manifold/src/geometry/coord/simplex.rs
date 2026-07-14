@@ -202,8 +202,12 @@ impl SimplexCoords {
     self
   }
 
+  /// The Regge edge lengths this coordinate realization has: the bridge from
+  /// the extrinsic layer down into the intrinsic one.
   pub fn to_lengths(&self) -> SimplexLengths {
-    SimplexLengths::from_coords(self)
+    let lengths: Vec<f64> = self.edges().map(|e| e.vol()).collect();
+    // SAFETY: Edge lengths stem from a realization already.
+    SimplexLengths::new_unchecked(lengths.into(), self.dim_intrinsic())
   }
 }
 
@@ -219,9 +223,24 @@ impl SimplexRefExt for SimplexRef<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::point::{ref_bary, ref_difbarys};
+  use crate::{
+    geometry::metric::simplex::SimplexLengths,
+    point::{ref_bary, ref_difbarys},
+  };
 
   use approx::assert_relative_eq;
+
+  /// The standard coordinate simplex realizes the standard edge lengths: the two
+  /// descriptions of the reference cell agree, extrinsic and intrinsic.
+  #[test]
+  fn ref_coords_realize_ref_lengths() {
+    for dim in 0..=4 {
+      let coords = SimplexCoords::standard(dim);
+      let lengths = coords.to_lengths();
+      assert_relative_eq!(lengths.vector(), SimplexLengths::standard(dim).vector());
+      assert_relative_eq!(coords.vol(), lengths.vol());
+    }
+  }
 
   /// The standard simplex is the coordinate realization of the reference
   /// chart: its global coordinates *are* the local ones.

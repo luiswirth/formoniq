@@ -3,7 +3,7 @@ use super::{
   Coord, CoordRef,
 };
 use crate::{
-  geometry::metric::mesh::MeshLengths,
+  geometry::metric::{mesh::MeshLengths, Geometry},
   topology::{
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef},
@@ -12,7 +12,10 @@ use crate::{
   Dim,
 };
 
-use common::linalg::nalgebra::{Matrix, Vector};
+use common::{
+  gramian::RiemannianMetric,
+  linalg::nalgebra::{Matrix, Vector},
+};
 
 use itertools::Itertools;
 
@@ -20,6 +23,17 @@ use itertools::Itertools;
 #[derive(Debug, Clone)]
 pub struct MeshCoords {
   matrix: Matrix,
+}
+
+/// An embedding *induces* a metric: the Gramian of the cell's spanning vectors.
+///
+/// This impl lives here, not in the metric layer, and that is the whole point --
+/// coordinates know about the metric they induce, the metric knows nothing of
+/// coordinates (invariant 2).
+impl Geometry for MeshCoords {
+  fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric {
+    RiemannianMetric::new(cell.coord_simplex(self).metric_tensor())
+  }
 }
 
 impl MeshCoords {

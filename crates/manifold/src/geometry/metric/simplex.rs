@@ -1,5 +1,5 @@
 use super::EdgeIdx;
-use crate::{geometry::coord::simplex::SimplexCoords, topology::simplex::nedges, Dim};
+use crate::{topology::simplex::nedges, Dim};
 
 use common::{
   combo::{combinations, factorial, Combination},
@@ -7,7 +7,6 @@ use common::{
   linalg::nalgebra::{Matrix, Vector},
 };
 
-use itertools::Itertools;
 use std::f64::consts::SQRT_2;
 
 /// The edge lengths of a simplex.
@@ -53,13 +52,6 @@ impl SimplexLengths {
 
     Self::new_unchecked(lengths.into(), dim)
   }
-  pub fn from_coords(coords: &SimplexCoords) -> Self {
-    let dim = coords.dim_intrinsic();
-    let lengths = coords.edges().map(|e| e.vol()).collect_vec().into();
-    // SAFETY: Edge lengths stem from a realization already.
-    Self::new_unchecked(lengths, dim)
-  }
-
   pub fn dim(&self) -> Dim {
     self.dim
   }
@@ -210,7 +202,6 @@ impl SimplexLengths {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::geometry::coord::simplex::SimplexCoords;
 
   use approx::assert_relative_eq;
 
@@ -221,16 +212,6 @@ mod test {
       let lengths = SimplexLengths::standard(dim);
       let roundtrip = SimplexLengths::from_metric_tensor(&lengths.to_metric_tensor());
       assert_relative_eq!(lengths.vector(), roundtrip.vector(), epsilon = 1e-12);
-    }
-  }
-
-  #[test]
-  fn ref_coord_vs_ref_lengths() {
-    for dim in 0..=4 {
-      let coords = SimplexCoords::standard(dim);
-      let lengths = coords.to_lengths();
-      assert_relative_eq!(lengths.vector(), SimplexLengths::standard(dim).vector());
-      assert_relative_eq!(coords.vol(), lengths.vol());
     }
   }
 }

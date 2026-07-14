@@ -6,16 +6,18 @@
 //! It is implemented by every geometry representation, related by the
 //! derivation chain coords $->$ edge lengths $->$ per-cell metric:
 //!
-//! - [`MeshCoords`]: extrinsic embedding (grade-0 data), which induces the
-//!   metric.
 //! - [`MeshLengths`]: intrinsic Regge edge lengths (grade-1 data).
 //! - [`CellGramians`]: the metric tensors themselves as per-cell data (grade
 //!   n) -- the most local, coordinate-free geometry, living natively on the
 //!   cell skeleton with no need of a global edge indexing.
+//! - [`MeshCoords`](crate::geometry::coord::mesh::MeshCoords): an extrinsic
+//!   embedding (grade-0 data), which *induces* a metric. It implements
+//!   [`Geometry`] from the [`coord`](crate::geometry::coord) module, one layer
+//!   up: an embedding knows about the metric it induces, but the metric layer
+//!   knows nothing of embeddings, and must not.
 
 use super::{mesh::MeshLengths, simplex::SimplexLengths};
 use crate::{
-  geometry::coord::{mesh::MeshCoords, simplex::SimplexRefExt},
   topology::{complex::Complex, data::SkeletonVec, handle::SimplexRef},
   Dim,
 };
@@ -32,12 +34,6 @@ pub trait Geometry {
 impl Geometry for MeshLengths {
   fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric {
     self.simplex_lengths(cell).riemannian_metric()
-  }
-}
-
-impl Geometry for MeshCoords {
-  fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric {
-    RiemannianMetric::new(cell.coord_simplex(self).metric_tensor())
   }
 }
 
