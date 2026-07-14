@@ -172,6 +172,7 @@ fn relative_inclusion_is_cochain_map() {
 fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use common::linalg::faer::FaerCholesky;
   use common::linalg::nalgebra::Vector;
+  use ddf::field::CoordFieldExt;
   use exterior::field::DiffFormClosure;
   use formoniq::{assemble, bc, operators::SourceElVec};
 
@@ -182,11 +183,8 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   let boundary = whitney.boundary().unwrap();
 
   let source = DiffFormClosure::constant_scalar(1.0, dim);
-  let galvec = assemble::assemble_galvec(
-    &topology,
-    &metric,
-    SourceElVec::new(&source, &coords, dim, None),
-  );
+  let source = source.pullback_on(&topology, &coords);
+  let galvec = assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, None));
 
   // Affine-lifting path with zero boundary values.
   let zero_values = Cochain::new(0, Vector::zeros(boundary.ndofs(0)));

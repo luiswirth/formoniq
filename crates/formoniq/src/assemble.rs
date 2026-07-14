@@ -62,7 +62,7 @@ pub fn assemble_galvec(
     .handle_par_iter()
     .flat_map(|cell| {
       let metric = geometry.cell_metric(cell);
-      let elvec = elvec.eval(&metric, cell.simplex());
+      let elvec = elvec.eval(&metric, cell);
 
       let subs: Vec<_> = cell.faces(grade).collect();
 

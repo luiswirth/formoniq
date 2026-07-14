@@ -2,6 +2,7 @@ extern crate nalgebra as na;
 
 pub mod cochain;
 pub mod derham;
+pub mod field;
 pub mod io;
 pub mod whitney;
 
@@ -27,47 +28,46 @@ impl CoordSimplexExt for SimplexCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::{derham::integrate_form_simplex, whitney::lsf::WhitneyLsf};
+  use crate::{cochain::Cochain, derham::derham_map, whitney::form::WhitneyForm};
 
-  use common::combo::{Combination, Sign};
-  use manifold::{
-    geometry::coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexRefExt},
-    topology::complex::Complex,
+  use {
+    common::linalg::nalgebra::Vector,
+    manifold::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex},
   };
 
+  use approx::assert_relative_eq;
+
+  /// $R compose W = id$: Whitney's theorem.
+  ///
+  /// The de Rham map is a left inverse of the Whitney interpolation, which is
+  /// to say the Whitney forms are the basis dual to the degrees of freedom,
+  /// $integral_tau W_sigma = delta_(sigma tau)$. Running it on every basis
+  /// cochain checks that duality matrix entry by entry -- including the signs,
+  /// since a DOF carries the orientation of its simplex.
+  ///
+  /// Both sides are intrinsic: no coordinates enter, only the topology.
   #[test]
   fn whitney_basis_property() {
-    for dim in 0..=4 {
-      let topology = Complex::standard(dim);
-      let coords = MeshCoords::standard(dim);
+    let standard = (0..=4).map(Complex::standard);
+    let cartesian = (1..=3).map(|dim| {
+      CartesianMeshInfo::new_unit(dim, 2)
+        .compute_coord_complex()
+        .0
+    });
 
+    for topology in standard.chain(cartesian) {
+      let dim = topology.dim();
       for grade in 0..=dim {
-        for dof_simp in topology.skeleton(grade).handle_iter() {
-          let whitney_form =
-            WhitneyLsf::standard(dim, Combination::from_increasing(dof_simp.simplex().iter()));
+        let ndofs = topology.nsimplices(grade);
+        for idof in 0..ndofs {
+          let mut coeffs = Vector::zeros(ndofs);
+          coeffs[idof] = 1.0;
+          let basis_cochain = Cochain::new(grade, coeffs);
 
-          for other_simp in topology.skeleton(grade).handle_iter() {
-            let are_same_simp = dof_simp == other_simp;
-            let other_simplex = other_simp.coord_simplex(&coords);
-            let qr = SimplexQuadRule::degree(grade, 1);
-            let discret = integrate_form_simplex(&whitney_form, &other_simplex, &qr);
-            let expected = f64::from(u8::from(are_same_simp));
-            let diff = (discret - expected).abs();
-            const TOL: f64 = 10e-9;
-            let equal = diff <= TOL;
-            assert!(equal, "for: computed={discret} expected={expected}");
-            if other_simplex.nvertices() >= 2 {
-              let other_simplex_rev = other_simplex.clone().flipped_orientation();
-              let discret_rev = integrate_form_simplex(&whitney_form, &other_simplex_rev, &qr);
-              let expected_rev = Sign::Neg.as_f64() * usize::from(are_same_simp) as f64;
-              let diff_rev = (discret_rev - expected_rev).abs();
-              let equal_rev = diff_rev <= TOL;
-              assert!(
-                equal_rev,
-                "rev: computed={discret_rev} expected={expected_rev}"
-              );
-            }
-          }
+          let whitney = WhitneyForm::new(basis_cochain.clone(), &topology);
+          let roundtrip = derham_map(&whitney, &topology, 1);
+
+          assert_relative_eq!(roundtrip.coeffs(), basis_cochain.coeffs(), epsilon = 1e-9);
         }
       }
     }

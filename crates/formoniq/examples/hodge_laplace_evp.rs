@@ -1,9 +1,10 @@
 use {
   ddf::cochain::Cochain,
+  ddf::field::ExteriorFieldExt,
   ddf::whitney::form::WhitneyForm,
   exterior::exterior_dim,
   formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
-  manifold::geometry::coord::simplex::SimplexCoords,
+  manifold::{geometry::coord::simplex::SimplexRefExt, point::MeshPoint},
 };
 
 use std::{
@@ -73,12 +74,17 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     writeln!(&mut file)?;
 
-    for cell in topology.cells().handle_iter() {
-      let cell_coords = SimplexCoords::from_simplex_and_coords(cell.simplex(), &coords);
-      let whitney = WhitneyForm::new(eigen_cochain.clone(), &topology, &coords);
-      let cell_value = whitney.eval_known_cell(cell, &cell_coords.barycenter());
+    // Sampling in ambient coordinates: the reference-frame value of the
+    // eigenform is extended to the ambient frame through the chart, which is
+    // an I/O concern and lives outside the intrinsic core.
+    let whitney = WhitneyForm::new(eigen_cochain, &topology);
+    let sampler = whitney.sampled_on(&topology, &coords);
 
-      for coord in cell_coords.barycenter().iter() {
+    for cell in topology.cells().handle_iter() {
+      let barycenter = cell.coord_simplex(&coords).barycenter();
+      let cell_value = sampler.at_point(&MeshPoint::barycenter(cell.idx()));
+
+      for coord in barycenter.iter() {
         write!(file, "{coord:.6} ")?;
       }
       for comp in cell_value.coeffs() {

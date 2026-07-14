@@ -4,14 +4,15 @@ use {
     combo::{factorial, Combination},
     linalg::nalgebra::{Matrix, Vector},
   },
-  ddf::whitney::lsf::WhitneyLsf,
-  exterior::{exterior_power, field::ExteriorField, multiform_gramian, Dim, ExteriorGrade},
+  ddf::{field::ExteriorField, whitney::lsf::WhitneyLsf},
+  exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
   manifold::{
-    geometry::{
-      coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
-      refsimp_vol,
+    geometry::{cell_volume, coord::quadrature::SimplexQuadRule, coord::CoordRef},
+    point::{ref_difbarys, MeshPoint},
+    topology::{
+      handle::SimplexRef,
+      simplex::{standard_boundary_operator, standard_subsimps},
     },
-    topology::simplex::{standard_boundary_operator, standard_subsimps, Simplex},
   },
 };
 
@@ -20,11 +21,6 @@ pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
   fn eval(&self, metric: &RiemannianMetric) -> ElMat;
-}
-
-/// The volume of a cell carrying the given metric tensor.
-fn cell_volume(metric: &RiemannianMetric) -> f64 {
-  refsimp_vol(metric.dim()) * metric.det_sqrt()
 }
 
 /// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
@@ -71,8 +67,7 @@ pub struct HodgeMassElmat {
 impl HodgeMassElmat {
   pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
     let simplices: Vec<_> = standard_subsimps(dim, grade).collect();
-    let ref_difbarys = SimplexCoords::standard(dim).difbarys();
-    let difbarys_power = exterior_power(&ref_difbarys, grade);
+    let difbarys_power = exterior_power(&ref_difbarys(dim), grade);
 
     Self {
       dim,
@@ -210,72 +205,55 @@ impl ElMatProvider for CodifDifElmat {
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &RiemannianMetric, topology: &Simplex) -> ElVec;
+  fn eval(&self, metric: &RiemannianMetric, cell: SimplexRef) -> ElVec;
 }
 
-pub struct SourceElVec<'a, F>
-where
-  F: ExteriorField,
-{
+/// Element vector of the source load
+/// $[integral_K inner(f, W_sigma)_(Lambda^k) vol]_(sigma in Delta_k (K))$.
+///
+/// Intrinsic: the source is a field on the manifold, the Whitney shape
+/// functions are the reference ones, and both are paired in the cell's
+/// reference frame under the induced inner product $Lambda^k g^(-1)$ of the
+/// cell metric. Source assembly therefore runs on Regge geometry, with no
+/// coordinates in sight.
+pub struct SourceElVec<'a, F> {
   source: &'a F,
-  mesh_coords: &'a MeshCoords,
   qr: SimplexQuadRule,
   whitneys: Vec<WhitneyLsf>,
 }
-impl<'a, F> SourceElVec<'a, F>
-where
-  F: ExteriorField,
-{
-  /// `dim_cells` is the dimension of the mesh cells assembled over:
-  /// the topology dimension, which for boundary assembly is smaller than
-  /// the ambient dimension of the source field.
-  pub fn new(
-    source: &'a F,
-    mesh_coords: &'a MeshCoords,
-    dim_cells: Dim,
-    qr: Option<SimplexQuadRule>,
-  ) -> Self {
-    let qr = qr.unwrap_or(SimplexQuadRule::degree(dim_cells, 1));
-    let whitneys = standard_subsimps(dim_cells, source.grade())
-      .map(|dof_simp| WhitneyLsf::standard(dim_cells, dof_simp))
+impl<'a, F: ExteriorField<Covariant>> SourceElVec<'a, F> {
+  pub fn new(source: &'a F, qr: Option<SimplexQuadRule>) -> Self {
+    let dim = source.dim_intrinsic();
+    let qr = qr.unwrap_or(SimplexQuadRule::degree(dim, 1));
+    let whitneys = standard_subsimps(dim, source.grade())
+      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
       .collect();
     Self {
       source,
-      mesh_coords,
       qr,
       whitneys,
     }
   }
 }
-impl<F> ElVecProvider for SourceElVec<'_, F>
-where
-  F: Sync + ExteriorField,
-{
+impl<F: Sync + ExteriorField<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, metric: &RiemannianMetric, topology: &Simplex) -> ElVec {
-    let cell_coords = SimplexCoords::from_simplex_and_coords(topology, self.mesh_coords);
-
+  fn eval(&self, metric: &RiemannianMetric, cell: SimplexRef) -> ElVec {
     let inner = multiform_gramian(metric, self.grade());
 
     let mut elvec = ElVec::zeros(self.whitneys.len());
     for (iwhitney, whitney) in self.whitneys.iter().enumerate() {
       let inner_pointwise = |local: CoordRef| {
-        let global = cell_coords.local2global(local);
+        let point = MeshPoint::from_local(cell.idx(), local);
         inner.inner(
-          self
-            .source
-            .at_point(&global)
-            .pullback(&cell_coords.linear_transform())
-            .coeffs(),
-          whitney.at_point(local).coeffs(),
+          self.source.at(&point).coeffs(),
+          whitney.at_bary(point.bary()).coeffs(),
         )
       };
-      let value = self
+      elvec[iwhitney] = self
         .qr
         .integrate_local(&inner_pointwise, cell_volume(metric));
-      elvec[iwhitney] = value;
     }
     elvec
   }
