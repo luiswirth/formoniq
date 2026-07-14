@@ -69,12 +69,11 @@ impl Simplex {
 
   /// The local positions of this simplex's vertices within a supersimplex.
   pub fn relative_to(&self, sup: &Self) -> Combination {
-    Combination::from_increasing(self.iter().map(|v| {
-      sup
-        .vertices
-        .binary_search(&v)
-        .expect("Not a subsimplex.")
-    }))
+    Combination::from_increasing(
+      self
+        .iter()
+        .map(|v| sup.vertices.binary_search(&v).expect("Not a subsimplex.")),
+    )
   }
 
   pub fn is_subsimplex_of(&self, sup: &Self) -> bool {

@@ -182,8 +182,11 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   let boundary = fes.boundary().unwrap();
 
   let source = DiffFormClosure::constant_scalar(1.0, dim);
-  let galvec =
-    assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, &coords, dim, None));
+  let galvec = assemble::assemble_galvec(
+    &topology,
+    &metric,
+    SourceElVec::new(&source, &coords, dim, None),
+  );
 
   // Affine-lifting path with zero boundary values.
   let zero_values = Cochain::new(0, Vector::zeros(boundary.ndofs(0)));

@@ -35,7 +35,7 @@ impl SimplexIdx {
   pub fn assert_valid(self, mesh: &Complex) {
     assert!(self.is_valid(mesh), "Not a valid simplex index.");
   }
-  pub fn handle(self, complex: &Complex) -> SimplexHandle {
+  pub fn handle(self, complex: &Complex) -> SimplexHandle<'_> {
     SimplexHandle::new(complex, self)
   }
 }
@@ -91,7 +91,7 @@ impl<'m> SimplexHandle<'m> {
 }
 
 impl SimplexHandle<'_> {
-  pub fn boundary_chain(&self) -> impl Iterator<Item = (Sign, SimplexHandle)> {
+  pub fn boundary_chain(&self) -> impl Iterator<Item = (Sign, SimplexHandle<'_>)> {
     self.boundary().map(move |sub| {
       let sign = sub.sign;
       let handle = self
@@ -102,7 +102,7 @@ impl SimplexHandle<'_> {
     })
   }
 
-  pub fn cocells(&self) -> impl Iterator<Item = SimplexHandle> + '_ {
+  pub fn cocells(&self) -> impl Iterator<Item = SimplexHandle<'_>> + '_ {
     self
       .mesh_data()
       .cocells
@@ -115,7 +115,7 @@ impl SimplexHandle<'_> {
   /// These are ordered lexicographically w.r.t.
   /// the local vertex indices.
   /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
-  pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexHandle> {
+  pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexHandle<'_>> {
     self
       .subsimps(dim_sub)
       .map(move |sub| self.complex.skeleton(dim_sub).handle_by_simplex(&sub))
@@ -125,7 +125,7 @@ impl SimplexHandle<'_> {
   ///
   /// These are ordered first by cell index and then
   /// by lexicographically w.r.t. the local vertex indices.
-  pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexHandle> {
+  pub fn mesh_supersimps(&self, dim_super: Dim) -> impl Iterator<Item = SimplexHandle<'_>> {
     self.cocells().flat_map(move |parent| {
       let sups: Vec<_> = self.supersimps(dim_super, &parent).collect();
       sups
@@ -134,12 +134,12 @@ impl SimplexHandle<'_> {
     })
   }
 
-  pub fn mesh_vertices(&self) -> impl Iterator<Item = SimplexHandle> {
+  pub fn mesh_vertices(&self) -> impl Iterator<Item = SimplexHandle<'_>> {
     self
       .iter()
       .map(|v| SimplexIdx::new(0, v).handle(self.complex))
   }
-  pub fn mesh_edges(&self) -> impl Iterator<Item = SimplexHandle> {
+  pub fn mesh_edges(&self) -> impl Iterator<Item = SimplexHandle<'_>> {
     self.mesh_subsimps(1)
   }
 }

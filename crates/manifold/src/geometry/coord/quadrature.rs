@@ -45,9 +45,9 @@ impl SimplexQuadRule {
     let mut ipoint = 0;
     for i in 0..=s {
       let denominator = (d + n - 2 * i) as f64;
-      let weight = (-1.0f64).powi(i as i32) * 2.0f64.powi(-2 * (s as i32))
-        * denominator.powi(d as i32)
-        / (factorialf(i) * factorialf(d + n - i));
+      let weight =
+        (-1.0f64).powi(i as i32) * 2.0f64.powi(-2 * (s as i32)) * denominator.powi(d as i32)
+          / (factorialf(i) * factorialf(d + n - i));
 
       for beta in compositions(s - i, n + 1) {
         // Barycentric point (2 beta + 1) / denominator;

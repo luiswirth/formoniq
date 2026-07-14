@@ -3,11 +3,11 @@ use common::linalg::nalgebra::{CsrMatrix, Vector};
 use {
   exterior::ExteriorGrade,
   manifold::{
+    topology::skeleton::Skeleton,
     topology::{
       complex::Complex,
       handle::{SimplexHandle, SimplexIdx},
     },
-    topology::skeleton::Skeleton,
   },
 };
 
@@ -131,4 +131,3 @@ impl std::ops::Sub for Cochain {
     self
   }
 }
-

@@ -176,7 +176,10 @@ impl Combination {
     for index in indices {
       assert!(index < MAX_NINDICES);
       let bit = 1 << index;
-      assert!(set & bit == 0 && set < bit, "Indices must be strictly increasing.");
+      assert!(
+        set & bit == 0 && set < bit,
+        "Indices must be strictly increasing."
+      );
       set |= bit;
     }
     Self(set)
@@ -423,9 +426,7 @@ mod test {
       for card in 0..=n {
         let inside: Vec<_> = combinations(n, card).collect();
         assert_eq!(inside.len(), binomial(n, card));
-        assert!(inside
-          .iter()
-          .all(|c| c.iter().all(|index| index < n)));
+        assert!(inside.iter().all(|c| c.iter().all(|index| index < n)));
         assert_eq!(
           inside,
           itertools::Itertools::combinations(0..n, card)

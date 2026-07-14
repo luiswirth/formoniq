@@ -62,7 +62,7 @@ impl MeshCoords {
     self.matrix.ncols()
   }
 
-  pub fn coord(&self, ivertex: VertexIdx) -> CoordRef {
+  pub fn coord(&self, ivertex: VertexIdx) -> CoordRef<'_> {
     self.matrix.column(ivertex)
   }
 
