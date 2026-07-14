@@ -4,15 +4,12 @@ A Finite Element Exterior Calculus (FEEC) library in Rust: PDEs formulated with
 differential forms, solved on simplicial Riemannian manifolds of arbitrary
 dimension, intrinsically and coordinate-free.
 
-This is a mathematical discipline taking software form. The math is not a
-motivation for the code, it *is* the code: differential geometry, algebraic
-topology, functional analysis, category theory and mathematical physics,
-realized as types, traits and laws. Write it the way a mathematician would want
-to read it.
+The mathematics is the design. Differential geometry, algebraic topology,
+functional analysis and category theory enter as types, traits and laws, not as
+commentary on them. Code should read the way a mathematician would write.
 
-## Mission
+## Design goals
 
-- The ultimate FEEC / differential-geometry / PDE library.
 - **Unification over special-casing.** One general principle covers the many
   classical special cases. Gradient/curl/divergence are one exterior derivative;
   Poisson/Maxwell/Hodge-Laplace are one Hodge-Laplace problem; scalar and vector
@@ -20,9 +17,10 @@ to read it.
 - **Arbitrary dimension, always.** Nothing is hardcoded to 2D or 3D. Dimension
   is a runtime value `Dim`, grade a runtime value `ExteriorGrade`. If you find
   yourself writing `if dim == 3`, the abstraction is wrong.
-- Long-term: BEM and spectral methods inside the same exterior-calculus frame;
-  higher-order (trimmed polynomial $P^-_r Lambda^k$) elements; 
-  curvature, higher order Regge or isoparametric cells.
+- Directions being explored, not commitments: BEM and spectral methods within
+  the same exterior-calculus frame; higher-order (trimmed polynomial
+  $P^-_r Lambda^k$) elements; curvature, higher-order Regge and isoparametric
+  cells.
 
 ## Architecture
 
@@ -144,6 +142,28 @@ lints, with `clippy::pedantic` applied selectively rather than enforced.
 Idiomatic and expressive, concise and self-explanatory. Prefer the iterator
 chain that states the intent over the loop that states the mechanics.
 
+## Public artifacts
+
+The README, this file, the doc comments, the issues and the commit messages are
+all read by people. Write them for a skeptical senior reader, because that is
+who shows up.
+
+- **No superlatives, no marketing register.** "The ultimate library" is not a
+  claim, it is a tell. State what the code does and let the reader judge. The
+  work is strong enough that overselling it only subtracts credibility.
+- **Roadmap is direction, not promise.** Say what is being explored, not what is
+  coming.
+- **Argue from the mathematics and the design, never from this file.** An issue
+  that cites CLAUDE.md as its authority documents a process, not a reason. The
+  reason has to stand on its own.
+- **Verify before asserting.** Every number, flag and capability gets checked
+  against the code first. A confident unverified specific is worse than none.
+- **Keep the tooling out of the content.** AI assistance here is deliberate and
+  disclosed, in commit trailers. That is what transparency looks like; it does
+  not mean narrating the assistant inside a README, an issue or a doc comment.
+- **Plain prose.** No emoji, no decorative dividers, no headers over three-line
+  sections, no bold on every other phrase.
+
 ## Anti-goals
 
 - No hacks. If a test fails, the mathematics or the abstraction is wrong — fix
@@ -157,6 +177,10 @@ chain that states the intent over the loop that states the mechanics.
 - No embedding assumptions in the core path (see invariant 2).
 - No comments that restate the code. Comments carry invariants, contracts and
   mathematical context only.
+- Nothing transient in this file. It carries architecture, invariants,
+  conventions and anti-goals — what stays true. Never current state, in-flight
+  plans, tooling wire-ups, personal details, or pointers to things that move.
+  Those belong in issues, commits and the code itself.
 
 ## Workflow
 
@@ -181,8 +205,7 @@ operators lazily`. Keep commits structurally coherent — one idea each.
 
 ## Origin
 
-v0.1 was a BSc-thesis implementation (ETH Zurich, supervised by
-Prof. Dr. Ralf Hiptmair), focused on the elliptic Hodge-Laplace problem with the
-first-order Whitney basis. v0.2 is the rebuild toward the library described
-above. Where thesis-era code still contradicts the invariants, the invariants
-win.
+v0.1 was a BSc-thesis implementation, focused on the elliptic Hodge-Laplace
+problem with the first-order Whitney basis. v0.2 is the rebuild toward the
+library described above. Where thesis-era code still contradicts the invariants,
+the invariants win.
