@@ -54,7 +54,7 @@ where
     .map(|m| Matrix::identity(m.nrows(), m.nrows()))
     .collect();
 
-  let kron_size = mats.iter().map(|mat| mat.nrows()).product::<usize>();
+  let kron_size = mats.iter().map(na::Matrix::nrows).product::<usize>();
   let mut kron_sum = Matrix::zeros(kron_size, kron_size);
   for (dim, mat) in mats.iter().enumerate() {
     let eyes_before = eyes[..dim]
@@ -122,7 +122,7 @@ impl CooMatrixExt for CooMatrix {
     let nrows = self.nrows() + nrows_added;
     let ncols = self.ncols() + ncols_added;
     let (rows, cols, values) = mem::replace(self, Self::new(0, 0)).disassemble();
-    *self = Self::try_from_triplets(nrows, ncols, rows, cols, values).unwrap()
+    *self = Self::try_from_triplets(nrows, ncols, rows, cols, values).unwrap();
   }
 
   fn transpose(self) -> Self {

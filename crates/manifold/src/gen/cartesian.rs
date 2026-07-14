@@ -22,7 +22,7 @@ pub struct Rect {
 
 impl Rect {
   pub fn new_min_max(min: Vector, max: Vector) -> Self {
-    assert!(min.len() == max.len());
+    assert_eq!(min.len(), max.len());
     Self { min, max }
   }
   pub fn new_unit_cube(dim: Dim) -> Self {

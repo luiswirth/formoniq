@@ -9,8 +9,8 @@ use super::nalgebra::{CsrMatrix, Matrix, Vector};
 
 const PETSC_SOLVER_PATH: &str = "./petsc-solver";
 
-const PETSC_MAT_FILE_CLASSID: i32 = 1211216;
-const PETSC_VEC_FILE_CLASSID: i32 = 1211214;
+const PETSC_MAT_FILE_CLASSID: i32 = 1_211_216;
+const PETSC_VEC_FILE_CLASSID: i32 = 1_211_214;
 
 pub fn petsc_write_matrix(matrix: &CsrMatrix, filename: &str) -> std::io::Result<()> {
   let file = File::create(filename)?;

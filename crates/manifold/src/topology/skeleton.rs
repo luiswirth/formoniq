@@ -14,7 +14,10 @@ impl Skeleton {
     assert!(!simplices.is_empty(), "Skeleton must not be empty");
     let dim = simplices[0].dim();
     assert!(
-      simplices.iter().map(|simp| simp.dim()).all(|d| d == dim),
+      simplices
+        .iter()
+        .map(super::simplex::Simplex::dim)
+        .all(|d| d == dim),
       "Skeleton simplices must have same dimension."
     );
     let nvertices = if dim == 0 {

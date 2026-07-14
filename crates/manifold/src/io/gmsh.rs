@@ -23,9 +23,9 @@ pub fn gmsh2coord_cells(bytes: &[u8]) -> (Skeleton, MeshCoords) {
     .collect();
 
   if mesh_vertices.iter().all(|coord| coord[2] == 0.0) {
-    mesh_vertices
-      .iter_mut()
-      .for_each(|coord| *coord = na::dvector![coord[0], coord[1]])
+    for coord in &mut mesh_vertices {
+      *coord = na::dvector![coord[0], coord[1]];
+    }
   }
 
   let mesh_vertices = Matrix::from_columns(&mesh_vertices);

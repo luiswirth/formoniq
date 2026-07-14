@@ -38,7 +38,7 @@ impl Simplex {
     (sign, simplex)
   }
   pub fn standard(dim: Dim) -> Self {
-    Self::new((0..dim + 1).collect())
+    Self::new((0..=dim).collect())
   }
   pub fn single(v: usize) -> Self {
     Self::new(vec![v])

@@ -204,13 +204,13 @@ impl SimplexCoords {
   }
 
   pub fn swap_vertices(&mut self, icol: usize, jcol: usize) {
-    self.vertices.swap_coords(icol, jcol)
+    self.vertices.swap_coords(icol, jcol);
   }
   pub fn flip_orientation(&mut self) {
     if self.nvertices() >= 2 {
-      self.swap_vertices(0, 1)
+      self.swap_vertices(0, 1);
     } else {
-      warn!("Cannot flip CoordSimplex with less than 2 vertices.")
+      warn!("Cannot flip CoordSimplex with less than 2 vertices.");
     }
   }
   pub fn flipped_orientation(mut self) -> Self {

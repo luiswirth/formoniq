@@ -66,6 +66,6 @@ fn main() {
   }
 
   let coords_list: Vec<_> = coords_list.into_iter().collect();
-  let times = (0..=nsteps).map(|istep| istep as f64 * dt);
+  let times = (0..=nsteps).map(|istep| f64::from(istep) * dt);
   manifold::io::blender::write_3dmesh_animation(&coords_list, times);
 }

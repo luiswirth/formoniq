@@ -27,7 +27,7 @@ pub fn algebraic_convergence_rate(next: f64, prev: f64) -> f64 {
 }
 
 pub fn phase_to_rgb(phase: f64) -> [f32; 3] {
-  let hue = (phase / std::f64::consts::PI + 1.0) / 2.0;
+  let hue = f64::midpoint(phase / std::f64::consts::PI, 1.0);
   hsv_to_rgb(hue as f32, 1.0, 1.0)
 }
 

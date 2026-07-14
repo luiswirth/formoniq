@@ -3,7 +3,7 @@ use faer::linalg::solvers::Solve;
 use super::nalgebra::{CscMatrix, CsrMatrix, Vector};
 
 pub fn faervec2navec(faer: &faer::Mat<f64>) -> Vector {
-  assert!(faer.ncols() == 1);
+  assert_eq!(faer.ncols(), 1);
   Vector::from_iterator(faer.nrows(), faer.row_iter().map(|r| r[0]))
 }
 
