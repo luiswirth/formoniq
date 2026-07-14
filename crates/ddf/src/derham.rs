@@ -16,30 +16,29 @@
 //! The integral $integral_sigma omega$ of a $k$-form over a $k$-simplex is
 //! **metric-free** -- it pairs the form with the tangent blade of the simplex,
 //! and no length, angle or volume is ever needed. The implementation is
-//! correspondingly intrinsic: it works entirely in the reference frame of a
-//! cell supporting $sigma$, where the face is an affine subsimplex of the
-//! standard cell and its tangent blade is pure combinatorics. Which supporting
-//! cell is chosen does not matter: neighbouring charts differ by an affine
-//! gluing that fixes $sigma$, and the pairing sees only the part of $omega$
-//! tangential to $sigma$, on which the charts agree.
+//! correspondingly intrinsic, and needs no embedding either: it works entirely
+//! in the chart of a cell supporting $sigma$, where the face is an affine
+//! subsimplex of the reference cell and its tangent blade is pure
+//! combinatorics.
+//!
+//! Which supporting cell is chosen does not matter. Two charts containing
+//! $sigma$ differ by a [`Transition`](manifold::atlas::Transition), whose
+//! differential carries the tangent blade of $sigma$ in one chart to the tangent
+//! blade in the other; the pairing sees only the part of $omega$ tangential to
+//! $sigma$, on which the two charts agree by exactly that map. The law is
+//! `derham_map_is_independent_of_supporting_cell` below.
 
-use crate::{section::Section, CoordSimplexExt};
+use crate::{cochain::Cochain, section::Section};
 
 use {
   common::combo::Combination,
-  exterior::Covariant,
+  exterior::{exterior_power, Covariant, MultiVector},
   manifold::{
-    geometry::{
-      coord::{mesh::MeshCoords, quadrature::SimplexQuadRule, simplex::SimplexCoords, CoordRef},
-      refsimp_vol,
-    },
-    point::MeshPoint,
-    topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
+    atlas::{ref_face_spanning_vectors, refsimp_vol, MeshPoint, SimplexQuadRule},
+    topology::{complex::Complex, handle::SimplexIdx},
     Dim,
   },
 };
-
-use crate::cochain::Cochain;
 
 /// The de Rham map: discretize a differential $k$-form on the simplicial
 /// manifold into a $k$-cochain by integrating it over each $k$-simplex, with
@@ -66,8 +65,7 @@ pub fn derham_map(
     .map(|simp| {
       let cell = simp.cells().next().expect("Every simplex has a cell.");
       let positions = simp.simplex().relative_to(cell.simplex());
-      let face = reference_face(topology.dim(), &positions);
-      integrate_over_face(field, cell.idx(), &face, &qr)
+      integrate_over_face(field, cell.idx(), &positions, &qr)
     })
     .collect::<Vec<_>>()
     .into();
@@ -75,14 +73,20 @@ pub fn derham_map(
   Cochain::new(grade, coeffs)
 }
 
-/// The face of the reference $n$-simplex spanned by the given local vertex
-/// positions: the image of a face of a cell under that cell's chart.
+/// The tangent blade $v_1 wedge dots.c wedge v_k$ of a face of the reference
+/// cell, in the cell's reference frame: the single column
+/// $Lambda^k V in RR^(binom(n,k) times 1)$ of the $k$-minors of its spanning
+/// vectors.
 ///
-/// A coordinate simplex, but not an embedding of the mesh -- these are the
-/// coordinates *of the chart*, which every cell has by definition.
-pub fn reference_face(cell_dim: Dim, positions: &Combination) -> SimplexCoords {
-  let simp = Simplex::new(positions.iter().collect());
-  SimplexCoords::from_simplex_and_coords(&simp, &MeshCoords::standard(cell_dim))
+/// An `exterior` construction on `manifold` combinatorics, and so it lives here
+/// in the crate that joins them. Metric-free and coordinate-free: a face of a
+/// cell has spanning vectors in the cell's chart whatever geometry the mesh
+/// carries, and none at all if it carries none.
+pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> MultiVector {
+  let grade = positions.card() - 1;
+  let spanning = ref_face_spanning_vectors(cell_dim, positions);
+  let coeffs = exterior_power(&spanning, grade).column(0).into_owned();
+  MultiVector::new(coeffs, cell_dim, grade)
 }
 
 /// $integral_sigma omega$ over a face of a cell, expressed in that cell's
@@ -96,19 +100,16 @@ pub fn reference_face(cell_dim: Dim, positions: &Combination) -> SimplexCoords {
 pub fn integrate_over_face(
   field: &impl Section<Covariant>,
   cell: SimplexIdx,
-  face: &SimplexCoords,
+  positions: &Combination,
   qr: &SimplexQuadRule,
 ) -> f64 {
-  let grade = face.dim_intrinsic();
+  let grade = positions.card() - 1;
   assert_eq!(qr.dim(), grade);
   assert_eq!(field.grade(), grade);
 
-  let tangent_blade = face.spanning_multivector();
-  let integrand = |local: CoordRef| {
-    let point = MeshPoint::from_local(cell, face.local2global(local).as_view());
-    field.at(&point).pairing(&tangent_blade)
-  };
-  qr.integrate_local(&integrand, refsimp_vol(grade))
+  let tangent_blade = face_tangent_blade(cell.dim(), positions);
+  let integrand = |point: &MeshPoint| field.at(point).pairing(&tangent_blade);
+  qr.integrate_face(cell, positions, &integrand, refsimp_vol(grade))
 }
 
 #[cfg(test)]
@@ -118,7 +119,7 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
-    common::linalg::nalgebra::Vector,
+    common::{coord::Coord, linalg::nalgebra::Vector},
     exterior::{field::DiffFormClosure, ExteriorElement},
     manifold::gen::cartesian::CartesianMeshInfo,
   };
@@ -198,7 +199,7 @@ mod test {
     for dim in 2..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
       let field = DiffFormClosure::one_form(
-        |p| Vector::from_iterator(p.len(), p.iter().map(|x| x.sin())),
+        |p: &Coord| Vector::from_iterator(p.dim(), p.iter().map(|x| x.sin())),
         dim,
       );
       let pulled = field.pullback_on(&topology, &coords);
@@ -209,13 +210,45 @@ mod test {
           .cells()
           .map(|cell| {
             let positions = edge.simplex().relative_to(cell.simplex());
-            let face = reference_face(dim, &positions);
-            integrate_over_face(&pulled, cell.idx(), &face, &qr)
+            integrate_over_face(&pulled, cell.idx(), &positions, &qr)
           })
           .collect();
 
         for value in &integrals[1..] {
           assert_relative_eq!(*value, integrals[0], epsilon = 1e-12);
+        }
+      }
+    }
+  }
+
+  /// The tangent blade of a shared face transforms by $Lambda^k (dif psi)$
+  /// under the transition between the two charts that see it.
+  ///
+  /// This is *why* the de Rham map is well defined: the duality pairing
+  /// $angle.l omega, tau angle.r$ is invariant because the form pulls back along
+  /// $dif psi$ exactly as the blade pushes forward along it, and the two cancel.
+  /// The well-definedness above is the consequence; this is the cause.
+  #[test]
+  fn tangent_blade_transforms_by_the_transition_differential() {
+    use manifold::atlas::ChartExt;
+
+    for dim in 2..=3 {
+      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+
+      for face_dim in 1..dim {
+        for face in topology.skeleton(face_dim).handle_iter() {
+          let cells: Vec<_> = face.cells().collect();
+          for (i, &source) in cells.iter().enumerate() {
+            for &target in &cells[i + 1..] {
+              let differential = source.chart().transition_to(target.chart()).differential();
+
+              let here = face_tangent_blade(dim, &face.simplex().relative_to(source.simplex()));
+              let there = face_tangent_blade(dim, &face.simplex().relative_to(target.simplex()));
+
+              let pushed = here.pushforward(&differential);
+              assert_relative_eq!(pushed.coeffs(), there.coeffs(), epsilon = 1e-12);
+            }
+          }
         }
       }
     }

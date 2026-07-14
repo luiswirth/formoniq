@@ -6,7 +6,7 @@ use {
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,
     whitney_complex::WhitneyComplex,
   },
-  manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::CoordRef},
+  manifold::{gen::cartesian::CartesianMeshInfo, geometry::coord::Coord},
 };
 
 use std::{f64::consts::PI, fs};
@@ -26,9 +26,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let solution_exact = DiffFormClosure::one_form(
       |p| {
         Vector::from_iterator(
-          p.len(),
-          (0..p.len()).map(|i| {
-            let prod = p.remove_row(i).map(f64::cos).product();
+          p.dim(),
+          (0..p.dim()).map(|i| {
+            let prod = p.view().remove_row(i).map(f64::cos).product();
             p[i].sin().powi(2) * prod
           }),
         )
@@ -37,8 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     let dif_solution_exact = DiffFormClosure::new(
-      move |p: CoordRef| {
-        let dim = p.len();
+      move |p: &Coord| {
+        let dim = p.dim();
         let ncomponents = if dim > 1 { dim * (dim - 1) / 2 } else { 0 };
         let mut components = Vec::with_capacity(ncomponents);
 
@@ -69,7 +69,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vector::from_iterator(
           p.len(),
           (0..p.len()).map(|i| {
-            let prod: f64 = p.remove_row(i).map(f64::cos).product();
+            let prod: f64 = p.view().remove_row(i).map(f64::cos).product();
             -(2.0 * (2.0 * p[i]).cos() - (p.len() - 1) as f64 * p[i].sin().powi(2)) * prod
           }),
         )
