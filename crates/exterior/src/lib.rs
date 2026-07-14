@@ -152,7 +152,7 @@ impl<V: Variance> ExteriorElement<V> {
   }
 
   pub fn into_grade1(self) -> Vector {
-    assert!(self.grade == 1);
+    assert_eq!(self.grade, 1);
     self.coeffs
   }
 
@@ -381,14 +381,14 @@ impl<V: Variance> std::ops::Mul<ExteriorElement<V>> for f64 {
 impl<V: Variance> std::ops::Index<Blade> for ExteriorElement<V> {
   type Output = f64;
   fn index(&self, blade: Blade) -> &Self::Output {
-    assert!(blade.card() == self.grade);
+    assert_eq!(blade.card(), self.grade);
     assert!(blade.iter().all(|i| i < self.dim));
     &self.coeffs[blade.rank()]
   }
 }
 impl<V: Variance> std::ops::IndexMut<Blade> for ExteriorElement<V> {
   fn index_mut(&mut self, blade: Blade) -> &mut Self::Output {
-    assert!(blade.card() == self.grade);
+    assert_eq!(blade.card(), self.grade);
     assert!(blade.iter().all(|i| i < self.dim));
     &mut self.coeffs[blade.rank()]
   }

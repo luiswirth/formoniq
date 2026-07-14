@@ -27,7 +27,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vector::from_iterator(
           p.len(),
           (0..p.len()).map(|i| {
-            let prod = p.remove_row(i).map(|a| a.cos()).product();
+            let prod = p.remove_row(i).map(f64::cos).product();
             p[i].sin().powi(2) * prod
           }),
         )
@@ -68,7 +68,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Vector::from_iterator(
           p.len(),
           (0..p.len()).map(|i| {
-            let prod: f64 = p.remove_row(i).map(|a| a.cos()).product();
+            let prod: f64 = p.remove_row(i).map(f64::cos).product();
             -(2.0 * (2.0 * p[i]).cos() - (p.len() - 1) as f64 * p[i].sin().powi(2)) * prod
           }),
         )
@@ -106,10 +106,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       );
 
       let conv_rate = |errors: &[f64], curr: f64| {
-        errors
-          .last()
-          .map(|&prev| algebraic_convergence_rate(curr, prev))
-          .unwrap_or(f64::INFINITY)
+        errors.last().map_or(f64::INFINITY, |&prev| {
+          algebraic_convergence_rate(curr, prev)
+        })
       };
 
       let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &coords);
@@ -122,8 +121,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
       errors_hd.push(error_hd);
 
       println!(
-        "| {:>2} | {:<8.2e} | {:>7.2} | {:<8.2e} | {:>7.2} |",
-        irefine, error_l2, conv_rate_l2, error_hd, conv_rate_hd
+        "| {irefine:>2} | {error_l2:<8.2e} | {conv_rate_l2:>7.2} | {error_hd:<8.2e} | {conv_rate_hd:>7.2} |"
       );
     }
   }

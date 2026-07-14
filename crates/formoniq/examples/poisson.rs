@@ -64,10 +64,9 @@ fn main() {
       );
 
       let conv_rate = |errors: &[f64], curr: f64| {
-        errors
-          .last()
-          .map(|&prev| algebraic_convergence_rate(curr, prev))
-          .unwrap_or(f64::INFINITY)
+        errors.last().map_or(f64::INFINITY, |&prev| {
+          algebraic_convergence_rate(curr, prev)
+        })
       };
 
       let error_l2 = fe_l2_error(&galsol, &solution_exact, &topology, &coords);
@@ -80,8 +79,7 @@ fn main() {
       errors_h1.push(error_h1);
 
       println!(
-        "| {:>2} | {:<8.2e} | {:>6.2} | {:<8.2e} | {:>6.2} |",
-        irefine, error_l2, conv_rate_l2, error_h1, conv_rate_h1
+        "| {irefine:>2} | {error_l2:<8.2e} | {conv_rate_l2:>6.2} | {error_h1:<8.2e} | {conv_rate_h1:>6.2} |"
       );
     }
   }

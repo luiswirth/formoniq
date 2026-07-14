@@ -37,7 +37,7 @@ impl MeshCoords {
   }
 
   pub fn swap_coords(&mut self, icol: usize, jcol: usize) {
-    self.matrix.swap_columns(icol, jcol)
+    self.matrix.swap_columns(icol, jcol);
   }
 }
 

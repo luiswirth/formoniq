@@ -36,9 +36,10 @@ pub enum Sign {
 
 impl Sign {
   pub fn from_bool(b: bool) -> Self {
-    match b {
-      true => Self::Pos,
-      false => Self::Neg,
+    if b {
+      Self::Pos
+    } else {
+      Self::Neg
     }
   }
   pub fn from_f64(f: f64) -> Option<Self> {
@@ -64,14 +65,14 @@ impl Sign {
     }
   }
   pub fn flip(&mut self) {
-    *self = self.other()
+    *self = self.other();
   }
 
   pub fn as_i32(self) -> i32 {
     self as i32
   }
   pub fn as_f64(self) -> f64 {
-    self as i32 as f64
+    f64::from(self as i32)
   }
 
   pub fn is_pos(self) -> bool {

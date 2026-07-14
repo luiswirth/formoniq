@@ -18,7 +18,7 @@ pub struct Cochain {
 }
 impl Cochain {
   pub fn new(grade: ExteriorGrade, coeffs: Vector) -> Self {
-    Self { grade, coeffs }
+    Self { coeffs, grade }
   }
   pub fn constant(value: f64, skeleton: &Skeleton) -> Self {
     let ncoeffs = skeleton.len();
@@ -75,13 +75,13 @@ impl Cochain {
 impl std::ops::Index<SimplexIdx> for Cochain {
   type Output = f64;
   fn index(&self, idx: SimplexIdx) -> &Self::Output {
-    assert!(idx.dim() == self.grade());
+    assert_eq!(idx.dim(), self.grade());
     &self.coeffs[idx.kidx]
   }
 }
 impl std::ops::IndexMut<SimplexIdx> for Cochain {
   fn index_mut(&mut self, idx: SimplexIdx) -> &mut Self::Output {
-    assert!(idx.dim() == self.grade());
+    assert_eq!(idx.dim(), self.grade());
     &mut self.coeffs[idx.kidx]
   }
 }
@@ -89,13 +89,13 @@ impl std::ops::IndexMut<SimplexIdx> for Cochain {
 impl std::ops::Index<SimplexHandle<'_>> for Cochain {
   type Output = f64;
   fn index(&self, handle: SimplexHandle<'_>) -> &Self::Output {
-    assert!(handle.dim() == self.grade());
+    assert_eq!(handle.dim(), self.grade());
     &self.coeffs[handle.kidx()]
   }
 }
 impl std::ops::IndexMut<SimplexHandle<'_>> for Cochain {
   fn index_mut(&mut self, idx: SimplexHandle<'_>) -> &mut Self::Output {
-    assert!(idx.dim() == self.grade());
+    assert_eq!(idx.dim(), self.grade());
     &mut self.coeffs[idx.kidx()]
   }
 }
@@ -120,7 +120,7 @@ impl std::ops::MulAssign<f64> for Cochain {
 }
 impl std::ops::SubAssign for Cochain {
   fn sub_assign(&mut self, rhs: Self) {
-    assert!(self.grade == rhs.grade);
+    assert_eq!(self.grade, rhs.grade);
     self.coeffs -= rhs.coeffs;
   }
 }

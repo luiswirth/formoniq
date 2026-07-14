@@ -42,7 +42,7 @@ fn harmonic_space_dim(
 ) -> usize {
   let coclosed = dif_prev.map(|d| d.transpose() * mass);
   let constraints: Vec<Matrix> = dif.into_iter().chain(coclosed).collect();
-  let nrows = constraints.iter().map(|m| m.nrows()).sum();
+  let nrows = constraints.iter().map(na::Matrix::nrows).sum();
   if nrows == 0 {
     return ndofs;
   }
@@ -79,7 +79,7 @@ fn harmonics_are_cohomology_cube() {
       let harmonic_dim = harmonic_space_dim(fes.ndofs(k), dif, dif_prev, mass);
 
       let betti = topology.homology_dim(k);
-      let expected = (k == 0) as usize;
+      let expected = usize::from(k == 0);
       assert_eq!(betti, expected);
       assert_eq!(harmonic_dim, betti, "dim={dim} k={k}");
     }
@@ -141,7 +141,7 @@ fn relative_harmonics_are_relative_cohomology_cube() {
       let harmonic_dim = harmonic_space_dim(ndofs[k], dif, dif_prev, mass);
 
       let betti_rel = cohomology_dim(&difs, &ndofs, k);
-      let expected = (k == dim) as usize;
+      let expected = usize::from(k == dim);
       assert_eq!(betti_rel, expected, "dim={dim} k={k}");
       assert_eq!(harmonic_dim, betti_rel, "dim={dim} k={k}");
     }

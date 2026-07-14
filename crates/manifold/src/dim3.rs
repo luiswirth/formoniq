@@ -89,7 +89,7 @@ impl TriangleSurface3D {
       }
     }
     for (vertex_normal, count) in vertex_normals.iter_mut().zip(vertex_triangle_counts) {
-      *vertex_normal /= count as f64;
+      *vertex_normal /= f64::from(count);
     }
     for ((mut v, n), &d) in self
       .coords
@@ -124,7 +124,7 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
   let vertex_coords = ICOSAHEDRON_SURFACE
     .vertex_coords()
     .coord_iter()
-    .map(|c| c.into_owned())
+    .map(na::Matrix::into_owned)
     .collect();
 
   let (triangles, vertex_coords) = subdivide(triangles, vertex_coords, nsubdivisions);
@@ -181,7 +181,7 @@ fn get_midpoint(
 }
 
 static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
-  let phi = (1.0 + 5.0f64.sqrt()) / 2.0;
+  let phi = f64::midpoint(1.0, 5.0f64.sqrt());
 
   #[rustfmt::skip]
   let vertex_coords = [

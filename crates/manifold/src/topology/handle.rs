@@ -56,7 +56,7 @@ impl std::fmt::Debug for SimplexHandle<'_> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
     f.debug_struct("SimplexHandle")
       .field("idx", &self.idx)
-      .field("complex", &(self.complex as *const Complex))
+      .field("complex", &std::ptr::from_ref::<Complex>(self.complex))
       .finish()
   }
 }
@@ -152,7 +152,7 @@ impl PartialEq for SimplexHandle<'_> {
 impl Eq for SimplexHandle<'_> {}
 impl std::hash::Hash for SimplexHandle<'_> {
   fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-    (self.complex as *const Complex).hash(state);
+    std::ptr::from_ref::<Complex>(self.complex).hash(state);
     self.idx.hash(state);
   }
 }
