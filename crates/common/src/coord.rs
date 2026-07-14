@@ -10,8 +10,16 @@
 //! written down and the wrong composition does not compile. The tag is a
 //! zero-sized [`CoordSpace`] marker: no runtime cost, no runtime check. Reading
 //! is unaffected -- `Coords` derefs to the underlying vector, so the whole
-//! nalgebra API is there -- but a coordinate of one space can never *be* a
-//! coordinate of another without passing through the map that relates them.
+//! nalgebra API is there.
+//!
+//! The tag is a discipline, not a proof. Building a `Coords<S>` out of a raw
+//! [`Vector`] -- through [`Coords::new`] or [`From`] -- is unchecked, and
+//! deliberately so: that is the boundary at which untagged linear algebra
+//! enters, and there is nothing at a boundary to check against. The space is
+//! whatever the caller says it is. What the tags buy is that *past* the
+//! boundary the claim is carried and enforced: a coordinate of one space cannot
+//! be passed where another is expected, and a map between two spaces has to
+//! exist and be named rather than be assumed.
 
 use crate::{
   linalg::nalgebra::{Vector, VectorView},
@@ -124,6 +132,9 @@ impl<'a, S: CoordSpace> From<&'a Coords<S>> for CoordsRef<'a, S> {
     coords.as_view()
   }
 }
+/// The unchecked entry from raw linear algebra: the space is whatever the
+/// context infers, claimed and not verified. The convenience is worth it, but
+/// it is the one place the tagging is on trust (see the module docs).
 impl<S: CoordSpace> From<Vector> for Coords<S> {
   fn from(entries: Vector) -> Self {
     Self::new(entries)
