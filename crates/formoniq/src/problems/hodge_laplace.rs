@@ -14,14 +14,14 @@ use itertools::Itertools;
 use std::mem;
 
 pub fn solve_hodge_laplace_source(
-  fes: WhitneyComplex,
+  whitney: WhitneyComplex,
   source_galvec: GalVec,
   grade: ExteriorGrade,
   homology_dim: usize,
 ) -> (Cochain, Cochain, Cochain) {
-  let harmonics = solve_hodge_laplace_harmonics(fes, grade, homology_dim);
+  let harmonics = solve_hodge_laplace_harmonics(whitney, grade, homology_dim);
 
-  let galmats = MixedGalmats::compute(fes, grade);
+  let galmats = MixedGalmats::compute(whitney, grade);
 
   let mass_u = CsrMatrix::from(&galmats.mass_u);
   let mass_harmonics = &mass_u * &harmonics;
@@ -73,26 +73,26 @@ pub fn solve_hodge_laplace_source(
 }
 
 pub fn solve_hodge_laplace_harmonics(
-  fes: WhitneyComplex,
+  whitney: WhitneyComplex,
   grade: ExteriorGrade,
   homology_dim: usize,
 ) -> Matrix {
   if homology_dim == 0 {
-    let nwhitneys = fes.ndofs(grade);
+    let nwhitneys = whitney.ndofs(grade);
     return Matrix::zeros(nwhitneys, 0);
   }
 
-  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(fes, grade, homology_dim);
+  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(whitney, grade, homology_dim);
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   harmonics
 }
 
 pub fn solve_hodge_laplace_evp(
-  fes: WhitneyComplex,
+  whitney: WhitneyComplex,
   grade: ExteriorGrade,
-  neigen_values: usize,
+  neigenvalues: usize,
 ) -> (Vector, Matrix, Matrix) {
-  let galmats = MixedGalmats::compute(fes, grade);
+  let galmats = MixedGalmats::compute(whitney, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
 
@@ -105,7 +105,7 @@ pub fn solve_hodge_laplace_evp(
     rhs.push(r, c, v);
   }
 
-  let (eigenvals, eigenvectors) = petsc_ghiep(&(&lhs).into(), &(&rhs).into(), neigen_values);
+  let (eigenvals, eigenvectors) = petsc_ghiep(&(&lhs).into(), &(&rhs).into(), neigenvalues);
 
   let eigen_sigmas = eigenvectors.rows(0, sigma_len).into_owned();
   let eigen_us = eigenvectors.rows(sigma_len, u_len).into_owned();
@@ -120,16 +120,16 @@ pub struct MixedGalmats {
   mass_u: GalMat,
 }
 impl MixedGalmats {
-  pub fn compute(fes: WhitneyComplex, grade: ExteriorGrade) -> Self {
-    assert!(grade <= fes.dim());
+  pub fn compute(whitney: WhitneyComplex, grade: ExteriorGrade) -> Self {
+    assert!(grade <= whitney.dim());
 
-    let mass_u = fes.mass(grade);
+    let mass_u = whitney.mass(grade);
     let mass_u_csr = CsrMatrix::from(&mass_u);
 
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      let mass_sigma = fes.mass(grade - 1);
+      let mass_sigma = whitney.mass(grade - 1);
 
-      let exdif_sigma = fes.dif(grade - 1);
+      let exdif_sigma = whitney.dif(grade - 1);
 
       let dif_sigma = &mass_u_csr * &exdif_sigma;
       let dif_sigma = CooMatrix::from(&dif_sigma);
@@ -142,8 +142,8 @@ impl MixedGalmats {
       (GalMat::new(0, 0), GalMat::new(0, 0), GalMat::new(0, 0))
     };
 
-    let codifdif_u = if grade < fes.dim() {
-      fes.codif_dif(grade)
+    let codifdif_u = if grade < whitney.dim() {
+      whitney.codif_dif(grade)
     } else {
       GalMat::new(0, 0)
     };

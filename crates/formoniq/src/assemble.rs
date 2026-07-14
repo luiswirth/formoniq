@@ -66,14 +66,14 @@ pub fn assemble_galvec(
 
       let subs: Vec<_> = cell.mesh_subsimps(grade).collect();
 
-      let mut local_entires = Vec::new();
+      let mut local_entries = Vec::new();
       for (ilocal, &iglobal) in subs.iter().enumerate() {
         if elvec[ilocal] != 0.0 {
-          local_entires.push((iglobal.kidx(), elvec[ilocal]));
+          local_entries.push((iglobal.kidx(), elvec[ilocal]));
         }
       }
 
-      local_entires
+      local_entries
     })
     .collect();
 

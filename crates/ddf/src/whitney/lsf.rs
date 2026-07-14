@@ -1,6 +1,6 @@
 use {
   common::{
-    combo::{factorialf, Combination, Sign},
+    combo::{factorial_f64, Combination, Sign},
     linalg::nalgebra::Matrix,
   },
   exterior::{field::ExteriorField, ExteriorGrade, MultiForm, MultiVector},
@@ -64,7 +64,7 @@ impl WhitneyLsf {
   /// Vanishes automatically for the top grade, where $Lambda^(k+1) (RR^n)$
   /// is the zero space.
   pub fn dif(&self) -> MultiForm {
-    factorialf(self.grade() + 1) * self.barycentric_blade().pullback(&self.difbarys)
+    factorial_f64(self.grade() + 1) * self.barycentric_blade().pullback(&self.difbarys)
   }
 }
 
@@ -81,6 +81,6 @@ impl ExteriorField for WhitneyLsf {
   fn at_point<'a>(&self, coord: impl Into<CoordRef<'a>>) -> MultiForm {
     let barys = MultiVector::line(self.cell_coords.global2bary(coord));
     let koszul = self.barycentric_blade().interior_product(&barys);
-    factorialf(self.grade()) * koszul.pullback(&self.difbarys)
+    factorial_f64(self.grade()) * koszul.pullback(&self.difbarys)
   }
 }

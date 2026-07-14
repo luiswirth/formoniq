@@ -139,10 +139,10 @@ mod test {
       let dif_of_projected = derham_map(&form, &topology, &coords, 1).dif(&topology);
       let projected_dif = derham_map(&dif_form, &topology, &coords, 1);
 
-      assert_eq!(dif_of_projected.grade, projected_dif.grade);
+      assert_eq!(dif_of_projected.grade(), projected_dif.grade());
       assert_relative_eq!(
-        dif_of_projected.coeffs,
-        projected_dif.coeffs,
+        dif_of_projected.coeffs(),
+        projected_dif.coeffs(),
         epsilon = 1e-12
       );
     }

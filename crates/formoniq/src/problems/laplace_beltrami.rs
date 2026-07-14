@@ -17,14 +17,14 @@ use ddf::cochain::Cochain;
 /// Essential boundary condition $"tr" u = g$ with `boundary_values` a
 /// 0-cochain on the trace complex, imposed by affine lifting.
 pub fn solve_laplace_beltrami_source(
-  fes: WhitneyComplex,
+  whitney: WhitneyComplex,
   boundary: &BoundaryWhitneyComplex,
   source_galvec: GalVec,
   boundary_values: &Cochain,
 ) -> Cochain {
-  let laplace = CsrMatrix::from(&fes.codif_dif(0));
+  let laplace = CsrMatrix::from(&whitney.codif_dif(0));
   bc::solve_with_essential_bc(
-    &fes.relative(),
+    &whitney.relative(),
     boundary,
     laplace,
     &source_galvec,
@@ -34,16 +34,16 @@ pub fn solve_laplace_beltrami_source(
 
 /// Eigenvalue problem of Laplace-Beltrami operator.
 pub fn solve_laplace_beltrami_evp(
-  fes: WhitneyComplex,
-  neigen_values: usize,
+  whitney: WhitneyComplex,
+  neigenvalues: usize,
 ) -> (Vector, Vec<Cochain>) {
-  let laplace_galmat = fes.codif_dif(0);
-  let mass_galmat = fes.mass(0);
+  let laplace_galmat = whitney.codif_dif(0);
+  let mass_galmat = whitney.mass(0);
 
   let (eigenvals, eigenvecs) = petsc_ghiep(
     &CsrMatrix::from(&laplace_galmat),
     &CsrMatrix::from(&mass_galmat),
-    neigen_values,
+    neigenvalues,
   );
 
   let eigenvecs = eigenvecs

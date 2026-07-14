@@ -44,9 +44,9 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     0
   }
-  fn eval(&self, geomery: &SimplexLengths) -> ElMat {
-    let n = geomery.nvertices();
-    let v = geomery.vol() / n as f64;
+  fn eval(&self, geometry: &SimplexLengths) -> ElMat {
+    let n = geometry.nvertices();
+    let v = geometry.vol() / n as f64;
     Matrix::from_diagonal_element(n, n, v)
   }
 }
@@ -205,7 +205,7 @@ impl ElMatProvider for CodifDifElmat {
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec;
+  fn eval(&self, geometry: &SimplexLengths, cell: &Simplex) -> ElVec;
 }
 
 pub struct SourceElVec<'a, F>
@@ -249,8 +249,8 @@ where
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, geometry: &SimplexLengths, topology: &Simplex) -> ElVec {
-    let cell_coords = SimplexCoords::from_simplex_and_coords(topology, self.mesh_coords);
+  fn eval(&self, geometry: &SimplexLengths, cell: &Simplex) -> ElVec {
+    let cell_coords = SimplexCoords::from_simplex_and_coords(cell, self.mesh_coords);
 
     let inner = multi_gramian(
       geometry.riemannian_metric().covector_gramian(),

@@ -92,7 +92,7 @@ impl MeshLengths {
     topology
       .cells()
       .handle_iter()
-      .map(|cell| self.simplex_lengths(cell).shape_reguarity_measure())
+      .map(|cell| self.simplex_lengths(cell).shape_regularity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }

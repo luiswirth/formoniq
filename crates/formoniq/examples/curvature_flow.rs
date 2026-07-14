@@ -33,12 +33,12 @@ fn main() {
   for istep in 0..nsteps {
     println!("Solving Curvature Flow at step={istep}/{last_step}...");
 
-    let fes = WhitneyComplex::new(&topology, &metric);
-    let laplace = CsrMatrix::from(&fes.codif_dif(0));
-    let mass = CsrMatrix::from(&fes.mass(0));
+    let whitney = WhitneyComplex::new(&topology, &metric);
+    let laplace = CsrMatrix::from(&whitney.codif_dif(0));
+    let mass = CsrMatrix::from(&whitney.mass(0));
     let system = &mass + dt * &laplace;
-    let boundary = fes.boundary();
-    let relative = fes.relative();
+    let boundary = whitney.boundary();
+    let relative = whitney.relative();
 
     let coords_initial = coords_list.first().unwrap();
     let coords_old = coords_list.last().unwrap();
@@ -53,7 +53,7 @@ fn main() {
         Some(boundary) => {
           let boundary_values = boundary.trace_cochain(&comps_initial);
           bc::solve_with_essential_bc(&relative, boundary, system.clone(), &rhs, &boundary_values)
-            .coeffs
+            .into_coeffs()
         }
         None => FaerCholesky::new(system.clone()).solve(&rhs),
       };

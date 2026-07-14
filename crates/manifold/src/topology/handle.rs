@@ -79,14 +79,14 @@ impl<'m> SimplexHandle<'m> {
   pub fn skeleton(&self) -> SkeletonHandle<'m> {
     self.complex.skeleton(self.dim())
   }
-  pub fn mesh_skeleton_raw(&self) -> &ComplexSkeleton {
-    self.complex.mesh_skeleton_raw(self.idx.dim())
+  pub fn complex_skeleton(&self) -> &ComplexSkeleton {
+    self.complex.complex_skeleton(self.idx.dim())
   }
   pub fn skeleton_raw(&self) -> &Skeleton {
-    self.mesh_skeleton_raw().skeleton()
+    self.complex_skeleton().skeleton()
   }
   pub fn mesh_data(&self) -> &SimplexComplexData {
-    &self.mesh_skeleton_raw().complex_data()[self.kidx()]
+    &self.complex_skeleton().complex_data()[self.kidx()]
   }
 }
 
@@ -112,9 +112,9 @@ impl SimplexHandle<'_> {
 
   /// The dim-subsimplices of this simplex.
   ///
-  /// These are ordered lexicographically w.r.t.
-  /// the local vertex indices.
-  /// e.g. tet.descendants(1) = [(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)]
+  /// These are ordered lexicographically w.r.t. the local vertex indices,
+  /// e.g. `tet.mesh_subsimps(1)` yields the edges
+  /// `(0,1),(0,2),(0,3),(1,2),(1,3),(2,3)`.
   pub fn mesh_subsimps(&self, dim_sub: Dim) -> impl Iterator<Item = SimplexHandle<'_>> {
     self
       .subsimps(dim_sub)
@@ -165,7 +165,7 @@ pub struct SkeletonHandle<'m> {
 impl std::ops::Deref for SkeletonHandle<'_> {
   type Target = Skeleton;
   fn deref(&self) -> &Self::Target {
-    self.complex.mesh_skeleton_raw(self.dim).skeleton()
+    self.complex.complex_skeleton(self.dim).skeleton()
   }
 }
 

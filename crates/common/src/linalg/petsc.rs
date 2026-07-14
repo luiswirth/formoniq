@@ -115,7 +115,7 @@ pub fn petsc_read_eigenvecs(filename: &str) -> std::io::Result<nalgebra::DMatrix
   Ok(Matrix::from_column_slice(nrows, ncols, &data))
 }
 
-pub fn petsc_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigen_values: usize) -> (Vector, Matrix) {
+pub fn petsc_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigenvalues: usize) -> (Vector, Matrix) {
   petsc_write_matrix(lhs, &format!("{PETSC_SOLVER_PATH}/in/A.bin")).unwrap();
   petsc_write_matrix(rhs, &format!("{PETSC_SOLVER_PATH}/in/B.bin")).unwrap();
 
@@ -126,7 +126,7 @@ pub fn petsc_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigen_values: usize) -> (V
     "-st_type", "sinvert",
     "-st_shift", "0.1",
     "-eps_target", "0.",
-    "-eps_nev", &neigen_values.to_string(),
+    "-eps_nev", &neigenvalues.to_string(),
   ];
 
   let status = std::process::Command::new(binary)
