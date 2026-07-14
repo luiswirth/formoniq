@@ -41,7 +41,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
         .split_whitespace()
         .map(|x| x.parse::<f64>().unwrap())
         .collect();
-      assert!(coords.len() == 3);
+      assert_eq!(coords.len(), 3);
       vertex_coords.push(na::dvector![coords[0], coords[1], coords[2]]);
     } else if let Some(indices) = line.strip_prefix("f ") {
       let indices: Vec<usize> = indices
@@ -49,7 +49,7 @@ pub fn from_obj_string(obj_string: &str) -> TriangleSurface3D {
         // .obj uses 1-indexing.
         .map(|x| x.parse::<usize>().unwrap() - 1)
         .collect();
-      assert!(indices.len() == 3);
+      assert_eq!(indices.len(), 3);
       triangles.push([indices[0], indices[1], indices[2]]);
     }
   }
@@ -104,7 +104,7 @@ pub fn write_3dmesh_animation<'a, 'b>(
     .collect();
   let time_frames: Vec<f32> = time_frames.into_iter().map(|t| t as f32).collect();
 
-  write_mdd_file("out/sphere_wave.mdd", &mdd_frames, &time_frames).unwrap()
+  write_mdd_file("out/sphere_wave.mdd", &mdd_frames, &time_frames).unwrap();
 }
 
 pub fn write_displacement_animation<'a>(

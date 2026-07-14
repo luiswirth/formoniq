@@ -51,7 +51,7 @@ mod test {
             let other_simplex = other_simp.coord_simplex(&coords);
             let qr = SimplexQuadRule::degree(grade, 1);
             let discret = integrate_form_simplex(&whitney_form, &other_simplex, &qr);
-            let expected = are_same_simp as u8 as f64;
+            let expected = f64::from(u8::from(are_same_simp));
             let diff = (discret - expected).abs();
             const TOL: f64 = 10e-9;
             let equal = diff <= TOL;
@@ -59,7 +59,7 @@ mod test {
             if other_simplex.nvertices() >= 2 {
               let other_simplex_rev = other_simplex.clone().flipped_orientation();
               let discret_rev = integrate_form_simplex(&whitney_form, &other_simplex_rev, &qr);
-              let expected_rev = Sign::Neg.as_f64() * are_same_simp as usize as f64;
+              let expected_rev = Sign::Neg.as_f64() * usize::from(are_same_simp) as f64;
               let diff_rev = (discret_rev - expected_rev).abs();
               let equal_rev = diff_rev <= TOL;
               assert!(

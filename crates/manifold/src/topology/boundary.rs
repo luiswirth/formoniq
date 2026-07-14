@@ -174,12 +174,12 @@ mod test {
       let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
       let boundary = topology.boundary_complex().unwrap();
       assert!(!boundary.complex().has_boundary());
-      for k in 0..=(dim - 1) {
+      for k in 0..dim {
         // S^(n-1) betti numbers; the 0-sphere is two points.
         let expected = if dim == 1 {
           2
         } else {
-          (k == 0 || k == dim - 1) as usize
+          usize::from(k == 0 || k == dim - 1)
         };
         assert_eq!(
           boundary.complex().homology_dim(k),
@@ -216,7 +216,7 @@ mod test {
     for dim in 1..=3 {
       let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
       let boundary = topology.boundary_complex().unwrap();
-      for k in 0..=(dim - 1) {
+      for k in 0..dim {
         let nboundary = boundary.complex().nsimplices(k);
         let ninterior = topology.nsimplices(k) - topology.boundary_simplices(k).len();
         assert_eq!(nboundary + ninterior, topology.nsimplices(k));
