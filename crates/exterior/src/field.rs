@@ -2,14 +2,19 @@
 //!
 //! A [`CoordField`] is mesh-independent analytic data: an exact solution, a
 //! source term, a boundary flux, given as a function of a point of
-//! $Omega subset RR^n$. It is *not* the discrete-differential-form notion of a
+//! $Omega subset RR^N$. It is *not* the discrete-differential-form notion of a
 //! field -- a `Section` of the exterior bundle over the simplicial manifold,
 //! which lives one crate up in `ddf` and has no global coordinate to be a
 //! function of. The two are connected by the variance-directed functor:
-//! covariant coordinate fields pull back onto the manifold along the chart,
-//! contravariant ones are pushed forward off it.
+//! covariant coordinate fields pull back onto the manifold along the affine
+//! parametrization of a cell, contravariant ones are pushed forward off it.
+//!
+//! The argument is an [`Ambient`](common::coord::Ambient) coordinate, and it is
+//! tagged as such: a barycentric or a chart-local coordinate is a different
+//! space, and handing one to a `CoordField` is now a type error rather than a
+//! silent wrong answer.
 
-use common::linalg::nalgebra::{Vector, VectorView};
+use common::{coord::Coord, linalg::nalgebra::Vector};
 
 use crate::{Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, Variance};
 
@@ -19,7 +24,7 @@ use crate::{Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, Varia
 pub trait CoordField<V: Variance> {
   fn dim(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
-  fn at<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement<V>;
+  fn at(&self, coord: &Coord) -> ExteriorElement<V>;
 }
 
 /// A coordinate field given by a pointwise closure.
@@ -31,10 +36,13 @@ pub trait CoordField<V: Variance> {
 /// path -- the element loops themselves stay monomorphized over
 /// [`CoordField`].
 pub struct FieldClosure<V: Variance> {
-  closure: Box<dyn Fn(VectorView) -> ExteriorElement<V> + Sync>,
+  closure: Box<PointwiseFn<V>>,
   dim: Dim,
   grade: ExteriorGrade,
 }
+
+/// The pointwise law of a [`FieldClosure`]: a function of an ambient coordinate.
+type PointwiseFn<V> = dyn Fn(&Coord) -> ExteriorElement<V> + Sync;
 
 /// A differential form on a coordinate domain: a covariant [`FieldClosure`].
 pub type DiffFormClosure = FieldClosure<Covariant>;
@@ -44,7 +52,7 @@ pub type MultiVectorFieldClosure = FieldClosure<Contravariant>;
 
 impl<V: Variance> FieldClosure<V> {
   pub fn new(
-    closure: impl Fn(VectorView) -> ExteriorElement<V> + Sync + 'static,
+    closure: impl Fn(&Coord) -> ExteriorElement<V> + Sync + 'static,
     dim: Dim,
     grade: ExteriorGrade,
   ) -> Self {
@@ -56,11 +64,11 @@ impl<V: Variance> FieldClosure<V> {
   }
 
   /// A scalar field: grade 0, where the two variances coincide.
-  pub fn scalar(f: impl Fn(VectorView) -> f64 + Sync + 'static, dim: Dim) -> Self {
+  pub fn scalar(f: impl Fn(&Coord) -> f64 + Sync + 'static, dim: Dim) -> Self {
     Self::new(move |x| ExteriorElement::scalar(f(x), dim), dim, 0)
   }
   /// A grade-1 field, from its coefficients in the standard basis.
-  pub fn line(f: impl Fn(VectorView) -> Vector + Sync + 'static, dim: Dim) -> Self {
+  pub fn line(f: impl Fn(&Coord) -> Vector + Sync + 'static, dim: Dim) -> Self {
     Self::new(move |x| ExteriorElement::line(f(x)), dim, 1)
   }
 
@@ -73,20 +81,20 @@ impl<V: Variance> FieldClosure<V> {
     Self::scalar(move |x| x[icomp], dim)
   }
   /// The scalar field of the radial distance from a center point.
-  pub fn radial_scalar(center: Vector, dim: Dim) -> Self {
+  pub fn radial_scalar(center: Coord, dim: Dim) -> Self {
     Self::scalar(move |x| (&center - x).norm(), dim)
   }
 }
 
 impl DiffFormClosure {
   /// A covector field $omega = sum_i omega_i dif x^i$.
-  pub fn one_form(f: impl Fn(VectorView) -> Vector + Sync + 'static, dim: Dim) -> Self {
+  pub fn one_form(f: impl Fn(&Coord) -> Vector + Sync + 'static, dim: Dim) -> Self {
     Self::line(f, dim)
   }
 }
 impl MultiVectorFieldClosure {
   /// A vector field $v = sum_i v^i diff_i$.
-  pub fn vector_field(f: impl Fn(VectorView) -> Vector + Sync + 'static, dim: Dim) -> Self {
+  pub fn vector_field(f: impl Fn(&Coord) -> Vector + Sync + 'static, dim: Dim) -> Self {
     Self::line(f, dim)
   }
 }
@@ -98,7 +106,7 @@ impl<V: Variance> CoordField<V> for FieldClosure<V> {
   fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn at<'a>(&self, coord: impl Into<VectorView<'a>>) -> ExteriorElement<V> {
-    (self.closure)(coord.into())
+  fn at(&self, coord: &Coord) -> ExteriorElement<V> {
+    (self.closure)(coord)
   }
 }
