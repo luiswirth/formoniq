@@ -2,7 +2,10 @@ use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
 use exterior::ExteriorGrade;
 use manifold::{
   atlas::{barycenter_bary, Bary, MeshPoint},
-  geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
+  geometry::{
+    coord::{mesh::MeshCoords, simplex::SimplexRefExt},
+    metric::geometry::Geometry,
+  },
   topology::{complex::Complex, handle::SimplexRef, simplex::standard_subsimps},
   Dim,
 };
@@ -53,12 +56,37 @@ pub struct ScalarField {
 pub struct VectorField {
   pub name: String,
   pub samples: Vec<VectorSample>,
-  /// The barycentric lattice resolution each sample was reconstructed at:
-  /// the renderer's glyph length is a fraction of one lattice cell, not a
-  /// fixed constant, so arrows stay legible -- non-overlapping, but not
-  /// vanishingly short -- at whatever density the field was actually
-  /// sampled at.
+  /// The cochain every sample reconstructs, kept around (not just the
+  /// samples themselves) so [`Scene::resample_vector_field`] can regenerate
+  /// them at a different lattice resolution -- a rendering-density choice --
+  /// without re-running any solve.
+  pub cochain: Cochain,
+  /// The lattice resolution the scene itself chose at construction: the
+  /// floor [`Scene::resample_vector_field`] never goes below as the camera
+  /// zooms back out, since that choice was already deliberate -- one arrow
+  /// per cell for an eigenmode on a many-cell mesh, a dense lattice for the
+  /// single reference cell -- not an arbitrary default to erase.
+  pub base_lattice_resolution: usize,
+  /// The lattice resolution currently on display: `base_lattice_resolution`
+  /// refined by zooming in, via [`Scene::resample_vector_field`]. What the
+  /// renderer's glyph-length scaling divides by, so arrows stay legible --
+  /// non-overlapping, but not vanishingly short -- at whatever density is
+  /// currently sampled.
   pub lattice_resolution: usize,
+  /// See [`ScalarField::eigenvalue`].
+  pub eigenvalue: Option<f64>,
+  /// The field's own magnitude $|V|$, one value per vertex: what colors the
+  /// surface while `samples` are drawn as direction-only arrows on top of
+  /// it. Averaged at each vertex over its incident cells, not a single
+  /// well-defined value read off directly -- unlike grade 0, a grade-1
+  /// field has no canonical value at a vertex, since only the *tangential*
+  /// part of a section is chart-independent there (the atlas's own
+  /// invariant), so two incident cells can genuinely disagree on the full
+  /// vector. The magnitude $|V|_g$ is still an intrinsic, chart-independent
+  /// scalar within each cell, so averaging *that* across incident cells is
+  /// the same nodal-recovery idea classical FEM postprocessing uses for a
+  /// quantity that is only piecewise, not globally, single-valued.
+  pub magnitude: Vec<f64>,
 }
 
 pub struct VectorSample {
@@ -295,38 +323,125 @@ impl Scene {
         eigenvalue,
       }),
       1 => {
-        let interpolant = WhitneyInterpolant::new(cochain, topology);
-        let lattice = barycentric_lattice(topology.dim(), arrow_samples_per_cell_edge);
-        let cell_normals = oriented_cell_normals(topology, coords);
-        let samples = topology
-          .cells()
-          .handle_iter()
-          .flat_map(|cell| {
-            let metric = coords.cell_metric(cell);
-            let interpolant = &interpolant;
-            let normal = cell_normals[cell.kidx()];
-            lattice.iter().map(move |bary| {
-              let point = MeshPoint::new(cell.idx(), bary.clone());
-              let vector = interpolant.eval(&point).sharp(&metric);
-              let c = vector.coeffs();
-              let vector = na::Vector3::new(c[0], if c.len() > 1 { c[1] } else { 0.0 }, 0.0);
-              VectorSample {
-                position: ambient_point(cell, coords, bary),
-                vector,
-                normal,
-              }
-            })
-          })
-          .collect();
+        let samples = vector_field_samples(topology, coords, &cochain, arrow_samples_per_cell_edge);
+        let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
+        let magnitude = nodal_magnitude_field(topology, coords, &interpolant);
         vector_fields.push(VectorField {
           name,
           samples,
-          lattice_resolution: arrow_samples_per_cell_edge.max(1),
+          base_lattice_resolution: arrow_samples_per_cell_edge,
+          lattice_resolution: arrow_samples_per_cell_edge,
+          eigenvalue,
+          magnitude,
+          cochain,
         });
       }
       _ => {}
     }
   }
+
+  /// Regenerates one vector field's arrow samples at a different lattice
+  /// resolution, reusing the mode's own stored cochain instead of
+  /// re-running anything -- a rendering-density change, not a re-solve, so
+  /// it is cheap enough to call on every zoom step, unlike the scene's
+  /// initial dense eigensolve. The surface's own
+  /// `magnitude` coloring is untouched: it is a property of the mode, not of
+  /// how many arrows currently sample it.
+  pub fn resample_vector_field(&mut self, index: usize, resolution: usize) {
+    if self.vector_fields[index].lattice_resolution == resolution {
+      return;
+    }
+    let samples = vector_field_samples(
+      &self.topology,
+      &self.coords,
+      &self.vector_fields[index].cochain,
+      resolution,
+    );
+    let field = &mut self.vector_fields[index];
+    field.samples = samples;
+    field.lattice_resolution = resolution;
+  }
+}
+
+/// Reconstructs a grade-1 cochain as one arrow sample per point of a
+/// barycentric lattice of every cell -- the general machinery both
+/// [`Scene::field`] (at scene-build time) and [`Scene::resample_vector_field`]
+/// (on a zoom-driven density change) call, so the two never disagree on how a
+/// sample is built.
+fn vector_field_samples(
+  topology: &Complex,
+  coords: &MeshCoords,
+  cochain: &Cochain,
+  resolution: usize,
+) -> Vec<VectorSample> {
+  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
+  let lattice = barycentric_lattice(topology.dim(), resolution);
+  let cell_normals = oriented_cell_normals(topology, coords);
+  topology
+    .cells()
+    .handle_iter()
+    .flat_map(|cell| {
+      let metric = coords.cell_metric(cell);
+      // The parametrization $psi_K: hat(K) -> RR^N$ whose differential --
+      // constant, since $psi_K$ is affine -- pushes the sharped vector's
+      // coefficients (in the cell's own local tangent basis, the same basis
+      // `metric` is expressed in) out into the ambient one the renderer
+      // draws in. Skipping this and reading the local coefficients directly
+      // as ambient ones is only ever correct for a cell whose local basis
+      // happens to line up with the ambient axes -- true for the flat
+      // reference triangle, false for a generic cell of a curved mesh like
+      // the sphere.
+      let coord_simplex = cell.coord_simplex(coords);
+      let interpolant = &interpolant;
+      let normal = cell_normals[cell.kidx()];
+      lattice.iter().map(move |bary| {
+        let point = MeshPoint::new(cell.idx(), bary.clone());
+        let local = interpolant.eval(&point).sharp(&metric);
+        let ambient = coord_simplex.pushforward_vector(local.coeffs());
+        let vector = na::Vector3::new(
+          ambient[0],
+          if ambient.len() > 1 { ambient[1] } else { 0.0 },
+          if ambient.len() > 2 { ambient[2] } else { 0.0 },
+        );
+        VectorSample {
+          position: ambient_point(cell, coords, bary),
+          vector,
+          normal,
+        }
+      })
+    })
+    .collect()
+}
+
+/// The nodal average of $|V|_g$ over every cell incident to each vertex: see
+/// [`VectorField::magnitude`] for why an average, not a single value, is the
+/// principled thing to compute here.
+fn nodal_magnitude_field(
+  topology: &Complex,
+  coords: &MeshCoords,
+  interpolant: &WhitneyInterpolant,
+) -> Vec<f64> {
+  let nvertices = topology.skeleton_raw(0).len();
+  let mut sum = vec![0.0; nvertices];
+  let mut count = vec![0u32; nvertices];
+  for cell in topology.cells().handle_iter() {
+    let metric = coords.cell_metric(cell);
+    let coord_simplex = cell.coord_simplex(coords);
+    for (ilocal, &v) in cell.simplex().vertices.iter().enumerate() {
+      let mut weights = na::DVector::zeros(cell.nvertices());
+      weights[ilocal] = 1.0;
+      let point = MeshPoint::new(cell.idx(), weights.into());
+      let local = interpolant.eval(&point).sharp(&metric);
+      let ambient = coord_simplex.pushforward_vector(local.coeffs());
+      sum[v] += ambient.norm();
+      count[v] += 1;
+    }
+  }
+  sum
+    .into_iter()
+    .zip(count)
+    .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 })
+    .collect()
 }
 
 /// The ambient coordinates of vertex `v`, zero-padded to 3D.
