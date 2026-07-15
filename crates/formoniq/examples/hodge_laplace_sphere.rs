@@ -35,7 +35,6 @@ fn main() {
   tracing_subscriber::fmt::init();
 
   let grade = 1;
-  let homology_dim = 0;
 
   // The unit sphere as a continuum. `sphere(2)` gives the hyperspherical
   // forward map with its closed-form nearest-point chart; the axis convention is
@@ -66,7 +65,6 @@ fn main() {
       WhitneyComplex::new(&topology, &metric),
       source,
       grade,
-      homology_dim,
     );
 
     let solution = solution_exact.pullback_through(&topology, &coords, &sphere);

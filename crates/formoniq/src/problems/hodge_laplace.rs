@@ -17,9 +17,8 @@ pub fn solve_hodge_laplace_source(
   whitney: WhitneyComplex,
   source_galvec: GalVec,
   grade: ExteriorGrade,
-  homology_dim: usize,
 ) -> (Cochain, Cochain, Cochain) {
-  let harmonics = solve_hodge_laplace_harmonics(whitney, grade, homology_dim);
+  let harmonics = solve_hodge_laplace_harmonics(whitney, grade);
 
   let galmats = MixedGalmats::compute(whitney, grade);
 
@@ -72,11 +71,11 @@ pub fn solve_hodge_laplace_source(
   (sigma, u, p)
 }
 
-pub fn solve_hodge_laplace_harmonics(
-  whitney: WhitneyComplex,
-  grade: ExteriorGrade,
-  homology_dim: usize,
-) -> Matrix {
+pub fn solve_hodge_laplace_harmonics(whitney: WhitneyComplex, grade: ExteriorGrade) -> Matrix {
+  // The dimension of the harmonic space is the Betti number $b_k$ (Hodge
+  // theorem: $cal(H)^k tilde.equ H^k tilde.equ H_k$), an exact topological
+  // invariant of the complex — not a number the caller has to know.
+  let homology_dim = whitney.topology().betti_number(grade);
   if homology_dim == 0 {
     let nwhitneys = whitney.ndofs(grade);
     return Matrix::zeros(nwhitneys, 0);
