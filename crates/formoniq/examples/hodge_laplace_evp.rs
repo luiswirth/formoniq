@@ -1,97 +1,157 @@
+//! Hodge-Laplace eigenvalue problem.
+//!
+//! By default, a generic sweep over every dimension $1 <= n <= 3$ and every form
+//! grade $0 <= k <= n$ on the flat box $[0, pi]^n$: the lowest eigenvalues of the
+//! mixed Hodge Laplacian, refined until their algebraic self-convergence rate
+//! shows. The count of zero eigenvalues is the harmonic dimension $b_k$ — $1$ at
+//! grade $0$, else $0$ on the contractible box — an exact topological anchor.
+//!
+//! Run with `-i` / `--interactive` to instead load an external mesh (`.msh` or
+//! `.obj`) and read the grade and eigenvalue count from stdin — the way to put
+//! the solver on a curved domain such as the sphere, where the grade-0 spectrum
+//! is $ell(ell + 1)$.
+//!
+//! Run by hand; read the spectra off the tables.
+
 use {
-  ddf::cochain::Cochain,
-  ddf::section::SectionExt,
-  ddf::whitney::interpolant::WhitneyInterpolant,
-  exterior::exterior_dim,
+  common::util::algebraic_convergence_rate,
   formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
-  manifold::{atlas::MeshPoint, geometry::coord::simplex::SimplexRefExt},
+  manifold::gen::cartesian::CartesianMeshInfo,
 };
 
-use std::{
-  fs::{self, File},
-  io::Write,
-  path::PathBuf,
-};
+use std::f64::consts::PI;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-  let out_path = "out/laplacian_evp";
-  let _ = fs::remove_dir_all(out_path);
-  fs::create_dir_all(out_path).unwrap();
+  tracing_subscriber::fmt::init();
 
-  println!("Enter mesh file path.");
-  let mut path = String::new();
-  std::io::stdin().read_line(&mut path)?;
-  let path: PathBuf = path.trim().to_string().into();
+  let interactive = std::env::args()
+    .nth(1)
+    .is_some_and(|arg| arg == "-i" || arg == "--interactive");
 
-  let file_ext = path.extension().expect("Missing file extension.");
+  if interactive {
+    interactive_mesh()
+  } else {
+    box_sweep();
+    Ok(())
+  }
+}
 
-  let (topology, coords) = match file_ext.to_str().unwrap() {
-    "msh" => {
-      let gmsh_file = fs::read(path)?;
-      manifold::io::gmsh::gmsh2coord_complex(&gmsh_file)
+/// The default: the mixed Hodge-Laplace spectrum on the flat box, swept over all
+/// dimensions and grades, with each eigenvalue's self-convergence rate.
+fn box_sweep() {
+  let neigen = 6;
+  // Dimension 0 is the base case: the box is a single point, the de Rham complex
+  // is $RR$ in degree 0, the Hodge Laplacian is the zero operator, and the whole
+  // spectrum is ${0}$ with multiplicity $b_0 = 1$. It carries no convergence (a
+  // point does not refine), but it runs on exactly the same code.
+  for dim in 0..=3 {
+    for grade in 0..=dim {
+      println!("\nHodge-Laplace EVP, dim {dim}, grade {grade}.");
+      println!(
+        "  {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
+        "r", "ncells"
+      );
+
+      // Every grade solves a dense generalized eigenproblem, $O(N^3)$ in the
+      // mixed-system size $N$, so refine only while that stays affordable and
+      // stop at the first level that would exceed the budget. In 3D this leaves
+      // just a couple of levels; the source example, on the sparse LU, carries
+      // the finer convergence story.
+      const MAX_DOFS: usize = 1200;
+
+      // History of the lowest eigenvalues per level, for the three-point
+      // Richardson estimate of each eigenvalue's convergence order.
+      let mut history: Vec<Vec<f64>> = Vec::new();
+      let mut prev_ndofs = 0;
+      for irefine in 0u32..=8 {
+        let nboxes_per_dim = 2usize.pow(irefine);
+        let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
+        let (topology, coords) = box_mesh.compute_coord_complex();
+        let metric = coords.to_edge_lengths(&topology);
+        let whitney = WhitneyComplex::new(&topology, &metric);
+
+        let ndofs = whitney.ndofs(grade)
+          + if grade > 0 {
+            whitney.ndofs(grade - 1)
+          } else {
+            0
+          };
+        // Stop once the dense solve would exceed the budget, or once refinement
+        // no longer grows the mesh — a 0-manifold is a single point and does not
+        // subdivide, so it has exactly one level.
+        if !history.is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
+          break;
+        }
+        prev_ndofs = ndofs;
+
+        let (eigenvals, _, _) = hodge_laplace::solve_hodge_laplace_evp(whitney, grade, neigen);
+        // The coarsest levels can carry fewer DOFs than the requested count; the
+        // eigensolver pads the rest with non-finite values.
+        let eigenvals: Vec<f64> = eigenvals
+          .iter()
+          .copied()
+          .filter(|x| x.is_finite())
+          .collect();
+
+        // Richardson: with three successive levels the ratio of consecutive
+        // differences estimates the order without knowing the exact eigenvalue.
+        // FEEC eigenvalues converge as $O(h^2)$, so expect a rate near 2.
+        let rates: Option<Vec<f64>> = match history.as_slice() {
+          [.., older, newer] => Some(
+            (0..eigenvals.len().min(newer.len()).min(older.len()))
+              .map(|i| {
+                let (d_old, d_new) = ((newer[i] - older[i]).abs(), (eigenvals[i] - newer[i]).abs());
+                algebraic_convergence_rate(d_new, d_old)
+              })
+              .collect(),
+          ),
+          _ => None,
+        };
+
+        let ncells = topology.cells().len();
+        print!("  {irefine:>2} | {ncells:>7} |");
+        for (i, &lambda) in eigenvals.iter().enumerate() {
+          match rates.as_ref().and_then(|rates| rates.get(i)) {
+            Some(rate) => print!(" {lambda:6.3}({rate:>4.1})"),
+            None => print!(" {lambda:6.3}( -- )"),
+          }
+        }
+        println!();
+
+        history.push(eigenvals);
+      }
     }
-    "obj" => {
-      let obj_file = fs::read(path)?;
-      let obj_string = String::from_utf8(obj_file)?;
-      manifold::io::blender::obj2coord_complex(&obj_string)
-    }
-    _ => panic!("Unkown file extension."),
+  }
+}
+
+/// Load an external mesh and solve the eigenproblem on it, reading the grade and
+/// eigenvalue count from stdin. The route to a curved domain: the solver is
+/// intrinsic, so the mesh's own edge lengths are all it consumes.
+fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
+  let prompt = |msg: &str| -> Result<String, Box<dyn std::error::Error>> {
+    println!("{msg}");
+    let mut line = String::new();
+    std::io::stdin().read_line(&mut line)?;
+    Ok(line.trim().to_string())
   };
 
-  let ambient_dim = coords.dim();
+  let path = std::path::PathBuf::from(prompt("Enter mesh file path (.msh or .obj).")?);
+  let (topology, coords) = match path.extension().and_then(|e| e.to_str()) {
+    Some("msh") => manifold::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
+    Some("obj") => {
+      manifold::io::blender::obj2coord_complex(&String::from_utf8(std::fs::read(path)?)?)
+    }
+    _ => return Err("Unknown or missing file extension.".into()),
+  };
   let metric = coords.to_edge_lengths(&topology);
 
-  fs::write(
-    format!("{out_path}/mesh.obj"),
-    manifold::io::blender::coord_complex2obj(&topology, &coords),
-  )?;
+  let grade: usize = prompt("Enter exterior grade.")?.parse()?;
+  let neigen: usize = prompt("Enter number of eigenvalues.")?.parse()?;
 
-  println!("Enter exterior grade.");
-  let mut grade = String::new();
-  std::io::stdin().read_line(&mut grade)?;
-  let grade: usize = grade.trim().parse()?;
-
-  println!("Enter number of eigens.");
-  let mut neigen = String::new();
-  std::io::stdin().read_line(&mut neigen)?;
-  let neigen: usize = neigen.trim().parse()?;
-
-  let (eigenvals, _, eigenfuncs) =
+  let (eigenvals, _, _) =
     hodge_laplace::solve_hodge_laplace_evp(WhitneyComplex::new(&topology, &metric), grade, neigen);
-  for (ieigen, (&eigenval, eigenfunc)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate()
-  {
-    println!("ieigen={ieigen}, eigenval={eigenval:.3}");
-    let eigen_cochain = Cochain::new(grade, eigenfunc.into_owned());
-
-    let mut file = File::create(format!("{out_path}/eigen{ieigen}.txt"))?;
-
-    // Write header
-    for i in 0..ambient_dim {
-      write!(&mut file, "x{i} ")?;
-    }
-    for i in 0..exterior_dim(ambient_dim, grade) {
-      write!(&mut file, "v{i} ")?;
-    }
-    writeln!(&mut file)?;
-
-    // Sampling in ambient coordinates: the reference-frame value of the
-    // eigenform is extended to the ambient frame through the chart, which is
-    // an I/O concern and lives outside the intrinsic core.
-    let whitney = WhitneyInterpolant::new(eigen_cochain, &topology);
-    let sampler = whitney.sampled_on(&topology, &coords);
-
-    for cell in topology.cells().handle_iter() {
-      let barycenter = cell.coord_simplex(&coords).barycenter();
-      let cell_value = sampler.at_point(&MeshPoint::barycenter(cell.idx()));
-
-      for coord in barycenter.iter() {
-        write!(file, "{coord:.6} ")?;
-      }
-      for comp in cell_value.coeffs() {
-        write!(file, "{comp:.6} ")?;
-      }
-      writeln!(file)?;
-    }
+  for (i, &lambda) in eigenvals.iter().enumerate() {
+    println!("eigenvalue {i}: {lambda:.4}");
   }
   Ok(())
 }
