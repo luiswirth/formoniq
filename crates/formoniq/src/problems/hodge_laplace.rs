@@ -95,7 +95,9 @@ pub fn solve_hodge_laplace_source<C: HilbertComplex>(
     Cochain::new(0, sigma_coeffs)
   };
   let u = Cochain::new(grade, complex.inclusion(grade) * u_coeffs);
-  let p = Cochain::new(grade, complex.inclusion(grade) * p_coeffs);
+  // `p` is the coefficient vector against the harmonic basis (length $b_k$), a
+  // Lagrange multiplier — not a cochain in $u$-space, so it is not extended.
+  let p = Cochain::new(grade, p_coeffs);
   (sigma, u, p)
 }
 
