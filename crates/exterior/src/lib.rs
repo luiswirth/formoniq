@@ -1,7 +1,5 @@
 extern crate nalgebra as na;
 
-pub mod field;
-
 use common::{
   combo::{binomial, combinations, Combination, Sign},
   gramian::{Gramian, RiemannianMetric},

@@ -9,8 +9,8 @@
 extern crate nalgebra as na;
 
 use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
+use continuum::field::DiffFormClosure;
 use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
-use exterior::field::DiffFormClosure;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use manifold::gen::cartesian::CartesianMeshInfo;
 

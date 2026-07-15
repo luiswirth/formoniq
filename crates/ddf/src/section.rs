@@ -10,11 +10,13 @@
 //! no global coordinate system. Sections therefore work verbatim on a purely
 //! metric (Regge) manifold, where no global coordinate exists at all.
 //!
-//! The flat, mesh-independent [`CoordField`]s of the `exterior` crate connect
-//! to this world through the functor whose direction the [`Variance`] fixes:
+//! The mesh-independent [`CoordField`]s of the `continuum` crate -- analytic
+//! data on the smooth manifold $M$ -- connect to this world through the functor
+//! whose direction the [`Variance`] fixes:
 //!
-//! - covariant: a coordinate form **pulls back** onto the manifold along the
-//!   cell chart ([`Pullback`], canonical and metric-free);
+//! - covariant: a coordinate form **pulls back** onto the mesh along the
+//!   composite of the cell parametrization and the continuum chart
+//!   ([`Pullback`], canonical and metric-free);
 //! - contravariant: the direction reverses, so a multivector field on the
 //!   manifold is what pushes forward into ambient space instead.
 //!
@@ -27,10 +29,14 @@
 use crate::whitney::interpolant::WhitneyInterpolant;
 
 use {
-  common::gramian::RiemannianMetric,
+  common::{
+    coord::{Ambient, CoordSpace, Coords},
+    gramian::RiemannianMetric,
+    linalg::nalgebra::Vector,
+  },
+  continuum::{field::CoordField, parametrization::Parametrization},
   exterior::{
-    field::CoordField, Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm,
-    MultiVector, Variance,
+    Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
   },
   manifold::{
     atlas::MeshPoint,
@@ -63,22 +69,59 @@ pub trait Section<V: Variance> {
   fn at(&self, point: &MeshPoint) -> ExteriorElement<V>;
 }
 
-/// The pullback of a coordinate differential form onto the manifold along the
-/// cell charts, $omega |-> phi_K^* omega$.
+/// The pullback of a continuum differential form onto the mesh, $omega |->
+/// (chi compose psi_K)^* omega$.
 ///
-/// The canonical way a mesh-independent form becomes a field on the mesh:
-/// evaluate at the global image of the mesh point and pull the value back
-/// through the chart's linear part. Metric-free, and only for [`Covariant`]
-/// fields -- pullback is the contravariant action of $Lambda^k$, so the
-/// functor runs this way and no other.
-pub struct Pullback<'a, F> {
+/// A form $omega$ on a chart domain $Omega$ of the continuum $M$ reaches a cell
+/// $K$ of the simplicial mesh through the composite
+///
+/// $$ hat(K) ->^(psi_K) RR^N ->^chi Omega, qquad chi = phi^(-1) compose r, $$
+///
+/// the affine parametrization $psi_K$ of the cell followed by the continuum
+/// chart $chi$ -- the ordinary transition-map pattern, but spanning $M_h$ and
+/// $M$ instead of two patches of one manifold. Evaluate $omega$ at
+/// $u = chi(psi_K(lambda))$ and pull the value back through the composite
+/// differential $dif chi dot dif psi_K$. Metric-free, and only for [`Covariant`]
+/// fields -- pullback is the contravariant action of $Lambda^k$, so the functor
+/// runs this way and no other.
+///
+/// The construction is a bona fide pullback of a form along a smooth map, and
+/// $(R s)_sigma = integral_(r(sigma)) omega_M$ is the exact integral of the true
+/// form over the curved image of the face. What it is *not* is exact *on* $M$,
+/// and the inexactness is the $M_h != M$ gap made quantitative -- a domain gap
+/// ($r(sigma)$ is not the geodesic simplex, $O(h^2)$ under the orthogonal
+/// projection) and a metric gap (the $L^2$ pairings downstream use the chord
+/// metric $g_h$, not $g_M$, also $O(h^2)$). Both are inherent to a linear mesh
+/// and distinct from the exact structure *inside* $M_h$.
+///
+/// The flat case is the value $Omega = RR^N$, $phi = id$: then $chi$ is the
+/// identity and the composite collapses to $psi_K$ alone, taken with no chart
+/// solve. That is exactly what `pullback_on` is.
+pub struct Pullback<'a, F, S: CoordSpace = Ambient> {
   field: &'a F,
   topology: &'a Complex,
   coords: &'a MeshCoords,
+  chart: Chart<'a, S>,
 }
 
-impl<'a, F: CoordField<Covariant>> Pullback<'a, F> {
-  pub fn new(field: &'a F, topology: &'a Complex, coords: &'a MeshCoords) -> Self {
+/// How a mesh point reaches the continuum chart domain $Omega$.
+enum Chart<'a, S: CoordSpace> {
+  /// The flat case: $Omega = RR^N$, $phi = id$, so $chi = id$ and the ambient
+  /// image of the mesh point *is* the domain point. No chart solve.
+  Identity,
+  /// The curved case: $chi = phi^(-1) compose r$, evaluated by the
+  /// [`Parametrization`]. `vertex_omega` caches $chi$ at every mesh vertex, so an
+  /// interior point can seed its Gauss-Newton from the barycentric interpolation
+  /// of its cell's vertices rather than a cold start.
+  Through {
+    param: &'a Parametrization<S>,
+    vertex_omega: Vec<Coords<S>>,
+  },
+}
+
+impl<'a, F: CoordField<Covariant, Ambient>> Pullback<'a, F, Ambient> {
+  /// The flat pullback: the field's domain *is* the ambient space.
+  pub fn identity(field: &'a F, topology: &'a Complex, coords: &'a MeshCoords) -> Self {
     assert_eq!(
       field.dim(),
       coords.dim(),
@@ -88,11 +131,44 @@ impl<'a, F: CoordField<Covariant>> Pullback<'a, F> {
       field,
       topology,
       coords,
+      chart: Chart::Identity,
     }
   }
 }
 
-impl<F: CoordField<Covariant>> Section<Covariant> for Pullback<'_, F> {
+impl<'a, S: CoordSpace, F: CoordField<Covariant, S>> Pullback<'a, F, S> {
+  /// The curved pullback: the field lives on a chart domain of the continuum,
+  /// reached through `param`.
+  pub fn through(
+    field: &'a F,
+    topology: &'a Complex,
+    coords: &'a MeshCoords,
+    param: &'a Parametrization<S>,
+  ) -> Self {
+    assert_eq!(
+      field.dim(),
+      param.dim(),
+      "Field lives on the parametrization's domain."
+    );
+    let vertex_omega = (0..coords.nvertices())
+      .map(|v| {
+        let vc = coords.coord(v).to_coords();
+        param.chart(&vc, &param.seed_at(&vc))
+      })
+      .collect();
+    Self {
+      field,
+      topology,
+      coords,
+      chart: Chart::Through {
+        param,
+        vertex_omega,
+      },
+    }
+  }
+}
+
+impl<S: CoordSpace, F: CoordField<Covariant, S>> Section<Covariant> for Pullback<'_, F, S> {
   fn dim(&self) -> Dim {
     self.topology.dim()
   }
@@ -100,26 +176,66 @@ impl<F: CoordField<Covariant>> Section<Covariant> for Pullback<'_, F> {
     self.field.grade()
   }
   fn at(&self, point: &MeshPoint) -> MultiForm {
-    let parametrization = point.chart(self.topology).cell().coord_simplex(self.coords);
+    let cell = point.chart(self.topology).cell();
+    let parametrization = cell.coord_simplex(self.coords);
     let global = parametrization.bary2global(point.bary());
-    self
-      .field
-      .at(&global)
-      .pullback(&parametrization.linear_transform())
+    match &self.chart {
+      // `Identity` is only ever built at `S = Ambient`, where the ambient image
+      // *is* the domain point; the relabel is the sanctioned unchecked entry.
+      Chart::Identity => {
+        let u = Coords::<S>::new(global.into_vector());
+        self
+          .field
+          .at(&u)
+          .pullback(&parametrization.linear_transform())
+      }
+      Chart::Through {
+        param,
+        vertex_omega,
+      } => {
+        let seed: Vector = cell
+          .simplex()
+          .iter()
+          .zip(point.bary().iter())
+          .map(|(v, &w)| w * vertex_omega[v].view())
+          .sum();
+        let u = param.chart(&global, &Coords::new(seed));
+        let composite = param.chart_differential(&u) * parametrization.linear_transform();
+        self.field.at(&u).pullback(&composite)
+      }
+    }
   }
 }
 
-/// Pull a coordinate form onto the manifold: `f.pullback_on(&topology, &coords)`.
-pub trait CoordFieldExt: Sized + CoordField<Covariant> {
+/// Pull a continuum form onto the mesh:
+/// `f.pullback_on(&topology, &coords)` (flat) or
+/// `f.pullback_through(&topology, &coords, &param)` (curved).
+pub trait CoordFieldExt<S: CoordSpace = Ambient>: Sized + CoordField<Covariant, S> {
+  /// Pull the form onto the mesh along a continuum [`Parametrization`].
+  fn pullback_through<'a>(
+    &'a self,
+    topology: &'a Complex,
+    coords: &'a MeshCoords,
+    param: &'a Parametrization<S>,
+  ) -> Pullback<'a, Self, S> {
+    Pullback::through(self, topology, coords, param)
+  }
+
+  /// Pull the form onto the mesh in the flat case: the identity special case of
+  /// [`pullback_through`](Self::pullback_through), where the continuum is $RR^N$
+  /// and its chart is the identity.
   fn pullback_on<'a>(
     &'a self,
     topology: &'a Complex,
     coords: &'a MeshCoords,
-  ) -> Pullback<'a, Self> {
-    Pullback::new(self, topology, coords)
+  ) -> Pullback<'a, Self, Ambient>
+  where
+    Self: CoordField<Covariant, Ambient>,
+  {
+    Pullback::identity(self, topology, coords)
   }
 }
-impl<F: CoordField<Covariant>> CoordFieldExt for F {}
+impl<S: CoordSpace, F: CoordField<Covariant, S>> CoordFieldExt<S> for F {}
 
 /// The ambient-coordinate sampling of a section: the inverse road, taken
 /// only for visualization and I/O.
@@ -354,7 +470,7 @@ mod test {
 
   use {
     common::linalg::nalgebra::Vector,
-    exterior::field::DiffFormClosure,
+    continuum::field::DiffFormClosure,
     manifold::{
       gen::cartesian::CartesianMeshInfo,
       geometry::coord::{locate::PointLocator, Coord},
@@ -428,6 +544,77 @@ mod test {
           epsilon = 1e-12
         );
       }
+    }
+  }
+
+  /// The flat pullback is the identity special case of the curved one: on a
+  /// mesh of full intrinsic dimension, `pullback_on` and
+  /// `pullback_through(&identity)` agree pointwise. This is the "a flat domain
+  /// is a continuum whose chart is the identity" claim, made a theorem.
+  #[test]
+  fn flat_pullback_is_identity_chart() {
+    use continuum::parametrization::Parametrization;
+    use manifold::atlas::MeshPoint;
+
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+
+      let field = DiffFormClosure::one_form(
+        |p| Vector::from_iterator(p.dim(), p.iter().map(|x| (2.0 * x).cos())),
+        dim,
+      );
+      let identity = Parametrization::identity(dim);
+
+      let flat = field.pullback_on(&topology, &coords);
+      let through = field.pullback_through(&topology, &coords, &identity);
+
+      for cell in topology.cells().handle_iter() {
+        let point = MeshPoint::barycenter(cell.idx());
+        assert_relative_eq!(
+          flat.at(&point).coeffs(),
+          through.at(&point).coeffs(),
+          epsilon = 1e-12
+        );
+      }
+    }
+  }
+
+  /// Functoriality of the composite differential: pulling a continuum form onto
+  /// a curved mesh through $chi compose psi_K$ equals pulling it along
+  /// $dif chi$ and then along $dif psi_K$ separately -- $Lambda^k (A B) =
+  /// (Lambda^k A)(Lambda^k B)$, exercised through the real bridge on $S^2$.
+  ///
+  /// The bridge assembles the single composite $dif chi dot dif psi_K$; the
+  /// two-stage pullback here brackets it the other way. Both sides evaluate the
+  /// same finite-difference Jacobian, so the check is deterministic.
+  #[test]
+  fn composite_pullback_is_functorial() {
+    use continuum::parametrization::Parametrization;
+    use manifold::{
+      atlas::MeshPoint, dim3::mesh_sphere_surface, geometry::coord::simplex::SimplexRefExt,
+    };
+
+    let (topology, coords) = mesh_sphere_surface(2).into_coord_complex();
+    let sphere = Parametrization::sphere(2, 1.0);
+
+    // An arbitrary 1-form on the (theta, phi) chart domain.
+    let form = DiffFormClosure::one_form(|u| na::dvector![u[0].sin(), u[0] * u[1].cos()], 2);
+    let section = form.pullback_through(&topology, &coords, &sphere);
+
+    for cell in topology.cells().handle_iter() {
+      let point = MeshPoint::barycenter(cell.idx());
+      let parametrization = cell.coord_simplex(&coords);
+      let global = parametrization.bary2global(point.bary());
+      let u = sphere.chart(&global, sphere.seed());
+      let dchi = sphere.chart_differential(&u);
+      let dpsi = parametrization.linear_transform();
+
+      let staged = form.at(&u).pullback(&dchi).pullback(&dpsi);
+      assert_relative_eq!(
+        section.at(&point).coeffs(),
+        staged.coeffs(),
+        epsilon = 1e-12
+      );
     }
   }
 

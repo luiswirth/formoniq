@@ -25,8 +25,8 @@
 extern crate nalgebra as na;
 
 use common::linalg::nalgebra::Vector;
+use continuum::field::DiffFormClosure;
 use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
-use exterior::field::DiffFormClosure;
 use formoniq::{
   problems::maxwell::{
     leapfrog_energy, solve_maxwell_curl_curl, solve_maxwell_leapfrog, CurlCurlState,

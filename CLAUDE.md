@@ -24,31 +24,40 @@ commentary on them. Code should read the way a mathematician would write.
 
 ## Architecture
 
-Strict crate ladder, each layer adding exactly one thing:
+Crate ladder, each layer adding exactly one thing —
+`common → exterior → { manifold, continuum } → ddf → formoniq`, where `manifold`
+and `continuum` are *siblings*:
 
-| crate      | is                                  | key contents |
-| ---------- | ----------------------------------- | ------------ |
-| `common`   | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, `coord::Coords<S>` (coordinates tagged by their space), linalg backends (nalgebra/faer/petsc), `Dim` |
-| `exterior` | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `field::CoordField<V>` (flat, mesh-independent) |
-| `manifold` | the simplicial Riemannian manifold  | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
-| `ddf`      | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with `Pullback`/`Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
-| `formoniq` | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
+| crate       | is                                  | key contents |
+| ----------- | ----------------------------------- | ------------ |
+| `common`    | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, `coord::Coords<S>` (coordinates tagged by their space), linalg backends (nalgebra/faer/petsc), `Dim` |
+| `exterior`  | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
+| `manifold`  | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
+| `continuum` | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
+| `ddf`       | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
+| `formoniq`  | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `manifold` never about forms.
+`manifold` (the simplicial $M_h$) and `continuum` (the smooth $M$ it
+approximates) are independent objects, so neither depends on the other; their
+one relation — pulling continuum data onto the mesh, and the error that costs —
+is the join, and it lives in `ddf`, the crate above both.
 
 **Concepts float up.** A concept belongs in the lowest crate (or module) that can
 express it with the dependencies it already has. If expressing it there would
 need a new downward dependency, it belongs one level up instead, in the crate
-that joins the two — which is why `ddf` exists. Never widen a lower crate's
-dependencies to make a method fit.
+that joins the two — which is why `ddf` exists, where `exterior`, `manifold` and
+`continuum` all meet. Never widen a lower crate's dependencies to make a method
+fit.
 
 Composition therefore reaches down from above: a free function in the joining
 crate by default, or a thin `...Ext` trait where method syntax carries the math
-better — `CoordFieldExt::pullback_on` and `SectionExt::sampled_on` (an `exterior`
-field meeting a `manifold` mesh, in `ddf`), `SimplexRefExt` (geometry methods on a
-topology handle, which is how invariant 1 is upheld inside `manifold`, below
-crate granularity).
+better — `CoordFieldExt::pullback_through` (and its identity special case
+`pullback_on`) and `SectionExt::sampled_on` (a `continuum` field meeting a
+`manifold` mesh, in `ddf`), `SimplexRefExt` (geometry methods on a topology
+handle, which is how invariant 1 is upheld inside `manifold`, below crate
+granularity).
 
 The rule bites *within* a crate too, not just between crates. `metric` must not
 import `coord`: an embedding induces a metric, a metric induces no embedding, so
@@ -78,9 +87,11 @@ and passes tests.
    plus barycentric coordinates — never a global coordinate, which on a Regge
    manifold does not exist. A **field** is a `Section<V>`: a section of the
    exterior bundle, evaluated at a `MeshPoint`, valued in the reference frame of
-   that chart. The flat `CoordField<V>` of analytic data (exact solutions,
-   sources) is a *different* concept, and reaches the mesh only through the
-   pullback adapter. Sampling back into ambient coordinates (`Sampler`) is not
+   that chart. The `CoordField<V, S>` of analytic data on the *continuum* (exact
+   solutions, sources) is a *different* concept, living in `continuum`, and
+   reaches the mesh only through the `Pullback` bridge — pulled through a cell's
+   parametrization and the continuum chart, the flat domain being the identity
+   special case. Sampling back into ambient coordinates (`Sampler`) is not
    canonical — it extends the value along the pseudo-inverse of the cell
    parametrization — and is confined to I/O.
 
