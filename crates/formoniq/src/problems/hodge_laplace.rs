@@ -4,7 +4,7 @@ use crate::{
 };
 
 use {
-  common::linalg::petsc::{petsc_ghiep, petsc_saddle_point},
+  common::linalg::{faer::FaerLu, petsc::petsc_ghiep},
   ddf::cochain::Cochain,
   exterior::ExteriorGrade,
 };
@@ -56,7 +56,10 @@ pub fn solve_hodge_laplace_source(
     Vector::zeros(harmonics.ncols());
   ];
 
-  let galsol = petsc_saddle_point(&system_matrix, &rhs);
+  // The KKT system is symmetric indefinite, so Cholesky is out; sparse LU
+  // solves it directly. Unsymmetric LU forfeits the ~2x a symmetric
+  // $L D L^top$ would save on an indefinite system, nothing more.
+  let galsol = FaerLu::new(system_matrix).solve(&rhs);
   let sigma = Cochain::new(grade - 1, galsol.view_range(..sigma_len, 0).into_owned());
   let u = Cochain::new(
     grade,
