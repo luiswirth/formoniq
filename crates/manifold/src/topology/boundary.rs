@@ -182,7 +182,7 @@ mod test {
           usize::from(k == 0 || k == dim - 1)
         };
         assert_eq!(
-          boundary.complex().homology_dim(k),
+          boundary.complex().betti_number(k),
           expected,
           "dim={dim} k={k}"
         );

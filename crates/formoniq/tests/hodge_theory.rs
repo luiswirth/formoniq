@@ -78,7 +78,7 @@ fn harmonics_are_cohomology_cube() {
       let mass = Matrix::from(&whitney.mass(k));
       let harmonic_dim = harmonic_space_dim(whitney.ndofs(k), dif, dif_prev, mass);
 
-      let betti = topology.homology_dim(k);
+      let betti = topology.betti_number(k);
       let expected = usize::from(k == 0);
       assert_eq!(betti, expected);
       assert_eq!(harmonic_dim, betti, "dim={dim} k={k}");
@@ -107,7 +107,7 @@ fn harmonics_are_cohomology_sphere() {
     let mass = Matrix::from(&whitney.mass(k));
     let harmonic_dim = harmonic_space_dim(whitney.ndofs(k), dif, dif_prev, mass);
 
-    assert_eq!(topology.homology_dim(k), expected);
+    assert_eq!(topology.betti_number(k), expected);
     assert_eq!(harmonic_dim, expected, "k={k}");
   }
 }
@@ -244,7 +244,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
   // Absolute cohomology and harmonics.
   let mut betti_abs = Vec::new();
   for k in 0..=dim {
-    let betti = topology.homology_dim(k);
+    let betti = topology.betti_number(k);
     let dif = (k < dim).then(|| dense(&whitney.dif(k)));
     let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
     let mass = Matrix::from(&whitney.mass(k));
@@ -287,7 +287,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
   // Boundary cohomology: two circles.
   let boundary = topology.boundary_complex().unwrap();
   let betti_bdry: Vec<_> = (0..=boundary.dim())
-    .map(|k| boundary.complex().homology_dim(k))
+    .map(|k| boundary.complex().betti_number(k))
     .collect();
   assert_eq!(betti_bdry, vec![2, 2]);
 
