@@ -19,7 +19,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   fs::create_dir_all(path).unwrap();
 
   let grade = 1;
-  let homology_dim = 0;
 
   for dim in 2_usize..=3 {
     println!("Solving Hodge-Laplace in {dim}d.");
@@ -107,7 +106,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         WhitneyComplex::new(&topology, &metric),
         source_data,
         grade,
-        homology_dim,
       );
 
       let conv_rate = |errors: &[f64], curr: f64| {
