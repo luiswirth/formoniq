@@ -84,7 +84,7 @@ fn box_sweep() {
         }
         prev_ndofs = ndofs;
 
-        let (eigenvals, _, _) = hodge_laplace::solve_hodge_laplace_evp(whitney, grade, neigen);
+        let (eigenvals, _, _) = hodge_laplace::solve_hodge_laplace_evp(&whitney, grade, neigen);
         // The coarsest levels can carry fewer DOFs than the requested count; the
         // eigensolver pads the rest with non-finite values.
         let eigenvals: Vec<f64> = eigenvals
@@ -149,7 +149,7 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
   let neigen: usize = prompt("Enter number of eigenvalues.")?.parse()?;
 
   let (eigenvals, _, _) =
-    hodge_laplace::solve_hodge_laplace_evp(WhitneyComplex::new(&topology, &metric), grade, neigen);
+    hodge_laplace::solve_hodge_laplace_evp(&WhitneyComplex::new(&topology, &metric), grade, neigen);
   for (i, &lambda) in eigenvals.iter().enumerate() {
     println!("eigenvalue {i}: {lambda:.4}");
   }

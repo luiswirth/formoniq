@@ -23,6 +23,39 @@ use {
 
 use std::collections::HashSet;
 
+/// The interface the mixed Hodge-Laplace solver consumes from a discrete
+/// Hilbert complex: the $L^2 Lambda^k$ inner products, the exterior derivative
+/// and its stiffness, the DOF counts, and the harmonic dimension.
+///
+/// Implemented by both the full [`WhitneyComplex`] (absolute / natural boundary
+/// conditions, harmonic space $H^k (K)$) and its [`RelativeWhitneyComplex`]
+/// (essential / homogeneous Dirichlet, harmonic space $H^k (K, diff K)$), so the
+/// solver is one monomorphized piece of code over both --- the choice of
+/// boundary condition is just the choice of complex.
+///
+/// The [`Self::inclusion`] $E: cal(W)^"rel" Lambda^k arrow.hook cal(W) Lambda^k$
+/// (the identity for the full complex) is what lets the solver take its source
+/// and return its solution in the ambient $cal(W) Lambda^k$ regardless: it
+/// restricts the right-hand side by $E^T$ and extends the solution by $E$.
+pub trait HilbertComplex {
+  fn dim(&self) -> Dim;
+  fn ndofs(&self, grade: ExteriorGrade) -> usize;
+  fn mass(&self, grade: ExteriorGrade) -> GalMat;
+  fn dif(&self, grade: ExteriorGrade) -> CsrMatrix;
+  fn codif_dif(&self, grade: ExteriorGrade) -> GalMat;
+
+  /// The dimension of the discrete harmonic space $cal(H)^k$: the Betti number
+  /// of the complex by the discrete Hodge theorem ($b_k (K)$ for the full
+  /// complex, $b_k (K, diff K)$ for the relative one), an exact topological
+  /// invariant.
+  fn harmonic_dim(&self, grade: ExteriorGrade) -> usize;
+
+  /// The inclusion $E: C^k arrow.hook cal(W) Lambda^k$ of this complex's DOFs
+  /// into the ambient Whitney space, extending by zero on the constrained
+  /// boundary. The identity on the full complex.
+  fn inclusion(&self, grade: ExteriorGrade) -> CsrMatrix;
+}
+
 /// The discrete Hilbert complex of Whitney forms,
 ///
 /// $cal(W) Lambda^0 -> cal(W) Lambda^1 -> dots.c -> cal(W) Lambda^n$
@@ -130,6 +163,37 @@ impl<'a> WhitneyComplex<'a> {
     let boundary = self.topology.facet_subcomplex(facets);
     let geometry = boundary.trace_lengths(self.geometry);
     BoundaryWhitneyComplex { boundary, geometry }
+  }
+}
+
+impl HilbertComplex for WhitneyComplex<'_> {
+  fn dim(&self) -> Dim {
+    WhitneyComplex::dim(self)
+  }
+  fn ndofs(&self, grade: ExteriorGrade) -> usize {
+    WhitneyComplex::ndofs(self, grade)
+  }
+  fn mass(&self, grade: ExteriorGrade) -> GalMat {
+    WhitneyComplex::mass(self, grade)
+  }
+  fn dif(&self, grade: ExteriorGrade) -> CsrMatrix {
+    WhitneyComplex::dif(self, grade)
+  }
+  fn codif_dif(&self, grade: ExteriorGrade) -> GalMat {
+    WhitneyComplex::codif_dif(self, grade)
+  }
+  /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.
+  fn harmonic_dim(&self, grade: ExteriorGrade) -> usize {
+    self.topology.betti_number(grade)
+  }
+  /// No boundary is constrained, so the inclusion is the identity.
+  fn inclusion(&self, grade: ExteriorGrade) -> CsrMatrix {
+    let n = WhitneyComplex::ndofs(self, grade);
+    let mut coo = CooMatrix::new(n, n);
+    for i in 0..n {
+      coo.push(i, i, 1.0);
+    }
+    CsrMatrix::from(&coo)
   }
 }
 
@@ -276,5 +340,30 @@ impl<'a> RelativeWhitneyComplex<'a> {
       u.grade(),
       self.inclusion(u.grade()).transpose() * u.coeffs(),
     )
+  }
+}
+
+impl HilbertComplex for RelativeWhitneyComplex<'_> {
+  fn dim(&self) -> Dim {
+    RelativeWhitneyComplex::dim(self)
+  }
+  fn ndofs(&self, grade: ExteriorGrade) -> usize {
+    RelativeWhitneyComplex::ndofs(self, grade)
+  }
+  fn mass(&self, grade: ExteriorGrade) -> GalMat {
+    RelativeWhitneyComplex::mass(self, grade)
+  }
+  fn dif(&self, grade: ExteriorGrade) -> CsrMatrix {
+    RelativeWhitneyComplex::dif(self, grade)
+  }
+  fn codif_dif(&self, grade: ExteriorGrade) -> GalMat {
+    RelativeWhitneyComplex::codif_dif(self, grade)
+  }
+  /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
+  fn harmonic_dim(&self, grade: ExteriorGrade) -> usize {
+    self.full.topology().relative_betti_number(grade)
+  }
+  fn inclusion(&self, grade: ExteriorGrade) -> CsrMatrix {
+    RelativeWhitneyComplex::inclusion(self, grade)
   }
 }

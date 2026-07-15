@@ -1,6 +1,6 @@
 use crate::{
   assemble::{GalMat, GalVec},
-  whitney_complex::WhitneyComplex,
+  whitney_complex::HilbertComplex,
 };
 
 use {
@@ -13,14 +13,27 @@ use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vecto
 use itertools::Itertools;
 use std::mem;
 
-pub fn solve_hodge_laplace_source(
-  whitney: WhitneyComplex,
+/// The mixed Hodge-Laplace source problem $Delta u = f$ on any discrete Hilbert
+/// complex: absolute (natural / Neumann) boundary conditions on the full
+/// [`WhitneyComplex`], essential (homogeneous Dirichlet) on the
+/// [`RelativeWhitneyComplex`] --- the same code either way.
+///
+/// The right-hand side `source_galvec` is assembled in the ambient
+/// $cal(W) Lambda^k$; it is restricted to this complex's DOFs internally, and
+/// the returned $(sigma, u, p)$ cochains are extended back to the ambient space,
+/// so the caller is oblivious to the boundary condition. `p` is the harmonic
+/// component of $u$, fixed to zero against the harmonic space $cal(H)^k$.
+///
+/// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
+/// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
+pub fn solve_hodge_laplace_source<C: HilbertComplex>(
+  complex: &C,
   source_galvec: GalVec,
   grade: ExteriorGrade,
 ) -> (Cochain, Cochain, Cochain) {
-  let harmonics = solve_hodge_laplace_harmonics(whitney, grade);
+  let harmonics = solve_hodge_laplace_harmonics(complex, grade);
 
-  let galmats = MixedGalmats::compute(whitney, grade);
+  let galmats = MixedGalmats::compute(complex, grade);
 
   let mass_u = CsrMatrix::from(&galmats.mass_u);
   let mass_harmonics = &mass_u * &harmonics;
@@ -49,10 +62,15 @@ pub fn solve_hodge_laplace_source(
 
   let system_matrix = CsrMatrix::from(&galmat);
 
+  // Restrict the ambient right-hand side to this complex's DOFs, $E^T f$: the
+  // identity on the full complex, a restriction to interior DOFs on the
+  // relative one.
+  let source = complex.inclusion(grade).transpose() * source_galvec;
+
   #[allow(clippy::toplevel_ref_arg)]
   let rhs = na::stack![
     Vector::zeros(sigma_len);
-    source_galvec;
+    source;
     Vector::zeros(harmonics.ncols());
   ];
 
@@ -60,41 +78,53 @@ pub fn solve_hodge_laplace_source(
   // solves it directly. Unsymmetric LU forfeits the ~2x a symmetric
   // $L D L^top$ would save on an indefinite system, nothing more.
   let galsol = FaerLu::new(system_matrix).solve(&rhs);
-  let sigma = Cochain::new(grade - 1, galsol.view_range(..sigma_len, 0).into_owned());
-  let u = Cochain::new(
-    grade,
-    galsol
-      .view_range(sigma_len..sigma_len + u_len, 0)
-      .into_owned(),
-  );
-  let p = Cochain::new(
-    grade,
-    galsol.view_range(sigma_len + u_len.., 0).into_owned(),
-  );
+
+  // Extend the solution back to the ambient $cal(W) Lambda^k$ by zero on the
+  // constrained boundary, $E u$, so callers see full cochains regardless of BC.
+  let sigma_coeffs = galsol.view_range(..sigma_len, 0).into_owned();
+  let u_coeffs = galsol
+    .view_range(sigma_len..sigma_len + u_len, 0)
+    .into_owned();
+  let p_coeffs = galsol.view_range(sigma_len + u_len.., 0).into_owned();
+
+  // At grade 0 the $sigma in Lambda^(-1)$ space is empty; there is nothing to
+  // extend and no grade $-1$ to name it.
+  let sigma = if grade > 0 {
+    Cochain::new(grade - 1, complex.inclusion(grade - 1) * sigma_coeffs)
+  } else {
+    Cochain::new(0, sigma_coeffs)
+  };
+  let u = Cochain::new(grade, complex.inclusion(grade) * u_coeffs);
+  let p = Cochain::new(grade, complex.inclusion(grade) * p_coeffs);
   (sigma, u, p)
 }
 
-pub fn solve_hodge_laplace_harmonics(whitney: WhitneyComplex, grade: ExteriorGrade) -> Matrix {
+pub fn solve_hodge_laplace_harmonics<C: HilbertComplex>(
+  complex: &C,
+  grade: ExteriorGrade,
+) -> Matrix {
   // The dimension of the harmonic space is the Betti number $b_k$ (Hodge
   // theorem: $cal(H)^k tilde.equ H^k tilde.equ H_k$), an exact topological
-  // invariant of the complex — not a number the caller has to know.
-  let homology_dim = whitney.topology().betti_number(grade);
+  // invariant of the complex — not a number the caller has to know. Absolute
+  // $b_k (K)$ on the full complex, relative $b_k (K, diff K)$ on the relative
+  // one; the trait picks the right invariant.
+  let homology_dim = complex.harmonic_dim(grade);
   if homology_dim == 0 {
-    let nwhitneys = whitney.ndofs(grade);
+    let nwhitneys = complex.ndofs(grade);
     return Matrix::zeros(nwhitneys, 0);
   }
 
-  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(whitney, grade, homology_dim);
+  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(complex, grade, homology_dim);
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   harmonics
 }
 
-pub fn solve_hodge_laplace_evp(
-  whitney: WhitneyComplex,
+pub fn solve_hodge_laplace_evp<C: HilbertComplex>(
+  complex: &C,
   grade: ExteriorGrade,
   neigenvalues: usize,
 ) -> (Vector, Matrix, Matrix) {
-  let galmats = MixedGalmats::compute(whitney, grade);
+  let galmats = MixedGalmats::compute(complex, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
 
@@ -122,16 +152,16 @@ pub struct MixedGalmats {
   mass_u: GalMat,
 }
 impl MixedGalmats {
-  pub fn compute(whitney: WhitneyComplex, grade: ExteriorGrade) -> Self {
-    assert!(grade <= whitney.dim());
+  pub fn compute<C: HilbertComplex>(complex: &C, grade: ExteriorGrade) -> Self {
+    assert!(grade <= complex.dim());
 
-    let mass_u = whitney.mass(grade);
+    let mass_u = complex.mass(grade);
     let mass_u_csr = CsrMatrix::from(&mass_u);
 
     let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      let mass_sigma = whitney.mass(grade - 1);
+      let mass_sigma = complex.mass(grade - 1);
 
-      let exdif_sigma = whitney.dif(grade - 1);
+      let exdif_sigma = complex.dif(grade - 1);
 
       let dif_sigma = &mass_u_csr * &exdif_sigma;
       let dif_sigma = CooMatrix::from(&dif_sigma);
@@ -153,8 +183,8 @@ impl MixedGalmats {
       )
     };
 
-    let codifdif_u = if grade < whitney.dim() {
-      whitney.codif_dif(grade)
+    let codifdif_u = if grade < complex.dim() {
+      complex.codif_dif(grade)
     } else {
       // At top grade $dif u = 0$, so the $codif dif$ block vanishes — but it still
       // occupies the $u times u$ diagonal slot and must be shaped $u_"len"^2$, not
