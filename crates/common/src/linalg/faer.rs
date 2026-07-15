@@ -114,6 +114,73 @@ pub fn faer_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigenvalues: usize) -> (Vec
   (eigenvals, eigenvecs)
 }
 
+/// The generalized symmetric-definite eigenproblem $A x = lambda B x$, with $A$
+/// symmetric and $B$ symmetric *positive definite*, solved for the
+/// `neigenvalues` algebraically smallest pairs. Eigenvalues are returned in
+/// ascending order; eigenvectors are $B$-orthonormal.
+///
+/// Where [`faer_ghiep`] carries no definiteness assumption and pays for it with
+/// a nonsymmetric QZ, this exploits the structure of the elliptic pencil (the
+/// FE stiffness against an SPD mass matrix). A Cholesky factor $B = L L^top$
+/// reduces the pencil to the standard self-adjoint problem $C y = lambda y$ with
+/// $C = L^(-1) A L^(-top)$, whose spectrum is real, whose solver is a symmetric
+/// tridiagonal QR — an order of magnitude cheaper than QZ and parallel — and
+/// whose eigenvectors back-transform as $x = L^(-top) y$.
+///
+/// Still dense: it forms the whole spectrum and keeps the smallest
+/// `neigenvalues`, so $O(n^3)$ time and $O(n^2)$ memory, right only while the
+/// meshes are small. The scaling endpoint is a sparse shift-invert Lanczos,
+/// which this does not attempt. $B$ *must* be positive definite; on the
+/// singular, indefinite pencil of the mixed formulation, use [`faer_ghiep`].
+pub fn faer_gsdiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigenvalues: usize) -> (Vector, Matrix) {
+  let n = lhs.nrows();
+  let lhs_dense = Matrix::from(lhs);
+  let rhs_dense = Matrix::from(rhs);
+  let count = neigenvalues.min(n);
+
+  // The $1 times 1$ (and empty) base case, mirroring faer_ghiep: the pencil
+  // $(a, b)$ has the single eigenvalue $a / b$ with $B$-normalized eigenvector
+  // $1 / sqrt(b)$. This keeps the $0$-manifold total rather than tripping the
+  // Cholesky/EVD on a degenerate size.
+  if n <= 1 {
+    let eigenvals = Vector::from_iterator(
+      count,
+      (0..count).map(|i| lhs_dense[(i, i)] / rhs_dense[(i, i)]),
+    );
+    let eigenvecs = Matrix::from_fn(n, count, |i, _| 1.0 / rhs_dense[(i, i)].sqrt());
+    return (eigenvals, eigenvecs);
+  }
+
+  let a = faer::Mat::from_fn(n, n, |i, j| lhs_dense[(i, j)]);
+  let b = faer::Mat::from_fn(n, n, |i, j| rhs_dense[(i, j)]);
+
+  let l = b
+    .llt(faer::Side::Lower)
+    .expect("B is not positive definite; use faer_ghiep on an indefinite pencil")
+    .L()
+    .to_owned();
+
+  // $C = L^(-1) A L^(-top)$ via two lower-triangular solves. With $A$ symmetric,
+  // $W = L^(-1) A$ has $W^top = A L^(-top)$, so $L^(-1) W^top = C$ is symmetric;
+  // the EVD reads only its lower triangle, absorbing the rounding asymmetry.
+  let mut w = a;
+  l.solve_lower_triangular_in_place(w.as_mut());
+  let mut c = w.transpose().to_owned();
+  l.solve_lower_triangular_in_place(c.as_mut());
+
+  let eig = c.self_adjoint_eigen(faer::Side::Lower).unwrap();
+  let vals = eig.S().column_vector();
+  let y = eig.U();
+
+  // The smallest `count` are the leading columns; back-transform $x = L^(-top) y$.
+  let mut x = faer::Mat::from_fn(n, count, |i, k| *y.get(i, k));
+  l.transpose().solve_upper_triangular_in_place(x.as_mut());
+
+  let eigenvals = Vector::from_iterator(count, (0..count).map(|i| *vals.get(i)));
+  let eigenvecs = Matrix::from_fn(n, count, |i, k| *x.get(i, k));
+  (eigenvals, eigenvecs)
+}
+
 pub struct FaerCholesky {
   raw: faer::sparse::linalg::solvers::Llt<usize, f64>,
 }
@@ -132,7 +199,7 @@ impl FaerCholesky {
 
 #[cfg(test)]
 mod test {
-  use super::{faer_ghiep, Matrix, Vector};
+  use super::{faer_ghiep, faer_gsdiep, Matrix, Vector};
 
   fn symmetric(n: usize, f: impl Fn(usize, usize) -> f64) -> Matrix {
     Matrix::from_fn(n, n, |i, j| f(i.min(j), i.max(j)))
@@ -195,6 +262,45 @@ mod test {
       "eigenvector is B-normalized"
     );
     assert!((&a * &x - vals[0] * (&b * &x)).norm() < 1e-12);
+  }
+
+  /// The symmetric-definite solver agrees with the general QZ on a definite
+  /// pencil — same smallest eigenvalues — and every returned pair solves
+  /// $A x = lambda B x$ with a $B$-orthonormal eigenvector.
+  #[test]
+  fn gsdiep_matches_ghiep_on_definite_pencil() {
+    let n = 6;
+    // The elliptic regime gsdiep is for: an SPD $A$ (positive spectrum), where
+    // "algebraically smallest" and "smallest magnitude" coincide, so gsdiep's
+    // ascending selection matches ghiep's magnitude selection. On an indefinite
+    // $A$ the two conventions legitimately diverge and are not meant to agree.
+    let a = symmetric(n, |i, j| if i == j { 2.0 * n as f64 } else { 0.5 });
+    // SPD: diagonally dominant with a positive diagonal.
+    let b = symmetric(n, |i, j| if i == j { n as f64 } else { 0.3 });
+
+    for nev in 1..=n {
+      let (vals, vecs) = faer_gsdiep(&(&a).into(), &(&b).into(), nev);
+      let (want, _) = faer_ghiep(&(&a).into(), &(&b).into(), nev);
+
+      let mut got: Vec<f64> = vals.iter().copied().collect();
+      let mut want: Vec<f64> = want.iter().copied().collect();
+      got.sort_by(f64::total_cmp);
+      want.sort_by(f64::total_cmp);
+      for (g, w) in got.iter().zip(&want) {
+        assert!((g - w).abs() < 1e-9, "nev={nev}: got {g} want {w}");
+      }
+
+      for k in 0..vals.len() {
+        let x = vecs.column(k).into_owned();
+        let residual = (&a * &x - vals[k] * (&b * &x)).norm();
+        assert!(residual < 1e-9, "nev={nev} k={k} residual={residual:e}");
+        let bnorm = x.dot(&(&b * &x));
+        assert!(
+          (bnorm - 1.0).abs() < 1e-9,
+          "nev={nev} k={k} not B-normalized"
+        );
+      }
+    }
   }
 
   /// A singular, indefinite $B$ (the mixed-formulation regime): a null

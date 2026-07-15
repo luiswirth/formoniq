@@ -8,4 +8,5 @@ members = [
   "crates/continuum",
   "crates/manifold",
   "crates/common",
+  "crates/studio",
 ]
