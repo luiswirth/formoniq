@@ -4,7 +4,7 @@ use super::{
 };
 use crate::Dim;
 
-use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, Matrix};
+use common::linalg::nalgebra::{CooMatrix, CooMatrixExt};
 
 use itertools::Itertools;
 
@@ -169,35 +169,10 @@ impl Complex {
   ///
   /// The coboundary operator, which is the discrete exterior derivative
   /// on cochains. It is the transpose of the boundary operator.
+  ///
+  /// The Betti numbers of the complex are in [`homology`](super::homology).
   pub fn coboundary_operator(&self, dim: Dim) -> CooMatrix {
     self.boundary_operator(dim + 1).clone().transpose()
-  }
-
-  /// Dimension of the k-th homology group.
-  ///
-  /// k-th Betti number.
-  /// Number of k-dimensional holes in the manifold.
-  /// Computed using simplicial homology.
-  pub fn homology_dim(&self, dim: Dim) -> usize {
-    // TODO: use sparse matrix!
-    let boundary_this = Matrix::from(self.boundary_operator(dim));
-    let boundary_plus = Matrix::from(self.boundary_operator(dim + 1));
-
-    const RANK_TOL: f64 = 1e-12;
-
-    let dim_image = |op: &Matrix| -> usize {
-      if op.is_empty() {
-        0
-      } else {
-        op.rank(RANK_TOL)
-      }
-    };
-    let dim_kernel = |op: &Matrix| -> usize { op.ncols() - dim_image(op) };
-
-    let dim_cycles = dim_kernel(&boundary_this);
-    let dim_boundaries = dim_image(&boundary_plus);
-
-    dim_cycles - dim_boundaries
   }
 }
 
@@ -262,6 +237,7 @@ mod test {
   use crate::topology::simplex::{nsubsimplices, standard_boundary_operator, Simplex};
 
   use super::*;
+  use common::linalg::nalgebra::Matrix;
 
   /// Every skeleton is in canonical colexicographic order, and the vertices
   /// are contiguous and fully used. This is the ordering contract the file
