@@ -16,6 +16,11 @@ use crate::render::{
 };
 use crate::scene::Scene;
 
+use egui_wgpu::{
+  Renderer as EguiRenderer, RendererOptions as EguiRendererOptions, ScreenDescriptor,
+};
+use egui_winit::State as EguiWinitState;
+
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
@@ -39,6 +44,93 @@ const DISPLAY_MODE: usize = 4;
 // meaningful on any mesh the scene is built from.
 const WAVE_AMPLITUDE_FRACTION: f32 = 1.0;
 
+/// Which built-in scene is on display: a picker in the UI switches this at
+/// runtime, so this is a value, not a per-build constant -- the render path
+/// already treats every `Scene` alike regardless of which of these built it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Demo {
+  /// Laplace-Beltrami eigenmodes on the sphere.
+  SphericalHarmonics,
+  /// Every Whitney basis function of the reference triangle.
+  WhitneyBasis,
+}
+
+impl Demo {
+  const ALL: [Demo; 2] = [Demo::SphericalHarmonics, Demo::WhitneyBasis];
+
+  fn label(self) -> &'static str {
+    match self {
+      Demo::SphericalHarmonics => "Spherical harmonics",
+      Demo::WhitneyBasis => "Whitney basis (reference triangle)",
+    }
+  }
+}
+
+/// The starting scene when the viewer opens.
+const DEMO: Demo = Demo::WhitneyBasis;
+
+/// The scene a demo builds, and the field it's shown on initially -- the one
+/// place a `Demo` turns into a `Scene`, called both at startup and whenever
+/// the UI switches it.
+fn build_scene(demo: Demo) -> (Scene, usize) {
+  match demo {
+    // Real formoniq output: Laplace-Beltrami eigenfunctions on the unit
+    // sphere (discrete spherical harmonics), colored by one mode.
+    Demo::SphericalHarmonics => (
+      Scene::spherical_harmonics(SPHERE_SUBDIVISIONS, SPHERE_MODES),
+      DISPLAY_MODE,
+    ),
+    // The Whitney basis functions of the reference triangle: grade 0 is
+    // colored; grade 1 is already computed onto `scene.vector_fields` but
+    // has no glyph to draw yet.
+    Demo::WhitneyBasis => (Scene::whitney_basis(2, 8), 0),
+  }
+}
+
+/// The camera's natural starting orientation for a scene, derived purely from
+/// its own coordinates -- not which `Demo` built it, so a future flat or 3D
+/// scene gets the same sensible default without adding another `match` arm
+/// here.
+fn default_camera(scene: &Scene, aspect: f32) -> Camera {
+  // Framing distance from the scene's own coordinate extent, not a constant
+  // tuned for the sphere: an icosphere of radius 1 gives back exactly the
+  // prior hardcoded 3.0, and a unit reference triangle frames itself too.
+  let extent = scene
+    .coords
+    .coord_iter()
+    .map(|c| c.norm())
+    .fold(0.0, f64::max)
+    .max(1e-6);
+  // A mesh flat in the z = 0 plane (the reference cell scenes: nothing has
+  // been displaced off it yet) is looked down onto from above, along its own
+  // normal, in orthographic top-down mode, rather than the angled perspective
+  // orbit tuned for a fully 3D shape like the sphere.
+  let z_extent = scene
+    .coords
+    .coord_iter()
+    .map(|c| if c.len() > 2 { c[2].abs() } else { 0.0 })
+    .fold(0.0, f64::max);
+  let is_planar = z_extent < 1e-9 * extent;
+  // `|yaw| = pi/2` keeps the eye's x-offset at exactly zero (see the
+  // `direction` formula in `Camera::build_view_projection_matrix`): only
+  // `pitch` should change for a top-down-ish view, since any other yaw skews
+  // the eye diagonally in x and rotates the on-screen framing away from the
+  // mesh's own axes. The sign flips between the two defaults because it also
+  // fixes the handedness of the screen's local `right` axis -- without it,
+  // screen-right ends up world $-x$ instead of $+x$, mirroring the mesh
+  // left-to-right.
+  let pitch: f32 = if is_planar { -1.2 } else { 0.3 };
+  let yaw: f32 = if is_planar { 1.57 } else { -1.57 };
+
+  let mut camera = Camera::new(aspect);
+  camera.target = nalgebra::Point3::origin();
+  camera.distance = 3.0 * extent as f32;
+  camera.pitch = pitch;
+  camera.yaw = yaw;
+  camera.top_down = is_planar;
+  camera
+}
+
 fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu::TextureView {
   let size = wgpu::Extent3d {
     width: config.width,
@@ -57,6 +149,47 @@ fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu:
   };
   let texture = device.create_texture(&desc);
   texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+/// The mesh buffer and bounds/wave uniforms for showing one scalar field of a
+/// scene: the one place a field index turns into pixels, called both at
+/// startup and whenever the UI switches the selection.
+struct FieldDisplay {
+  mesh_buffer: MeshBuffer,
+  field_min: f32,
+  field_max: f32,
+  wave_amplitude: f32,
+  wave_omega: f32,
+}
+
+fn build_field_display(
+  device: &Device,
+  scene: &Scene,
+  field_index: usize,
+  mesh_width: f32,
+) -> FieldDisplay {
+  let field = &scene.fields[field_index];
+  let (field_min, field_max) = field.bounds();
+  let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
+
+  let field_scale = field_min.abs().max(field_max.abs()).max(f32::EPSILON);
+  // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
+  // Whitney basis function): no dispersion relation to animate at, so the
+  // wave collapses to no displacement rather than a special case here.
+  let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
+  let wave_amplitude = if field.eigenvalue.is_some() {
+    WAVE_AMPLITUDE_FRACTION * mesh_width / field_scale
+  } else {
+    0.0
+  };
+
+  FieldDisplay {
+    mesh_buffer,
+    field_min,
+    field_max,
+    wave_amplitude,
+    wave_omega,
+  }
 }
 
 struct State<'a> {
@@ -92,6 +225,20 @@ struct State<'a> {
   // Mouse state for orbit controls
   mouse_pressed: bool,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
+
+  // The full scene stays around, not just the field on display, so the UI
+  // can switch which one is shown -- a scene is exactly as general as the
+  // picker built over it, regardless of how many fields it carries.
+  demo: Demo,
+  scene: Scene,
+  selected_field: usize,
+  // Fixed at scene-build time: the mesh's own edge-length scale, used to
+  // normalize the standing-wave amplitude to whichever field is on display.
+  mesh_width: f32,
+
+  egui_ctx: egui::Context,
+  egui_winit_state: EguiWinitState,
+  egui_renderer: EguiRenderer,
 }
 
 /// Per-frame standing-wave state: $u(t) = "amplitude" dot "value" dot cos(omega t)$,
@@ -105,12 +252,22 @@ struct WaveUniform {
   _pad: f32,
 }
 
+/// Colormap normalization range for the field currently on display.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct BoundsUniform {
+  min_val: f32,
+  max_val: f32,
+  _pad1: f32,
+  _pad2: f32,
+}
+
 impl<'a> State<'a> {
   async fn new(window: Arc<Window>) -> State<'a> {
     let size = window.inner_size();
     let instance = wgpu::Instance::default();
 
-    let surface = instance.create_surface(window).unwrap();
+    let surface = instance.create_surface(window.clone()).unwrap();
     let adapter = instance
       .request_adapter(&wgpu::RequestAdapterOptions {
         power_preference: wgpu::PowerPreference::default(),
@@ -131,34 +288,22 @@ impl<'a> State<'a> {
       .unwrap();
     surface.configure(&device, &config);
 
-    // Real formoniq output: Laplace-Beltrami eigenfunctions on the unit
-    // sphere (discrete spherical harmonics), colored by one mode.
-    let scene = Scene::spherical_harmonics(SPHERE_SUBDIVISIONS, SPHERE_MODES);
-    let field = &scene.fields[DISPLAY_MODE];
-    let (field_min, field_max) = field.bounds();
-
-    let mesh_buffer = MeshBuffer::new(&device, &scene.topology, &scene.coords, field.values());
-
+    let demo = DEMO;
+    let (scene, field_index) = build_scene(demo);
     // The standing-wave amplitude is scaled by the mesh's own width, not a
-    // sphere radius, and normalized against the mode's own value range, so the
-    // displacement reads the same whether the mesh is a sphere or anything
-    // else, and whether the mode is low or high order. The temporal frequency
-    // $omega = sqrt(lambda)$ comes from the mode's own eigenvalue: the wave
-    // equation's dispersion relation, not a fixed animation speed.
+    // sphere radius, so the displacement reads the same whether the mesh is a
+    // sphere or anything else, and whichever field is currently on display.
     let mesh_width = scene
       .coords
       .to_edge_lengths(&scene.topology)
       .mesh_width_max() as f32;
-    let field_scale = field_min.abs().max(field_max.abs()).max(f32::EPSILON);
-    let wave_amplitude = WAVE_AMPLITUDE_FRACTION * mesh_width / field_scale;
-    let wave_omega = field.eigenvalue.sqrt() as f32;
+    let display = build_field_display(&device, &scene, field_index, mesh_width);
+    let (field_min, field_max) = (display.field_min, display.field_max);
+    let mesh_buffer = display.mesh_buffer;
+    let wave_amplitude = display.wave_amplitude;
+    let wave_omega = display.wave_omega;
 
-    let mut camera = Camera::new(config.width as f32 / config.height as f32);
-    camera.target = nalgebra::Point3::origin();
-    camera.distance = 3.0;
-    camera.pitch = 0.3;
-    camera.yaw = -1.57;
-
+    let camera = default_camera(&scene, config.width as f32 / config.height as f32);
     let mut camera_uniform = CameraUniform::new();
     camera_uniform.update_view_proj(&camera);
 
@@ -191,16 +336,6 @@ impl<'a> State<'a> {
       }],
       label: Some("camera_bind_group"),
     });
-
-    // Bounds uniform for fragment shader
-    #[repr(C)]
-    #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-    struct BoundsUniform {
-      min_val: f32,
-      max_val: f32,
-      _pad1: f32,
-      _pad2: f32,
-    }
 
     let bounds_uniform = BoundsUniform {
       min_val: field_min,
@@ -307,7 +442,7 @@ impl<'a> State<'a> {
         module: &shader,
         entry_point: Some("vs_main"),
         compilation_options: Default::default(),
-        buffers: &[Some(Vertex::desc())],
+        buffers: &[Vertex::desc()],
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
@@ -357,7 +492,7 @@ impl<'a> State<'a> {
         module: &wireframe_shader,
         entry_point: Some("vs_main"),
         compilation_options: Default::default(),
-        buffers: &[Some(Vertex::desc())],
+        buffers: &[Vertex::desc()],
       },
       fragment: Some(wgpu::FragmentState {
         module: &wireframe_shader,
@@ -386,6 +521,17 @@ impl<'a> State<'a> {
 
     let depth_view = create_depth_texture(&device, &config);
 
+    let egui_ctx = egui::Context::default();
+    let egui_winit_state = EguiWinitState::new(
+      egui_ctx.clone(),
+      egui::ViewportId::ROOT,
+      &window,
+      Some(window.scale_factor() as f32),
+      None,
+      None,
+    );
+    let egui_renderer = EguiRenderer::new(&device, config.format, EguiRendererOptions::default());
+
     Self {
       surface,
       device,
@@ -409,7 +555,72 @@ impl<'a> State<'a> {
       wave_bind_group,
       mouse_pressed: false,
       last_mouse_pos: None,
+      demo,
+      scene,
+      selected_field: field_index,
+      mesh_width,
+      egui_ctx,
+      egui_winit_state,
+      egui_renderer,
     }
+  }
+
+  /// Displays field `index` of the *current* scene, rebuilding exactly the
+  /// pieces that depend on it: the mesh buffer's per-vertex values, the
+  /// colormap bounds, and the standing-wave parameters. Unconditional --
+  /// callers that only want to act on an actual change (the common case)
+  /// go through [`Self::set_field`] instead.
+  fn apply_field(&mut self, index: usize) {
+    self.selected_field = index;
+    let display = build_field_display(&self.device, &self.scene, index, self.mesh_width);
+    self.mesh_buffer = display.mesh_buffer;
+    self.wave_amplitude = display.wave_amplitude;
+    self.wave_omega = display.wave_omega;
+    self.start_time = std::time::Instant::now();
+
+    let bounds_uniform = BoundsUniform {
+      min_val: display.field_min,
+      max_val: display.field_max,
+      _pad1: 0.0,
+      _pad2: 0.0,
+    };
+    self.queue.write_buffer(
+      &self.bounds_buffer,
+      0,
+      bytemuck::cast_slice(&[bounds_uniform]),
+    );
+  }
+
+  /// Switches the displayed field within the current scene. Everything else
+  /// (camera, pipelines, egui) stays untouched.
+  fn set_field(&mut self, index: usize) {
+    if index == self.selected_field {
+      return;
+    }
+    self.apply_field(index);
+  }
+
+  /// Switches to a different built-in scene: a new topology, coordinates and
+  /// field set, plus the camera's natural orientation for it. The field
+  /// index and camera state from the old scene are never reused as-is here
+  /// (unlike [`Self::set_field`]'s early-out) -- a field index valid in one
+  /// scene can be out of range in another, and a camera tuned for a sphere
+  /// is not a natural start for a flat reference cell, or vice versa.
+  fn set_demo(&mut self, demo: Demo) {
+    if demo == self.demo {
+      return;
+    }
+    self.demo = demo;
+    let (scene, field_index) = build_scene(demo);
+    self.mesh_width = scene
+      .coords
+      .to_edge_lengths(&scene.topology)
+      .mesh_width_max() as f32;
+    self.scene = scene;
+    self.apply_field(field_index);
+
+    self.camera = default_camera(&self.scene, self.camera.aspect);
+    self.update_camera_buffer();
   }
 
   fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
@@ -447,16 +658,23 @@ impl<'a> State<'a> {
           if let Some(last) = self.last_mouse_pos {
             let dx = (position.x - last.x) as f32;
             let dy = (position.y - last.y) as f32;
-            self.camera.yaw += dx * 0.005;
-            self.camera.pitch -= dy * 0.005;
-            // Clamp pitch to avoid gimbal lock
-            self.camera.pitch = self.camera.pitch.clamp(-1.5, 1.5);
-            self.camera_uniform.update_view_proj(&self.camera);
-            self.queue.write_buffer(
-              &self.camera_buffer,
-              0,
-              bytemuck::cast_slice(&[self.camera_uniform]),
-            );
+            if self.camera.top_down {
+              // Drag-to-pan: the content follows the cursor, like dragging a
+              // sheet of paper -- the opposite sense from orbit, where the
+              // camera follows the cursor around the scene. World-per-pixel
+              // comes from the same half-extent the orthographic frustum
+              // itself is sized from, so panning and zooming agree on scale.
+              let (_, half_height) = self.camera.ortho_half_extent();
+              let world_per_pixel = 2.0 * half_height / self.size.height.max(1) as f32;
+              self.camera.target.x -= dx * world_per_pixel;
+              self.camera.target.y += dy * world_per_pixel;
+            } else {
+              self.camera.yaw += dx * 0.005;
+              self.camera.pitch -= dy * 0.005;
+              // Clamp pitch to avoid gimbal lock
+              self.camera.pitch = self.camera.pitch.clamp(-1.5, 1.5);
+            }
+            self.update_camera_buffer();
           }
           self.last_mouse_pos = Some(*position);
         }
@@ -468,18 +686,97 @@ impl<'a> State<'a> {
         };
         self.camera.distance -= scroll;
         self.camera.distance = self.camera.distance.clamp(1.0, 100.0);
-        self.camera_uniform.update_view_proj(&self.camera);
-        self.queue.write_buffer(
-          &self.camera_buffer,
-          0,
-          bytemuck::cast_slice(&[self.camera_uniform]),
-        );
+        self.update_camera_buffer();
       }
       _ => {}
     }
   }
 
-  fn render(&mut self) -> Result<(), ()> {
+  fn update_camera_buffer(&mut self) {
+    self.camera_uniform.update_view_proj(&self.camera);
+    self.queue.write_buffer(
+      &self.camera_buffer,
+      0,
+      bytemuck::cast_slice(&[self.camera_uniform]),
+    );
+  }
+
+  /// Builds and tessellates the control panel: a scene picker, that scene's
+  /// field picker, and the camera-mode toggle. Reads out of `self` into plain
+  /// locals before entering the `egui::Context::run_ui` closure, since `ctx`
+  /// (a clone of `self.egui_ctx`) is what the closure captures -- borrowing
+  /// `self` itself inside it would conflict with the `&mut self` calls
+  /// (`set_demo`/`set_field`) right after.
+  fn run_ui(&mut self, window: &Window) -> (Vec<egui::ClippedPrimitive>, egui::TexturesDelta, f32) {
+    let ctx = self.egui_ctx.clone();
+    let raw_input = self.egui_winit_state.take_egui_input(window);
+
+    let mut demo = self.demo;
+    let field_names: Vec<&str> = self.scene.fields.iter().map(|f| f.name.as_str()).collect();
+    let nvector_fields = self.scene.vector_fields.len();
+    let mut selected = self.selected_field;
+    let mut top_down = self.camera.top_down;
+
+    let full_output = ctx.run_ui(raw_input, |ctx| {
+      egui::Window::new("Scene").show(ctx, |ui| {
+        for d in Demo::ALL {
+          ui.radio_value(&mut demo, d, d.label());
+        }
+        ui.separator();
+
+        for (i, name) in field_names.iter().enumerate() {
+          ui.radio_value(&mut selected, i, *name);
+        }
+        if nvector_fields > 0 {
+          ui.separator();
+          ui.label(format!(
+            "{nvector_fields} vector field(s) computed, no glyph yet"
+          ));
+        }
+
+        ui.separator();
+        ui.checkbox(&mut top_down, "Top-down (orthographic, drag to pan)");
+      });
+    });
+
+    // A scene switch replaces the field set and the camera's natural
+    // orientation wholesale, so the `selected`/`top_down` picked in this same
+    // frame belong to the *old* scene and must not be applied afterward --
+    // `set_demo` already chooses both anew for the scene it switches to.
+    if demo != self.demo {
+      self.set_demo(demo);
+    } else {
+      self.set_field(selected);
+      if top_down != self.camera.top_down {
+        self.camera.top_down = top_down;
+        self.update_camera_buffer();
+      }
+    }
+
+    self
+      .egui_winit_state
+      .handle_platform_output(window, full_output.platform_output);
+    let paint_jobs = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
+    (
+      paint_jobs,
+      full_output.textures_delta,
+      full_output.pixels_per_point,
+    )
+  }
+
+  fn render(&mut self, window: &Window) -> Result<(), ()> {
+    let (paint_jobs, textures_delta, pixels_per_point) = self.run_ui(window);
+
+    // Registered unconditionally, ahead of the surface-acquire early-returns
+    // below: egui reports a texture delta exactly once, on the frame it
+    // changes, so dropping it on a `Timeout`/`Occluded`/`Outdated` frame would
+    // lose that texture (e.g. the font atlas) for the rest of the session.
+    for (id, image_delta) in &textures_delta.set {
+      self
+        .egui_renderer
+        .update_texture(&self.device, &self.queue, *id, image_delta);
+    }
+
     let wave_uniform = WaveUniform {
       time: self.start_time.elapsed().as_secs_f32(),
       amplitude: self.wave_amplitude,
@@ -563,8 +860,50 @@ impl<'a> State<'a> {
       render_pass.draw_indexed(0..self.mesh_buffer.num_wireframe_indices, 0, 0..1);
     }
 
-    self.queue.submit(std::iter::once(encoder.finish()));
-    self.queue.present(output);
+    let screen_descriptor = ScreenDescriptor {
+      size_in_pixels: [self.config.width, self.config.height],
+      pixels_per_point,
+    };
+    let egui_cmd_buffers = self.egui_renderer.update_buffers(
+      &self.device,
+      &self.queue,
+      &mut encoder,
+      &paint_jobs,
+      &screen_descriptor,
+    );
+    {
+      let egui_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Egui Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+          view: &view,
+          resolve_target: None,
+          ops: wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: wgpu::StoreOp::Store,
+          },
+          depth_slice: None,
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+      });
+      self.egui_renderer.render(
+        &mut egui_pass.forget_lifetime(),
+        &paint_jobs,
+        &screen_descriptor,
+      );
+    }
+    for id in &textures_delta.free {
+      self.egui_renderer.free_texture(id);
+    }
+
+    self.queue.submit(
+      egui_cmd_buffers
+        .into_iter()
+        .chain(std::iter::once(encoder.finish())),
+    );
+    output.present();
 
     Ok(())
   }
@@ -611,25 +950,36 @@ impl<'a> ApplicationHandler for App<'a> {
     _window_id: WindowId,
     event: WindowEvent,
   ) {
-    if let Some(state) = &mut self.state {
-      match event {
-        WindowEvent::CloseRequested
-        | WindowEvent::KeyboardInput {
-          event:
-            winit::event::KeyEvent {
-              state: ElementState::Pressed,
-              logical_key: winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape),
-              ..
-            },
-          ..
-        } => event_loop.exit(),
-        WindowEvent::Resized(physical_size) => {
-          state.resize(physical_size);
-        }
-        WindowEvent::RedrawRequested => {
-          let _ = state.render();
-        }
-        other => {
+    let (Some(window), Some(state)) = (&self.window, &mut self.state) else {
+      return;
+    };
+
+    // Every event goes to egui first; camera/orbit controls only see what
+    // egui didn't consume (e.g. a drag that started on a widget).
+    let consumed = state
+      .egui_winit_state
+      .on_window_event(window, &event)
+      .consumed;
+
+    match event {
+      WindowEvent::CloseRequested
+      | WindowEvent::KeyboardInput {
+        event:
+          winit::event::KeyEvent {
+            state: ElementState::Pressed,
+            logical_key: winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape),
+            ..
+          },
+        ..
+      } => event_loop.exit(),
+      WindowEvent::Resized(physical_size) => {
+        state.resize(physical_size);
+      }
+      WindowEvent::RedrawRequested => {
+        let _ = state.render(window);
+      }
+      other => {
+        if !consumed {
           state.handle_input(&other);
         }
       }
