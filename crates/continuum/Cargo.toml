@@ -1,0 +1,12 @@
+[package]
+name = "continuum"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+common = { path = "../common" }
+exterior = { path = "../exterior" }
+
+nalgebra = "0.33.2"
+
+approx = "0.5.1"

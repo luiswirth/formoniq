@@ -7,6 +7,7 @@ license = "MIT OR Apache-2.0"
 [dependencies]
 ddf = { path = "../ddf" }
 exterior = { path = "../exterior" }
+continuum = { path = "../continuum" }
 manifold = { path = "../manifold" }
 common = { path = "../common" }
 

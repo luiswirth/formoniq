@@ -172,8 +172,8 @@ fn relative_inclusion_is_cochain_map() {
 fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use common::linalg::faer::FaerCholesky;
   use common::linalg::nalgebra::Vector;
+  use continuum::field::DiffFormClosure;
   use ddf::section::CoordFieldExt;
-  use exterior::field::DiffFormClosure;
   use formoniq::{assemble, bc, operators::SourceElVec};
 
   let dim = 2;

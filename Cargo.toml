@@ -5,6 +5,7 @@ members = [
   "crates/formoniq",
   "crates/ddf",
   "crates/exterior",
+  "crates/continuum",
   "crates/manifold",
   "crates/common",
 ]
