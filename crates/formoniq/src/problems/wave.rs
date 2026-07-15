@@ -4,7 +4,7 @@ use crate::whitney_complex::WhitneyComplex;
 
 use common::linalg::{
   faer::FaerCholesky,
-  nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
+  nalgebra::{bilinear_form_sparse, quadratic_form_sparse, CsrMatrix, Vector},
 };
 use ddf::cochain::Cochain;
 use exterior::ExteriorGrade;
@@ -19,9 +19,19 @@ impl WaveState {
     Self { pos, vel }
   }
 
-  /// The energy should be conserved from state to state.
-  pub fn energy(&self, laplace: &CsrMatrix, mass: &CsrMatrix) -> f64 {
+  /// The exactly conserved leapfrog invariant
+  /// $E = 1/2 (x^T K x + v^T M v) - (dif t)/2 x^T K v$, with $K$ the stiffness
+  /// and $M$ the mass.
+  ///
+  /// The scheme is symplectic Euler, which stores position and velocity
+  /// staggered by half a step; the co-located energy $1/2(x^T K x + v^T M v)$
+  /// therefore oscillates at $O(dif t)$. The cross term is exactly the shadow
+  /// correction that makes the quadratic form invariant under the unconstrained
+  /// (linear) step map --- conserved to roundoff there, and to a bounded
+  /// $O(dif t^2)$ once the essential velocity constraint projects each step.
+  pub fn energy(&self, laplace: &CsrMatrix, mass: &CsrMatrix, dt: f64) -> f64 {
     0.5 * (quadratic_form_sparse(laplace, &self.pos) + quadratic_form_sparse(mass, &self.vel))
+      - 0.5 * dt * bilinear_form_sparse(laplace, &self.pos, &self.vel)
   }
 }
 
@@ -56,15 +66,13 @@ pub fn solve_wave(
   let mass_cholesky = FaerCholesky::new(velocity_mass);
 
   const ENERGY_TOLERANCE: f64 = 0.1; // 10%
-  let initial_energy = initial_data.energy(&laplace, &mass);
+  let dt0 = times.windows(2).next().map_or(0.0, |w| w[1] - w[0]);
+  let initial_energy = initial_data.energy(&laplace, &mass, dt0);
 
   let mut solution = Vec::with_capacity(times.len());
   solution.push(initial_data);
 
-  let last_step = times.len() - 2;
-  for (istep, t01) in times.windows(2).enumerate() {
-    println!("Solving Wave Equation at step={istep}/{last_step}...");
-
+  for t01 in times.windows(2) {
     let [t0, t1] = t01 else { unreachable!() };
     let dt = t1 - t0;
 
@@ -79,8 +87,13 @@ pub fn solve_wave(
       &inclusion,
     );
 
-    let energy = next.energy(&laplace, &mass);
-    if (energy - initial_energy).abs() >= ENERGY_TOLERANCE * initial_energy {
+    // The conserved invariant stays flat (to $O(dif t^2)$ under the essential
+    // constraint); a genuine blowup from an over-CFL step is the only thing that
+    // moves it appreciably. At top grade $K = 0$ the energy is identically zero
+    // and there is nothing to check.
+    let energy = next.energy(&laplace, &mass, dt);
+    if initial_energy > 0.0 && (energy - initial_energy).abs() >= ENERGY_TOLERANCE * initial_energy
+    {
       panic!("Blowup while solving wave equation.");
     }
 
