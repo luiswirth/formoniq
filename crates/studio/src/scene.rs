@@ -1,6 +1,7 @@
 use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
+use exterior::ExteriorGrade;
 use manifold::{
-  atlas::{Bary, MeshPoint},
+  atlas::{barycenter_bary, Bary, MeshPoint},
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
   topology::{complex::Complex, handle::SimplexRef, simplex::standard_subsimps},
   Dim,
@@ -52,6 +53,12 @@ pub struct ScalarField {
 pub struct VectorField {
   pub name: String,
   pub samples: Vec<VectorSample>,
+  /// The barycentric lattice resolution each sample was reconstructed at:
+  /// the renderer's glyph length is a fraction of one lattice cell, not a
+  /// fixed constant, so arrows stay legible -- non-overlapping, but not
+  /// vanishingly short -- at whatever density the field was actually
+  /// sampled at.
+  pub lattice_resolution: usize,
 }
 
 pub struct VectorSample {
@@ -59,6 +66,12 @@ pub struct VectorSample {
   pub position: na::Vector3<f64>,
   /// The sharped tangent vector at that point, in ambient coordinates.
   pub vector: na::Vector3<f64>,
+  /// Outward unit normal of the cell this sample lies in: the tangent-plane
+  /// basis an arrow glyph is drawn in. Not assumed to be the ambient $z$-axis
+  /// -- true only for the flat reference-cell scenes -- so a glyph stays
+  /// tangent to a curved surface like the sphere instead of always lying
+  /// flat in the $x$-$y$ plane.
+  pub normal: na::Vector3<f64>,
 }
 
 impl VectorField {
@@ -95,53 +108,110 @@ impl ScalarField {
 }
 
 impl Scene {
-  /// Grade-0 Hodge-Laplace eigenmodes -- standing-wave normal modes, $Delta u =
-  /// lambda u$ with $Delta = delta dif$ on functions, no multiplier block -- of
-  /// an arbitrary simplicial surface with the given geometry.
+  /// Hodge-Laplace eigenmodes of a single grade -- standing-wave normal
+  /// modes, $Delta u = lambda u$ -- of an arbitrary simplicial surface with
+  /// the given geometry, filed into `fields` or `vector_fields` through the
+  /// same [`Self::field`] dispatch a raw Whitney basis function goes
+  /// through: an eigenmode and a one-hot cochain differ only in where the
+  /// cochain comes from (a dense eigensolve vs. a Kronecker delta), not in
+  /// how it is reconstructed or displayed.
   ///
-  /// Neither the mesh nor its embedding are assumed to be a sphere: any 2D
-  /// `Complex` with a `MeshCoords` realization goes in, so a scene is exactly
-  /// as general as the underlying eigensolve. The spherical harmonics are one
-  /// instantiation of this ([`Self::spherical_harmonics`]), not a special case
-  /// baked into the solve.
+  /// One arrow per cell (`arrow_samples_per_cell_edge = 0`, its barycenter)
+  /// for a grade-1 mode: a real mesh has far more cells than the reference
+  /// triangle's one, so a dense per-cell lattice would bury the field's own
+  /// shape in glyph clutter.
   ///
-  /// The eigensolve is dense ($O(n^3)$ in the vertex count $n$), so mesh
-  /// resolution controls both fidelity and cost.
-  pub fn eigenmodes(topology: Complex, coords: MeshCoords, nmodes: usize) -> Self {
+  /// The eigensolve is dense ($O(n^3)$ in the DOF count), so mesh resolution
+  /// controls both fidelity and cost.
+  fn eigenmode_fields(
+    topology: &Complex,
+    coords: &MeshCoords,
+    grade: ExteriorGrade,
+    nmodes: usize,
+    fields: &mut Vec<ScalarField>,
+    vector_fields: &mut Vec<VectorField>,
+  ) {
     use formoniq::{
       problems::hodge_laplace::solve_hodge_laplace_evp, whitney_complex::WhitneyComplex,
     };
 
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths(topology);
     let (eigenvals, _, eigenfuncs) =
-      solve_hodge_laplace_evp(&WhitneyComplex::new(&topology, &metric), 0, nmodes);
+      solve_hodge_laplace_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
 
-    let fields = eigenvals
-      .iter()
-      .zip(eigenfuncs.column_iter())
-      .enumerate()
-      .map(|(i, (&lambda, col))| ScalarField {
-        name: format!("mode {i} (lambda = {lambda:.2})"),
-        cochain: Cochain::new(0, col.into_owned()),
-        eigenvalue: Some(lambda),
-      })
-      .collect();
+    for (i, (&lambda, col)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate() {
+      let name = format!("mode {i} (grade {grade}, lambda = {lambda:.2})");
+      let cochain = Cochain::new(grade, col.into_owned());
+      Self::field(
+        topology,
+        coords,
+        name,
+        cochain,
+        Some(lambda),
+        0,
+        fields,
+        vector_fields,
+      );
+    }
+  }
 
+  /// Grade-0 Hodge-Laplace eigenmodes of an arbitrary simplicial surface.
+  /// Neither the mesh nor its embedding are assumed to be a sphere: any 2D
+  /// `Complex` with a `MeshCoords` realization goes in, so a scene is exactly
+  /// as general as the underlying eigensolve. The spherical harmonics are one
+  /// instantiation of this ([`Self::spherical_harmonics`]), not a special
+  /// case baked into the solve.
+  pub fn eigenmodes(topology: Complex, coords: MeshCoords, nmodes: usize) -> Self {
+    let mut fields = Vec::new();
+    let mut vector_fields = Vec::new();
+    Self::eigenmode_fields(
+      &topology,
+      &coords,
+      0,
+      nmodes,
+      &mut fields,
+      &mut vector_fields,
+    );
     Self {
       topology,
       coords,
       fields,
-      vector_fields: Vec::new(),
+      vector_fields,
     }
   }
 
   /// Laplace-Beltrami eigenfunctions on the unit sphere — the discrete
-  /// spherical harmonics — on an icosphere of the given subdivision depth.
+  /// spherical harmonics, grade 0 (scalar modes) and grade 1 (tangent vector
+  /// field modes) together in one scene, on an icosphere of the given
+  /// subdivision depth.
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
     use manifold::gen::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
-    Self::eigenmodes(topology, coords, nmodes)
+    let mut fields = Vec::new();
+    let mut vector_fields = Vec::new();
+    Self::eigenmode_fields(
+      &topology,
+      &coords,
+      0,
+      nmodes,
+      &mut fields,
+      &mut vector_fields,
+    );
+    Self::eigenmode_fields(
+      &topology,
+      &coords,
+      1,
+      nmodes,
+      &mut fields,
+      &mut vector_fields,
+    );
+    Self {
+      topology,
+      coords,
+      fields,
+      vector_fields,
+    }
   }
 
   /// Every Whitney basis function ("local shape function") of the standard
@@ -227,12 +297,14 @@ impl Scene {
       1 => {
         let interpolant = WhitneyInterpolant::new(cochain, topology);
         let lattice = barycentric_lattice(topology.dim(), arrow_samples_per_cell_edge);
+        let cell_normals = oriented_cell_normals(topology, coords);
         let samples = topology
           .cells()
           .handle_iter()
           .flat_map(|cell| {
             let metric = coords.cell_metric(cell);
             let interpolant = &interpolant;
+            let normal = cell_normals[cell.kidx()];
             lattice.iter().map(move |bary| {
               let point = MeshPoint::new(cell.idx(), bary.clone());
               let vector = interpolant.eval(&point).sharp(&metric);
@@ -241,15 +313,30 @@ impl Scene {
               VectorSample {
                 position: ambient_point(cell, coords, bary),
                 vector,
+                normal,
               }
             })
           })
           .collect();
-        vector_fields.push(VectorField { name, samples });
+        vector_fields.push(VectorField {
+          name,
+          samples,
+          lattice_resolution: arrow_samples_per_cell_edge.max(1),
+        });
       }
       _ => {}
     }
   }
+}
+
+/// The ambient coordinates of vertex `v`, zero-padded to 3D.
+fn ambient_vec(coords: &MeshCoords, v: usize) -> na::Vector3<f64> {
+  let c = coords.coord(v);
+  na::Vector3::new(
+    c[0],
+    if c.len() > 1 { c[1] } else { 0.0 },
+    if c.len() > 2 { c[2] } else { 0.0 },
+  )
 }
 
 /// The ambient position of a barycentric point of `cell`: the affine
@@ -259,15 +346,37 @@ impl Scene {
 fn ambient_point(cell: SimplexRef, coords: &MeshCoords, bary: &Bary) -> na::Vector3<f64> {
   let mut p = na::Vector3::zeros();
   for (i, &v) in cell.simplex().vertices.iter().enumerate() {
-    let c = coords.coord(v);
-    let ambient = na::Vector3::new(
-      c[0],
-      if c.len() > 1 { c[1] } else { 0.0 },
-      if c.len() > 2 { c[2] } else { 0.0 },
-    );
-    p += bary[i] * ambient;
+    p += bary[i] * ambient_vec(coords, v);
   }
   p
+}
+
+/// The outward unit normal of every cell, indexed by cell $k$-index: a flat
+/// cell's own two edge vectors determine its normal only up to sign, and a
+/// `Complex`'s cells carry no winding to break that tie (see
+/// [`crate::mesh3d::orient_triangles`]), so the topology-wide consistent
+/// orientation pass is what fixes it -- the same one [`crate::render::mesh`]
+/// runs to shade the surface itself.
+fn oriented_cell_normals(topology: &Complex, coords: &MeshCoords) -> Vec<na::Vector3<f64>> {
+  let triangles: Vec<[usize; 3]> = topology
+    .cells()
+    .handle_iter()
+    .map(|cell| {
+      let v = &cell.simplex().vertices;
+      [v[0], v[1], v[2]]
+    })
+    .collect();
+  crate::mesh3d::orient_triangles(&triangles)
+    .iter()
+    .map(|&[a, b, c]| {
+      let (pa, pb, pc) = (
+        ambient_vec(coords, a),
+        ambient_vec(coords, b),
+        ambient_vec(coords, c),
+      );
+      (pb - pa).cross(&(pc - pa)).normalize()
+    })
+    .collect()
 }
 
 /// A uniform barycentric lattice on the standard `dim`-simplex: every
@@ -294,7 +403,9 @@ fn barycentric_lattice(dim: Dim, resolution: usize) -> Vec<Bary> {
       prefix.pop();
     }
   }
-  let resolution = resolution.max(1);
+  if resolution == 0 {
+    return vec![barycenter_bary(dim)];
+  }
   let mut compositions = Vec::new();
   recurse(resolution, dim + 1, &mut Vec::new(), &mut compositions);
   compositions
