@@ -7,6 +7,6 @@ edition = "2021"
 common = { path = "../common" }
 exterior = { path = "../exterior" }
 
-nalgebra = "0.33.2"
+nalgebra = "0.35.0"
 
 approx = "0.5.1"
