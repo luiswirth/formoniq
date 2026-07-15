@@ -67,6 +67,23 @@ pub fn faer_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigenvalues: usize) -> (Vec
   let n = lhs.nrows();
   let lhs_dense = Matrix::from(lhs);
   let rhs_dense = Matrix::from(rhs);
+
+  // faer's dense QZ mis-sizes its workspace for $n <= 1$, but the generalized
+  // eigenproblem is trivial at that size: the $1 times 1$ pencil $(a, b)$ has the
+  // single eigenvalue $a / b$ with $B$-normalized eigenvector $1 / sqrt(b)$, and
+  // the empty pencil has none. This is the base case that lets the
+  // $0$-dimensional manifold (a point, on which the Hodge Laplacian is the zero
+  // operator) solve rather than crash.
+  if n <= 1 {
+    let count = neigenvalues.min(n);
+    let eigenvals = Vector::from_iterator(
+      count,
+      (0..count).map(|i| lhs_dense[(i, i)] / rhs_dense[(i, i)]),
+    );
+    let eigenvecs = Matrix::from_fn(n, count, |i, _| 1.0 / rhs_dense[(i, i)].sqrt());
+    return (eigenvals, eigenvecs);
+  }
+
   let a = faer::Mat::from_fn(n, n, |i, j| lhs_dense[(i, j)]);
   let b = faer::Mat::from_fn(n, n, |i, j| rhs_dense[(i, j)]);
 
@@ -160,6 +177,24 @@ mod test {
         assert!((g - w).abs() < 1e-9, "nev={nev}: got {g} want {w}");
       }
     }
+  }
+
+  /// The $1 times 1$ base case (the $0$-manifold's Hodge-Laplace pencil), where
+  /// faer's dense QZ mis-sizes its workspace: the lone eigenvalue is $a / b$ with
+  /// a $B$-normalized eigenvector, and it still solves the pencil.
+  #[test]
+  fn ghiep_solves_the_scalar_pencil() {
+    let a = Matrix::from_element(1, 1, 3.0);
+    let b = Matrix::from_element(1, 1, 4.0);
+    let (vals, vecs) = faer_ghiep(&(&a).into(), &(&b).into(), 3);
+    assert_eq!(vals.len(), 1);
+    assert!((vals[0] - 3.0 / 4.0).abs() < 1e-12);
+    let x: Vector = vecs.column(0).into_owned();
+    assert!(
+      (x.dot(&(&b * &x)) - 1.0).abs() < 1e-12,
+      "eigenvector is B-normalized"
+    );
+    assert!((&a * &x - vals[0] * (&b * &x)).norm() < 1e-12);
   }
 
   /// A singular, indefinite $B$ (the mixed-formulation regime): a null

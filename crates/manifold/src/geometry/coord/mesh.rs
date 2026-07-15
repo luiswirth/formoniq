@@ -110,6 +110,12 @@ impl MeshCoords {
   }
 
   pub fn to_edge_lengths(&self, topology: &Complex) -> MeshLengths {
+    // A 0-manifold is a discrete set of points: its 1-skeleton is empty, so the
+    // edge-length representation of its (trivial, 0-dimensional) geometry is the
+    // empty vector.
+    if topology.dim() == 0 {
+      return MeshLengths::new_unchecked(Vector::zeros(0));
+    }
     let edges = topology.edges();
     let mut edge_lengths = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {

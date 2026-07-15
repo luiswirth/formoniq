@@ -141,13 +141,25 @@ impl MixedGalmats {
 
       (mass_sigma, dif_sigma, codif_u)
     } else {
-      (GalMat::new(0, 0), GalMat::new(0, 0), GalMat::new(0, 0))
+      // At grade 0 the $sigma$ space is empty, but the off-diagonal blocks still
+      // have to align with the $u$ block: $dif_sigma$ maps the empty $sigma$ into
+      // $u$-space ($u_"len" times 0$) and $codif_u$ maps $u$ into it
+      // ($0 times u_"len"$). Shaping them $0 times 0$ instead breaks block assembly.
+      let u_len = mass_u.nrows();
+      (
+        GalMat::new(0, 0),
+        GalMat::new(u_len, 0),
+        GalMat::new(0, u_len),
+      )
     };
 
     let codifdif_u = if grade < whitney.dim() {
       whitney.codif_dif(grade)
     } else {
-      GalMat::new(0, 0)
+      // At top grade $dif u = 0$, so the $codif dif$ block vanishes — but it still
+      // occupies the $u times u$ diagonal slot and must be shaped $u_"len"^2$, not
+      // $0 times 0$, or block assembly misaligns.
+      GalMat::new(mass_u.nrows(), mass_u.nrows())
     };
 
     Self {
