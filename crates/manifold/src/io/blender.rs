@@ -90,6 +90,7 @@ pub fn write_mdd_file(
 }
 
 pub fn write_3dmesh_animation<'a, 'b>(
+  filename: impl AsRef<Path>,
   coords_frames: impl IntoIterator<Item = &'a MeshCoords>,
   time_frames: impl IntoIterator<Item = f64>,
 ) {
@@ -104,10 +105,11 @@ pub fn write_3dmesh_animation<'a, 'b>(
     .collect();
   let time_frames: Vec<f32> = time_frames.into_iter().map(|t| t as f32).collect();
 
-  write_mdd_file("out/sphere_wave.mdd", &mdd_frames, &time_frames).unwrap();
+  write_mdd_file(filename, &mdd_frames, &time_frames).unwrap();
 }
 
 pub fn write_displacement_animation<'a>(
+  filename: impl AsRef<Path>,
   base_surface: &TriangleSurface3D,
   displacements_frames: impl IntoIterator<Item = &'a Vector>,
   frame_times: impl IntoIterator<Item = f64>,
@@ -122,5 +124,5 @@ pub fn write_displacement_animation<'a>(
     })
     .collect();
 
-  write_3dmesh_animation(&coords_frames, frame_times);
+  write_3dmesh_animation(filename, &coords_frames, frame_times);
 }
