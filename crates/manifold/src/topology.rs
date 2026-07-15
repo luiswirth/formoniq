@@ -2,6 +2,7 @@ pub mod boundary;
 pub mod complex;
 pub mod data;
 pub mod handle;
+pub mod homology;
 pub mod simplex;
 pub mod skeleton;
 
