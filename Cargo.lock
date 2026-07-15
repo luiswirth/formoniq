@@ -671,6 +671,10 @@ dependencies = [
  "mshio",
  "nalgebra",
  "nalgebra-sparse",
+ "num-bigint 0.4.8",
+ "num-integer",
+ "num-rational 0.4.2",
+ "num-traits",
  "rayon",
  "tracing",
 ]
