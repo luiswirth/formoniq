@@ -1,10 +1,12 @@
 //! Hodge-Laplace eigenvalue problem.
 //!
-//! By default, a generic sweep over every dimension $1 <= n <= 3$ and every form
-//! grade $0 <= k <= n$ on the flat box $[0, pi]^n$: the lowest eigenvalues of the
-//! mixed Hodge Laplacian, refined until their algebraic self-convergence rate
-//! shows. The count of zero eigenvalues is the harmonic dimension $b_k$ — $1$ at
-//! grade $0$, else $0$ on the contractible box — an exact topological anchor.
+//! By default, a generic sweep over every dimension $0 <= n <= 3$, every form
+//! grade $0 <= k <= n$, and both boundary conditions on the flat box $[0, pi]^n$:
+//! the lowest eigenvalues of the mixed Hodge Laplacian, refined until their
+//! algebraic self-convergence rate shows. The count of zero eigenvalues is the
+//! harmonic dimension — absolute $b_k (K)$ ($1$ at grade $0$) versus relative
+//! $b_k (K, diff K)$ ($1$ at top grade) on the contractible box, an exact
+//! topological anchor and a staging of Poincaré--Lefschetz duality.
 //!
 //! Run with `-i` / `--interactive` to instead load an external mesh (`.msh` or
 //! `.obj`) and read the grade and eigenvalue count from stdin — the way to put
@@ -46,79 +48,94 @@ fn box_sweep() {
   // point does not refine), but it runs on exactly the same code.
   for dim in 0..=3 {
     for grade in 0..=dim {
-      println!("\nHodge-Laplace EVP, dim {dim}, grade {grade}.");
-      println!(
-        "  {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
-        "r", "ncells"
-      );
+      // Both boundary conditions: absolute (natural / Neumann) on the full
+      // Whitney complex, relative (essential / Dirichlet) on its
+      // boundary-vanishing subcomplex. The zero-eigenvalue count is the harmonic
+      // dimension — $b_k (K)$ for absolute, $b_k (K, diff K)$ for relative — so
+      // the harmonic mode sits at grade $0$ for absolute and top grade for
+      // relative, staging Poincaré--Lefschetz duality. On the point ($n = 0$)
+      // the boundary is empty and the two coincide.
+      for relative in [false, true] {
+        let bc = if relative { "Relative" } else { "Absolute" };
+        println!("\nHodge-Laplace EVP, dim {dim}, grade {grade}, {bc}.");
+        println!(
+          "  {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
+          "r", "ncells"
+        );
 
-      // Every grade solves a dense generalized eigenproblem, $O(N^3)$ in the
-      // mixed-system size $N$, so refine only while that stays affordable and
-      // stop at the first level that would exceed the budget. In 3D this leaves
-      // just a couple of levels; the source example, on the sparse LU, carries
-      // the finer convergence story.
-      const MAX_DOFS: usize = 1200;
+        // Every grade solves a dense generalized eigenproblem, $O(N^3)$ in the
+        // mixed-system size $N$, so refine only while that stays affordable and
+        // stop at the first level that would exceed the budget. In 3D this leaves
+        // just a couple of levels; the source example, on the sparse LU, carries
+        // the finer convergence story.
+        const MAX_DOFS: usize = 1200;
 
-      // History of the lowest eigenvalues per level, for the three-point
-      // Richardson estimate of each eigenvalue's convergence order.
-      let mut history: Vec<Vec<f64>> = Vec::new();
-      let mut prev_ndofs = 0;
-      for irefine in 0u32..=8 {
-        let nboxes_per_dim = 2usize.pow(irefine);
-        let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
-        let (topology, coords) = box_mesh.compute_coord_complex();
-        let metric = coords.to_edge_lengths(&topology);
-        let whitney = WhitneyComplex::new(&topology, &metric);
+        // History of the lowest eigenvalues per level, for the three-point
+        // Richardson estimate of each eigenvalue's convergence order.
+        let mut history: Vec<Vec<f64>> = Vec::new();
+        let mut prev_ndofs = 0;
+        for irefine in 0u32..=8 {
+          let nboxes_per_dim = 2usize.pow(irefine);
+          let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
+          let (topology, coords) = box_mesh.compute_coord_complex();
+          let metric = coords.to_edge_lengths(&topology);
+          let whitney = WhitneyComplex::new(&topology, &metric);
 
-        let ndofs = whitney.ndofs(grade)
-          + if grade > 0 {
-            whitney.ndofs(grade - 1)
-          } else {
-            0
-          };
-        // Stop once the dense solve would exceed the budget, or once refinement
-        // no longer grows the mesh — a 0-manifold is a single point and does not
-        // subdivide, so it has exactly one level.
-        if !history.is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
-          break;
-        }
-        prev_ndofs = ndofs;
-
-        let (eigenvals, _, _) = hodge_laplace::solve_hodge_laplace_evp(&whitney, grade, neigen);
-        // The coarsest levels can carry fewer DOFs than the requested count; the
-        // eigensolver pads the rest with non-finite values.
-        let eigenvals: Vec<f64> = eigenvals
-          .iter()
-          .copied()
-          .filter(|x| x.is_finite())
-          .collect();
-
-        // Richardson: with three successive levels the ratio of consecutive
-        // differences estimates the order without knowing the exact eigenvalue.
-        // FEEC eigenvalues converge as $O(h^2)$, so expect a rate near 2.
-        let rates: Option<Vec<f64>> = match history.as_slice() {
-          [.., older, newer] => Some(
-            (0..eigenvals.len().min(newer.len()).min(older.len()))
-              .map(|i| {
-                let (d_old, d_new) = ((newer[i] - older[i]).abs(), (eigenvals[i] - newer[i]).abs());
-                algebraic_convergence_rate(d_new, d_old)
-              })
-              .collect(),
-          ),
-          _ => None,
-        };
-
-        let ncells = topology.cells().len();
-        print!("  {irefine:>2} | {ncells:>7} |");
-        for (i, &lambda) in eigenvals.iter().enumerate() {
-          match rates.as_ref().and_then(|rates| rates.get(i)) {
-            Some(rate) => print!(" {lambda:6.3}({rate:>4.1})"),
-            None => print!(" {lambda:6.3}( -- )"),
+          let ndofs = whitney.ndofs(grade)
+            + if grade > 0 {
+              whitney.ndofs(grade - 1)
+            } else {
+              0
+            };
+          // Stop once the dense solve would exceed the budget, or once refinement
+          // no longer grows the mesh — a 0-manifold is a single point and does not
+          // subdivide, so it has exactly one level.
+          if !history.is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
+            break;
           }
-        }
-        println!();
+          prev_ndofs = ndofs;
 
-        history.push(eigenvals);
+          let (eigenvals, _, _) = if relative {
+            hodge_laplace::solve_hodge_laplace_evp(&whitney.relative(), grade, neigen)
+          } else {
+            hodge_laplace::solve_hodge_laplace_evp(&whitney, grade, neigen)
+          };
+          // The coarsest levels can carry fewer DOFs than the requested count; the
+          // eigensolver pads the rest with non-finite values.
+          let eigenvals: Vec<f64> = eigenvals
+            .iter()
+            .copied()
+            .filter(|x| x.is_finite())
+            .collect();
+
+          // Richardson: with three successive levels the ratio of consecutive
+          // differences estimates the order without knowing the exact eigenvalue.
+          // FEEC eigenvalues converge as $O(h^2)$, so expect a rate near 2.
+          let rates: Option<Vec<f64>> = match history.as_slice() {
+            [.., older, newer] => Some(
+              (0..eigenvals.len().min(newer.len()).min(older.len()))
+                .map(|i| {
+                  let (d_old, d_new) =
+                    ((newer[i] - older[i]).abs(), (eigenvals[i] - newer[i]).abs());
+                  algebraic_convergence_rate(d_new, d_old)
+                })
+                .collect(),
+            ),
+            _ => None,
+          };
+
+          let ncells = topology.cells().len();
+          print!("  {irefine:>2} | {ncells:>7} |");
+          for (i, &lambda) in eigenvals.iter().enumerate() {
+            match rates.as_ref().and_then(|rates| rates.get(i)) {
+              Some(rate) => print!(" {lambda:6.3}({rate:>4.1})"),
+              None => print!(" {lambda:6.3}( -- )"),
+            }
+          }
+          println!();
+
+          history.push(eigenvals);
+        }
       }
     }
   }
