@@ -14,9 +14,25 @@ const ARROW_LENGTH_FRACTION: f64 = 0.8;
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct Vertex {
   pub position: [f32; 3],
-  pub value: f32,       // 0-form scalar value
-  pub normal: [f32; 3], // outward vertex normal, for standing-wave displacement
-  pub _pad: f32,
+  /// A surface vertex: the colormap scalar, the raw (signed) 0-form value,
+  /// or the nodal `magnitude` field when the surface is the blank-canvas
+  /// backdrop to a vector field's arrows. A glyph vertex: its arrow's
+  /// magnitude relative to the field's peak (see `push_arrow_glyph`), which
+  /// the shader uses to scale the standing-wave swing so a weak sample
+  /// swings less than a strong one -- never the colormap, since glyphs are
+  /// drawn flat and uncolored so the colormap always reads as "the surface".
+  pub value: f32,
+  /// A surface vertex: the standing-wave displacement at wave amplitude 1
+  /// (`value` times its own outward unit normal), added to `position`,
+  /// scaled by `wave.amplitude * cos(wave.omega * wave.time)` -- the
+  /// classical scalar-membrane convention. A glyph vertex: its arrow's own
+  /// root (tail), fixed at the sample point -- the shader scales the
+  /// corner's offset from that root instead of translating it, see
+  /// `shader.wgsl`.
+  pub displacement: [f32; 3],
+  /// Nonzero for a glyph vertex, zero for the surface: which branch of the
+  /// fragment shader's coloring this vertex takes.
+  pub is_glyph: f32,
 }
 
 impl Vertex {
@@ -39,6 +55,11 @@ impl Vertex {
           offset: std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
           shader_location: 2,
           format: wgpu::VertexFormat::Float32x3,
+        },
+        wgpu::VertexAttribute {
+          offset: std::mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
+          shader_location: 3,
+          format: wgpu::VertexFormat::Float32,
         },
       ],
     }
@@ -113,12 +134,13 @@ impl MeshBuffer {
         0.0
       };
       let n = vertex_normals[i];
+      let value = value as f32;
 
       vertices.push(Vertex {
         position: [x, y, z],
-        value: value as f32,
-        normal: [n.x as f32, n.y as f32, n.z as f32],
-        _pad: 0.0,
+        value,
+        displacement: [value * n.x as f32, value * n.y as f32, value * n.z as f32],
+        is_glyph: 0.0,
       });
     }
 
@@ -135,26 +157,37 @@ impl MeshBuffer {
     (vertices, indices, edge_indices)
   }
 
-  /// A grade-1 field's samples as arrow glyphs, on top of the mesh's own
-  /// surface shown blank (every vertex at the colormap's zero -- a canvas,
-  /// not a field in its own right). Direction is normalized: an arrow's
-  /// *length* reads as legibility, not magnitude, matching the `plot/`
-  /// Python tool's own `normalize_vectors` convention -- magnitude is
-  /// carried by `value` (the arrow's color) instead, which is the
-  /// unambiguous channel since two nearby arrows of different length are
-  /// otherwise hard to compare by eye.
+  /// A grade-1 field: the surface colored by its nodal `magnitude` (the
+  /// scalar readout of a vector field, the same role `MeshBuffer::new`'s
+  /// 0-form plays for a genuine scalar field), with `samples` drawn as
+  /// direction-only arrows on top -- flat, uncolored (`Vertex::is_glyph`),
+  /// since color already lives on the surface underneath them. Direction is
+  /// normalized for the glyph's shape: an arrow's *length* reads as
+  /// legibility, not magnitude, matching the `plot/` Python tool's own
+  /// `normalize_vectors` convention. Each arrow's magnitude relative to the
+  /// field's peak is kept for its own standing-wave swing, so a sample where
+  /// the field is small swings less than one where it's large.
   pub fn from_vector_field(
     device: &wgpu::Device,
     topology: &Complex,
     coords: &MeshCoords,
     field: &VectorField,
   ) -> Self {
-    let nvertices = topology.skeleton_raw(0).len();
     let (mut vertices, mut indices, wireframe_indices) =
-      Self::surface_geometry(topology, coords, &vec![0.0; nvertices]);
+      Self::surface_geometry(topology, coords, &field.magnitude);
+    // The vector field's own animation lives entirely in the glyphs'
+    // tangential motion below, not in a normal-displaced surface -- unlike a
+    // genuine scalar eigenmode, `magnitude` is a derived proxy coloring the
+    // canvas, not itself the solution of a scalar wave equation, so the
+    // baked-in normal displacement `surface_geometry` gives every vertex
+    // would be a claim this field never makes.
+    for vertex in &mut vertices {
+      vertex.displacement = [0.0; 3];
+    }
 
     let mesh_width = coords.to_edge_lengths(topology).mesh_width_max();
-    let length = ARROW_LENGTH_FRACTION * mesh_width / field.lattice_resolution as f64;
+    let length = ARROW_LENGTH_FRACTION * mesh_width / field.lattice_resolution.max(1) as f64;
+    let peak_magnitude = field.max_magnitude();
 
     for sample in &field.samples {
       let magnitude = sample.vector.norm();
@@ -165,8 +198,8 @@ impl MeshBuffer {
         sample.position,
         sample.vector / magnitude,
         sample.normal,
+        (magnitude / peak_magnitude) as f32,
         length,
-        magnitude as f32,
         &mut vertices,
         &mut indices,
       );
@@ -216,25 +249,33 @@ impl MeshBuffer {
 /// `up` is the sample's own cell normal, not assumed to be the ambient
 /// $z$-axis, so the glyph stays tangent to a curved surface (the sphere's
 /// grade-1 eigenmodes) rather than always lying flat in the $x$-$y$ plane.
+/// Sitting exactly in that tangent plane, at the surface, would z-fight the
+/// canvas underneath -- handled not by a geometric lift here (fragile: a
+/// world-space offset shrinks to nothing in clip space at a distance or a
+/// grazing angle) but by the same clip-space depth nudge the wireframe
+/// pipeline already uses, keyed off `is_glyph` in the shader.
+///
+/// `relative_magnitude` is the sample's true magnitude divided by the
+/// field's peak, baked into every corner's `value` so the shader can scale
+/// the standing-wave swing per glyph -- `origin` is baked into every
+/// corner's `displacement` as the arrow's fixed root, about which that swing
+/// scales, rather than a translation applied to the whole rigid shape.
 fn push_arrow_glyph(
   origin: na::Vector3<f64>,
   direction: na::Vector3<f64>,
   up: na::Vector3<f64>,
+  relative_magnitude: f32,
   length: f64,
-  value: f32,
   vertices: &mut Vec<Vertex>,
   indices: &mut Vec<u32>,
 ) {
   let right = up.cross(&direction).normalize();
-  // Lifted a hair off the surface so the glyph doesn't z-fight the blank
-  // canvas underneath it.
-  let lift = up * (length * 0.02);
 
   let shaft_len = length * 0.6;
   let shaft_half_width = length * 0.06;
   let head_half_width = length * 0.18;
 
-  let point = |u: f64, v: f64| origin + lift + direction * u + right * v;
+  let point = |u: f64, v: f64| origin + direction * u + right * v;
   let corners = [
     point(0.0, shaft_half_width),        // tail, left
     point(shaft_len, shaft_half_width),  // shaft/head junction, left
@@ -246,12 +287,12 @@ fn push_arrow_glyph(
   ];
 
   let base = vertices.len() as u32;
-  let n = [up.x as f32, up.y as f32, up.z as f32];
+  let root = [origin.x as f32, origin.y as f32, origin.z as f32];
   vertices.extend(corners.iter().map(|p| Vertex {
     position: [p.x as f32, p.y as f32, p.z as f32],
-    value,
-    normal: n,
-    _pad: 0.0,
+    value: relative_magnitude,
+    displacement: root,
+    is_glyph: 1.0,
   }));
   for k in 1..corners.len() as u32 - 1 {
     indices.extend([base, base + k, base + k + 1]);
