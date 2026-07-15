@@ -18,7 +18,9 @@ Research code, under active development.
   de Rham map, and the discrete exterior derivative, with the commuting-diagram
   properties covered by tests.
 - **Problems.** Hodge-Laplace source and eigenvalue problems, Maxwell, heat,
-  wave, Laplace-Beltrami. Parallel assembly; PETSc/SLEPc solver backend.
+  wave, Laplace-Beltrami. Parallel assembly; native pure-Rust solvers (faer
+  sparse LU for the saddle-point system, a dense QZ for the generalized
+  eigenproblems).
 
 ## Getting started
 

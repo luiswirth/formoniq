@@ -7,8 +7,8 @@ use crate::{
 };
 
 use common::linalg::{
+  faer::faer_ghiep,
   nalgebra::{CsrMatrix, Vector},
-  petsc::petsc_ghiep,
 };
 use ddf::cochain::Cochain;
 
@@ -40,7 +40,7 @@ pub fn solve_laplace_beltrami_evp(
   let laplace_galmat = whitney.codif_dif(0);
   let mass_galmat = whitney.mass(0);
 
-  let (eigenvals, eigenvecs) = petsc_ghiep(
+  let (eigenvals, eigenvecs) = faer_ghiep(
     &CsrMatrix::from(&laplace_galmat),
     &CsrMatrix::from(&mass_galmat),
     neigenvalues,
