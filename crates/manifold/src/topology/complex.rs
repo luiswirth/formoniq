@@ -8,7 +8,7 @@ use common::linalg::nalgebra::{CooMatrix, CooMatrixExt};
 
 use itertools::Itertools;
 
-use std::sync::OnceLock;
+use std::{io, path::Path, sync::OnceLock};
 
 /// A simplicial manifold complex.
 ///
@@ -58,6 +58,18 @@ impl Complex {
   }
   pub fn cells(&self) -> SkeletonRef<'_> {
     self.skeleton(self.dim())
+  }
+}
+
+/// Serialization is just the top-dimensional [`Skeleton`] (its cells): every
+/// other skeleton, and every cached operator, is [`Complex::from_cells`]'s
+/// job to rederive, not data to store.
+impl Complex {
+  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+    self.skeleton_raw(self.dim()).save(path)
+  }
+  pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
+    Ok(Self::from_cells(Skeleton::load(path)?))
   }
 }
 
@@ -238,6 +250,27 @@ mod test {
 
   use super::*;
   use common::linalg::nalgebra::Matrix;
+
+  /// Round-tripping through CBOR reproduces the same topology: the boundary
+  /// (an $O(n^3)$ derived quantity, not stored data) matches, so the save/load
+  /// pair is exercised through `Complex::from_cells`, not just through serde.
+  #[test]
+  fn save_load_roundtrip() {
+    use crate::gen::cartesian::CartesianMeshInfo;
+
+    let (topology, _) = CartesianMeshInfo::new_unit(3, 2).compute_coord_complex();
+
+    let path = std::env::temp_dir().join(format!("formoniq_test_{}.cbor", std::process::id()));
+    topology.save(&path).unwrap();
+    let loaded = Complex::load(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+
+    assert_eq!(loaded.dim(), topology.dim());
+    for dim in 0..=topology.dim() {
+      assert_eq!(loaded.nsimplices(dim), topology.nsimplices(dim));
+    }
+    assert_eq!(loaded.betti_numbers(), topology.betti_numbers());
+  }
 
   /// Every skeleton is in canonical colexicographic order, and the vertices
   /// are contiguous and fully used. This is the ordering contract the file

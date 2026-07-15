@@ -19,8 +19,10 @@ use common::{
 
 use itertools::Itertools;
 
+use std::{io, path::Path};
+
 /// The coordinates of the vertices of the mesh.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MeshCoords {
   matrix: Matrix,
 }
@@ -56,6 +58,21 @@ impl MeshCoords {
 
   pub fn swap_coords(&mut self, icol: usize, jcol: usize) {
     self.matrix.swap_columns(icol, jcol);
+  }
+
+  /// Whether this embedding could be the geometry of `topology`: one column
+  /// per vertex, nothing more (the two carry no other shared invariant to
+  /// check, since embedding and topology are otherwise fully independent
+  /// inputs).
+  pub fn is_compatible_with(&self, topology: &Complex) -> bool {
+    self.nvertices() == topology.vertices().len()
+  }
+
+  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+    common::io::save_cbor(self, path)
+  }
+  pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
+    common::io::load_cbor(path)
   }
 }
 
