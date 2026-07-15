@@ -4,7 +4,7 @@ use crate::{
 };
 
 /// A Gram Matrix represent an inner product expressed in a basis.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Gramian {
   /// S.P.D. matrix
   matrix: Matrix,
@@ -87,7 +87,7 @@ impl std::ops::Index<(usize, usize)> for Gramian {
 /// needs $g$ or $g^(-1)$: contravariant quantities (vectors) are measured by
 /// [`Self::vector_gramian`], covariant ones (forms) by
 /// [`Self::covector_gramian`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct RiemannianMetric {
   vector_gramian: Gramian,
   covector_gramian: Gramian,

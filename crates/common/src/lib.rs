@@ -5,6 +5,7 @@ pub mod affine;
 pub mod combo;
 pub mod coord;
 pub mod gramian;
+pub mod io;
 
 pub mod linalg;
 pub mod util;

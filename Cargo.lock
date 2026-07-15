@@ -403,6 +403,33 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 
 [[package]]
+name = "ciborium"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42e69ffd6f0917f5c029256a24d0161db17cea3997d185db0d35926308770f0e"
+dependencies = [
+ "ciborium-io",
+ "ciborium-ll",
+ "serde",
+]
+
+[[package]]
+name = "ciborium-io"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05afea1e0a06c9be33d539b876f1ce3692f4afea2cb41f740e7743225ed1c757"
+
+[[package]]
+name = "ciborium-ll"
+version = "0.2.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57663b653d948a338bfb3eeba9bb2fd5fcfaecb9e199e87e1eda4d9e8b240fd9"
+dependencies = [
+ "ciborium-io",
+ "half",
+]
+
+[[package]]
 name = "clipboard-win"
 version = "5.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -452,12 +479,14 @@ name = "common"
 version = "0.2.0"
 dependencies = [
  "approx",
+ "ciborium",
  "faer",
  "itertools 0.15.0",
  "nalgebra",
  "nalgebra-sparse",
  "num-integer",
  "num-traits",
+ "serde",
 ]
 
 [[package]]
@@ -637,6 +666,7 @@ dependencies = [
  "manifold",
  "nalgebra",
  "nalgebra-sparse",
+ "serde",
 ]
 
 [[package]]
@@ -1685,6 +1715,8 @@ checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
 dependencies = [
  "equivalent",
  "hashbrown 0.17.1",
+ "serde",
+ "serde_core",
 ]
 
 [[package]]
@@ -1982,6 +2014,7 @@ dependencies = [
  "num-rational 0.4.2",
  "num-traits",
  "rayon",
+ "serde",
  "tracing",
 ]
 
@@ -2132,6 +2165,7 @@ dependencies = [
  "num-complex 0.4.6",
  "num-rational 0.4.2",
  "num-traits",
+ "serde",
  "simba",
  "typenum",
 ]
@@ -2347,6 +2381,7 @@ dependencies = [
  "bytemuck",
  "num-traits",
  "rand 0.8.7",
+ "serde",
 ]
 
 [[package]]

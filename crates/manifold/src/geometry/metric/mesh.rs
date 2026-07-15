@@ -13,8 +13,10 @@ use common::linalg::nalgebra::Vector;
 use itertools::Itertools;
 use rayon::iter::ParallelIterator;
 
+use std::{io, path::Path};
+
 /// The lengths of the edges of the mesh.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct MeshLengths {
   vector: Vector,
 }
@@ -126,6 +128,19 @@ impl MeshLengths {
     skeleton
       .handle_par_iter()
       .all(|simp| self.simplex_lengths(simp).is_coordinate_realizable())
+  }
+
+  /// Whether this could be the edge-length geometry of `topology`: one length
+  /// per edge, nothing more.
+  pub fn is_compatible_with(&self, topology: &Complex) -> bool {
+    self.nedges() == topology.edges().len()
+  }
+
+  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+    common::io::save_cbor(self, path)
+  }
+  pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
+    common::io::load_cbor(path)
   }
 }
 impl std::ops::Index<EdgeIdx> for MeshLengths {

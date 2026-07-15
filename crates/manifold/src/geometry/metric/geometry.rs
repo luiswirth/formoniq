@@ -18,11 +18,17 @@
 
 use super::{mesh::MeshLengths, simplex::SimplexLengths};
 use crate::{
-  topology::{complex::Complex, data::SkeletonVec, handle::SimplexRef},
+  topology::{
+    complex::Complex,
+    data::{SkeletonData, SkeletonVec},
+    handle::SimplexRef,
+  },
   Dim,
 };
 
 use common::gramian::RiemannianMetric;
+
+use std::{io, path::Path};
 
 /// The intrinsic geometry of a mesh: the Riemannian metric of each cell, which
 /// is all that FEEC assembly needs.
@@ -40,7 +46,7 @@ impl Geometry for MeshLengths {
 /// The per-cell metric tensors as grade-n data on the mesh: the most local,
 /// coordinate-free geometry. Each cell independently carries its flat metric,
 /// so this is defined on the cell skeleton alone.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CellGramians {
   metrics: SkeletonVec<RiemannianMetric>,
 }
@@ -63,6 +69,19 @@ impl CellGramians {
 
   pub fn metrics(&self) -> &SkeletonVec<RiemannianMetric> {
     &self.metrics
+  }
+
+  /// Whether this could be the per-cell geometry of `topology`: one metric per
+  /// simplex of the grade it was built for.
+  pub fn is_compatible_with(&self, topology: &Complex) -> bool {
+    self.metrics.len() == topology.skeleton(self.metrics.grade()).len()
+  }
+
+  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+    common::io::save_cbor(self, path)
+  }
+  pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
+    common::io::load_cbor(path)
   }
 }
 

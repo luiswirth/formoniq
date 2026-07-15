@@ -11,11 +11,13 @@ use {
   },
 };
 
+use std::{io, path::Path};
+
 /// A $k$-cochain: one real coefficient per $k$-simplex of the skeleton.
 ///
 /// An element of the cochain space $C^k$, hence a vector space over the
 /// simplices of a fixed grade.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Cochain {
   coeffs: Vector,
   grade: ExteriorGrade,
@@ -64,6 +66,19 @@ impl Cochain {
   pub fn dif(&self, topology: &Complex) -> Self {
     let dif_operator = CsrMatrix::from(&topology.coboundary_operator(self.grade()));
     Cochain::new(self.grade() + 1, dif_operator * self.coeffs())
+  }
+
+  /// Whether this could be a cochain on `topology`: same grade, one
+  /// coefficient per simplex of that grade.
+  pub fn is_compatible_with(&self, topology: &Complex) -> bool {
+    self.grade <= topology.dim() && self.len() == topology.skeleton(self.grade).len()
+  }
+
+  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+    common::io::save_cbor(self, path)
+  }
+  pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
+    common::io::load_cbor(path)
   }
 }
 
@@ -150,5 +165,29 @@ impl std::ops::Sub for Cochain {
   fn sub(mut self, rhs: Self) -> Self::Output {
     self -= rhs;
     self
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use manifold::gen::cartesian::CartesianMeshInfo;
+
+  #[test]
+  fn save_load_roundtrip_and_compatibility() {
+    let (topology, _) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+    let cochain = Cochain::from_function(|s| s.kidx() as f64, 1, &topology);
+    assert!(cochain.is_compatible_with(&topology));
+
+    let path = std::env::temp_dir().join(format!("formoniq_test_{}.cbor", std::process::id()));
+    cochain.save(&path).unwrap();
+    let loaded = Cochain::load(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+
+    assert_eq!(loaded.grade(), cochain.grade());
+    assert_eq!(loaded.coeffs(), cochain.coeffs());
+
+    let other = CartesianMeshInfo::new_unit(2, 5).compute_coord_complex().0;
+    assert!(!loaded.is_compatible_with(&other));
   }
 }
