@@ -30,6 +30,10 @@ const SPHERE_MODES: usize = 10;
 // Which eigenmode colors the surface. Mode 0 is the constant harmonic; mode 4
 // is the first grade-2 spherical harmonic.
 const DISPLAY_MODE: usize = 4;
+// Peak standing-wave displacement, as a multiple of the mesh's own width
+// $h_max$ -- a mesh-intrinsic scale, not a sphere radius, so it stays
+// meaningful on any mesh the scene is built from.
+const WAVE_AMPLITUDE_FRACTION: f32 = 1.0;
 
 fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu::TextureView {
   let size = wgpu::Extent3d {
@@ -73,9 +77,28 @@ struct State<'a> {
   bounds_buffer: wgpu::Buffer,
   bounds_bind_group: wgpu::BindGroup,
 
+  // Standing-wave animation: the mode's own frequency and a displacement
+  // amplitude fixed at scene-build time; only `time` changes per frame.
+  start_time: std::time::Instant,
+  wave_amplitude: f32,
+  wave_omega: f32,
+  wave_buffer: wgpu::Buffer,
+  wave_bind_group: wgpu::BindGroup,
+
   // Mouse state for orbit controls
   mouse_pressed: bool,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
+}
+
+/// Per-frame standing-wave state: $u(t) = "amplitude" dot "value" dot cos(omega t)$,
+/// displacing each vertex along its own normal (see `shader.wgsl`/`wireframe.wgsl`).
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct WaveUniform {
+  time: f32,
+  amplitude: f32,
+  omega: f32,
+  _pad: f32,
 }
 
 impl<'a> State<'a> {
@@ -111,6 +134,20 @@ impl<'a> State<'a> {
     let (field_min, field_max) = field.bounds();
 
     let mesh_buffer = MeshBuffer::new(&device, &scene.topology, &scene.coords, field.values());
+
+    // The standing-wave amplitude is scaled by the mesh's own width, not a
+    // sphere radius, and normalized against the mode's own value range, so the
+    // displacement reads the same whether the mesh is a sphere or anything
+    // else, and whether the mode is low or high order. The temporal frequency
+    // $omega = sqrt(lambda)$ comes from the mode's own eigenvalue: the wave
+    // equation's dispersion relation, not a fixed animation speed.
+    let mesh_width = scene
+      .coords
+      .to_edge_lengths(&scene.topology)
+      .mesh_width_max() as f32;
+    let field_scale = field_min.abs().max(field_max.abs()).max(f32::EPSILON);
+    let wave_amplitude = WAVE_AMPLITUDE_FRACTION * mesh_width / field_scale;
+    let wave_omega = field.eigenvalue.sqrt() as f32;
 
     let mut camera = Camera::new(config.width as f32 / config.height as f32);
     camera.target = nalgebra::Point3::origin();
@@ -198,6 +235,44 @@ impl<'a> State<'a> {
       label: Some("bounds_bind_group"),
     });
 
+    let start_time = std::time::Instant::now();
+    let wave_uniform = WaveUniform {
+      time: 0.0,
+      amplitude: wave_amplitude,
+      omega: wave_omega,
+      _pad: 0.0,
+    };
+
+    let wave_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Wave Buffer"),
+      contents: bytemuck::cast_slice(&[wave_uniform]),
+      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+
+    let wave_bind_group_layout =
+      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[wgpu::BindGroupLayoutEntry {
+          binding: 0,
+          visibility: wgpu::ShaderStages::VERTEX,
+          ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+          },
+          count: None,
+        }],
+        label: Some("wave_bind_group_layout"),
+      });
+
+    let wave_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+      layout: &wave_bind_group_layout,
+      entries: &[wgpu::BindGroupEntry {
+        binding: 0,
+        resource: wave_buffer.as_entire_binding(),
+      }],
+      label: Some("wave_bind_group"),
+    });
+
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: Some("Shader"),
       source: wgpu::ShaderSource::Wgsl(include_str!("render/shader.wgsl").into()),
@@ -208,6 +283,7 @@ impl<'a> State<'a> {
       bind_group_layouts: &[
         Some(&camera_bind_group_layout),
         Some(&bounds_bind_group_layout),
+        Some(&wave_bind_group_layout),
       ],
       immediate_size: 0,
     });
@@ -263,7 +339,10 @@ impl<'a> State<'a> {
     let wireframe_pipeline_layout =
       device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("Wireframe Pipeline Layout"),
-        bind_group_layouts: &[Some(&camera_bind_group_layout)],
+        bind_group_layouts: &[
+          Some(&camera_bind_group_layout),
+          Some(&wave_bind_group_layout),
+        ],
         immediate_size: 0,
       });
 
@@ -319,6 +398,11 @@ impl<'a> State<'a> {
       mesh_buffer,
       bounds_buffer,
       bounds_bind_group,
+      start_time,
+      wave_amplitude,
+      wave_omega,
+      wave_buffer,
+      wave_bind_group,
       mouse_pressed: false,
       last_mouse_pos: None,
     }
@@ -392,6 +476,16 @@ impl<'a> State<'a> {
   }
 
   fn render(&mut self) -> Result<(), ()> {
+    let wave_uniform = WaveUniform {
+      time: self.start_time.elapsed().as_secs_f32(),
+      amplitude: self.wave_amplitude,
+      omega: self.wave_omega,
+      _pad: 0.0,
+    };
+    self
+      .queue
+      .write_buffer(&self.wave_buffer, 0, bytemuck::cast_slice(&[wave_uniform]));
+
     let output = match self.surface.get_current_texture() {
       wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
       wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
@@ -445,6 +539,7 @@ impl<'a> State<'a> {
       render_pass.set_pipeline(&self.render_pipeline);
       render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
       render_pass.set_bind_group(1, &self.bounds_bind_group, &[]);
+      render_pass.set_bind_group(2, &self.wave_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
       render_pass.set_index_buffer(
         self.mesh_buffer.index_buffer.slice(..),
@@ -455,6 +550,7 @@ impl<'a> State<'a> {
       // Draw wireframe edges on top
       render_pass.set_pipeline(&self.wireframe_pipeline);
       render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+      render_pass.set_bind_group(1, &self.wave_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
       render_pass.set_index_buffer(
         self.mesh_buffer.wireframe_index_buffer.slice(..),

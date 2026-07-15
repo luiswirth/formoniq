@@ -9,6 +9,7 @@ var<uniform> camera: CameraUniform;
 struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) value: f32,
+    @location(2) normal: vec3<f32>,
 };
 
 struct VertexOutput {
@@ -16,13 +17,27 @@ struct VertexOutput {
     @location(0) value: f32,
 };
 
+// Standing-wave displacement of an eigenmode: $u(t) = a cos(omega t)$ at each
+// vertex, moved along its own outward normal -- so `omega` and `amplitude` are
+// a property of the mode being shown, not a fixed animation.
+struct Wave {
+    time: f32,
+    amplitude: f32,
+    omega: f32,
+    _pad: f32,
+};
+@group(2) @binding(0)
+var<uniform> wave: Wave;
+
 @vertex
 fn vs_main(
     model: VertexInput,
 ) -> VertexOutput {
     var out: VertexOutput;
     out.value = model.value;
-    out.clip_position = camera.view_proj * vec4<f32>(model.position, 1.0);
+    let displacement = wave.amplitude * model.value * cos(wave.omega * wave.time);
+    let position = model.position + displacement * model.normal;
+    out.clip_position = camera.view_proj * vec4<f32>(position, 1.0);
     return out;
 }
 

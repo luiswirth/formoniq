@@ -19,6 +19,11 @@ pub struct Scene {
 pub struct ScalarField {
   pub name: String,
   pub cochain: Cochain,
+  /// The Hodge-Laplace eigenvalue $lambda$ this field is an eigenfunction of.
+  /// For the wave equation $partial_t^2 u + Delta u = 0$ this is the square of
+  /// the mode's own temporal frequency, $omega = sqrt(lambda)$ -- the standing
+  /// wave for *this* mode, not a frequency picked by the viewer.
+  pub eigenvalue: f64,
 }
 
 impl ScalarField {
@@ -44,24 +49,24 @@ impl ScalarField {
 }
 
 impl Scene {
-  /// Laplace-Beltrami eigenfunctions on the unit sphere — the discrete
-  /// spherical harmonics — as scalar fields on an icosphere of the given
-  /// subdivision depth.
+  /// Grade-0 Hodge-Laplace eigenmodes -- standing-wave normal modes, $Delta u =
+  /// lambda u$ with $Delta = delta dif$ on functions, no multiplier block -- of
+  /// an arbitrary simplicial surface with the given geometry.
   ///
-  /// The eigensolve is dense ($O(n^3)$ in the vertex count $n$), so the depth
-  /// controls both fidelity and cost.
-  pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
+  /// Neither the mesh nor its embedding are assumed to be a sphere: any 2D
+  /// `Complex` with a `MeshCoords` realization goes in, so a scene is exactly
+  /// as general as the underlying eigensolve. The spherical harmonics are one
+  /// instantiation of this ([`Self::spherical_harmonics`]), not a special case
+  /// baked into the solve.
+  ///
+  /// The eigensolve is dense ($O(n^3)$ in the vertex count $n$), so mesh
+  /// resolution controls both fidelity and cost.
+  pub fn eigenmodes(topology: Complex, coords: MeshCoords, nmodes: usize) -> Self {
     use formoniq::{
       problems::hodge_laplace::solve_hodge_laplace_evp, whitney_complex::WhitneyComplex,
     };
-    use manifold::dim3::mesh_sphere_surface;
 
-    let (topology, coords) = mesh_sphere_surface(nsubdivisions).into_coord_complex();
     let metric = coords.to_edge_lengths(&topology);
-
-    // The spherical harmonics are the grade-0 case of the Hodge-Laplace
-    // eigenproblem: $Delta = delta dif$ on functions, no multiplier block. The
-    // returned $u$-block is the 0-cochain eigenbasis.
     let (eigenvals, _, eigenfuncs) =
       solve_hodge_laplace_evp(&WhitneyComplex::new(&topology, &metric), 0, nmodes);
 
@@ -72,6 +77,7 @@ impl Scene {
       .map(|(i, (&lambda, col))| ScalarField {
         name: format!("mode {i} (lambda = {lambda:.2})"),
         cochain: Cochain::new(0, col.into_owned()),
+        eigenvalue: lambda,
       })
       .collect();
 
@@ -80,5 +86,14 @@ impl Scene {
       coords,
       fields,
     }
+  }
+
+  /// Laplace-Beltrami eigenfunctions on the unit sphere — the discrete
+  /// spherical harmonics — on an icosphere of the given subdivision depth.
+  pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
+    use manifold::dim3::mesh_sphere_surface;
+
+    let (topology, coords) = mesh_sphere_surface(nsubdivisions).into_coord_complex();
+    Self::eigenmodes(topology, coords, nmodes)
   }
 }
