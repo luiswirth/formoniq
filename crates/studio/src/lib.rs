@@ -72,18 +72,17 @@ const DEMO: Demo = Demo::WhitneyBasis;
 /// The scene a demo builds, and the field it's shown on initially -- the one
 /// place a `Demo` turns into a `Scene`, called both at startup and whenever
 /// the UI switches it.
-fn build_scene(demo: Demo) -> (Scene, usize) {
+fn build_scene(demo: Demo) -> (Scene, Selection) {
   match demo {
     // Real formoniq output: Laplace-Beltrami eigenfunctions on the unit
     // sphere (discrete spherical harmonics), colored by one mode.
     Demo::SphericalHarmonics => (
       Scene::spherical_harmonics(SPHERE_SUBDIVISIONS, SPHERE_MODES),
-      DISPLAY_MODE,
+      Selection::Scalar(DISPLAY_MODE),
     ),
     // The Whitney basis functions of the reference triangle: grade 0 is
-    // colored; grade 1 is already computed onto `scene.vector_fields` but
-    // has no glyph to draw yet.
-    Demo::WhitneyBasis => (Scene::whitney_basis(2, 8), 0),
+    // colored; grade 1 is drawn as arrow glyphs.
+    Demo::WhitneyBasis => (Scene::whitney_basis(2, 8), Selection::Scalar(0)),
   }
 }
 
@@ -151,9 +150,20 @@ fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu:
   texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
-/// The mesh buffer and bounds/wave uniforms for showing one scalar field of a
-/// scene: the one place a field index turns into pixels, called both at
-/// startup and whenever the UI switches the selection.
+/// Which field of a scene is on display: its grade decides the mark
+/// ([`Scene`]'s own rule), and this is that choice's UI-facing form -- a
+/// scalar field colors the surface, a vector field draws arrow glyphs on top
+/// of a blank one. `PartialEq` so `egui::Ui::radio_value` can bind directly
+/// to it.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Selection {
+  Scalar(usize),
+  Vector(usize),
+}
+
+/// The mesh buffer and bounds/wave uniforms for showing one field of a
+/// scene: the one place a [`Selection`] turns into pixels, called both at
+/// startup and whenever the UI switches it.
 struct FieldDisplay {
   mesh_buffer: MeshBuffer,
   field_min: f32,
@@ -165,30 +175,50 @@ struct FieldDisplay {
 fn build_field_display(
   device: &Device,
   scene: &Scene,
-  field_index: usize,
+  selection: Selection,
   mesh_width: f32,
 ) -> FieldDisplay {
-  let field = &scene.fields[field_index];
-  let (field_min, field_max) = field.bounds();
-  let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
+  match selection {
+    Selection::Scalar(index) => {
+      let field = &scene.fields[index];
+      let (field_min, field_max) = field.bounds();
+      let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
 
-  let field_scale = field_min.abs().max(field_max.abs()).max(f32::EPSILON);
-  // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
-  // Whitney basis function): no dispersion relation to animate at, so the
-  // wave collapses to no displacement rather than a special case here.
-  let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
-  let wave_amplitude = if field.eigenvalue.is_some() {
-    WAVE_AMPLITUDE_FRACTION * mesh_width / field_scale
-  } else {
-    0.0
-  };
+      let field_scale = field_min.abs().max(field_max.abs()).max(f32::EPSILON);
+      // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
+      // Whitney basis function): no dispersion relation to animate at, so
+      // the wave collapses to no displacement rather than a special case
+      // here.
+      let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
+      let wave_amplitude = if field.eigenvalue.is_some() {
+        WAVE_AMPLITUDE_FRACTION * mesh_width / field_scale
+      } else {
+        0.0
+      };
 
-  FieldDisplay {
-    mesh_buffer,
-    field_min,
-    field_max,
-    wave_amplitude,
-    wave_omega,
+      FieldDisplay {
+        mesh_buffer,
+        field_min,
+        field_max,
+        wave_amplitude,
+        wave_omega,
+      }
+    }
+    Selection::Vector(index) => {
+      let field = &scene.vector_fields[index];
+      let mesh_buffer =
+        MeshBuffer::from_vector_field(device, &scene.topology, &scene.coords, field);
+      // Arrow color is magnitude, a nonnegative quantity with no
+      // eigenfunction to animate at -- no wave, and the range starts at 0
+      // rather than the field's own minimum.
+      FieldDisplay {
+        mesh_buffer,
+        field_min: 0.0,
+        field_max: (field.max_magnitude() as f32).max(f32::EPSILON),
+        wave_amplitude: 0.0,
+        wave_omega: 0.0,
+      }
+    }
   }
 }
 
@@ -231,7 +261,7 @@ struct State<'a> {
   // picker built over it, regardless of how many fields it carries.
   demo: Demo,
   scene: Scene,
-  selected_field: usize,
+  selection: Selection,
   // Fixed at scene-build time: the mesh's own edge-length scale, used to
   // normalize the standing-wave amplitude to whichever field is on display.
   mesh_width: f32,
@@ -289,7 +319,7 @@ impl<'a> State<'a> {
     surface.configure(&device, &config);
 
     let demo = DEMO;
-    let (scene, field_index) = build_scene(demo);
+    let (scene, selection) = build_scene(demo);
     // The standing-wave amplitude is scaled by the mesh's own width, not a
     // sphere radius, so the displacement reads the same whether the mesh is a
     // sphere or anything else, and whichever field is currently on display.
@@ -297,7 +327,7 @@ impl<'a> State<'a> {
       .coords
       .to_edge_lengths(&scene.topology)
       .mesh_width_max() as f32;
-    let display = build_field_display(&device, &scene, field_index, mesh_width);
+    let display = build_field_display(&device, &scene, selection, mesh_width);
     let (field_min, field_max) = (display.field_min, display.field_max);
     let mesh_buffer = display.mesh_buffer;
     let wave_amplitude = display.wave_amplitude;
@@ -557,7 +587,7 @@ impl<'a> State<'a> {
       last_mouse_pos: None,
       demo,
       scene,
-      selected_field: field_index,
+      selection,
       mesh_width,
       egui_ctx,
       egui_winit_state,
@@ -565,14 +595,14 @@ impl<'a> State<'a> {
     }
   }
 
-  /// Displays field `index` of the *current* scene, rebuilding exactly the
-  /// pieces that depend on it: the mesh buffer's per-vertex values, the
-  /// colormap bounds, and the standing-wave parameters. Unconditional --
-  /// callers that only want to act on an actual change (the common case)
-  /// go through [`Self::set_field`] instead.
-  fn apply_field(&mut self, index: usize) {
-    self.selected_field = index;
-    let display = build_field_display(&self.device, &self.scene, index, self.mesh_width);
+  /// Displays `selection` of the *current* scene, rebuilding exactly the
+  /// pieces that depend on it: the mesh buffer, the colormap bounds, and the
+  /// standing-wave parameters. Unconditional -- callers that only want to
+  /// act on an actual change (the common case) go through
+  /// [`Self::set_field`] instead.
+  fn apply_field(&mut self, selection: Selection) {
+    self.selection = selection;
+    let display = build_field_display(&self.device, &self.scene, selection, self.mesh_width);
     self.mesh_buffer = display.mesh_buffer;
     self.wave_amplitude = display.wave_amplitude;
     self.wave_omega = display.wave_omega;
@@ -593,31 +623,31 @@ impl<'a> State<'a> {
 
   /// Switches the displayed field within the current scene. Everything else
   /// (camera, pipelines, egui) stays untouched.
-  fn set_field(&mut self, index: usize) {
-    if index == self.selected_field {
+  fn set_field(&mut self, selection: Selection) {
+    if selection == self.selection {
       return;
     }
-    self.apply_field(index);
+    self.apply_field(selection);
   }
 
   /// Switches to a different built-in scene: a new topology, coordinates and
-  /// field set, plus the camera's natural orientation for it. The field
-  /// index and camera state from the old scene are never reused as-is here
-  /// (unlike [`Self::set_field`]'s early-out) -- a field index valid in one
-  /// scene can be out of range in another, and a camera tuned for a sphere
-  /// is not a natural start for a flat reference cell, or vice versa.
+  /// field set, plus the camera's natural orientation for it. The selection
+  /// and camera state from the old scene are never reused as-is here (unlike
+  /// [`Self::set_field`]'s early-out) -- a selection valid in one scene can
+  /// be out of range in another, and a camera tuned for a sphere is not a
+  /// natural start for a flat reference cell, or vice versa.
   fn set_demo(&mut self, demo: Demo) {
     if demo == self.demo {
       return;
     }
     self.demo = demo;
-    let (scene, field_index) = build_scene(demo);
+    let (scene, selection) = build_scene(demo);
     self.mesh_width = scene
       .coords
       .to_edge_lengths(&scene.topology)
       .mesh_width_max() as f32;
     self.scene = scene;
-    self.apply_field(field_index);
+    self.apply_field(selection);
 
     self.camera = default_camera(&self.scene, self.camera.aspect);
     self.update_camera_buffer();
@@ -713,8 +743,13 @@ impl<'a> State<'a> {
 
     let mut demo = self.demo;
     let field_names: Vec<&str> = self.scene.fields.iter().map(|f| f.name.as_str()).collect();
-    let nvector_fields = self.scene.vector_fields.len();
-    let mut selected = self.selected_field;
+    let vector_field_names: Vec<&str> = self
+      .scene
+      .vector_fields
+      .iter()
+      .map(|f| f.name.as_str())
+      .collect();
+    let mut selection = self.selection;
     let mut top_down = self.camera.top_down;
 
     let full_output = ctx.run_ui(raw_input, |ctx| {
@@ -725,13 +760,13 @@ impl<'a> State<'a> {
         ui.separator();
 
         for (i, name) in field_names.iter().enumerate() {
-          ui.radio_value(&mut selected, i, *name);
+          ui.radio_value(&mut selection, Selection::Scalar(i), *name);
         }
-        if nvector_fields > 0 {
+        if !vector_field_names.is_empty() {
           ui.separator();
-          ui.label(format!(
-            "{nvector_fields} vector field(s) computed, no glyph yet"
-          ));
+          for (i, name) in vector_field_names.iter().enumerate() {
+            ui.radio_value(&mut selection, Selection::Vector(i), *name);
+          }
         }
 
         ui.separator();
@@ -740,13 +775,14 @@ impl<'a> State<'a> {
     });
 
     // A scene switch replaces the field set and the camera's natural
-    // orientation wholesale, so the `selected`/`top_down` picked in this same
-    // frame belong to the *old* scene and must not be applied afterward --
-    // `set_demo` already chooses both anew for the scene it switches to.
+    // orientation wholesale, so the `selection`/`top_down` picked in this
+    // same frame belong to the *old* scene and must not be applied
+    // afterward -- `set_demo` already chooses both anew for the scene it
+    // switches to.
     if demo != self.demo {
       self.set_demo(demo);
     } else {
-      self.set_field(selected);
+      self.set_field(selection);
       if top_down != self.camera.top_down {
         self.camera.top_down = top_down;
         self.update_camera_buffer();
@@ -793,8 +829,23 @@ impl<'a> State<'a> {
         self.resize(self.size);
         return Ok(());
       }
-      wgpu::CurrentSurfaceTexture::Timeout | wgpu::CurrentSurfaceTexture::Occluded => return Ok(()),
-      wgpu::CurrentSurfaceTexture::Validation => return Ok(()),
+      // `Occluded` here is normally moot -- `about_to_wait` already stops
+      // chasing redraws once `WindowEvent::Occluded(true)` lands -- but
+      // `Timeout`/`Validation` are surface trouble that isn't occlusion (e.g.
+      // a transient GPU stall) and `about_to_wait` will immediately request
+      // another frame regardless. A short sleep here is the backstop against
+      // that turning into the same full-throttle retry spin, whatever its
+      // cause.
+      wgpu::CurrentSurfaceTexture::Timeout
+      | wgpu::CurrentSurfaceTexture::Occluded
+      | wgpu::CurrentSurfaceTexture::Validation => {
+        // Blocking sleep is unavailable on the wasm32 target (the browser's
+        // own event loop already paces redraws there); native is what can
+        // spin a CPU core unbounded.
+        #[cfg(not(target_arch = "wasm32"))]
+        std::thread::sleep(std::time::Duration::from_millis(16));
+        return Ok(());
+      }
     };
     let view = output
       .texture
@@ -913,6 +964,16 @@ impl<'a> State<'a> {
 struct App<'a> {
   window: Option<Arc<Window>>,
   state: Option<State<'a>>,
+  // Whether the window is currently fully covered/minimized/off-screen. While
+  // occluded, `get_current_texture` can never succeed, so there is no vsync
+  // to pace the render loop against -- unconditionally chasing another
+  // `RedrawRequested` (the naive `about_to_wait` pattern) turns into an
+  // unbounded busy-spin of GPU driver calls for as long as the window stays
+  // hidden (locked screen, closed lid, switched away), which is exactly the
+  // kind of sustained driver contention that can wedge the whole system, not
+  // just this process. `WindowEvent::Occluded` is winit's own signal for
+  // this and is what actually stops the spin, rather than a fixed sleep.
+  occluded: bool,
 }
 
 impl<'a> ApplicationHandler for App<'a> {
@@ -975,6 +1036,12 @@ impl<'a> ApplicationHandler for App<'a> {
       WindowEvent::Resized(physical_size) => {
         state.resize(physical_size);
       }
+      WindowEvent::Occluded(occluded) => {
+        self.occluded = occluded;
+        if !occluded {
+          window.request_redraw();
+        }
+      }
       WindowEvent::RedrawRequested => {
         let _ = state.render(window);
       }
@@ -987,6 +1054,11 @@ impl<'a> ApplicationHandler for App<'a> {
   }
 
   fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    // Not while occluded: see the field doc on `occluded`. The loop resumes
+    // on its own once `WindowEvent::Occluded(false)` fires the next redraw.
+    if self.occluded {
+      return;
+    }
     if let Some(window) = &self.window {
       window.request_redraw();
     }

@@ -2,7 +2,13 @@ use bytemuck::{Pod, Zeroable};
 use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 use wgpu::util::DeviceExt;
 
-use crate::mesh3d;
+use crate::{mesh3d, scene::VectorField};
+
+/// The physical length of an arrow glyph, as a fraction of one lattice
+/// cell's own spacing -- so neighboring arrows leave a gap regardless of how
+/// densely the field was sampled. Matches the `plot/` Python tool's own
+/// `length = 0.8 / quiver_count` convention.
+const ARROW_LENGTH_FRACTION: f64 = 0.8;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -54,6 +60,19 @@ impl MeshBuffer {
     coords: &MeshCoords,
     zero_form: &[f64],
   ) -> Self {
+    let (vertices, indices, wireframe_indices) =
+      Self::surface_geometry(topology, coords, zero_form);
+    Self::from_raw(device, &vertices, &indices, &wireframe_indices)
+  }
+
+  /// The mesh's own triangle surface, colored by a 0-form: the vertex/index
+  /// lists both [`Self::new`] and [`Self::from_vector_field`] (as the blank
+  /// canvas its arrows sit on) build their buffers from.
+  fn surface_geometry(
+    topology: &Complex,
+    coords: &MeshCoords,
+    zero_form: &[f64],
+  ) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
     assert_eq!(
       topology.dim(),
       2,
@@ -113,21 +132,70 @@ impl MeshBuffer {
       edge_indices.push(verts[1] as u32);
     }
 
+    (vertices, indices, edge_indices)
+  }
+
+  /// A grade-1 field's samples as arrow glyphs, on top of the mesh's own
+  /// surface shown blank (every vertex at the colormap's zero -- a canvas,
+  /// not a field in its own right). Direction is normalized: an arrow's
+  /// *length* reads as legibility, not magnitude, matching the `plot/`
+  /// Python tool's own `normalize_vectors` convention -- magnitude is
+  /// carried by `value` (the arrow's color) instead, which is the
+  /// unambiguous channel since two nearby arrows of different length are
+  /// otherwise hard to compare by eye.
+  pub fn from_vector_field(
+    device: &wgpu::Device,
+    topology: &Complex,
+    coords: &MeshCoords,
+    field: &VectorField,
+  ) -> Self {
+    let nvertices = topology.skeleton_raw(0).len();
+    let (mut vertices, mut indices, wireframe_indices) =
+      Self::surface_geometry(topology, coords, &vec![0.0; nvertices]);
+
+    let mesh_width = coords.to_edge_lengths(topology).mesh_width_max();
+    let length = ARROW_LENGTH_FRACTION * mesh_width / field.lattice_resolution as f64;
+
+    for sample in &field.samples {
+      let magnitude = sample.vector.norm();
+      if magnitude < 1e-12 {
+        continue;
+      }
+      push_arrow_glyph(
+        sample.position,
+        sample.vector / magnitude,
+        sample.normal,
+        length,
+        magnitude as f32,
+        &mut vertices,
+        &mut indices,
+      );
+    }
+
+    Self::from_raw(device, &vertices, &indices, &wireframe_indices)
+  }
+
+  fn from_raw(
+    device: &wgpu::Device,
+    vertices: &[Vertex],
+    indices: &[u32],
+    wireframe_indices: &[u32],
+  ) -> Self {
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
       label: Some("Vertex Buffer"),
-      contents: bytemuck::cast_slice(&vertices),
+      contents: bytemuck::cast_slice(vertices),
       usage: wgpu::BufferUsages::VERTEX,
     });
 
     let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
       label: Some("Index Buffer"),
-      contents: bytemuck::cast_slice(&indices),
+      contents: bytemuck::cast_slice(indices),
       usage: wgpu::BufferUsages::INDEX,
     });
 
     let wireframe_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
       label: Some("Wireframe Index Buffer"),
-      contents: bytemuck::cast_slice(&edge_indices),
+      contents: bytemuck::cast_slice(wireframe_indices),
       usage: wgpu::BufferUsages::INDEX,
     });
 
@@ -136,7 +204,56 @@ impl MeshBuffer {
       index_buffer,
       num_indices: indices.len() as u32,
       wireframe_index_buffer,
-      num_wireframe_indices: edge_indices.len() as u32,
+      num_wireframe_indices: wireframe_indices.len() as u32,
     }
+  }
+}
+
+/// Appends one flat arrow -- a shaft and a triangular head, fan-triangulated
+/// from the tail -- pointing along `direction` from `origin`, lying in the
+/// tangent plane perpendicular to `up`, to `vertices` and `indices`.
+///
+/// `up` is the sample's own cell normal, not assumed to be the ambient
+/// $z$-axis, so the glyph stays tangent to a curved surface (the sphere's
+/// grade-1 eigenmodes) rather than always lying flat in the $x$-$y$ plane.
+fn push_arrow_glyph(
+  origin: na::Vector3<f64>,
+  direction: na::Vector3<f64>,
+  up: na::Vector3<f64>,
+  length: f64,
+  value: f32,
+  vertices: &mut Vec<Vertex>,
+  indices: &mut Vec<u32>,
+) {
+  let right = up.cross(&direction).normalize();
+  // Lifted a hair off the surface so the glyph doesn't z-fight the blank
+  // canvas underneath it.
+  let lift = up * (length * 0.02);
+
+  let shaft_len = length * 0.6;
+  let shaft_half_width = length * 0.06;
+  let head_half_width = length * 0.18;
+
+  let point = |u: f64, v: f64| origin + lift + direction * u + right * v;
+  let corners = [
+    point(0.0, shaft_half_width),        // tail, left
+    point(shaft_len, shaft_half_width),  // shaft/head junction, left
+    point(shaft_len, head_half_width),   // head base, left
+    point(length, 0.0),                  // tip
+    point(shaft_len, -head_half_width),  // head base, right
+    point(shaft_len, -shaft_half_width), // shaft/head junction, right
+    point(0.0, -shaft_half_width),       // tail, right
+  ];
+
+  let base = vertices.len() as u32;
+  let n = [up.x as f32, up.y as f32, up.z as f32];
+  vertices.extend(corners.iter().map(|p| Vertex {
+    position: [p.x as f32, p.y as f32, p.z as f32],
+    value,
+    normal: n,
+    _pad: 0.0,
+  }));
+  for k in 1..corners.len() as u32 - 1 {
+    indices.extend([base, base + k, base + k + 1]);
   }
 }
