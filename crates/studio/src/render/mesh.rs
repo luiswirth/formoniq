@@ -1,6 +1,8 @@
 use bytemuck::{Pod, Zeroable};
-use manifold::{dim3, geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 use wgpu::util::DeviceExt;
+
+use crate::mesh3d;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -74,8 +76,8 @@ impl MeshBuffer {
       })
       .collect();
 
-    let oriented_triangles = dim3::orient_triangles(&triangles);
-    let vertex_normals = dim3::vertex_normals(&oriented_triangles, coords);
+    let oriented_triangles = mesh3d::orient_triangles(&triangles);
+    let vertex_normals = mesh3d::vertex_normals(&oriented_triangles, coords);
 
     let mut vertices = Vec::with_capacity(nvertices);
     for (i, &value) in zero_form.iter().enumerate() {

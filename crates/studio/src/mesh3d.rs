@@ -1,11 +1,18 @@
-use common::linalg::nalgebra::{Matrix, Vector, VectorView};
+//! A triangle surface embedded in $RR^3$: the rendering- and export-facing
+//! counterpart of a 2D `manifold::Complex`.
+//!
+//! This is deliberately dimension-specific and coordinate-full -- exactly the
+//! two things formoniq's core keeps out. A `Complex`'s cells carry no winding
+//! and no embedding; a graphics API (and a `.obj`/`.mdd` file) needs both,
+//! fixed at 3.
 
-use crate::{
+use std::collections::HashMap;
+
+use common::linalg::nalgebra::VectorView;
+use manifold::{
   geometry::coord::{mesh::MeshCoords, simplex::SimplexCoords},
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
-
-use std::{collections::HashMap, sync::LazyLock};
 
 pub type TriangleTopology = Vec<[usize; 3]>;
 
@@ -39,7 +46,6 @@ impl TriangleSurface3D {
     assert!(coords.dim() <= 3, "Skeleton is not embeddable in 3D.");
     let coords = coords.embed_euclidean(3);
 
-    // TODO: is this good?
     let triangles = skeleton
       .into_index_set()
       .into_iter()
@@ -93,11 +99,11 @@ impl TriangleSurface3D {
 ///
 /// A `Complex`'s cells carry no winding -- vertices are colex-sorted, per the
 /// crate's one indexing convention -- so a triangle list read off a `Complex`
-/// (e.g. via [`crate::topology::complex::Complex::cells`]) has an
-/// essentially arbitrary, alternating winding per triangle. Per-vertex
-/// normals of such a list are meaningless without first running this pass:
-/// consistent orientation is topological data, recoverable from the manifold's
-/// face adjacency, not from geometry (a 2-simplex in $RR^3$ has no signed
+/// (e.g. via [`manifold::topology::complex::Complex::cells`]) has an
+/// essentially arbitrary, alternating winding per triangle. Per-vertex normals
+/// of such a list are meaningless without first running this pass: consistent
+/// orientation is topological data, recoverable from the manifold's face
+/// adjacency, not from geometry (a 2-simplex in $RR^3$ has no signed
 /// determinant to read a winding off of).
 ///
 /// Fixes the orientation of one triangle per connected component arbitrarily;
@@ -169,132 +175,3 @@ pub fn vertex_normals(triangles: &[[usize; 3]], coords: &MeshCoords) -> Vec<na::
   }
   vertex_normals
 }
-
-/// Returns $\[r, theta, phi\]$ with $r in \[0,oo), theta in \[0,pi\], phi in \[0, tau)$
-pub fn cartesian2spherical(p: na::Vector3<f64>) -> [f64; 3] {
-  let r = p.norm();
-  let theta = (p.z / r).acos(); // [0,pi]
-  let phi = p.y.atan2(p.x); // [0,tau]
-  [r, theta, phi]
-}
-
-/// Takes $(r, theta, phi)$ with $r in \[0,oo), theta in \[0,pi\], phi in \[0, tau)$
-pub fn spherical2cartesian(r: f64, theta: f64, phi: f64) -> na::Vector3<f64> {
-  let x = r * theta.sin() * phi.cos();
-  let y = r * theta.sin() * phi.sin();
-  let z = r * theta.cos();
-  na::Vector3::new(x, y, z)
-}
-
-/// Geodesic sphere from subdividing a icosahedron
-pub fn mesh_sphere_surface(nsubdivisions: usize) -> TriangleSurface3D {
-  let triangles = ICOSAHEDRON_SURFACE.triangles().to_vec();
-  let vertex_coords = ICOSAHEDRON_SURFACE
-    .vertex_coords()
-    .coord_iter()
-    .map(|v| v.view().into_owned())
-    .collect();
-
-  let (triangles, vertex_coords) = subdivide(triangles, vertex_coords, nsubdivisions);
-
-  TriangleSurface3D::new(triangles, Matrix::from_columns(&vertex_coords))
-}
-
-fn subdivide(
-  triangles: Vec<[usize; 3]>,
-  mut vertex_coords: Vec<Vector>,
-  depth: usize,
-) -> (Vec<[usize; 3]>, Vec<Vector>) {
-  if depth == 0 {
-    return (triangles, vertex_coords);
-  }
-
-  let mut midpoints = HashMap::new();
-
-  let triangles = triangles
-    .into_iter()
-    .flat_map(|[v0, v1, v2]| {
-      let v01 = get_midpoint(v0, v1, &mut vertex_coords, &mut midpoints);
-      let v12 = get_midpoint(v1, v2, &mut vertex_coords, &mut midpoints);
-      let v20 = get_midpoint(v2, v0, &mut vertex_coords, &mut midpoints);
-
-      [
-        [v0, v01, v20],
-        [v1, v12, v01],
-        [v2, v20, v12],
-        [v01, v12, v20],
-      ]
-    })
-    .collect();
-
-  subdivide(triangles, vertex_coords, depth - 1)
-}
-
-fn get_midpoint(
-  v0: usize,
-  v1: usize,
-  vertices: &mut Vec<Vector>,
-  midpoints: &mut HashMap<(usize, usize), usize>,
-) -> usize {
-  let edge = if v0 < v1 { (v0, v1) } else { (v1, v0) };
-  if let Some(&midpoint) = midpoints.get(&edge) {
-    return midpoint;
-  }
-
-  let midpoint = ((&vertices[v0] + &vertices[v1]) / 2.0).normalize();
-  vertices.push(midpoint);
-  let index = vertices.len() - 1;
-  midpoints.insert(edge, index);
-  index
-}
-
-static ICOSAHEDRON_SURFACE: LazyLock<TriangleSurface3D> = LazyLock::new(|| {
-  let phi = f64::midpoint(1.0, 5.0f64.sqrt());
-
-  #[rustfmt::skip]
-  let vertex_coords = [
-    [-1.0, phi, 0.0],
-    [ 1.0, phi, 0.0],
-    [-1.0,-phi, 0.0],
-    [ 1.0,-phi, 0.0],
-    [ 0.0,-1.0, phi],
-    [ 0.0, 1.0, phi],
-    [ 0.0,-1.0,-phi],
-    [ 0.0, 1.0,-phi],
-    [ phi, 0.0,-1.0],
-    [ phi, 0.0, 1.0],
-    [-phi, 0.0,-1.0],
-    [-phi, 0.0, 1.0],
-  ];
-
-  let vertex_coords: Vec<_> = vertex_coords
-    .into_iter()
-    .map(|v| na::dvector![v[0], v[1], v[2]].normalize())
-    .collect();
-
-  #[rustfmt::skip]
-  let triangles = vec![
-    [ 0,11, 5],
-    [ 0, 5, 1],
-    [ 0, 1, 7],
-    [ 0, 7,10],
-    [ 0,10,11],
-    [ 1, 5, 9],
-    [ 5,11, 4],
-    [11,10, 2],
-    [10, 7, 6],
-    [ 7, 1, 8],
-    [ 3, 9, 4],
-    [ 3, 4, 2],
-    [ 3, 2, 6],
-    [ 3, 6, 8],
-    [ 3, 8, 9],
-    [ 4, 9, 5],
-    [ 2, 4,11],
-    [ 6, 2,10],
-    [ 8, 6, 7],
-    [ 9, 8, 1],
-  ];
-
-  TriangleSurface3D::new(triangles, Matrix::from_columns(&vertex_coords))
-});

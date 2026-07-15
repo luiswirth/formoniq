@@ -591,10 +591,10 @@ mod test {
   fn composite_pullback_is_functorial() {
     use continuum::parametrization::Parametrization;
     use manifold::{
-      atlas::MeshPoint, dim3::mesh_sphere_surface, geometry::coord::simplex::SimplexRefExt,
+      atlas::MeshPoint, gen::sphere::mesh_sphere_surface, geometry::coord::simplex::SimplexRefExt,
     };
 
-    let (topology, coords) = mesh_sphere_surface(2).into_coord_complex();
+    let (topology, coords) = mesh_sphere_surface(2);
     let sphere = Parametrization::sphere(2, 1.0);
 
     // An arbitrary 1-form on the (theta, phi) chart domain.

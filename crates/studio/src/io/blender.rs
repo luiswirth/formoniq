@@ -1,8 +1,8 @@
 use common::linalg::nalgebra::{Matrix, Vector};
 
-use crate::dim3::TriangleSurface3D;
-use crate::geometry::coord::mesh::MeshCoords;
-use crate::topology::complex::Complex;
+use crate::mesh3d::TriangleSurface3D;
+use manifold::geometry::coord::mesh::MeshCoords;
+use manifold::topology::complex::Complex;
 
 use std::fmt::Write;
 use std::path::Path;

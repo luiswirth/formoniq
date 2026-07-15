@@ -1,4 +1,3 @@
-pub mod blender;
 pub mod gmsh;
 
 use std::{

@@ -5,7 +5,6 @@ pub mod atlas;
 pub mod geometry;
 pub mod topology;
 
-pub mod dim3;
 pub mod gen;
 pub mod io;
 
