@@ -7,6 +7,7 @@ use common::linalg::{
   nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
 };
 use ddf::cochain::Cochain;
+use exterior::ExteriorGrade;
 use manifold::geometry::metric::mesh::MeshLengths;
 
 pub struct WaveState {
@@ -24,19 +25,21 @@ impl WaveState {
   }
 }
 
-/// times = [t_0,t_1,...,T]
+/// Leapfrog for the wave equation $diff_(t t) u = -Delta u$ on Whitney
+/// $k$-forms of any `grade`, over `times` = $[t_0, t_1, ..., T]$.
 ///
 /// On a mesh with boundary, the boundary is held fixed at the initial
 /// position: the velocity is constrained to the relative complex
 /// (homogeneous essential condition).
 pub fn solve_wave(
   whitney: WhitneyComplex,
+  grade: ExteriorGrade,
   times: &[f64],
   initial_data: WaveState,
   force_data: Cochain,
 ) -> Vec<WaveState> {
-  let laplace = CsrMatrix::from(&whitney.codif_dif(0));
-  let mass = CsrMatrix::from(&whitney.mass(0));
+  let laplace = CsrMatrix::from(&whitney.codif_dif(grade));
+  let mass = CsrMatrix::from(&whitney.mass(grade));
 
   let force = &mass * force_data.coeffs();
 
@@ -45,7 +48,7 @@ pub fn solve_wave(
   let inclusion = whitney
     .boundary()
     .is_some()
-    .then(|| whitney.relative().inclusion(0));
+    .then(|| whitney.relative().inclusion(grade));
   let velocity_mass = match &inclusion {
     Some(incl) => incl.transpose() * &mass * incl,
     None => mass.clone(),

@@ -8,14 +8,16 @@ use crate::{
 };
 
 use ddf::cochain::Cochain;
+use exterior::ExteriorGrade;
 
-/// Implicit Euler for the heat equation, with the essential boundary
-/// condition $"tr" u = g$ held fixed in time (affine lifting, factorized
-/// once).
+/// Implicit Euler for the heat equation $diff_t u = -Delta u$ on Whitney
+/// $k$-forms of any `grade`, with the essential boundary condition
+/// $"tr" u = g$ held fixed in time (affine lifting, factorized once).
 #[allow(clippy::too_many_arguments)]
 pub fn solve_heat(
   whitney: WhitneyComplex,
   boundary: &BoundaryWhitneyComplex,
+  grade: ExteriorGrade,
   nsteps: usize,
   dt: f64,
   boundary_values: &Cochain,
@@ -23,8 +25,8 @@ pub fn solve_heat(
   source_data: Cochain,
   diffusion_coeff: f64,
 ) -> Vec<Cochain> {
-  let laplace = CsrMatrix::from(&whitney.codif_dif(0));
-  let mass = CsrMatrix::from(&whitney.mass(0));
+  let laplace = CsrMatrix::from(&whitney.codif_dif(grade));
+  let mass = CsrMatrix::from(&whitney.mass(grade));
   let system = &mass + diffusion_coeff * dt * &laplace;
 
   let lifted = LiftedSystem::new(&whitney.relative(), boundary, system, boundary_values);
