@@ -142,6 +142,13 @@ and passes tests.
    runtime dispatch, in anything on the assembly hot path. HPC is a requirement,
    not an afterthought (`rayon`-parallel assembly is already the norm).
 
+**Invariants 3 and 4 are proofs, not conventions** — Lean 4 style: a
+precondition that is a property of a value (the space a coordinate lives in, the
+variance of a form) becomes a type-level witness, not an assertion repeated at
+each call. The type demands the property, the check happens once where the
+witness is built, and the wrong composition fails to compile. Reach for this
+wherever a "trust me, this is an *X*" comment sits in a signature.
+
 ## Conventions
 
 **Doc comments carry the math, in Typst notation.** This is the house style;
