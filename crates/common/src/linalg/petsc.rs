@@ -45,40 +45,6 @@ pub fn petsc_write_matrix(matrix: &CsrMatrix, filename: &str) -> std::io::Result
   Ok(())
 }
 
-pub fn petsc_write_vector(vector: &Vector, filename: &str) -> std::io::Result<()> {
-  let file = File::create(filename)?;
-  let mut writer = BufWriter::new(file);
-
-  writer.write_i32::<BigEndian>(PETSC_VEC_FILE_CLASSID)?;
-
-  let nrows = vector.nrows() as i32;
-  writer.write_i32::<BigEndian>(nrows)?;
-
-  for &value in vector {
-    writer.write_f64::<BigEndian>(value)?;
-  }
-
-  writer.flush()?;
-  Ok(())
-}
-
-pub fn petsc_read_vector(filename: &str) -> std::io::Result<Vector> {
-  let file = File::open(filename)?;
-  let mut reader = BufReader::new(file);
-
-  let magic = reader.read_i32::<BigEndian>()?;
-  assert_eq!(magic, PETSC_VEC_FILE_CLASSID);
-
-  let nrows = reader.read_i32::<BigEndian>()? as usize;
-
-  let mut vector = Vector::zeros(nrows);
-  for i in 0..nrows {
-    vector[i] = reader.read_f64::<BigEndian>()?;
-  }
-
-  Ok(vector)
-}
-
 pub fn petsc_read_eigenvals(filename: &str) -> std::io::Result<Vector> {
   let file = File::open(filename)?;
   let mut reader = BufReader::new(file);
@@ -140,27 +106,4 @@ pub fn petsc_ghiep(lhs: &CsrMatrix, rhs: &CsrMatrix, neigenvalues: usize) -> (Ve
   let eigenvecs = petsc_read_eigenvecs(&format!("{PETSC_SOLVER_PATH}/out/eigenvecs.bin")).unwrap();
 
   (eigenvals, eigenvecs)
-}
-
-pub fn petsc_saddle_point(lhs: &CsrMatrix, rhs: &Vector) -> Vector {
-  petsc_write_matrix(lhs, &format!("{PETSC_SOLVER_PATH}/in/A.bin")).unwrap();
-  petsc_write_vector(rhs, &format!("{PETSC_SOLVER_PATH}/in/b.bin")).unwrap();
-
-  let binary = "./hils.out";
-  #[rustfmt::skip]
-  let args: [&str; 0] = [
-    //"-ksp_type", "minres",
-    //"-pc_type", "lu",
-    //"-ksp_max_it", "1000",
-    //"-ksp_rtol", "1e-9",
-  ];
-
-  let status = std::process::Command::new(binary)
-    .current_dir(PETSC_SOLVER_PATH)
-    .args(args)
-    .status()
-    .unwrap();
-  assert!(status.success());
-
-  petsc_read_vector(&format!("{PETSC_SOLVER_PATH}/out/x.bin")).unwrap()
 }
