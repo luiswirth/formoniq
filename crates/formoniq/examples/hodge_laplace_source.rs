@@ -33,7 +33,7 @@ use {
     whitney_complex::WhitneyComplex,
   },
   manifold::gen::cartesian::CartesianMeshInfo,
-  util::{BoundaryCondition, BoxEigenform},
+  util::{report, BoundaryCondition, BoxEigenform},
 };
 
 use std::f64::consts::PI;
@@ -46,11 +46,12 @@ fn main() {
       for bc in [BoundaryCondition::Absolute, BoundaryCondition::Relative] {
         let form = BoxEigenform::new(dim, grade, bc);
         println!(
-          "\nHodge-Laplace source, dim {dim}, grade {grade}, {bc:?} (Delta u = {} u).",
+          "\nHodge-Laplace source — dim {dim}, grade {grade}, {} — Δu = {}u",
+          bc.label(),
           form.eigenvalue()
         );
         println!(
-          "| {:>2} | {:>7} | {:>8} | {:>7} | {:>8} | {:>7} |",
+          "| {:>2} | {:>7} | {:>9} | {:>7} | {:>9} | {:>7} |",
           "r", "ncells", "L2 err", "L2 conv", "Hd err", "Hd conv",
         );
 
@@ -110,23 +111,28 @@ fn main() {
           let conv_l2 = conv(&errors_l2, error_l2);
           errors_l2.push(error_l2);
 
+          // Top grade: $dif u = 0$ identically, so there is no $H(dif)$ error to
+          // converge — the two columns are marked absent rather than filled with a
+          // spurious zero.
           let (error_hd, conv_hd) = match form.dif_solution() {
             Some(dif_solution_field) => {
               let dif_solution = dif_solution_field.pullback_on(&topology, &coords);
               let error_hd = fe_l2_error(&galsol.dif(&topology), &dif_solution, &topology, &metric);
               let conv_hd = conv(&errors_hd, error_hd);
               errors_hd.push(error_hd);
-              (error_hd, conv_hd)
+              (Some(error_hd), Some(conv_hd))
             }
-            // Top grade: $dif u = 0$ identically, so the exterior derivative of the
-            // discrete solution is exactly zero and there is nothing to converge.
-            None => (0.0, f64::NAN),
+            None => (None, None),
           };
 
           let ncells = topology.cells().len();
           println!(
-          "| {irefine:>2} | {ncells:>7} | {error_l2:<8.2e} | {conv_l2:>7.2} | {error_hd:<8.2e} | {conv_hd:>7.2} |"
-        );
+            "| {irefine:>2} | {ncells:>7} | {:>9} | {:>7} | {:>9} | {:>7} |",
+            report::err(Some(error_l2)),
+            report::rate(Some(conv_l2)),
+            report::err(error_hd),
+            report::rate(conv_hd),
+          );
         }
       }
     }
