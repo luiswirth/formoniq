@@ -120,7 +120,8 @@ mod test {
 
   use {
     common::{coord::Coord, linalg::nalgebra::Vector},
-    exterior::{field::DiffFormClosure, ExteriorElement},
+    continuum::field::DiffFormClosure,
+    exterior::ExteriorElement,
     manifold::gen::cartesian::CartesianMeshInfo,
   };
 
@@ -172,7 +173,7 @@ mod test {
     ];
 
     for (form, dif_form) in cases {
-      let dim = exterior::field::CoordField::dim(&form);
+      let dim = continuum::field::CoordField::dim(&form);
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
 
       let dif_of_projected =

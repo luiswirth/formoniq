@@ -1,7 +1,8 @@
 use {
   common::{linalg::nalgebra::Vector, util::algebraic_convergence_rate},
+  continuum::field::DiffFormClosure,
   ddf::section::CoordFieldExt,
-  exterior::{field::DiffFormClosure, ExteriorElement},
+  exterior::ExteriorElement,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,
     whitney_complex::WhitneyComplex,

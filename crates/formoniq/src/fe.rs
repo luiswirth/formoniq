@@ -101,8 +101,8 @@ pub fn l2_projection<F: Sync + Section<Covariant>>(
 mod test {
   use super::*;
 
+  use continuum::field::DiffFormClosure;
   use ddf::section::CoordFieldExt;
-  use exterior::field::DiffFormClosure;
   use manifold::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;
