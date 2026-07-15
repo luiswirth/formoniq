@@ -17,6 +17,16 @@ commentary on them. Code should read the way a mathematician would write.
 - **Arbitrary dimension, always.** Nothing is hardcoded to 2D or 3D. Dimension
   is a runtime value `Dim`, grade a runtime value `ExteriorGrade`. If you find
   yourself writing `if dim == 3`, the abstraction is wrong.
+- **Total on the degenerate boundary.** Dimensional agnosticism is the interior
+  claim; the stronger one is that the range is closed at its extremes. The base
+  dimension, the extremal grades, an empty skeleton, a one-element system — these
+  are where generic code silently breaks (a block sized wrong, an index one past
+  the top, a backend's small-input path) and where the special-case temptation is
+  strongest. The abstraction must be total there too: an edge case runs on the
+  same code and returns the mathematically trivial answer — the empty result, the
+  zero operator, the single harmonic mode — rather than being excluded. A base
+  case that holds is a proof of the unification; one that panics is a hidden
+  `if dim == ...` the design never admitted to.
 - Directions being explored, not commitments: BEM and spectral methods within
   the same exterior-calculus frame; higher-order (trimmed polynomial
   $P^-_r Lambda^k$) elements; curvature, higher-order Regge and isoparametric
