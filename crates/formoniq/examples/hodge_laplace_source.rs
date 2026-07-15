@@ -73,7 +73,7 @@ fn main() {
 
         let source = assemble_galvec(&topology, &metric, SourceElVec::new(&load, None));
         let (_, galsol, _) = hodge_laplace::solve_hodge_laplace_source(
-          WhitneyComplex::new(&topology, &metric),
+          &WhitneyComplex::new(&topology, &metric),
           source,
           grade,
         );
