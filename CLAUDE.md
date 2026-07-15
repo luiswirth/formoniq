@@ -30,7 +30,7 @@ and `continuum` are *siblings*:
 
 | crate       | is                                  | key contents |
 | ----------- | ----------------------------------- | ------------ |
-| `common`    | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, `coord::Coords<S>` (coordinates tagged by their space), linalg backends (nalgebra/faer/petsc), `Dim` |
+| `common`    | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, `coord::Coords<S>` (coordinates tagged by their space), linalg backends (nalgebra/faer), `Dim` |
 | `exterior`  | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
 | `manifold`  | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
 | `continuum` | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
@@ -194,8 +194,10 @@ just as well and silently means something else. A new ordered structure is colex
 
 **Linalg backends by role.** nalgebra dense (`Matrix`/`Vector`) for element-local
 math (Gramians, element matrices, exterior powers); `nalgebra-sparse` (`CooMatrix`)
-for globally assembled operators; faer and petsc for solves and eigenproblems.
-Go through `common::linalg` rather than reaching for a backend directly.
+for globally assembled operators; faer for solves and eigenproblems (sparse LU
+and Cholesky, and a dense QZ for the generalized eigenproblem). The workspace is
+pure Rust, with no external solver toolchain. Go through `common::linalg` rather
+than reaching for a backend directly.
 
 **Naming reflects the mathematics.** `SimplexRef`, `Cochain`, `MultiForm`,
 `CellGramians` — a reader who knows the math should recognize every type

@@ -4,7 +4,7 @@ use crate::{
 };
 
 use {
-  common::linalg::{faer::FaerLu, petsc::petsc_ghiep},
+  common::linalg::faer::{faer_ghiep, FaerLu},
   ddf::cochain::Cochain,
   exterior::ExteriorGrade,
 };
@@ -107,7 +107,7 @@ pub fn solve_hodge_laplace_evp(
     rhs.push(r, c, v);
   }
 
-  let (eigenvals, eigenvectors) = petsc_ghiep(&(&lhs).into(), &(&rhs).into(), neigenvalues);
+  let (eigenvals, eigenvectors) = faer_ghiep(&(&lhs).into(), &(&rhs).into(), neigenvalues);
 
   let eigen_sigmas = eigenvectors.rows(0, sigma_len).into_owned();
   let eigen_us = eigenvectors.rows(sigma_len, u_len).into_owned();

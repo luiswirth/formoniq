@@ -399,14 +399,16 @@ pub fn solve_maxwell_curl_curl(
 /// extended by zero from the relative complex onto the full mesh.
 ///
 /// The frequency-domain counterpart of the time-domain solvers above, built
-/// from the very same operators. Requires the external PETSc/SLEPc eigensolver
-/// (see [`common::linalg::petsc`]).
+/// from the very same operators. Solved natively by [`faer_ghiep`], a dense QZ
+/// on the generalized pencil.
+///
+/// [`faer_ghiep`]: common::linalg::faer::faer_ghiep
 pub fn solve_maxwell_cavity_modes(
   fes: WhitneyComplex,
   medium: Medium,
   nmodes: usize,
 ) -> (Vector, Vec<Cochain>) {
-  use common::linalg::petsc::petsc_ghiep;
+  use common::linalg::faer::faer_ghiep;
 
   let ops = MaxwellOperators::new(&fes, medium);
   let relative = fes.relative();
@@ -415,7 +417,7 @@ pub fn solve_maxwell_cavity_modes(
   let stiffness_rel = incl.transpose() * &ops.stiffness() * &incl;
   let mass_rel = incl.transpose() * &ops.mass_e * &incl;
 
-  let (eigenvals, eigenvecs) = petsc_ghiep(&stiffness_rel, &mass_rel, nmodes);
+  let (eigenvals, eigenvecs) = faer_ghiep(&stiffness_rel, &mass_rel, nmodes);
 
   let modes = eigenvecs
     .column_iter()
