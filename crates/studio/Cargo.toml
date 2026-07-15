@@ -14,7 +14,10 @@ ddf = { path = "../ddf" }
 manifold = { path = "../manifold" }
 common = { path = "../common" }
 exterior = { path = "../exterior" }
-wgpu = "30.0.0"
+# Pinned to match egui-wgpu 0.35's own wgpu dependency: the render pass and
+# command-buffer types crossing the egui/native boundary must be the same
+# `wgpu` crate, not just semver-compatible. Bump together with egui-wgpu.
+wgpu = "29.0.4"
 winit = "0.30.13"
 pollster = "1.0.1"
 nalgebra = "0.35.0"
