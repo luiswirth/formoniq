@@ -78,8 +78,16 @@ impl Complex {
       .collect();
     let complex = Complex::from_cells(Skeleton::new(cells));
 
-    let parent_kidxs = (0..=complex.dim())
+    // Indexed by the full parent grade range $0..=n$, not just the boundary's
+    // own $0..=n-1$: at grade $n$ the $(n-1)$-dimensional boundary carries no
+    // simplices, so the trace is the zero map into an empty codomain. Storing
+    // that empty row explicitly keeps `trace_operator` total at top grade
+    // rather than indexing one past the boundary dimension.
+    let parent_kidxs = (0..=self.dim())
       .map(|grade| {
+        if grade > complex.dim() {
+          return Vec::new();
+        }
         complex
           .skeleton(grade)
           .iter()
@@ -91,7 +99,7 @@ impl Complex {
           .collect()
       })
       .collect();
-    let parent_nsimplices = (0..=complex.dim()).map(|k| self.nsimplices(k)).collect();
+    let parent_nsimplices = (0..=self.dim()).map(|k| self.nsimplices(k)).collect();
 
     BoundaryComplex {
       complex,

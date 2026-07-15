@@ -111,6 +111,13 @@ impl<'a> WhitneyComplex<'a> {
   ///
   /// the stiffness matrix $D^T M_(k+1) D$ of the up-part of the Hodge-Laplacian.
   pub fn codif_dif(&self, grade: ExteriorGrade) -> GalMat {
+    // At top grade $dif: Lambda^n -> Lambda^(n+1)$ maps into the zero space, so
+    // $delta dif$ is the zero operator; there is no $(n+1)$-skeleton to assemble
+    // a mass over. Return it explicitly, sized $"ndofs"^2$, keeping the operator
+    // total at the degenerate top grade rather than indexing past the skeleton.
+    if grade == self.dim() {
+      return GalMat::new(self.ndofs(grade), self.ndofs(grade));
+    }
     let dif = self.dif(grade);
     let mass = CsrMatrix::from(&self.mass(grade + 1));
     GalMat::from(&(dif.transpose() * mass * dif))
@@ -324,6 +331,13 @@ impl<'a> RelativeWhitneyComplex<'a> {
   /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^(k+1))$ on the
   /// relative complex.
   pub fn codif_dif(&self, grade: ExteriorGrade) -> GalMat {
+    // At top grade $dif: Lambda^n -> Lambda^(n+1)$ maps into the zero space, so
+    // $delta dif$ is the zero operator; there is no $(n+1)$-skeleton to assemble
+    // a mass over. Return it explicitly, sized $"ndofs"^2$, keeping the operator
+    // total at the degenerate top grade rather than indexing past the skeleton.
+    if grade == self.dim() {
+      return GalMat::new(self.ndofs(grade), self.ndofs(grade));
+    }
     let dif = self.dif(grade);
     let mass = CsrMatrix::from(&self.mass(grade + 1));
     GalMat::from(&(dif.transpose() * mass * dif))

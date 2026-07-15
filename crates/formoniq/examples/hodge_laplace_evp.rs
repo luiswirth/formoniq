@@ -164,15 +164,10 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
   };
 
   let path = std::path::PathBuf::from(prompt("Enter mesh file path (.msh or .obj).")?);
-  let (base_surface, topology, coords) = match path.extension().and_then(|e| e.to_str()) {
-    Some("msh") => {
-      let (topology, coords) = manifold::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?);
-      (None, topology, coords)
-    }
+  let (topology, coords) = match path.extension().and_then(|e| e.to_str()) {
+    Some("msh") => manifold::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
     Some("obj") => {
-      let surface = manifold::io::blender::from_obj_string(&String::from_utf8(std::fs::read(path)?)?);
-      let (topology, coords) = surface.clone().into_coord_complex();
-      (Some(surface), topology, coords)
+      manifold::io::blender::obj2coord_complex(&String::from_utf8(std::fs::read(path)?)?)
     }
     _ => return Err("Unknown or missing file extension.".into()),
   };
@@ -181,56 +176,11 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
   let grade: usize = prompt("Enter exterior grade.")?.parse()?;
   let neigen: usize = prompt("Enter number of eigenvalues.")?.parse()?;
 
-  let (eigenvals, _, eigen_us) =
+  let (eigenvals, _, _) =
     hodge_laplace::solve_hodge_laplace_evp(&WhitneyComplex::new(&topology, &metric), grade, neigen);
   for (i, &lambda) in eigenvals.iter().enumerate() {
     println!("eigenvalue {i}: {lambda:.4}");
   }
 
-  if let (Some(surface), 0) = (base_surface, grade) {
-    let out_dir = "out/hodge_laplace_evp";
-    std::fs::create_dir_all(out_dir)?;
-
-    let do_animation = prompt("Generate breathing animation? (y/n)")?.to_lowercase() == "y";
-
-    for (i, &lambda) in eigenvals.iter().enumerate() {
-      let eigenfunc = eigen_us.column(i);
-
-      let mut mode_surface = surface.clone();
-      for (ivertex, mut cart_pos) in mode_surface.vertex_coords_mut().coord_iter_mut().enumerate() {
-        cart_pos *= eigenfunc[ivertex];
-      }
-      std::fs::write(
-        format!("{out_dir}/eigenmode{i}.obj"),
-        manifold::io::blender::to_obj_string(&mode_surface),
-      )?;
-
-      if do_animation {
-        let omega = lambda.abs().sqrt();
-        let fps = 30;
-        let duration = if omega > 1e-6 {
-          std::f64::consts::TAU / omega
-        } else {
-          1.0
-        };
-        let nframes = (duration * fps as f64).ceil() as usize;
-        let times: Vec<_> = (0..=nframes).map(|frame| frame as f64 / fps as f64).collect();
-
-        let displacements: Vec<_> = times
-          .iter()
-          .map(|&t| (eigenfunc * (omega * t).cos()).into_owned())
-          .collect();
-
-        manifold::io::blender::write_displacement_animation(
-          format!("{out_dir}/breathing{i}.mdd"),
-          &surface,
-          &displacements,
-          times.iter().copied(),
-        );
-      }
-    }
-  }
-
   Ok(())
 }
-

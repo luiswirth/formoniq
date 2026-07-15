@@ -35,10 +35,7 @@ pub fn solve_heat(
   let mut solution = Vec::with_capacity(nsteps + 1);
   solution.push(initial_data);
 
-  let last_step = nsteps - 1;
-  for istep in 0..nsteps {
-    println!("Solving Heat Equation at step={istep}/{last_step}...");
-
+  for _ in 0..nsteps {
     let prev = solution.last().unwrap().coeffs();
     let rhs = &mass * prev + dt * &source;
     solution.push(lifted.solve(&rhs));
