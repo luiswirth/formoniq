@@ -20,6 +20,9 @@
 
 extern crate nalgebra as na;
 
+#[path = "util/mod.rs"]
+mod util;
+
 use {
   common::util::algebraic_convergence_rate,
   continuum::{field::DiffFormClosure, parametrization::Parametrization},
@@ -29,6 +32,7 @@ use {
     whitney_complex::WhitneyComplex,
   },
   manifold::dim3::mesh_sphere_surface,
+  util::report,
 };
 
 fn main() {
@@ -45,9 +49,10 @@ fn main() {
   let solution_exact = DiffFormClosure::one_form(|u| na::dvector![-u[0].sin(), 0.0], 2);
   let load = DiffFormClosure::one_form(|u| na::dvector![-2.0 * u[0].sin(), 0.0], 2);
 
+  println!("\nHodge-Laplace source — 2-sphere, grade {grade} — Δu = 2u");
   println!(
-    "| {:>2} | {:>7} | {:>8} | {:>7} |",
-    "k", "ncells", "L2 err", "L2 conv",
+    "| {:>2} | {:>7} | {:>9} | {:>7} |",
+    "r", "ncells", "L2 err", "L2 conv",
   );
 
   let mut errors = Vec::new();
@@ -75,6 +80,10 @@ fn main() {
     errors.push(error);
 
     let ncells = topology.cells().len();
-    println!("| {irefine:>2} | {ncells:>7} | {error:<8.2e} | {conv:>7.2} |");
+    println!(
+      "| {irefine:>2} | {ncells:>7} | {:>9} | {:>7} |",
+      report::err(Some(error)),
+      report::rate(Some(conv)),
+    );
   }
 }

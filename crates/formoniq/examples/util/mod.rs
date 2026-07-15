@@ -1,7 +1,11 @@
-//! Manufactured data shared by the Hodge-Laplace examples.
+//! Shared support for the Hodge-Laplace examples: the manufactured box
+//! eigenform and the [`report`] helpers that give the three tables one look.
 //!
 //! Included with `#[path = "util/mod.rs"] mod util;`; it is not itself an
-//! example binary (only files directly under `examples/` are).
+//! example binary (only files directly under `examples/` are). Each including
+//! binary compiles the whole module but uses only a subset, so unused items are
+//! expected here rather than a sign of dead code.
+#![allow(dead_code)]
 
 use {
   common::{
@@ -11,6 +15,54 @@ use {
   continuum::field::DiffFormClosure,
   exterior::ExteriorElement,
 };
+
+/// Uniform table formatting for the Hodge-Laplace examples, so the source, the
+/// spectrum and the sphere tables read as one.
+///
+/// Every table opens with the same `| r | ncells |` frame, and every value it
+/// prints comes from one of the three formatters below, in one convention:
+/// errors in scientific notation to three significant figures (they decay over
+/// many orders), eigenvalues in fixed-point to three decimals (they are $O(1)$),
+/// convergence rates to two decimals, and one marker — [`NA`] — for every value
+/// that does not exist at a row: the first refinement (no coarser level to
+/// compare against), the rate of an identically-zero harmonic mode, the missing
+/// $dif u$ at top grade. A dash says "no meaningful value here", which is more
+/// honest than a printed `inf`, `NaN` or `0.00e0` standing in for one.
+///
+/// Each formatter returns the bare value; the call site pads it to its column
+/// width, so the header and the data rows share one set of width specifiers.
+pub mod report {
+  /// The absent-value marker: a value that does not exist at this row, as
+  /// opposed to one that is small.
+  pub const NA: &str = "—";
+
+  /// An error (or any decaying quantity) in scientific notation, or [`NA`] when
+  /// it does not exist at this row.
+  pub fn err(x: Option<f64>) -> String {
+    x.map_or_else(|| NA.to_string(), |x| format!("{x:.2e}"))
+  }
+
+  /// A convergence rate, or [`NA`] when there is no coarser level to compare
+  /// against (a non-finite rate) or the quantity is an identically-zero harmonic
+  /// mode.
+  pub fn rate(r: Option<f64>) -> String {
+    match r {
+      Some(r) if r.is_finite() => format!("{r:.2}"),
+      _ => NA.to_string(),
+    }
+  }
+
+  /// An eigenvalue in fixed-point, the negative zero of a harmonic mode's
+  /// residual normalized away.
+  pub fn eigval(lambda: f64) -> String {
+    let s = format!("{lambda:.3}");
+    if s == "-0.000" {
+      "0.000".to_string()
+    } else {
+      s
+    }
+  }
+}
 
 /// Which boundary condition the manufactured eigenform meets: the two dual
 /// Hodge-Laplace problems on the box.
@@ -22,6 +74,16 @@ pub enum BoundaryCondition {
   /// Essential / relative: $"tr" u = 0$, $"tr" dif u = 0$. The relative Whitney
   /// complex; harmonic space $H^k (K, diff K)$ (box: top grade).
   Relative,
+}
+
+impl BoundaryCondition {
+  /// The lower-case name used in the table headings.
+  pub fn label(self) -> &'static str {
+    match self {
+      Self::Absolute => "absolute",
+      Self::Relative => "relative",
+    }
+  }
 }
 
 /// The manufactured Hodge-Laplace eigenform on the flat box $[0, pi]^n$,

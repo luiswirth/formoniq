@@ -15,10 +15,14 @@
 //!
 //! Run by hand; read the spectra off the tables.
 
+#[path = "util/mod.rs"]
+mod util;
+
 use {
   common::util::algebraic_convergence_rate,
   formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
   manifold::gen::cartesian::CartesianMeshInfo,
+  util::{report, BoundaryCondition},
 };
 
 use std::f64::consts::PI;
@@ -55,11 +59,14 @@ fn box_sweep() {
       // the harmonic mode sits at grade $0$ for absolute and top grade for
       // relative, staging Poincaré--Lefschetz duality. On the point ($n = 0$)
       // the boundary is empty and the two coincide.
-      for relative in [false, true] {
-        let bc = if relative { "Relative" } else { "Absolute" };
-        println!("\nHodge-Laplace EVP, dim {dim}, grade {grade}, {bc}.");
+      for bc in [BoundaryCondition::Absolute, BoundaryCondition::Relative] {
+        let relative = bc == BoundaryCondition::Relative;
         println!(
-          "  {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
+          "\nHodge-Laplace spectrum — dim {dim}, grade {grade}, {}",
+          bc.label()
+        );
+        println!(
+          "| {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
           "r", "ncells"
         );
 
@@ -125,12 +132,16 @@ fn box_sweep() {
           };
 
           let ncells = topology.cells().len();
-          print!("  {irefine:>2} | {ncells:>7} |");
+          print!("| {irefine:>2} | {ncells:>7} |");
           for (i, &lambda) in eigenvals.iter().enumerate() {
-            match rates.as_ref().and_then(|rates| rates.get(i)) {
-              Some(rate) => print!(" {lambda:6.3}({rate:>4.1})"),
-              None => print!(" {lambda:6.3}( -- )"),
-            }
+            // A near-zero eigenvalue is a harmonic mode: FEEC captures it exactly,
+            // so a "convergence rate" would only compare solver noise — mark it,
+            // and the coarsest levels with no prior triple, absent.
+            let rate = rates
+              .as_ref()
+              .and_then(|rates| rates.get(i).copied())
+              .filter(|_| lambda.abs() > 1e-6);
+            print!(" {:>7}({:>6})", report::eigval(lambda), report::rate(rate));
           }
           println!();
 
