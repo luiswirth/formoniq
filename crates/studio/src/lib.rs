@@ -1,3 +1,5 @@
+extern crate nalgebra as na;
+
 use std::sync::Arc;
 use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue, RenderPipeline, Surface, SurfaceConfiguration};
@@ -17,6 +19,8 @@ use crate::scene::Scene;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
+pub mod io;
+pub mod mesh3d;
 pub mod render;
 pub mod scene;
 pub mod ui;

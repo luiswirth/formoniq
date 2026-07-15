@@ -491,7 +491,7 @@ mod test {
           .0
       })
       .collect();
-    complexes.push(crate::dim3::mesh_sphere_surface(1).into_coord_complex().0);
+    complexes.push(crate::gen::sphere::mesh_sphere_surface(1).0);
     complexes.push(annulus());
     complexes
   }
@@ -613,7 +613,7 @@ mod test {
   /// 2-sphere realizes it with Betti numbers $(1, 0, 1)$.
   #[test]
   fn sphere_poincare_duality() {
-    let (topology, _) = crate::dim3::mesh_sphere_surface(1).into_coord_complex();
+    let (topology, _) = crate::gen::sphere::mesh_sphere_surface(1);
     let betti = topology.betti_numbers();
     let n = topology.dim();
     for k in 0..=n {
@@ -652,7 +652,7 @@ mod test {
   /// complex, so relative and absolute Betti numbers coincide. The 2-sphere.
   #[test]
   fn closed_manifold_relative_equals_absolute() {
-    let (topology, _) = crate::dim3::mesh_sphere_surface(1).into_coord_complex();
+    let (topology, _) = crate::gen::sphere::mesh_sphere_surface(1);
     for k in 0..=topology.dim() {
       assert_eq!(
         topology.relative_betti_number(k),

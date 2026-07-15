@@ -8,8 +8,8 @@
 //! $b_k (K, diff K)$ ($1$ at top grade) on the contractible box, an exact
 //! topological anchor and a staging of Poincaré--Lefschetz duality.
 //!
-//! Run with `-i` / `--interactive` to instead load an external mesh (`.msh` or
-//! `.obj`) and read the grade and eigenvalue count from stdin — the way to put
+//! Run with `-i` / `--interactive` to instead load an external mesh (`.msh`)
+//! and read the grade and eigenvalue count from stdin — the way to put
 //! the solver on a curved domain such as the sphere, where the grade-0 spectrum
 //! is $ell(ell + 1)$.
 //!
@@ -163,12 +163,9 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
     Ok(line.trim().to_string())
   };
 
-  let path = std::path::PathBuf::from(prompt("Enter mesh file path (.msh or .obj).")?);
+  let path = std::path::PathBuf::from(prompt("Enter mesh file path (.msh).")?);
   let (topology, coords) = match path.extension().and_then(|e| e.to_str()) {
     Some("msh") => manifold::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
-    Some("obj") => {
-      manifold::io::blender::obj2coord_complex(&String::from_utf8(std::fs::read(path)?)?)
-    }
     _ => return Err("Unknown or missing file extension.".into()),
   };
   let metric = coords.to_edge_lengths(&topology);

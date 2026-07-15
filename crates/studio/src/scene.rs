@@ -91,9 +91,9 @@ impl Scene {
   /// Laplace-Beltrami eigenfunctions on the unit sphere — the discrete
   /// spherical harmonics — on an icosphere of the given subdivision depth.
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
-    use manifold::dim3::mesh_sphere_surface;
+    use manifold::gen::sphere::mesh_sphere_surface;
 
-    let (topology, coords) = mesh_sphere_surface(nsubdivisions).into_coord_complex();
+    let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     Self::eigenmodes(topology, coords, nmodes)
   }
 }

@@ -90,8 +90,7 @@ fn harmonics_are_cohomology_cube() {
 /// The mesh is closed, so the relative complex coincides with the full one.
 #[test]
 fn harmonics_are_cohomology_sphere() {
-  let sphere = manifold::dim3::mesh_sphere_surface(1);
-  let (topology, coords) = sphere.into_coord_complex();
+  let (topology, coords) = manifold::gen::sphere::mesh_sphere_surface(1);
   let metric = coords.to_edge_lengths(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let dim = topology.dim();
