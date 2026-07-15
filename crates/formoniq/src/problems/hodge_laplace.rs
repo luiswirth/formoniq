@@ -4,7 +4,7 @@ use crate::{
 };
 
 use {
-  common::linalg::faer::{faer_ghiep, FaerLu},
+  common::linalg::faer::{faer_ghiep, faer_gsdiep, FaerLu},
   ddf::cochain::Cochain,
   exterior::ExteriorGrade,
 };
@@ -139,7 +139,17 @@ pub fn solve_hodge_laplace_evp<C: HilbertComplex>(
     rhs.push(r, c, v);
   }
 
-  let (eigenvals, eigenvectors) = faer_ghiep(&(&lhs).into(), &(&rhs).into(), neigenvalues);
+  // At grade 0 the $sigma$ block is empty, so the pencil is $codif dif$ against
+  // the mass matrix — symmetric positive-(semi)definite, admitting the cheaper
+  // Cholesky-reduction path. For $k > 0$ the mixed KKT pencil is symmetric
+  // indefinite and needs the general solver. This dispatches on the assembled
+  // shape ($sigma_"len" = 0$), not on the grade — the definiteness is what earns
+  // the fast path.
+  let (eigenvals, eigenvectors) = if sigma_len == 0 {
+    faer_gsdiep(&(&lhs).into(), &(&rhs).into(), neigenvalues)
+  } else {
+    faer_ghiep(&(&lhs).into(), &(&rhs).into(), neigenvalues)
+  };
 
   let eigen_sigmas = eigenvectors.rows(0, sigma_len).into_owned();
   let eigen_us = eigenvectors.rows(sigma_len, u_len).into_owned();

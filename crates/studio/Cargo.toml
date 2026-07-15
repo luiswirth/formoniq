@@ -1,0 +1,38 @@
+[package]
+name = "formoniq-studio"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Internal workspace dependencies
+formoniq = { path = "../formoniq" }
+ddf = { path = "../ddf" }
+manifold = { path = "../manifold" }
+common = { path = "../common" }
+exterior = { path = "../exterior" }
+wgpu = "30.0.0"
+winit = "0.30.13"
+pollster = "1.0.1"
+nalgebra = "0.35.0"
+log = "0.4.33"
+env_logger = "0.11.11"
+egui = "0.35.0"
+egui-wgpu = "0.35.0"
+egui-winit = "0.35.0"
+cfg-if = "1.0.4"
+bytemuck = { version = "1.25.1", features = ["derive"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+console_error_panic_hook = "0.1.7"
+console_log = "1.0"
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+] }
