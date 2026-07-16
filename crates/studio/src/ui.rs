@@ -157,16 +157,24 @@ fn grade_grid(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
 /// magnetic index $m in -l..=l$ on the sphere's $2l+1$-fold grade-0 multiplet).
 /// Hovering a cell shows the mode's full name and eigenvalue.
 fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &mut Selection) {
-  // A fixed cell size makes the columns line up into a grid; the matching
-  // gutters left and right keep each row's cells centered under `vertical_centered`.
-  const CELL: [f32; 2] = [30.0, 22.0];
-  const GUTTER: f32 = 56.0;
+  // A fixed cell size lines the columns up into a grid; a fixed-width label
+  // gutter on the left holds the shell's eigenvalue and keeps the columns
+  // aligned across rows. `vertical_centered` then centers each row within the
+  // panel, so the shorter shells sit symmetrically over the widest one -- the
+  // pyramid. The widest shell (the sphere's five-member grade-0 $l = 2$
+  // multiplet) is what sets the panel's minimum width, and it fills that width
+  // exactly: there is no trailing spacer, so no dead padding on the right.
+  const CELL: [f32; 2] = [26.0, 20.0];
+  const GUTTER: f32 = 34.0;
   ui.vertical_centered(|ui| {
     for shell in shells {
       ui.horizontal(|ui| {
         ui.add_sized(
           [GUTTER, CELL[1]],
-          egui::Label::new(format!("λ = {:.1}", shell.eigenvalue)),
+          // A whole number for the row label -- distinct shells differ by an
+          // order-one gap, so the integer part alone separates them, and the
+          // precise eigenvalue lives in the cell hover and the transport bar.
+          egui::Label::new(format!("λ{:.0}", shell.eigenvalue)),
         );
         let n = shell.members.len() as isize;
         for (pos, &idx) in shell.members.iter().enumerate() {
@@ -186,7 +194,6 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
             *selection = entry.selection;
           }
         }
-        ui.add_space(GUTTER);
       });
     }
   });
@@ -227,6 +234,15 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) selection: Selection,
   pub(crate) top_down: bool,
   pub(crate) presets: &'a [Preset],
+  /// The displayed field's Hodge-Laplace eigenvalue $lambda$, when it is an
+  /// eigenmode: the transport bar reports it and its frequency $omega =
+  /// sqrt(lambda)$. `None` for a field with no standing wave (a raw Whitney
+  /// basis function, an explicit cochain).
+  pub(crate) eigenvalue: Option<f64>,
+  /// Whether the standing-wave clock is running, driving the play/pause control.
+  pub(crate) playing: bool,
+  /// The clock's current time $t$, for the transport readout.
+  pub(crate) time: f32,
 }
 
 /// The changes the user requested this frame, for the caller to apply. Each
@@ -242,6 +258,10 @@ pub(crate) struct PanelResponse {
   pub(crate) requested_preset: Option<usize>,
   pub(crate) selection: Selection,
   pub(crate) top_down: bool,
+  /// Whether the standing wave should be running after this frame -- the
+  /// play/pause toggle. Defaults to the model's own state when the control
+  /// wasn't touched, like the other fields.
+  pub(crate) playing: bool,
   /// Whether "Load OBJ…" was clicked -- the one request the panel cannot
   /// resolve itself, since opening the native file browser is the caller's
   /// (`app.rs`'s) stateful `egui_file_dialog`, not something a pure function
@@ -249,60 +269,69 @@ pub(crate) struct PanelResponse {
   pub(crate) load_obj_clicked: bool,
 }
 
-/// Builds and tessellates the control panel: the preset browser, the two raw
-/// axes (mesh picker and study picker) for free composition, the study's own
-/// knobs (eigenmode grade tabs, the mode picker or basis grid, or a spinner
-/// while it solves) and the camera-mode toggle. A pure function of `model`: it
-/// reads no other state and its only side effect is on `ctx`'s own egui pass,
-/// so the caller is free to apply the returned changes however it likes.
-pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
+/// Builds and tessellates the docked shell: a left sidebar (the preset browser
+/// and the two raw axes, mesh and study, for free composition), a right
+/// inspector (the study's own knobs -- eigenmode grade tabs, the mode picker or
+/// basis grid, or a spinner while it solves -- and the camera-mode toggle), a
+/// bottom transport bar (play/pause and the standing wave's readouts), and the
+/// field-name viewport overlay. No central panel is drawn, so the wgpu scene
+/// shows through the middle.
+///
+/// A pure function of `model`: it reads no other state and its only side effect
+/// is on `ctx`'s own egui pass, so the caller is free to apply the returned
+/// changes however it likes.
+pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut requested_mesh = model.mesh_source.clone();
   let mut requested_study = model.study.clone();
   let mut requested_preset = None;
   let mut selection = model.selection;
   let mut top_down = model.top_down;
+  let mut playing = model.playing;
   let mut load_obj_clicked = false;
 
-  egui::Window::new("Gallery").show(ctx, |ui| {
-    // The preset browser: a curated point in the mesh × study product,
-    // selected as a whole. Everything below it is the raw product it is a
-    // point of.
-    egui::ComboBox::from_id_salt("preset")
-      .selected_text("Presets…")
-      .show_ui(ui, |ui| {
-        for (i, preset) in model.presets.iter().enumerate() {
-          if ui.selectable_label(false, preset.name).clicked() {
-            requested_preset = Some(i);
-          }
+  // Left sidebar: the browser. The curated presets on top -- each a point in
+  // the mesh × study product, chosen as a whole -- then the raw two axes below.
+  egui::Panel::left("browser")
+    .default_size(180.0)
+    .show(ui, |ui| {
+      ui.add_space(4.0);
+      ui.heading("Browser");
+      ui.separator();
+
+      ui.label("Presets");
+      for (i, preset) in model.presets.iter().enumerate() {
+        if ui.selectable_label(false, preset.name).clicked() {
+          requested_preset = Some(i);
+        }
+      }
+      ui.separator();
+
+      // The study axis. Eigenmodes and the Whitney basis are the two generic
+      // studies; an explicit cochain list has no generic form to pick, so it
+      // shows as the selected study only when a preset installed it.
+      ui.label("Study");
+      ui.horizontal_wrapped(|ui| {
+        let on_eigenmodes = matches!(model.study, Study::Eigenmodes { .. });
+        if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
+          requested_study = Study::Eigenmodes {
+            grade: model.last_grade,
+            nmodes: DEFAULT_NMODES,
+          };
+        }
+        let on_whitney = matches!(model.study, Study::WhitneyBasis);
+        if ui.selectable_label(on_whitney, "Whitney basis").clicked() {
+          requested_study = Study::WhitneyBasis;
+        }
+        if matches!(model.study, Study::Cochains(_)) {
+          let _ = ui.selectable_label(true, "Cochains");
         }
       });
-    ui.separator();
+      ui.separator();
 
-    // The study axis. Eigenmodes and the Whitney basis are the two generic
-    // studies; an explicit cochain list has no generic form to pick, so it
-    // shows as the selected study only when a preset installed it.
-    ui.horizontal(|ui| {
-      let on_eigenmodes = matches!(model.study, Study::Eigenmodes { .. });
-      if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
-        requested_study = Study::Eigenmodes {
-          grade: model.last_grade,
-          nmodes: DEFAULT_NMODES,
-        };
-      }
-      let on_whitney = matches!(model.study, Study::WhitneyBasis);
-      if ui.selectable_label(on_whitney, "Whitney basis").clicked() {
-        requested_study = Study::WhitneyBasis;
-      }
-      if matches!(model.study, Study::Cochains(_)) {
-        let _ = ui.selectable_label(true, "Cochains");
-      }
-    });
-    ui.separator();
-
-    // The mesh axis: every study runs on every mesh, so the picker is always
-    // shown. A generated family resets to its default refinement when first
-    // chosen; re-picking the current family keeps the slider's value.
-    ui.horizontal(|ui| {
+      // The mesh axis: every study runs on every mesh, so the picker is always
+      // shown. A generated family resets to its default refinement when first
+      // chosen; re-picking the current family keeps the slider's value.
+      ui.label("Mesh");
       egui::ComboBox::from_id_salt("mesh-source")
         .selected_text(requested_mesh.label())
         .show_ui(ui, |ui| {
@@ -335,73 +364,121 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
             }
           }
         });
+      // A generated family or the reference cell carries a slider; a built-in,
+      // the triforce or a loaded mesh has none.
+      match &mut requested_mesh {
+        MeshSource::Sphere { subdivisions } => {
+          ui.add(egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"));
+        }
+        MeshSource::Grid { cells_axis } => {
+          ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
+        }
+        MeshSource::ReferenceCell { dim } => {
+          ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
+        }
+        MeshSource::Triforce | MeshSource::Builtin(_) | MeshSource::Custom { .. } => {}
+      }
       // Opens the in-egui file browser; the pick itself is retrieved by the
       // caller, which owns the (native-only) `egui_file_dialog` state.
       if ui.button("Load OBJ…").clicked() {
         load_obj_clicked = true;
       }
+      if let Some(error) = &model.mesh_error {
+        ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
+      }
     });
-    // A generated family or the reference cell carries a slider; a built-in,
-    // the triforce or a loaded mesh has none.
-    match &mut requested_mesh {
-      MeshSource::Sphere { subdivisions } => {
-        ui.add(egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"));
-      }
-      MeshSource::Grid { cells_axis } => {
-        ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
-      }
-      MeshSource::ReferenceCell { dim } => {
-        ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
-      }
-      MeshSource::Triforce | MeshSource::Builtin(_) | MeshSource::Custom { .. } => {}
-    }
-    if let Some(error) = &model.mesh_error {
-      ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
-    }
-    ui.separator();
 
-    // One tab per grade of the de Rham complex; every grade is solved and
-    // shown, the top grade through its Hodge star just like grade 0.
-    if let Study::Eigenmodes { grade, .. } = &model.study {
-      let grade = *grade;
-      ui.horizontal(|ui| {
-        for g in 0..=model.max_grade {
-          if ui
-            .selectable_label(g == grade, grade_mark_label(g, model.max_grade))
-            .clicked()
-          {
-            requested_study = Study::Eigenmodes {
-              grade: g,
-              nmodes: DEFAULT_NMODES,
-            };
-          }
-        }
-      });
+  // Right inspector: the knobs of what is shown -- the study's own parameters
+  // and the camera mode.
+  egui::Panel::right("inspector")
+    .default_size(250.0)
+    .show(ui, |ui| {
+      ui.add_space(4.0);
+      ui.heading("Inspector");
       ui.separator();
-    }
 
-    if model.is_loading {
-      ui.horizontal(|ui| {
-        ui.add(egui::Spinner::new().size(20.0));
-        if let Some(label) = &model.loading_label {
-          ui.label(format!("Solving {label}…"));
-        }
-      });
-    } else {
-      match &model.study {
-        Study::Eigenmodes { .. } => {
-          ui.label("rows: degeneracy shell (λ) · cells: order");
-        }
-        Study::WhitneyBasis => {
-          ui.label("rows: grade · cells: DOF simplex");
-        }
-        Study::Cochains(_) => {}
-      };
-      render_modes(ui, &model.entries, &mut selection, model.scene_dim);
-    }
+      // One tab per grade of the de Rham complex; every grade is solved and
+      // shown, the top grade through its Hodge star just like grade 0.
+      if let Study::Eigenmodes { grade, .. } = &model.study {
+        let grade = *grade;
+        ui.horizontal_wrapped(|ui| {
+          for g in 0..=model.max_grade {
+            if ui
+              .selectable_label(g == grade, grade_mark_label(g, model.max_grade))
+              .clicked()
+            {
+              requested_study = Study::Eigenmodes {
+                grade: g,
+                nmodes: DEFAULT_NMODES,
+              };
+            }
+          }
+        });
+        ui.separator();
+      }
 
-    ui.separator();
-    ui.checkbox(&mut top_down, "Top-down (orthographic, drag to pan)");
+      if model.is_loading {
+        ui.horizontal(|ui| {
+          ui.add(egui::Spinner::new().size(20.0));
+          if let Some(label) = &model.loading_label {
+            ui.label(format!("Solving {label}…"));
+          }
+        });
+      } else {
+        match &model.study {
+          Study::Eigenmodes { .. } => {
+            ui.label("λ shell × order");
+          }
+          Study::WhitneyBasis => {
+            ui.label("grade × DOF");
+          }
+          Study::Cochains(_) => {}
+        };
+        render_modes(ui, &model.entries, &mut selection, model.scene_dim);
+      }
+
+      ui.separator();
+      ui.checkbox(&mut top_down, "Top-down")
+        .on_hover_text("Orthographic, drag to pan");
+    });
+
+  // Bottom transport bar: play/pause and the standing wave's readouts. Only an
+  // oscillating mode ($omega > 0$) has a wave to run, so the toggle is disabled
+  // for a static or harmonic field, where it would control nothing.
+  egui::Panel::bottom("transport").show(ui, |ui| {
+    ui.add_space(2.0);
+    ui.horizontal(|ui| {
+      let omega = model.eigenvalue.map(|l| l.max(0.0).sqrt());
+      let has_wave = omega.is_some_and(|w| w > 1e-9);
+      let label = if playing { "⏸" } else { "▶" };
+      if ui
+        .add_enabled(has_wave, egui::Button::new(label))
+        .on_hover_text(if playing { "Pause" } else { "Play" })
+        .clicked()
+      {
+        playing = !playing;
+      }
+      ui.separator();
+
+      match omega {
+        Some(omega) if omega > 1e-9 => {
+          ui.monospace(format!("t = {:.2} s", model.time));
+          ui.separator();
+          ui.monospace(format!("λ = {:.4}", model.eigenvalue.unwrap()));
+          ui.monospace(format!("ω = {omega:.4}"));
+          ui.monospace(format!("T = {:.2} s", std::f64::consts::TAU / omega));
+        }
+        // A harmonic mode ($lambda = 0$) is a genuine eigenmode with no
+        // oscillation: its period is unbounded, not large.
+        Some(_) => {
+          ui.monospace("λ = 0 · harmonic (no oscillation)");
+        }
+        None => {
+          ui.monospace("static field · no standing wave");
+        }
+      }
+    });
+    ui.add_space(2.0);
   });
 
   PanelResponse {
@@ -410,6 +487,7 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
     requested_preset,
     selection,
     top_down,
+    playing,
     load_obj_clicked,
   }
 }

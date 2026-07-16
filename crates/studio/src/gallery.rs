@@ -135,8 +135,8 @@ impl BuiltinMesh {
 /// a privileged case.
 ///
 /// [`Self::Custom`] is not regenerable -- the loaded mesh lives in the gallery,
-  /// keyed by this descriptor for the picker -- so it is the one variant
-  /// `build` cannot serve.
+/// keyed by this descriptor for the picker -- so it is the one variant
+/// `build` cannot serve.
 #[derive(Clone, PartialEq)]
 pub enum MeshSource {
   /// An icosphere of the given subdivision depth.
