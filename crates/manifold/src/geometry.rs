@@ -2,7 +2,7 @@
 //! layer downstream of it.
 //!
 //! [`metric`] is the intrinsic one and the only one FEEC assembly consumes;
-//! [`coord`] is an embedding, one [`Geometry`](metric::Geometry) implementor
+//! [`coord`] is an embedding, one [`Geometry`] implementor
 //! among several. The dependency runs that way and not the other: an embedding
 //! induces a metric, a metric induces no embedding.
 
