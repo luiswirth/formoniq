@@ -209,7 +209,7 @@ impl MeshSource {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum View {
   /// A single grade of the mesh's Hodge-Laplace eigenmodes. The expensive
-  /// case: each grade is a dense eigensolve, run once and memoized, so only the
+  /// case: each grade is an eigensolve, run once and memoized, so only the
   /// grade actually being viewed is ever computed.
   MeshGrade(ExteriorGrade),
   /// Every Whitney basis function of the reference triangle. Cheap to build.
@@ -256,8 +256,8 @@ fn default_selection(scene: &Scene) -> Selection {
   }
 }
 
-/// A rebuild of `T` running off the render thread, so a solve that triggers a
-/// dense eigensolve never blocks the UI. `poll` is non-blocking and yields the
+/// A rebuild of `T` running off the render thread, so a solve that triggers an
+/// eigensolve never blocks the UI. `poll` is non-blocking and yields the
 /// result exactly once, the frame it arrives.
 ///
 /// Wasm has no threads to spawn onto, so there `build` just runs eagerly and
@@ -1595,7 +1595,7 @@ impl<'a> State<'a> {
   }
 
   /// Requests that `view` be shown. A cached view (an already-solved grade)
-  /// installs instantly; an uncached one -- a grade's dense eigensolve -- runs
+  /// installs instantly; an uncached one -- a grade's eigensolve -- runs
   /// on a background thread via `gallery`, and [`Self::poll_view_load`] installs
   /// the result once it lands, so this call never blocks the UI.
   fn set_view(&mut self, view: View) {

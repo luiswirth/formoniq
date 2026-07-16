@@ -92,7 +92,7 @@ fn box_sweep() {
             } else {
               0
             };
-          // Stop once the dense solve would exceed the budget, or once refinement
+          // Stop once the solve would exceed the budget, or once refinement
           // no longer grows the mesh — a 0-manifold is a single point and does not
           // subdivide, so it has exactly one level.
           if !history.is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
@@ -101,17 +101,13 @@ fn box_sweep() {
           prev_ndofs = ndofs;
 
           let (eigenvals, _, _) = if relative {
-            hodge_laplace::solve_hodge_laplace_evp(&whitney.relative(), grade, neigen)
+            hodge_laplace::solve_hodge_laplace_evp(&whitney.relative(), grade, neigen).unwrap()
           } else {
-            hodge_laplace::solve_hodge_laplace_evp(&whitney, grade, neigen)
+            hodge_laplace::solve_hodge_laplace_evp(&whitney, grade, neigen).unwrap()
           };
-          // The coarsest levels can carry fewer DOFs than the requested count; the
-          // eigensolver pads the rest with non-finite values.
-          let eigenvals: Vec<f64> = eigenvals
-            .iter()
-            .copied()
-            .filter(|x| x.is_finite())
-            .collect();
+          // The coarsest levels can carry fewer DOFs than the requested count,
+          // and then the eigensolver returns fewer pairs.
+          let eigenvals: Vec<f64> = eigenvals.iter().copied().collect();
 
           // Richardson: with three successive levels the ratio of consecutive
           // differences estimates the order without knowing the exact eigenvalue.
@@ -171,8 +167,11 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
   let grade: usize = prompt("Enter exterior grade.")?.parse()?;
   let neigen: usize = prompt("Enter number of eigenvalues.")?.parse()?;
 
-  let (eigenvals, _, _) =
-    hodge_laplace::solve_hodge_laplace_evp(&WhitneyComplex::new(&topology, &metric), grade, neigen);
+  let (eigenvals, _, _) = hodge_laplace::solve_hodge_laplace_evp(
+    &WhitneyComplex::new(&topology, &metric),
+    grade,
+    neigen,
+  )?;
   for (i, &lambda) in eigenvals.iter().enumerate() {
     println!("eigenvalue {i}: {lambda:.4}");
   }

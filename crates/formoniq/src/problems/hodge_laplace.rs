@@ -4,7 +4,10 @@ use crate::{
 };
 
 use {
-  common::linalg::{eigen::sparse_shift_invert_eigen, faer::FaerLu},
+  common::linalg::{
+    eigen::{sparse_shift_invert_eigen, EigenError},
+    faer::FaerLu,
+  },
   ddf::cochain::Cochain,
   exterior::ExteriorGrade,
 };
@@ -24,14 +27,17 @@ use std::mem;
 /// so the caller is oblivious to the boundary condition. `p` is the harmonic
 /// component of $u$, fixed to zero against the harmonic space $cal(H)^k$.
 ///
+/// Fails only where [`solve_hodge_laplace_harmonics`] does: the harmonic basis
+/// is an eigensolve.
+///
 /// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
 /// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
 pub fn solve_hodge_laplace_source<C: HilbertComplex>(
   complex: &C,
   source_galvec: GalVec,
   grade: ExteriorGrade,
-) -> (Cochain, Cochain, Cochain) {
-  let harmonics = solve_hodge_laplace_harmonics(complex, grade);
+) -> Result<(Cochain, Cochain, Cochain), EigenError> {
+  let harmonics = solve_hodge_laplace_harmonics(complex, grade)?;
 
   let galmats = MixedGalmats::compute(complex, grade);
 
@@ -98,13 +104,13 @@ pub fn solve_hodge_laplace_source<C: HilbertComplex>(
   // `p` is the coefficient vector against the harmonic basis (length $b_k$), a
   // Lagrange multiplier — not a cochain in $u$-space, so it is not extended.
   let p = Cochain::new(grade, p_coeffs);
-  (sigma, u, p)
+  Ok((sigma, u, p))
 }
 
 pub fn solve_hodge_laplace_harmonics<C: HilbertComplex>(
   complex: &C,
   grade: ExteriorGrade,
-) -> Matrix {
+) -> Result<Matrix, EigenError> {
   // The dimension of the harmonic space is the Betti number $b_k$ (Hodge
   // theorem: $cal(H)^k tilde.equ H^k tilde.equ H_k$), an exact topological
   // invariant of the complex — not a number the caller has to know. Absolute
@@ -113,19 +119,22 @@ pub fn solve_hodge_laplace_harmonics<C: HilbertComplex>(
   let homology_dim = complex.harmonic_dim(grade);
   if homology_dim == 0 {
     let nwhitneys = complex.ndofs(grade);
-    return Matrix::zeros(nwhitneys, 0);
+    return Ok(Matrix::zeros(nwhitneys, 0));
   }
 
-  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(complex, grade, homology_dim);
+  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(complex, grade, homology_dim)?;
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
-  harmonics
+  Ok(harmonics)
 }
 
+/// The `neigenvalues` eigenpairs of the mixed Hodge-Laplace pencil nearest
+/// $0$, as $(lambda, sigma, u)$. Fewer, on a complex whose DOFs cannot support
+/// that many.
 pub fn solve_hodge_laplace_evp<C: HilbertComplex>(
   complex: &C,
   grade: ExteriorGrade,
   neigenvalues: usize,
-) -> (Vector, Matrix, Matrix) {
+) -> Result<(Vector, Matrix, Matrix), EigenError> {
   let galmats = MixedGalmats::compute(complex, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
@@ -140,11 +149,11 @@ pub fn solve_hodge_laplace_evp<C: HilbertComplex>(
   }
 
   let (eigenvals, eigenvectors) =
-    sparse_shift_invert_eigen(&(&lhs).into(), &(&rhs).into(), 0.0, neigenvalues);
+    sparse_shift_invert_eigen(&(&lhs).into(), &(&rhs).into(), 0.0, neigenvalues)?;
 
   let eigen_sigmas = eigenvectors.rows(0, sigma_len).into_owned();
   let eigen_us = eigenvectors.rows(sigma_len, u_len).into_owned();
-  (eigenvals, eigen_sigmas, eigen_us)
+  Ok((eigenvals, eigen_sigmas, eigen_us))
 }
 
 pub struct MixedGalmats {
