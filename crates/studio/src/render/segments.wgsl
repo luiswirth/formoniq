@@ -11,12 +11,15 @@
 //
 // The ink is deliberately not the shared colormap. The division of labour is
 // that the surface carries the magnitude and the marks carry the geometry, so
-// colormapping a ribbon would restate what the fill beneath it already says --
-// and restate it invisibly: that colormap is three sinusoids at 120 degree phase
-// offsets, whose channels sum to a constant, so it is iso-luminant. A ribbon
-// tinted by the same magnitude as the fill under it therefore matches the
-// backdrop in hue *and* luminance. Against a backdrop of constant mid luminance,
-// a near-black ink is the one choice that separates everywhere.
+// colormapping a ribbon would restate what the fill beneath it already says.
+// Neither colormap this preamble offers is iso-luminant (viridis runs dark to
+// bright, the diverging map runs dark-blue to white to dark-red), so no single
+// fixed ink separates from every sample of either -- a near-black ribbon still
+// vanishes into viridis's low end, a white one into the diverging map's
+// midpoint. `display.rs` draws each ribbon as two `Segments` items sharing one
+// batch: a wider light halo first, a narrower dark core on top -- an outline,
+// the standard cartographic answer to a line crossing a field it has no fixed
+// contrast with, and correct against either colormap without knowing which.
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(1) @binding(0) var<uniform> material: SegmentMaterial;

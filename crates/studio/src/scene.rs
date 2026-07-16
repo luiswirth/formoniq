@@ -539,10 +539,10 @@ impl Scene {
           dof_label,
         });
       }
-      reduced => todo!(
-        "reduced grade {reduced} (n = {n}, k = {k}): an (n-k)-dimensional sheet \
-         has no render mark yet; only reachable at n >= 4"
-      ),
+      _reduced => {
+        // A reduced grade >= 2 (only reachable at n >= 4) has no render mark
+        // yet -- files into no list rather than panicking the viewer.
+      }
     }
   }
 }

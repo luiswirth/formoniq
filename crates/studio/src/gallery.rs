@@ -198,11 +198,6 @@ impl View {
 /// A rebuild of `T` running off the render thread, so a solve that triggers an
 /// eigensolve never blocks the UI. `poll` is non-blocking and yields the
 /// result exactly once, the frame it arrives.
-///
-/// Wasm has no threads to spawn onto, so there `build` just runs eagerly and
-/// the result is already waiting on the first `poll` -- the freeze that
-/// motivates this on native is unavoidable there today, not silently
-/// reintroduced.
 struct PendingLoad<T> {
   rx: std::sync::mpsc::Receiver<T>,
 }
@@ -210,12 +205,9 @@ struct PendingLoad<T> {
 impl<T: Send + 'static> PendingLoad<T> {
   fn spawn(build: impl FnOnce() -> T + Send + 'static) -> Self {
     let (tx, rx) = std::sync::mpsc::channel();
-    #[cfg(not(target_arch = "wasm32"))]
     std::thread::spawn(move || {
       let _ = tx.send(build());
     });
-    #[cfg(target_arch = "wasm32")]
-    let _ = tx.send(build());
     Self { rx }
   }
 

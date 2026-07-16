@@ -35,11 +35,17 @@ struct Frame {
 // additively displaced along its own outward normal times its scalar value (the
 // classical membrane picture). A field with no eigenvalue has `omega = 0` and
 // `amplitude = 0`, so the same code leaves it static.
+// `diverging` is 1.0 for a signed field (colormap centered at its normalized
+// midpoint, `min_val`/`max_val` symmetric about zero) and 0.0 for an unsigned
+// magnitude (sequential, dark-to-bright low-to-high). Material data, not a
+// global shader choice: which one applies is a property of the field, decided
+// once in `display.rs` alongside the range itself.
 struct SurfaceMaterial {
     min_val: f32,
     max_val: f32,
     wave_amplitude: f32,
     wave_omega: f32,
+    diverging: f32,
 };
 
 // How a segment mark is drawn: its ink (`rgb` plus a base opacity), its
@@ -72,16 +78,38 @@ fn wave_displace(amplitude: f32, osc: f32, position: vec3<f32>, normal: vec3<f32
     return position + capped * normal;
 }
 
-fn colormap(t: f32) -> vec3<f32> {
+// Perceptually uniform sequential map (a polynomial fit to viridis), for an
+// unsigned magnitude: dark, low-saturation at 0, rising in lightness and
+// saturation to a bright yellow at 1. Monotone in luminance, which is exactly
+// what lets a single fixed ink separate from it everywhere -- unlike the
+// three-sinusoid rainbow this replaces, whose channels summed to a constant
+// and made it iso-luminant.
+fn viridis(t: f32) -> vec3<f32> {
     let x = clamp(t, 0.0, 1.0);
-    let r = 0.5 + 0.5 * sin(x * 6.28 - 1.57);
-    let g = 0.5 + 0.5 * sin(x * 6.28 - 1.57 + 2.09);
-    let b = 0.5 + 0.5 * sin(x * 6.28 - 1.57 - 2.09);
-    return vec3<f32>(r, g, b);
+    let c0 = vec3<f32>(0.2777273272, 0.0054073445, 0.3340998053);
+    let c1 = vec3<f32>(0.1050930431, 1.4046135299, 1.3845901626);
+    let c2 = vec3<f32>(-0.3308618287, 0.2148475595, 0.0950951630);
+    let c3 = vec3<f32>(-4.6342304990, -5.7991009734, -19.3324409563);
+    let c4 = vec3<f32>(6.2282699363, 14.1799333668, 56.6905526007);
+    let c5 = vec3<f32>(4.7763849977, -13.7451453777, -65.3530326334);
+    let c6 = vec3<f32>(-5.4354558559, 4.6458526122, 26.3124352496);
+    return c0 + x * (c1 + x * (c2 + x * (c3 + x * (c4 + x * (c5 + x * c6)))));
+}
+
+// Diverging map for a zero-centered signed field: blue for negative, off-white
+// at the midpoint, red for positive -- so the sign of the field is legible at
+// a glance, not just its magnitude.
+fn diverging(t: f32) -> vec3<f32> {
+    let x = clamp(t, 0.0, 1.0);
+    let blue = vec3<f32>(0.230, 0.299, 0.754);
+    let white = vec3<f32>(0.865, 0.865, 0.865);
+    let red = vec3<f32>(0.706, 0.016, 0.150);
+    return select(mix(white, red, (x - 0.5) * 2.0), mix(blue, white, x * 2.0), x < 0.5);
 }
 
 fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
-    return colormap((value - material.min_val) / (material.max_val - material.min_val));
+    let t = (value - material.min_val) / (material.max_val - material.min_val);
+    return select(viridis(t), diverging(t), material.diverging > 0.5);
 }
 
 // A segment (a mesh edge, a traced streamline step) drawn with constant

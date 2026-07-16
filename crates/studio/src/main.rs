@@ -92,8 +92,6 @@ fn parse_size(s: &str) -> Result<(u32, u32), String> {
 fn main() {
   let cli = Cli::parse();
   match cli.command {
-    // `run` installs the logger itself -- it is also the wasm entry point,
-    // where the logger is a different one and there is no `main` to do it.
     None => pollster::block_on(formoniq_studio::run()),
     Some(Command::Export {
       out,

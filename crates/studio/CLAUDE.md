@@ -3,8 +3,7 @@
 The visual, interactive counterpart to `formoniq`: a viewer for inspecting PDE
 solutions, meshes and simplicial manifolds, cochains, and the differential
 geometry underneath them. It is meant to be both an instrument for a
-mathematician or engineer and a way to see the abstractions directly, and to run
-natively and on the web from one source.
+mathematician or engineer and a way to see the abstractions directly.
 
 This file carries what is particular to the viewer. The parent `CLAUDE.md` still
 governs — its invariants, conventions and house style bind here unchanged. What
