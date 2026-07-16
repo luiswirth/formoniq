@@ -70,12 +70,10 @@ fn box_sweep() {
           "r", "ncells"
         );
 
-        // Every grade solves a dense generalized eigenproblem, $O(N^3)$ in the
-        // mixed-system size $N$, so refine only while that stays affordable and
-        // stop at the first level that would exceed the budget. In 3D this leaves
-        // just a couple of levels; the source example, on the sparse LU, carries
-        // the finer convergence story.
-        const MAX_DOFS: usize = 1200;
+        // The eigensolve is a sparse shift-invert Lanczos, so the budget is set
+        // by wall-clock patience for a hand-run sweep, not by a dense O(N^3)
+        // ceiling.
+        const MAX_DOFS: usize = 20_000;
 
         // History of the lowest eigenvalues per level, for the three-point
         // Richardson estimate of each eigenvalue's convergence order.

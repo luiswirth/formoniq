@@ -56,13 +56,10 @@ fn main() {
         );
 
         // Whenever the harmonic space is nontrivial, fixing the harmonic part
-        // runs a dense generalized eigensolve, $O(N^3)$ in the mixed-system size
-        // $N = dim cal(W) Lambda^k + dim cal(W) Lambda^(k-1)$ at this grade. That
-        // cost, not the dimension, sets the refinement budget: absolute hits it
-        // at grade $0$ (smallest system), relative at top grade (largest), so a
-        // per-dimension cap would misjudge both. Stop at the first level over
-        // budget. This is the same rule the eigenvalue example uses.
-        const MAX_DOFS: usize = 1200;
+        // runs a sparse shift-invert Lanczos solve for exactly the harmonic
+        // dimension's worth of eigenpairs, so the budget here is wall-clock
+        // patience for a hand-run sweep, not a dense O(N^3) ceiling.
+        const MAX_DOFS: usize = 20_000;
 
         let mut errors_l2 = Vec::new();
         let mut errors_hd = Vec::new();
