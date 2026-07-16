@@ -232,6 +232,13 @@ enum View {
   /// several cells incident to it instead of a single reference cell. Cheap
   /// to build, and mesh-independent like the reference-cell basis.
   WhitneyBasisMesh,
+  /// The constant/pure-curl/pure-div worked examples on the triforce mesh
+  /// ([`Scene::whitney_examples`]): three grade-1 fields, each an explicit
+  /// linear combination of GSFs rather than a single one-hot cochain. Shares
+  /// the triforce mesh with [`View::WhitneyBasisMesh`] but is its own view,
+  /// since a flat 3-entry list has no grade grouping to gain from being
+  /// merged into that gallery.
+  WhitneyExamplesMesh,
 }
 
 impl View {
@@ -243,6 +250,7 @@ impl View {
       View::MeshGrade(grade) => format!("Eigenmodes, grade {grade}"),
       View::WhitneyBasis => "Whitney basis (reference triangle)".to_string(),
       View::WhitneyBasisMesh => "Whitney basis (triforce mesh)".to_string(),
+      View::WhitneyExamplesMesh => "Whitney examples (triforce mesh)".to_string(),
     }
   }
 }
@@ -261,6 +269,10 @@ fn build_view(view: View, mesh: &Mesh) -> Scene {
     View::WhitneyBasisMesh => {
       let (topology, coords) = crate::mesh3d::triforce();
       Scene::whitney_basis_mesh(topology, coords)
+    }
+    View::WhitneyExamplesMesh => {
+      let (topology, coords) = crate::mesh3d::triforce();
+      Scene::whitney_examples(topology, coords)
     }
   }
 }
@@ -403,7 +415,7 @@ impl Gallery {
           self.mesh.1.clone(),
         ))
       }
-      View::WhitneyBasis | View::WhitneyBasisMesh => None,
+      View::WhitneyBasis | View::WhitneyBasisMesh | View::WhitneyExamplesMesh => None,
     }
   }
 
@@ -2055,6 +2067,15 @@ impl<'a> State<'a> {
           {
             requested_view = View::WhitneyBasisMesh;
           }
+          if ui
+            .selectable_label(
+              shown_view == View::WhitneyExamplesMesh,
+              "Examples (triforce mesh)",
+            )
+            .clicked()
+          {
+            requested_view = View::WhitneyExamplesMesh;
+          }
         });
         ui.separator();
 
@@ -2139,10 +2160,13 @@ impl<'a> State<'a> {
           });
         } else {
           match shown_view {
-            View::MeshGrade(_) => ui.label("rows: degeneracy shell (λ) · cells: order"),
-            View::WhitneyBasis | View::WhitneyBasisMesh => {
-              ui.label("rows: grade · cells: DOF simplex")
+            View::MeshGrade(_) => {
+              ui.label("rows: degeneracy shell (λ) · cells: order");
             }
+            View::WhitneyBasis | View::WhitneyBasisMesh => {
+              ui.label("rows: grade · cells: DOF simplex");
+            }
+            View::WhitneyExamplesMesh => {}
           };
           render_modes(ui, &entries, &mut selection, scene_dim);
         }

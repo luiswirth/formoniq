@@ -353,6 +353,74 @@ impl Scene {
     Self::whitney_basis_on(topology, coords)
   }
 
+  /// Three worked grade-1 examples on [`crate::mesh3d::triforce`] -- a
+  /// constant field, a pure-curl field and a pure-divergence field -- each an
+  /// explicit linear combination of GSFs rather than a single one-hot
+  /// cochain, going through the same reduced-grade reconstruction regardless.
+  /// Coefficients reproduce `plot/in/triforce`'s `constant`/`rot`/`div`
+  /// cochains, looked up per edge by vertex pair rather than assumed to sit
+  /// at the exporter's file order, since a mesh's own edge indexing need not
+  /// agree with it.
+  pub fn whitney_examples(topology: Complex, coords: MeshCoords) -> Self {
+    use manifold::topology::simplex::Simplex;
+
+    // (v0, v1, constant, curl, div), v0 < v1 matching the canonical
+    // (positively oriented) edge orientation both `plot/in/triforce` and this
+    // topology agree on.
+    #[rustfmt::skip]
+    let edges: [(usize, usize, f64, f64, f64); 9] = [
+      (0, 1,  1.0,  1.0, 0.0),
+      (0, 2,  0.5, -1.0, 0.0),
+      (1, 2, -0.5,  1.0, 0.0),
+      (0, 3, -0.5, -1.0, 0.5),
+      (2, 3, -1.0,  1.0, 0.5),
+      (1, 4,  0.5,  1.0, 0.5),
+      (2, 4,  1.0, -1.0, 0.5),
+      (0, 5,  0.5,  1.0, 0.5),
+      (1, 5, -0.5, -1.0, 0.5),
+    ];
+
+    let nedges = topology.nsimplices(1);
+    let edge_skeleton = topology.skeleton_raw(1);
+    let mut constant = na::DVector::zeros(nedges);
+    let mut curl = na::DVector::zeros(nedges);
+    let mut div = na::DVector::zeros(nedges);
+    for (v0, v1, c, r, d) in edges {
+      let idx = edge_skeleton.kidx_by_simplex(&Simplex::new(vec![v0, v1]));
+      constant[idx] = c;
+      curl[idx] = r;
+      div[idx] = d;
+    }
+
+    let mut fields = Vec::new();
+    let mut line_fields = Vec::new();
+    for (name, coeffs) in [
+      ("constant field", constant),
+      ("pure curl", curl),
+      ("pure div", div),
+    ] {
+      Self::field(
+        &topology,
+        &coords,
+        FieldMeta {
+          name: name.to_string(),
+          eigenvalue: None,
+          dof_label: None,
+        },
+        Cochain::new(1, coeffs),
+        &mut fields,
+        &mut line_fields,
+      );
+    }
+
+    Self {
+      topology,
+      coords,
+      fields,
+      line_fields,
+    }
+  }
+
   /// Shared construction for [`Self::whitney_basis`] and
   /// [`Self::whitney_basis_mesh`]: one field per DOF simplex of every grade
   /// $0..=$ `topology.dim()`, each the reconstructed field of a one-hot
@@ -600,5 +668,18 @@ mod tests {
     let scene = Scene::whitney_basis_mesh(topology, coords);
     assert_eq!(scene.fields.len(), 6 + 4); // vertices, and faces via ⋆
     assert_eq!(scene.line_fields.len(), 9); // edges
+  }
+
+  /// The three worked examples are all grade-1 line fields (no scalar
+  /// density), named for the picker -- and the edge-by-vertex-pair lookup
+  /// found every edge of `plot/in/triforce`'s coefficient table without
+  /// panicking, which is the actual thing under test.
+  #[test]
+  fn whitney_examples_are_three_named_line_fields() {
+    let (topology, coords) = crate::mesh3d::triforce();
+    let scene = Scene::whitney_examples(topology, coords);
+    assert!(scene.fields.is_empty());
+    let names: Vec<_> = scene.line_fields.iter().map(|f| f.name.as_str()).collect();
+    assert_eq!(names, ["constant field", "pure curl", "pure div"]);
   }
 }
