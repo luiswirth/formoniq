@@ -208,7 +208,7 @@ impl Scene {
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
     for grade in 0..=topology.dim() {
-      let (mut f, mut l) = Self::spherical_harmonics_grade(&topology, &coords, grade, nmodes);
+      let (mut f, mut l) = Self::eigenmodes_grade(&topology, &coords, grade, nmodes);
       fields.append(&mut f);
       line_fields.append(&mut l);
     }
@@ -220,12 +220,14 @@ impl Scene {
     }
   }
 
-  /// The discrete spherical harmonics of a *single* grade on a shared sphere
+  /// The Hodge-Laplace eigenmodes of a *single* grade on a shared surface
   /// mesh: the fields one grade's (dense, $O(n^3)$) eigensolve contributes,
   /// split by their render mark. The unit the gallery computes lazily and
   /// memoizes -- the mesh is built once and passed in, so switching grade pays
-  /// only for that grade's solve, and only the first time it is viewed.
-  pub fn spherical_harmonics_grade(
+  /// only for that grade's solve, and only the first time it is viewed. The
+  /// discrete spherical harmonics are one instantiation, the mesh being a
+  /// sphere; nothing here assumes it.
+  pub fn eigenmodes_grade(
     topology: &Complex,
     coords: &MeshCoords,
     grade: ExteriorGrade,
@@ -277,16 +279,16 @@ impl Scene {
     }
   }
 
-  /// A full [`Scene`] carrying one grade's discrete spherical harmonics on the
-  /// shared sphere mesh: the mesh (cloned in) plus the fields that grade's
+  /// A full [`Scene`] carrying one grade's Hodge-Laplace eigenmodes on the
+  /// shared surface mesh: the mesh (cloned in) plus the fields that grade's
   /// eigensolve contributes. The display unit the gallery memoizes per grade.
-  pub fn sphere_grade(
+  pub fn mesh_grade(
     topology: &Complex,
     coords: &MeshCoords,
     grade: ExteriorGrade,
     nmodes: usize,
   ) -> Self {
-    let (fields, line_fields) = Self::spherical_harmonics_grade(topology, coords, grade, nmodes);
+    let (fields, line_fields) = Self::eigenmodes_grade(topology, coords, grade, nmodes);
     Self {
       topology: topology.clone(),
       coords: coords.clone(),
