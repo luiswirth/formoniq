@@ -1151,7 +1151,7 @@ struct ScreenUniform {
 /// what actually reaches the eye once the downsample pass box-filters the
 /// supersampled scene down. Wide enough to read clearly against a filled
 /// surface without swamping fine mesh detail.
-const WIREFRAME_WIDTH_PX: f32 = 1.6;
+const WIREFRAME_WIDTH_PX: f32 = 2.2;
 
 /// Shared state for the G-buffer and LIC passes: the viewport (to project the
 /// tangent to pixels and to step in texel units), the object-space noise
