@@ -28,6 +28,7 @@ use manifold::{
 /// ([`LineField`]). Both marks exhaust $n <= 3$: only $n >= 4$ produces a
 /// reduced grade $>= 2$, an $(n-k)$-dimensional sheet with no mark yet -- a
 /// future mark, not a special case to route around.
+#[derive(Clone)]
 pub struct Scene {
   pub topology: Complex,
   pub coords: MeshCoords,
@@ -41,8 +42,15 @@ pub struct Scene {
 /// the pointwise Hodge star $star: Lambda^n -> Lambda^0$, nodal-sampled to the
 /// vertices. From here the two are indistinguishable -- the same density
 /// colormap and the same normal-displacement standing wave.
+#[derive(Clone)]
 pub struct ScalarField {
   pub name: String,
+  /// The grade $k$ of the form this field was reconstructed from, before the
+  /// reduction to a density. A genuine 0-form keeps $k = 0$; a top form keeps
+  /// $k = n$ even though it is drawn through its Hodge star. Carried so the
+  /// gallery can organize by original grade, not by the render mark the reduced
+  /// grade happens to share with grade 0.
+  pub grade: ExteriorGrade,
   pub cochain: Cochain,
   /// The Hodge-Laplace eigenvalue $lambda$ this field is an eigenfunction of,
   /// when it is one. For the wave equation $partial_t^2 u + Delta u = 0$ this
@@ -68,8 +76,14 @@ pub struct ScalarField {
 /// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves the lines fixed and
 /// swings only the magnitude tint through zero. A single real eigenmode does
 /// not travel, so the LIC is never advected.
+#[derive(Clone)]
 pub struct LineField {
   pub name: String,
+  /// The grade $k$ of the form this field was reconstructed from, before the
+  /// reduction to a line field. A grade-1 form keeps $k = 1$; a grade-$(n-1)$
+  /// form keeps $k = n-1$ even though it is drawn through its Hodge star. See
+  /// [`ScalarField::grade`].
+  pub grade: ExteriorGrade,
   /// Per-vertex unit ambient tangent direction (zero where the field
   /// vanishes). Nodal-averaged across incident cells then normalized -- unlike
   /// grade 0, a grade-1 field has no canonical value at a vertex, since only
@@ -177,21 +191,105 @@ impl Scene {
     }
   }
 
-  /// Laplace-Beltrami eigenfunctions on the unit sphere — the discrete
-  /// spherical harmonics, grade 0 (scalar modes) and grade 1 (line field
-  /// modes) together in one scene, on an icosphere of the given subdivision
-  /// depth.
+  /// Hodge-Laplace eigenmodes on the unit sphere — the discrete spherical
+  /// harmonics — at *every* grade $0..=n$ of the de Rham complex, together in
+  /// one scene, on an icosphere of the given subdivision depth.
+  ///
+  /// Every grade goes through the same `field` reduction: on the sphere
+  /// ($n = 2$) grade 0 and the top grade 2 are scalar densities (grade 2 by its
+  /// pointwise Hodge star, $star(f dvol) = f$), while grade 1 is a tangent line
+  /// field. No grade is special-cased -- the extremal grade 2 runs on exactly
+  /// the same code as grade 0, which is the point of the $min(k, n-k)$ dispatch
+  /// (discussion #101).
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
     use manifold::gen::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
-    Self::eigenmode_fields(&topology, &coords, 0, nmodes, &mut fields, &mut line_fields);
-    Self::eigenmode_fields(&topology, &coords, 1, nmodes, &mut fields, &mut line_fields);
+    for grade in 0..=topology.dim() {
+      let (mut f, mut l) = Self::spherical_harmonics_grade(&topology, &coords, grade, nmodes);
+      fields.append(&mut f);
+      line_fields.append(&mut l);
+    }
     Self {
       topology,
       coords,
+      fields,
+      line_fields,
+    }
+  }
+
+  /// The discrete spherical harmonics of a *single* grade on a shared sphere
+  /// mesh: the fields one grade's (dense, $O(n^3)$) eigensolve contributes,
+  /// split by their render mark. The unit the gallery computes lazily and
+  /// memoizes -- the mesh is built once and passed in, so switching grade pays
+  /// only for that grade's solve, and only the first time it is viewed.
+  pub fn spherical_harmonics_grade(
+    topology: &Complex,
+    coords: &MeshCoords,
+    grade: ExteriorGrade,
+    nmodes: usize,
+  ) -> (Vec<ScalarField>, Vec<LineField>) {
+    let mut fields = Vec::new();
+    let mut line_fields = Vec::new();
+    Self::eigenmode_fields(
+      topology,
+      coords,
+      grade,
+      nmodes,
+      &mut fields,
+      &mut line_fields,
+    );
+    (fields, line_fields)
+  }
+
+  /// The bare icosphere carrying a single constant field: the mesh of
+  /// [`Self::spherical_harmonics`] without its (dense, $O(n^3)$) eigensolve.
+  /// Stands in for the real scene so the viewer can show the sphere the instant
+  /// the window opens, while the solve runs in the background and swaps the
+  /// actual modes in when it lands. The lone field has no eigenvalue, so it is
+  /// drawn as a plain, undeformed surface.
+  pub fn sphere_placeholder(nsubdivisions: usize) -> Self {
+    use manifold::gen::sphere::mesh_sphere_surface;
+
+    let (topology, coords) = mesh_sphere_surface(nsubdivisions);
+    Self::placeholder_on(topology, coords)
+  }
+
+  /// The same solve-free placeholder as [`Self::sphere_placeholder`], but on a
+  /// mesh already in hand -- so the gallery can share one sphere mesh between
+  /// the instant placeholder and the per-grade solves that follow, rather than
+  /// meshing twice.
+  pub fn placeholder_on(topology: Complex, coords: MeshCoords) -> Self {
+    let nvertices = topology.skeleton_raw(0).len();
+    let fields = vec![ScalarField {
+      name: "loading...".to_string(),
+      grade: 0,
+      cochain: Cochain::new(0, na::DVector::zeros(nvertices)),
+      eigenvalue: None,
+    }];
+    Self {
+      topology,
+      coords,
+      fields,
+      line_fields: Vec::new(),
+    }
+  }
+
+  /// A full [`Scene`] carrying one grade's discrete spherical harmonics on the
+  /// shared sphere mesh: the mesh (cloned in) plus the fields that grade's
+  /// eigensolve contributes. The display unit the gallery memoizes per grade.
+  pub fn sphere_grade(
+    topology: &Complex,
+    coords: &MeshCoords,
+    grade: ExteriorGrade,
+    nmodes: usize,
+  ) -> Self {
+    let (fields, line_fields) = Self::spherical_harmonics_grade(topology, coords, grade, nmodes);
+    Self {
+      topology: topology.clone(),
+      coords: coords.clone(),
       fields,
       line_fields,
     }
@@ -281,6 +379,7 @@ impl Scene {
         };
         fields.push(ScalarField {
           name,
+          grade: k,
           cochain,
           eigenvalue,
         });
@@ -290,6 +389,7 @@ impl Scene {
         let (direction, magnitude) = nodal_line_field(topology, coords, &interpolant);
         line_fields.push(LineField {
           name,
+          grade: k,
           direction,
           magnitude,
           eigenvalue,
