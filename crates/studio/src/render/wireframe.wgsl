@@ -11,6 +11,7 @@ struct VertexInput {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) value: f32,
+    @location(4) max_displacement: f32,
 };
 
 struct VertexOutput {
@@ -33,8 +34,9 @@ var<uniform> wave: Wave;
 fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     let osc = cos(wave.omega * wave.time);
-    let displacement = model.value * model.normal;
-    let position = model.position + wave.amplitude * osc * displacement;
+    let raw = wave.amplitude * osc * model.value;
+    let capped = clamp(raw, -model.max_displacement, model.max_displacement);
+    let position = model.position + capped * model.normal;
     out.clip_position = camera.view_proj * vec4<f32>(position, 1.0);
     // Small depth bias: pull edges closer in NDC so they draw on top of faces.
     out.clip_position.z -= 0.0001;
