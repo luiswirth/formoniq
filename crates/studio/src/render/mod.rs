@@ -9,14 +9,13 @@ pub mod camera;
 pub mod context;
 pub mod downsample;
 pub mod fill;
-pub mod mesh;
+pub mod item;
 pub mod renderer;
-pub mod streamline;
+pub mod segments;
 pub mod uniform;
-pub mod wireframe;
 
 pub use context::GpuContext;
-pub use renderer::{Renderer, SceneView};
+pub use renderer::{FrameView, Renderer};
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
@@ -27,16 +26,6 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// WGSL side as the preamble's `SSAA_SCALE` override, so the box filter and the
 /// target allocation are one number rather than two that must be kept in sync.
 const SSAA_SCALE: u32 = 2;
-
-/// The wireframe's half-width as a fraction of the scene's own extent (its
-/// radius) -- the same object-intrinsic scale the standing-wave displacement
-/// uses -- rather than a fixed screen-pixel count, so the line reads the same
-/// thickness whether the mesh is zoomed to fill the screen or shrunk to a
-/// corner of it.
-const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
-
-/// The streamline ribbon's half-width, on the same object-intrinsic scale.
-const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
 
 /// The WGSL source of one pass: the shared preamble (types, pure functions, the
 /// `SSAA_SCALE` override) followed by the body. Concatenated because WGSL has
@@ -62,8 +51,8 @@ fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::Shader
   })
 }
 
-/// The depth state the scene passes share: the fill and the wireframe write it;
-/// the alpha-blended streamline ribbons only test against it.
+/// The depth state the scene passes share: the fill writes it; the
+/// alpha-blended segment marks only test against it.
 fn depth_stencil(write: bool) -> wgpu::DepthStencilState {
   wgpu::DepthStencilState {
     format: DEPTH_FORMAT,
@@ -108,8 +97,7 @@ mod tests {
   fn shaders_parse_and_validate() {
     let bodies: &[(&str, &str)] = &[
       ("fill.wgsl", include_str!("fill.wgsl")),
-      ("wireframe.wgsl", include_str!("wireframe.wgsl")),
-      ("streamline.wgsl", include_str!("streamline.wgsl")),
+      ("segments.wgsl", include_str!("segments.wgsl")),
       ("downsample.wgsl", include_str!("downsample.wgsl")),
     ];
     for (name, body) in bodies {

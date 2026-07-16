@@ -481,7 +481,7 @@ mod tests {
   /// made falsifiable -- a kink at an edge would show up as a turn.
   #[test]
   fn constant_field_streamlines_are_straight() {
-    let (topology, coords) = crate::mesh3d::triforce();
+    let (topology, coords) = crate::demos::triforce();
     let scene = Scene::whitney_examples(topology, coords);
     let field = scene
       .line_fields
@@ -509,7 +509,7 @@ mod tests {
   /// another. This is the even-spacing guarantee.
   #[test]
   fn distinct_streamlines_stay_separated() {
-    let (topology, coords) = crate::mesh3d::triforce();
+    let (topology, coords) = crate::demos::triforce();
     let scene = Scene::whitney_examples(topology, coords);
     let field = scene
       .line_fields
