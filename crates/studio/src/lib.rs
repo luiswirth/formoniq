@@ -212,8 +212,15 @@ enum View {
   /// case: each grade is an eigensolve, run once and memoized, so only the
   /// grade actually being viewed is ever computed.
   MeshGrade(ExteriorGrade),
-  /// Every Whitney basis function of the reference triangle. Cheap to build.
+  /// Every Whitney basis function ("local shape function") of the reference
+  /// triangle. Cheap to build.
   WhitneyBasis,
+  /// Every Whitney basis function ("global shape function") of the triforce
+  /// teaching mesh ([`crate::mesh3d::triforce`]): the same construction as
+  /// [`View::WhitneyBasis`], but a DOF simplex's support now spans the
+  /// several cells incident to it instead of a single reference cell. Cheap
+  /// to build, and mesh-independent like the reference-cell basis.
+  WhitneyBasisMesh,
 }
 
 impl View {
@@ -224,6 +231,7 @@ impl View {
     match self {
       View::MeshGrade(grade) => format!("Eigenmodes, grade {grade}"),
       View::WhitneyBasis => "Whitney basis (reference triangle)".to_string(),
+      View::WhitneyBasisMesh => "Whitney basis (triforce mesh)".to_string(),
     }
   }
 }
@@ -239,6 +247,10 @@ fn build_view(view: View, mesh: &Mesh) -> Scene {
       Scene::mesh_grade(topology, coords, grade, SPHERE_MODES)
     }
     View::WhitneyBasis => Scene::whitney_basis(2),
+    View::WhitneyBasisMesh => {
+      let (topology, coords) = crate::mesh3d::triforce();
+      Scene::whitney_basis_mesh(topology, coords)
+    }
   }
 }
 
@@ -355,8 +367,9 @@ impl Gallery {
 
   /// Adopts `mesh` under `source` and re-solves the current grade against it.
   /// The per-grade eigensolves are all tied to the old mesh, so they are
-  /// dropped from the cache (the reference-cell Whitney basis is
-  /// mesh-independent and kept); the current grade's solve is respawned in the
+  /// dropped from the cache (both Whitney-basis views are mesh-independent --
+  /// the reference triangle and the triforce mesh are fixed, not the picker's
+  /// mesh -- and kept); the current grade's solve is respawned in the
   /// background.
   ///
   /// Returns a solve-free placeholder on the new mesh to show at once while
@@ -379,7 +392,7 @@ impl Gallery {
           self.mesh.1.clone(),
         ))
       }
-      View::WhitneyBasis => None,
+      View::WhitneyBasis | View::WhitneyBasisMesh => None,
     }
   }
 
@@ -655,13 +668,17 @@ impl Selection {
   }
 }
 
-/// One mode of the currently shown grade, as the picker needs it: the field's
-/// [`Selection`], its eigenvalue (for the degeneracy layout) and its full name
-/// (for the hover). The render mark the selection resolves to is decided
-/// elsewhere by the reduced grade; here a mode is just a selectable cell.
+/// One mode of the currently shown scene, as the picker needs it: the field's
+/// [`Selection`], its original grade (before the reduction to a render mark),
+/// its eigenvalue (for the degeneracy layout), its DOF label (for the basis
+/// grid) and its full name (for the hover). The render mark the selection
+/// resolves to is decided elsewhere by the reduced grade; here a mode is just
+/// a selectable cell.
 struct Entry<'a> {
   selection: Selection,
+  grade: ExteriorGrade,
   eigenvalue: Option<f64>,
+  dof_label: Option<&'a str>,
   name: &'a str,
 }
 
@@ -723,20 +740,59 @@ fn degeneracy_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Opti
   Some(shells)
 }
 
-/// Renders the modes of the currently shown grade as a picker. When they carry
-/// eigenvalues (the harmonics) they lay out as the orbital pyramid by degeneracy
-/// shell; otherwise (the raw Whitney basis) they fall back to a flat list.
-fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection) {
-  match degeneracy_shells(entries.iter().map(|e| e.eigenvalue)) {
-    Some(shells) => pyramid(ui, &shells, entries, selection),
-    None => {
-      for entry in entries {
+/// Renders the modes of the currently shown scene as a picker. Eigenmodes
+/// (the harmonics) lay out as the orbital pyramid by degeneracy shell; raw
+/// Whitney basis functions (LSFs and GSFs alike) lay out as a grid by grade
+/// instead, since they carry a DOF label but no eigenvalue; anything carrying
+/// neither -- not produced today, but the totality this dispatch is answering
+/// to -- falls back to one flat list.
+fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
+  if let Some(shells) = degeneracy_shells(entries.iter().map(|e| e.eigenvalue)) {
+    pyramid(ui, &shells, entries, selection);
+  } else if entries.iter().all(|e| e.dof_label.is_some()) {
+    grade_grid(ui, entries, selection, n);
+  } else {
+    for entry in entries {
+      let selected = *selection == entry.selection;
+      if ui.selectable_label(selected, entry.name).clicked() {
+        *selection = entry.selection;
+      }
+    }
+  }
+}
+
+/// Lays out a Whitney basis gallery (LSFs or GSFs) as one row per grade,
+/// ordered $0..=n$ and labelled by [`grade_mark_label`], each row a wrapped
+/// flow of DOF cells -- unlike the eigenmode pyramid there is no natural width
+/// to center on, since a mesh's edge count need not match its vertex or face
+/// count. Hovering a cell shows the basis function's full name.
+fn grade_grid(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
+  const CELL: [f32; 2] = [30.0, 22.0];
+  for grade in 0..=n {
+    let members: Vec<usize> = entries
+      .iter()
+      .enumerate()
+      .filter(|(_, e)| e.grade == grade)
+      .map(|(i, _)| i)
+      .collect();
+    if members.is_empty() {
+      continue;
+    }
+    ui.label(grade_mark_label(grade, n));
+    ui.horizontal_wrapped(|ui| {
+      for idx in members {
+        let entry = &entries[idx];
         let selected = *selection == entry.selection;
-        if ui.selectable_label(selected, entry.name).clicked() {
+        let label = entry.dof_label.unwrap_or(entry.name);
+        if ui
+          .add_sized(CELL, egui::Button::selectable(selected, label))
+          .on_hover_text(entry.name)
+          .clicked()
+        {
           *selection = entry.selection;
         }
       }
-    }
+    });
   }
 }
 
@@ -1778,6 +1834,7 @@ impl<'a> State<'a> {
     let loading_label = self.gallery.loading_view().map(View::label);
     let last_mesh_grade = self.gallery.last_mesh_grade;
     let max_grade = self.gallery.mesh.0.dim();
+    let scene_dim = self.scene.topology.dim();
 
     // The current scene's modes, as the picker needs them. Scalar and line
     // fields both feed in; for a single mesh grade exactly one list is
@@ -1789,7 +1846,9 @@ impl<'a> State<'a> {
       .enumerate()
       .map(|(i, f)| Entry {
         selection: Selection::Scalar(i),
+        grade: f.grade,
         eigenvalue: f.eigenvalue,
+        dof_label: f.dof_label.as_deref(),
         name: f.name.as_str(),
       })
       .chain(
@@ -1800,7 +1859,9 @@ impl<'a> State<'a> {
           .enumerate()
           .map(|(i, f)| Entry {
             selection: Selection::Line(i),
+            grade: f.grade,
             eigenvalue: f.eigenvalue,
+            dof_label: f.dof_label.as_deref(),
             name: f.name.as_str(),
           }),
       )
@@ -1828,10 +1889,16 @@ impl<'a> State<'a> {
             requested_view = View::MeshGrade(last_mesh_grade);
           }
           if ui
-            .selectable_label(!on_eigenmodes, "Whitney basis")
+            .selectable_label(shown_view == View::WhitneyBasis, "LSF (reference cell)")
             .clicked()
           {
             requested_view = View::WhitneyBasis;
+          }
+          if ui
+            .selectable_label(shown_view == View::WhitneyBasisMesh, "GSF (triforce mesh)")
+            .clicked()
+          {
+            requested_view = View::WhitneyBasisMesh;
           }
         });
         ui.separator();
@@ -1916,10 +1983,13 @@ impl<'a> State<'a> {
             }
           });
         } else {
-          if matches!(shown_view, View::MeshGrade(_)) {
-            ui.label("rows: degeneracy shell (λ) · cells: order");
-          }
-          render_modes(ui, &entries, &mut selection);
+          match shown_view {
+            View::MeshGrade(_) => ui.label("rows: degeneracy shell (λ) · cells: order"),
+            View::WhitneyBasis | View::WhitneyBasisMesh => {
+              ui.label("rows: grade · cells: DOF simplex")
+            }
+          };
+          render_modes(ui, &entries, &mut selection, scene_dim);
         }
 
         ui.separator();
