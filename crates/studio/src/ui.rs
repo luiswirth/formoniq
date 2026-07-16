@@ -61,6 +61,21 @@ const SHELL_REL_GAP: f64 = 0.3;
 /// of splitting on numerical noise, where the relative gap alone has no scale.
 const SHELL_ABS_FRAC: f64 = 1e-6;
 
+/// Rounds `x` to `decimals` fractional digits, collapsing IEEE negative zero
+/// to positive zero at that precision. A harmonic mode's eigenvalue is a
+/// numerical zero, not exactly `0.0` (e.g. `-1e-9`), and formatting it
+/// directly prints a spurious minus sign (`-0`) for a quantity that is
+/// mathematically zero.
+fn round_for_display(x: f64, decimals: i32) -> f64 {
+  let scale = 10f64.powi(decimals);
+  let rounded = (x * scale).round() / scale;
+  if rounded == 0.0 {
+    0.0
+  } else {
+    rounded
+  }
+}
+
 /// Groups a list of eigenmodes into its degeneracy shells by clustering
 /// consecutive near-equal eigenvalues.
 ///
@@ -123,32 +138,44 @@ fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection,
 /// count. Hovering a cell shows the basis function's full name.
 fn grade_grid(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
   const CELL: [f32; 2] = [30.0, 22.0];
-  for grade in 0..=n {
-    let members: Vec<usize> = entries
-      .iter()
-      .enumerate()
-      .filter(|(_, e)| e.grade == grade)
-      .map(|(i, _)| i)
-      .collect();
-    if members.is_empty() {
-      continue;
-    }
-    ui.label(grade_mark_label(grade, n));
-    ui.horizontal_wrapped(|ui| {
-      for idx in members {
-        let entry = &entries[idx];
-        let selected = *selection == entry.selection;
-        let label = entry.dof_label.unwrap_or(entry.name);
-        if ui
-          .add_sized(CELL, egui::Button::selectable(selected, label))
-          .on_hover_text(entry.name)
-          .clicked()
-        {
-          *selection = entry.selection;
+  // A mesh's DOF count is unbounded (a reference cell has a handful, a
+  // built-in surface thousands), and the grid is a flat button-per-DOF flow
+  // with no natural width to wrap on -- left unbounded it grows the panel to
+  // the mesh's simplex count instead of the screen's. A fixed-height scroll
+  // area keeps the layout identical at every DOF count and bounds it to the
+  // viewport instead, rather than special-casing which meshes are "small
+  // enough" to browse this way.
+  const GRID_MAX_HEIGHT: f32 = 240.0;
+  egui::ScrollArea::vertical()
+    .max_height(GRID_MAX_HEIGHT)
+    .show(ui, |ui| {
+      for grade in 0..=n {
+        let members: Vec<usize> = entries
+          .iter()
+          .enumerate()
+          .filter(|(_, e)| e.grade == grade)
+          .map(|(i, _)| i)
+          .collect();
+        if members.is_empty() {
+          continue;
         }
+        ui.label(grade_mark_label(grade, n));
+        ui.horizontal_wrapped(|ui| {
+          for idx in members {
+            let entry = &entries[idx];
+            let selected = *selection == entry.selection;
+            let label = entry.dof_label.unwrap_or(entry.name);
+            if ui
+              .add_sized(CELL, egui::Button::selectable(selected, label))
+              .on_hover_text(entry.name)
+              .clicked()
+            {
+              *selection = entry.selection;
+            }
+          }
+        });
       }
     });
-  }
 }
 
 /// Lays out one grade's eigenmodes as the orbital pyramid: one centered row per
@@ -174,7 +201,7 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
           // A whole number for the row label -- distinct shells differ by an
           // order-one gap, so the integer part alone separates them, and the
           // precise eigenvalue lives in the cell hover and the transport bar.
-          egui::Label::new(format!("λ{:.0}", shell.eigenvalue)),
+          egui::Label::new(format!("λ~{:.0}", round_for_display(shell.eigenvalue, 0))),
         );
         let n = shell.members.len() as isize;
         for (pos, &idx) in shell.members.iter().enumerate() {
@@ -214,7 +241,7 @@ pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
   if grade == reduced {
     format!("grade {grade} · {mark}")
   } else {
-    format!("grade {grade} · {mark} (⋆)")
+    format!("grade {grade} · {mark} (*)")
   }
 }
 
@@ -329,7 +356,10 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           requested_study = Study::WhitneyBasis;
         }
         let on_hodge = matches!(model.study, Study::HodgeDecomposition);
-        if ui.selectable_label(on_hodge, "Hodge decomp").clicked() {
+        if ui
+          .selectable_label(on_hodge, "Hodge decomposition")
+          .clicked()
+        {
           requested_study = Study::HodgeDecomposition;
         }
         if matches!(model.study, Study::Cochains(_)) {
@@ -386,7 +416,10 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         MeshSource::ReferenceCell { dim } => {
           ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
         }
-        MeshSource::Triforce | MeshSource::Builtin(_) | MeshSource::Custom { .. } => {}
+        MeshSource::Triforce
+        | MeshSource::Builtin(_)
+        | MeshSource::Custom { .. }
+        | MeshSource::File(_) => {}
       }
       // Opens the in-egui file browser; the pick itself is retrieved by the
       // caller, which owns the (native-only) `egui_file_dialog` state.
@@ -489,7 +522,10 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         Some(omega) if omega > 1e-9 => {
           ui.monospace(format!("t = {:.2} s", model.time));
           ui.separator();
-          ui.monospace(format!("λ = {:.4}", model.eigenvalue.unwrap()));
+          ui.monospace(format!(
+            "λ = {:.4}",
+            round_for_display(model.eigenvalue.unwrap(), 4)
+          ));
           ui.monospace(format!("ω = {omega:.4}"));
           ui.monospace(format!("T = {:.2} s", std::f64::consts::TAU / omega));
         }

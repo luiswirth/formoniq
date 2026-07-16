@@ -731,7 +731,7 @@ impl<'a> ApplicationHandler for App<'a> {
     if self.window.is_none() {
       let window = Arc::new(
         event_loop
-          .create_window(Window::default_attributes())
+          .create_window(Window::default_attributes().with_title("formoniq-studio"))
           .unwrap(),
       );
 

@@ -78,6 +78,15 @@ const MIN_SPEED_FRACTION: f64 = 1e-3;
 /// Backstop on a single curve's arclength, in units of `d_sep`: a spiral that
 /// neither closes nor reaches a critical point is cut here.
 const MAX_ARCLEN_FRACTION: f64 = 400.0;
+/// A traced curve shorter than this fraction of `d_sep` is discarded rather
+/// than drawn. In a convergent region (near a vortex center, where
+/// neighbouring curves are not parallel) a seed can pass the entry check at
+/// its own point and then curve straight into a *different* already-placed
+/// neighbour within a step or two, choking the curve on both ends almost at
+/// birth. The result carries no coverage the curve that choked it does not
+/// already provide -- the area is exactly why it was choked short -- so it is
+/// pure visual noise: an isolated dash with no neighbour of its own.
+const MIN_LINE_ARCLEN_FRACTION: f64 = 2.0;
 /// Backstop on the total number of curves.
 const MAX_LINES: usize = 20_000;
 /// Hard cap on the steps of one half-curve, guarding against a step length that
@@ -147,6 +156,10 @@ pub fn trace(
 
     let line = tracer.trace_line(&seed, &placed);
     if line.len() < 2 {
+      continue;
+    }
+    let arclen: f64 = line.windows(2).map(|w| (w[1].pos - w[0].pos).norm()).sum();
+    if arclen < MIN_LINE_ARCLEN_FRACTION * d_sep {
       continue;
     }
 

@@ -38,10 +38,6 @@ use crate::streamline::Streamlines;
 /// back on itself.
 const CURVATURE_SAFETY_FRACTION: f64 = 0.9;
 
-/// Number of samples over which a streamline's ends ramp from invisible to full
-/// opacity, so a curve fades in rather than starting with a hard cap.
-const TAPER_SAMPLES: f64 = 4.0;
-
 /// The static half of a baked vertex: everything that is a function of the mesh
 /// and its embedding, and of no field on it.
 #[repr(C)]
@@ -60,18 +56,19 @@ pub struct BakedVertex {
   pub max_displacement: f32,
 }
 
-/// A vertex of a segment mark: a baked vertex plus the end taper. The wireframe,
-/// a line field's traced ribbons and a 1-manifold's own cells are one mark drawn
-/// from one type; a curve carries the taper it was traced with, a mesh edge
-/// carries 1.
+/// A vertex of a segment mark: a baked vertex plus an opacity multiplier. The
+/// wireframe, a line field's traced ribbons and a 1-manifold's own cells are
+/// one mark drawn from one type.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
 pub struct SegmentVertex {
   pub vertex: BakedVertex,
-  /// End taper in $[0, 1]$, multiplied into the mark's opacity: 0 at the very
-  /// ends of a traced curve, ramping to 1 over a fixed number of samples. A mesh edge
-  /// has no ends to fade and carries 1.
-  pub taper: f32,
+  /// Opacity multiplier in $[0, 1]$, for a mark that wants to fade part of
+  /// itself out (none does today -- every producer emits 1). Kept as a
+  /// per-vertex factor rather than a flat material constant, since a future
+  /// mark's reason to fade (unlike a traced curve's arbitrary tracer cutoff,
+  /// which is not such a reason) would vary along its length.
+  pub opacity: f32,
 }
 
 /// The primitives one complex's cells bake to, at dimension $min(n, 2)$.
@@ -180,13 +177,15 @@ impl BakedMesh {
   }
 
   /// The mesh's own vertices as segment vertices: the table the wireframe
-  /// overlay (and a 1-manifold's cells) are drawn from. A mesh edge has no ends
-  /// to fade, so it is untapered.
+  /// overlay (and a 1-manifold's cells) are drawn from, at full opacity.
   pub fn segment_vertices(&self) -> Vec<SegmentVertex> {
     self
       .positions
       .iter()
-      .map(|&vertex| SegmentVertex { vertex, taper: 1.0 })
+      .map(|&vertex| SegmentVertex {
+        vertex,
+        opacity: 1.0,
+      })
       .collect()
   }
 }
@@ -214,8 +213,7 @@ pub fn bake_streamlines(
   for line in &streamlines.lines {
     let base = vertices.len() as u32;
     let len = line.len();
-    for (i, sample) in line.iter().enumerate() {
-      let from_end = i.min(len - 1 - i) as f64;
+    for sample in line {
       vertices.push(SegmentVertex {
         vertex: BakedVertex {
           position: [
@@ -226,7 +224,11 @@ pub fn bake_streamlines(
           normal: [0.0; 3],
           max_displacement: 0.0,
         },
-        taper: (from_end / TAPER_SAMPLES).min(1.0) as f32,
+        // A traced curve is cut where the tracer stops, not where the field
+        // itself fades -- there is nothing physically meaningful at its ends
+        // to signal by dimming, so it carries full opacity like any other
+        // mark.
+        opacity: 1.0,
       });
     }
     segments.extend((1..len as u32).map(|i| [base + i - 1, base + i]));

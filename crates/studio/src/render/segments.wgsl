@@ -28,20 +28,20 @@ struct EndpointA {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
     @location(2) max_displacement: f32,
-    @location(3) taper: f32,
+    @location(3) opacity: f32,
     @location(8) value: f32,
 };
 struct EndpointB {
     @location(4) position: vec3<f32>,
     @location(5) normal: vec3<f32>,
     @location(6) max_displacement: f32,
-    @location(7) taper: f32,
+    @location(7) opacity: f32,
     @location(9) value: f32,
 };
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
-    @location(0) taper: f32,
+    @location(0) opacity: f32,
 };
 
 @vertex
@@ -59,7 +59,7 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
 
     var out: VertexOutput;
     out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
-    out.taper = select(a.taper, b.taper, billboard_is_b(vertex_index));
+    out.opacity = select(a.opacity, b.opacity, billboard_is_b(vertex_index));
     return out;
 }
 
@@ -71,6 +71,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // entirely would read as the geometry changing. A mark with no such story to
     // tell passes `fade_floor = 1`, and the envelope is constant.
     let env = abs(wave_osc(frame, material.wave_omega));
-    let alpha = material.color.a * in.taper * mix(material.fade_floor, 1.0, env);
+    let alpha = material.color.a * in.opacity * mix(material.fade_floor, 1.0, env);
     return vec4<f32>(material.color.rgb, alpha);
 }

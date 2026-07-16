@@ -9,12 +9,12 @@
 //! context, and asking the caller for them would be asking for information they
 //! do not have.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 use formoniq_studio::export::{export, ExportSpec};
 use formoniq_studio::gallery::{
-  BuiltinMesh, MeshSource, Study, DEFAULT_NMODES, REFERENCE_CELL_DIM,
+  BuiltinMesh, CochainSpec, MeshSource, NamedCochain, Study, DEFAULT_NMODES, REFERENCE_CELL_DIM,
 };
 
 #[derive(Parser)]
@@ -37,9 +37,17 @@ enum Command {
     #[arg(long, value_parser = parse_study, default_value = "grade0")]
     study: Study,
     /// Which mesh to run the study on: `sphere`, `grid`, `refcell`,
-    /// `triforce`, or a built-in by name.
+    /// `triforce`, a built-in by name, or a directory holding a mesh saved by
+    /// the engine's own `topology.cbor`/`coords.cbor` pair.
     #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
     mesh: MeshSource,
+    /// A cochain saved by the engine (`Cochain::save`) to show, in addition
+    /// to `--study`'s own. Repeatable; each is named for its file stem.
+    /// Given at least one, the scene shows exactly these cochains rather than
+    /// `--study`'s built-in fields -- the general path for anything the
+    /// gallery did not itself solve (a solve's output, a paper figure).
+    #[arg(long = "cochain")]
+    cochains: Vec<PathBuf>,
     /// Which field of the scene, in the picker's order. Defaults to the first,
     /// as the viewer opens on.
     #[arg(long)]
@@ -64,6 +72,7 @@ fn parse_study(s: &str) -> Result<Study, String> {
   match s {
     "whitney" => Ok(Study::WhitneyBasis),
     "hodge" | "decomposition" => Ok(Study::HodgeDecomposition),
+    "triforce-examples" => Ok(Study::Cochains(formoniq_studio::demos::triforce_examples())),
     _ => s
       .strip_prefix("grade")
       .and_then(|g| g.parse().ok())
@@ -87,11 +96,15 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
       dim: REFERENCE_CELL_DIM,
     }),
     "triforce" => Ok(MeshSource::Triforce),
+    _ if Path::new(s).is_dir() => Ok(MeshSource::File(PathBuf::from(s))),
     _ => BuiltinMesh::from_name(s)
       .map(MeshSource::Builtin)
       .ok_or_else(|| {
         let builtins = BuiltinMesh::ALL.map(BuiltinMesh::name).join("`, `");
-        format!("expected `sphere`, `grid`, `refcell`, `triforce`, `{builtins}`, got `{s}`")
+        format!(
+          "expected `sphere`, `grid`, `refcell`, `triforce`, `{builtins}`, or a mesh directory, \
+           got `{s}`"
+        )
       }),
   }
 }
@@ -117,12 +130,29 @@ fn main() {
       out,
       study,
       mesh,
+      cochains,
       field,
       size,
       frames,
       fps,
     }) => {
       let _ = env_logger::try_init();
+      let study = if cochains.is_empty() {
+        study
+      } else {
+        Study::Cochains(
+          cochains
+            .into_iter()
+            .map(|path| NamedCochain {
+              name: path
+                .file_stem()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_else(|| path.to_string_lossy().into_owned()),
+              spec: CochainSpec::File(path),
+            })
+            .collect(),
+        )
+      };
       let spec = ExportSpec {
         study,
         mesh_source: mesh,

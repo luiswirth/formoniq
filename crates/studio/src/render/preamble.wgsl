@@ -107,9 +107,20 @@ fn diverging(t: f32) -> vec3<f32> {
     return select(mix(white, red, (x - 0.5) * 2.0), mix(blue, white, x * 2.0), x < 0.5);
 }
 
+// Saturation boost applied to every colormap sample: pushes each channel away
+// from the sample's own luminance, so the fill reads as fully saturated ink
+// rather than the paler blend a straight polynomial fit gives near the middle
+// of either map's range.
+const SATURATION_BOOST: f32 = 1.6;
+
+fn saturate_color(color: vec3<f32>) -> vec3<f32> {
+    let luminance = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
+    return clamp(mix(vec3<f32>(luminance), color, SATURATION_BOOST), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
 fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
     let t = (value - material.min_val) / (material.max_val - material.min_val);
-    return select(viridis(t), diverging(t), material.diverging > 0.5);
+    return saturate_color(select(viridis(t), diverging(t), material.diverging > 0.5));
 }
 
 // A segment (a mesh edge, a traced streamline step) drawn with constant

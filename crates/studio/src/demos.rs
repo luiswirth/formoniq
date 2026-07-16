@@ -64,7 +64,7 @@ pub fn triforce() -> (Complex, MeshCoords) {
 /// vertex pair rather than by the exporter's file order, since a mesh's own
 /// edge indexing need not agree with it -- the resolution against the mesh
 /// happens in [`CochainSpec::resolve`] at build time.
-pub(crate) fn triforce_examples() -> Vec<NamedCochain> {
+pub fn triforce_examples() -> Vec<NamedCochain> {
   // (v0, v1, constant, curl, div), v0 < v1 matching the canonical (positively
   // oriented) edge orientation both `plot/in/triforce` and the triforce
   // topology agree on.

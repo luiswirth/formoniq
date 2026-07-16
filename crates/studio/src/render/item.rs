@@ -52,7 +52,7 @@ const fn baked_attributes(loc: u32) -> [wgpu::VertexAttribute; 3] {
   ]
 }
 
-/// A `SegmentVertex`'s four: a `BakedVertex`'s, then the taper trailing it.
+/// A `SegmentVertex`'s four: a `BakedVertex`'s, then the opacity trailing it.
 const fn segment_attributes(loc: u32) -> [wgpu::VertexAttribute; 4] {
   let [p, n, m] = baked_attributes(loc);
   [p, n, m, attribute(28, loc + 3, wgpu::VertexFormat::Float32)]
@@ -181,7 +181,7 @@ impl SegmentBatch {
   }
 
   /// Rebinds the mark to a different field over the same segments: the endpoint
-  /// positions, normals and tapers are the mesh's, and stay.
+  /// positions, normals and opacities are the mesh's, and stay.
   pub fn write_attributes(&self, queue: &wgpu::Queue, values: &[f32]) {
     for (end, buffer) in self.values.iter().enumerate() {
       let gathered = gather(values, &self.segments, end);
