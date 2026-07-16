@@ -54,9 +54,14 @@ const GBUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 const NOISE_SIZE: u32 = 64;
 // How hard the along-line noise average is stretched back out of grey.
 const LIC_CONTRAST: f32 = 5.0;
-// Object-space noise frequency, in cycles per mesh width: fixes the streamline
-// texture to the surface at a density that reads as lines rather than mush.
-const NOISE_CYCLES_PER_MESH_WIDTH: f32 = 6.0;
+// Object-space noise frequency, in cycles per scene extent (its radius): fixes
+// the streamline texture to the surface at a density that reads as lines rather
+// than mush. Keyed on the object's own size ([`scene_extent`]), the same
+// object-intrinsic scale the wave amplitude and wireframe width use -- never on
+// the edge length, a property of the triangulation and not the object: refining
+// the mesh would then drive the noise frequency past the pixel Nyquist and
+// alias the streamlines into static.
+const NOISE_CYCLES_PER_EXTENT: f32 = 10.0;
 
 // Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
 // eigensolve is dense in the vertex count, so keep this modest for an instant
@@ -1103,13 +1108,11 @@ struct State<'a> {
   gallery: Gallery,
   scene: Scene,
   selection: Selection,
-  // Fixed at scene-build time: the mesh's own edge-length scale, which sets the
-  // LIC noise frequency (`noise_scale`).
-  mesh_width: f32,
   // Fixed at scene-build time: the object's coordinate extent (its radius),
   // which sets the standing-wave displacement scale for whichever field is on
-  // display -- an object-intrinsic length, so the lobes read at orbital scale
-  // on any mesh.
+  // display and the LIC noise frequency (`noise_scale`) -- an object-intrinsic
+  // length, so the lobes read at orbital scale and the streamlines at a fixed
+  // density on any mesh, however finely triangulated.
   amplitude_scale: f32,
 
   egui_ctx: egui::Context,
@@ -1212,13 +1215,9 @@ impl<'a> State<'a> {
     // blocking the first frame on the solve.
     let (gallery, scene) = Gallery::new(MeshSource::START);
     let selection = default_selection(&scene);
-    // The mesh width fixes the LIC noise frequency; the coordinate extent fixes
-    // the standing-wave displacement (see the two `State` fields). Both are
-    // object-intrinsic, so neither is tuned to the sphere.
-    let mesh_width = scene
-      .coords
-      .to_edge_lengths(&scene.topology)
-      .mesh_width_max() as f32;
+    // The coordinate extent fixes both the standing-wave displacement and the
+    // LIC noise frequency (see the `State` field): object-intrinsic, so neither
+    // is tuned to the sphere.
     let amplitude_scale = scene_extent(&scene) as f32;
     let display = build_field_display(&device, &scene, selection, amplitude_scale);
     let (field_min, field_max) = (display.field_min, display.field_max);
@@ -1492,7 +1491,7 @@ impl<'a> State<'a> {
     let (gbuffer_dir_view, gbuffer_pos_view) =
       create_gbuffer_textures(&device, ss_width, ss_height);
     let (noise_view, noise_sampler) = create_noise_texture(&device, &queue);
-    let noise_scale = NOISE_CYCLES_PER_MESH_WIDTH / mesh_width.max(f32::EPSILON);
+    let noise_scale = NOISE_CYCLES_PER_EXTENT / amplitude_scale.max(f32::EPSILON);
 
     let lic_uniform = LicUniform {
       viewport: [ss_width as f32, ss_height as f32],
@@ -1848,7 +1847,6 @@ impl<'a> State<'a> {
       gallery,
       scene,
       selection,
-      mesh_width,
       amplitude_scale,
       egui_ctx,
       egui_winit_state,
@@ -1948,12 +1946,8 @@ impl<'a> State<'a> {
   /// camera tuned for the sphere is not a natural start for the flat reference
   /// cell, or vice versa.
   fn install_scene(&mut self, scene: Scene) {
-    self.mesh_width = scene
-      .coords
-      .to_edge_lengths(&scene.topology)
-      .mesh_width_max() as f32;
-    self.noise_scale = NOISE_CYCLES_PER_MESH_WIDTH / self.mesh_width.max(f32::EPSILON);
     self.amplitude_scale = scene_extent(&scene) as f32;
+    self.noise_scale = NOISE_CYCLES_PER_EXTENT / self.amplitude_scale.max(f32::EPSILON);
     let selection = default_selection(&scene);
     self.scene = scene;
     self.apply_field(selection);
