@@ -1,5 +1,123 @@
-use formoniq_studio::run;
+//! The `studio` binary: the interactive viewer by default, a headless render
+//! with `export`.
+//!
+//! The two are not two frontends. Both build the same scene through the same
+//! gallery construction and the same display layer; the export subcommand adds
+//! only a destination and a frame clock. What is *not* here is a flag for
+//! anything the code can decide for itself -- the wave amplitude, the mark
+//! widths and the supersampling are properties of the object and of the
+//! context, and asking the caller for them would be asking for information they
+//! do not have.
+
+use std::path::PathBuf;
+
+use clap::{Parser, Subcommand};
+use formoniq_studio::export::{export, ExportSpec};
+use formoniq_studio::gallery::{MeshSource, View};
+
+#[derive(Parser)]
+#[command(about = "A viewer for FEEC solutions on simplicial manifolds")]
+struct Cli {
+  #[command(subcommand)]
+  command: Option<Command>,
+}
+
+#[derive(Subcommand)]
+enum Command {
+  /// Render a scene to a PNG still or an MP4 clip, with no window.
+  Export {
+    /// Destination. `.mp4` writes a clip through `ffmpeg`; anything else is a
+    /// PNG still.
+    out: PathBuf,
+    /// Which scene: a mesh eigenmode grade, or one of the Whitney galleries.
+    #[arg(long, value_parser = parse_view, default_value = "grade0")]
+    view: View,
+    /// Which mesh to build a `grade<k>` view on. Ignored by the Whitney views,
+    /// which carry their own fixed mesh.
+    #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
+    mesh: MeshSource,
+    /// Which field of the view, in the picker's order. Defaults to the first,
+    /// as the viewer opens on.
+    #[arg(long)]
+    field: Option<usize>,
+    /// Export resolution, `WxH`. Independent of any window.
+    #[arg(long, value_parser = parse_size, default_value = "1920x1080")]
+    size: (u32, u32),
+    /// Frames to render (mp4). Defaults to exactly one period of the standing
+    /// wave, $2 pi \/ omega$, which is what makes the clip loop seamlessly; a
+    /// field that is not an eigenmode has no period and renders one still.
+    #[arg(long)]
+    frames: Option<u32>,
+    #[arg(long, default_value_t = 60)]
+    fps: u32,
+  },
+}
+
+fn parse_view(s: &str) -> Result<View, String> {
+  match s {
+    "whitney" => Ok(View::WhitneyBasis),
+    "whitney-mesh" => Ok(View::WhitneyBasisMesh),
+    "whitney-examples" => Ok(View::WhitneyExamplesMesh),
+    _ => s
+      .strip_prefix("grade")
+      .and_then(|g| g.parse().ok())
+      .map(View::MeshGrade)
+      .ok_or_else(|| {
+        format!("expected `grade<k>`, `whitney`, `whitney-mesh` or `whitney-examples`, got `{s}`")
+      }),
+  }
+}
+
+fn parse_mesh(s: &str) -> Result<MeshSource, String> {
+  match s {
+    "sphere" => Ok(MeshSource::START),
+    "grid" => Ok(MeshSource::Grid { cells_axis: 16 }),
+    _ => Err(format!("expected `sphere` or `grid`, got `{s}`")),
+  }
+}
+
+fn parse_size(s: &str) -> Result<(u32, u32), String> {
+  let (w, h) = s
+    .split_once(['x', 'X'])
+    .ok_or_else(|| format!("expected `WxH`, got `{s}`"))?;
+  let parse = |v: &str, axis| {
+    v.parse::<u32>()
+      .ok()
+      .filter(|&v| v > 0)
+      .ok_or_else(|| format!("{axis} must be a positive integer, got `{v}`"))
+  };
+  Ok((parse(w, "width")?, parse(h, "height")?))
+}
 
 fn main() {
-  pollster::block_on(run());
+  let cli = Cli::parse();
+  match cli.command {
+    // `run` installs the logger itself -- it is also the wasm entry point,
+    // where the logger is a different one and there is no `main` to do it.
+    None => pollster::block_on(formoniq_studio::run()),
+    Some(Command::Export {
+      out,
+      view,
+      mesh,
+      field,
+      size,
+      frames,
+      fps,
+    }) => {
+      let _ = env_logger::try_init();
+      let spec = ExportSpec {
+        view,
+        mesh_source: mesh,
+        field,
+        size,
+        frames,
+        fps,
+      };
+      if let Err(error) = export(&spec, &out) {
+        eprintln!("export failed: {error}");
+        std::process::exit(1);
+      }
+      println!("wrote {}", out.display());
+    }
+  }
 }

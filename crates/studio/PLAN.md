@@ -25,7 +25,8 @@ src/
   demos.rs        Scene constructors: whitney galleries, eigenmodes, triforce
   bake.rs         BakedMesh, orient/normals, centroid/extent, R^3 embed
   streamline.rs   intrinsic tracer (unchanged)
-  export.rs       offscreen target, readback, PNG encode, ffmpeg pipe, panels
+  display.rs      Scene + Selection -> DrawList, shared by both callers
+  export.rs       offscreen target, readback, PNG encode, ffmpeg pipe
   ui/panel.rs     pure panel function -> PanelResponse
   render/
     context.rs    GpuContext { device, queue } -- with or without a surface
@@ -114,21 +115,36 @@ One frame-graph implementation, two callers; they cannot drift.
 
 `export.rs`: offscreen texture with `COPY_SRC`, row-alignment-padded buffer
 readback, PNG via the `image` crate. MP4 by piping raw frames to an `ffmpeg`
-subprocess when present (clear error otherwise) -- no vendored encoder. An
-eigenmode is periodic with period $2 pi \/ omega$, so exporting exactly one
-period yields a seamlessly looping clip.
+subprocess when present (clear error otherwise) -- no vendored encoder.
+
+An eigenmode is periodic with period $T = 2 pi \/ omega$, and the clip *is* one
+period: frame $k$ is rendered at $t_k = k T \/ N$, so $N$ divides $T$ by
+construction and the wrap from the last frame to the first is exact. Sampling
+$t_k = k \/ "fps"$ instead would divide the period by a number it has no reason
+to divide evenly, leaving up to half a frame of phase at the seam. `--frames`
+therefore chooses how densely the period is sampled and `--fps` only the
+playback rate; the default $N$ is the one that makes playback wall-clock. A
+field that does not oscillate -- not an eigenmode, or a harmonic mode -- has no
+period and is one still.
 
 CLI in `main.rs`:
 
 ```
 studio                            # interactive (default)
-studio export out.png --view ... --field ... --size WxH --supersample N
-studio export out.mp4 ... --frames N --fps N
-studio export out.png --panels a,b,c    # shared camera, composited CPU-side
+studio export out.png --view ... --field ... --size WxH
+studio export out.mp4 ... --fps N [--frames N]
 ```
 
-reusing `View`/`Gallery` scene construction and `Selection` verbatim.
-Export resolution is independent of any window.
+reusing `View`/`Gallery` scene construction and `Selection` verbatim, through
+the shared `display.rs`. Export resolution is independent of any window.
+
+The CLI carries no flag for what the code can decide itself. Supersampling is
+the case in point: the window is frame-rate bound and an export is not, so the
+factor follows from the context and a `--supersample` would only let a caller
+ask for a worse image. It is a `Renderer::new` parameter (construction data,
+like the target format, since it is baked into every pipeline as the WGSL
+`SSAA_SCALE` override) with two call sites, not a knob. `--frames` stays because
+it is the one number the mathematics does not always supply.
 
 ### Boilerplate removal
 
@@ -187,9 +203,14 @@ Each step is one or more commits, each green under `cargo fmt --all`,
    The curvature cap likewise has no meaning for $d >= 3$'s boundary surface (the
    volume's own estimators are not the boundary's), so displacement there is
    uncapped rather than clamped by a quantity that means something else.
-4. **Export.** `export.rs` + CLI: PNG, then ffmpeg pipe, then `--panels`.
+4. **Export.** `export.rs` + CLI: PNG, then the ffmpeg pipe. Preceded by
+   lifting the display layer (the `Scene`-to-`DrawList` reduction) out of
+   `app.rs`, which held it only because the window was its sole caller: it is
+   what the two callers must share for a material not to drift between them.
    Headless smoke test: render a known view, assert readback is non-uniform
-   (skip when no adapter is available).
+   (skip when no adapter is available). Pointed at a grade-1 view, whose field
+   reduces to the streamline mark -- grade 0 is scalars only and would leave the
+   segment pipeline uncovered.
 5. **Quality pass.**
    - Colormaps: diverging (zero-centered) for signed fields, perceptually
      uniform sequential (viridis fit) for magnitudes; replace the sine

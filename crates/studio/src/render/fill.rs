@@ -4,7 +4,7 @@
 use super::{
   color_target, compilation_options, depth_stencil,
   item::SurfaceBatch,
-  primitive, shader_module,
+  primitive, shader_module, ssaa_constants,
   uniform::{FrameUniform, SurfaceMaterial, UniformBinding, UniformPool},
 };
 
@@ -18,7 +18,9 @@ impl FillPass {
     format: wgpu::TextureFormat,
     frame: &UniformBinding<FrameUniform>,
     materials: &UniformPool<SurfaceMaterial>,
+    ssaa: u32,
   ) -> Self {
+    let constants = ssaa_constants(ssaa);
     let shader = shader_module(device, "Fill Shader", include_str!("fill.wgsl"));
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
       label: Some("Fill Pipeline Layout"),
@@ -31,13 +33,13 @@ impl FillPass {
       vertex: wgpu::VertexState {
         module: &shader,
         entry_point: Some("vs_main"),
-        compilation_options: compilation_options(),
+        compilation_options: compilation_options(&constants),
         buffers: &SurfaceBatch::layouts(),
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
         entry_point: Some("fs_main"),
-        compilation_options: compilation_options(),
+        compilation_options: compilation_options(&constants),
         targets: &[color_target(format, wgpu::BlendState::REPLACE)],
       }),
       primitive: primitive(),

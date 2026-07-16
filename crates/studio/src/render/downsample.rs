@@ -3,7 +3,7 @@
 //! antialiased, and the only pass that writes the render target directly. See
 //! `downsample.wgsl`.
 
-use super::{color_target, compilation_options, primitive, shader_module};
+use super::{color_target, compilation_options, primitive, shader_module, ssaa_constants};
 
 /// The scene color texture as the downsample's one binding. Rebuilt with the
 /// texture on resize.
@@ -17,7 +17,8 @@ pub struct DownsamplePass {
 }
 
 impl DownsamplePass {
-  pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat) -> Self {
+  pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, ssaa: u32) -> Self {
+    let constants = ssaa_constants(ssaa);
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
       label: Some("scene_color_bind_group_layout"),
       entries: &[wgpu::BindGroupLayoutEntry {
@@ -43,13 +44,13 @@ impl DownsamplePass {
       vertex: wgpu::VertexState {
         module: &shader,
         entry_point: Some("vs_main"),
-        compilation_options: compilation_options(),
+        compilation_options: compilation_options(&constants),
         buffers: &[],
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
         entry_point: Some("fs_main"),
-        compilation_options: compilation_options(),
+        compilation_options: compilation_options(&constants),
         targets: &[color_target(format, wgpu::BlendState::REPLACE)],
       }),
       primitive: primitive(),
