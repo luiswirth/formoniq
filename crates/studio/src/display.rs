@@ -22,7 +22,7 @@ use crate::render::{
   GpuContext,
 };
 use crate::scene::Scene;
-use crate::ui::panel::Selection;
+use crate::ui::Selection;
 
 /// Peak standing-wave displacement, as a fraction of the scene's own coordinate
 /// extent (its radius) -- an object-intrinsic scale, independent of how finely
@@ -189,6 +189,12 @@ impl MeshDisplay {
 /// only that field has: the one place a [`Selection`] turns into something
 /// drawable. Everything here is static per field -- the renderer only re-times
 /// it per frame.
+///
+/// The field's own half of the bake's vertex split -- its attribute stream --
+/// is *returned* by [`Self::build`] rather than written from inside it: a
+/// [`MeshDisplay`] is the static half, the two halves meet on the GPU, and
+/// which of them does the writing is the caller's to see rather than a
+/// constructor's to hide.
 pub(crate) struct FieldDisplay {
   /// The traced streamlines of a line field, `None` for a scalar field. Their
   /// presence *is* the line-field mark: there is no branch to pick.
@@ -200,13 +206,16 @@ pub(crate) struct FieldDisplay {
 }
 
 impl FieldDisplay {
+  /// The field's display and the attribute stream it decides, one scalar per
+  /// baked vertex -- which a caller writes into a [`MeshDisplay`] with
+  /// [`MeshDisplay::write_attributes`]. Returned rather than written here: see
+  /// the type's own doc.
   pub(crate) fn build(
     ctx: &GpuContext,
-    mesh: &MeshDisplay,
     scene: &Scene,
     selection: Selection,
     amplitude_scale: f32,
-  ) -> Self {
+  ) -> (Self, Vec<f32>) {
     let (streamlines, attributes, surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
@@ -295,9 +304,7 @@ impl FieldDisplay {
       }
     };
 
-    mesh.write_attributes(&ctx.queue, &attributes);
-
-    Self {
+    let display = Self {
       streamlines,
       surface,
       // The wireframe rides the surface's own wave, so it tracks the displaced
@@ -327,7 +334,8 @@ impl FieldDisplay {
         wave_amplitude: 0.0,
         wave_omega: surface.wave_omega,
       },
-    }
+    };
+    (display, attributes)
   }
 
   /// The frame's items, in submission order: the surface writes depth, and the

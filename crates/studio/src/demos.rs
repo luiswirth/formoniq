@@ -10,7 +10,7 @@ use manifold::{
 
 use crate::gallery::{Mesh, View};
 use crate::scene::Scene;
-use crate::ui::panel::Selection;
+use crate::ui::Selection;
 
 // Chosen so both grades close on a complete degeneracy shell: grade 0 fills
 // $l = 0..=3$ ($sum (2l+1) = 16$) and grade 1 fills $l = 1, 2$

@@ -49,7 +49,7 @@ pub enum BuiltinMesh {
 }
 
 impl BuiltinMesh {
-  pub(crate) const ALL: [BuiltinMesh; 4] = [
+  pub const ALL: [BuiltinMesh; 4] = [
     BuiltinMesh::Spot,
     BuiltinMesh::Bob,
     BuiltinMesh::Blub,
@@ -63,6 +63,23 @@ impl BuiltinMesh {
       BuiltinMesh::Blub => "Blub (fish)",
       BuiltinMesh::Csaszar => "Császár torus",
     }
+  }
+
+  /// The mesh's name as a caller writes it: ASCII, lowercase, no spaces --
+  /// what the picker's own label is not, since a label is prose and this is a
+  /// token. Paired with [`Self::from_name`], so a mesh added to [`Self::ALL`]
+  /// reaches the CLI without a second list to keep in step.
+  pub fn name(self) -> &'static str {
+    match self {
+      BuiltinMesh::Spot => "spot",
+      BuiltinMesh::Bob => "bob",
+      BuiltinMesh::Blub => "blub",
+      BuiltinMesh::Csaszar => "csaszar",
+    }
+  }
+
+  pub fn from_name(name: &str) -> Option<Self> {
+    Self::ALL.into_iter().find(|m| m.name() == name)
   }
 
   /// The embedded OBJ source of the mesh. Baked in with `include_str!`, so it

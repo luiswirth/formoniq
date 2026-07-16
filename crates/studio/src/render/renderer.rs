@@ -12,11 +12,18 @@ use super::{
   DEPTH_FORMAT,
 };
 
-/// The background the scene is cleared to.
+/// The background the scene is cleared to: a near-black the lit surface and the
+/// light streamline halo both separate from.
+///
+/// Stated *linearly*, because that is what a clear value is -- [`wgpu::Color`]
+/// is linear and an sRGB target encodes it on write, so the sRGB byte 0.1 would
+/// name here comes out at roughly 0.35, a mid grey. This is the linear value
+/// whose sRGB encoding is the dark 0.1 the background is meant to be:
+/// $0.1^(2.2) approx 0.0079$.
 const CLEAR_COLOR: wgpu::Color = wgpu::Color {
-  r: 0.1,
-  g: 0.1,
-  b: 0.1,
+  r: 0.0079,
+  g: 0.0079,
+  b: 0.0079,
   a: 1.0,
 };
 
@@ -32,8 +39,9 @@ pub struct FrameView<'a> {
   /// the same input.
   pub size: (u32, u32),
   /// Seconds into the standing wave. An input, never state: the windowed loop
-  /// passes wall-clock time, an exporter passes $t_k = k \/ "fps"$, and the
-  /// frames are deterministic either way.
+  /// passes wall-clock time and an exporter passes the instant it means to
+  /// render, and the frames are deterministic either way. Which instants those
+  /// are is the caller's business, not this layer's.
   pub time: f32,
 }
 

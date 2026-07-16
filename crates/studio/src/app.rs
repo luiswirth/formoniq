@@ -1,6 +1,6 @@
 //! The windowed viewer: winit event loop, wgpu surface, egui integration and
 //! input handling. Consumes the gallery model (`gallery.rs`) and the panel
-//! (`ui/panel.rs`), builds the current selection's display (`display.rs`), and
+//! (`ui.rs`), builds the current selection's display (`display.rs`), and
 //! hands its draw list to the [`Renderer`], which owns every pipeline.
 //!
 //! What is here is what a *window* adds, and nothing else: the surface, the
@@ -26,7 +26,7 @@ use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
 use crate::gallery::{Gallery, MeshSource, View};
 use crate::render::{camera::Camera, FrameView, GpuContext, Renderer, DEFAULT_SSAA_SCALE};
 use crate::scene::Scene;
-use crate::ui::panel::{Entry, PanelModel, Selection};
+use crate::ui::{Entry, PanelModel, Selection};
 
 use egui_wgpu::{
   Renderer as EguiRenderer, RendererOptions as EguiRendererOptions, ScreenDescriptor,
@@ -114,7 +114,8 @@ impl<'a> State<'a> {
     let selection = default_selection(&scene);
     let amplitude_scale = scene_extent(&scene) as f32;
     let mesh_display = MeshDisplay::build(&ctx.device, &scene);
-    let display = FieldDisplay::build(&ctx, &mesh_display, &scene, selection, amplitude_scale);
+    let (display, attributes) = FieldDisplay::build(&ctx, &scene, selection, amplitude_scale);
+    mesh_display.write_attributes(&ctx.queue, &attributes);
 
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
 
@@ -161,13 +162,12 @@ impl<'a> State<'a> {
   /// [`Self::set_field`] instead.
   fn apply_field(&mut self, selection: Selection) {
     self.selection = selection;
-    self.display = FieldDisplay::build(
-      &self.ctx,
-      &self.mesh_display,
-      &self.scene,
-      selection,
-      self.amplitude_scale,
-    );
+    let (display, attributes) =
+      FieldDisplay::build(&self.ctx, &self.scene, selection, self.amplitude_scale);
+    self
+      .mesh_display
+      .write_attributes(&self.ctx.queue, &attributes);
+    self.display = display;
     self.start_time = std::time::Instant::now();
   }
 
@@ -316,7 +316,7 @@ impl<'a> State<'a> {
     }
   }
 
-  /// Builds the panel's model snapshot, hands it to [`crate::ui::panel::panel`]
+  /// Builds the panel's model snapshot, hands it to [`crate::ui::panel`]
   /// inside the one egui pass, and applies the requested changes afterward.
   /// The model/response split keeps the panel itself a pure function of its
   /// input; only this method touches `self`.
@@ -385,7 +385,7 @@ impl<'a> State<'a> {
 
     let mut response = None;
     let full_output = ctx.run_ui(raw_input, |ctx| {
-      response = Some(crate::ui::panel::panel(ctx, &model));
+      response = Some(crate::ui::panel(ctx, &model));
 
       // The file browser draws as its own window and opens on the panel's
       // request; it must be updated within the frame, after the panel.
