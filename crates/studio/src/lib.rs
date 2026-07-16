@@ -437,14 +437,22 @@ impl Gallery {
 }
 
 /// The scene's coordinate extent: the largest distance of any vertex from the
-/// origin -- an icosphere of radius 1 gives 1, a unit reference triangle its
-/// own radius. Both the camera framing and the standing-wave amplitude scale
-/// off this object-intrinsic length, so neither is tuned to the sphere.
+/// mesh's own centroid -- its intrinsic radius, independent of where the mesh
+/// sits in space. Measured about the centroid, not the origin, so a mesh
+/// nowhere near the origin (a unit grid on $[0,1]^2$, an off-center loaded OBJ)
+/// still reports its true size; an origin-centered unit sphere gives 1 either
+/// way. Both the camera framing and the standing-wave amplitude scale off this,
+/// so neither is tuned to the sphere.
 fn scene_extent(scene: &Scene) -> f64 {
-  scene
-    .coords
+  let coords = &scene.coords;
+  let n = coords.nvertices().max(1) as f64;
+  let centroid = coords
     .coord_iter()
-    .map(|c| c.norm())
+    .fold(na::DVector::zeros(3), |acc, c| acc + *c)
+    / n;
+  coords
+    .coord_iter()
+    .map(|c| (*c - &centroid).norm())
     .fold(0.0, f64::max)
     .max(1e-6)
 }
