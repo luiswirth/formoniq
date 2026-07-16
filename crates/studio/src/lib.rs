@@ -17,6 +17,7 @@ use winit::{
 use crate::render::{
   camera::{Camera, CameraUniform},
   mesh::{MeshBuffer, Vertex},
+  streamline::StreamEndpoint,
 };
 use crate::scene::Scene;
 
@@ -32,6 +33,7 @@ pub mod io;
 pub mod mesh3d;
 pub mod render;
 pub mod scene;
+pub mod streamline;
 pub mod ui;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
@@ -62,6 +64,13 @@ const LIC_CONTRAST: f32 = 5.0;
 // the mesh would then drive the noise frequency past the pixel Nyquist and
 // alias the streamlines into static.
 const NOISE_CYCLES_PER_EXTENT: f32 = 10.0;
+// Streamline separation and ribbon half-width, each as a fraction of the scene
+// extent (its radius) -- object-intrinsic, like the wave amplitude and wireframe
+// width, so the line density and thickness are properties of the object, not the
+// triangulation. The separation is the one knob that sets how dense the evenly
+// spaced curves are.
+const STREAMLINE_SEPARATION_FRACTION: f32 = 0.09;
+const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
 
 // Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
 // eigensolve is dense in the vertex count, so keep this modest for an instant
@@ -760,6 +769,20 @@ impl Selection {
   }
 }
 
+/// How a line field is drawn: the default is evenly-spaced [`Streamlines`], the
+/// integral curves of the field traced on the manifold; [`Lic`] is the older
+/// dense line-integral-convolution texture, kept as an alternative for
+/// high-frequency fields a discrete curve set would undersample. Only a line
+/// field's mark is selectable; a scalar field ignores this.
+///
+/// [`Streamlines`]: LineMark::Streamlines
+/// [`Lic`]: LineMark::Lic
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum LineMark {
+  Streamlines,
+  Lic,
+}
+
 /// One mode of the currently shown scene, as the picker needs it: the field's
 /// [`Selection`], its original grade (before the reduction to a render mark),
 /// its eigenvalue (for the degeneracy layout), its DOF label (for the basis
@@ -953,6 +976,10 @@ fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
 /// startup and whenever the UI switches it.
 struct FieldDisplay {
   mesh_buffer: MeshBuffer,
+  /// The traced streamlines of a line field, `None` for a scalar field. Built
+  /// once here, since the field is static per mode; the render pass only
+  /// re-tints it per frame.
+  streamlines: Option<render::streamline::StreamlineBuffer>,
   field_min: f32,
   field_max: f32,
   wave_amplitude: f32,
@@ -997,6 +1024,7 @@ fn build_field_display(
 
       FieldDisplay {
         mesh_buffer,
+        streamlines: None,
         field_min,
         field_max,
         wave_amplitude,
@@ -1006,6 +1034,11 @@ fn build_field_display(
     Selection::Line(index) => {
       let field = &scene.line_fields[index];
       let mesh_buffer = MeshBuffer::from_line_field(device, &scene.topology, &scene.coords, field);
+      // The integral curves of the true Whitney field, traced on the manifold
+      // at a separation fixed to the object's own extent (not its mesh width).
+      let d_sep = f64::from(STREAMLINE_SEPARATION_FRACTION * amplitude_scale);
+      let traced = crate::streamline::trace(&scene.topology, &scene.coords, &field.cochain, d_sep);
+      let streamlines = Some(render::streamline::StreamlineBuffer::new(device, &traced));
       let (raw_min, raw_max) = field.bounds();
       // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
       // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
@@ -1027,6 +1060,7 @@ fn build_field_display(
 
       FieldDisplay {
         mesh_buffer,
+        streamlines,
         field_min,
         field_max,
         wave_amplitude: 0.0,
@@ -1078,6 +1112,16 @@ struct State<'a> {
   camera_bind_group: wgpu::BindGroup,
 
   mesh_buffer: MeshBuffer,
+
+  // The streamline mark for a line field: the evenly-spaced ribbon pipeline, the
+  // traced curves of the current field (`None` for a scalar field or an empty
+  // line field), and the per-frame width/bounds uniform. `line_mark` chooses
+  // between this and the LIC path above.
+  line_mark: LineMark,
+  streamline_pipeline: RenderPipeline,
+  streamline_buffer: Option<render::streamline::StreamlineBuffer>,
+  streamline_uniform_buffer: wgpu::Buffer,
+  streamline_bind_group: wgpu::BindGroup,
 
   // kept alive to back bounds_bind_group's binding; never read directly
   #[allow(dead_code)]
@@ -1160,6 +1204,17 @@ struct WireframeUniform {
   _pad2: f32,
 }
 
+/// The streamline ribbon pipeline's per-frame state: the world-space ribbon
+/// half-width, a fraction of the scene extent. The ribbons carry no colormap --
+/// the surface beneath them does (see `streamline.wgsl`) -- so the fill's bounds
+/// are not needed here.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct StreamlineUniform {
+  half_width_world: f32,
+  _pad: [f32; 3],
+}
+
 /// The wireframe's half-width as a fraction of the scene's own extent
 /// ([`scene_extent`]) -- the same object-intrinsic scale
 /// `WAVE_AMPLITUDE_FRACTION` uses for the standing-wave displacement --
@@ -1222,6 +1277,7 @@ impl<'a> State<'a> {
     let display = build_field_display(&device, &scene, selection, amplitude_scale);
     let (field_min, field_max) = (display.field_min, display.field_max);
     let mesh_buffer = display.mesh_buffer;
+    let streamline_buffer = display.streamlines;
     let wave_amplitude = display.wave_amplitude;
     let wave_omega = display.wave_omega;
 
@@ -1477,7 +1533,97 @@ impl<'a> State<'a> {
         unclipped_depth: false,
         conservative: false,
       },
-      depth_stencil,
+      depth_stencil: depth_stencil.clone(),
+      multisample: wgpu::MultisampleState::default(),
+      multiview_mask: None,
+      cache: None,
+    });
+
+    // Streamline ribbon pipeline: the billboard quads of `streamline.wgsl`, one
+    // instance per traced segment, tinted by the field magnitude with alpha
+    // blending so the ends taper and the node fade read over the surface.
+    let streamline_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+      label: Some("Streamline Shader"),
+      source: wgpu::ShaderSource::Wgsl(include_str!("render/streamline.wgsl").into()),
+    });
+    let streamline_uniform = StreamlineUniform {
+      half_width_world: STREAMLINE_WIDTH_FRACTION * amplitude_scale,
+      _pad: [0.0; 3],
+    };
+    let streamline_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Streamline Uniform Buffer"),
+      contents: bytemuck::cast_slice(&[streamline_uniform]),
+      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+    let streamline_bind_group_layout =
+      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[wgpu::BindGroupLayoutEntry {
+          binding: 0,
+          visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+          ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+          },
+          count: None,
+        }],
+        label: Some("streamline_bind_group_layout"),
+      });
+    let streamline_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+      layout: &streamline_bind_group_layout,
+      entries: &[wgpu::BindGroupEntry {
+        binding: 0,
+        resource: streamline_uniform_buffer.as_entire_binding(),
+      }],
+      label: Some("streamline_bind_group"),
+    });
+    let streamline_pipeline_layout =
+      device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Streamline Pipeline Layout"),
+        bind_group_layouts: &[
+          Some(&camera_bind_group_layout),
+          Some(&wave_bind_group_layout),
+          Some(&streamline_bind_group_layout),
+        ],
+        immediate_size: 0,
+      });
+    let streamline_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+      label: Some("Streamline Pipeline"),
+      layout: Some(&streamline_pipeline_layout),
+      vertex: wgpu::VertexState {
+        module: &streamline_shader,
+        entry_point: Some("vs_main"),
+        compilation_options: Default::default(),
+        buffers: &[StreamEndpoint::desc_a(), StreamEndpoint::desc_b()],
+      },
+      fragment: Some(wgpu::FragmentState {
+        module: &streamline_shader,
+        entry_point: Some("fs_main"),
+        compilation_options: Default::default(),
+        targets: &[Some(wgpu::ColorTargetState {
+          format: config.format,
+          blend: Some(wgpu::BlendState::ALPHA_BLENDING),
+          write_mask: wgpu::ColorWrites::ALL,
+        })],
+      }),
+      primitive: wgpu::PrimitiveState {
+        topology: wgpu::PrimitiveTopology::TriangleList,
+        strip_index_format: None,
+        front_face: wgpu::FrontFace::Ccw,
+        cull_mode: None,
+        polygon_mode: wgpu::PolygonMode::Fill,
+        unclipped_depth: false,
+        conservative: false,
+      },
+      // The ribbons are an alpha-blended overlay on the surface: they test
+      // against it (so a curve on the far side stays hidden) but must not write
+      // depth. Writing it would let a ribbon, biased toward the camera and drawn
+      // first, occlude the wireframe edge it lies along -- and depth-writing
+      // translucent geometry is wrong regardless of what is drawn after.
+      depth_stencil: Some(wgpu::DepthStencilState {
+        depth_write_enabled: Some(false),
+        ..depth_stencil.clone().unwrap()
+      }),
       multisample: wgpu::MultisampleState::default(),
       multiview_mask: None,
       cache: None,
@@ -1833,6 +1979,11 @@ impl<'a> State<'a> {
       camera_buffer,
       camera_bind_group,
       mesh_buffer,
+      line_mark: LineMark::Streamlines,
+      streamline_pipeline,
+      streamline_buffer,
+      streamline_uniform_buffer,
+      streamline_bind_group,
       bounds_buffer,
       bounds_bind_group,
       start_time,
@@ -1867,6 +2018,7 @@ impl<'a> State<'a> {
     self.selection = selection;
     let display = build_field_display(&self.device, &self.scene, selection, self.amplitude_scale);
     self.mesh_buffer = display.mesh_buffer;
+    self.streamline_buffer = display.streamlines;
     self.wave_amplitude = display.wave_amplitude;
     self.wave_omega = display.wave_omega;
     self.start_time = std::time::Instant::now();
@@ -1881,6 +2033,18 @@ impl<'a> State<'a> {
       &self.bounds_buffer,
       0,
       bytemuck::cast_slice(&[bounds_uniform]),
+    );
+
+    // The ribbons take their width from the current object extent, which changes
+    // with the scene, so rewrite it here rather than only at startup.
+    let streamline_uniform = StreamlineUniform {
+      half_width_world: STREAMLINE_WIDTH_FRACTION * self.amplitude_scale,
+      _pad: [0.0; 3],
+    };
+    self.queue.write_buffer(
+      &self.streamline_uniform_buffer,
+      0,
+      bytemuck::cast_slice(&[streamline_uniform]),
     );
   }
 
@@ -2119,6 +2283,7 @@ impl<'a> State<'a> {
     let mut requested_view = shown_view;
     let mut requested_mesh_source = mesh_source.clone();
     let mut selection = self.selection;
+    let mut line_mark = self.line_mark;
     let mut top_down = self.camera.top_down;
 
     // Borrow only the file dialog into the closure (native): the rest of the
@@ -2251,6 +2416,18 @@ impl<'a> State<'a> {
           render_modes(ui, &entries, &mut selection, scene_dim);
         }
 
+        // The mark is only meaningful for a line field, and it applies to the
+        // one on screen, so it follows the displayed selection rather than the
+        // one this frame's picker may just have moved to.
+        if selection.is_line() {
+          ui.separator();
+          ui.horizontal(|ui| {
+            ui.label("line mark:");
+            ui.radio_value(&mut line_mark, LineMark::Streamlines, "streamlines");
+            ui.radio_value(&mut line_mark, LineMark::Lic, "LIC");
+          });
+        }
+
         ui.separator();
         ui.checkbox(&mut top_down, "Top-down (orthographic, drag to pan)");
       });
@@ -2286,6 +2463,7 @@ impl<'a> State<'a> {
         self.set_view(requested_view);
       } else {
         self.set_field(selection);
+        self.line_mark = line_mark;
         if top_down != self.camera.top_down {
           self.camera.top_down = top_down;
           self.update_camera_buffer();
@@ -2411,7 +2589,7 @@ impl<'a> State<'a> {
       b: 0.1,
       a: 1.0,
     };
-    if self.selection.is_line() {
+    if self.selection.is_line() && self.line_mark == LineMark::Lic {
       // G-buffer: the surface's screen tangent, magnitude, coverage, world
       // position and shade, into two offscreen targets and the shared depth.
       {
@@ -2556,6 +2734,22 @@ impl<'a> State<'a> {
         wgpu::IndexFormat::Uint32,
       );
       render_pass.draw_indexed(0..self.mesh_buffer.num_indices, 0, 0..1);
+
+      // A line field in streamline mode: the evenly-spaced ribbons over the
+      // magnitude-tinted surface, before the wireframe. The surface fill above
+      // is identical to a scalar field's, since a line field's `MeshBuffer`
+      // carries its nodal magnitude as the fill value.
+      if let Some(streamlines) = &self.streamline_buffer {
+        if streamlines.num_segments > 0 {
+          render_pass.set_pipeline(&self.streamline_pipeline);
+          render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+          render_pass.set_bind_group(1, &self.wave_bind_group, &[]);
+          render_pass.set_bind_group(2, &self.streamline_bind_group, &[]);
+          render_pass.set_vertex_buffer(0, streamlines.endpoint_a.slice(..));
+          render_pass.set_vertex_buffer(1, streamlines.endpoint_b.slice(..));
+          render_pass.draw(0..6, 0..streamlines.num_segments);
+        }
+      }
 
       // Draw wireframe edges on top
       render_pass.set_pipeline(&self.wireframe_pipeline);

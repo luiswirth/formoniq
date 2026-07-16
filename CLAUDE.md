@@ -35,8 +35,8 @@ commentary on them. Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing —
-`common → exterior → { manifold, continuum } → ddf → formoniq`, where `manifold`
-and `continuum` are *siblings*:
+`common → exterior → { manifold, continuum } → ddf → formoniq → studio`, where
+`manifold` and `continuum` are *siblings*:
 
 | crate       | is                                  | key contents |
 | ----------- | ----------------------------------- | ------------ |
@@ -46,6 +46,7 @@ and `continuum` are *siblings*:
 | `continuum` | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `ddf`       | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
 | `formoniq`  | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
+| `studio`    | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `TriangleSurface3D` (the $RR^3$ bake), reduced-grade render marks (scalar density, LIC line field, streamlines), a wgpu/winit/egui renderer, native and wasm |
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `manifold` never about forms.
@@ -53,6 +54,14 @@ one: `exterior` must never hear about meshes, `manifold` never about forms.
 approximates) are independent objects, so neither depends on the other; their
 one relation — pulling continuum data onto the mesh, and the error that costs —
 is the join, and it lives in `ddf`, the crate above both.
+
+`studio` sits at the top as the visual counterpart to the engine — the one
+consumer of the I/O-and-visualization carve-out invariant 2 draws. Visualization
+needs an embedding, so `studio` is extrinsic by necessity where the core is
+intrinsic by discipline; it depends downward on `formoniq` and below, nothing
+depends on it, and it carries its own `crates/studio/CLAUDE.md` for what that
+inversion means. The parent's invariants still bind it — they are only read from
+the extrinsic side.
 
 **Concepts float up.** A concept belongs in the lowest crate (or module) that can
 express it with the dependencies it already has. If expressing it there would
