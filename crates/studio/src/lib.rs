@@ -1,6 +1,10 @@
 extern crate nalgebra as na;
 
+use std::collections::HashMap;
 use std::sync::Arc;
+
+use exterior::ExteriorGrade;
+use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex, Dim};
 use wgpu::util::DeviceExt;
 use wgpu::{Device, Queue, RenderPipeline, Surface, SurfaceConfiguration};
 use winit::{
@@ -46,44 +50,80 @@ const NOISE_CYCLES_PER_MESH_WIDTH: f32 = 6.0;
 // Icosphere subdivision depth. The Laplace-Beltrami eigensolve is dense in the
 // vertex count, so keep this modest for an instant startup; bump for fidelity.
 const SPHERE_SUBDIVISIONS: usize = 3;
-const SPHERE_MODES: usize = 10;
-// Which eigenmode colors the surface. Mode 0 is the constant harmonic; mode 4
-// is the first grade-2 spherical harmonic.
-const DISPLAY_MODE: usize = 4;
-// Peak standing-wave displacement, as a multiple of the mesh's own width
-// $h_max$ -- a mesh-intrinsic scale, not a sphere radius, so it stays
-// meaningful on any mesh the scene is built from.
-const WAVE_AMPLITUDE_FRACTION: f32 = 1.0;
+// Chosen so both grades close on a complete degeneracy shell: grade 0 fills
+// $l = 0..=3$ ($sum (2l+1) = 16$) and grade 1 fills $l = 1, 2$
+// ($6 + 10 = 16$), so the orbital pyramid the UI lays these out in has no
+// half-built final row.
+const SPHERE_MODES: usize = 16;
+// Peak standing-wave displacement, as a fraction of the scene's own coordinate
+// extent (its radius) -- an object-intrinsic scale, independent of how finely
+// the object is meshed. At this fraction a grade-$l$ eigenmode swells its
+// positive lobes to nearly twice the radius and pinches its negative lobes
+// almost to the center, so the deformed surface reads as the familiar
+// orbital-lobe shape rather than a faint ripple. Kept below 1 so a negative
+// lobe never overshoots the origin and inverts the surface.
+const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 
-/// Which built-in scene is on display: a picker in the UI switches this at
-/// runtime, so this is a value, not a per-build constant -- the render path
-/// already treats every `Scene` alike regardless of which of these built it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Demo {
-  /// Laplace-Beltrami eigenmodes on the sphere.
-  SphericalHarmonics,
-  /// Every Whitney basis function of the reference triangle.
+/// The shared sphere mesh the harmonics gallery solves its grades against,
+/// built once so every per-grade eigensolve reuses it rather than remeshing.
+type SphereMesh = (Complex, MeshCoords);
+
+/// What the viewer is showing -- the unit a build, and its memoization, is
+/// keyed on. A picker in the UI switches this at runtime; the render path
+/// treats every `Scene` alike regardless of which `View` built it.
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum View {
+  /// A single grade of the sphere's discrete harmonics. The expensive case:
+  /// each grade is a dense eigensolve, run once and memoized, so only the grade
+  /// actually being viewed is ever computed.
+  SphereGrade(ExteriorGrade),
+  /// Every Whitney basis function of the reference triangle. Cheap to build.
   WhitneyBasis,
 }
 
-impl Demo {
-  const ALL: [Demo; 2] = [Demo::SphericalHarmonics, Demo::WhitneyBasis];
+impl View {
+  /// The starting view when the viewer opens: grade 0 of the sphere.
+  const START: View = View::SphereGrade(0);
 
-  fn label(self) -> &'static str {
+  fn label(self) -> String {
     match self {
-      Demo::SphericalHarmonics => "Spherical harmonics",
-      Demo::WhitneyBasis => "Whitney basis (reference triangle)",
+      View::SphereGrade(grade) => format!("Spherical harmonics, grade {grade}"),
+      View::WhitneyBasis => "Whitney basis (reference triangle)".to_string(),
     }
   }
 }
 
-/// The starting scene when the viewer opens.
-const DEMO: Demo = Demo::WhitneyBasis;
+/// Builds the scene for `view`. For a sphere grade this runs that grade's dense
+/// eigensolve against the shared `mesh` -- the expensive path the caller runs
+/// on a background thread and memoizes; the Whitney basis is cheap and ignores
+/// the mesh.
+fn build_view(view: View, mesh: &SphereMesh) -> Scene {
+  match view {
+    View::SphereGrade(grade) => {
+      let (topology, coords) = mesh;
+      Scene::sphere_grade(topology, coords, grade, SPHERE_MODES)
+    }
+    View::WhitneyBasis => Scene::whitney_basis(2),
+  }
+}
 
-/// A rebuild of `T` running off the render thread, so a demo switch that
-/// triggers a dense eigensolve (`Scene::spherical_harmonics`) never blocks the
-/// UI. `poll` is non-blocking and yields the result exactly once, the frame it
-/// arrives.
+/// The field a freshly shown scene opens on: its first mode. A sphere grade
+/// carries only one render mark, so exactly one of the two lists is nonempty; a
+/// scene with neither (never produced here) falls back harmlessly to the first
+/// scalar slot.
+fn default_selection(scene: &Scene) -> Selection {
+  if !scene.fields.is_empty() {
+    Selection::Scalar(0)
+  } else if !scene.line_fields.is_empty() {
+    Selection::Line(0)
+  } else {
+    Selection::Scalar(0)
+  }
+}
+
+/// A rebuild of `T` running off the render thread, so a solve that triggers a
+/// dense eigensolve never blocks the UI. `poll` is non-blocking and yields the
+/// result exactly once, the frame it arrives.
 ///
 /// Wasm has no threads to spawn onto, so there `build` just runs eagerly and
 /// the result is already waiting on the first `poll` -- the freeze that
@@ -110,141 +150,104 @@ impl<T: Send + 'static> PendingLoad<T> {
   }
 }
 
-/// Which demo is on display, and which, if any, is being rebuilt in the
-/// background to replace it. Kept free of any GPU type so it can be
-/// unit-tested on its own -- the actual `Scene`/`Selection` it carries in
-/// `State` are just its `T`.
+/// The gallery's lazy, memoized loader. Owns the shared sphere mesh; each
+/// view's scene is built at most once -- the expensive sphere grades on a
+/// background thread -- and cached, so revisiting a grade is instant and only
+/// the grades actually viewed are ever solved.
 ///
-/// Only one load is ever in flight. Requesting the demo already on display
-/// cancels a pending switch away from it, rather than letting an abandoned
-/// load land once it happens to finish; requesting a third demo while a
-/// switch is already loading replaces that load outright. Either way, a
-/// result can only ever be applied for the load `loading` currently names --
-/// there is no path for a stale one to surface later.
-struct SceneSwitcher<D, T> {
-  current: D,
-  loading: Option<(D, PendingLoad<T>)>,
+/// Kept free of any GPU type; `State` owns the `Scene` it produces. Only one
+/// build is ever in flight: requesting a view while another is loading replaces
+/// the pending build, and a landed result is only ever installed for the view
+/// it was built for.
+struct Gallery {
+  mesh: Arc<SphereMesh>,
+  current: View,
+  /// The last sphere grade viewed, so toggling to the Whitney basis and back
+  /// resumes that grade rather than resetting to 0.
+  last_sphere_grade: ExteriorGrade,
+  cache: HashMap<View, Scene>,
+  loading: Option<(View, PendingLoad<Scene>)>,
 }
 
-impl<D: Copy + PartialEq, T: Send + 'static> SceneSwitcher<D, T> {
-  fn new(current: D) -> Self {
-    Self {
-      current,
+impl Gallery {
+  /// Opens on [`View::START`], returning the cheap placeholder scene to show at
+  /// once while that view's real build runs in the background (delivered later
+  /// by [`Self::poll`]). The placeholder shares the loader's mesh, so the
+  /// window is up on the first frame without waiting on any eigensolve.
+  fn new(mesh: SphereMesh) -> (Self, Scene) {
+    let mesh = Arc::new(mesh);
+    let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
+    let mut gallery = Self {
+      mesh,
+      current: View::START,
+      last_sphere_grade: 0,
+      cache: HashMap::new(),
       loading: None,
-    }
+    };
+    gallery.spawn(View::START);
+    (gallery, placeholder)
+  }
+
+  fn spawn(&mut self, view: View) {
+    let mesh = self.mesh.clone();
+    self.loading = Some((view, PendingLoad::spawn(move || build_view(view, &mesh))));
   }
 
   fn is_loading(&self) -> bool {
     self.loading.is_some()
   }
 
-  fn request(&mut self, demo: D, build: impl FnOnce() -> T + Send + 'static) {
-    if demo == self.current {
-      self.loading = None;
-      return;
-    }
-    if self.loading.as_ref().is_some_and(|(d, _)| *d == demo) {
-      return;
-    }
-    self.loading = Some((demo, PendingLoad::spawn(build)));
+  fn loading_view(&self) -> Option<View> {
+    self.loading.as_ref().map(|(view, _)| *view)
   }
 
-  /// `Some` exactly once, the frame a load completes, and commits `demo` as
-  /// the new `current` in the same step.
-  fn poll(&mut self) -> Option<T> {
-    let result = self
+  /// Requests that `view` be shown. Returns `Some(scene)` to install right now
+  /// -- a cache hit, instant -- or `None` when the view is either already shown
+  /// or now building in the background (a spinner shows until [`Self::poll`]
+  /// delivers it).
+  fn request(&mut self, view: View) -> Option<Scene> {
+    if let View::SphereGrade(grade) = view {
+      self.last_sphere_grade = grade;
+    }
+    if view == self.current && self.loading.is_none() {
+      return None;
+    }
+    if let Some(scene) = self.cache.get(&view) {
+      self.current = view;
+      self.loading = None;
+      return Some(scene.clone());
+    }
+    if !self.loading.as_ref().is_some_and(|(v, _)| *v == view) {
+      self.spawn(view);
+    }
+    None
+  }
+
+  /// `Some` exactly once, the frame a background build lands: commits it as
+  /// `current`, memoizes it, and hands it back to be installed.
+  fn poll(&mut self) -> Option<Scene> {
+    let (view, scene) = self
       .loading
       .as_ref()
-      .and_then(|(_, pending)| pending.poll())?;
-    let (demo, _) = self.loading.take().unwrap();
-    self.current = demo;
-    Some(result)
+      .and_then(|(view, pending)| pending.poll().map(|scene| (*view, scene)))?;
+    self.loading = None;
+    self.current = view;
+    self.cache.insert(view, scene.clone());
+    Some(scene)
   }
 }
 
-#[cfg(test)]
-mod scene_switcher_tests {
-  use super::SceneSwitcher;
-
-  fn poll_until<D: Copy + PartialEq, T: Send + 'static>(switcher: &mut SceneSwitcher<D, T>) -> T {
-    loop {
-      if let Some(result) = switcher.poll() {
-        return result;
-      }
-      std::thread::sleep(std::time::Duration::from_millis(1));
-    }
-  }
-
-  #[test]
-  fn request_delivers_the_built_value_and_commits_current() {
-    let mut switcher = SceneSwitcher::new(0u32);
-    switcher.request(1, || 42u32);
-    let value = poll_until(&mut switcher);
-    assert_eq!(value, 42);
-    assert_eq!(switcher.current, 1);
-    assert!(!switcher.is_loading());
-  }
-
-  #[test]
-  fn requesting_the_current_demo_cancels_a_pending_switch() {
-    let (gate_tx, gate_rx) = std::sync::mpsc::channel::<()>();
-    let mut switcher = SceneSwitcher::new(0u32);
-    switcher.request(1, move || {
-      gate_rx.recv().ok();
-      99u32
-    });
-    assert!(switcher.is_loading());
-
-    // Switch back before the background build ever finishes.
-    switcher.request(0, || unreachable!("current demo never rebuilds itself"));
-    assert!(!switcher.is_loading());
-    assert_eq!(switcher.current, 0);
-
-    // Let the abandoned build finish; its result must never surface.
-    gate_tx.send(()).ok();
-    std::thread::sleep(std::time::Duration::from_millis(20));
-    assert_eq!(switcher.poll(), None);
-    assert_eq!(switcher.current, 0);
-  }
-
-  #[test]
-  fn requesting_a_third_demo_replaces_the_pending_load() {
-    let (gate_tx, gate_rx) = std::sync::mpsc::channel::<()>();
-    let mut switcher = SceneSwitcher::new(0u32);
-    switcher.request(1, move || {
-      gate_rx.recv().ok();
-      1u32
-    });
-    switcher.request(2, || 2u32);
-
-    let value = poll_until(&mut switcher);
-    assert_eq!(value, 2);
-    assert_eq!(switcher.current, 2);
-
-    // The abandoned load for demo 1 must not surface once it finishes either.
-    gate_tx.send(()).ok();
-    std::thread::sleep(std::time::Duration::from_millis(20));
-    assert_eq!(switcher.poll(), None);
-    assert_eq!(switcher.current, 2);
-  }
-}
-
-/// The scene a demo builds, and the field it's shown on initially -- the one
-/// place a `Demo` turns into a `Scene`, called both at startup and whenever
-/// the UI switches it.
-fn build_scene(demo: Demo) -> (Scene, Selection) {
-  match demo {
-    // Real formoniq output: Laplace-Beltrami eigenfunctions on the unit
-    // sphere (discrete spherical harmonics), colored by one mode.
-    Demo::SphericalHarmonics => (
-      Scene::spherical_harmonics(SPHERE_SUBDIVISIONS, SPHERE_MODES),
-      Selection::Scalar(DISPLAY_MODE),
-    ),
-    // The Whitney basis functions of the reference triangle: grade 0 (and the
-    // top grade 2, starred to a density) color the surface; grade 1 is drawn
-    // as a line field.
-    Demo::WhitneyBasis => (Scene::whitney_basis(2), Selection::Scalar(0)),
-  }
+/// The scene's coordinate extent: the largest distance of any vertex from the
+/// origin -- an icosphere of radius 1 gives 1, a unit reference triangle its
+/// own radius. Both the camera framing and the standing-wave amplitude scale
+/// off this object-intrinsic length, so neither is tuned to the sphere.
+fn scene_extent(scene: &Scene) -> f64 {
+  scene
+    .coords
+    .coord_iter()
+    .map(|c| c.norm())
+    .fold(0.0, f64::max)
+    .max(1e-6)
 }
 
 /// The camera's natural starting orientation for a scene, derived purely from
@@ -255,12 +258,7 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   // Framing distance from the scene's own coordinate extent, not a constant
   // tuned for the sphere: an icosphere of radius 1 gives back exactly the
   // prior hardcoded 3.0, and a unit reference triangle frames itself too.
-  let extent = scene
-    .coords
-    .coord_iter()
-    .map(|c| c.norm())
-    .fold(0.0, f64::max)
-    .max(1e-6);
+  let extent = scene_extent(scene);
   // A mesh flat in the z = 0 plane (the reference cell scenes: nothing has
   // been displaced off it yet) is looked down onto from above, along its own
   // normal, in orthographic top-down mode, rather than the angled perspective
@@ -450,6 +448,131 @@ impl Selection {
   }
 }
 
+/// One mode of the currently shown grade, as the picker needs it: the field's
+/// [`Selection`], its eigenvalue (for the degeneracy layout) and its full name
+/// (for the hover). The render mark the selection resolves to is decided
+/// elsewhere by the reduced grade; here a mode is just a selectable cell.
+struct Entry<'a> {
+  selection: Selection,
+  eigenvalue: Option<f64>,
+  name: &'a str,
+}
+
+/// One degeneracy shell of an eigenmode list: the modes sharing a Laplace
+/// degree $l$, in the order the eigensolve returned them. A row of the orbital
+/// pyramid.
+struct Shell {
+  degree: usize,
+  /// Indices into the entry list this shell was grouped from.
+  members: Vec<usize>,
+}
+
+/// Groups a list of eigenmodes into its degeneracy shells, reading the Laplace
+/// degree $l$ back from each eigenvalue through the sphere's dispersion
+/// relation $lambda = l(l+1)$, i.e. $l = round((sqrt(1 + 4 lambda) - 1) / 2)$.
+///
+/// On $S^2$ the whole de Rham complex shares this spectrum, so one rule shells
+/// every grade: the modes arrive sorted by $lambda$, clustered tightly around
+/// $l(l+1)$ (the discrete degeneracy an icosphere only approximately resolves),
+/// and consecutive modes of equal rounded degree are one degenerate eigenspace
+/// -- $2l+1$-fold at grade 0, the row of the pyramid. Organization derived
+/// purely from the eigensolver's output, no geometry.
+///
+/// `None` if any field carries no eigenvalue (not an eigenmode scene, e.g. the
+/// raw Whitney basis), where the caller keeps a flat list instead.
+fn degree_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Option<Vec<Shell>> {
+  let mut shells: Vec<Shell> = Vec::new();
+  for (idx, eigenvalue) in eigenvalues.into_iter().enumerate() {
+    let lambda = eigenvalue?;
+    let degree = (((1.0 + 4.0 * lambda).max(0.0).sqrt() - 1.0) / 2.0).round() as usize;
+    match shells.last_mut() {
+      Some(shell) if shell.degree == degree => shell.members.push(idx),
+      _ => shells.push(Shell {
+        degree,
+        members: vec![idx],
+      }),
+    }
+  }
+  Some(shells)
+}
+
+/// Renders the modes of the currently shown grade as a picker. When they carry
+/// eigenvalues (the harmonics) they lay out as the orbital pyramid by degeneracy
+/// shell; otherwise (the raw Whitney basis) they fall back to a flat list.
+fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection) {
+  match degree_shells(entries.iter().map(|e| e.eigenvalue)) {
+    Some(shells) => pyramid(ui, &shells, entries, selection),
+    None => {
+      for entry in entries {
+        let selected = *selection == entry.selection;
+        if ui.selectable_label(selected, entry.name).clicked() {
+          *selection = entry.selection;
+        }
+      }
+    }
+  }
+}
+
+/// Lays out one grade's eigenmodes as the orbital pyramid: one centered row per
+/// degeneracy shell, widening with $l$, each cell a mode selector labelled by
+/// its magnetic index $m$ (the within-shell offset, $-l..=l$ when the shell is
+/// the $2l+1$-fold grade-0 multiplet). Hovering a cell shows the mode's full
+/// name and eigenvalue.
+fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &mut Selection) {
+  // A fixed cell size makes the columns line up into a grid; the matching
+  // gutters left and right keep each row's cells centered under `vertical_centered`.
+  const CELL: [f32; 2] = [30.0, 22.0];
+  const GUTTER: f32 = 44.0;
+  ui.vertical_centered(|ui| {
+    for shell in shells {
+      ui.horizontal(|ui| {
+        ui.add_sized(
+          [GUTTER, CELL[1]],
+          egui::Label::new(format!("l = {}", shell.degree)),
+        );
+        let n = shell.members.len() as isize;
+        for (pos, &idx) in shell.members.iter().enumerate() {
+          let m = pos as isize - (n - 1) / 2;
+          let label = if m == 0 {
+            "0".to_string()
+          } else {
+            format!("{m:+}")
+          };
+          let entry = &entries[idx];
+          let selected = *selection == entry.selection;
+          if ui
+            .add_sized(CELL, egui::Button::selectable(selected, label))
+            .on_hover_text(entry.name)
+            .clicked()
+          {
+            *selection = entry.selection;
+          }
+        }
+        ui.add_space(GUTTER);
+      });
+    }
+  });
+}
+
+/// The render mark a grade-$k$ field is drawn with on an $n$-manifold, named
+/// for the UI: its reduced grade $min(k, n-k)$ decides between a scalar density
+/// and a tangent line field (discussion #101). Whether the reduction went
+/// through a Hodge star ($k$ above the fold) is noted so the top-grade section
+/// reads as a density arrived at by $star$, not a bare 0-form.
+fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
+  let reduced = grade.min(n - grade);
+  let mark = match reduced {
+    0 => "density",
+    1 => "line field",
+    _ => "sheet",
+  };
+  if grade == reduced {
+    format!("grade {grade} · {mark}")
+  } else {
+    format!("grade {grade} · {mark} (⋆)")
+  }
+}
+
 /// The mesh buffer and bounds/wave uniforms for showing one field of a
 /// scene: the one place a [`Selection`] turns into pixels, called both at
 /// startup and whenever the UI switches it.
@@ -465,7 +588,7 @@ fn build_field_display(
   device: &Device,
   scene: &Scene,
   selection: Selection,
-  mesh_width: f32,
+  amplitude_scale: f32,
 ) -> FieldDisplay {
   match selection {
     Selection::Scalar(index) => {
@@ -479,8 +602,11 @@ fn build_field_display(
       // the wave collapses to no displacement rather than a special case
       // here.
       let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
+      // Normalized by the field's own peak so every mode reaches the same peak
+      // displacement -- a fraction of the object's extent, not its mesh width,
+      // so the lobes read at orbital scale regardless of resolution.
       let wave_amplitude = if field.eigenvalue.is_some() {
-        WAVE_AMPLITUDE_FRACTION * mesh_width / field_scale
+        WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale
       } else {
         0.0
       };
@@ -576,17 +702,21 @@ struct State<'a> {
   mouse_pressed: bool,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
 
-  // The full scene stays around, not just the field on display, so the UI
-  // can switch which one is shown -- a scene is exactly as general as the
-  // picker built over it, regardless of how many fields it carries. Which
-  // demo is `current` and which, if any, is loading in the background lives
-  // in `scene_switcher`, not a bare `Demo` field.
-  scene_switcher: SceneSwitcher<Demo, (Scene, Selection)>,
+  // The lazy, memoized per-grade loader: which view is current, which is
+  // building in the background, and the cache of already-solved scenes. The
+  // full scene it produces stays around (not just the field on display), so the
+  // UI can switch which field is shown without a rebuild.
+  gallery: Gallery,
   scene: Scene,
   selection: Selection,
-  // Fixed at scene-build time: the mesh's own edge-length scale, used to
-  // normalize the standing-wave amplitude to whichever field is on display.
+  // Fixed at scene-build time: the mesh's own edge-length scale, which sets the
+  // LIC noise frequency (`noise_scale`).
   mesh_width: f32,
+  // Fixed at scene-build time: the object's coordinate extent (its radius),
+  // which sets the standing-wave displacement scale for whichever field is on
+  // display -- an object-intrinsic length, so the lobes read at orbital scale
+  // on any mesh.
+  amplitude_scale: f32,
 
   egui_ctx: egui::Context,
   egui_winit_state: EguiWinitState,
@@ -655,16 +785,23 @@ impl<'a> State<'a> {
       .unwrap();
     surface.configure(&device, &config);
 
-    let demo = DEMO;
-    let (scene, selection) = build_scene(demo);
-    // The standing-wave amplitude is scaled by the mesh's own width, not a
-    // sphere radius, so the displacement reads the same whether the mesh is a
-    // sphere or anything else, and whichever field is currently on display.
+    // Show the window immediately: the gallery opens on a cheap placeholder
+    // sphere and builds the first grade's harmonics in the background, swapping
+    // it in when it lands (`poll_view_load`), rather than blocking the first
+    // frame on the solve.
+    let (gallery, scene) = Gallery::new(manifold::gen::sphere::mesh_sphere_surface(
+      SPHERE_SUBDIVISIONS,
+    ));
+    let selection = default_selection(&scene);
+    // The mesh width fixes the LIC noise frequency; the coordinate extent fixes
+    // the standing-wave displacement (see the two `State` fields). Both are
+    // object-intrinsic, so neither is tuned to the sphere.
     let mesh_width = scene
       .coords
       .to_edge_lengths(&scene.topology)
       .mesh_width_max() as f32;
-    let display = build_field_display(&device, &scene, selection, mesh_width);
+    let amplitude_scale = scene_extent(&scene) as f32;
+    let display = build_field_display(&device, &scene, selection, amplitude_scale);
     let (field_min, field_max) = (display.field_min, display.field_max);
     let mesh_buffer = display.mesh_buffer;
     let wave_amplitude = display.wave_amplitude;
@@ -1175,10 +1312,11 @@ impl<'a> State<'a> {
       wave_bind_group,
       mouse_pressed: false,
       last_mouse_pos: None,
-      scene_switcher: SceneSwitcher::new(demo),
+      gallery,
       scene,
       selection,
       mesh_width,
+      amplitude_scale,
       egui_ctx,
       egui_winit_state,
       egui_renderer,
@@ -1192,7 +1330,7 @@ impl<'a> State<'a> {
   /// [`Self::set_field`] instead.
   fn apply_field(&mut self, selection: Selection) {
     self.selection = selection;
-    let display = build_field_display(&self.device, &self.scene, selection, self.mesh_width);
+    let display = build_field_display(&self.device, &self.scene, selection, self.amplitude_scale);
     self.mesh_buffer = display.mesh_buffer;
     self.wave_amplitude = display.wave_amplitude;
     self.wave_omega = display.wave_omega;
@@ -1220,28 +1358,30 @@ impl<'a> State<'a> {
     self.apply_field(selection);
   }
 
-  /// Requests a switch to a different built-in scene. The rebuild --
-  /// including, for [`Demo::SphericalHarmonics`], a dense eigensolve -- runs
-  /// on a background thread via `scene_switcher` rather than blocking this
-  /// call, so the UI stays responsive while it completes; [`Self::poll_scene_load`]
-  /// is what actually applies the result once it lands.
-  fn set_demo(&mut self, demo: Demo) {
-    self.scene_switcher.request(demo, move || build_scene(demo));
+  /// Requests that `view` be shown. A cached view (an already-solved grade)
+  /// installs instantly; an uncached one -- a grade's dense eigensolve -- runs
+  /// on a background thread via `gallery`, and [`Self::poll_view_load`] installs
+  /// the result once it lands, so this call never blocks the UI.
+  fn set_view(&mut self, view: View) {
+    if let Some(scene) = self.gallery.request(view) {
+      self.install_scene(scene);
+    }
   }
 
-  /// Applies a scene that just finished loading (or, at startup, the initial
-  /// one): a new topology, coordinates and field set, plus the camera's
-  /// natural orientation for it. The selection and camera state from the old
-  /// scene are never reused as-is here (unlike [`Self::set_field`]'s
-  /// early-out) -- a selection valid in one scene can be out of range in
-  /// another, and a camera tuned for a sphere is not a natural start for a
-  /// flat reference cell, or vice versa.
-  fn apply_new_scene(&mut self, scene: Scene, selection: Selection) {
+  /// Installs a scene the gallery just handed over -- a cache hit or a finished
+  /// build -- opening it on its first mode. The selection and camera from the
+  /// old scene are never reused here (unlike [`Self::set_field`]'s early-out):
+  /// a selection valid in one grade can be out of range in another, and a
+  /// camera tuned for the sphere is not a natural start for the flat reference
+  /// cell, or vice versa.
+  fn install_scene(&mut self, scene: Scene) {
     self.mesh_width = scene
       .coords
       .to_edge_lengths(&scene.topology)
       .mesh_width_max() as f32;
     self.noise_scale = NOISE_CYCLES_PER_MESH_WIDTH / self.mesh_width.max(f32::EPSILON);
+    self.amplitude_scale = scene_extent(&scene) as f32;
+    let selection = default_selection(&scene);
     self.scene = scene;
     self.apply_field(selection);
 
@@ -1249,12 +1389,11 @@ impl<'a> State<'a> {
     self.update_camera_buffer();
   }
 
-  /// Non-blocking: applies a scene switch requested through [`Self::set_demo`]
-  /// exactly once, the frame its background build finishes. Called once per
-  /// frame regardless of whether a load is in flight.
-  fn poll_scene_load(&mut self) {
-    if let Some((scene, selection)) = self.scene_switcher.poll() {
-      self.apply_new_scene(scene, selection);
+  /// Non-blocking: installs a background build the frame it finishes. Called
+  /// once per frame regardless of whether a build is in flight.
+  fn poll_view_load(&mut self) {
+    if let Some(scene) = self.gallery.poll() {
+      self.install_scene(scene);
     }
   }
 
@@ -1346,52 +1485,103 @@ impl<'a> State<'a> {
     );
   }
 
-  /// Builds and tessellates the control panel: a scene picker, that scene's
-  /// field picker, and the camera-mode toggle. Reads out of `self` into plain
-  /// locals before entering the `egui::Context::run_ui` closure, since `ctx`
-  /// (a clone of `self.egui_ctx`) is what the closure captures -- borrowing
-  /// `self` itself inside it would conflict with the `&mut self` calls
-  /// (`set_demo`/`set_field`) right after.
+  /// Builds and tessellates the control panel: the family picker, the sphere's
+  /// per-grade tabs, that grade's orbital-pyramid mode picker (or a spinner
+  /// while it solves), and the camera-mode toggle. Reads out of `self` into
+  /// plain locals before entering the `egui::Context::run_ui` closure, since
+  /// `ctx` (a clone of `self.egui_ctx`) is what the closure captures --
+  /// borrowing `self` inside it would conflict with the `&mut self` calls
+  /// (`set_view`/`set_field`) right after.
   fn run_ui(&mut self, window: &Window) -> (Vec<egui::ClippedPrimitive>, egui::TexturesDelta, f32) {
     let ctx = self.egui_ctx.clone();
     let raw_input = self.egui_winit_state.take_egui_input(window);
 
-    let mut demo = self.scene_switcher.current;
-    let loading = self.scene_switcher.is_loading();
-    let field_names: Vec<&str> = self.scene.fields.iter().map(|f| f.name.as_str()).collect();
-    let line_field_names: Vec<&str> = self
+    // What the panel reflects is the view being *loaded*, if any, so clicking a
+    // grade highlights it and shows the spinner at once rather than a frame
+    // after its solve lands. The displayed `self.scene` still belongs to the
+    // previous view meanwhile, but the mode picker is hidden behind the spinner
+    // until the new one arrives, so its entries are only read when they match.
+    let shown_view = self.gallery.loading_view().unwrap_or(self.gallery.current);
+    let is_loading = self.gallery.is_loading();
+    let loading_label = self.gallery.loading_view().map(View::label);
+    let last_sphere_grade = self.gallery.last_sphere_grade;
+    let max_grade = self.gallery.mesh.0.dim();
+
+    // The current scene's modes, as the picker needs them. Scalar and line
+    // fields both feed in; for a single sphere grade exactly one list is
+    // populated, so the pyramid is over that grade alone.
+    let entries: Vec<Entry> = self
       .scene
-      .line_fields
+      .fields
       .iter()
-      .map(|f| f.name.as_str())
+      .enumerate()
+      .map(|(i, f)| Entry {
+        selection: Selection::Scalar(i),
+        eigenvalue: f.eigenvalue,
+        name: f.name.as_str(),
+      })
+      .chain(
+        self
+          .scene
+          .line_fields
+          .iter()
+          .enumerate()
+          .map(|(i, f)| Entry {
+            selection: Selection::Line(i),
+            eigenvalue: f.eigenvalue,
+            name: f.name.as_str(),
+          }),
+      )
       .collect();
+
+    let mut requested_view = shown_view;
     let mut selection = self.selection;
     let mut top_down = self.camera.top_down;
 
     let full_output = ctx.run_ui(raw_input, |ctx| {
-      egui::Window::new("Scene").show(ctx, |ui| {
-        // Disabled while a switch is loading: picking a third demo mid-load
-        // is allowed by `SceneSwitcher` itself, but a frozen picker is the
-        // clearer signal that a rebuild (the sphere's dense eigensolve, in
-        // particular) is already in flight.
-        ui.add_enabled_ui(!loading, |ui| {
-          for d in Demo::ALL {
-            ui.radio_value(&mut demo, d, d.label());
+      egui::Window::new("Gallery").show(ctx, |ui| {
+        let on_sphere = matches!(shown_view, View::SphereGrade(_));
+        ui.horizontal(|ui| {
+          if ui
+            .selectable_label(on_sphere, "Spherical harmonics")
+            .clicked()
+          {
+            requested_view = View::SphereGrade(last_sphere_grade);
+          }
+          if ui.selectable_label(!on_sphere, "Whitney basis").clicked() {
+            requested_view = View::WhitneyBasis;
           }
         });
-        if loading {
-          ui.label(format!("Loading {}...", demo.label()));
-        }
         ui.separator();
 
-        for (i, name) in field_names.iter().enumerate() {
-          ui.radio_value(&mut selection, Selection::Scalar(i), *name);
-        }
-        if !line_field_names.is_empty() {
+        if let View::SphereGrade(grade) = shown_view {
+          // One tab per grade of the de Rham complex; every grade is solved and
+          // shown, the top grade through its Hodge star just like grade 0.
+          ui.horizontal(|ui| {
+            for g in 0..=max_grade {
+              if ui
+                .selectable_label(g == grade, grade_mark_label(g, max_grade))
+                .clicked()
+              {
+                requested_view = View::SphereGrade(g);
+              }
+            }
+          });
           ui.separator();
-          for (i, name) in line_field_names.iter().enumerate() {
-            ui.radio_value(&mut selection, Selection::Line(i), *name);
+        }
+
+        if is_loading {
+          ui.horizontal(|ui| {
+            ui.add(egui::Spinner::new().size(20.0));
+            if let Some(label) = &loading_label {
+              ui.label(format!("Solving {label}…"));
+            }
+          });
+        } else {
+          if matches!(shown_view, View::SphereGrade(_)) {
+            ui.label("rows: degree l · cells: order m");
           }
+          render_modes(ui, &entries, &mut selection);
         }
 
         ui.separator();
@@ -1399,13 +1589,12 @@ impl<'a> State<'a> {
       });
     });
 
-    // A scene switch replaces the field set and the camera's natural
-    // orientation wholesale, so the `selection`/`top_down` picked in this
-    // same frame belong to the *old* scene and must not be applied
-    // afterward -- `set_demo` already chooses both anew for the scene it
-    // switches to, once the background load completes.
-    if demo != self.scene_switcher.current {
-      self.set_demo(demo);
+    // Switching view replaces the field set and the camera's natural
+    // orientation wholesale, so the `selection`/`top_down` picked this same
+    // frame belong to the view being left and must not be applied afterward --
+    // `set_view` chooses both anew for the view it lands on.
+    if requested_view != shown_view {
+      self.set_view(requested_view);
     } else {
       self.set_field(selection);
       if top_down != self.camera.top_down {
@@ -1429,7 +1618,7 @@ impl<'a> State<'a> {
     // Ahead of `run_ui`: applying a finished background load before the panel
     // is built is what makes the field/vector-field pickers reflect the new
     // scene on the very frame it lands, rather than one frame late.
-    self.poll_scene_load();
+    self.poll_view_load();
     let (paint_jobs, textures_delta, pixels_per_point) = self.run_ui(window);
 
     // Registered unconditionally, ahead of the surface-acquire early-returns
