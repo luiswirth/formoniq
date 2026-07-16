@@ -332,6 +332,22 @@ pub fn export(spec: &ExportSpec, path: &Path) -> Result<(), String> {
   }
 }
 
+/// Renders one already-built frame -- the window's live camera, field and clock
+/// time -- to a PNG at `path`. Unlike [`export`], nothing is rebuilt from a
+/// spec: the caller's own draw list and camera are rendered exactly as they are
+/// on screen, so the still is the current view.
+///
+/// The scene pass is still re-created at the export texture format with the
+/// export supersampling rather than copied off the swapchain, so a window frame drawn
+/// at the interactive SSAA budget is written at the higher export fidelity and
+/// without the egui panels composited over it.
+pub fn export_frame_png(ctx: &GpuContext, frame: &FrameView, path: &Path) -> Result<(), String> {
+  let mut renderer = Renderer::new(ctx, EXPORT_FORMAT, export_ssaa_scale(frame.size));
+  let target = ExportTarget::new(ctx, frame.size);
+  let pixels = target.frame(ctx, &mut renderer, frame);
+  write_png(&pixels, target.size, path)
+}
+
 /// One frame of the displayed scene at `time`. The one place a `FrameView` is
 /// built here, so the still and the clip cannot differ in anything but `time`.
 fn render_at(

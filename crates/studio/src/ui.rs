@@ -267,6 +267,11 @@ pub(crate) struct PanelResponse {
   /// (`app.rs`'s) stateful `egui_file_dialog`, not something a pure function
   /// of a snapshot can own.
   pub(crate) load_obj_clicked: bool,
+  /// Whether "Export PNG…" was clicked -- opens the save dialog the caller
+  /// owns, and on a pick the current frame (this field, this camera, this
+  /// instant) is written as a still. Same reason as `load_obj_clicked`: the
+  /// dialog is stateful, so it cannot live in this pure function.
+  pub(crate) export_png_clicked: bool,
 }
 
 /// Builds and tessellates the docked shell: a left sidebar (the preset browser
@@ -288,6 +293,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut top_down = model.top_down;
   let mut playing = model.playing;
   let mut load_obj_clicked = false;
+  let mut export_png_clicked = false;
 
   // Left sidebar: the browser. The curated presets on top -- each a point in
   // the mesh × study product, chosen as a whole -- then the raw two axes below.
@@ -321,6 +327,10 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         let on_whitney = matches!(model.study, Study::WhitneyBasis);
         if ui.selectable_label(on_whitney, "Whitney basis").clicked() {
           requested_study = Study::WhitneyBasis;
+        }
+        let on_hodge = matches!(model.study, Study::HodgeDecomposition);
+        if ui.selectable_label(on_hodge, "Hodge decomp").clicked() {
+          requested_study = Study::HodgeDecomposition;
         }
         if matches!(model.study, Study::Cochains(_)) {
           let _ = ui.selectable_label(true, "Cochains");
@@ -432,6 +442,9 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           Study::WhitneyBasis => {
             ui.label("grade × DOF");
           }
+          Study::HodgeDecomposition => {
+            ui.label("ω = dα + δβ + h");
+          }
           Study::Cochains(_) => {}
         };
         render_modes(ui, &model.entries, &mut selection, model.scene_dim);
@@ -440,6 +453,18 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       ui.separator();
       ui.checkbox(&mut top_down, "Top-down")
         .on_hover_text("Orthographic, drag to pan");
+
+      // Writes exactly what is on screen -- the current field, camera and wave
+      // phase -- as a PNG still, at the window's own resolution and the export
+      // supersampling. The clip export the transport bar would host is a
+      // separate, later concern; this is the plain screenshot.
+      if ui
+        .button("Export PNG…")
+        .on_hover_text("Save the current view as a still")
+        .clicked()
+      {
+        export_png_clicked = true;
+      }
     });
 
   // Bottom transport bar: play/pause and the standing wave's readouts. Only an
@@ -489,6 +514,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     top_down,
     playing,
     load_obj_clicked,
+    export_png_clicked,
   }
 }
 

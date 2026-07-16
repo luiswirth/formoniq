@@ -92,6 +92,10 @@ struct State<'a> {
   // holds the browser's own navigation state across frames), updated every
   // frame inside the egui pass, and polled for a pick afterward.
   file_dialog: egui_file_dialog::FileDialog,
+  // A second, independent browser for the "Export PNG…" save dialog: separate
+  // from the OBJ loader so each carries its own filter and default name, and so
+  // a pick on one is never mistaken for the other.
+  export_dialog: egui_file_dialog::FileDialog,
 }
 
 impl<'a> State<'a> {
@@ -176,6 +180,10 @@ impl<'a> State<'a> {
       file_dialog: egui_file_dialog::FileDialog::new()
         .add_file_filter_extensions("Wavefront OBJ", vec!["obj"])
         .default_file_filter("Wavefront OBJ"),
+      export_dialog: egui_file_dialog::FileDialog::new()
+        .add_save_extension("PNG image", "png")
+        .default_save_extension("PNG image")
+        .default_file_name("frame.png"),
     }
   }
 
@@ -441,18 +449,24 @@ impl<'a> State<'a> {
     // closure without conflicting with the `&mut self` calls after it. Its own
     // borrow ends with the closure, before those calls.
     let file_dialog = &mut self.file_dialog;
+    let export_dialog = &mut self.export_dialog;
 
     let mut response = None;
     let full_output = ctx.run_ui(raw_input, |ui| {
       response = Some(crate::ui::panel(ui, &model));
 
-      // The file browser draws as its own window and opens on the panel's
-      // request; it must be updated within the frame, after the panel. `Ui`
+      // Both browsers draw as their own windows and open on the panel's
+      // request; each must be updated within the frame, after the panel. `Ui`
       // derefs to `Context`, which is what `FileDialog::update` takes.
-      if response.as_ref().unwrap().load_obj_clicked {
+      let response = response.as_ref().unwrap();
+      if response.load_obj_clicked {
         file_dialog.pick_file();
       }
       file_dialog.update(ui);
+      if response.export_png_clicked {
+        export_dialog.save_file();
+      }
+      export_dialog.update(ui);
     });
     let response = response.expect("the closure always runs exactly once");
 
@@ -489,6 +503,12 @@ impl<'a> State<'a> {
     // regardless of the branch above, and only when it actually moved.
     self.clock.set_playing(response.playing);
 
+    // A finished export pick is likewise orthogonal to the shown pair: it reads
+    // the current frame and writes it, changing nothing on screen.
+    if let Some(path) = self.export_dialog.take_picked() {
+      self.export_current_png(&path);
+    }
+
     self
       .egui_winit_state
       .handle_platform_output(window, full_output.platform_output);
@@ -498,6 +518,24 @@ impl<'a> State<'a> {
       full_output.textures_delta,
       full_output.pixels_per_point,
     )
+  }
+
+  /// Writes the current view -- this field, this camera, this wave phase -- to
+  /// `path` as a PNG still, at the window's own resolution. The same draw list
+  /// and camera the window is rendering, handed to the headless path, so the
+  /// still is exactly what is on screen (minus the egui panels). A write failure
+  /// is surfaced in the panel rather than aborting the loop.
+  fn export_current_png(&mut self, path: &std::path::Path) {
+    let items = self.display.draw_list(&self.mesh_display);
+    let frame = FrameView {
+      items: &items,
+      camera: &self.camera,
+      size: (self.config.width, self.config.height),
+      time: self.clock.time(),
+    };
+    if let Err(error) = crate::export::export_frame_png(&self.ctx, &frame, path) {
+      self.gallery.set_error(error);
+    }
   }
 
   fn render(&mut self, window: &Window) -> Result<(), ()> {

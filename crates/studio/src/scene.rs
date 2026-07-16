@@ -1,5 +1,9 @@
 use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
-use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
+use continuum::field::DiffFormClosure;
+use ddf::{
+  cochain::Cochain, derham::derham_map, section::CoordFieldExt,
+  whitney::interpolant::WhitneyInterpolant,
+};
 use exterior::{ExteriorGrade, MultiForm};
 use manifold::{
   atlas::MeshPoint,
@@ -399,6 +403,60 @@ impl Scene {
     }
   }
 
+  /// The Hodge decomposition of a probe field, as four switchable fields: the
+  /// input $omega$ and its three $L^2$-orthogonal shells
+  /// $omega = dif alpha + delta beta + h$ -- exact, coexact, and harmonic. The
+  /// harmonic shell is what makes this more than the classical Helmholtz split:
+  /// on a contractible mesh it vanishes, and on a genus-$g$ surface it is the
+  /// $2g$-dimensional space the two independent cycles pair with, seen directly.
+  ///
+  /// The probe is a pulled-back ambient 1-form with a harmonic cycle mixed in
+  /// (`hodge_probe_input`), so every mesh gets a non-trivial grade-1 form that
+  /// exercises all three shells; the underlying `hodge_decompose` is itself
+  /// dimension- and grade-general. A failed solve falls back to showing the
+  /// input alone rather than taking the viewer down.
+  pub fn hodge_decomposition(topology: Complex, coords: MeshCoords) -> Self {
+    let input = hodge_probe_input(&topology, &coords);
+
+    let mut fields = Vec::new();
+    let mut line_fields = Vec::new();
+
+    let named = match hodge_decompose(&topology, &coords, &input) {
+      Ok(parts) => vec![
+        ("ω input", input),
+        ("dα exact", parts.exact),
+        ("δβ coexact", parts.coexact),
+        ("h harmonic", parts.harmonic),
+      ],
+      Err(err) => {
+        eprintln!("grade-1 Hodge decomposition failed: {err}");
+        vec![("ω input", input)]
+      }
+    };
+
+    for (name, cochain) in named {
+      Self::field(
+        &topology,
+        &coords,
+        FieldMeta {
+          name: name.to_string(),
+          eigenvalue: None,
+          dof_label: None,
+        },
+        cochain,
+        &mut fields,
+        &mut line_fields,
+      );
+    }
+
+    Self {
+      topology,
+      coords,
+      fields,
+      line_fields,
+    }
+  }
+
   /// Shared construction for [`Self::whitney_basis`] and
   /// [`Self::whitney_basis_mesh`]: one field per DOF simplex of every grade
   /// $0..=$ `topology.dim()`, each the reconstructed field of a one-hot
@@ -605,6 +663,166 @@ fn nodal_scalar_density(
   )
 }
 
+/// The three $L^2$-orthogonal shells of the discrete Hodge decomposition of a
+/// $k$-cochain, $omega = "exact" + "coexact" + "harmonic"$, each a $k$-cochain
+/// on the same complex.
+pub(crate) struct HodgeParts {
+  /// $dif alpha$, $alpha in cal(W) Lambda^(k-1)$: the exact (range-of-$dif$)
+  /// component.
+  pub(crate) exact: Cochain,
+  /// $delta beta$, $beta in cal(W) Lambda^(k+1)$: the coexact
+  /// (range-of-$delta$) component.
+  pub(crate) coexact: Cochain,
+  /// $h in cal(H)^k$: the harmonic component, the $L^2$-projection of $omega$
+  /// onto the $b_k$-dimensional harmonic space.
+  pub(crate) harmonic: Cochain,
+}
+
+/// The discrete Hodge decomposition of a $k$-cochain through the mixed
+/// Hodge-Laplace source problem $Delta u = omega$ (absolute boundary
+/// conditions, the full [`WhitneyComplex`]).
+///
+/// The mixed solve returns $(sigma, u, p)$ with $sigma = delta u$ weakly and
+/// $p$ the harmonic projection of the load in harmonic-basis coordinates. Its
+/// $u$-block reads $M(dif sigma + delta dif u + H p) = M omega$, so at the
+/// coefficient level
+/// $omega = underbrace(dif sigma, "exact") + underbrace(delta dif u, "coexact") + underbrace(H p, "harmonic")$
+/// *exactly* -- the three shells sum back to $omega$ with no residual, and the
+/// coexact shell is recovered as the remainder rather than by forming $delta$
+/// explicitly. Their pairwise $L^2$-orthogonality is the content of the mixed
+/// formulation.
+///
+/// [`WhitneyComplex`]: formoniq::whitney_complex::WhitneyComplex
+pub(crate) fn hodge_decompose(
+  topology: &Complex,
+  coords: &MeshCoords,
+  input: &Cochain,
+) -> Result<HodgeParts, common::linalg::eigen::EigenError> {
+  use common::linalg::nalgebra::CsrMatrix;
+  use formoniq::{
+    problems::hodge_laplace::{solve_hodge_laplace_harmonics, solve_hodge_laplace_source},
+    whitney_complex::WhitneyComplex,
+  };
+
+  let grade = input.grade();
+  let metric = coords.to_edge_lengths(topology);
+  let complex = WhitneyComplex::new(topology, &metric);
+
+  // The load vector of the source problem is the Riesz representation of the
+  // functional $angle.l omega, dot.c angle.r$, i.e. $M_k omega$.
+  let mass = CsrMatrix::from(&complex.mass(grade));
+  let source_galvec = &mass * input.coeffs();
+
+  let (sigma, _u, p) = solve_hodge_laplace_source(&complex, source_galvec, grade)?;
+  let harmonics = solve_hodge_laplace_harmonics(&complex, grade)?;
+
+  // exact $= dif sigma$. At grade 0 the $sigma in Lambda^(-1)$ space is empty,
+  // so the exact shell is identically zero.
+  let exact = if grade > 0 {
+    let dif = CsrMatrix::from(&topology.coboundary_operator(grade - 1));
+    &dif * sigma.coeffs()
+  } else {
+    Vector::zeros(input.coeffs().len())
+  };
+  // harmonic $= H p$, lifting the harmonic-basis coordinates back into
+  // $cal(W) Lambda^k$. Zero-width when $b_k = 0$, so this is the zero cochain
+  // on a contractible mesh.
+  let harmonic = &harmonics * p.coeffs();
+  // coexact as the exact-arithmetic remainder (see the doc comment).
+  let coexact = input.coeffs() - &exact - &harmonic;
+
+  Ok(HodgeParts {
+    exact: Cochain::new(grade, exact),
+    coexact: Cochain::new(grade, coexact),
+    harmonic: Cochain::new(grade, harmonic),
+  })
+}
+
+/// A deterministic, mesh-independent probe form for the Hodge decomposition:
+/// the ambient 1-form $omega = -y dif x + x dif y + z dif z$ pulled onto the
+/// mesh through the `ddf` bridge, then de Rham mapped to a `grade`-cochain.
+///
+/// The swirl $-y dif x + x dif y$ is not closed (a coexact part) and threads
+/// any handle enclosing the $z$-axis (a harmonic part); the $z dif z = dif(z^2\/2)$
+/// contributes a manifestly exact part. Its pullback therefore lights up all
+/// three shells on a genus-1 surface, and degrades gracefully (harmonic part
+/// zero) on a contractible one.
+///
+/// The probe field the decomposition study actually splits: the ambient swirl
+/// [`hodge_probe_form`] plus, on a mesh with grade-1 homology, an explicit copy
+/// of a harmonic 1-form scaled to the swirl's magnitude.
+///
+/// The swirl alone supplies rich exact and coexact shells, but its periods
+/// around the handles can vanish -- they do on the Császár torus, where a purely
+/// ambient probe leaves the harmonic shell at numerical zero. Whether an ambient
+/// field excites a cycle depends on how the handle happens to sit in space,
+/// which is no basis for a teaching example. Injecting a harmonic generator
+/// makes the field genuinely carry a topological cycle on *any* genus-$g$
+/// surface, so the decomposition demonstrates all three shells regardless of
+/// embedding -- and injecting the harmonic part is itself the point: the
+/// decomposition returns it untouched, orthogonal to the two it did not put
+/// there. On a contractible mesh the harmonic space is empty and nothing is
+/// added.
+pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Cochain {
+  use common::linalg::nalgebra::CsrMatrix;
+  use formoniq::{
+    problems::hodge_laplace::solve_hodge_laplace_harmonics, whitney_complex::WhitneyComplex,
+  };
+
+  let swirl = hodge_probe_form(topology, coords);
+  let metric = coords.to_edge_lengths(topology);
+  let complex = WhitneyComplex::new(topology, &metric);
+  let mass = CsrMatrix::from(&complex.mass(1));
+  let m_norm = |v: &Vector| (&mass * v).dot(v).max(0.0).sqrt();
+
+  match solve_hodge_laplace_harmonics(&complex, 1) {
+    Ok(harmonics) if harmonics.ncols() > 0 => {
+      let h0 = harmonics.column(0).clone_owned();
+      let (swirl_norm, h0_norm) = (m_norm(swirl.coeffs()), m_norm(&h0));
+      // Scale the injected cycle to the swirl's magnitude so neither swamps the
+      // other; guard the degenerate zero-norm harmonic vector.
+      let scale = if h0_norm > 1e-12 {
+        swirl_norm / h0_norm
+      } else {
+        0.0
+      };
+      Cochain::new(1, swirl.coeffs() + scale * h0)
+    }
+    _ => swirl,
+  }
+}
+
+/// The smooth part of the decomposition probe: the ambient 1-form
+/// $omega = -y dif x + x dif y + z dif z$ pulled onto the mesh through the `ddf`
+/// bridge and de Rham mapped to a 1-cochain.
+///
+/// The swirl $-y dif x + x dif y$ is not closed, so it carries both an exact and
+/// a coexact part; the $z dif z = dif(z^2\/2)$ makes the exact part manifestly
+/// nonzero. It does *not* reliably carry a harmonic part -- whether an ambient
+/// field has nonzero periods around a surface's handles depends on how those
+/// handles sit in space, and on the Császár torus, for one, they vanish. The
+/// harmonic shell is supplied separately by [`hodge_probe_input`].
+fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
+  let n = coords.dim();
+  let field = DiffFormClosure::one_form(
+    move |p| {
+      let x = p.vector();
+      let mut omega = Vector::zeros(n);
+      if n >= 2 {
+        omega[0] = -x[1];
+        omega[1] = x[0];
+      }
+      if n >= 3 {
+        omega[2] = x[2];
+      }
+      omega
+    },
+    n,
+  );
+  let pulled = field.pullback_on(topology, coords);
+  derham_map(&pulled, topology, 2)
+}
+
 /// A nalgebra vector of ambient coordinates, zero-padded to 3D.
 fn to_vec3(v: &Vector) -> na::Vector3<f64> {
   na::Vector3::new(
@@ -641,6 +859,81 @@ mod tests {
     let scene = Scene::whitney_basis_mesh(topology, coords);
     assert_eq!(scene.fields.len(), 6 + 4); // vertices, and faces via ⋆
     assert_eq!(scene.line_fields.len(), 9); // edges
+  }
+
+  /// The Hodge decomposition is a theorem, not a golden number. On Bob (a
+  /// genus-1 surface, so $b_1 = 2$) the probe 1-form splits into three shells
+  /// that sum back to it exactly, are pairwise $L^2$-orthogonal, and carry a
+  /// genuinely nonzero harmonic component -- the part the two handle cycles pair
+  /// with. The flat unit square is the contractible base case: the same solve,
+  /// harmonic shell identically zero because there is no grade-1 homology to
+  /// project onto. The harmonic dimension is read off the complex and must equal
+  /// the surface's first Betti number in each case.
+  #[test]
+  fn hodge_decomposition_splits_orthogonally() {
+    use crate::gallery::{BuiltinMesh, MeshSource};
+    use common::linalg::nalgebra::CsrMatrix;
+    use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
+
+    for (source, betti_1) in [
+      (MeshSource::Builtin(BuiltinMesh::Bob), 2usize),
+      (MeshSource::Grid { cells_axis: 4 }, 0usize),
+    ] {
+      let label = source.label();
+      let (topology, coords) = source.build().unwrap();
+      assert!(
+        topology.nsimplices(2) > 0,
+        "{label}: mesh built empty (unfetched asset?)"
+      );
+
+      let input = hodge_probe_input(&topology, &coords);
+      let parts = hodge_decompose(&topology, &coords, &input).expect("the decomposition solves");
+
+      let metric = coords.to_edge_lengths(&topology);
+      let complex = WhitneyComplex::new(&topology, &metric);
+      assert_eq!(
+        complex.harmonic_dim(1),
+        betti_1,
+        "{label}: harmonic dimension is the first Betti number"
+      );
+
+      let mass = CsrMatrix::from(&complex.mass(1));
+      let ip = |a: &Cochain, b: &Cochain| (&mass * b.coeffs()).dot(a.coeffs());
+
+      // The three shells reconstruct the input exactly (LU residual aside).
+      let sum = parts.exact.coeffs() + parts.coexact.coeffs() + parts.harmonic.coeffs();
+      let residual = (&sum - input.coeffs()).norm();
+      assert!(
+        residual < 1e-8,
+        "{label}: shells do not sum to input ({residual})"
+      );
+
+      // Pairwise orthogonal in the $L^2 Lambda^1$ inner product.
+      let scale = ip(&input, &input).sqrt().max(1e-12);
+      for (a, b, name) in [
+        (&parts.exact, &parts.coexact, "exact·coexact"),
+        (&parts.exact, &parts.harmonic, "exact·harmonic"),
+        (&parts.coexact, &parts.harmonic, "coexact·harmonic"),
+      ] {
+        let cross = ip(a, b).abs() / (scale * scale);
+        assert!(cross < 1e-6, "{label}: {name} not orthogonal ({cross})");
+      }
+
+      // The harmonic shell is nonzero exactly when the surface has grade-1
+      // homology to carry it.
+      let harmonic_frac = ip(&parts.harmonic, &parts.harmonic).sqrt() / scale;
+      if betti_1 > 0 {
+        assert!(
+          harmonic_frac > 1e-6,
+          "{label}: harmonic shell vanished ({harmonic_frac})"
+        );
+      } else {
+        assert!(
+          harmonic_frac < 1e-9,
+          "{label}: spurious harmonic shell ({harmonic_frac})"
+        );
+      }
+    }
   }
 
   /// The three worked examples are all grade-1 line fields (no scalar

@@ -31,8 +31,9 @@ enum Command {
     /// Destination. `.mp4` writes a clip through `ffmpeg`; anything else is a
     /// PNG still.
     out: PathBuf,
-    /// Which study to run: `grade<k>` for a Hodge-Laplace eigenmode grade, or
-    /// `whitney` for the Whitney basis.
+    /// Which study to run: `grade<k>` for a Hodge-Laplace eigenmode grade,
+    /// `whitney` for the Whitney basis, or `hodge` for the grade-1 Hodge
+    /// decomposition.
     #[arg(long, value_parser = parse_study, default_value = "grade0")]
     study: Study,
     /// Which mesh to run the study on: `sphere`, `grid`, `refcell`,
@@ -62,6 +63,7 @@ enum Command {
 fn parse_study(s: &str) -> Result<Study, String> {
   match s {
     "whitney" => Ok(Study::WhitneyBasis),
+    "hodge" | "decomposition" => Ok(Study::HodgeDecomposition),
     _ => s
       .strip_prefix("grade")
       .and_then(|g| g.parse().ok())
@@ -69,7 +71,7 @@ fn parse_study(s: &str) -> Result<Study, String> {
         grade,
         nmodes: DEFAULT_NMODES,
       })
-      .ok_or_else(|| format!("expected `grade<k>` or `whitney`, got `{s}`")),
+      .ok_or_else(|| format!("expected `grade<k>`, `whitney` or `hodge`, got `{s}`")),
   }
 }
 
