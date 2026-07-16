@@ -1,6 +1,6 @@
 use faer::linalg::solvers::Solve;
 
-use super::nalgebra::{CscMatrix, CsrMatrix, Vector};
+use super::nalgebra::{CscMatrix, CsrMatrix, Matrix, Vector};
 
 pub fn faervec2navec(faer: &faer::Mat<f64>) -> Vector {
   assert_eq!(faer.ncols(), 1);
@@ -50,6 +50,16 @@ impl FaerLu {
     let b = faer::Col::from_fn(b.nrows(), |i| b[i]);
     let x = self.raw.solve(b);
     Vector::from_iterator(x.nrows(), x.iter().copied())
+  }
+
+  /// Solves against every column of `b` in one call, reusing the
+  /// factorization's triangular solves across the whole block instead of
+  /// resolving column by column — the same total work, but a single call
+  /// into faer's blocked solve rather than `b.ncols()` separate ones.
+  pub fn solve_multi(&self, b: &Matrix) -> Matrix {
+    let rhs = faer::Mat::from_fn(b.nrows(), b.ncols(), |i, j| b[(i, j)]);
+    let x = self.raw.solve(rhs);
+    Matrix::from_fn(x.nrows(), x.ncols(), |i, j| x[(i, j)])
   }
 }
 

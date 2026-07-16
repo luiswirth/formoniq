@@ -102,8 +102,20 @@ pub fn sparse_shift_invert_eigen(
     // siblings independently valid; only running out of vectors to expand is
     // true exhaustion of the reachable invariant subspace.
     while dim < target_dim && dim < basis.len() {
-      expand(&mut basis, &mut bbasis, &mut proj, dim, &lu, b);
-      dim += 1;
+      // Every vector already sitting in `basis` at this point (the cycle's
+      // seed or restart block) has a known `bbasis` image that doesn't
+      // depend on any not-yet-computed expansion — solve the whole run in
+      // one multi-RHS call. Growth past this run happens one vector at a
+      // time (each `expand` appends at most one), so batching applies once
+      // per cycle, not once per vector.
+      let batch_end = basis.len().min(target_dim);
+      let rhs = Matrix::from_fn(n, batch_end - dim, |r, c| bbasis[dim + c][r]);
+      let ws = lu.solve_multi(&rhs);
+      for c in 0..ws.ncols() {
+        let w = Vector::from_iterator(n, ws.column(c).iter().copied());
+        expand(&mut basis, &mut bbasis, &mut proj, dim, w, b);
+        dim += 1;
+      }
     }
     let exhausted = dim < target_dim;
 
@@ -175,9 +187,10 @@ pub fn sparse_shift_invert_eigen(
   })
 }
 
-/// Applies $T = M^(-1) B$ to `basis[idx]`, reorthogonalizes against the whole
-/// basis (not just up to `idx`: siblings past it still await their own
-/// expansion), fills row/column `idx` of `proj`, and appends the
+/// Reorthogonalizes `w = T "basis[idx]"` (already solved by the caller,
+/// batched across the whole run of siblings sharing `idx`'s cycle) against
+/// the whole basis (not just up to `idx`: siblings past it still await their
+/// own expansion), fills row/column `idx` of `proj`, and appends the
 /// $B$-normalized residual — unless its $B$-seminorm has broken down, in which
 /// case `proj` is still complete for `idx` and nothing is appended.
 fn expand(
@@ -185,11 +198,9 @@ fn expand(
   bbasis: &mut Vec<Vector>,
   proj: &mut Matrix,
   idx: usize,
-  lu: &FaerLu,
+  mut w: Vector,
   b: &CsrMatrix,
 ) {
-  let mut w = lu.solve(&bbasis[idx]);
-
   let mut h = vec![0.0; basis.len()];
   // Two passes of modified Gram-Schmidt ("twice is enough") in the B-inner
   // product.
