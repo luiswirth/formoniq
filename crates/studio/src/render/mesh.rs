@@ -1,8 +1,18 @@
 use bytemuck::{Pod, Zeroable};
-use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+use manifold::{
+  geometry::coord::{mesh::MeshCoords, vertex_curvature_radius},
+  topology::complex::Complex,
+};
 use wgpu::util::DeviceExt;
 
 use crate::{mesh3d, scene::LineField};
+
+/// Fraction of the local curvature radius (see [`vertex_curvature_radius`])
+/// allowed as peak normal displacement, mirroring `WAVE_AMPLITUDE_FRACTION`'s
+/// role against the scene extent in `lib.rs`: kept below 1 so a vertex never
+/// reaches its own focal point, where the normal offset would fold the
+/// surface back on itself.
+const CURVATURE_SAFETY_FRACTION: f32 = 0.9;
 
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
@@ -20,6 +30,11 @@ pub struct Vertex {
   /// across each triangle and projected to screen space by the G-buffer pass;
   /// zero for a scalar field, which has no line to draw.
   pub direction: [f32; 3],
+  /// The per-vertex cap on normal displacement magnitude: a fraction of the
+  /// local curvature radius (`f32::INFINITY` where curvature imposes no
+  /// bound), clamping the shared global `wave.amplitude` down wherever it
+  /// would otherwise fold a thin or sharply curved feature.
+  pub max_displacement: f32,
 }
 
 impl Vertex {
@@ -47,6 +62,11 @@ impl Vertex {
           offset: std::mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
           shader_location: 3,
           format: wgpu::VertexFormat::Float32x3,
+        },
+        wgpu::VertexAttribute {
+          offset: std::mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
+          shader_location: 4,
+          format: wgpu::VertexFormat::Float32,
         },
       ],
     }
@@ -162,6 +182,7 @@ fn surface_geometry(
 
   let oriented_triangles = mesh3d::orient_triangles(&triangles);
   let vertex_normals = mesh3d::vertex_normals(&oriented_triangles, coords);
+  let curvature_radius = vertex_curvature_radius(topology, coords);
 
   let mut vertices = Vec::with_capacity(nvertices);
   for (i, &value) in value.iter().enumerate() {
@@ -179,12 +200,14 @@ fn surface_geometry(
     };
     let n = vertex_normals[i].normalize();
     let d = direction.map_or(na::Vector3::zeros(), |dir| dir[i]);
+    let max_displacement = (CURVATURE_SAFETY_FRACTION as f64 * curvature_radius[i]) as f32;
 
     vertices.push(Vertex {
       position: [x, y, z],
       normal: [n.x as f32, n.y as f32, n.z as f32],
       value: value as f32,
       direction: [d.x as f32, d.y as f32, d.z as f32],
+      max_displacement,
     });
   }
 
