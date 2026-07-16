@@ -55,19 +55,30 @@ impl Camera {
     (half_height * self.aspect, half_height)
   }
 
-  pub fn build_view_projection_matrix(&self) -> Matrix4<f32> {
-    let (eye, up) = if self.top_down {
-      (
-        self.target + Vector3::new(0.0, 0.0, self.distance),
-        Vector3::y_axis(),
-      )
+  /// The camera's world-space eye position -- the orbit or top-down formula
+  /// [`Self::build_view_projection_matrix`] also uses to build the view
+  /// matrix, factored out since the wireframe shader needs it directly (to
+  /// find the screen-facing perpendicular of a world-space-thick edge quad)
+  /// rather than only the matrix it feeds into.
+  pub fn eye(&self) -> Point3<f32> {
+    if self.top_down {
+      self.target + Vector3::new(0.0, 0.0, self.distance)
     } else {
       let direction = Vector3::new(
         self.yaw.cos() * self.pitch.cos(),
         self.yaw.sin() * self.pitch.cos(),
         self.pitch.sin(),
       );
-      (self.target - direction * self.distance, Vector3::z_axis())
+      self.target - direction * self.distance
+    }
+  }
+
+  pub fn build_view_projection_matrix(&self) -> Matrix4<f32> {
+    let eye = self.eye();
+    let up = if self.top_down {
+      Vector3::y_axis()
+    } else {
+      Vector3::z_axis()
     };
     let view = Matrix4::look_at_rh(&eye, &self.target, &up);
 
@@ -94,6 +105,10 @@ impl Camera {
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct CameraUniform {
   view_proj: [[f32; 4]; 4],
+  /// World-space eye position, `w` unused (kept for uniform alignment): the
+  /// wireframe shader's own use for it, to find the screen-facing
+  /// perpendicular of a world-space-thick edge quad.
+  eye: [f32; 4],
 }
 
 impl Default for CameraUniform {
@@ -106,10 +121,13 @@ impl CameraUniform {
   pub fn new() -> Self {
     Self {
       view_proj: nalgebra::Matrix4::identity().into(),
+      eye: [0.0; 4],
     }
   }
 
   pub fn update_view_proj(&mut self, camera: &Camera) {
     self.view_proj = camera.build_view_projection_matrix().into();
+    let eye = camera.eye();
+    self.eye = [eye.x, eye.y, eye.z, 1.0];
   }
 }
