@@ -35,6 +35,17 @@ pub mod scene;
 pub mod ui;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+// Supersampling factor applied per axis (so 4x the pixel count) to every scene
+// pass -- the fill, the wireframe, and the G-buffer/LIC pair -- before a box
+// filter downsamples back to the swapchain. MSAA was rejected for the
+// line-field path: its resolve would blend the G-buffer's direction and world
+// position across a silhouette, corrupting the very data the LIC pass reads
+// back (this is also why the G-buffer sampler is nearest, not linear). A
+// single supersampled offscreen target antialiases both paths uniformly with
+// no such hazard, at the cost of the extra fill rate. Must match `SCALE` in
+// `render/downsample.wgsl`, which cannot read a Rust constant.
+const SSAA_SCALE: u32 = 2;
+
 // The line-field G-buffer targets: `dir_mag` (screen tangent xy, magnitude,
 // coverage) and `pos_shade` (world position, Lambert shade). Half-float so the
 // world position survives for the LIC pass's object-space noise lookup.
@@ -509,10 +520,19 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   camera
 }
 
-fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu::TextureView {
+/// The supersampled offscreen resolution every scene pass renders at: the
+/// swapchain's own size scaled by [`SSAA_SCALE`] per axis.
+fn supersampled_size(config: &SurfaceConfiguration) -> (u32, u32) {
+  (
+    config.width.max(1) * SSAA_SCALE,
+    config.height.max(1) * SSAA_SCALE,
+  )
+}
+
+fn create_depth_texture(device: &Device, width: u32, height: u32) -> wgpu::TextureView {
   let size = wgpu::Extent3d {
-    width: config.width,
-    height: config.height,
+    width,
+    height,
     depth_or_array_layers: 1,
   };
   let desc = wgpu::TextureDescriptor {
@@ -529,18 +549,64 @@ fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu:
   texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
-/// The two line-field G-buffer render targets, sized to the surface. Recreated
-/// on resize alongside the depth texture.
+/// The offscreen target every scene pass (the direct fill/wireframe path and
+/// the LIC path alike) draws into, at the supersampled resolution -- the
+/// downsample pass then box-filters this down into the swapchain view.
+/// Recreated on resize alongside the depth texture.
+fn create_scene_color_texture(
+  device: &Device,
+  format: wgpu::TextureFormat,
+  width: u32,
+  height: u32,
+) -> wgpu::TextureView {
+  let texture = device.create_texture(&wgpu::TextureDescriptor {
+    label: Some("Scene Color Texture (supersampled)"),
+    size: wgpu::Extent3d {
+      width,
+      height,
+      depth_or_array_layers: 1,
+    },
+    mip_level_count: 1,
+    sample_count: 1,
+    dimension: wgpu::TextureDimension::D2,
+    format,
+    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+    view_formats: &[],
+  });
+  texture.create_view(&wgpu::TextureViewDescriptor::default())
+}
+
+/// The bind group for the downsample pass's one texture binding. Rebuilt
+/// whenever the scene color view is (at startup and on resize).
+fn create_scene_color_bind_group(
+  device: &Device,
+  layout: &wgpu::BindGroupLayout,
+  scene_color_view: &wgpu::TextureView,
+) -> wgpu::BindGroup {
+  device.create_bind_group(&wgpu::BindGroupDescriptor {
+    label: Some("scene_color_bind_group"),
+    layout,
+    entries: &[wgpu::BindGroupEntry {
+      binding: 0,
+      resource: wgpu::BindingResource::TextureView(scene_color_view),
+    }],
+  })
+}
+
+/// The two line-field G-buffer render targets, at the supersampled resolution
+/// so they line up texel-for-texel with the scene color target the LIC pass
+/// writes into. Recreated on resize alongside the depth texture.
 fn create_gbuffer_textures(
   device: &Device,
-  config: &SurfaceConfiguration,
+  width: u32,
+  height: u32,
 ) -> (wgpu::TextureView, wgpu::TextureView) {
   let make = |label: &str| {
     let texture = device.create_texture(&wgpu::TextureDescriptor {
       label: Some(label),
       size: wgpu::Extent3d {
-        width: config.width.max(1),
-        height: config.height.max(1),
+        width,
+        height,
         depth_or_array_layers: 1,
       },
       mip_level_count: 1,
@@ -944,6 +1010,15 @@ struct State<'a> {
   wireframe_pipeline: RenderPipeline,
   depth_view: wgpu::TextureView,
 
+  // Antialiasing: every scene pass draws into this supersampled offscreen
+  // target instead of the swapchain; the downsample pipeline then box-filters
+  // it into the swapchain view, once, ahead of the egui pass (see
+  // `SSAA_SCALE`).
+  scene_color_view: wgpu::TextureView,
+  downsample_pipeline: RenderPipeline,
+  scene_color_bind_group_layout: wgpu::BindGroupLayout,
+  scene_color_bind_group: wgpu::BindGroup,
+
   // Line-field path: an offscreen G-buffer pass feeds a fullscreen LIC pass.
   // Only exercised when the current selection is a line field; a scalar field
   // takes the direct fill path above.
@@ -1313,15 +1388,18 @@ impl<'a> State<'a> {
       cache: None,
     });
 
-    let depth_view = create_depth_texture(&device, &config);
+    let (ss_width, ss_height) = supersampled_size(&config);
+    let depth_view = create_depth_texture(&device, ss_width, ss_height);
+    let scene_color_view = create_scene_color_texture(&device, config.format, ss_width, ss_height);
 
     // Line-field path: G-buffer + fullscreen LIC.
-    let (gbuffer_dir_view, gbuffer_pos_view) = create_gbuffer_textures(&device, &config);
+    let (gbuffer_dir_view, gbuffer_pos_view) =
+      create_gbuffer_textures(&device, ss_width, ss_height);
     let (noise_view, noise_sampler) = create_noise_texture(&device, &queue);
     let noise_scale = NOISE_CYCLES_PER_MESH_WIDTH / mesh_width.max(f32::EPSILON);
 
     let lic_uniform = LicUniform {
-      viewport: [config.width as f32, config.height as f32],
+      viewport: [ss_width as f32, ss_height as f32],
       noise_scale,
       omega: wave_omega,
       time: 0.0,
@@ -1555,6 +1633,71 @@ impl<'a> State<'a> {
       cache: None,
     });
 
+    // Downsample: the supersampling antialiasing step. A box filter over
+    // `SSAA_SCALE^2` texels, applied to whichever scene pass just filled
+    // `scene_color_view`, into the swapchain -- the one place both render
+    // paths' output gets antialiased.
+    let scene_color_bind_group_layout =
+      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("scene_color_bind_group_layout"),
+        entries: &[wgpu::BindGroupLayoutEntry {
+          binding: 0,
+          visibility: wgpu::ShaderStages::FRAGMENT,
+          ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+          },
+          count: None,
+        }],
+      });
+    let scene_color_bind_group =
+      create_scene_color_bind_group(&device, &scene_color_bind_group_layout, &scene_color_view);
+
+    let downsample_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+      label: Some("Downsample Shader"),
+      source: wgpu::ShaderSource::Wgsl(include_str!("render/downsample.wgsl").into()),
+    });
+    let downsample_pipeline_layout =
+      device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+        label: Some("Downsample Pipeline Layout"),
+        bind_group_layouts: &[Some(&scene_color_bind_group_layout)],
+        immediate_size: 0,
+      });
+    let downsample_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+      label: Some("Downsample Pipeline"),
+      layout: Some(&downsample_pipeline_layout),
+      vertex: wgpu::VertexState {
+        module: &downsample_shader,
+        entry_point: Some("vs_main"),
+        compilation_options: Default::default(),
+        buffers: &[],
+      },
+      fragment: Some(wgpu::FragmentState {
+        module: &downsample_shader,
+        entry_point: Some("fs_main"),
+        compilation_options: Default::default(),
+        targets: &[Some(wgpu::ColorTargetState {
+          format: config.format,
+          blend: Some(wgpu::BlendState::REPLACE),
+          write_mask: wgpu::ColorWrites::ALL,
+        })],
+      }),
+      primitive: wgpu::PrimitiveState {
+        topology: wgpu::PrimitiveTopology::TriangleList,
+        strip_index_format: None,
+        front_face: wgpu::FrontFace::Ccw,
+        cull_mode: None,
+        polygon_mode: wgpu::PolygonMode::Fill,
+        unclipped_depth: false,
+        conservative: false,
+      },
+      depth_stencil: None,
+      multisample: wgpu::MultisampleState::default(),
+      multiview_mask: None,
+      cache: None,
+    });
+
     let egui_ctx = egui::Context::default();
     let egui_winit_state = EguiWinitState::new(
       egui_ctx.clone(),
@@ -1575,6 +1718,10 @@ impl<'a> State<'a> {
       render_pipeline,
       wireframe_pipeline,
       depth_view,
+      scene_color_view,
+      downsample_pipeline,
+      scene_color_bind_group_layout,
+      scene_color_bind_group,
       gbuffer_pipeline,
       lic_pipeline,
       gbuffer_dir_view,
@@ -1731,8 +1878,16 @@ impl<'a> State<'a> {
       self.config.width = new_size.width;
       self.config.height = new_size.height;
       self.surface.configure(&self.device, &self.config);
-      self.depth_view = create_depth_texture(&self.device, &self.config);
-      let (dir_view, pos_view) = create_gbuffer_textures(&self.device, &self.config);
+      let (ss_width, ss_height) = supersampled_size(&self.config);
+      self.depth_view = create_depth_texture(&self.device, ss_width, ss_height);
+      self.scene_color_view =
+        create_scene_color_texture(&self.device, self.config.format, ss_width, ss_height);
+      self.scene_color_bind_group = create_scene_color_bind_group(
+        &self.device,
+        &self.scene_color_bind_group_layout,
+        &self.scene_color_view,
+      );
+      let (dir_view, pos_view) = create_gbuffer_textures(&self.device, ss_width, ss_height);
       self.gbuffer_dir_view = dir_view;
       self.gbuffer_pos_view = pos_view;
       self.gbuffer_tex_bind_group = create_gbuffer_bind_group(
@@ -2074,8 +2229,12 @@ impl<'a> State<'a> {
 
     // The LIC pass shares the tint clock with the wave: the direction is
     // static, so `omega`/`time` swing only the magnitude tint, never the lines.
+    // `viewport` is the G-buffer/scene-color target's own (supersampled)
+    // resolution, not the swapchain's -- it fixes the texel size the pass
+    // steps in.
+    let (ss_width, ss_height) = supersampled_size(&self.config);
     let lic_uniform = LicUniform {
-      viewport: [self.config.width as f32, self.config.height as f32],
+      viewport: [ss_width as f32, ss_height as f32],
       noise_scale: self.noise_scale,
       omega: self.wave_omega,
       time: self.start_time.elapsed().as_secs_f32(),
@@ -2181,12 +2340,13 @@ impl<'a> State<'a> {
         gbuffer_pass.draw_indexed(0..self.mesh_buffer.num_indices, 0, 0..1);
       }
       // Fullscreen LIC: integrate the tangent, tint by the animated magnitude,
-      // composite over the shaded surface, into the swapchain view.
+      // composite over the shaded surface, into the supersampled scene color
+      // target (downsampled into the swapchain below, alongside the wireframe).
       {
         let mut lic_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
           label: Some("LIC Pass"),
           color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view,
+            view: &self.scene_color_view,
             resolve_target: None,
             ops: wgpu::Operations {
               load: wgpu::LoadOp::Clear(clear_color),
@@ -2212,7 +2372,7 @@ impl<'a> State<'a> {
         let mut wire_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
           label: Some("Wireframe Pass"),
           color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &view,
+            view: &self.scene_color_view,
             resolve_target: None,
             ops: wgpu::Operations {
               load: wgpu::LoadOp::Load,
@@ -2246,7 +2406,7 @@ impl<'a> State<'a> {
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Render Pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-          view: &view,
+          view: &self.scene_color_view,
           resolve_target: None,
           ops: wgpu::Operations {
             load: wgpu::LoadOp::Clear(clear_color),
@@ -2289,6 +2449,30 @@ impl<'a> State<'a> {
         wgpu::IndexFormat::Uint32,
       );
       render_pass.draw_indexed(0..self.mesh_buffer.num_wireframe_indices, 0, 0..1);
+    }
+
+    // Antialiasing: box-filter the supersampled scene color target down into
+    // the swapchain, once, regardless of which path above filled it.
+    {
+      let mut downsample_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Downsample Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+          view: &view,
+          resolve_target: None,
+          ops: wgpu::Operations {
+            load: wgpu::LoadOp::Clear(clear_color),
+            store: wgpu::StoreOp::Store,
+          },
+          depth_slice: None,
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+      });
+      downsample_pass.set_pipeline(&self.downsample_pipeline);
+      downsample_pass.set_bind_group(0, &self.scene_color_bind_group, &[]);
+      downsample_pass.draw(0..3, 0..1);
     }
 
     let screen_descriptor = ScreenDescriptor {
