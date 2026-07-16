@@ -1,7 +1,9 @@
 // Fullscreen line-integral convolution of the line-field G-buffer.
 //
-// Per covered pixel, integrate the projected tangent direction forward and
-// backward a fixed screen-space arclength, sampling a 3D noise texture at the
+// Per covered pixel, advect the projected tangent field forward and backward a
+// fixed screen-space arclength -- re-reading the field at each step and turning
+// with it, so the kernel follows the curved streamline rather than shooting off
+// along the center pixel's tangent -- and sample a 3D noise texture at the
 // *world* position read back from the G-buffer at each step. Keying the noise
 // on object space (not screen space) is what fixes the streamlines to the
 // surface. The walk itself is in screen space, so the pattern is not fully
@@ -69,6 +71,41 @@ const BACKGROUND: vec3<f32> = vec3<f32>(0.1, 0.1, 0.1);
 const STEPS: i32 = 24;
 const STEP_PX: f32 = 1.2;
 
+// One half of the convolution: advect from `start_uv` along `seed_dir`,
+// accumulating the object-space noise at each covered step. Forward Euler in
+// screen space, one step per `STEP_PX`. The G-buffer direction is unit but
+// unsigned (a *line* field), so each step flips it to agree with the travel
+// direction -- otherwise the walk could reverse at a pixel whose stored sign
+// disagrees and fold the streamline back on itself. A step off the surface
+// (coverage drops) ends the walk rather than smearing across the silhouette.
+// Returns the running (sum, weight); the caller adds the shared center sample.
+fn march(start_uv: vec2<f32>, seed_dir: vec2<f32>, texel: vec2<f32>) -> vec2<f32> {
+    var pos = start_uv;
+    var dir = seed_dir;
+    var sum = 0.0;
+    var weight = 0.0;
+    for (var i: i32 = 0; i < STEPS; i = i + 1) {
+        pos = pos + dir * STEP_PX * texel;
+        let g = textureSampleLevel(gbuf_dir_mag, gbuf_sampler, pos, 0.0);
+        if (g.w < 0.5) {
+            break;
+        }
+        var d = g.xy;
+        if (dot(d, dir) < 0.0) {
+            d = -d;
+        }
+        // Keep the previous heading through a momentarily degenerate direction
+        // (a field zero) rather than stalling on a null step.
+        if (dot(d, d) > 1e-8) {
+            dir = d;
+        }
+        let wp = textureSampleLevel(gbuf_pos_shade, gbuf_sampler, pos, 0.0).xyz;
+        sum = sum + noise_at(wp);
+        weight = weight + 1.0;
+    }
+    return vec2<f32>(sum, weight);
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let dir_mag = textureSampleLevel(gbuf_dir_mag, gbuf_sampler, in.uv, 0.0);
@@ -83,27 +120,14 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let shade = pos_shade.w;
 
     // Line-integral convolution: average the noise along the streamline through
-    // this pixel, sampling in object space so the pattern is locked to the
-    // surface. Steps that leave the surface (coverage drops) are dropped rather
-    // than smeared across the silhouette.
+    // this pixel, advecting the field in each direction so the kernel follows
+    // the line's curvature. The noise is sampled in object space, locking the
+    // pattern to the surface. The two half-marches share the center sample.
     let texel = 1.0 / lic.viewport;
-    var sum = noise_at(pos_shade.xyz);
-    var weight = 1.0;
-    for (var i: i32 = 1; i <= STEPS; i = i + 1) {
-        let off = sdir * (f32(i) * STEP_PX) * texel;
-        let uv_f = in.uv + off;
-        let uv_b = in.uv - off;
-        let g_f = textureSampleLevel(gbuf_dir_mag, gbuf_sampler, uv_f, 0.0);
-        let g_b = textureSampleLevel(gbuf_dir_mag, gbuf_sampler, uv_b, 0.0);
-        if (g_f.w > 0.5) {
-            sum = sum + noise_at(textureSampleLevel(gbuf_pos_shade, gbuf_sampler, uv_f, 0.0).xyz);
-            weight = weight + 1.0;
-        }
-        if (g_b.w > 0.5) {
-            sum = sum + noise_at(textureSampleLevel(gbuf_pos_shade, gbuf_sampler, uv_b, 0.0).xyz);
-            weight = weight + 1.0;
-        }
-    }
+    let fwd = march(in.uv, sdir, texel);
+    let bwd = march(in.uv, -sdir, texel);
+    let sum = noise_at(pos_shade.xyz) + fwd.x + bwd.x;
+    let weight = 1.0 + fwd.y + bwd.y;
     let lic_raw = sum / weight;
     // Contrast-stretch about the noise mean of 0.5, then push toward the
     // extremes with a smoothstep: the along-line average otherwise regresses to
