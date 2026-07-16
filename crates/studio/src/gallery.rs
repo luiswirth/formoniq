@@ -1,15 +1,27 @@
-//! The gallery model: which mesh and which view of it are shown, and the
-//! lazy, memoized loader that builds a view's [`crate::scene::Scene`] --
-//! possibly on a background thread. Free of any GPU type; the windowed
-//! wrapper (`app.rs`) owns the `Scene` this produces.
+//! The gallery model: which mesh and which study of it are shown, and the
+//! lazy, memoized loader that builds a `(mesh, study)` pair's
+//! [`crate::scene::Scene`] -- possibly on a background thread. Free of any GPU
+//! type; the windowed wrapper (`app.rs`) owns the `Scene` this produces.
+//!
+//! The two axes are independent. What is shown is a point in the product
+//! [`MeshSource`] × [`Study`]: every study runs on every mesh, and the cache,
+//! the background load and the placeholder machinery all key on the pair. A
+//! `Preset` is only a named point in that product together with the field it
+//! opens on -- a value the browser fills the two axes from, never a build path
+//! of its own.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
+use ddf::cochain::Cochain;
 use exterior::ExteriorGrade;
-use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+use manifold::{
+  geometry::coord::mesh::{standard_coord_complex, MeshCoords},
+  topology::{complex::Complex, simplex::Simplex},
+  Dim,
+};
 
 use crate::scene::Scene;
+use crate::ui::Selection;
 
 // Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
 // eigensolve is dense in the vertex count, so keep this modest for an instant
@@ -26,8 +38,21 @@ pub(crate) const SPHERE_SUBDIVISIONS_MAX: usize = 4;
 pub(crate) const GRID_CELLS_DEFAULT: usize = 8;
 pub(crate) const GRID_CELLS_MAX: usize = 20;
 
-/// The shared surface mesh the gallery solves its grades against, built once
-/// so every per-grade eigensolve reuses it rather than remeshing.
+// The reference cell the Whitney-basis study opens on, and the top of its
+// dimension slider: the intrinsic dimensions the fixed ambient $RR^3$ embeds.
+// A triangle (dim 2) matches the historical local-shape-function gallery.
+pub const REFERENCE_CELL_DIM: Dim = 2;
+pub(crate) const REFERENCE_CELL_DIM_MAX: Dim = 3;
+
+// Hodge-Laplace modes an eigenmode study solves for by default. Chosen so both
+// low grades close on a complete degeneracy shell on the sphere: grade 0 fills
+// $l = 0..=3$ ($sum (2l+1) = 16$) and grade 1 fills $l = 1, 2$
+// ($6 + 10 = 16$), so the orbital pyramid the UI lays these out in has no
+// half-built final row.
+pub const DEFAULT_NMODES: usize = 16;
+
+/// The shared surface mesh a study solves against, built once so every
+/// per-grade eigensolve reuses it rather than remeshing.
 pub(crate) type Mesh = (Complex, MeshCoords);
 
 /// One of the CC0 surface meshes the studio ships as a built-in gallery,
@@ -97,19 +122,21 @@ impl BuiltinMesh {
   }
 }
 
-/// The chosen source of the surface mesh the eigenmode gallery solves on -- a
-/// runtime input, not a fixed sphere. A generated family carries its refinement
-/// (moved by a slider); a built-in or a user-loaded file carries none.
+/// The chosen source of the mesh a study runs on -- a runtime input, not a
+/// fixed sphere. A generated family carries its refinement (moved by a slider);
+/// a built-in, the reference cell, the triforce or a user-loaded file each
+/// carry their own fixed geometry.
 ///
-/// Nothing downstream distinguishes the variants: the eigensolve, the reduced
-/// grade dispatch and the degeneracy clustering are all mesh-agnostic, and the
-/// camera reads a curved surface (perspective orbit) from a flat one (top-down
-/// orthographic) off the coordinates alone. The sphere's spherical harmonics
-/// are then one mesh's spectrum among others, not a privileged case.
+/// Nothing downstream distinguishes the variants: the eigensolve, the Whitney
+/// reconstruction, the reduced-grade dispatch and the degeneracy clustering are
+/// all mesh-agnostic, and the camera reads a curved surface (perspective orbit)
+/// from a flat one (top-down orthographic) off the coordinates alone. The
+/// sphere's spherical harmonics are then one mesh's spectrum among others, not
+/// a privileged case.
 ///
 /// [`Self::Custom`] is not regenerable -- the loaded mesh lives in the gallery,
-/// keyed by this descriptor for the picker -- so it is the one variant
-/// `build` cannot serve.
+  /// keyed by this descriptor for the picker -- so it is the one variant
+  /// `build` cannot serve.
 #[derive(Clone, PartialEq)]
 pub enum MeshSource {
   /// An icosphere of the given subdivision depth.
@@ -119,6 +146,17 @@ pub enum MeshSource {
   /// (Neumann) one, and its degeneracies (a mode and its transpose share an
   /// eigenvalue) fill the pyramid's rows just as the sphere's multiplets do.
   Grid { cells_axis: usize },
+  /// The standard reference cell of the given intrinsic dimension as a one-cell
+  /// mesh. The Whitney-basis study on it is the local shape functions, so
+  /// "local shape functions" is that composition, not a study of its own.
+  /// `dim` ranges over $1..=3$, the intrinsic dimensions the fixed ambient
+  /// $RR^3$ embeds.
+  ReferenceCell { dim: Dim },
+  /// The triforce teaching mesh ([`crate::demos::triforce`]): four cells around
+  /// one interior vertex, flat in the $z = 0$ plane. The multi-cell counterpart
+  /// of the reference cell -- the Whitney-basis study on it is the global shape
+  /// functions.
+  Triforce,
   /// One of the embedded CC0 gallery meshes.
   Builtin(BuiltinMesh),
   /// A mesh the user loaded from an OBJ file, named for the picker.
@@ -136,6 +174,8 @@ impl MeshSource {
     match self {
       MeshSource::Sphere { .. } => "Sphere".to_string(),
       MeshSource::Grid { .. } => "Grid".to_string(),
+      MeshSource::ReferenceCell { .. } => "Reference cell".to_string(),
+      MeshSource::Triforce => "Triforce".to_string(),
       MeshSource::Builtin(builtin) => builtin.label().to_string(),
       MeshSource::Custom { name } => name.clone(),
     }
@@ -161,6 +201,13 @@ impl MeshSource {
         // plane of $RR^3$, exactly as the flat reference-cell scenes do.
         Ok((topology, coords.embed_euclidean(3)))
       }
+      MeshSource::ReferenceCell { dim } => {
+        let (topology, coords) = standard_coord_complex(*dim);
+        // A reference cell of `dim < 3` embeds as itself in the `z = 0` plane;
+        // a no-op once `dim >= 3`.
+        Ok((topology, coords.embed_euclidean((*dim).max(3))))
+      }
+      MeshSource::Triforce => Ok(crate::demos::triforce()),
       MeshSource::Builtin(builtin) => {
         crate::io::obj::parse(builtin.obj()).map_err(|e| format!("{}: {e}", builtin.label()))
       }
@@ -171,45 +218,156 @@ impl MeshSource {
   }
 }
 
-/// What the viewer is showing -- the unit a build, and its memoization, is
-/// keyed on. A picker in the UI switches this at runtime; the render path
-/// treats every `Scene` alike regardless of which `View` built it.
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub enum View {
-  /// A single grade of the mesh's Hodge-Laplace eigenmodes. The expensive
-  /// case: each grade is an eigensolve, run once and memoized, so only the
-  /// grade actually being viewed is ever computed.
-  MeshGrade(ExteriorGrade),
-  /// Every Whitney basis function ("local shape function") of the reference
-  /// triangle. Cheap to build.
+/// What is computed on the mesh: the second axis of the platform. Parameters
+/// live in the variant; a `Preset` fills them with concrete values, and the
+/// inspector edits them. Every study builds on every [`MeshSource`], and the
+/// build goes through the general [`Scene`] constructors -- there is no
+/// per-study display path.
+#[derive(Clone, PartialEq)]
+pub enum Study {
+  /// Hodge-Laplace eigenmodes of a single grade: the standing-wave normal
+  /// modes $Delta u = lambda u$, solved once and memoized. The harmonic forms
+  /// are its zero shell ($lambda = 0$), not a separate solver.
+  Eigenmodes { grade: ExteriorGrade, nmodes: usize },
+  /// One field per DOF simplex of every grade: the one-hot cochains, the
+  /// Whitney basis functions of the mesh. A reference cell's local shape
+  /// functions and a multi-cell mesh's global ones are the same construction,
+  /// differing only in whether a DOF simplex's support is one cell or several.
   WhitneyBasis,
-  /// Every Whitney basis function ("global shape function") of the triforce
-  /// teaching mesh ([`crate::demos::triforce`]): the same construction as
-  /// [`View::WhitneyBasis`], but a DOF simplex's support now spans the
-  /// several cells incident to it instead of a single reference cell. Cheap
-  /// to build, and mesh-independent like the reference-cell basis.
-  WhitneyBasisMesh,
-  /// The constant/pure-curl/pure-div worked examples on the triforce mesh
-  /// ([`Scene::whitney_examples`]): three grade-1 fields, each an explicit
-  /// linear combination of GSFs rather than a single one-hot cochain. Shares
-  /// the triforce mesh with [`View::WhitneyBasisMesh`] but is its own view,
-  /// since a flat 3-entry list has no grade grouping to gain from being
-  /// merged into that gallery.
-  WhitneyExamplesMesh,
+  /// A named list of explicit cochains -- the triforce worked examples today, a
+  /// loaded cochain file later.
+  Cochains(Vec<NamedCochain>),
 }
 
-impl View {
-  /// The starting view when the viewer opens: grade 0 of the mesh.
-  pub const START: View = View::MeshGrade(0);
-
-  pub(crate) fn label(self) -> String {
-    match self {
-      View::MeshGrade(grade) => format!("Eigenmodes, grade {grade}"),
-      View::WhitneyBasis => "Whitney basis (reference triangle)".to_string(),
-      View::WhitneyBasisMesh => "Whitney basis (triforce mesh)".to_string(),
-      View::WhitneyExamplesMesh => "Whitney examples (triforce mesh)".to_string(),
+impl Study {
+  /// The study the viewer opens on: grade-0 eigenmodes.
+  pub(crate) fn start() -> Study {
+    Study::Eigenmodes {
+      grade: 0,
+      nmodes: DEFAULT_NMODES,
     }
   }
+
+  pub(crate) fn label(&self) -> String {
+    match self {
+      Study::Eigenmodes { grade, .. } => format!("Eigenmodes, grade {grade}"),
+      Study::WhitneyBasis => "Whitney basis".to_string(),
+      Study::Cochains(_) => "Cochains".to_string(),
+    }
+  }
+
+  /// Builds the study's scene on `mesh`. For an eigenmode grade this runs that
+  /// grade's dense eigensolve -- the expensive path the caller runs on a
+  /// background thread and memoizes; the Whitney basis and the explicit
+  /// cochains are cheap.
+  pub(crate) fn build(&self, mesh: &Mesh) -> Scene {
+    let (topology, coords) = mesh;
+    match self {
+      Study::Eigenmodes { grade, nmodes } => Scene::mesh_grade(topology, coords, *grade, *nmodes),
+      Study::WhitneyBasis => Scene::whitney_basis_mesh(topology.clone(), coords.clone()),
+      Study::Cochains(specs) => Scene::cochains(topology.clone(), coords.clone(), specs),
+    }
+  }
+}
+
+/// A named entry of a [`Study::Cochains`] list: an explicit cochain kept as
+/// data ([`CochainSpec`]) plus the name the picker shows it under.
+#[derive(Clone, PartialEq)]
+pub struct NamedCochain {
+  pub name: String,
+  pub spec: CochainSpec,
+}
+
+/// A concrete cochain kept as data rather than as a constructed vector, so a
+/// preset builds one and the resolution against a mesh happens at build time.
+#[derive(Clone, PartialEq)]
+pub enum CochainSpec {
+  /// A grade-1 cochain given as a coefficient per edge, each edge addressed by
+  /// its ordered vertex pair $(v_0, v_1)$ with $v_0 < v_1$ -- the canonical
+  /// (positively oriented) edge orientation -- so the value lands on the mesh's
+  /// own edge regardless of that mesh's internal edge indexing.
+  ByEdges(Vec<(usize, usize, f64)>),
+}
+
+impl CochainSpec {
+  /// Resolves the spec to a cochain on `topology`.
+  pub(crate) fn resolve(&self, topology: &Complex) -> Cochain {
+    match self {
+      CochainSpec::ByEdges(entries) => {
+        let edges = topology.skeleton_raw(1);
+        let mut coeffs = na::DVector::zeros(topology.nsimplices(1));
+        for &(v0, v1, value) in entries {
+          coeffs[edges.kidx_by_simplex(&Simplex::new(vec![v0, v1]))] = value;
+        }
+        Cochain::new(1, coeffs)
+      }
+    }
+  }
+}
+
+/// A named point in the [`MeshSource`] × [`Study`] product, plus the field it
+/// opens on. Selecting a preset sets the two axes and the selection;
+/// everything afterward is the ordinary platform. A preset is a
+/// *configuration*, never a code path of its own -- the moment a curated
+/// example would need its own branch to build or display, it has stopped being
+/// a preset.
+pub(crate) struct Preset {
+  pub(crate) name: &'static str,
+  pub(crate) mesh: MeshSource,
+  pub(crate) study: Study,
+  /// The field the preset opens on, or `None` to open on the scene's first
+  /// mode (the platform's own default).
+  pub(crate) selection: Option<Selection>,
+}
+
+/// The curated first-wave presets, in browser order. Each is a configuration of
+/// the general platform: a mesh, a study, and the field to open on.
+pub(crate) fn presets() -> Vec<Preset> {
+  vec![
+    Preset {
+      name: "Spherical harmonics",
+      mesh: MeshSource::START,
+      study: Study::start(),
+      selection: None,
+    },
+    Preset {
+      name: "Harmonic 1-forms",
+      mesh: MeshSource::Builtin(BuiltinMesh::Csaszar),
+      study: Study::Eigenmodes {
+        grade: 1,
+        nmodes: DEFAULT_NMODES,
+      },
+      selection: None,
+    },
+    Preset {
+      name: "Whitney basis",
+      mesh: MeshSource::ReferenceCell {
+        dim: REFERENCE_CELL_DIM,
+      },
+      study: Study::WhitneyBasis,
+      selection: None,
+    },
+    Preset {
+      name: "Global shape functions",
+      mesh: MeshSource::Triforce,
+      study: Study::WhitneyBasis,
+      selection: None,
+    },
+    Preset {
+      name: "Constant / curl / div",
+      mesh: MeshSource::Triforce,
+      study: Study::Cochains(crate::demos::triforce_examples()),
+      selection: Some(Selection::Line(0)),
+    },
+  ]
+}
+
+/// What the viewer is showing: the `(mesh, study)` pair a build and its
+/// memoization key on. The unit the gallery caches and loads.
+#[derive(Clone, PartialEq)]
+pub(crate) struct Shown {
+  pub(crate) mesh: MeshSource,
+  pub(crate) study: Study,
 }
 
 /// A rebuild of `T` running off the render thread, so a solve that triggers an
@@ -233,26 +391,27 @@ impl<T: Send + 'static> PendingLoad<T> {
   }
 }
 
-/// The gallery's lazy, memoized loader. Owns the shared surface mesh; each
-/// view's scene is built at most once -- the expensive mesh grades on a
-/// background thread -- and cached, so revisiting a grade is instant and only
-/// the grades actually viewed are ever solved.
+/// The gallery's lazy, memoized loader. Owns the current mesh; each
+/// `(mesh, study)` pair's scene is built at most once -- the expensive
+/// eigensolves on a background thread -- and cached, so revisiting a pair is
+/// instant and only the pairs actually viewed are ever solved.
 ///
-/// Kept free of any GPU type; `State` owns the `Scene` it produces. Only one
-/// build is ever in flight: requesting a view while another is loading replaces
-/// the pending build, and a landed result is only ever installed for the view
-/// it was built for.
+/// Kept free of any GPU type; the windowed wrapper owns the `Scene` it
+/// produces. Only one build is ever in flight: requesting a pair while another
+/// is loading replaces the pending build, and a landed result is only ever
+/// installed for the pair it was built for.
 pub(crate) struct Gallery {
-  /// Which mesh the current `mesh` was built from, so the UI can reflect the
-  /// live choice and a re-selection of the same source is a no-op.
+  /// The live mesh axis, and the mesh built from it. Updated the moment a mesh
+  /// change is requested, so the panel reflects the choice at once.
   pub(crate) mesh_source: MeshSource,
   pub(crate) mesh: Arc<Mesh>,
-  pub(crate) current: View,
-  /// The last mesh grade viewed, so toggling to the Whitney basis and back
+  /// The live study axis.
+  pub(crate) study: Study,
+  /// The last eigenmode grade viewed, so toggling to the Whitney basis and back
   /// resumes that grade rather than resetting to 0.
-  pub(crate) last_mesh_grade: ExteriorGrade,
-  cache: HashMap<View, Scene>,
-  loading: Option<(View, PendingLoad<Scene>)>,
+  pub(crate) last_grade: ExteriorGrade,
+  cache: Vec<(Shown, Scene)>,
+  loading: Option<(Shown, PendingLoad<Scene>)>,
   /// The last mesh-source failure (a malformed OBJ, an unfetched asset),
   /// surfaced in the panel until the next successful mesh change. `None` when
   /// the current mesh loaded cleanly.
@@ -260,10 +419,11 @@ pub(crate) struct Gallery {
 }
 
 impl Gallery {
-  /// Opens on [`View::START`], returning the cheap placeholder scene to show at
-  /// once while that view's real build runs in the background (delivered later
-  /// by [`Self::poll`]). The placeholder shares the loader's mesh, so the
-  /// window is up on the first frame without waiting on any eigensolve.
+  /// Opens on the starting study of `source`, returning the cheap placeholder
+  /// scene to show at once while that pair's real build runs in the background
+  /// (delivered later by [`Self::poll`]). The placeholder shares the loader's
+  /// mesh, so the window is up on the first frame without waiting on any
+  /// eigensolve.
   pub(crate) fn new(source: MeshSource) -> (Self, Scene) {
     // The starting source is the icosphere, whose build is infallible.
     let mesh = Arc::new(source.build().expect("the starting mesh builds"));
@@ -271,23 +431,76 @@ impl Gallery {
     let mut gallery = Self {
       mesh_source: source,
       mesh,
-      current: View::START,
-      last_mesh_grade: 0,
-      cache: HashMap::new(),
+      study: Study::start(),
+      last_grade: 0,
+      cache: Vec::new(),
       loading: None,
       error: None,
     };
-    gallery.spawn(View::START);
+    let shown = gallery.shown();
+    gallery.spawn(shown);
     (gallery, placeholder)
   }
 
-  /// Switches to a regenerable source (a generated family or a built-in mesh),
-  /// building its mesh first so a failure leaves the current one untouched.
-  /// `Ok(Some(scene))` is the placeholder to show while the re-solve runs;
-  /// `Ok(None)` is a no-op source change, or one under a view that ignores the
-  /// mesh; `Err` is a build failure to surface.
-  pub(crate) fn select_source(&mut self, source: MeshSource) -> Result<Option<Scene>, String> {
-    if source == self.mesh_source {
+  /// The pair currently on the two live axes.
+  pub(crate) fn shown(&self) -> Shown {
+    Shown {
+      mesh: self.mesh_source.clone(),
+      study: self.study.clone(),
+    }
+  }
+
+  fn cached(&self, shown: &Shown) -> Option<Scene> {
+    self
+      .cache
+      .iter()
+      .find(|(s, _)| s == shown)
+      .map(|(_, scene)| scene.clone())
+  }
+
+  fn spawn(&mut self, shown: Shown) {
+    let mesh = self.mesh.clone();
+    let study = shown.study.clone();
+    self.loading = Some((shown, PendingLoad::spawn(move || study.build(&mesh))));
+  }
+
+  /// Requests a build of the current pair against `self.mesh` (which the caller
+  /// has already made match `self.mesh_source`). `Some(scene)` is a cache hit
+  /// to install now; `None` means a background build is in flight (a spinner
+  /// shows until [`Self::poll`] delivers it).
+  fn request(&mut self) -> Option<Scene> {
+    let shown = self.shown();
+    if let Some(scene) = self.cached(&shown) {
+      self.loading = None;
+      return Some(scene);
+    }
+    if !self.loading.as_ref().is_some_and(|(s, _)| *s == shown) {
+      self.spawn(shown);
+    }
+    None
+  }
+
+  /// Switches the study on the current mesh. `Some(scene)` is a cache hit to
+  /// install now; `None` is a no-op (the study is already shown) or a build now
+  /// running in the background.
+  pub(crate) fn select_study(&mut self, study: Study) -> Option<Scene> {
+    if study == self.study && self.loading.is_none() {
+      return None;
+    }
+    if let Study::Eigenmodes { grade, .. } = &study {
+      self.last_grade = *grade;
+    }
+    self.study = study;
+    self.request()
+  }
+
+  /// Switches to a regenerable mesh source, building its mesh first so a
+  /// failure leaves the current one untouched. `Ok(Some(scene))` installs now
+  /// -- a cache hit, or a solve-free placeholder on the new mesh to show while
+  /// its study re-solves; `Ok(None)` is a no-op source change; `Err` is a build
+  /// failure to surface.
+  pub(crate) fn select_mesh(&mut self, source: MeshSource) -> Result<Option<Scene>, String> {
+    if source == self.mesh_source && self.loading.is_none() {
       return Ok(None);
     }
     let mesh = source.build()?;
@@ -301,89 +514,61 @@ impl Gallery {
     self.install_mesh(MeshSource::Custom { name }, mesh)
   }
 
-  /// Adopts `mesh` under `source` and re-solves the current grade against it.
-  /// The per-grade eigensolves are all tied to the old mesh, so they are
-  /// dropped from the cache (both Whitney-basis views are mesh-independent --
-  /// the reference triangle and the triforce mesh are fixed, not the picker's
-  /// mesh -- and kept); the current grade's solve is respawned in the
-  /// background.
-  ///
-  /// Returns a solve-free placeholder on the new mesh to show at once while
-  /// that solve runs -- or `None` when the current view does not depend on the
-  /// mesh (the Whitney basis), where nothing visible changes and only the
-  /// stored source is updated, taking effect the next time a mesh grade is
-  /// shown.
+  /// Applies a preset: builds its mesh, sets the two axes, and requests the
+  /// build. Returns a scene to install now (a cache hit, or a placeholder on
+  /// the new mesh) or `None` while the pair solves. The preset's opening
+  /// selection is the caller's to apply once the scene lands.
+  pub(crate) fn select_preset(&mut self, preset: &Preset) -> Result<Option<Scene>, String> {
+    let mesh = preset.mesh.build()?;
+    if let Study::Eigenmodes { grade, .. } = &preset.study {
+      self.last_grade = *grade;
+    }
+    self.study = preset.study.clone();
+    Ok(self.install_mesh(preset.mesh.clone(), mesh))
+  }
+
+  /// Adopts `mesh` under `source` and requests the current study against it. A
+  /// cache hit (this pair was built before) installs at once; otherwise the
+  /// build is spawned and a solve-free placeholder on the new mesh is returned
+  /// to show while it runs.
   fn install_mesh(&mut self, source: MeshSource, mesh: Mesh) -> Option<Scene> {
     self.error = None;
     self.mesh_source = source;
     self.mesh = Arc::new(mesh);
-    self
-      .cache
-      .retain(|view, _| !matches!(view, View::MeshGrade(_)));
-    match self.current {
-      View::MeshGrade(_) => {
-        self.spawn(self.current);
-        Some(Scene::placeholder_on(
-          self.mesh.0.clone(),
-          self.mesh.1.clone(),
-        ))
-      }
-      View::WhitneyBasis | View::WhitneyBasisMesh | View::WhitneyExamplesMesh => None,
+    let shown = self.shown();
+    if let Some(scene) = self.cached(&shown) {
+      self.loading = None;
+      return Some(scene);
     }
+    self.spawn(shown);
+    Some(Scene::placeholder_on(
+      self.mesh.0.clone(),
+      self.mesh.1.clone(),
+    ))
   }
 
   pub(crate) fn set_error(&mut self, error: String) {
     self.error = Some(error);
   }
 
-  fn spawn(&mut self, view: View) {
-    let mesh = self.mesh.clone();
-    self.loading = Some((
-      view,
-      PendingLoad::spawn(move || crate::demos::build_view(view, &mesh)),
-    ));
-  }
-
   pub(crate) fn is_loading(&self) -> bool {
     self.loading.is_some()
   }
 
-  pub(crate) fn loading_view(&self) -> Option<View> {
-    self.loading.as_ref().map(|(view, _)| *view)
+  /// The study label of the build in flight, for the spinner.
+  pub(crate) fn loading_label(&self) -> Option<String> {
+    self.loading.as_ref().map(|(shown, _)| shown.study.label())
   }
 
-  /// Requests that `view` be shown. Returns `Some(scene)` to install right now
-  /// -- a cache hit, instant -- or `None` when the view is either already shown
-  /// or now building in the background (a spinner shows until [`Self::poll`]
-  /// delivers it).
-  pub(crate) fn request(&mut self, view: View) -> Option<Scene> {
-    if let View::MeshGrade(grade) = view {
-      self.last_mesh_grade = grade;
-    }
-    if view == self.current && self.loading.is_none() {
-      return None;
-    }
-    if let Some(scene) = self.cache.get(&view) {
-      self.current = view;
-      self.loading = None;
-      return Some(scene.clone());
-    }
-    if !self.loading.as_ref().is_some_and(|(v, _)| *v == view) {
-      self.spawn(view);
-    }
-    None
-  }
-
-  /// `Some` exactly once, the frame a background build lands: commits it as
-  /// `current`, memoizes it, and hands it back to be installed.
+  /// `Some` exactly once, the frame a background build lands: memoizes it and
+  /// hands it back to be installed.
   pub(crate) fn poll(&mut self) -> Option<Scene> {
-    let (view, scene) = self
+    let (shown, scene) = self
       .loading
       .as_ref()
-      .and_then(|(view, pending)| pending.poll().map(|scene| (*view, scene)))?;
+      .and_then(|(shown, pending)| pending.poll().map(|scene| (shown.clone(), scene)))?;
     self.loading = None;
-    self.current = view;
-    self.cache.insert(view, scene.clone());
+    self.cache.push((shown, scene.clone()));
     Some(scene)
   }
 }

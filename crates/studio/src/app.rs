@@ -23,7 +23,7 @@ use winit::{
 
 use crate::demos::default_selection;
 use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
-use crate::gallery::{Gallery, MeshSource, View};
+use crate::gallery::{presets, Gallery, MeshSource, Preset, Study};
 use crate::render::{camera::Camera, FrameView, GpuContext, Renderer, DEFAULT_SSAA_SCALE};
 use crate::scene::Scene;
 use crate::ui::{Entry, PanelModel, Selection};
@@ -61,6 +61,14 @@ struct State<'a> {
   gallery: Gallery,
   scene: Scene,
   selection: Selection,
+  /// The curated presets the browser lists, built once. A preset is a
+  /// configuration of the two axes (`gallery.rs`), so it lives model-side, not
+  /// in the panel.
+  presets: Vec<Preset>,
+  /// The field a just-requested preset means to open on, applied when its scene
+  /// lands ([`Self::install_scene`]). `None` for any other install, which opens
+  /// on the scene's own first mode.
+  pending_selection: Option<Selection>,
   /// Fixed at scene-build time: the object's coordinate extent (its radius),
   /// which sets the standing-wave displacement scale for whichever field is on
   /// display and the world-space width of the segment marks -- an
@@ -146,6 +154,8 @@ impl<'a> State<'a> {
       gallery,
       scene,
       selection,
+      presets: presets(),
+      pending_selection: None,
       amplitude_scale,
       egui_ctx,
       egui_winit_state,
@@ -180,23 +190,37 @@ impl<'a> State<'a> {
     self.apply_field(selection);
   }
 
-  /// Requests that `view` be shown. A cached view (an already-solved grade)
-  /// installs instantly; an uncached one -- a grade's eigensolve -- runs
-  /// on a background thread via `gallery`, and [`Self::poll_view_load`] installs
-  /// the result once it lands, so this call never blocks the UI.
-  fn set_view(&mut self, view: View) {
-    if let Some(scene) = self.gallery.request(view) {
+  /// Requests that `study` be shown on the current mesh. A cached pair (an
+  /// already-solved grade) installs instantly; an uncached one -- a grade's
+  /// eigensolve -- runs on a background thread via `gallery`, and
+  /// [`Self::poll_view_load`] installs the result once it lands, so this call
+  /// never blocks the UI.
+  fn set_study(&mut self, study: Study) {
+    if let Some(scene) = self.gallery.select_study(study) {
       self.install_scene(scene);
     }
   }
 
-  /// Switches the gallery's mesh to a regenerable source and installs the
-  /// placeholder it hands back (the new mesh, shown at once) while the current
-  /// grade re-solves in the background. A no-op source change, or one under a
-  /// view that ignores the mesh, installs nothing; a build failure is recorded
-  /// on the gallery and shown in the panel, leaving the current mesh in place.
+  /// Switches the gallery's mesh to a regenerable source and installs the scene
+  /// it hands back -- a cache hit, or a placeholder on the new mesh shown at
+  /// once while the current study re-solves in the background. A no-op source
+  /// change installs nothing; a build failure is recorded on the gallery and
+  /// shown in the panel, leaving the current mesh in place.
   fn set_mesh_source(&mut self, source: MeshSource) {
-    match self.gallery.select_source(source) {
+    match self.gallery.select_mesh(source) {
+      Ok(Some(scene)) => self.install_scene(scene),
+      Ok(None) => {}
+      Err(error) => self.gallery.set_error(error),
+    }
+  }
+
+  /// Applies a preset: sets both axes and the opening field, then installs the
+  /// scene the gallery hands back (a cache hit or a placeholder on the new
+  /// mesh). The preset's field is remembered in `pending_selection` and applied
+  /// once the real scene lands. A build failure is recorded and shown.
+  fn set_preset(&mut self, index: usize) {
+    self.pending_selection = self.presets[index].selection;
+    match self.gallery.select_preset(&self.presets[index]) {
       Ok(Some(scene)) => self.install_scene(scene),
       Ok(None) => {}
       Err(error) => self.gallery.set_error(error),
@@ -233,7 +257,17 @@ impl<'a> State<'a> {
   /// cell, or vice versa.
   fn install_scene(&mut self, scene: Scene) {
     self.amplitude_scale = scene_extent(&scene) as f32;
-    let selection = default_selection(&scene);
+    // A preset's opening field, if one is pending and in range on this scene;
+    // otherwise the scene's own first mode. A placeholder (one scalar field)
+    // does not satisfy a line-field preset selection, so the pending choice is
+    // kept until the real scene it belongs to lands.
+    let selection = match self.pending_selection {
+      Some(sel) if selection_in_range(&scene, sel) => {
+        self.pending_selection = None;
+        sel
+      }
+      _ => default_selection(&scene),
+    };
     self.scene = scene;
     self.mesh_display = MeshDisplay::build(&self.ctx.device, &self.scene);
     self.apply_field(selection);
@@ -324,13 +358,13 @@ impl<'a> State<'a> {
     let ctx = self.egui_ctx.clone();
     let raw_input = self.egui_winit_state.take_egui_input(window);
 
-    // What the panel reflects is the view being *loaded*, if any, so clicking a
-    // grade highlights it and shows the spinner at once rather than a frame
-    // after its solve lands. The displayed `self.scene` still belongs to the
-    // previous view meanwhile, but the mode picker is hidden behind the spinner
-    // until the new one arrives, so its entries are only read when they match.
-    let shown_view = self.gallery.loading_view().unwrap_or(self.gallery.current);
+    // The two live axes drive the panel's highlighting, so clicking a study or
+    // a grade reflects at once rather than a frame after its solve lands. The
+    // displayed `self.scene` still belongs to the previous pair meanwhile, but
+    // the mode picker is hidden behind the spinner until the new one arrives,
+    // so its entries are only read when they match.
     let mesh_source = self.gallery.mesh_source.clone();
+    let study = self.gallery.study.clone();
 
     // The current scene's modes, as the picker needs them. Scalar and line
     // fields both feed in; for a single mesh grade exactly one list is
@@ -364,17 +398,18 @@ impl<'a> State<'a> {
       .collect();
 
     let model = PanelModel {
-      shown_view,
+      mesh_source: mesh_source.clone(),
+      study: study.clone(),
       is_loading: self.gallery.is_loading(),
-      loading_label: self.gallery.loading_view().map(View::label),
-      last_mesh_grade: self.gallery.last_mesh_grade,
+      loading_label: self.gallery.loading_label(),
+      last_grade: self.gallery.last_grade,
       max_grade: self.gallery.mesh.0.dim(),
       scene_dim: self.scene.topology.dim(),
       entries,
-      mesh_source: mesh_source.clone(),
       mesh_error: self.gallery.error.clone(),
       selection: self.selection,
       top_down: self.camera.top_down,
+      presets: &self.presets,
     };
 
     // Borrow only the file dialog into the closure: the rest of the panel is
@@ -396,13 +431,13 @@ impl<'a> State<'a> {
     });
     let response = response.expect("the closure always runs exactly once");
 
-    // A finished file pick, a mesh-source change and a view switch each replace
-    // the field set and the camera's natural orientation wholesale, so the
-    // `selection`/`top_down` picked this same frame belong to the view being
-    // left and must not be applied afterward -- the mesh/view setters choose
-    // both anew for what they land on. They are mutually exclusive in priority
-    // (at most one such widget moves per frame anyway); a load or a mesh change
-    // re-solves the current grade, so both precede a same-frame grade switch.
+    // A finished file pick, a preset, a mesh-source change and a study switch
+    // each replace the field set and the camera's natural orientation
+    // wholesale, so the `selection`/`top_down` picked this same frame belong to
+    // the pair being left and must not be applied afterward -- the setters
+    // choose both anew for what they land on. They are mutually exclusive in
+    // priority (at most one such widget moves per frame anyway); a preset sets
+    // both axes at once, so it precedes the individual axis switches.
     let loaded_file = match self.file_dialog.take_picked() {
       Some(path) => {
         self.load_obj_path(path);
@@ -412,10 +447,12 @@ impl<'a> State<'a> {
     };
 
     if !loaded_file {
-      if response.requested_mesh_source != mesh_source {
-        self.set_mesh_source(response.requested_mesh_source);
-      } else if response.requested_view != shown_view {
-        self.set_view(response.requested_view);
+      if let Some(index) = response.requested_preset {
+        self.set_preset(index);
+      } else if response.requested_mesh != mesh_source {
+        self.set_mesh_source(response.requested_mesh);
+      } else if response.requested_study != study {
+        self.set_study(response.requested_study);
       } else {
         self.set_field(response.selection);
         self.camera.top_down = response.top_down;
@@ -541,6 +578,17 @@ impl<'a> State<'a> {
     output.present();
 
     Ok(())
+  }
+}
+
+/// Whether `selection` indexes a field the scene actually has -- the guard a
+/// preset's opening field goes through, since a placeholder (one scalar field)
+/// cannot satisfy a line-field selection and a selection valid in one study can
+/// be out of range in another.
+fn selection_in_range(scene: &Scene, selection: Selection) -> bool {
+  match selection {
+    Selection::Scalar(i) => i < scene.fields.len(),
+    Selection::Line(i) => i < scene.line_fields.len(),
   }
 }
 

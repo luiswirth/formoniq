@@ -8,8 +8,8 @@ use exterior::ExteriorGrade;
 use manifold::Dim;
 
 use crate::gallery::{
-  BuiltinMesh, MeshSource, View, GRID_CELLS_DEFAULT, GRID_CELLS_MAX, SPHERE_SUBDIVISIONS,
-  SPHERE_SUBDIVISIONS_MAX,
+  BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, GRID_CELLS_DEFAULT, GRID_CELLS_MAX,
+  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
 };
 
 /// Which field of a scene is on display: its reduced grade decides the mark
@@ -215,17 +215,18 @@ pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
 /// borrow, so building it and rendering the panel cannot conflict with the
 /// `&mut self` calls the caller makes to apply the response afterward.
 pub(crate) struct PanelModel<'a> {
-  pub(crate) shown_view: View,
+  pub(crate) mesh_source: MeshSource,
+  pub(crate) study: Study,
   pub(crate) is_loading: bool,
   pub(crate) loading_label: Option<String>,
-  pub(crate) last_mesh_grade: ExteriorGrade,
+  pub(crate) last_grade: ExteriorGrade,
   pub(crate) max_grade: Dim,
   pub(crate) scene_dim: Dim,
   pub(crate) entries: Vec<Entry<'a>>,
-  pub(crate) mesh_source: MeshSource,
   pub(crate) mesh_error: Option<String>,
   pub(crate) selection: Selection,
   pub(crate) top_down: bool,
+  pub(crate) presets: &'a [Preset],
 }
 
 /// The changes the user requested this frame, for the caller to apply. Each
@@ -233,8 +234,12 @@ pub(crate) struct PanelModel<'a> {
 /// can compare against the model unconditionally rather than branching on
 /// whether a widget fired.
 pub(crate) struct PanelResponse {
-  pub(crate) requested_view: View,
-  pub(crate) requested_mesh_source: MeshSource,
+  pub(crate) requested_mesh: MeshSource,
+  pub(crate) requested_study: Study,
+  /// The index into `presets` of a preset the user picked this frame, if any.
+  /// A preset sets both axes and the opening field at once, so the caller
+  /// applies it in preference to the individual `requested_*` fields.
+  pub(crate) requested_preset: Option<usize>,
   pub(crate) selection: Selection,
   pub(crate) top_down: bool,
   /// Whether "Load OBJ…" was clicked -- the one request the panel cannot
@@ -244,116 +249,131 @@ pub(crate) struct PanelResponse {
   pub(crate) load_obj_clicked: bool,
 }
 
-/// Builds and tessellates the control panel: the family picker, the mesh's
-/// per-grade tabs, that grade's orbital-pyramid mode picker (or a spinner
-/// while it solves), and the camera-mode toggle. A pure function of `model`:
-/// it reads no other state and its only side effect is on `ctx`'s own egui
-/// pass, so the caller is free to apply the returned changes however it likes.
+/// Builds and tessellates the control panel: the preset browser, the two raw
+/// axes (mesh picker and study picker) for free composition, the study's own
+/// knobs (eigenmode grade tabs, the mode picker or basis grid, or a spinner
+/// while it solves) and the camera-mode toggle. A pure function of `model`: it
+/// reads no other state and its only side effect is on `ctx`'s own egui pass,
+/// so the caller is free to apply the returned changes however it likes.
 pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
-  let mut requested_view = model.shown_view;
-  let mut requested_mesh_source = model.mesh_source.clone();
+  let mut requested_mesh = model.mesh_source.clone();
+  let mut requested_study = model.study.clone();
+  let mut requested_preset = None;
   let mut selection = model.selection;
   let mut top_down = model.top_down;
   let mut load_obj_clicked = false;
 
   egui::Window::new("Gallery").show(ctx, |ui| {
-    let on_eigenmodes = matches!(model.shown_view, View::MeshGrade(_));
+    // The preset browser: a curated point in the mesh × study product,
+    // selected as a whole. Everything below it is the raw product it is a
+    // point of.
+    egui::ComboBox::from_id_salt("preset")
+      .selected_text("Presets…")
+      .show_ui(ui, |ui| {
+        for (i, preset) in model.presets.iter().enumerate() {
+          if ui.selectable_label(false, preset.name).clicked() {
+            requested_preset = Some(i);
+          }
+        }
+      });
+    ui.separator();
+
+    // The study axis. Eigenmodes and the Whitney basis are the two generic
+    // studies; an explicit cochain list has no generic form to pick, so it
+    // shows as the selected study only when a preset installed it.
     ui.horizontal(|ui| {
-      if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() {
-        requested_view = View::MeshGrade(model.last_mesh_grade);
+      let on_eigenmodes = matches!(model.study, Study::Eigenmodes { .. });
+      if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
+        requested_study = Study::Eigenmodes {
+          grade: model.last_grade,
+          nmodes: DEFAULT_NMODES,
+        };
       }
-      if ui
-        .selectable_label(
-          model.shown_view == View::WhitneyBasis,
-          "LSF (reference cell)",
-        )
-        .clicked()
-      {
-        requested_view = View::WhitneyBasis;
+      let on_whitney = matches!(model.study, Study::WhitneyBasis);
+      if ui.selectable_label(on_whitney, "Whitney basis").clicked() {
+        requested_study = Study::WhitneyBasis;
       }
-      if ui
-        .selectable_label(
-          model.shown_view == View::WhitneyBasisMesh,
-          "GSF (triforce mesh)",
-        )
-        .clicked()
-      {
-        requested_view = View::WhitneyBasisMesh;
-      }
-      if ui
-        .selectable_label(
-          model.shown_view == View::WhitneyExamplesMesh,
-          "Examples (triforce mesh)",
-        )
-        .clicked()
-      {
-        requested_view = View::WhitneyExamplesMesh;
+      if matches!(model.study, Study::Cochains(_)) {
+        let _ = ui.selectable_label(true, "Cochains");
       }
     });
     ui.separator();
 
-    if let View::MeshGrade(grade) = model.shown_view {
-      // Mesh source: the surface the eigenmodes live on is a chosen input,
-      // not a fixed sphere -- a generated family, a built-in gallery mesh,
-      // or a loaded OBJ. Picking any remeshes and re-solves the current
-      // grade (`requested_mesh_source`, applied after the closure).
-      ui.horizontal(|ui| {
-        egui::ComboBox::from_id_salt("mesh-source")
-          .selected_text(requested_mesh_source.label())
-          .show_ui(ui, |ui| {
-            // A generated family resets to its default refinement when
-            // first chosen; re-picking the current family keeps the
-            // slider's value.
-            let is_sphere = matches!(requested_mesh_source, MeshSource::Sphere { .. });
-            if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
-              requested_mesh_source = MeshSource::Sphere {
-                subdivisions: SPHERE_SUBDIVISIONS,
-              };
+    // The mesh axis: every study runs on every mesh, so the picker is always
+    // shown. A generated family resets to its default refinement when first
+    // chosen; re-picking the current family keeps the slider's value.
+    ui.horizontal(|ui| {
+      egui::ComboBox::from_id_salt("mesh-source")
+        .selected_text(requested_mesh.label())
+        .show_ui(ui, |ui| {
+          let is_sphere = matches!(requested_mesh, MeshSource::Sphere { .. });
+          if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
+            requested_mesh = MeshSource::Sphere {
+              subdivisions: SPHERE_SUBDIVISIONS,
+            };
+          }
+          let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
+          if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
+            requested_mesh = MeshSource::Grid {
+              cells_axis: GRID_CELLS_DEFAULT,
+            };
+          }
+          let is_ref = matches!(requested_mesh, MeshSource::ReferenceCell { .. });
+          if ui.selectable_label(is_ref, "Reference cell").clicked() && !is_ref {
+            requested_mesh = MeshSource::ReferenceCell {
+              dim: REFERENCE_CELL_DIM,
+            };
+          }
+          let is_triforce = matches!(requested_mesh, MeshSource::Triforce);
+          if ui.selectable_label(is_triforce, "Triforce").clicked() {
+            requested_mesh = MeshSource::Triforce;
+          }
+          for builtin in BuiltinMesh::ALL {
+            let selected = requested_mesh == MeshSource::Builtin(builtin);
+            if ui.selectable_label(selected, builtin.label()).clicked() {
+              requested_mesh = MeshSource::Builtin(builtin);
             }
-            let is_grid = matches!(requested_mesh_source, MeshSource::Grid { .. });
-            if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
-              requested_mesh_source = MeshSource::Grid {
-                cells_axis: GRID_CELLS_DEFAULT,
-              };
-            }
-            for builtin in BuiltinMesh::ALL {
-              let selected = requested_mesh_source == MeshSource::Builtin(builtin);
-              if ui.selectable_label(selected, builtin.label()).clicked() {
-                requested_mesh_source = MeshSource::Builtin(builtin);
-              }
-            }
-          });
-        // Opens the in-egui file browser; the pick itself is retrieved by the
-        // caller, which owns the (native-only) `egui_file_dialog` state.
-        if ui.button("Load OBJ…").clicked() {
-          load_obj_clicked = true;
-        }
-      });
-      // A generated family carries a refinement slider; a built-in or
-      // loaded mesh has none.
-      match &mut requested_mesh_source {
-        MeshSource::Sphere { subdivisions } => {
-          ui.add(egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"));
-        }
-        MeshSource::Grid { cells_axis } => {
-          ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
-        }
-        MeshSource::Builtin(_) | MeshSource::Custom { .. } => {}
+          }
+        });
+      // Opens the in-egui file browser; the pick itself is retrieved by the
+      // caller, which owns the (native-only) `egui_file_dialog` state.
+      if ui.button("Load OBJ…").clicked() {
+        load_obj_clicked = true;
       }
-      if let Some(error) = &model.mesh_error {
-        ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
+    });
+    // A generated family or the reference cell carries a slider; a built-in,
+    // the triforce or a loaded mesh has none.
+    match &mut requested_mesh {
+      MeshSource::Sphere { subdivisions } => {
+        ui.add(egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"));
       }
-      ui.separator();
+      MeshSource::Grid { cells_axis } => {
+        ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
+      }
+      MeshSource::ReferenceCell { dim } => {
+        ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
+      }
+      MeshSource::Triforce | MeshSource::Builtin(_) | MeshSource::Custom { .. } => {}
+    }
+    if let Some(error) = &model.mesh_error {
+      ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
+    }
+    ui.separator();
 
-      // One tab per grade of the de Rham complex; every grade is solved and
-      // shown, the top grade through its Hodge star just like grade 0.
+    // One tab per grade of the de Rham complex; every grade is solved and
+    // shown, the top grade through its Hodge star just like grade 0.
+    if let Study::Eigenmodes { grade, .. } = &model.study {
+      let grade = *grade;
       ui.horizontal(|ui| {
         for g in 0..=model.max_grade {
           if ui
             .selectable_label(g == grade, grade_mark_label(g, model.max_grade))
             .clicked()
           {
-            requested_view = View::MeshGrade(g);
+            requested_study = Study::Eigenmodes {
+              grade: g,
+              nmodes: DEFAULT_NMODES,
+            };
           }
         }
       });
@@ -368,14 +388,14 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
         }
       });
     } else {
-      match model.shown_view {
-        View::MeshGrade(_) => {
+      match &model.study {
+        Study::Eigenmodes { .. } => {
           ui.label("rows: degeneracy shell (λ) · cells: order");
         }
-        View::WhitneyBasis | View::WhitneyBasisMesh => {
+        Study::WhitneyBasis => {
           ui.label("rows: grade · cells: DOF simplex");
         }
-        View::WhitneyExamplesMesh => {}
+        Study::Cochains(_) => {}
       };
       render_modes(ui, &model.entries, &mut selection, model.scene_dim);
     }
@@ -385,8 +405,9 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
   });
 
   PanelResponse {
-    requested_view,
-    requested_mesh_source,
+    requested_mesh,
+    requested_study,
+    requested_preset,
     selection,
     top_down,
     load_obj_clicked,

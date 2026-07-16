@@ -13,7 +13,9 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use formoniq_studio::export::{export, ExportSpec};
-use formoniq_studio::gallery::{BuiltinMesh, MeshSource, View};
+use formoniq_studio::gallery::{
+  BuiltinMesh, MeshSource, Study, DEFAULT_NMODES, REFERENCE_CELL_DIM,
+};
 
 #[derive(Parser)]
 #[command(about = "A viewer for FEEC solutions on simplicial manifolds")]
@@ -29,15 +31,15 @@ enum Command {
     /// Destination. `.mp4` writes a clip through `ffmpeg`; anything else is a
     /// PNG still.
     out: PathBuf,
-    /// Which scene: a mesh eigenmode grade, or one of the Whitney galleries.
-    #[arg(long, value_parser = parse_view, default_value = "grade0")]
-    view: View,
-    /// Which mesh to build a `grade<k>` view on: `sphere`, `grid`, or a
-    /// built-in by name. Ignored by the Whitney views, which carry their own
-    /// fixed mesh.
+    /// Which study to run: `grade<k>` for a Hodge-Laplace eigenmode grade, or
+    /// `whitney` for the Whitney basis.
+    #[arg(long, value_parser = parse_study, default_value = "grade0")]
+    study: Study,
+    /// Which mesh to run the study on: `sphere`, `grid`, `refcell`,
+    /// `triforce`, or a built-in by name.
     #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
     mesh: MeshSource,
-    /// Which field of the view, in the picker's order. Defaults to the first,
+    /// Which field of the scene, in the picker's order. Defaults to the first,
     /// as the viewer opens on.
     #[arg(long)]
     field: Option<usize>,
@@ -57,34 +59,37 @@ enum Command {
   },
 }
 
-fn parse_view(s: &str) -> Result<View, String> {
+fn parse_study(s: &str) -> Result<Study, String> {
   match s {
-    "whitney" => Ok(View::WhitneyBasis),
-    "whitney-mesh" => Ok(View::WhitneyBasisMesh),
-    "whitney-examples" => Ok(View::WhitneyExamplesMesh),
+    "whitney" => Ok(Study::WhitneyBasis),
     _ => s
       .strip_prefix("grade")
       .and_then(|g| g.parse().ok())
-      .map(View::MeshGrade)
-      .ok_or_else(|| {
-        format!("expected `grade<k>`, `whitney`, `whitney-mesh` or `whitney-examples`, got `{s}`")
-      }),
+      .map(|grade| Study::Eigenmodes {
+        grade,
+        nmodes: DEFAULT_NMODES,
+      })
+      .ok_or_else(|| format!("expected `grade<k>` or `whitney`, got `{s}`")),
   }
 }
 
-/// The mesh names an export accepts: the two generated families, and every
-/// embedded built-in by its own name. A mesh the user loaded into the viewer is
-/// not among them -- `MeshSource::Custom` is not regenerable from its
-/// descriptor, so there is nothing here to name it by.
+/// The mesh names an export accepts: the generated families, the reference cell
+/// and triforce, and every embedded built-in by its own name. A mesh the user
+/// loaded into the viewer is not among them -- `MeshSource::Custom` is not
+/// regenerable from its descriptor, so there is nothing here to name it by.
 fn parse_mesh(s: &str) -> Result<MeshSource, String> {
   match s {
     "sphere" => Ok(MeshSource::START),
     "grid" => Ok(MeshSource::Grid { cells_axis: 16 }),
+    "refcell" | "reference" => Ok(MeshSource::ReferenceCell {
+      dim: REFERENCE_CELL_DIM,
+    }),
+    "triforce" => Ok(MeshSource::Triforce),
     _ => BuiltinMesh::from_name(s)
       .map(MeshSource::Builtin)
       .ok_or_else(|| {
         let builtins = BuiltinMesh::ALL.map(BuiltinMesh::name).join("`, `");
-        format!("expected `sphere`, `grid`, `{builtins}`, got `{s}`")
+        format!("expected `sphere`, `grid`, `refcell`, `triforce`, `{builtins}`, got `{s}`")
       }),
   }
 }
@@ -108,7 +113,7 @@ fn main() {
     None => pollster::block_on(formoniq_studio::run()),
     Some(Command::Export {
       out,
-      view,
+      study,
       mesh,
       field,
       size,
@@ -117,7 +122,7 @@ fn main() {
     }) => {
       let _ = env_logger::try_init();
       let spec = ExportSpec {
-        view,
+        study,
         mesh_source: mesh,
         field,
         size,

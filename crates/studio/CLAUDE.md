@@ -128,6 +128,25 @@ they bind the same way the parent's invariants do:
 - **The UI is a pure function of the model** returning requested changes, not a
   mutator of it.
 
+## The platform is a product; presets are points in it
+
+What the viewer shows is a point in `MeshSource × Study` — any study on any
+mesh, the two axes independent and every pair total. The cache, the background
+load and the placeholder machinery all key on the pair, not on a fixed
+enumeration of views. A `Preset` is a named point in that product together with
+the field it opens on: selecting one sets the two axes and the selection, and
+everything afterward is the ordinary platform.
+
+A preset is therefore a *configuration*, never a code path — the moment a
+curated example would need its own branch to build or display, it has stopped
+being a preset and the generalization has a hole. This is the same dissolution
+the parent's invariants demand, one level up: the reference cell is the mesh
+whose only cell is the standard simplex, so the local shape functions are the
+Whitney study on it, not a study of their own; the global shape functions are
+that study on the triforce; the spherical harmonics are the eigenmode study on
+the sphere. Anything that looks like a special view owes the same reduction into
+a mesh and a study.
+
 ## Rendering
 
 Render the way an expert in computer graphics would: prefer the visually most
