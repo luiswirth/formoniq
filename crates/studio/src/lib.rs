@@ -480,17 +480,26 @@ impl Gallery {
 /// way. Both the camera framing and the standing-wave amplitude scale off this,
 /// so neither is tuned to the sphere.
 fn scene_extent(scene: &Scene) -> f64 {
+  scene_centroid_and_extent(scene).1
+}
+
+/// The mesh's own centroid, in the same 3-vector coordinates as
+/// [`scene_extent`] -- the point the camera should target so an off-center
+/// mesh (a unit grid on $[0,1]^2$, an off-center loaded OBJ) still ends up in
+/// the middle of the view, not just correctly sized.
+fn scene_centroid_and_extent(scene: &Scene) -> (na::DVector<f64>, f64) {
   let coords = &scene.coords;
   let n = coords.nvertices().max(1) as f64;
   let centroid = coords
     .coord_iter()
     .fold(na::DVector::zeros(3), |acc, c| acc + *c)
     / n;
-  coords
+  let extent = coords
     .coord_iter()
     .map(|c| (*c - &centroid).norm())
     .fold(0.0, f64::max)
-    .max(1e-6)
+    .max(1e-6);
+  (centroid, extent)
 }
 
 /// The camera's natural starting orientation for a scene, derived purely from
@@ -501,7 +510,7 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   // Framing distance from the scene's own coordinate extent, not a constant
   // tuned for the sphere: an icosphere of radius 1 gives back exactly the
   // prior hardcoded 3.0, and a unit reference triangle frames itself too.
-  let extent = scene_extent(scene);
+  let (centroid, extent) = scene_centroid_and_extent(scene);
   // A mesh flat in the z = 0 plane (the reference cell scenes: nothing has
   // been displaced off it yet) is looked down onto from above, along its own
   // normal, in orthographic top-down mode, rather than the angled perspective
@@ -524,7 +533,7 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   let yaw: f32 = if is_planar { 1.57 } else { -1.57 };
 
   let mut camera = Camera::new(aspect);
-  camera.target = nalgebra::Point3::origin();
+  camera.target = nalgebra::Point3::new(centroid[0] as f32, centroid[1] as f32, centroid[2] as f32);
   camera.distance = 3.0 * extent as f32;
   camera.pitch = pitch;
   camera.yaw = yaw;
