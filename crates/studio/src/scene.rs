@@ -92,6 +92,13 @@ pub struct LineField {
   /// form keeps $k = n-1$ even though it is drawn through its Hodge star. See
   /// [`ScalarField::grade`].
   pub grade: ExteriorGrade,
+  /// The original $k$-cochain this field was reduced from, kept whole so the
+  /// viewer can reconstruct the *true* Whitney field $W c$ (via
+  /// [`WhitneyInterpolant`]) rather than only the nodal average below. The
+  /// streamline tracer integrates $((W c)|_"reduced")^sharp$ cell by cell; the
+  /// nodal `direction`/`magnitude` are the coarser readout the LIC and surface
+  /// tint use.
+  pub cochain: Cochain,
   /// Per-vertex unit ambient tangent direction (zero where the field
   /// vanishes). Nodal-averaged across incident cells then normalized -- unlike
   /// grade 0, a grade-1 field has no canonical value at a vertex, since only
@@ -536,6 +543,7 @@ impl Scene {
         line_fields.push(LineField {
           name,
           grade: k,
+          cochain: interpolant.cochain().clone(),
           direction,
           magnitude,
           eigenvalue,
@@ -554,7 +562,7 @@ impl Scene {
 /// value $W c$ if its grade is already $<= n-k$, else its Hodge star, so the
 /// result always has grade $min(k, n-k)$. The star is where -- and the only
 /// place -- a metric enters the reduction.
-fn reduced_form(form: MultiForm, metric: &RiemannianMetric) -> MultiForm {
+pub(crate) fn reduced_form(form: MultiForm, metric: &RiemannianMetric) -> MultiForm {
   let n = form.dim();
   let k = form.grade();
   if k <= n - k {

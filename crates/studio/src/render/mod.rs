@@ -1,5 +1,6 @@
 pub mod camera;
 pub mod mesh;
+pub mod streamline;
 
 #[cfg(test)]
 mod tests {
@@ -14,6 +15,7 @@ mod tests {
       ("wireframe.wgsl", include_str!("wireframe.wgsl")),
       ("gbuffer.wgsl", include_str!("gbuffer.wgsl")),
       ("lic.wgsl", include_str!("lic.wgsl")),
+      ("streamline.wgsl", include_str!("streamline.wgsl")),
       ("downsample.wgsl", include_str!("downsample.wgsl")),
     ];
     for (name, source) in sources {
