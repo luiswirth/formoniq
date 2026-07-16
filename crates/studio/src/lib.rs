@@ -47,9 +47,20 @@ const LIC_CONTRAST: f32 = 5.0;
 // texture to the surface at a density that reads as lines rather than mush.
 const NOISE_CYCLES_PER_MESH_WIDTH: f32 = 6.0;
 
-// Icosphere subdivision depth. The Laplace-Beltrami eigensolve is dense in the
-// vertex count, so keep this modest for an instant startup; bump for fidelity.
+// Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
+// eigensolve is dense in the vertex count, so keep this modest for an instant
+// startup; the mesh slider goes up to `SPHERE_SUBDIVISIONS_MAX` for fidelity.
 const SPHERE_SUBDIVISIONS: usize = 3;
+// Upper end of the sphere refinement slider. The per-grade solve is dense
+// ($O(n^3)$), and at grade 1 the edge count is what enters, so a step past this
+// turns the background solve from seconds into minutes -- the cap keeps every
+// reachable mesh solvable while the window stays responsive.
+const SPHERE_SUBDIVISIONS_MAX: usize = 4;
+// Cells per axis the unit-square grid opens on, and the upper end of its
+// refinement slider. A grid this fine keeps the dense per-grade solve well
+// inside the sphere's cost, so the same cap reasoning applies loosely.
+const GRID_CELLS_DEFAULT: usize = 8;
+const GRID_CELLS_MAX: usize = 20;
 // Chosen so both grades close on a complete degeneracy shell: grade 0 fills
 // $l = 0..=3$ ($sum (2l+1) = 16$) and grade 1 fills $l = 1, 2$
 // ($6 + 10 = 16$), so the orbital pyramid the UI lays these out in has no
@@ -67,6 +78,52 @@ const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 /// The shared surface mesh the gallery solves its grades against, built once
 /// so every per-grade eigensolve reuses it rather than remeshing.
 type Mesh = (Complex, MeshCoords);
+
+/// The family and refinement of surface mesh the eigenmode gallery solves on --
+/// a chosen, rebuildable input, not a fixed sphere. Switching family or moving
+/// the refinement slider remeshes and re-solves the current grade.
+///
+/// Both families are 2D surfaces, as the renderer requires. Nothing downstream
+/// distinguishes them: the eigensolve, the reduced-grade dispatch and the
+/// degeneracy clustering are all mesh-agnostic, and the camera reads a curved
+/// sphere (perspective orbit) from a flat grid (top-down orthographic) off the
+/// coordinates alone. The sphere's spherical harmonics are then one mesh's
+/// spectrum among others, not a privileged case.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum MeshSource {
+  /// An icosphere of the given subdivision depth.
+  Sphere { subdivisions: usize },
+  /// A triangulated unit square with the given number of cells per axis, a
+  /// surface with boundary -- so its Hodge-Laplace spectrum is the natural
+  /// (Neumann) one, and its degeneracies (a mode and its transpose share an
+  /// eigenvalue) fill the pyramid's rows just as the sphere's multiplets do.
+  Grid { cells_axis: usize },
+}
+
+impl MeshSource {
+  /// The mesh the gallery opens on: the icosphere, matching the historical
+  /// startup.
+  const START: MeshSource = MeshSource::Sphere {
+    subdivisions: SPHERE_SUBDIVISIONS,
+  };
+
+  fn build(self) -> Mesh {
+    match self {
+      MeshSource::Sphere { subdivisions } => {
+        manifold::gen::sphere::mesh_sphere_surface(subdivisions)
+      }
+      MeshSource::Grid { cells_axis } => {
+        let (topology, coords) =
+          manifold::gen::cartesian::CartesianMeshInfo::new_unit(2, cells_axis)
+            .compute_coord_complex();
+        // The renderer draws in 3D and reads the surface normal off the
+        // embedding; the grid is planar in $RR^2$, so lift it into the $z = 0$
+        // plane of $RR^3$, exactly as the flat reference-cell scenes do.
+        (topology, coords.embed_euclidean(3))
+      }
+    }
+  }
+}
 
 /// What the viewer is showing -- the unit a build, and its memoization, is
 /// keyed on. A picker in the UI switches this at runtime; the render path
@@ -160,6 +217,9 @@ impl<T: Send + 'static> PendingLoad<T> {
 /// the pending build, and a landed result is only ever installed for the view
 /// it was built for.
 struct Gallery {
+  /// Which mesh the current `mesh` was built from, so the UI can reflect the
+  /// live choice and a re-selection of the same source is a no-op.
+  mesh_source: MeshSource,
   mesh: Arc<Mesh>,
   current: View,
   /// The last mesh grade viewed, so toggling to the Whitney basis and back
@@ -174,10 +234,11 @@ impl Gallery {
   /// once while that view's real build runs in the background (delivered later
   /// by [`Self::poll`]). The placeholder shares the loader's mesh, so the
   /// window is up on the first frame without waiting on any eigensolve.
-  fn new(mesh: Mesh) -> (Self, Scene) {
-    let mesh = Arc::new(mesh);
+  fn new(source: MeshSource) -> (Self, Scene) {
+    let mesh = Arc::new(source.build());
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
     let mut gallery = Self {
+      mesh_source: source,
       mesh,
       current: View::START,
       last_mesh_grade: 0,
@@ -186,6 +247,38 @@ impl Gallery {
     };
     gallery.spawn(View::START);
     (gallery, placeholder)
+  }
+
+  /// Rebuilds the mesh from a new source and re-solves the current grade
+  /// against it. The per-grade eigensolves are all tied to the old mesh, so
+  /// they are dropped from the cache (the reference-cell Whitney basis is
+  /// mesh-independent and kept); the current grade's solve is respawned in the
+  /// background.
+  ///
+  /// Returns a solve-free placeholder on the new mesh to show at once while
+  /// that solve runs -- or `None` when the current view does not depend on the
+  /// mesh (the Whitney basis), where nothing visible changes and only the
+  /// stored source is updated, taking effect the next time a mesh grade is
+  /// shown. A re-selection of the current source is a no-op.
+  fn set_mesh_source(&mut self, source: MeshSource) -> Option<Scene> {
+    if source == self.mesh_source {
+      return None;
+    }
+    self.mesh_source = source;
+    self.mesh = Arc::new(source.build());
+    self
+      .cache
+      .retain(|view, _| !matches!(view, View::MeshGrade(_)));
+    match self.current {
+      View::MeshGrade(_) => {
+        self.spawn(self.current);
+        Some(Scene::placeholder_on(
+          self.mesh.0.clone(),
+          self.mesh.1.clone(),
+        ))
+      }
+      View::WhitneyBasis => None,
+    }
   }
 
   fn spawn(&mut self, view: View) {
@@ -805,13 +898,11 @@ impl<'a> State<'a> {
       .unwrap();
     surface.configure(&device, &config);
 
-    // Show the window immediately: the gallery opens on a cheap placeholder
-    // sphere and builds the first grade's harmonics in the background, swapping
-    // it in when it lands (`poll_view_load`), rather than blocking the first
-    // frame on the solve.
-    let (gallery, scene) = Gallery::new(manifold::gen::sphere::mesh_sphere_surface(
-      SPHERE_SUBDIVISIONS,
-    ));
+    // Show the window immediately: the gallery opens on a cheap placeholder of
+    // the starting mesh and builds the first grade's eigenmodes in the
+    // background, swapping it in when it lands (`poll_view_load`), rather than
+    // blocking the first frame on the solve.
+    let (gallery, scene) = Gallery::new(MeshSource::START);
     let selection = default_selection(&scene);
     // The mesh width fixes the LIC noise frequency; the coordinate extent fixes
     // the standing-wave displacement (see the two `State` fields). Both are
@@ -1388,6 +1479,16 @@ impl<'a> State<'a> {
     }
   }
 
+  /// Rebuilds the gallery's mesh from a new source and installs the placeholder
+  /// it hands back (the new mesh, shown at once) while the current grade
+  /// re-solves in the background. A no-op source change, or one under a view
+  /// that ignores the mesh, installs nothing.
+  fn set_mesh_source(&mut self, source: MeshSource) {
+    if let Some(scene) = self.gallery.set_mesh_source(source) {
+      self.install_scene(scene);
+    }
+  }
+
   /// Installs a scene the gallery just handed over -- a cache hit or a finished
   /// build -- opening it on its first mode. The selection and camera from the
   /// old scene are never reused here (unlike [`Self::set_field`]'s early-out):
@@ -1554,7 +1655,9 @@ impl<'a> State<'a> {
       )
       .collect();
 
+    let mesh_source = self.gallery.mesh_source;
     let mut requested_view = shown_view;
+    let mut requested_mesh_source = mesh_source;
     let mut selection = self.selection;
     let mut top_down = self.camera.top_down;
 
@@ -1575,6 +1678,35 @@ impl<'a> State<'a> {
         ui.separator();
 
         if let View::MeshGrade(grade) = shown_view {
+          // Mesh family and refinement: the surface the eigenmodes live on is a
+          // chosen input, not a fixed sphere. Changing either remeshes and
+          // re-solves the current grade (`requested_mesh_source`, applied after
+          // the closure).
+          ui.horizontal(|ui| {
+            let is_sphere = matches!(requested_mesh_source, MeshSource::Sphere { .. });
+            if ui.selectable_label(is_sphere, "Sphere").clicked() {
+              requested_mesh_source = MeshSource::Sphere {
+                subdivisions: SPHERE_SUBDIVISIONS,
+              };
+            }
+            if ui.selectable_label(!is_sphere, "Grid").clicked() {
+              requested_mesh_source = MeshSource::Grid {
+                cells_axis: GRID_CELLS_DEFAULT,
+              };
+            }
+          });
+          match &mut requested_mesh_source {
+            MeshSource::Sphere { subdivisions } => {
+              ui.add(
+                egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"),
+              );
+            }
+            MeshSource::Grid { cells_axis } => {
+              ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
+            }
+          }
+          ui.separator();
+
           // One tab per grade of the de Rham complex; every grade is solved and
           // shown, the top grade through its Hodge star just like grade 0.
           ui.horizontal(|ui| {
@@ -1609,11 +1741,16 @@ impl<'a> State<'a> {
       });
     });
 
-    // Switching view replaces the field set and the camera's natural
-    // orientation wholesale, so the `selection`/`top_down` picked this same
-    // frame belong to the view being left and must not be applied afterward --
-    // `set_view` chooses both anew for the view it lands on.
-    if requested_view != shown_view {
+    // Remeshing and switching view both replace the field set and the camera's
+    // natural orientation wholesale, so the `selection`/`top_down` picked this
+    // same frame belong to the view being left and must not be applied
+    // afterward -- `set_mesh_source`/`set_view` choose both anew for what they
+    // land on. A mesh change re-solves the current grade, so it takes priority
+    // over a same-frame grade switch (at most one widget moves per frame
+    // anyway).
+    if requested_mesh_source != mesh_source {
+      self.set_mesh_source(requested_mesh_source);
+    } else if requested_view != shown_view {
       self.set_view(requested_view);
     } else {
       self.set_field(selection);
