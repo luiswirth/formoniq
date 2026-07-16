@@ -1,12 +1,13 @@
+use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
 use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
-use exterior::ExteriorGrade;
+use exterior::{ExteriorGrade, MultiForm};
 use manifold::{
-  atlas::{barycenter_bary, Bary, MeshPoint},
+  atlas::MeshPoint,
   geometry::{
     coord::{mesh::MeshCoords, simplex::SimplexRefExt},
     metric::geometry::Geometry,
   },
-  topology::{complex::Complex, handle::SimplexRef, simplex::standard_subsimps},
+  topology::{complex::Complex, simplex::standard_subsimps},
   Dim,
 };
 
@@ -19,21 +20,27 @@ use manifold::{
 /// export format, so the coloring, displacement and mode selection stay
 /// decisions of the viewer.
 ///
-/// A field's grade decides the mark it is drawn with, not a per-scene choice:
-/// grade 0 sharps to a one-component multivector (a scalar) and colors the
-/// surface ([`ScalarField`]); grade 1 sharps to a genuine tangent vector and
-/// is drawn as an arrow ([`VectorField`]). Grades strictly between 1 and
-/// `cell_dim - 1` (only possible once `cell_dim >= 4`) sharp to a
-/// higher-arity multivector with no glyph implemented yet -- a future mark,
-/// not a special case to work around.
+/// A field's grade decides the mark it is drawn with, not a per-scene choice,
+/// and the rule is one line: reduce the $k$-form to its *reduced grade*
+/// $min(k, n-k)$ via the Hodge star, then dispatch on that. A reduced grade of
+/// 0 is a scalar density coloring the surface ([`ScalarField`]); a reduced
+/// grade of 1 is a line field drawn with line-integral convolution
+/// ([`LineField`]). Both marks exhaust $n <= 3$: only $n >= 4$ produces a
+/// reduced grade $>= 2$, an $(n-k)$-dimensional sheet with no mark yet -- a
+/// future mark, not a special case to route around.
 pub struct Scene {
   pub topology: Complex,
   pub coords: MeshCoords,
   pub fields: Vec<ScalarField>,
-  pub vector_fields: Vec<VectorField>,
+  pub line_fields: Vec<LineField>,
 }
 
 /// A named scalar field on the surface: a 0-cochain, one value per vertex.
+///
+/// A grade-0 form is one directly; a top-grade ($k = n$) form becomes one by
+/// the pointwise Hodge star $star: Lambda^n -> Lambda^0$, nodal-sampled to the
+/// vertices. From here the two are indistinguishable -- the same density
+/// colormap and the same normal-displacement standing wave.
 pub struct ScalarField {
   pub name: String,
   pub cochain: Cochain,
@@ -46,71 +53,37 @@ pub struct ScalarField {
   pub eigenvalue: Option<f64>,
 }
 
-/// A named vector field on the surface, sampled at a set of points rather than
-/// carried as a cochain: the musical isomorphism $sharp$ that turns a grade-1
-/// [`exterior::MultiForm`] into a tangent [`exterior::MultiVector`] needs a
-/// metric evaluated pointwise, so unlike a scalar field (exact from vertex
-/// values alone, since Whitney 0-forms are barycentric-linear and the
-/// rasterizer interpolates linearly too) a 1-form is reconstructed on a
-/// lattice of sample points, one arrow per sample.
-pub struct VectorField {
+/// A named line field on the surface: the reduced-grade-1 mark, drawn with
+/// line-integral convolution rather than sampled arrow glyphs.
+///
+/// A grade-1 (or, via the Hodge star, grade-$(n-1)$) form reduces to a genuine
+/// tangent *line* field. Its direction is a per-vertex unit ambient tangent
+/// vector, nodal-averaged across incident cells and interpolated by the
+/// rasterizer; its (unsigned) magnitude is the same per-vertex nodal recovery a
+/// [`ScalarField`] uses, and drives both the tint and the standing-wave
+/// amplitude. LIC is a continuous per-fragment texture, resolution-independent,
+/// so unlike an arrow quiver there is no sample lattice to choose.
+///
+/// The direction is static: $ker$ and $sharp$ are scale-invariant, so the
+/// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves the lines fixed and
+/// swings only the magnitude tint through zero. A single real eigenmode does
+/// not travel, so the LIC is never advected.
+pub struct LineField {
   pub name: String,
-  pub samples: Vec<VectorSample>,
-  /// The cochain every sample reconstructs, kept around (not just the
-  /// samples themselves) so [`Scene::resample_vector_field`] can regenerate
-  /// them at a different lattice resolution -- a rendering-density choice --
-  /// without re-running any solve.
-  pub cochain: Cochain,
-  /// The lattice resolution the scene itself chose at construction: the
-  /// floor [`Scene::resample_vector_field`] never goes below as the camera
-  /// zooms back out, since that choice was already deliberate -- one arrow
-  /// per cell for an eigenmode on a many-cell mesh, a dense lattice for the
-  /// single reference cell -- not an arbitrary default to erase.
-  pub base_lattice_resolution: usize,
-  /// The lattice resolution currently on display: `base_lattice_resolution`
-  /// refined by zooming in, via [`Scene::resample_vector_field`]. What the
-  /// renderer's glyph-length scaling divides by, so arrows stay legible --
-  /// non-overlapping, but not vanishingly short -- at whatever density is
-  /// currently sampled.
-  pub lattice_resolution: usize,
+  /// Per-vertex unit ambient tangent direction (zero where the field
+  /// vanishes). Nodal-averaged across incident cells then normalized -- unlike
+  /// grade 0, a grade-1 field has no canonical value at a vertex, since only
+  /// the *tangential* part of a section is chart-independent there (the atlas's
+  /// own invariant), so incident cells can genuinely disagree on the full
+  /// vector; averaging is the same nodal recovery classical FEM postprocessing
+  /// uses for a piecewise, not globally, single-valued quantity.
+  pub direction: Vec<na::Vector3<f64>>,
+  /// Per-vertex nodal magnitude $|V|_g$, the intrinsic chart-independent scalar
+  /// averaged across incident cells: what tints the surface, times
+  /// $cos(sqrt(lambda) t)$ per frame so the sign flips through zero.
+  pub magnitude: Vec<f64>,
   /// See [`ScalarField::eigenvalue`].
   pub eigenvalue: Option<f64>,
-  /// The field's own magnitude $|V|$, one value per vertex: what colors the
-  /// surface while `samples` are drawn as direction-only arrows on top of
-  /// it. Averaged at each vertex over its incident cells, not a single
-  /// well-defined value read off directly -- unlike grade 0, a grade-1
-  /// field has no canonical value at a vertex, since only the *tangential*
-  /// part of a section is chart-independent there (the atlas's own
-  /// invariant), so two incident cells can genuinely disagree on the full
-  /// vector. The magnitude $|V|_g$ is still an intrinsic, chart-independent
-  /// scalar within each cell, so averaging *that* across incident cells is
-  /// the same nodal-recovery idea classical FEM postprocessing uses for a
-  /// quantity that is only piecewise, not globally, single-valued.
-  pub magnitude: Vec<f64>,
-}
-
-pub struct VectorSample {
-  /// Ambient position of the sample point.
-  pub position: na::Vector3<f64>,
-  /// The sharped tangent vector at that point, in ambient coordinates.
-  pub vector: na::Vector3<f64>,
-  /// Outward unit normal of the cell this sample lies in: the tangent-plane
-  /// basis an arrow glyph is drawn in. Not assumed to be the ambient $z$-axis
-  /// -- true only for the flat reference-cell scenes -- so a glyph stays
-  /// tangent to a curved surface like the sphere instead of always lying
-  /// flat in the $x$-$y$ plane.
-  pub normal: na::Vector3<f64>,
-}
-
-impl VectorField {
-  /// Largest arrow length, for glyph-size normalization.
-  pub fn max_magnitude(&self) -> f64 {
-    self
-      .samples
-      .iter()
-      .map(|s| s.vector.norm())
-      .fold(0.0, f64::max)
-  }
 }
 
 impl ScalarField {
@@ -135,19 +108,23 @@ impl ScalarField {
   }
 }
 
+impl LineField {
+  /// Largest nodal magnitude, for tint normalization. Symmetric bounds
+  /// $[-m, m]$ follow from it, since the animated tint $|V| cos(sqrt(lambda) t)$
+  /// is signed even though $|V|$ is not.
+  pub fn max_magnitude(&self) -> f64 {
+    self.magnitude.iter().copied().fold(0.0, f64::max)
+  }
+}
+
 impl Scene {
   /// Hodge-Laplace eigenmodes of a single grade -- standing-wave normal
   /// modes, $Delta u = lambda u$ -- of an arbitrary simplicial surface with
-  /// the given geometry, filed into `fields` or `vector_fields` through the
+  /// the given geometry, filed into `fields` or `line_fields` through the
   /// same [`Self::field`] dispatch a raw Whitney basis function goes
   /// through: an eigenmode and a one-hot cochain differ only in where the
   /// cochain comes from (a dense eigensolve vs. a Kronecker delta), not in
   /// how it is reconstructed or displayed.
-  ///
-  /// One arrow per cell (`arrow_samples_per_cell_edge = 0`, its barycenter)
-  /// for a grade-1 mode: a real mesh has far more cells than the reference
-  /// triangle's one, so a dense per-cell lattice would bury the field's own
-  /// shape in glyph clutter.
   ///
   /// The eigensolve is dense ($O(n^3)$ in the DOF count), so mesh resolution
   /// controls both fidelity and cost.
@@ -157,7 +134,7 @@ impl Scene {
     grade: ExteriorGrade,
     nmodes: usize,
     fields: &mut Vec<ScalarField>,
-    vector_fields: &mut Vec<VectorField>,
+    line_fields: &mut Vec<LineField>,
   ) {
     use formoniq::{
       problems::hodge_laplace::solve_hodge_laplace_evp, whitney_complex::WhitneyComplex,
@@ -176,9 +153,8 @@ impl Scene {
         name,
         cochain,
         Some(lambda),
-        0,
         fields,
-        vector_fields,
+        line_fields,
       );
     }
   }
@@ -191,54 +167,33 @@ impl Scene {
   /// case baked into the solve.
   pub fn eigenmodes(topology: Complex, coords: MeshCoords, nmodes: usize) -> Self {
     let mut fields = Vec::new();
-    let mut vector_fields = Vec::new();
-    Self::eigenmode_fields(
-      &topology,
-      &coords,
-      0,
-      nmodes,
-      &mut fields,
-      &mut vector_fields,
-    );
+    let mut line_fields = Vec::new();
+    Self::eigenmode_fields(&topology, &coords, 0, nmodes, &mut fields, &mut line_fields);
     Self {
       topology,
       coords,
       fields,
-      vector_fields,
+      line_fields,
     }
   }
 
   /// Laplace-Beltrami eigenfunctions on the unit sphere — the discrete
-  /// spherical harmonics, grade 0 (scalar modes) and grade 1 (tangent vector
-  /// field modes) together in one scene, on an icosphere of the given
-  /// subdivision depth.
+  /// spherical harmonics, grade 0 (scalar modes) and grade 1 (line field
+  /// modes) together in one scene, on an icosphere of the given subdivision
+  /// depth.
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
     use manifold::gen::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     let mut fields = Vec::new();
-    let mut vector_fields = Vec::new();
-    Self::eigenmode_fields(
-      &topology,
-      &coords,
-      0,
-      nmodes,
-      &mut fields,
-      &mut vector_fields,
-    );
-    Self::eigenmode_fields(
-      &topology,
-      &coords,
-      1,
-      nmodes,
-      &mut fields,
-      &mut vector_fields,
-    );
+    let mut line_fields = Vec::new();
+    Self::eigenmode_fields(&topology, &coords, 0, nmodes, &mut fields, &mut line_fields);
+    Self::eigenmode_fields(&topology, &coords, 1, nmodes, &mut fields, &mut line_fields);
     Self {
       topology,
       coords,
       fields,
-      vector_fields,
+      line_fields,
     }
   }
 
@@ -250,7 +205,7 @@ impl Scene {
   /// and the sharp musical isomorphism are exactly the general machinery a
   /// solved field (an eigenmode, or a future loaded cochain) goes through too.
   /// One field per subsimplex of every grade $0..=$ `cell_dim`.
-  pub fn whitney_basis(cell_dim: Dim, arrow_samples_per_cell_edge: usize) -> Self {
+  pub fn whitney_basis(cell_dim: Dim) -> Self {
     use manifold::geometry::coord::mesh::standard_coord_complex;
 
     let (topology, coords) = standard_coord_complex(cell_dim);
@@ -260,7 +215,7 @@ impl Scene {
     let coords = coords.embed_euclidean(cell_dim.max(3));
 
     let mut fields = Vec::new();
-    let mut vector_fields = Vec::new();
+    let mut line_fields = Vec::new();
     for grade in 0..=cell_dim {
       let ndofs = topology.nsimplices(grade);
       for (idof, dof_simp) in standard_subsimps(cell_dim, grade).enumerate() {
@@ -277,9 +232,8 @@ impl Scene {
           name,
           cochain,
           None,
-          arrow_samples_per_cell_edge,
           &mut fields,
-          &mut vector_fields,
+          &mut line_fields,
         );
       }
     }
@@ -288,249 +242,166 @@ impl Scene {
       topology,
       coords,
       fields,
-      vector_fields,
+      line_fields,
     }
   }
 
-  /// Reconstructs a cochain as the render mark its grade calls for, and files
-  /// it into `fields` or `vector_fields` accordingly -- the one general entry
-  /// point both a raw Whitney basis function ([`Self::whitney_basis`]) and a
-  /// solved field arrive at.
+  /// Reconstructs a cochain as the render mark its *reduced grade*
+  /// $min(k, n-k)$ calls for, and files it into `fields` or `line_fields`
+  /// accordingly -- the one general entry point both a raw Whitney basis
+  /// function ([`Self::whitney_basis`]) and a solved field arrive at.
   ///
-  /// Grade 0 needs no reconstruction: a Whitney 0-form is exactly the
-  /// barycentric-linear function through its vertex values, and the
-  /// rasterizer already interpolates linearly, so the cochain's coefficients
-  /// *are* the vertex values. Grade 1 sharps to a genuine tangent vector and
-  /// is reconstructed via the [`WhitneyInterpolant`] on a barycentric lattice
-  /// of every cell, one arrow per sample. Higher grades sharp to a
-  /// higher-arity multivector, for which no glyph exists yet, and are
-  /// skipped -- a future mark, not a special case to route around.
-  #[allow(clippy::too_many_arguments)]
+  /// The Hodge star is what makes the dispatch total. A reduced grade of 0
+  /// ($k = 0$ or $k = n$) is a scalar density: grade 0 needs no reconstruction
+  /// (a Whitney 0-form is the barycentric-linear function through its vertex
+  /// values, which the rasterizer already interpolates), while $k = n$ stars
+  /// pointwise to a 0-form and is nodal-sampled. A reduced grade of 1 ($k = 1$
+  /// or $k = n-1$) reduces to a genuine tangent line field. A reduced grade
+  /// $>= 2$ is only reachable at $n >= 4$ and has no mark yet.
   fn field(
     topology: &Complex,
     coords: &MeshCoords,
     name: String,
     cochain: Cochain,
     eigenvalue: Option<f64>,
-    arrow_samples_per_cell_edge: usize,
     fields: &mut Vec<ScalarField>,
-    vector_fields: &mut Vec<VectorField>,
+    line_fields: &mut Vec<LineField>,
   ) {
-    match cochain.grade() {
-      0 => fields.push(ScalarField {
-        name,
-        cochain,
-        eigenvalue,
-      }),
-      1 => {
-        let samples = vector_field_samples(topology, coords, &cochain, arrow_samples_per_cell_edge);
-        let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-        let magnitude = nodal_magnitude_field(topology, coords, &interpolant);
-        vector_fields.push(VectorField {
+    let n = topology.dim();
+    let k = cochain.grade();
+    match k.min(n - k) {
+      0 => {
+        // k == 0: the coefficients already are the vertex values. k == n: the
+        // pointwise Hodge star of the top form, nodal-sampled to a 0-cochain.
+        let cochain = if k == 0 {
+          cochain
+        } else {
+          let interpolant = WhitneyInterpolant::new(cochain, topology);
+          Cochain::new(0, nodal_scalar_density(topology, coords, &interpolant))
+        };
+        fields.push(ScalarField {
           name,
-          samples,
-          base_lattice_resolution: arrow_samples_per_cell_edge,
-          lattice_resolution: arrow_samples_per_cell_edge,
-          eigenvalue,
-          magnitude,
           cochain,
+          eigenvalue,
         });
       }
-      _ => {}
+      1 => {
+        let interpolant = WhitneyInterpolant::new(cochain, topology);
+        let (direction, magnitude) = nodal_line_field(topology, coords, &interpolant);
+        line_fields.push(LineField {
+          name,
+          direction,
+          magnitude,
+          eigenvalue,
+        });
+      }
+      reduced => todo!(
+        "reduced grade {reduced} (n = {n}, k = {k}): an (n-k)-dimensional sheet \
+         has no render mark yet; only reachable at n >= 4"
+      ),
     }
-  }
-
-  /// Regenerates one vector field's arrow samples at a different lattice
-  /// resolution, reusing the mode's own stored cochain instead of
-  /// re-running anything -- a rendering-density change, not a re-solve, so
-  /// it is cheap enough to call on every zoom step, unlike the scene's
-  /// initial dense eigensolve. The surface's own
-  /// `magnitude` coloring is untouched: it is a property of the mode, not of
-  /// how many arrows currently sample it.
-  pub fn resample_vector_field(&mut self, index: usize, resolution: usize) {
-    if self.vector_fields[index].lattice_resolution == resolution {
-      return;
-    }
-    let samples = vector_field_samples(
-      &self.topology,
-      &self.coords,
-      &self.vector_fields[index].cochain,
-      resolution,
-    );
-    let field = &mut self.vector_fields[index];
-    field.samples = samples;
-    field.lattice_resolution = resolution;
   }
 }
 
-/// Reconstructs a grade-1 cochain as one arrow sample per point of a
-/// barycentric lattice of every cell -- the general machinery both
-/// [`Scene::field`] (at scene-build time) and [`Scene::resample_vector_field`]
-/// (on a zoom-driven density change) call, so the two never disagree on how a
-/// sample is built.
-fn vector_field_samples(
-  topology: &Complex,
-  coords: &MeshCoords,
-  cochain: &Cochain,
-  resolution: usize,
-) -> Vec<VectorSample> {
-  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-  let lattice = barycentric_lattice(topology.dim(), resolution);
-  let cell_normals = oriented_cell_normals(topology, coords);
-  topology
-    .cells()
-    .handle_iter()
-    .flat_map(|cell| {
-      let metric = coords.cell_metric(cell);
-      // The parametrization $psi_K: hat(K) -> RR^N$ whose differential --
-      // constant, since $psi_K$ is affine -- pushes the sharped vector's
-      // coefficients (in the cell's own local tangent basis, the same basis
-      // `metric` is expressed in) out into the ambient one the renderer
-      // draws in. Skipping this and reading the local coefficients directly
-      // as ambient ones is only ever correct for a cell whose local basis
-      // happens to line up with the ambient axes -- true for the flat
-      // reference triangle, false for a generic cell of a curved mesh like
-      // the sphere.
-      let coord_simplex = cell.coord_simplex(coords);
-      let interpolant = &interpolant;
-      let normal = cell_normals[cell.kidx()];
-      lattice.iter().map(move |bary| {
-        let point = MeshPoint::new(cell.idx(), bary.clone());
-        let local = interpolant.eval(&point).sharp(&metric);
-        let ambient = coord_simplex.pushforward_vector(local.coeffs());
-        let vector = na::Vector3::new(
-          ambient[0],
-          if ambient.len() > 1 { ambient[1] } else { 0.0 },
-          if ambient.len() > 2 { ambient[2] } else { 0.0 },
-        );
-        VectorSample {
-          position: ambient_point(cell, coords, bary),
-          vector,
-          normal,
-        }
-      })
-    })
-    .collect()
+/// The reduced form at a point, in the reference frame of its cell: the Whitney
+/// value $W c$ if its grade is already $<= n-k$, else its Hodge star, so the
+/// result always has grade $min(k, n-k)$. The star is where -- and the only
+/// place -- a metric enters the reduction.
+fn reduced_form(form: MultiForm, metric: &RiemannianMetric) -> MultiForm {
+  let n = form.dim();
+  let k = form.grade();
+  if k <= n - k {
+    form
+  } else {
+    form.hodge_star(metric)
+  }
 }
 
-/// The nodal average of $|V|_g$ over every cell incident to each vertex: see
-/// [`VectorField::magnitude`] for why an average, not a single value, is the
-/// principled thing to compute here.
-fn nodal_magnitude_field(
+/// The nodal average over incident cells of the reduced grade-1 field, sharped
+/// and pushed forward into ambient coordinates: `direction` (normalized) and
+/// `magnitude` ($|V|_g$) per vertex. See [`LineField`] for why a nodal average.
+fn nodal_line_field(
   topology: &Complex,
   coords: &MeshCoords,
   interpolant: &WhitneyInterpolant,
-) -> Vec<f64> {
+) -> (Vec<na::Vector3<f64>>, Vec<f64>) {
   let nvertices = topology.skeleton_raw(0).len();
-  let mut sum = vec![0.0; nvertices];
+  let mut dir_sum = vec![na::Vector3::zeros(); nvertices];
+  let mut mag_sum = vec![0.0; nvertices];
   let mut count = vec![0u32; nvertices];
   for cell in topology.cells().handle_iter() {
     let metric = coords.cell_metric(cell);
+    // The affine parametrization $psi_K: hat(K) -> RR^N$ whose differential
+    // pushes the sharped vector's coefficients (in the cell's own local
+    // tangent basis, the basis `metric` is expressed in) out into the ambient
+    // frame the renderer draws in -- the one place the embedding enters.
     let coord_simplex = cell.coord_simplex(coords);
     for (ilocal, &v) in cell.simplex().vertices.iter().enumerate() {
       let mut weights = na::DVector::zeros(cell.nvertices());
       weights[ilocal] = 1.0;
       let point = MeshPoint::new(cell.idx(), weights.into());
-      let local = interpolant.eval(&point).sharp(&metric);
+      let local = reduced_form(interpolant.eval(&point), &metric).sharp(&metric);
       let ambient = coord_simplex.pushforward_vector(local.coeffs());
-      sum[v] += ambient.norm();
+      let vector = to_vec3(&ambient);
+      mag_sum[v] += vector.norm();
+      dir_sum[v] += vector;
       count[v] += 1;
     }
   }
-  sum
+  let direction = dir_sum
+    .into_iter()
+    .zip(&count)
+    .map(|(d, &c)| {
+      if c > 0 {
+        d.try_normalize(0.0).unwrap_or_else(na::Vector3::zeros)
+      } else {
+        na::Vector3::zeros()
+      }
+    })
+    .collect();
+  let magnitude = mag_sum
     .into_iter()
     .zip(count)
     .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 })
-    .collect()
+    .collect();
+  (direction, magnitude)
 }
 
-/// The ambient coordinates of vertex `v`, zero-padded to 3D.
-fn ambient_vec(coords: &MeshCoords, v: usize) -> na::Vector3<f64> {
-  let c = coords.coord(v);
-  na::Vector3::new(
-    c[0],
-    if c.len() > 1 { c[1] } else { 0.0 },
-    if c.len() > 2 { c[2] } else { 0.0 },
+/// The nodal average over incident cells of the reduced grade-0 field (the
+/// pointwise Hodge star of a top-grade form), one signed value per vertex.
+fn nodal_scalar_density(
+  topology: &Complex,
+  coords: &MeshCoords,
+  interpolant: &WhitneyInterpolant,
+) -> Vector {
+  let nvertices = topology.skeleton_raw(0).len();
+  let mut sum = vec![0.0; nvertices];
+  let mut count = vec![0u32; nvertices];
+  for cell in topology.cells().handle_iter() {
+    let metric = coords.cell_metric(cell);
+    for (ilocal, &v) in cell.simplex().vertices.iter().enumerate() {
+      let mut weights = na::DVector::zeros(cell.nvertices());
+      weights[ilocal] = 1.0;
+      let point = MeshPoint::new(cell.idx(), weights.into());
+      let density = reduced_form(interpolant.eval(&point), &metric).coeffs()[0];
+      sum[v] += density;
+      count[v] += 1;
+    }
+  }
+  Vector::from_iterator(
+    nvertices,
+    sum
+      .into_iter()
+      .zip(count)
+      .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 }),
   )
 }
 
-/// The ambient position of a barycentric point of `cell`: the affine
-/// combination of its vertices' ambient coordinates. The extrinsic
-/// counterpart of [`MeshPoint`], confined to the render layer like every
-/// other use of an embedding.
-fn ambient_point(cell: SimplexRef, coords: &MeshCoords, bary: &Bary) -> na::Vector3<f64> {
-  let mut p = na::Vector3::zeros();
-  for (i, &v) in cell.simplex().vertices.iter().enumerate() {
-    p += bary[i] * ambient_vec(coords, v);
-  }
-  p
-}
-
-/// The outward unit normal of every cell, indexed by cell $k$-index: a flat
-/// cell's own two edge vectors determine its normal only up to sign, and a
-/// `Complex`'s cells carry no winding to break that tie (see
-/// [`crate::mesh3d::orient_triangles`]), so the topology-wide consistent
-/// orientation pass is what fixes it -- the same one [`crate::render::mesh`]
-/// runs to shade the surface itself.
-fn oriented_cell_normals(topology: &Complex, coords: &MeshCoords) -> Vec<na::Vector3<f64>> {
-  let triangles: Vec<[usize; 3]> = topology
-    .cells()
-    .handle_iter()
-    .map(|cell| {
-      let v = &cell.simplex().vertices;
-      [v[0], v[1], v[2]]
-    })
-    .collect();
-  crate::mesh3d::orient_triangles(&triangles)
-    .iter()
-    .map(|&[a, b, c]| {
-      let (pa, pb, pc) = (
-        ambient_vec(coords, a),
-        ambient_vec(coords, b),
-        ambient_vec(coords, c),
-      );
-      (pb - pa).cross(&(pc - pa)).normalize()
-    })
-    .collect()
-}
-
-/// A uniform barycentric lattice on the standard `dim`-simplex: every
-/// composition of `resolution` into `dim + 1` nonnegative parts, normalized to
-/// weights summing to 1. Dimension-general -- unlike a hand-rolled triangle
-/// grid, this is the same construction at every `dim`, including the
-/// `resolution = 0` degenerate case (a single point, the barycenter).
-fn barycentric_lattice(dim: Dim, resolution: usize) -> Vec<Bary> {
-  fn recurse(
-    remaining: usize,
-    parts_left: usize,
-    prefix: &mut Vec<usize>,
-    out: &mut Vec<Vec<usize>>,
-  ) {
-    if parts_left == 1 {
-      prefix.push(remaining);
-      out.push(prefix.clone());
-      prefix.pop();
-      return;
-    }
-    for i in 0..=remaining {
-      prefix.push(i);
-      recurse(remaining - i, parts_left - 1, prefix, out);
-      prefix.pop();
-    }
-  }
-  if resolution == 0 {
-    return vec![barycenter_bary(dim)];
-  }
-  let mut compositions = Vec::new();
-  recurse(resolution, dim + 1, &mut Vec::new(), &mut compositions);
-  compositions
-    .into_iter()
-    .map(|weights| {
-      na::DVector::from_iterator(
-        dim + 1,
-        weights.into_iter().map(|w| w as f64 / resolution as f64),
-      )
-      .into()
-    })
-    .collect()
+/// A nalgebra vector of ambient coordinates, zero-padded to 3D.
+fn to_vec3(v: &Vector) -> na::Vector3<f64> {
+  na::Vector3::new(
+    v[0],
+    if v.len() > 1 { v[1] } else { 0.0 },
+    if v.len() > 2 { v[2] } else { 0.0 },
+  )
 }

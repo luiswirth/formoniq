@@ -31,6 +31,17 @@ pub mod scene;
 pub mod ui;
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+// The line-field G-buffer targets: `dir_mag` (screen tangent xy, magnitude,
+// coverage) and `pos_shade` (world position, Lambert shade). Half-float so the
+// world position survives for the LIC pass's object-space noise lookup.
+const GBUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+// Edge length of the cubic object-space noise texture the LIC integrates.
+const NOISE_SIZE: u32 = 64;
+// How hard the along-line noise average is stretched back out of grey.
+const LIC_CONTRAST: f32 = 5.0;
+// Object-space noise frequency, in cycles per mesh width: fixes the streamline
+// texture to the surface at a density that reads as lines rather than mush.
+const NOISE_CYCLES_PER_MESH_WIDTH: f32 = 6.0;
 
 // Icosphere subdivision depth. The Laplace-Beltrami eigensolve is dense in the
 // vertex count, so keep this modest for an instant startup; bump for fidelity.
@@ -229,9 +240,10 @@ fn build_scene(demo: Demo) -> (Scene, Selection) {
       Scene::spherical_harmonics(SPHERE_SUBDIVISIONS, SPHERE_MODES),
       Selection::Scalar(DISPLAY_MODE),
     ),
-    // The Whitney basis functions of the reference triangle: grade 0 is
-    // colored; grade 1 is drawn as arrow glyphs.
-    Demo::WhitneyBasis => (Scene::whitney_basis(2, 8), Selection::Scalar(0)),
+    // The Whitney basis functions of the reference triangle: grade 0 (and the
+    // top grade 2, starred to a density) color the surface; grade 1 is drawn
+    // as a line field.
+    Demo::WhitneyBasis => (Scene::whitney_basis(2), Selection::Scalar(0)),
   }
 }
 
@@ -279,29 +291,6 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   camera
 }
 
-/// One more lattice level per octave zoomed in past `base_distance`: density
-/// here is a rendering choice, not a discretization one (the eigensolve
-/// already fixed the mesh), so it is the *camera*, not the solver, that
-/// should decide how many arrows a cell's worth of screen space can support.
-/// Zooming out past `base_distance` never drops below `base_resolution` --
-/// that floor was already a deliberate choice made when the scene was built
-/// (one arrow per cell for a many-cell mesh, a dense lattice for a single
-/// reference cell), not a default to erase.
-fn adaptive_lattice_resolution(
-  base_resolution: usize,
-  base_distance: f32,
-  camera_distance: f32,
-) -> usize {
-  const MAX_EXTRA_OCTAVES: usize = 6;
-  let zoom = base_distance / camera_distance.max(1e-6);
-  let extra = if zoom > 1.0 {
-    (zoom.log2().round() as usize).min(MAX_EXTRA_OCTAVES)
-  } else {
-    0
-  };
-  base_resolution + extra
-}
-
 fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu::TextureView {
   let size = wgpu::Extent3d {
     width: config.width,
@@ -322,16 +311,143 @@ fn create_depth_texture(device: &Device, config: &SurfaceConfiguration) -> wgpu:
   texture.create_view(&wgpu::TextureViewDescriptor::default())
 }
 
-/// Which field of a scene is on display: its grade decides the mark
+/// The two line-field G-buffer render targets, sized to the surface. Recreated
+/// on resize alongside the depth texture.
+fn create_gbuffer_textures(
+  device: &Device,
+  config: &SurfaceConfiguration,
+) -> (wgpu::TextureView, wgpu::TextureView) {
+  let make = |label: &str| {
+    let texture = device.create_texture(&wgpu::TextureDescriptor {
+      label: Some(label),
+      size: wgpu::Extent3d {
+        width: config.width.max(1),
+        height: config.height.max(1),
+        depth_or_array_layers: 1,
+      },
+      mip_level_count: 1,
+      sample_count: 1,
+      dimension: wgpu::TextureDimension::D2,
+      format: GBUFFER_FORMAT,
+      usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
+      view_formats: &[],
+    });
+    texture.create_view(&wgpu::TextureViewDescriptor::default())
+  };
+  (make("G-buffer dir/mag"), make("G-buffer pos/shade"))
+}
+
+/// The LIC pass's binding of the two G-buffer views and their sampler. Rebuilt
+/// whenever the views are (at startup and on resize).
+fn create_gbuffer_bind_group(
+  device: &Device,
+  layout: &wgpu::BindGroupLayout,
+  dir_view: &wgpu::TextureView,
+  pos_view: &wgpu::TextureView,
+  sampler: &wgpu::Sampler,
+) -> wgpu::BindGroup {
+  device.create_bind_group(&wgpu::BindGroupDescriptor {
+    label: Some("gbuffer_tex_bind_group"),
+    layout,
+    entries: &[
+      wgpu::BindGroupEntry {
+        binding: 0,
+        resource: wgpu::BindingResource::TextureView(dir_view),
+      },
+      wgpu::BindGroupEntry {
+        binding: 1,
+        resource: wgpu::BindingResource::TextureView(pos_view),
+      },
+      wgpu::BindGroupEntry {
+        binding: 2,
+        resource: wgpu::BindingResource::Sampler(sampler),
+      },
+    ],
+  })
+}
+
+/// A cubic bipolar (black/white) noise texture the LIC integrates in object
+/// space. Binary rather than continuous on purpose: the along-line average of
+/// smooth value noise barely leaves its mean, washing the streaks out, whereas
+/// two-level noise carries maximal variance into the convolution so the
+/// streamlines read as crisp light/dark lines. Trilinearly filtered on sample,
+/// which softens the two levels back into antialiased strokes.
+fn create_noise_texture(device: &Device, queue: &Queue) -> (wgpu::TextureView, wgpu::Sampler) {
+  let n = NOISE_SIZE as usize;
+  let mut data = vec![0u8; n * n * n];
+  // A cheap integer hash (splitmix-ish) over the linear texel index, thresholded
+  // to full black or full white: no crate, deterministic, maximal contrast.
+  for (i, texel) in data.iter_mut().enumerate() {
+    let mut h = i as u64 ^ 0x9e37_79b9_7f4a_7c15;
+    h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    h ^= h >> 31;
+    *texel = if h & 0x80 != 0 { 255 } else { 0 };
+  }
+
+  let texture = device.create_texture(&wgpu::TextureDescriptor {
+    label: Some("LIC noise"),
+    size: wgpu::Extent3d {
+      width: NOISE_SIZE,
+      height: NOISE_SIZE,
+      depth_or_array_layers: NOISE_SIZE,
+    },
+    mip_level_count: 1,
+    sample_count: 1,
+    dimension: wgpu::TextureDimension::D3,
+    format: wgpu::TextureFormat::R8Unorm,
+    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+    view_formats: &[],
+  });
+  queue.write_texture(
+    wgpu::TexelCopyTextureInfo {
+      texture: &texture,
+      mip_level: 0,
+      origin: wgpu::Origin3d::ZERO,
+      aspect: wgpu::TextureAspect::All,
+    },
+    &data,
+    wgpu::TexelCopyBufferLayout {
+      offset: 0,
+      bytes_per_row: Some(NOISE_SIZE),
+      rows_per_image: Some(NOISE_SIZE),
+    },
+    wgpu::Extent3d {
+      width: NOISE_SIZE,
+      height: NOISE_SIZE,
+      depth_or_array_layers: NOISE_SIZE,
+    },
+  );
+
+  let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+  let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+    label: Some("LIC noise sampler"),
+    address_mode_u: wgpu::AddressMode::Repeat,
+    address_mode_v: wgpu::AddressMode::Repeat,
+    address_mode_w: wgpu::AddressMode::Repeat,
+    mag_filter: wgpu::FilterMode::Linear,
+    min_filter: wgpu::FilterMode::Linear,
+    mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+    ..Default::default()
+  });
+  (view, sampler)
+}
+
+/// Which field of a scene is on display: its reduced grade decides the mark
 /// ([`Scene`]'s own rule), and this is that choice's UI-facing form -- a
-/// scalar field colors the surface with its own value; a vector field colors
-/// the surface with its nodal magnitude and draws flat, uncolored arrow
-/// glyphs on top for direction. `PartialEq` so `egui::Ui::radio_value` can
-/// bind directly to it.
+/// scalar field colors the surface with its own value; a line field colors the
+/// surface with its nodal magnitude and draws line-integral convolution on top.
+/// `PartialEq` so `egui::Ui::radio_value` can bind directly to it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Selection {
   Scalar(usize),
-  Vector(usize),
+  Line(usize),
+}
+
+impl Selection {
+  fn is_line(self) -> bool {
+    matches!(self, Selection::Line(_))
+  }
 }
 
 /// The mesh buffer and bounds/wave uniforms for showing one field of a
@@ -354,10 +470,10 @@ fn build_field_display(
   match selection {
     Selection::Scalar(index) => {
       let field = &scene.fields[index];
-      let (field_min, field_max) = field.bounds();
+      let (raw_min, raw_max) = field.bounds();
       let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
 
-      let field_scale = field_min.abs().max(field_max.abs()).max(f32::EPSILON);
+      let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
       // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
       // Whitney basis function): no dispersion relation to animate at, so
       // the wave collapses to no displacement rather than a special case
@@ -368,6 +484,15 @@ fn build_field_display(
       } else {
         0.0
       };
+      // An eigenmode's color pulses by $cos(sqrt(lambda) t)$ through zero, so
+      // its colormap range is symmetric $[-s, s]$ about the midpoint -- the
+      // same reasoning as the line field's tint. A static field keeps its own
+      // asymmetric range.
+      let (field_min, field_max) = if field.eigenvalue.is_some() {
+        (-field_scale, field_scale)
+      } else {
+        (raw_min, raw_max)
+      };
 
       FieldDisplay {
         mesh_buffer,
@@ -377,35 +502,23 @@ fn build_field_display(
         wave_omega,
       }
     }
-    Selection::Vector(index) => {
-      let field = &scene.vector_fields[index];
-      let mesh_buffer =
-        MeshBuffer::from_vector_field(device, &scene.topology, &scene.coords, field);
-      // The surface is colored by the field's own nodal magnitude -- always
-      // nonnegative, with no eigenfunction sign to preserve -- so the range
-      // starts at 0 rather than the field's own minimum, same as grade 0
-      // would for an unsigned quantity.
-      let field_max = field
-        .magnitude
-        .iter()
-        .copied()
-        .fold(0.0, f64::max)
-        .max(f64::from(f32::EPSILON)) as f32;
-      // The tangential analogue of grade 0's normal displacement: each glyph
-      // swings along its own (unnormalized) field vector, scaled by the same
-      // mode's own dispersion relation, since it is the same eigenmode.
+    Selection::Line(index) => {
+      let field = &scene.line_fields[index];
+      let mesh_buffer = MeshBuffer::from_line_field(device, &scene.topology, &scene.coords, field);
+      // The tint is the signed magnitude $|V| cos(sqrt(lambda) t)$, so the
+      // colormap range is symmetric $[-m, m]$ about zero: the pulse runs
+      // through the colormap's midpoint and flips as the cosine crosses zero,
+      // unlike an unsigned scalar that starts at 0. The LIC direction is
+      // static, so there is no geometric displacement -- `wave_amplitude` is 0
+      // and only `wave_omega` (the tint clock) carries the mode's frequency.
+      let peak = field.max_magnitude().max(f64::from(f32::EPSILON)) as f32;
       let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
-      let wave_amplitude = if field.eigenvalue.is_some() {
-        WAVE_AMPLITUDE_FRACTION * mesh_width / field_max
-      } else {
-        0.0
-      };
 
       FieldDisplay {
         mesh_buffer,
-        field_min: 0.0,
-        field_max,
-        wave_amplitude,
+        field_min: -peak,
+        field_max: peak,
+        wave_amplitude: 0.0,
         wave_omega,
       }
     }
@@ -421,6 +534,23 @@ struct State<'a> {
   render_pipeline: RenderPipeline,
   wireframe_pipeline: RenderPipeline,
   depth_view: wgpu::TextureView,
+
+  // Line-field path: an offscreen G-buffer pass feeds a fullscreen LIC pass.
+  // Only exercised when the current selection is a line field; a scalar field
+  // takes the direct fill path above.
+  gbuffer_pipeline: RenderPipeline,
+  lic_pipeline: RenderPipeline,
+  gbuffer_dir_view: wgpu::TextureView,
+  gbuffer_pos_view: wgpu::TextureView,
+  gbuffer_sampler: wgpu::Sampler,
+  gbuffer_tex_bind_group_layout: wgpu::BindGroupLayout,
+  gbuffer_tex_bind_group: wgpu::BindGroup,
+  noise_bind_group: wgpu::BindGroup,
+  lic_buffer: wgpu::Buffer,
+  lic_bind_group: wgpu::BindGroup,
+  // The object-space noise frequency for the current scene, fixed from its own
+  // mesh width so the streamlines read at a consistent density on any mesh.
+  noise_scale: f32,
 
   camera: Camera,
   camera_uniform: CameraUniform,
@@ -457,12 +587,6 @@ struct State<'a> {
   // Fixed at scene-build time: the mesh's own edge-length scale, used to
   // normalize the standing-wave amplitude to whichever field is on display.
   mesh_width: f32,
-  // The camera's own distance at the moment the current scene's default
-  // camera was set up: the "1x zoom" reference `adaptive_lattice_resolution`
-  // measures every later distance against, so zooming in past it refines a
-  // vector field's glyph density and zooming back out relaxes it, without
-  // pinning that reference to an arbitrary absolute distance.
-  base_camera_distance: f32,
 
   egui_ctx: egui::Context,
   egui_winit_state: EguiWinitState,
@@ -488,6 +612,22 @@ struct BoundsUniform {
   max_val: f32,
   _pad1: f32,
   _pad2: f32,
+}
+
+/// Shared state for the G-buffer and LIC passes: the viewport (to project the
+/// tangent to pixels and to step in texel units), the object-space noise
+/// frequency, the tint clock $(omega, t)$ that swings the magnitude, and the
+/// contrast the along-line average is stretched by.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct LicUniform {
+  viewport: [f32; 2],
+  noise_scale: f32,
+  omega: f32,
+  time: f32,
+  contrast: f32,
+  _pad0: f32,
+  _pad1: f32,
 }
 
 impl<'a> State<'a> {
@@ -531,7 +671,6 @@ impl<'a> State<'a> {
     let wave_omega = display.wave_omega;
 
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
-    let base_camera_distance = camera.distance;
     let mut camera_uniform = CameraUniform::new();
     camera_uniform.update_view_proj(&camera);
 
@@ -620,7 +759,9 @@ impl<'a> State<'a> {
       device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         entries: &[wgpu::BindGroupLayoutEntry {
           binding: 0,
-          visibility: wgpu::ShaderStages::VERTEX,
+          // Also visible in the fragment stage: the scalar fill pulses its
+          // colormap by the same $cos(sqrt(lambda) t)$ that displaces it.
+          visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
           ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: false,
@@ -749,6 +890,246 @@ impl<'a> State<'a> {
 
     let depth_view = create_depth_texture(&device, &config);
 
+    // Line-field path: G-buffer + fullscreen LIC.
+    let (gbuffer_dir_view, gbuffer_pos_view) = create_gbuffer_textures(&device, &config);
+    let (noise_view, noise_sampler) = create_noise_texture(&device, &queue);
+    let noise_scale = NOISE_CYCLES_PER_MESH_WIDTH / mesh_width.max(f32::EPSILON);
+
+    let lic_uniform = LicUniform {
+      viewport: [config.width as f32, config.height as f32],
+      noise_scale,
+      omega: wave_omega,
+      time: 0.0,
+      contrast: LIC_CONTRAST,
+      _pad0: 0.0,
+      _pad1: 0.0,
+    };
+    let lic_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Lic Buffer"),
+      contents: bytemuck::cast_slice(&[lic_uniform]),
+      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+    // Shared by the G-buffer pass (which reads the viewport in its fragment
+    // stage) and the LIC pass.
+    let lic_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+      label: Some("lic_bind_group_layout"),
+      entries: &[wgpu::BindGroupLayoutEntry {
+        binding: 0,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Buffer {
+          ty: wgpu::BufferBindingType::Uniform,
+          has_dynamic_offset: false,
+          min_binding_size: None,
+        },
+        count: None,
+      }],
+    });
+    let lic_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+      label: Some("lic_bind_group"),
+      layout: &lic_bind_group_layout,
+      entries: &[wgpu::BindGroupEntry {
+        binding: 0,
+        resource: lic_buffer.as_entire_binding(),
+      }],
+    });
+
+    let gbuffer_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+      label: Some("G-buffer sampler"),
+      address_mode_u: wgpu::AddressMode::ClampToEdge,
+      address_mode_v: wgpu::AddressMode::ClampToEdge,
+      address_mode_w: wgpu::AddressMode::ClampToEdge,
+      mag_filter: wgpu::FilterMode::Nearest,
+      min_filter: wgpu::FilterMode::Nearest,
+      mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+      ..Default::default()
+    });
+    // The G-buffer carries a discontinuous direction and a world position, so
+    // it is sampled nearest (non-filtering): interpolation across a silhouette
+    // would blend a foreground tangent with a background one.
+    let gbuffer_tex_bind_group_layout =
+      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("gbuffer_tex_bind_group_layout"),
+        entries: &[
+          wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+              sample_type: wgpu::TextureSampleType::Float { filterable: false },
+              view_dimension: wgpu::TextureViewDimension::D2,
+              multisampled: false,
+            },
+            count: None,
+          },
+          wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+              sample_type: wgpu::TextureSampleType::Float { filterable: false },
+              view_dimension: wgpu::TextureViewDimension::D2,
+              multisampled: false,
+            },
+            count: None,
+          },
+          wgpu::BindGroupLayoutEntry {
+            binding: 2,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+            count: None,
+          },
+        ],
+      });
+    let gbuffer_tex_bind_group = create_gbuffer_bind_group(
+      &device,
+      &gbuffer_tex_bind_group_layout,
+      &gbuffer_dir_view,
+      &gbuffer_pos_view,
+      &gbuffer_sampler,
+    );
+
+    let noise_bind_group_layout =
+      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("noise_bind_group_layout"),
+        entries: &[
+          wgpu::BindGroupLayoutEntry {
+            binding: 0,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+              sample_type: wgpu::TextureSampleType::Float { filterable: true },
+              view_dimension: wgpu::TextureViewDimension::D3,
+              multisampled: false,
+            },
+            count: None,
+          },
+          wgpu::BindGroupLayoutEntry {
+            binding: 1,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+            count: None,
+          },
+        ],
+      });
+    let noise_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+      label: Some("noise_bind_group"),
+      layout: &noise_bind_group_layout,
+      entries: &[
+        wgpu::BindGroupEntry {
+          binding: 0,
+          resource: wgpu::BindingResource::TextureView(&noise_view),
+        },
+        wgpu::BindGroupEntry {
+          binding: 1,
+          resource: wgpu::BindingResource::Sampler(&noise_sampler),
+        },
+      ],
+    });
+
+    let gbuffer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+      label: Some("G-buffer Shader"),
+      source: wgpu::ShaderSource::Wgsl(include_str!("render/gbuffer.wgsl").into()),
+    });
+    let gbuffer_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+      label: Some("G-buffer Pipeline Layout"),
+      bind_group_layouts: &[
+        Some(&camera_bind_group_layout),
+        Some(&lic_bind_group_layout),
+      ],
+      immediate_size: 0,
+    });
+    let gbuffer_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+      label: Some("G-buffer Pipeline"),
+      layout: Some(&gbuffer_pipeline_layout),
+      vertex: wgpu::VertexState {
+        module: &gbuffer_shader,
+        entry_point: Some("vs_main"),
+        compilation_options: Default::default(),
+        buffers: &[Vertex::desc()],
+      },
+      fragment: Some(wgpu::FragmentState {
+        module: &gbuffer_shader,
+        entry_point: Some("fs_main"),
+        compilation_options: Default::default(),
+        targets: &[
+          Some(wgpu::ColorTargetState {
+            format: GBUFFER_FORMAT,
+            blend: Some(wgpu::BlendState::REPLACE),
+            write_mask: wgpu::ColorWrites::ALL,
+          }),
+          Some(wgpu::ColorTargetState {
+            format: GBUFFER_FORMAT,
+            blend: Some(wgpu::BlendState::REPLACE),
+            write_mask: wgpu::ColorWrites::ALL,
+          }),
+        ],
+      }),
+      primitive: wgpu::PrimitiveState {
+        topology: wgpu::PrimitiveTopology::TriangleList,
+        strip_index_format: None,
+        front_face: wgpu::FrontFace::Ccw,
+        cull_mode: None,
+        polygon_mode: wgpu::PolygonMode::Fill,
+        unclipped_depth: false,
+        conservative: false,
+      },
+      depth_stencil: Some(wgpu::DepthStencilState {
+        format: DEPTH_FORMAT,
+        depth_write_enabled: Some(true),
+        depth_compare: Some(wgpu::CompareFunction::Less),
+        stencil: wgpu::StencilState::default(),
+        bias: wgpu::DepthBiasState::default(),
+      }),
+      multisample: wgpu::MultisampleState::default(),
+      multiview_mask: None,
+      cache: None,
+    });
+
+    let lic_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+      label: Some("LIC Shader"),
+      source: wgpu::ShaderSource::Wgsl(include_str!("render/lic.wgsl").into()),
+    });
+    let lic_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+      label: Some("LIC Pipeline Layout"),
+      bind_group_layouts: &[
+        Some(&gbuffer_tex_bind_group_layout),
+        Some(&noise_bind_group_layout),
+        Some(&lic_bind_group_layout),
+        Some(&bounds_bind_group_layout),
+      ],
+      immediate_size: 0,
+    });
+    let lic_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+      label: Some("LIC Pipeline"),
+      layout: Some(&lic_pipeline_layout),
+      vertex: wgpu::VertexState {
+        module: &lic_shader,
+        entry_point: Some("vs_main"),
+        compilation_options: Default::default(),
+        buffers: &[],
+      },
+      fragment: Some(wgpu::FragmentState {
+        module: &lic_shader,
+        entry_point: Some("fs_main"),
+        compilation_options: Default::default(),
+        targets: &[Some(wgpu::ColorTargetState {
+          format: config.format,
+          blend: Some(wgpu::BlendState::REPLACE),
+          write_mask: wgpu::ColorWrites::ALL,
+        })],
+      }),
+      primitive: wgpu::PrimitiveState {
+        topology: wgpu::PrimitiveTopology::TriangleList,
+        strip_index_format: None,
+        front_face: wgpu::FrontFace::Ccw,
+        cull_mode: None,
+        polygon_mode: wgpu::PolygonMode::Fill,
+        unclipped_depth: false,
+        conservative: false,
+      },
+      depth_stencil: None,
+      multisample: wgpu::MultisampleState::default(),
+      multiview_mask: None,
+      cache: None,
+    });
+
     let egui_ctx = egui::Context::default();
     let egui_winit_state = EguiWinitState::new(
       egui_ctx.clone(),
@@ -769,6 +1150,17 @@ impl<'a> State<'a> {
       render_pipeline,
       wireframe_pipeline,
       depth_view,
+      gbuffer_pipeline,
+      lic_pipeline,
+      gbuffer_dir_view,
+      gbuffer_pos_view,
+      gbuffer_sampler,
+      gbuffer_tex_bind_group_layout,
+      gbuffer_tex_bind_group,
+      noise_bind_group,
+      lic_buffer,
+      lic_bind_group,
+      noise_scale,
       camera,
       camera_uniform,
       camera_buffer,
@@ -787,7 +1179,6 @@ impl<'a> State<'a> {
       scene,
       selection,
       mesh_width,
-      base_camera_distance,
       egui_ctx,
       egui_winit_state,
       egui_renderer,
@@ -829,29 +1220,6 @@ impl<'a> State<'a> {
     self.apply_field(selection);
   }
 
-  /// Refines or relaxes a displayed vector field's glyph density to match
-  /// the current zoom, if the selection is a vector field at all. A
-  /// no-op-preserving refresh of the *same* selection, unlike a demo or field
-  /// switch, so it goes through `Scene::resample_vector_field` plus a forced
-  /// `apply_field` rather than `set_field`'s early-out on an unchanged
-  /// selection (which would otherwise ignore this entirely).
-  fn update_glyph_density(&mut self) {
-    let Selection::Vector(index) = self.selection else {
-      return;
-    };
-    let base_resolution = self.scene.vector_fields[index].base_lattice_resolution;
-    let resolution = adaptive_lattice_resolution(
-      base_resolution,
-      self.base_camera_distance,
-      self.camera.distance,
-    );
-    if resolution == self.scene.vector_fields[index].lattice_resolution {
-      return;
-    }
-    self.scene.resample_vector_field(index, resolution);
-    self.apply_field(self.selection);
-  }
-
   /// Requests a switch to a different built-in scene. The rebuild --
   /// including, for [`Demo::SphericalHarmonics`], a dense eigensolve -- runs
   /// on a background thread via `scene_switcher` rather than blocking this
@@ -873,11 +1241,11 @@ impl<'a> State<'a> {
       .coords
       .to_edge_lengths(&scene.topology)
       .mesh_width_max() as f32;
+    self.noise_scale = NOISE_CYCLES_PER_MESH_WIDTH / self.mesh_width.max(f32::EPSILON);
     self.scene = scene;
     self.apply_field(selection);
 
     self.camera = default_camera(&self.scene, self.camera.aspect);
-    self.base_camera_distance = self.camera.distance;
     self.update_camera_buffer();
   }
 
@@ -897,6 +1265,16 @@ impl<'a> State<'a> {
       self.config.height = new_size.height;
       self.surface.configure(&self.device, &self.config);
       self.depth_view = create_depth_texture(&self.device, &self.config);
+      let (dir_view, pos_view) = create_gbuffer_textures(&self.device, &self.config);
+      self.gbuffer_dir_view = dir_view;
+      self.gbuffer_pos_view = pos_view;
+      self.gbuffer_tex_bind_group = create_gbuffer_bind_group(
+        &self.device,
+        &self.gbuffer_tex_bind_group_layout,
+        &self.gbuffer_dir_view,
+        &self.gbuffer_pos_view,
+        &self.gbuffer_sampler,
+      );
 
       self.camera.aspect = self.config.width as f32 / self.config.height as f32;
       self.camera_uniform.update_view_proj(&self.camera);
@@ -954,7 +1332,6 @@ impl<'a> State<'a> {
         self.camera.distance -= scroll;
         self.camera.distance = self.camera.distance.clamp(1.0, 100.0);
         self.update_camera_buffer();
-        self.update_glyph_density();
       }
       _ => {}
     }
@@ -982,9 +1359,9 @@ impl<'a> State<'a> {
     let mut demo = self.scene_switcher.current;
     let loading = self.scene_switcher.is_loading();
     let field_names: Vec<&str> = self.scene.fields.iter().map(|f| f.name.as_str()).collect();
-    let vector_field_names: Vec<&str> = self
+    let line_field_names: Vec<&str> = self
       .scene
-      .vector_fields
+      .line_fields
       .iter()
       .map(|f| f.name.as_str())
       .collect();
@@ -1010,10 +1387,10 @@ impl<'a> State<'a> {
         for (i, name) in field_names.iter().enumerate() {
           ui.radio_value(&mut selection, Selection::Scalar(i), *name);
         }
-        if !vector_field_names.is_empty() {
+        if !line_field_names.is_empty() {
           ui.separator();
-          for (i, name) in vector_field_names.iter().enumerate() {
-            ui.radio_value(&mut selection, Selection::Vector(i), *name);
+          for (i, name) in line_field_names.iter().enumerate() {
+            ui.radio_value(&mut selection, Selection::Line(i), *name);
           }
         }
 
@@ -1075,6 +1452,21 @@ impl<'a> State<'a> {
       .queue
       .write_buffer(&self.wave_buffer, 0, bytemuck::cast_slice(&[wave_uniform]));
 
+    // The LIC pass shares the tint clock with the wave: the direction is
+    // static, so `omega`/`time` swing only the magnitude tint, never the lines.
+    let lic_uniform = LicUniform {
+      viewport: [self.config.width as f32, self.config.height as f32],
+      noise_scale: self.noise_scale,
+      omega: self.wave_omega,
+      time: self.start_time.elapsed().as_secs_f32(),
+      contrast: LIC_CONTRAST,
+      _pad0: 0.0,
+      _pad1: 0.0,
+    };
+    self
+      .queue
+      .write_buffer(&self.lic_buffer, 0, bytemuck::cast_slice(&[lic_uniform]));
+
     let output = match self.surface.get_current_texture() {
       wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
       wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
@@ -1109,19 +1501,135 @@ impl<'a> State<'a> {
         label: Some("Render Encoder"),
       });
 
-    {
+    // A line field takes the G-buffer + fullscreen-LIC path; a scalar field
+    // takes the direct colormap fill. The mark differs because the reduced
+    // grade does -- this is [`Scene`]'s min(k, n-k) rule surfacing at draw
+    // time, not a dimension/grade special case in the core. Both then draw the
+    // wireframe on top and hand off to egui.
+    let clear_color = wgpu::Color {
+      r: 0.1,
+      g: 0.1,
+      b: 0.1,
+      a: 1.0,
+    };
+    if self.selection.is_line() {
+      // G-buffer: the surface's screen tangent, magnitude, coverage, world
+      // position and shade, into two offscreen targets and the shared depth.
+      {
+        let mut gbuffer_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+          label: Some("G-buffer Pass"),
+          color_attachments: &[
+            Some(wgpu::RenderPassColorAttachment {
+              view: &self.gbuffer_dir_view,
+              resolve_target: None,
+              ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                store: wgpu::StoreOp::Store,
+              },
+              depth_slice: None,
+            }),
+            Some(wgpu::RenderPassColorAttachment {
+              view: &self.gbuffer_pos_view,
+              resolve_target: None,
+              ops: wgpu::Operations {
+                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                store: wgpu::StoreOp::Store,
+              },
+              depth_slice: None,
+            }),
+          ],
+          depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &self.depth_view,
+            depth_ops: Some(wgpu::Operations {
+              load: wgpu::LoadOp::Clear(1.0),
+              store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+          }),
+          timestamp_writes: None,
+          occlusion_query_set: None,
+          multiview_mask: None,
+        });
+        gbuffer_pass.set_pipeline(&self.gbuffer_pipeline);
+        gbuffer_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+        gbuffer_pass.set_bind_group(1, &self.lic_bind_group, &[]);
+        gbuffer_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
+        gbuffer_pass.set_index_buffer(
+          self.mesh_buffer.index_buffer.slice(..),
+          wgpu::IndexFormat::Uint32,
+        );
+        gbuffer_pass.draw_indexed(0..self.mesh_buffer.num_indices, 0, 0..1);
+      }
+      // Fullscreen LIC: integrate the tangent, tint by the animated magnitude,
+      // composite over the shaded surface, into the swapchain view.
+      {
+        let mut lic_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+          label: Some("LIC Pass"),
+          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+              load: wgpu::LoadOp::Clear(clear_color),
+              store: wgpu::StoreOp::Store,
+            },
+            depth_slice: None,
+          })],
+          depth_stencil_attachment: None,
+          timestamp_writes: None,
+          occlusion_query_set: None,
+          multiview_mask: None,
+        });
+        lic_pass.set_pipeline(&self.lic_pipeline);
+        lic_pass.set_bind_group(0, &self.gbuffer_tex_bind_group, &[]);
+        lic_pass.set_bind_group(1, &self.noise_bind_group, &[]);
+        lic_pass.set_bind_group(2, &self.lic_bind_group, &[]);
+        lic_pass.set_bind_group(3, &self.bounds_bind_group, &[]);
+        lic_pass.draw(0..3, 0..1);
+      }
+      // Wireframe over the LIC, reusing the G-buffer's depth so back edges stay
+      // occluded.
+      {
+        let mut wire_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+          label: Some("Wireframe Pass"),
+          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+            view: &view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+              load: wgpu::LoadOp::Load,
+              store: wgpu::StoreOp::Store,
+            },
+            depth_slice: None,
+          })],
+          depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+            view: &self.depth_view,
+            depth_ops: Some(wgpu::Operations {
+              load: wgpu::LoadOp::Load,
+              store: wgpu::StoreOp::Store,
+            }),
+            stencil_ops: None,
+          }),
+          timestamp_writes: None,
+          occlusion_query_set: None,
+          multiview_mask: None,
+        });
+        wire_pass.set_pipeline(&self.wireframe_pipeline);
+        wire_pass.set_bind_group(0, &self.camera_bind_group, &[]);
+        wire_pass.set_bind_group(1, &self.wave_bind_group, &[]);
+        wire_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
+        wire_pass.set_index_buffer(
+          self.mesh_buffer.wireframe_index_buffer.slice(..),
+          wgpu::IndexFormat::Uint32,
+        );
+        wire_pass.draw_indexed(0..self.mesh_buffer.num_wireframe_indices, 0, 0..1);
+      }
+    } else {
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Render Pass"),
         color_attachments: &[Some(wgpu::RenderPassColorAttachment {
           view: &view,
           resolve_target: None,
           ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(wgpu::Color {
-              r: 0.1,
-              g: 0.1,
-              b: 0.1,
-              a: 1.0,
-            }),
+            load: wgpu::LoadOp::Clear(clear_color),
             store: wgpu::StoreOp::Store,
           },
           depth_slice: None,
