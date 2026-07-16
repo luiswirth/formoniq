@@ -89,14 +89,19 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     let px_delta = (ndc_other - ndc_self) * screen.viewport;
     let dir = px_delta / max(length(px_delta), 1e-6);
     let perp_px = vec2<f32>(-dir.y, dir.x) * screen.half_width_px;
-    let perp_ndc = perp_px / screen.viewport;
+    // NDC spans [-1, 1] -- width 2 -- across `viewport` pixels, so a pixel
+    // offset is *twice* its fraction of the viewport in NDC.
+    let perp_ndc = 2.0 * perp_px / screen.viewport;
 
     var out: VertexOutput;
     out.clip_position = self_clip;
     out.clip_position.x += perp_ndc.x * side[vertex_index] * self_clip.w;
     out.clip_position.y += perp_ndc.y * side[vertex_index] * self_clip.w;
-    // Small depth bias: pull edges closer in NDC so they draw on top of faces.
-    out.clip_position.z -= 0.0001;
+    // Small depth bias, scaled by `w` so it survives the perspective divide
+    // as a constant NDC offset regardless of depth: pulls edges toward the
+    // camera so they draw on top of the coplanar face beneath them instead of
+    // z-fighting it.
+    out.clip_position.z -= 0.0005 * self_clip.w;
     return out;
 }
 
