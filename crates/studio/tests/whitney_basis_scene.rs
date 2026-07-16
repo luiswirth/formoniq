@@ -31,18 +31,23 @@ fn grade2_whitney_basis_stars_to_a_constant_nonzero_density() {
   assert!(values.iter().all(|&v| (v - first).abs() < 1e-9));
 }
 
-/// Grade-1 basis functions reduce to nonzero tangent line fields lying in the
-/// reference triangle's own plane -- the standard embedding's ambient frame
-/// coincides with the cell's local frame, so no out-of-plane direction
-/// component should appear.
+/// Grade-1 basis functions reduce to nonzero tangent line fields whose integral
+/// curves lie in the reference triangle's own plane -- the standard embedding's
+/// ambient frame coincides with the cell's local frame, so a curve tangent to
+/// the surface can never leave $z = 0$. The tracer integrates the true Whitney
+/// field in the barycentric charts, so this is a statement about the field
+/// itself, not about any nodal average of it.
 #[test]
-fn grade1_whitney_basis_is_an_in_plane_line_field() {
+fn grade1_whitney_basis_traces_in_plane_curves() {
   let scene = Scene::whitney_basis(2);
   assert_eq!(scene.line_fields.len(), 3);
   for field in &scene.line_fields {
     assert!(field.bounds().1 > 1e-6);
-    for direction in &field.direction {
-      assert!(direction.z.abs() < 1e-12);
+    let traced =
+      formoniq_studio::streamline::trace(&scene.topology, &scene.coords, &field.cochain, 0.09);
+    assert!(!traced.lines.is_empty());
+    for sample in traced.lines.iter().flatten() {
+      assert!(sample.pos.z.abs() < 1e-12);
     }
   }
 }

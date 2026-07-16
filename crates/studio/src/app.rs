@@ -1,12 +1,16 @@
 //! The windowed viewer: winit event loop, wgpu surface, egui integration and
 //! input handling. Consumes the gallery model (`gallery.rs`) and the panel
-//! (`ui/panel.rs`), and owns every GPU resource -- pipelines, uniforms, the
-//! frame graph -- driving one scene's worth of rendering per frame.
+//! (`ui/panel.rs`), turns the current selection into the geometry and material
+//! parameters of one [`SceneView`], and hands that to the [`Renderer`], which
+//! owns every pipeline.
+//!
+//! This is the one place a clock and a surface exist. The renderer takes time
+//! as an argument, so a headless exporter can drive the same frame graph from a
+//! frame counter instead.
 
 use std::sync::Arc;
 
-use wgpu::util::DeviceExt;
-use wgpu::{Device, Queue, RenderPipeline, Surface, SurfaceConfiguration};
+use wgpu::{Surface, SurfaceConfiguration};
 use winit::{
   application::ApplicationHandler,
   event::*,
@@ -17,12 +21,13 @@ use winit::{
 use crate::demos::default_selection;
 use crate::gallery::{Gallery, MeshSource, View};
 use crate::render::{
-  camera::{Camera, CameraUniform},
-  mesh::{MeshBuffer, Vertex},
-  streamline::StreamEndpoint,
+  camera::Camera,
+  mesh::MeshBuffer,
+  streamline::StreamlineBuffer,
+  {GpuContext, Renderer, SceneView},
 };
 use crate::scene::Scene;
-use crate::ui::panel::{Entry, LineMark, PanelModel, Selection};
+use crate::ui::panel::{Entry, PanelModel, Selection};
 
 use egui_wgpu::{
   Renderer as EguiRenderer, RendererOptions as EguiRendererOptions, ScreenDescriptor,
@@ -32,50 +37,20 @@ use egui_winit::State as EguiWinitState;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-// Supersampling factor applied per axis (so 4x the pixel count) to every scene
-// pass -- the fill, the wireframe, and the G-buffer/LIC pair -- before a box
-// filter downsamples back to the swapchain. MSAA was rejected for the
-// line-field path: its resolve would blend the G-buffer's direction and world
-// position across a silhouette, corrupting the very data the LIC pass reads
-// back (this is also why the G-buffer sampler is nearest, not linear). A
-// single supersampled offscreen target antialiases both paths uniformly with
-// no such hazard, at the cost of the extra fill rate. Must match `SCALE` in
-// `render/downsample.wgsl`, which cannot read a Rust constant.
-const SSAA_SCALE: u32 = 2;
-
-// The line-field G-buffer targets: `dir_mag` (screen tangent xy, magnitude,
-// coverage) and `pos_shade` (world position, Lambert shade). Half-float so the
-// world position survives for the LIC pass's object-space noise lookup.
-const GBUFFER_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
-// Edge length of the cubic object-space noise texture the LIC integrates.
-const NOISE_SIZE: u32 = 64;
-// How hard the along-line noise average is stretched back out of grey.
-const LIC_CONTRAST: f32 = 5.0;
-// Object-space noise frequency, in cycles per scene extent (its radius): fixes
-// the streamline texture to the surface at a density that reads as lines rather
-// than mush. Keyed on the object's own size ([`scene_extent`]), the same
-// object-intrinsic scale the wave amplitude and wireframe width use -- never on
-// the edge length, a property of the triangulation and not the object: refining
-// the mesh would then drive the noise frequency past the pixel Nyquist and
-// alias the streamlines into static.
-const NOISE_CYCLES_PER_EXTENT: f32 = 10.0;
-// Streamline separation and ribbon half-width, each as a fraction of the scene
-// extent (its radius) -- object-intrinsic, like the wave amplitude and wireframe
-// width, so the line density and thickness are properties of the object, not the
-// triangulation. The separation is the one knob that sets how dense the evenly
-// spaced curves are.
-const STREAMLINE_SEPARATION_FRACTION: f32 = 0.09;
-const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
-
-// Peak standing-wave displacement, as a fraction of the scene's own coordinate
-// extent (its radius) -- an object-intrinsic scale, independent of how finely
-// the object is meshed. At this fraction a grade-$l$ eigenmode swells its
-// positive lobes to nearly twice the radius and pinches its negative lobes
-// almost to the center, so the deformed surface reads as the familiar
-// orbital-lobe shape rather than a faint ripple. Kept below 1 so a negative
-// lobe never overshoots the origin and inverts the surface.
+/// Peak standing-wave displacement, as a fraction of the scene's own coordinate
+/// extent (its radius) -- an object-intrinsic scale, independent of how finely
+/// the object is meshed. At this fraction a grade-$l$ eigenmode swells its
+/// positive lobes to nearly twice the radius and pinches its negative lobes
+/// almost to the center, so the deformed surface reads as the familiar
+/// orbital-lobe shape rather than a faint ripple. Kept below 1 so a negative
+/// lobe never overshoots the origin and inverts the surface.
 const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
+
+/// Streamline separation, as a fraction of the scene extent (its radius) --
+/// object-intrinsic, like the wave amplitude, so the line density is a property
+/// of the object and not of the triangulation. The one knob that sets how dense
+/// the evenly spaced curves are.
+const STREAMLINE_SEPARATION_FRACTION: f32 = 0.09;
 
 /// The scene's coordinate extent: the largest distance of any vertex from the
 /// mesh's own centroid -- its intrinsic radius, independent of where the mesh
@@ -146,299 +121,105 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   camera
 }
 
-/// The supersampled offscreen resolution every scene pass renders at: the
-/// swapchain's own size scaled by [`SSAA_SCALE`] per axis.
-fn supersampled_size(config: &SurfaceConfiguration) -> (u32, u32) {
-  (
-    config.width.max(1) * SSAA_SCALE,
-    config.height.max(1) * SSAA_SCALE,
-  )
-}
-
-fn create_depth_texture(device: &Device, width: u32, height: u32) -> wgpu::TextureView {
-  let size = wgpu::Extent3d {
-    width,
-    height,
-    depth_or_array_layers: 1,
-  };
-  let desc = wgpu::TextureDescriptor {
-    label: Some("Depth Texture"),
-    size,
-    mip_level_count: 1,
-    sample_count: 1,
-    dimension: wgpu::TextureDimension::D2,
-    format: DEPTH_FORMAT,
-    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-    view_formats: &[],
-  };
-  let texture = device.create_texture(&desc);
-  texture.create_view(&wgpu::TextureViewDescriptor::default())
-}
-
-/// The offscreen target every scene pass (the direct fill/wireframe path and
-/// the LIC path alike) draws into, at the supersampled resolution -- the
-/// downsample pass then box-filters this down into the swapchain view.
-/// Recreated on resize alongside the depth texture.
-fn create_scene_color_texture(
-  device: &Device,
-  format: wgpu::TextureFormat,
-  width: u32,
-  height: u32,
-) -> wgpu::TextureView {
-  let texture = device.create_texture(&wgpu::TextureDescriptor {
-    label: Some("Scene Color Texture (supersampled)"),
-    size: wgpu::Extent3d {
-      width,
-      height,
-      depth_or_array_layers: 1,
-    },
-    mip_level_count: 1,
-    sample_count: 1,
-    dimension: wgpu::TextureDimension::D2,
-    format,
-    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-    view_formats: &[],
-  });
-  texture.create_view(&wgpu::TextureViewDescriptor::default())
-}
-
-/// The bind group for the downsample pass's one texture binding. Rebuilt
-/// whenever the scene color view is (at startup and on resize).
-fn create_scene_color_bind_group(
-  device: &Device,
-  layout: &wgpu::BindGroupLayout,
-  scene_color_view: &wgpu::TextureView,
-) -> wgpu::BindGroup {
-  device.create_bind_group(&wgpu::BindGroupDescriptor {
-    label: Some("scene_color_bind_group"),
-    layout,
-    entries: &[wgpu::BindGroupEntry {
-      binding: 0,
-      resource: wgpu::BindingResource::TextureView(scene_color_view),
-    }],
-  })
-}
-
-/// The two line-field G-buffer render targets, at the supersampled resolution
-/// so they line up texel-for-texel with the scene color target the LIC pass
-/// writes into. Recreated on resize alongside the depth texture.
-fn create_gbuffer_textures(
-  device: &Device,
-  width: u32,
-  height: u32,
-) -> (wgpu::TextureView, wgpu::TextureView) {
-  let make = |label: &str| {
-    let texture = device.create_texture(&wgpu::TextureDescriptor {
-      label: Some(label),
-      size: wgpu::Extent3d {
-        width,
-        height,
-        depth_or_array_layers: 1,
-      },
-      mip_level_count: 1,
-      sample_count: 1,
-      dimension: wgpu::TextureDimension::D2,
-      format: GBUFFER_FORMAT,
-      usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-      view_formats: &[],
-    });
-    texture.create_view(&wgpu::TextureViewDescriptor::default())
-  };
-  (make("G-buffer dir/mag"), make("G-buffer pos/shade"))
-}
-
-/// The LIC pass's binding of the two G-buffer views and their sampler. Rebuilt
-/// whenever the views are (at startup and on resize).
-fn create_gbuffer_bind_group(
-  device: &Device,
-  layout: &wgpu::BindGroupLayout,
-  dir_view: &wgpu::TextureView,
-  pos_view: &wgpu::TextureView,
-  sampler: &wgpu::Sampler,
-) -> wgpu::BindGroup {
-  device.create_bind_group(&wgpu::BindGroupDescriptor {
-    label: Some("gbuffer_tex_bind_group"),
-    layout,
-    entries: &[
-      wgpu::BindGroupEntry {
-        binding: 0,
-        resource: wgpu::BindingResource::TextureView(dir_view),
-      },
-      wgpu::BindGroupEntry {
-        binding: 1,
-        resource: wgpu::BindingResource::TextureView(pos_view),
-      },
-      wgpu::BindGroupEntry {
-        binding: 2,
-        resource: wgpu::BindingResource::Sampler(sampler),
-      },
-    ],
-  })
-}
-
-/// A cubic bipolar (black/white) noise texture the LIC integrates in object
-/// space. Binary rather than continuous on purpose: the along-line average of
-/// smooth value noise barely leaves its mean, washing the streaks out, whereas
-/// two-level noise carries maximal variance into the convolution so the
-/// streamlines read as crisp light/dark lines. Trilinearly filtered on sample,
-/// which softens the two levels back into antialiased strokes.
-fn create_noise_texture(device: &Device, queue: &Queue) -> (wgpu::TextureView, wgpu::Sampler) {
-  let n = NOISE_SIZE as usize;
-  let mut data = vec![0u8; n * n * n];
-  // A cheap integer hash (splitmix-ish) over the linear texel index, thresholded
-  // to full black or full white: no crate, deterministic, maximal contrast.
-  for (i, texel) in data.iter_mut().enumerate() {
-    let mut h = i as u64 ^ 0x9e37_79b9_7f4a_7c15;
-    h = (h ^ (h >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    h = (h ^ (h >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-    h ^= h >> 31;
-    *texel = if h & 0x80 != 0 { 255 } else { 0 };
-  }
-
-  let texture = device.create_texture(&wgpu::TextureDescriptor {
-    label: Some("LIC noise"),
-    size: wgpu::Extent3d {
-      width: NOISE_SIZE,
-      height: NOISE_SIZE,
-      depth_or_array_layers: NOISE_SIZE,
-    },
-    mip_level_count: 1,
-    sample_count: 1,
-    dimension: wgpu::TextureDimension::D3,
-    format: wgpu::TextureFormat::R8Unorm,
-    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
-    view_formats: &[],
-  });
-  queue.write_texture(
-    wgpu::TexelCopyTextureInfo {
-      texture: &texture,
-      mip_level: 0,
-      origin: wgpu::Origin3d::ZERO,
-      aspect: wgpu::TextureAspect::All,
-    },
-    &data,
-    wgpu::TexelCopyBufferLayout {
-      offset: 0,
-      bytes_per_row: Some(NOISE_SIZE),
-      rows_per_image: Some(NOISE_SIZE),
-    },
-    wgpu::Extent3d {
-      width: NOISE_SIZE,
-      height: NOISE_SIZE,
-      depth_or_array_layers: NOISE_SIZE,
-    },
-  );
-
-  let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-  let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-    label: Some("LIC noise sampler"),
-    address_mode_u: wgpu::AddressMode::Repeat,
-    address_mode_v: wgpu::AddressMode::Repeat,
-    address_mode_w: wgpu::AddressMode::Repeat,
-    mag_filter: wgpu::FilterMode::Linear,
-    min_filter: wgpu::FilterMode::Linear,
-    mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-    ..Default::default()
-  });
-  (view, sampler)
-}
-
-/// The mesh buffer and bounds/wave uniforms for showing one field of a
-/// scene: the one place a [`Selection`] turns into pixels, called both at
-/// startup and whenever the UI switches it.
+/// The geometry and material parameters for showing one field of a scene: the
+/// one place a [`Selection`] turns into something drawable, built at startup and
+/// whenever the UI switches the field. Everything here is static per field --
+/// the renderer only re-times it per frame.
 struct FieldDisplay {
   mesh_buffer: MeshBuffer,
-  /// The traced streamlines of a line field, `None` for a scalar field. Built
-  /// once here, since the field is static per mode; the render pass only
-  /// re-tints it per frame.
-  streamlines: Option<crate::render::streamline::StreamlineBuffer>,
+  /// The traced streamlines of a line field, `None` for a scalar field.
+  streamlines: Option<StreamlineBuffer>,
   field_min: f32,
   field_max: f32,
   wave_amplitude: f32,
   wave_omega: f32,
 }
 
-fn build_field_display(
-  device: &Device,
-  scene: &Scene,
-  selection: Selection,
-  amplitude_scale: f32,
-) -> FieldDisplay {
-  match selection {
-    Selection::Scalar(index) => {
-      let field = &scene.fields[index];
-      let (raw_min, raw_max) = field.bounds();
-      let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
+impl FieldDisplay {
+  fn build(
+    device: &wgpu::Device,
+    scene: &Scene,
+    selection: Selection,
+    amplitude_scale: f32,
+  ) -> Self {
+    match selection {
+      Selection::Scalar(index) => {
+        let field = &scene.fields[index];
+        let (raw_min, raw_max) = field.bounds();
+        let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
 
-      let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
-      // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
-      // Whitney basis function): no dispersion relation to animate at, so
-      // the wave collapses to no displacement rather than a special case
-      // here.
-      let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
-      // Normalized by the field's own peak so every mode reaches the same peak
-      // displacement -- a fraction of the object's extent, not its mesh width,
-      // so the lobes read at orbital scale regardless of resolution.
-      let wave_amplitude = if field.eigenvalue.is_some() {
-        WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale
-      } else {
-        0.0
-      };
-      // An eigenmode's color pulses by $cos(sqrt(lambda) t)$ through zero, so
-      // its colormap range is symmetric $[-s, s]$ about the midpoint -- the
-      // same reasoning as the line field's tint. A static field keeps its own
-      // asymmetric range.
-      let (field_min, field_max) = if field.eigenvalue.is_some() {
-        (-field_scale, field_scale)
-      } else {
-        (raw_min, raw_max)
-      };
+        let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
+        // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
+        // Whitney basis function): no dispersion relation to animate at, so
+        // the wave collapses to no displacement rather than a special case
+        // here.
+        let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
+        // Normalized by the field's own peak so every mode reaches the same peak
+        // displacement -- a fraction of the object's extent, not its mesh width,
+        // so the lobes read at orbital scale regardless of resolution.
+        let wave_amplitude = if field.eigenvalue.is_some() {
+          WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale
+        } else {
+          0.0
+        };
+        // An eigenmode's color pulses by $cos(sqrt(lambda) t)$ through zero, so
+        // its colormap range is symmetric $[-s, s]$ about the midpoint -- the
+        // same reasoning as the line field's tint. A static field keeps its own
+        // asymmetric range.
+        let (field_min, field_max) = if field.eigenvalue.is_some() {
+          (-field_scale, field_scale)
+        } else {
+          (raw_min, raw_max)
+        };
 
-      FieldDisplay {
-        mesh_buffer,
-        streamlines: None,
-        field_min,
-        field_max,
-        wave_amplitude,
-        wave_omega,
+        Self {
+          mesh_buffer,
+          streamlines: None,
+          field_min,
+          field_max,
+          wave_amplitude,
+          wave_omega,
+        }
       }
-    }
-    Selection::Line(index) => {
-      let field = &scene.line_fields[index];
-      let mesh_buffer = MeshBuffer::from_line_field(device, &scene.topology, &scene.coords, field);
-      // The integral curves of the true Whitney field, traced on the manifold
-      // at a separation fixed to the object's own extent (not its mesh width).
-      let d_sep = f64::from(STREAMLINE_SEPARATION_FRACTION * amplitude_scale);
-      let traced = crate::streamline::trace(&scene.topology, &scene.coords, &field.cochain, d_sep);
-      let streamlines = Some(crate::render::streamline::StreamlineBuffer::new(
-        device, &traced,
-      ));
-      let (raw_min, raw_max) = field.bounds();
-      // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
-      // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
-      // through the midpoint and flips as the cosine crosses zero. A static
-      // field has no such pulse (wave_omega below is 0, cos(0) = 1), so its
-      // tint is the unsigned $|V|_g$ itself: using its true range instead of
-      // widening to symmetric keeps the colormap from spending half its
-      // span on negative values the field never takes. The LIC direction is
-      // static either way, so there is no geometric displacement --
-      // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
-      // the mode's frequency.
-      let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
-      let (field_min, field_max) = if field.eigenvalue.is_some() {
-        (-peak, peak)
-      } else {
-        (raw_min, raw_max)
-      };
-      let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
+      Selection::Line(index) => {
+        let field = &scene.line_fields[index];
+        // The surface is the same fill a scalar field gets, tinted by the
+        // field's nodal magnitude: the curves carry the direction, so the
+        // surface has only the magnitude left to say.
+        let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, &field.magnitude);
+        // The integral curves of the true Whitney field, traced on the manifold
+        // at a separation fixed to the object's own extent (not its mesh width).
+        let d_sep = f64::from(STREAMLINE_SEPARATION_FRACTION * amplitude_scale);
+        let traced =
+          crate::streamline::trace(&scene.topology, &scene.coords, &field.cochain, d_sep);
+        let streamlines = Some(StreamlineBuffer::new(device, &traced));
+        let (raw_min, raw_max) = field.bounds();
+        // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
+        // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
+        // through the midpoint and flips as the cosine crosses zero. A static
+        // field has no such pulse (wave_omega below is 0, cos(0) = 1), so its
+        // tint is the unsigned $|V|_g$ itself: using its true range instead of
+        // widening to symmetric keeps the colormap from spending half its
+        // span on negative values the field never takes. The curves are static
+        // either way, so there is no geometric displacement --
+        // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
+        // the mode's frequency.
+        let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
+        let (field_min, field_max) = if field.eigenvalue.is_some() {
+          (-peak, peak)
+        } else {
+          (raw_min, raw_max)
+        };
+        let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
 
-      FieldDisplay {
-        mesh_buffer,
-        streamlines,
-        field_min,
-        field_max,
-        wave_amplitude: 0.0,
-        wave_omega,
+        Self {
+          mesh_buffer,
+          streamlines,
+          field_min,
+          field_max,
+          wave_amplitude: 0.0,
+          wave_omega,
+        }
       }
     }
   }
@@ -446,74 +227,19 @@ fn build_field_display(
 
 struct State<'a> {
   surface: Surface<'a>,
-  device: Device,
-  queue: Queue,
+  ctx: GpuContext,
   config: SurfaceConfiguration,
   size: winit::dpi::PhysicalSize<u32>,
-  render_pipeline: RenderPipeline,
-  wireframe_pipeline: RenderPipeline,
-  depth_view: wgpu::TextureView,
-
-  // Antialiasing: every scene pass draws into this supersampled offscreen
-  // target instead of the swapchain; the downsample pipeline then box-filters
-  // it into the swapchain view, once, ahead of the egui pass (see
-  // `SSAA_SCALE`).
-  scene_color_view: wgpu::TextureView,
-  downsample_pipeline: RenderPipeline,
-  scene_color_bind_group_layout: wgpu::BindGroupLayout,
-  scene_color_bind_group: wgpu::BindGroup,
-
-  // Line-field path: an offscreen G-buffer pass feeds a fullscreen LIC pass.
-  // Only exercised when the current selection is a line field; a scalar field
-  // takes the direct fill path above.
-  gbuffer_pipeline: RenderPipeline,
-  lic_pipeline: RenderPipeline,
-  gbuffer_dir_view: wgpu::TextureView,
-  gbuffer_pos_view: wgpu::TextureView,
-  gbuffer_sampler: wgpu::Sampler,
-  gbuffer_tex_bind_group_layout: wgpu::BindGroupLayout,
-  gbuffer_tex_bind_group: wgpu::BindGroup,
-  noise_bind_group: wgpu::BindGroup,
-  lic_buffer: wgpu::Buffer,
-  lic_bind_group: wgpu::BindGroup,
-  // The object-space noise frequency for the current scene, fixed from its own
-  // mesh width so the streamlines read at a consistent density on any mesh.
-  noise_scale: f32,
+  renderer: Renderer,
 
   camera: Camera,
-  camera_uniform: CameraUniform,
-  camera_buffer: wgpu::Buffer,
-  camera_bind_group: wgpu::BindGroup,
+  display: FieldDisplay,
 
-  mesh_buffer: MeshBuffer,
-
-  // The streamline mark for a line field: the evenly-spaced ribbon pipeline, the
-  // traced curves of the current field (`None` for a scalar field or an empty
-  // line field), and the per-frame width/bounds uniform. `line_mark` chooses
-  // between this and the LIC path above.
-  line_mark: LineMark,
-  streamline_pipeline: RenderPipeline,
-  streamline_buffer: Option<crate::render::streamline::StreamlineBuffer>,
-  streamline_uniform_buffer: wgpu::Buffer,
-  streamline_bind_group: wgpu::BindGroup,
-
-  // kept alive to back bounds_bind_group's binding; never read directly
-  #[allow(dead_code)]
-  bounds_buffer: wgpu::Buffer,
-  bounds_bind_group: wgpu::BindGroup,
-
-  // Standing-wave animation: the mode's own frequency and a displacement
-  // amplitude fixed at scene-build time; only `time` changes per frame.
+  /// The standing wave's phase origin, reset whenever the field changes so a
+  /// newly selected mode starts at its crest. The renderer takes the elapsed
+  /// time as an argument, so this clock lives here, in the windowed loop, and
+  /// nowhere below.
   start_time: std::time::Instant,
-  wave_amplitude: f32,
-  wave_omega: f32,
-  wave_buffer: wgpu::Buffer,
-  wave_bind_group: wgpu::BindGroup,
-
-  // The wireframe's world-space half-width, rewritten alongside `wave_buffer`
-  // whenever `amplitude_scale` changes (a new mesh or view).
-  wireframe_buffer: wgpu::Buffer,
-  wireframe_bind_group: wgpu::BindGroup,
 
   // Mouse state for orbit controls
   mouse_pressed: bool,
@@ -526,11 +252,11 @@ struct State<'a> {
   gallery: Gallery,
   scene: Scene,
   selection: Selection,
-  // Fixed at scene-build time: the object's coordinate extent (its radius),
-  // which sets the standing-wave displacement scale for whichever field is on
-  // display and the LIC noise frequency (`noise_scale`) -- an object-intrinsic
-  // length, so the lobes read at orbital scale and the streamlines at a fixed
-  // density on any mesh, however finely triangulated.
+  /// Fixed at scene-build time: the object's coordinate extent (its radius),
+  /// which sets the standing-wave displacement scale for whichever field is on
+  /// display and the world-space width of the segment marks -- an
+  /// object-intrinsic length, so the lobes read at orbital scale on any mesh,
+  /// however finely triangulated.
   amplitude_scale: f32,
 
   egui_ctx: egui::Context,
@@ -543,74 +269,6 @@ struct State<'a> {
   // wasm has no filesystem to browse.
   #[cfg(not(target_arch = "wasm32"))]
   file_dialog: egui_file_dialog::FileDialog,
-}
-
-/// Per-frame standing-wave state: $u(t) = "amplitude" dot "value" dot cos(omega t)$,
-/// displacing each vertex along its own normal (see `shader.wgsl`/`wireframe.wgsl`).
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct WaveUniform {
-  time: f32,
-  amplitude: f32,
-  omega: f32,
-  _pad: f32,
-}
-
-/// Colormap normalization range for the field currently on display.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct BoundsUniform {
-  min_val: f32,
-  max_val: f32,
-  _pad1: f32,
-  _pad2: f32,
-}
-
-/// The wireframe pipeline's world-space thickening state: the line
-/// half-width, in the same world units the mesh's own coordinates are in.
-/// See `wireframe.wgsl`.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct WireframeUniform {
-  half_width_world: f32,
-  _pad0: f32,
-  _pad1: f32,
-  _pad2: f32,
-}
-
-/// The streamline ribbon pipeline's per-frame state: the world-space ribbon
-/// half-width, a fraction of the scene extent. The ribbons carry no colormap --
-/// the surface beneath them does (see `streamline.wgsl`) -- so the fill's bounds
-/// are not needed here.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct StreamlineUniform {
-  half_width_world: f32,
-  _pad: [f32; 3],
-}
-
-/// The wireframe's half-width as a fraction of the scene's own extent
-/// ([`scene_extent`]) -- the same object-intrinsic scale
-/// `WAVE_AMPLITUDE_FRACTION` uses for the standing-wave displacement --
-/// rather than a fixed screen-pixel count, so the line reads the same
-/// thickness whether the mesh is zoomed to fill the screen or shrunk to a
-/// corner of it.
-const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
-
-/// Shared state for the G-buffer and LIC passes: the viewport (to project the
-/// tangent to pixels and to step in texel units), the object-space noise
-/// frequency, the tint clock $(omega, t)$ that swings the magnitude, and the
-/// contrast the along-line average is stretched by.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct LicUniform {
-  viewport: [f32; 2],
-  noise_scale: f32,
-  omega: f32,
-  time: f32,
-  contrast: f32,
-  _pad0: f32,
-  _pad1: f32,
 }
 
 impl<'a> State<'a> {
@@ -632,11 +290,14 @@ impl<'a> State<'a> {
       .request_device(&wgpu::DeviceDescriptor::default())
       .await
       .unwrap();
+    let ctx = GpuContext { device, queue };
 
     let config = surface
       .get_default_config(&adapter, size.width.max(1), size.height.max(1))
       .unwrap();
-    surface.configure(&device, &config);
+    surface.configure(&ctx.device, &config);
+
+    let renderer = Renderer::new(&ctx, config.format);
 
     // Show the window immediately: the gallery opens on a cheap placeholder of
     // the starting mesh and builds the first grade's eigenmodes in the
@@ -644,674 +305,10 @@ impl<'a> State<'a> {
     // blocking the first frame on the solve.
     let (gallery, scene) = Gallery::new(MeshSource::START);
     let selection = default_selection(&scene);
-    // The coordinate extent fixes both the standing-wave displacement and the
-    // LIC noise frequency (see the `State` field): object-intrinsic, so neither
-    // is tuned to the sphere.
     let amplitude_scale = scene_extent(&scene) as f32;
-    let display = build_field_display(&device, &scene, selection, amplitude_scale);
-    let (field_min, field_max) = (display.field_min, display.field_max);
-    let mesh_buffer = display.mesh_buffer;
-    let streamline_buffer = display.streamlines;
-    let wave_amplitude = display.wave_amplitude;
-    let wave_omega = display.wave_omega;
+    let display = FieldDisplay::build(&ctx.device, &scene, selection, amplitude_scale);
 
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
-    let mut camera_uniform = CameraUniform::new();
-    camera_uniform.update_view_proj(&camera);
-
-    let camera_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Camera Buffer"),
-      contents: bytemuck::cast_slice(&[camera_uniform]),
-      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let camera_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-          binding: 0,
-          visibility: wgpu::ShaderStages::VERTEX,
-          ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-          },
-          count: None,
-        }],
-        label: Some("camera_bind_group_layout"),
-      });
-
-    let camera_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout: &camera_bind_group_layout,
-      entries: &[wgpu::BindGroupEntry {
-        binding: 0,
-        resource: camera_buffer.as_entire_binding(),
-      }],
-      label: Some("camera_bind_group"),
-    });
-
-    let bounds_uniform = BoundsUniform {
-      min_val: field_min,
-      max_val: field_max,
-      _pad1: 0.0,
-      _pad2: 0.0,
-    };
-
-    let bounds_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Bounds Buffer"),
-      contents: bytemuck::cast_slice(&[bounds_uniform]),
-      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let bounds_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-          binding: 0,
-          visibility: wgpu::ShaderStages::FRAGMENT,
-          ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-          },
-          count: None,
-        }],
-        label: Some("bounds_bind_group_layout"),
-      });
-
-    let bounds_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout: &bounds_bind_group_layout,
-      entries: &[wgpu::BindGroupEntry {
-        binding: 0,
-        resource: bounds_buffer.as_entire_binding(),
-      }],
-      label: Some("bounds_bind_group"),
-    });
-
-    let start_time = std::time::Instant::now();
-    let wave_uniform = WaveUniform {
-      time: 0.0,
-      amplitude: wave_amplitude,
-      omega: wave_omega,
-      _pad: 0.0,
-    };
-
-    let wave_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Wave Buffer"),
-      contents: bytemuck::cast_slice(&[wave_uniform]),
-      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-
-    let wave_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-          binding: 0,
-          // Also visible in the fragment stage: the scalar fill pulses its
-          // colormap by the same $cos(sqrt(lambda) t)$ that displaces it.
-          visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-          ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-          },
-          count: None,
-        }],
-        label: Some("wave_bind_group_layout"),
-      });
-
-    let wave_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout: &wave_bind_group_layout,
-      entries: &[wgpu::BindGroupEntry {
-        binding: 0,
-        resource: wave_buffer.as_entire_binding(),
-      }],
-      label: Some("wave_bind_group"),
-    });
-
-    // The wireframe's world-space half-width: rewritten alongside `amplitude_scale`
-    // (a new mesh or view), so it stays a fixed fraction of the object's own
-    // size rather than a screen-pixel count.
-    let wireframe_uniform = WireframeUniform {
-      half_width_world: WIREFRAME_WIDTH_FRACTION * amplitude_scale,
-      _pad0: 0.0,
-      _pad1: 0.0,
-      _pad2: 0.0,
-    };
-    let wireframe_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Wireframe Width Buffer"),
-      contents: bytemuck::cast_slice(&[wireframe_uniform]),
-      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-    let wireframe_width_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-          binding: 0,
-          visibility: wgpu::ShaderStages::VERTEX,
-          ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-          },
-          count: None,
-        }],
-        label: Some("wireframe_width_bind_group_layout"),
-      });
-    let wireframe_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout: &wireframe_width_bind_group_layout,
-      entries: &[wgpu::BindGroupEntry {
-        binding: 0,
-        resource: wireframe_buffer.as_entire_binding(),
-      }],
-      label: Some("wireframe_bind_group"),
-    });
-
-    let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-      label: Some("Shader"),
-      source: wgpu::ShaderSource::Wgsl(include_str!("render/shader.wgsl").into()),
-    });
-
-    let render_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-      label: Some("Render Pipeline Layout"),
-      bind_group_layouts: &[
-        Some(&camera_bind_group_layout),
-        Some(&bounds_bind_group_layout),
-        Some(&wave_bind_group_layout),
-      ],
-      immediate_size: 0,
-    });
-
-    let depth_stencil = Some(wgpu::DepthStencilState {
-      format: DEPTH_FORMAT,
-      depth_write_enabled: Some(true),
-      depth_compare: Some(wgpu::CompareFunction::Less),
-      stencil: wgpu::StencilState::default(),
-      bias: wgpu::DepthBiasState::default(),
-    });
-
-    let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Render Pipeline"),
-      layout: Some(&render_pipeline_layout),
-      vertex: wgpu::VertexState {
-        module: &shader,
-        entry_point: Some("vs_main"),
-        compilation_options: Default::default(),
-        buffers: &[Vertex::desc()],
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &shader,
-        entry_point: Some("fs_main"),
-        compilation_options: Default::default(),
-        targets: &[Some(wgpu::ColorTargetState {
-          format: config.format,
-          blend: Some(wgpu::BlendState::REPLACE),
-          write_mask: wgpu::ColorWrites::ALL,
-        })],
-      }),
-      primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        strip_index_format: None,
-        front_face: wgpu::FrontFace::Ccw,
-        cull_mode: None,
-        polygon_mode: wgpu::PolygonMode::Fill,
-        unclipped_depth: false,
-        conservative: false,
-      },
-      depth_stencil: depth_stencil.clone(),
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
-
-    // Wireframe pipeline — instanced screen-space-thick quads, one per edge
-    // (see `wireframe.wgsl`), reading each edge's two endpoints off two
-    // parallel per-instance vertex buffers.
-    let wireframe_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-      label: Some("Wireframe Shader"),
-      source: wgpu::ShaderSource::Wgsl(include_str!("render/wireframe.wgsl").into()),
-    });
-
-    let wireframe_pipeline_layout =
-      device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Wireframe Pipeline Layout"),
-        bind_group_layouts: &[
-          Some(&camera_bind_group_layout),
-          Some(&wave_bind_group_layout),
-          Some(&wireframe_width_bind_group_layout),
-        ],
-        immediate_size: 0,
-      });
-
-    let wireframe_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Wireframe Pipeline"),
-      layout: Some(&wireframe_pipeline_layout),
-      vertex: wgpu::VertexState {
-        module: &wireframe_shader,
-        entry_point: Some("vs_main"),
-        compilation_options: Default::default(),
-        buffers: &[Vertex::desc_endpoint_a(), Vertex::desc_endpoint_b()],
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &wireframe_shader,
-        entry_point: Some("fs_main"),
-        compilation_options: Default::default(),
-        targets: &[Some(wgpu::ColorTargetState {
-          format: config.format,
-          blend: Some(wgpu::BlendState::REPLACE),
-          write_mask: wgpu::ColorWrites::ALL,
-        })],
-      }),
-      primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        strip_index_format: None,
-        front_face: wgpu::FrontFace::Ccw,
-        cull_mode: None,
-        polygon_mode: wgpu::PolygonMode::Fill,
-        unclipped_depth: false,
-        conservative: false,
-      },
-      depth_stencil: depth_stencil.clone(),
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
-
-    // Streamline ribbon pipeline: the billboard quads of `streamline.wgsl`, one
-    // instance per traced segment, tinted by the field magnitude with alpha
-    // blending so the ends taper and the node fade read over the surface.
-    let streamline_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-      label: Some("Streamline Shader"),
-      source: wgpu::ShaderSource::Wgsl(include_str!("render/streamline.wgsl").into()),
-    });
-    let streamline_uniform = StreamlineUniform {
-      half_width_world: STREAMLINE_WIDTH_FRACTION * amplitude_scale,
-      _pad: [0.0; 3],
-    };
-    let streamline_uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Streamline Uniform Buffer"),
-      contents: bytemuck::cast_slice(&[streamline_uniform]),
-      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-    let streamline_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        entries: &[wgpu::BindGroupLayoutEntry {
-          binding: 0,
-          visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-          ty: wgpu::BindingType::Buffer {
-            ty: wgpu::BufferBindingType::Uniform,
-            has_dynamic_offset: false,
-            min_binding_size: None,
-          },
-          count: None,
-        }],
-        label: Some("streamline_bind_group_layout"),
-      });
-    let streamline_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout: &streamline_bind_group_layout,
-      entries: &[wgpu::BindGroupEntry {
-        binding: 0,
-        resource: streamline_uniform_buffer.as_entire_binding(),
-      }],
-      label: Some("streamline_bind_group"),
-    });
-    let streamline_pipeline_layout =
-      device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Streamline Pipeline Layout"),
-        bind_group_layouts: &[
-          Some(&camera_bind_group_layout),
-          Some(&wave_bind_group_layout),
-          Some(&streamline_bind_group_layout),
-        ],
-        immediate_size: 0,
-      });
-    let streamline_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Streamline Pipeline"),
-      layout: Some(&streamline_pipeline_layout),
-      vertex: wgpu::VertexState {
-        module: &streamline_shader,
-        entry_point: Some("vs_main"),
-        compilation_options: Default::default(),
-        buffers: &[StreamEndpoint::desc_a(), StreamEndpoint::desc_b()],
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &streamline_shader,
-        entry_point: Some("fs_main"),
-        compilation_options: Default::default(),
-        targets: &[Some(wgpu::ColorTargetState {
-          format: config.format,
-          blend: Some(wgpu::BlendState::ALPHA_BLENDING),
-          write_mask: wgpu::ColorWrites::ALL,
-        })],
-      }),
-      primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        strip_index_format: None,
-        front_face: wgpu::FrontFace::Ccw,
-        cull_mode: None,
-        polygon_mode: wgpu::PolygonMode::Fill,
-        unclipped_depth: false,
-        conservative: false,
-      },
-      // The ribbons are an alpha-blended overlay on the surface: they test
-      // against it (so a curve on the far side stays hidden) but must not write
-      // depth. Writing it would let a ribbon, biased toward the camera and drawn
-      // first, occlude the wireframe edge it lies along -- and depth-writing
-      // translucent geometry is wrong regardless of what is drawn after.
-      depth_stencil: Some(wgpu::DepthStencilState {
-        depth_write_enabled: Some(false),
-        ..depth_stencil.clone().unwrap()
-      }),
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
-
-    let (ss_width, ss_height) = supersampled_size(&config);
-    let depth_view = create_depth_texture(&device, ss_width, ss_height);
-    let scene_color_view = create_scene_color_texture(&device, config.format, ss_width, ss_height);
-
-    // Line-field path: G-buffer + fullscreen LIC.
-    let (gbuffer_dir_view, gbuffer_pos_view) =
-      create_gbuffer_textures(&device, ss_width, ss_height);
-    let (noise_view, noise_sampler) = create_noise_texture(&device, &queue);
-    let noise_scale = NOISE_CYCLES_PER_EXTENT / amplitude_scale.max(f32::EPSILON);
-
-    let lic_uniform = LicUniform {
-      viewport: [ss_width as f32, ss_height as f32],
-      noise_scale,
-      omega: wave_omega,
-      time: 0.0,
-      contrast: LIC_CONTRAST,
-      _pad0: 0.0,
-      _pad1: 0.0,
-    };
-    let lic_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Lic Buffer"),
-      contents: bytemuck::cast_slice(&[lic_uniform]),
-      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-    });
-    // Shared by the G-buffer pass (which reads the viewport in its fragment
-    // stage) and the LIC pass.
-    let lic_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-      label: Some("lic_bind_group_layout"),
-      entries: &[wgpu::BindGroupLayoutEntry {
-        binding: 0,
-        visibility: wgpu::ShaderStages::FRAGMENT,
-        ty: wgpu::BindingType::Buffer {
-          ty: wgpu::BufferBindingType::Uniform,
-          has_dynamic_offset: false,
-          min_binding_size: None,
-        },
-        count: None,
-      }],
-    });
-    let lic_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      label: Some("lic_bind_group"),
-      layout: &lic_bind_group_layout,
-      entries: &[wgpu::BindGroupEntry {
-        binding: 0,
-        resource: lic_buffer.as_entire_binding(),
-      }],
-    });
-
-    let gbuffer_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
-      label: Some("G-buffer sampler"),
-      address_mode_u: wgpu::AddressMode::ClampToEdge,
-      address_mode_v: wgpu::AddressMode::ClampToEdge,
-      address_mode_w: wgpu::AddressMode::ClampToEdge,
-      mag_filter: wgpu::FilterMode::Nearest,
-      min_filter: wgpu::FilterMode::Nearest,
-      mipmap_filter: wgpu::MipmapFilterMode::Nearest,
-      ..Default::default()
-    });
-    // The G-buffer carries a discontinuous direction and a world position, so
-    // it is sampled nearest (non-filtering): interpolation across a silhouette
-    // would blend a foreground tangent with a background one.
-    let gbuffer_tex_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("gbuffer_tex_bind_group_layout"),
-        entries: &[
-          wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-              sample_type: wgpu::TextureSampleType::Float { filterable: false },
-              view_dimension: wgpu::TextureViewDimension::D2,
-              multisampled: false,
-            },
-            count: None,
-          },
-          wgpu::BindGroupLayoutEntry {
-            binding: 1,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-              sample_type: wgpu::TextureSampleType::Float { filterable: false },
-              view_dimension: wgpu::TextureViewDimension::D2,
-              multisampled: false,
-            },
-            count: None,
-          },
-          wgpu::BindGroupLayoutEntry {
-            binding: 2,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
-            count: None,
-          },
-        ],
-      });
-    let gbuffer_tex_bind_group = create_gbuffer_bind_group(
-      &device,
-      &gbuffer_tex_bind_group_layout,
-      &gbuffer_dir_view,
-      &gbuffer_pos_view,
-      &gbuffer_sampler,
-    );
-
-    let noise_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("noise_bind_group_layout"),
-        entries: &[
-          wgpu::BindGroupLayoutEntry {
-            binding: 0,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Texture {
-              sample_type: wgpu::TextureSampleType::Float { filterable: true },
-              view_dimension: wgpu::TextureViewDimension::D3,
-              multisampled: false,
-            },
-            count: None,
-          },
-          wgpu::BindGroupLayoutEntry {
-            binding: 1,
-            visibility: wgpu::ShaderStages::FRAGMENT,
-            ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
-            count: None,
-          },
-        ],
-      });
-    let noise_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      label: Some("noise_bind_group"),
-      layout: &noise_bind_group_layout,
-      entries: &[
-        wgpu::BindGroupEntry {
-          binding: 0,
-          resource: wgpu::BindingResource::TextureView(&noise_view),
-        },
-        wgpu::BindGroupEntry {
-          binding: 1,
-          resource: wgpu::BindingResource::Sampler(&noise_sampler),
-        },
-      ],
-    });
-
-    let gbuffer_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-      label: Some("G-buffer Shader"),
-      source: wgpu::ShaderSource::Wgsl(include_str!("render/gbuffer.wgsl").into()),
-    });
-    let gbuffer_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-      label: Some("G-buffer Pipeline Layout"),
-      bind_group_layouts: &[
-        Some(&camera_bind_group_layout),
-        Some(&lic_bind_group_layout),
-      ],
-      immediate_size: 0,
-    });
-    let gbuffer_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("G-buffer Pipeline"),
-      layout: Some(&gbuffer_pipeline_layout),
-      vertex: wgpu::VertexState {
-        module: &gbuffer_shader,
-        entry_point: Some("vs_main"),
-        compilation_options: Default::default(),
-        buffers: &[Vertex::desc()],
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &gbuffer_shader,
-        entry_point: Some("fs_main"),
-        compilation_options: Default::default(),
-        targets: &[
-          Some(wgpu::ColorTargetState {
-            format: GBUFFER_FORMAT,
-            blend: Some(wgpu::BlendState::REPLACE),
-            write_mask: wgpu::ColorWrites::ALL,
-          }),
-          Some(wgpu::ColorTargetState {
-            format: GBUFFER_FORMAT,
-            blend: Some(wgpu::BlendState::REPLACE),
-            write_mask: wgpu::ColorWrites::ALL,
-          }),
-        ],
-      }),
-      primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        strip_index_format: None,
-        front_face: wgpu::FrontFace::Ccw,
-        cull_mode: None,
-        polygon_mode: wgpu::PolygonMode::Fill,
-        unclipped_depth: false,
-        conservative: false,
-      },
-      depth_stencil: Some(wgpu::DepthStencilState {
-        format: DEPTH_FORMAT,
-        depth_write_enabled: Some(true),
-        depth_compare: Some(wgpu::CompareFunction::Less),
-        stencil: wgpu::StencilState::default(),
-        bias: wgpu::DepthBiasState::default(),
-      }),
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
-
-    let lic_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-      label: Some("LIC Shader"),
-      source: wgpu::ShaderSource::Wgsl(include_str!("render/lic.wgsl").into()),
-    });
-    let lic_pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-      label: Some("LIC Pipeline Layout"),
-      bind_group_layouts: &[
-        Some(&gbuffer_tex_bind_group_layout),
-        Some(&noise_bind_group_layout),
-        Some(&lic_bind_group_layout),
-        Some(&bounds_bind_group_layout),
-      ],
-      immediate_size: 0,
-    });
-    let lic_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("LIC Pipeline"),
-      layout: Some(&lic_pipeline_layout),
-      vertex: wgpu::VertexState {
-        module: &lic_shader,
-        entry_point: Some("vs_main"),
-        compilation_options: Default::default(),
-        buffers: &[],
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &lic_shader,
-        entry_point: Some("fs_main"),
-        compilation_options: Default::default(),
-        targets: &[Some(wgpu::ColorTargetState {
-          format: config.format,
-          blend: Some(wgpu::BlendState::REPLACE),
-          write_mask: wgpu::ColorWrites::ALL,
-        })],
-      }),
-      primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        strip_index_format: None,
-        front_face: wgpu::FrontFace::Ccw,
-        cull_mode: None,
-        polygon_mode: wgpu::PolygonMode::Fill,
-        unclipped_depth: false,
-        conservative: false,
-      },
-      depth_stencil: None,
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
-
-    // Downsample: the supersampling antialiasing step. A box filter over
-    // `SSAA_SCALE^2` texels, applied to whichever scene pass just filled
-    // `scene_color_view`, into the swapchain -- the one place both render
-    // paths' output gets antialiased.
-    let scene_color_bind_group_layout =
-      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-        label: Some("scene_color_bind_group_layout"),
-        entries: &[wgpu::BindGroupLayoutEntry {
-          binding: 0,
-          visibility: wgpu::ShaderStages::FRAGMENT,
-          ty: wgpu::BindingType::Texture {
-            sample_type: wgpu::TextureSampleType::Float { filterable: false },
-            view_dimension: wgpu::TextureViewDimension::D2,
-            multisampled: false,
-          },
-          count: None,
-        }],
-      });
-    let scene_color_bind_group =
-      create_scene_color_bind_group(&device, &scene_color_bind_group_layout, &scene_color_view);
-
-    let downsample_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-      label: Some("Downsample Shader"),
-      source: wgpu::ShaderSource::Wgsl(include_str!("render/downsample.wgsl").into()),
-    });
-    let downsample_pipeline_layout =
-      device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-        label: Some("Downsample Pipeline Layout"),
-        bind_group_layouts: &[Some(&scene_color_bind_group_layout)],
-        immediate_size: 0,
-      });
-    let downsample_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Downsample Pipeline"),
-      layout: Some(&downsample_pipeline_layout),
-      vertex: wgpu::VertexState {
-        module: &downsample_shader,
-        entry_point: Some("vs_main"),
-        compilation_options: Default::default(),
-        buffers: &[],
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &downsample_shader,
-        entry_point: Some("fs_main"),
-        compilation_options: Default::default(),
-        targets: &[Some(wgpu::ColorTargetState {
-          format: config.format,
-          blend: Some(wgpu::BlendState::REPLACE),
-          write_mask: wgpu::ColorWrites::ALL,
-        })],
-      }),
-      primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::TriangleList,
-        strip_index_format: None,
-        front_face: wgpu::FrontFace::Ccw,
-        cull_mode: None,
-        polygon_mode: wgpu::PolygonMode::Fill,
-        unclipped_depth: false,
-        conservative: false,
-      },
-      depth_stencil: None,
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
 
     let egui_ctx = egui::Context::default();
     let egui_winit_state = EguiWinitState::new(
@@ -1322,51 +319,18 @@ impl<'a> State<'a> {
       None,
       None,
     );
-    let egui_renderer = EguiRenderer::new(&device, config.format, EguiRendererOptions::default());
+    let egui_renderer =
+      EguiRenderer::new(&ctx.device, config.format, EguiRendererOptions::default());
 
     Self {
       surface,
-      device,
-      queue,
+      ctx,
       config,
       size,
-      render_pipeline,
-      wireframe_pipeline,
-      depth_view,
-      scene_color_view,
-      downsample_pipeline,
-      scene_color_bind_group_layout,
-      scene_color_bind_group,
-      gbuffer_pipeline,
-      lic_pipeline,
-      gbuffer_dir_view,
-      gbuffer_pos_view,
-      gbuffer_sampler,
-      gbuffer_tex_bind_group_layout,
-      gbuffer_tex_bind_group,
-      noise_bind_group,
-      lic_buffer,
-      lic_bind_group,
-      noise_scale,
+      renderer,
       camera,
-      camera_uniform,
-      camera_buffer,
-      camera_bind_group,
-      mesh_buffer,
-      line_mark: LineMark::Streamlines,
-      streamline_pipeline,
-      streamline_buffer,
-      streamline_uniform_buffer,
-      streamline_bind_group,
-      bounds_buffer,
-      bounds_bind_group,
-      start_time,
-      wave_amplitude,
-      wave_omega,
-      wave_buffer,
-      wave_bind_group,
-      wireframe_buffer,
-      wireframe_bind_group,
+      display,
+      start_time: std::time::Instant::now(),
       mouse_pressed: false,
       last_mouse_pos: None,
       gallery,
@@ -1383,43 +347,19 @@ impl<'a> State<'a> {
     }
   }
 
-  /// Displays `selection` of the *current* scene, rebuilding exactly the
-  /// pieces that depend on it: the mesh buffer, the colormap bounds, and the
-  /// standing-wave parameters. Unconditional -- callers that only want to
-  /// act on an actual change (the common case) go through
+  /// Displays `selection` of the *current* scene, rebuilding exactly the pieces
+  /// that depend on it and restarting the wave clock. Unconditional -- callers
+  /// that only want to act on an actual change (the common case) go through
   /// [`Self::set_field`] instead.
   fn apply_field(&mut self, selection: Selection) {
     self.selection = selection;
-    let display = build_field_display(&self.device, &self.scene, selection, self.amplitude_scale);
-    self.mesh_buffer = display.mesh_buffer;
-    self.streamline_buffer = display.streamlines;
-    self.wave_amplitude = display.wave_amplitude;
-    self.wave_omega = display.wave_omega;
+    self.display = FieldDisplay::build(
+      &self.ctx.device,
+      &self.scene,
+      selection,
+      self.amplitude_scale,
+    );
     self.start_time = std::time::Instant::now();
-
-    let bounds_uniform = BoundsUniform {
-      min_val: display.field_min,
-      max_val: display.field_max,
-      _pad1: 0.0,
-      _pad2: 0.0,
-    };
-    self.queue.write_buffer(
-      &self.bounds_buffer,
-      0,
-      bytemuck::cast_slice(&[bounds_uniform]),
-    );
-
-    // The ribbons take their width from the current object extent, which changes
-    // with the scene, so rewrite it here rather than only at startup.
-    let streamline_uniform = StreamlineUniform {
-      half_width_world: STREAMLINE_WIDTH_FRACTION * self.amplitude_scale,
-      _pad: [0.0; 3],
-    };
-    self.queue.write_buffer(
-      &self.streamline_uniform_buffer,
-      0,
-      bytemuck::cast_slice(&[streamline_uniform]),
-    );
   }
 
   /// Switches the displayed field within the current scene. Everything else
@@ -1485,13 +425,10 @@ impl<'a> State<'a> {
   /// cell, or vice versa.
   fn install_scene(&mut self, scene: Scene) {
     self.amplitude_scale = scene_extent(&scene) as f32;
-    self.noise_scale = NOISE_CYCLES_PER_EXTENT / self.amplitude_scale.max(f32::EPSILON);
     let selection = default_selection(&scene);
     self.scene = scene;
     self.apply_field(selection);
-
     self.camera = default_camera(&self.scene, self.camera.aspect);
-    self.update_camera_buffer();
   }
 
   /// Non-blocking: installs a background build the frame it finishes. Called
@@ -1507,34 +444,10 @@ impl<'a> State<'a> {
       self.size = new_size;
       self.config.width = new_size.width;
       self.config.height = new_size.height;
-      self.surface.configure(&self.device, &self.config);
-      let (ss_width, ss_height) = supersampled_size(&self.config);
-      self.depth_view = create_depth_texture(&self.device, ss_width, ss_height);
-      self.scene_color_view =
-        create_scene_color_texture(&self.device, self.config.format, ss_width, ss_height);
-      self.scene_color_bind_group = create_scene_color_bind_group(
-        &self.device,
-        &self.scene_color_bind_group_layout,
-        &self.scene_color_view,
-      );
-      let (dir_view, pos_view) = create_gbuffer_textures(&self.device, ss_width, ss_height);
-      self.gbuffer_dir_view = dir_view;
-      self.gbuffer_pos_view = pos_view;
-      self.gbuffer_tex_bind_group = create_gbuffer_bind_group(
-        &self.device,
-        &self.gbuffer_tex_bind_group_layout,
-        &self.gbuffer_dir_view,
-        &self.gbuffer_pos_view,
-        &self.gbuffer_sampler,
-      );
-
+      self.surface.configure(&self.ctx.device, &self.config);
+      // The renderer reallocates its own targets from the size it is handed,
+      // so there is nothing to resize here beyond the surface and the aspect.
       self.camera.aspect = self.config.width as f32 / self.config.height as f32;
-      self.camera_uniform.update_view_proj(&self.camera);
-      self.queue.write_buffer(
-        &self.camera_buffer,
-        0,
-        bytemuck::cast_slice(&[self.camera_uniform]),
-      );
     }
   }
 
@@ -1571,7 +484,6 @@ impl<'a> State<'a> {
               // Clamp pitch to avoid gimbal lock
               self.camera.pitch = self.camera.pitch.clamp(-1.5, 1.5);
             }
-            self.update_camera_buffer();
           }
           self.last_mouse_pos = Some(*position);
         }
@@ -1583,19 +495,9 @@ impl<'a> State<'a> {
         };
         self.camera.distance -= scroll;
         self.camera.distance = self.camera.distance.clamp(1.0, 100.0);
-        self.update_camera_buffer();
       }
       _ => {}
     }
-  }
-
-  fn update_camera_buffer(&mut self) {
-    self.camera_uniform.update_view_proj(&self.camera);
-    self.queue.write_buffer(
-      &self.camera_buffer,
-      0,
-      bytemuck::cast_slice(&[self.camera_uniform]),
-    );
   }
 
   /// Builds the panel's model snapshot, hands it to [`crate::ui::panel::panel`]
@@ -1656,7 +558,6 @@ impl<'a> State<'a> {
       mesh_source: mesh_source.clone(),
       mesh_error: self.gallery.error.clone(),
       selection: self.selection,
-      line_mark: self.line_mark,
       top_down: self.camera.top_down,
     };
 
@@ -1708,11 +609,7 @@ impl<'a> State<'a> {
         self.set_view(response.requested_view);
       } else {
         self.set_field(response.selection);
-        self.line_mark = response.line_mark;
-        if response.top_down != self.camera.top_down {
-          self.camera.top_down = response.top_down;
-          self.update_camera_buffer();
-        }
+        self.camera.top_down = response.top_down;
       }
     }
 
@@ -1729,8 +626,8 @@ impl<'a> State<'a> {
 
   fn render(&mut self, window: &Window) -> Result<(), ()> {
     // Ahead of `run_ui`: applying a finished background load before the panel
-    // is built is what makes the field/vector-field pickers reflect the new
-    // scene on the very frame it lands, rather than one frame late.
+    // is built is what makes the field pickers reflect the new scene on the
+    // very frame it lands, rather than one frame late.
     self.poll_view_load();
     let (paint_jobs, textures_delta, pixels_per_point) = self.run_ui(window);
 
@@ -1741,53 +638,8 @@ impl<'a> State<'a> {
     for (id, image_delta) in &textures_delta.set {
       self
         .egui_renderer
-        .update_texture(&self.device, &self.queue, *id, image_delta);
+        .update_texture(&self.ctx.device, &self.ctx.queue, *id, image_delta);
     }
-
-    let wave_uniform = WaveUniform {
-      time: self.start_time.elapsed().as_secs_f32(),
-      amplitude: self.wave_amplitude,
-      omega: self.wave_omega,
-      _pad: 0.0,
-    };
-    self
-      .queue
-      .write_buffer(&self.wave_buffer, 0, bytemuck::cast_slice(&[wave_uniform]));
-
-    // The LIC pass shares the tint clock with the wave: the direction is
-    // static, so `omega`/`time` swing only the magnitude tint, never the lines.
-    // `viewport` is the G-buffer/scene-color target's own (supersampled)
-    // resolution, not the swapchain's -- it fixes the texel size the pass
-    // steps in.
-    let (ss_width, ss_height) = supersampled_size(&self.config);
-    let lic_uniform = LicUniform {
-      viewport: [ss_width as f32, ss_height as f32],
-      noise_scale: self.noise_scale,
-      omega: self.wave_omega,
-      time: self.start_time.elapsed().as_secs_f32(),
-      contrast: LIC_CONTRAST,
-      _pad0: 0.0,
-      _pad1: 0.0,
-    };
-    self
-      .queue
-      .write_buffer(&self.lic_buffer, 0, bytemuck::cast_slice(&[lic_uniform]));
-
-    // Rewritten every frame (cheap, and simpler than hunting down every place
-    // `amplitude_scale` itself changes) rather than only once at startup, so
-    // the wireframe's world-space half-width always tracks the scene
-    // currently on display.
-    let wireframe_uniform = WireframeUniform {
-      half_width_world: WIREFRAME_WIDTH_FRACTION * self.amplitude_scale,
-      _pad0: 0.0,
-      _pad1: 0.0,
-      _pad2: 0.0,
-    };
-    self.queue.write_buffer(
-      &self.wireframe_buffer,
-      0,
-      bytemuck::cast_slice(&[wireframe_uniform]),
-    );
 
     let output = match self.surface.get_current_texture() {
       wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
@@ -1818,225 +670,37 @@ impl<'a> State<'a> {
       .create_view(&wgpu::TextureViewDescriptor::default());
 
     let mut encoder = self
+      .ctx
       .device
       .create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render Encoder"),
       });
 
-    // A line field takes the G-buffer + fullscreen-LIC path; a scalar field
-    // takes the direct colormap fill. The mark differs because the reduced
-    // grade does -- this is [`Scene`]'s min(k, n-k) rule surfacing at draw
-    // time, not a dimension/grade special case in the core. Both then draw the
-    // wireframe on top and hand off to egui.
-    let clear_color = wgpu::Color {
-      r: 0.1,
-      g: 0.1,
-      b: 0.1,
-      a: 1.0,
+    let scene_view = SceneView {
+      mesh: &self.display.mesh_buffer,
+      streamlines: self.display.streamlines.as_ref(),
+      field_min: self.display.field_min,
+      field_max: self.display.field_max,
+      wave_amplitude: self.display.wave_amplitude,
+      wave_omega: self.display.wave_omega,
+      extent: self.amplitude_scale,
+      camera: &self.camera,
+      size: (self.config.width, self.config.height),
+      time: self.start_time.elapsed().as_secs_f32(),
     };
-    if self.selection.is_line() && self.line_mark == LineMark::Lic {
-      // G-buffer: the surface's screen tangent, magnitude, coverage, world
-      // position and shade, into two offscreen targets and the shared depth.
-      {
-        let mut gbuffer_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-          label: Some("G-buffer Pass"),
-          color_attachments: &[
-            Some(wgpu::RenderPassColorAttachment {
-              view: &self.gbuffer_dir_view,
-              resolve_target: None,
-              ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                store: wgpu::StoreOp::Store,
-              },
-              depth_slice: None,
-            }),
-            Some(wgpu::RenderPassColorAttachment {
-              view: &self.gbuffer_pos_view,
-              resolve_target: None,
-              ops: wgpu::Operations {
-                load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                store: wgpu::StoreOp::Store,
-              },
-              depth_slice: None,
-            }),
-          ],
-          depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            view: &self.depth_view,
-            depth_ops: Some(wgpu::Operations {
-              load: wgpu::LoadOp::Clear(1.0),
-              store: wgpu::StoreOp::Store,
-            }),
-            stencil_ops: None,
-          }),
-          timestamp_writes: None,
-          occlusion_query_set: None,
-          multiview_mask: None,
-        });
-        gbuffer_pass.set_pipeline(&self.gbuffer_pipeline);
-        gbuffer_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-        gbuffer_pass.set_bind_group(1, &self.lic_bind_group, &[]);
-        gbuffer_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
-        gbuffer_pass.set_index_buffer(
-          self.mesh_buffer.index_buffer.slice(..),
-          wgpu::IndexFormat::Uint32,
-        );
-        gbuffer_pass.draw_indexed(0..self.mesh_buffer.num_indices, 0, 0..1);
-      }
-      // Fullscreen LIC: integrate the tangent, tint by the animated magnitude,
-      // composite over the shaded surface, into the supersampled scene color
-      // target (downsampled into the swapchain below, alongside the wireframe).
-      {
-        let mut lic_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-          label: Some("LIC Pass"),
-          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &self.scene_color_view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-              load: wgpu::LoadOp::Clear(clear_color),
-              store: wgpu::StoreOp::Store,
-            },
-            depth_slice: None,
-          })],
-          depth_stencil_attachment: None,
-          timestamp_writes: None,
-          occlusion_query_set: None,
-          multiview_mask: None,
-        });
-        lic_pass.set_pipeline(&self.lic_pipeline);
-        lic_pass.set_bind_group(0, &self.gbuffer_tex_bind_group, &[]);
-        lic_pass.set_bind_group(1, &self.noise_bind_group, &[]);
-        lic_pass.set_bind_group(2, &self.lic_bind_group, &[]);
-        lic_pass.set_bind_group(3, &self.bounds_bind_group, &[]);
-        lic_pass.draw(0..3, 0..1);
-      }
-      // Wireframe over the LIC, reusing the G-buffer's depth so back edges stay
-      // occluded.
-      {
-        let mut wire_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-          label: Some("Wireframe Pass"),
-          color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-            view: &self.scene_color_view,
-            resolve_target: None,
-            ops: wgpu::Operations {
-              load: wgpu::LoadOp::Load,
-              store: wgpu::StoreOp::Store,
-            },
-            depth_slice: None,
-          })],
-          depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-            view: &self.depth_view,
-            depth_ops: Some(wgpu::Operations {
-              load: wgpu::LoadOp::Load,
-              store: wgpu::StoreOp::Store,
-            }),
-            stencil_ops: None,
-          }),
-          timestamp_writes: None,
-          occlusion_query_set: None,
-          multiview_mask: None,
-        });
-        wire_pass.set_pipeline(&self.wireframe_pipeline);
-        wire_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-        wire_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-        wire_pass.set_bind_group(2, &self.wireframe_bind_group, &[]);
-        wire_pass.set_vertex_buffer(0, self.mesh_buffer.wireframe_a_buffer.slice(..));
-        wire_pass.set_vertex_buffer(1, self.mesh_buffer.wireframe_b_buffer.slice(..));
-        wire_pass.draw(0..6, 0..self.mesh_buffer.num_wireframe_edges);
-      }
-    } else {
-      let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Render Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-          view: &self.scene_color_view,
-          resolve_target: None,
-          ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(clear_color),
-            store: wgpu::StoreOp::Store,
-          },
-          depth_slice: None,
-        })],
-        depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-          view: &self.depth_view,
-          depth_ops: Some(wgpu::Operations {
-            load: wgpu::LoadOp::Clear(1.0),
-            store: wgpu::StoreOp::Store,
-          }),
-          stencil_ops: None,
-        }),
-        timestamp_writes: None,
-        occlusion_query_set: None,
-        multiview_mask: None,
-      });
+    self
+      .renderer
+      .render(&self.ctx, &mut encoder, &view, &scene_view);
 
-      // Draw filled triangles
-      render_pass.set_pipeline(&self.render_pipeline);
-      render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-      render_pass.set_bind_group(1, &self.bounds_bind_group, &[]);
-      render_pass.set_bind_group(2, &self.wave_bind_group, &[]);
-      render_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
-      render_pass.set_index_buffer(
-        self.mesh_buffer.index_buffer.slice(..),
-        wgpu::IndexFormat::Uint32,
-      );
-      render_pass.draw_indexed(0..self.mesh_buffer.num_indices, 0, 0..1);
-
-      // A line field in streamline mode: the evenly-spaced ribbons over the
-      // magnitude-tinted surface, before the wireframe. The surface fill above
-      // is identical to a scalar field's, since a line field's `MeshBuffer`
-      // carries its nodal magnitude as the fill value.
-      if let Some(streamlines) = &self.streamline_buffer {
-        if streamlines.num_segments > 0 {
-          render_pass.set_pipeline(&self.streamline_pipeline);
-          render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-          render_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-          render_pass.set_bind_group(2, &self.streamline_bind_group, &[]);
-          render_pass.set_vertex_buffer(0, streamlines.endpoint_a.slice(..));
-          render_pass.set_vertex_buffer(1, streamlines.endpoint_b.slice(..));
-          render_pass.draw(0..6, 0..streamlines.num_segments);
-        }
-      }
-
-      // Draw wireframe edges on top
-      render_pass.set_pipeline(&self.wireframe_pipeline);
-      render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
-      render_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-      render_pass.set_bind_group(2, &self.wireframe_bind_group, &[]);
-      render_pass.set_vertex_buffer(0, self.mesh_buffer.wireframe_a_buffer.slice(..));
-      render_pass.set_vertex_buffer(1, self.mesh_buffer.wireframe_b_buffer.slice(..));
-      render_pass.draw(0..6, 0..self.mesh_buffer.num_wireframe_edges);
-    }
-
-    // Antialiasing: box-filter the supersampled scene color target down into
-    // the swapchain, once, regardless of which path above filled it.
-    {
-      let mut downsample_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-        label: Some("Downsample Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-          view: &view,
-          resolve_target: None,
-          ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(clear_color),
-            store: wgpu::StoreOp::Store,
-          },
-          depth_slice: None,
-        })],
-        depth_stencil_attachment: None,
-        timestamp_writes: None,
-        occlusion_query_set: None,
-        multiview_mask: None,
-      });
-      downsample_pass.set_pipeline(&self.downsample_pipeline);
-      downsample_pass.set_bind_group(0, &self.scene_color_bind_group, &[]);
-      downsample_pass.draw(0..3, 0..1);
-    }
-
+    // egui composites over the renderer's output, in the same submission: the
+    // one thing the windowed wrapper draws that the frame graph does not.
     let screen_descriptor = ScreenDescriptor {
       size_in_pixels: [self.config.width, self.config.height],
       pixels_per_point,
     };
     let egui_cmd_buffers = self.egui_renderer.update_buffers(
-      &self.device,
-      &self.queue,
+      &self.ctx.device,
+      &self.ctx.queue,
       &mut encoder,
       &paint_jobs,
       &screen_descriptor,
@@ -2068,7 +732,7 @@ impl<'a> State<'a> {
       self.egui_renderer.free_texture(id);
     }
 
-    self.queue.submit(
+    self.ctx.queue.submit(
       egui_cmd_buffers
         .into_iter()
         .chain(std::iter::once(encoder.finish())),

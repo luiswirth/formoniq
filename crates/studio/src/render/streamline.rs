@@ -1,6 +1,14 @@
+//! The streamline ribbon pass: the traced integral curves of a line field as
+//! billboard quads, one instance per segment. The same technique as the
+//! wireframe, at a different width and with a tapered, wave-faded ink instead
+//! of a solid edge. See `streamline.wgsl`.
+
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
+use super::{
+  color_target, compilation_options, depth_stencil, primitive, shader_module, uniform::Uniforms,
+};
 use crate::streamline::Streamlines;
 
 /// Number of samples over which a curve's ends ramp from invisible to full
@@ -119,5 +127,72 @@ impl StreamlineBuffer {
       endpoint_b: endpoint_b_buffer,
       num_segments,
     }
+  }
+}
+
+pub struct StreamlinePass {
+  pipeline: wgpu::RenderPipeline,
+}
+
+impl StreamlinePass {
+  pub fn new(device: &wgpu::Device, format: wgpu::TextureFormat, uniforms: &Uniforms) -> Self {
+    let shader = shader_module(device, "Streamline Shader", include_str!("streamline.wgsl"));
+    let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+      label: Some("Streamline Pipeline Layout"),
+      bind_group_layouts: &[
+        Some(uniforms.camera.layout()),
+        Some(uniforms.wave.layout()),
+        Some(uniforms.streamline_width.layout()),
+      ],
+      immediate_size: 0,
+    });
+    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+      label: Some("Streamline Pipeline"),
+      layout: Some(&layout),
+      vertex: wgpu::VertexState {
+        module: &shader,
+        entry_point: Some("vs_main"),
+        compilation_options: compilation_options(),
+        buffers: &[StreamEndpoint::desc_a(), StreamEndpoint::desc_b()],
+      },
+      fragment: Some(wgpu::FragmentState {
+        module: &shader,
+        entry_point: Some("fs_main"),
+        compilation_options: compilation_options(),
+        targets: &[color_target(format, wgpu::BlendState::ALPHA_BLENDING)],
+      }),
+      primitive: primitive(),
+      // The ribbons are an alpha-blended overlay on the surface: they test
+      // against it (so a curve on the far side stays hidden) but must not write
+      // depth. Writing it would let a ribbon, biased toward the camera and drawn
+      // first, occlude the wireframe edge it lies along -- and depth-writing
+      // translucent geometry is wrong regardless of what is drawn after.
+      depth_stencil: Some(depth_stencil(false)),
+      multisample: wgpu::MultisampleState::default(),
+      multiview_mask: None,
+      cache: None,
+    });
+    Self { pipeline }
+  }
+
+  /// Draws the ribbons, if there are any: an empty trace (a field with no
+  /// streamlines) draws nothing rather than being a case the caller has to
+  /// exclude.
+  pub fn draw(
+    &self,
+    pass: &mut wgpu::RenderPass<'_>,
+    uniforms: &Uniforms,
+    streamlines: &StreamlineBuffer,
+  ) {
+    if streamlines.num_segments == 0 {
+      return;
+    }
+    pass.set_pipeline(&self.pipeline);
+    pass.set_bind_group(0, uniforms.camera.bind_group(), &[]);
+    pass.set_bind_group(1, uniforms.wave.bind_group(), &[]);
+    pass.set_bind_group(2, uniforms.streamline_width.bind_group(), &[]);
+    pass.set_vertex_buffer(0, streamlines.endpoint_a.slice(..));
+    pass.set_vertex_buffer(1, streamlines.endpoint_b.slice(..));
+    pass.draw(0..6, 0..streamlines.num_segments);
   }
 }

@@ -1,11 +1,9 @@
-// Box-filter downsample of the supersampled scene color target into the
-// swapchain: the antialiasing step for both the direct fill/wireframe path
-// and the G-buffer/LIC path, applied uniformly after either has finished
-// drawing (see `lib.rs`'s `SSAA_SCALE` for why this replaces MSAA).
-//
-// `SCALE` must match `SSAA_SCALE` in `lib.rs` -- there is no shared constant
-// between Rust and WGSL, so the two are kept in sync by hand.
-const SCALE: i32 = 2;
+// Box-filter downsample of the supersampled scene color target into the render
+// target: the antialiasing step, applied once after the scene passes have
+// finished drawing (see `render::SSAA_SCALE` for why this replaces MSAA). The
+// factor is the preamble's `SSAA_SCALE` override, set from that same Rust
+// constant at pipeline creation, so the filter cannot disagree with the
+// resolution the targets were allocated at.
 
 @group(0) @binding(0) var scene_tex: texture_2d<f32>;
 
@@ -24,12 +22,12 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let base = vec2<i32>(in.clip_position.xy) * SCALE;
+    let base = vec2<i32>(in.clip_position.xy) * SSAA_SCALE;
     var sum = vec4<f32>(0.0);
-    for (var dy: i32 = 0; dy < SCALE; dy = dy + 1) {
-        for (var dx: i32 = 0; dx < SCALE; dx = dx + 1) {
+    for (var dy: i32 = 0; dy < SSAA_SCALE; dy = dy + 1) {
+        for (var dx: i32 = 0; dx < SSAA_SCALE; dx = dx + 1) {
             sum = sum + textureLoad(scene_tex, base + vec2<i32>(dx, dy), 0);
         }
     }
-    return sum / f32(SCALE * SCALE);
+    return sum / f32(SSAA_SCALE * SSAA_SCALE);
 }

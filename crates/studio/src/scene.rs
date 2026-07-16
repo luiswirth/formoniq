@@ -73,17 +73,16 @@ pub struct ScalarField {
 /// line-integral convolution rather than sampled arrow glyphs.
 ///
 /// A grade-1 (or, via the Hodge star, grade-$(n-1)$) form reduces to a genuine
-/// tangent *line* field. Its direction is a per-vertex unit ambient tangent
-/// vector, nodal-averaged across incident cells and interpolated by the
-/// rasterizer; its (unsigned) magnitude is the same per-vertex nodal recovery a
-/// [`ScalarField`] uses, and drives both the tint and the standing-wave
-/// amplitude. LIC is a continuous per-fragment texture, resolution-independent,
-/// so unlike an arrow quiver there is no sample lattice to choose.
+/// tangent *line* field, drawn as its integral curves: the mark is the traced
+/// streamlines of the true Whitney field, evenly spaced at a separation fixed
+/// to the object's own extent. Its (unsigned) nodal magnitude is the same
+/// per-vertex recovery a [`ScalarField`] uses, and tints the surface the curves
+/// are drawn on.
 ///
-/// The direction is static: $ker$ and $sharp$ are scale-invariant, so the
+/// The curves are static: $ker$ and $sharp$ are scale-invariant, so the
 /// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves the lines fixed and
 /// swings only the magnitude tint through zero. A single real eigenmode does
-/// not travel, so the LIC is never advected.
+/// not travel, so the curves are never advected.
 #[derive(Clone)]
 pub struct LineField {
   pub name: String,
@@ -96,17 +95,8 @@ pub struct LineField {
   /// viewer can reconstruct the *true* Whitney field $W c$ (via
   /// [`WhitneyInterpolant`]) rather than only the nodal average below. The
   /// streamline tracer integrates $((W c)|_"reduced")^sharp$ cell by cell; the
-  /// nodal `direction`/`magnitude` are the coarser readout the LIC and surface
-  /// tint use.
+  /// nodal `magnitude` below is the coarser readout the surface tint uses.
   pub cochain: Cochain,
-  /// Per-vertex unit ambient tangent direction (zero where the field
-  /// vanishes). Nodal-averaged across incident cells then normalized -- unlike
-  /// grade 0, a grade-1 field has no canonical value at a vertex, since only
-  /// the *tangential* part of a section is chart-independent there (the atlas's
-  /// own invariant), so incident cells can genuinely disagree on the full
-  /// vector; averaging is the same nodal recovery classical FEM postprocessing
-  /// uses for a piecewise, not globally, single-valued quantity.
-  pub direction: Vec<na::Vector3<f64>>,
   /// Per-vertex nodal magnitude $|V|_g$, the intrinsic chart-independent scalar
   /// averaged across incident cells: what tints the surface, times
   /// $cos(sqrt(lambda) t)$ per frame so the sign flips through zero.
@@ -539,12 +529,11 @@ impl Scene {
       }
       1 => {
         let interpolant = WhitneyInterpolant::new(cochain, topology);
-        let (direction, magnitude) = nodal_line_field(topology, coords, &interpolant);
+        let magnitude = nodal_line_magnitude(topology, coords, &interpolant);
         line_fields.push(LineField {
           name,
           grade: k,
           cochain: interpolant.cochain().clone(),
-          direction,
           magnitude,
           eigenvalue,
           dof_label,
@@ -572,16 +561,25 @@ pub(crate) fn reduced_form(form: MultiForm, metric: &RiemannianMetric) -> MultiF
   }
 }
 
-/// The nodal average over incident cells of the reduced grade-1 field, sharped
-/// and pushed forward into ambient coordinates: `direction` (normalized) and
-/// `magnitude` ($|V|_g$) per vertex. See [`LineField`] for why a nodal average.
-fn nodal_line_field(
+/// The nodal average over incident cells of the reduced grade-1 field's
+/// magnitude $|V|_g$, the intrinsic chart-independent scalar the surface is
+/// tinted by. Unlike grade 0, a grade-1 field has no canonical value at a
+/// vertex -- only the *tangential* part of a section is chart-independent there
+/// (the atlas's own invariant), so incident cells genuinely disagree, and
+/// averaging is the same nodal recovery classical FEM postprocessing uses for a
+/// piecewise, not globally, single-valued quantity.
+///
+/// The metric is what makes this well defined: $|V|_g$ is a scalar, so the
+/// average is of numbers, not of vectors in cell-local frames that no shared
+/// frame relates. The field's *direction* has no such nodal recovery worth
+/// keeping -- the streamline tracer reads the true Whitney field cell by cell
+/// instead.
+fn nodal_line_magnitude(
   topology: &Complex,
   coords: &MeshCoords,
   interpolant: &WhitneyInterpolant,
-) -> (Vec<na::Vector3<f64>>, Vec<f64>) {
+) -> Vec<f64> {
   let nvertices = topology.skeleton_raw(0).len();
-  let mut dir_sum = vec![na::Vector3::zeros(); nvertices];
   let mut mag_sum = vec![0.0; nvertices];
   let mut count = vec![0u32; nvertices];
   for cell in topology.cells().handle_iter() {
@@ -597,29 +595,15 @@ fn nodal_line_field(
       let point = MeshPoint::new(cell.idx(), weights.into());
       let local = reduced_form(interpolant.eval(&point), &metric).sharp(&metric);
       let ambient = coord_simplex.pushforward_vector(local.coeffs());
-      let vector = to_vec3(&ambient);
-      mag_sum[v] += vector.norm();
-      dir_sum[v] += vector;
+      mag_sum[v] += to_vec3(&ambient).norm();
       count[v] += 1;
     }
   }
-  let direction = dir_sum
-    .into_iter()
-    .zip(&count)
-    .map(|(d, &c)| {
-      if c > 0 {
-        d.try_normalize(0.0).unwrap_or_else(na::Vector3::zeros)
-      } else {
-        na::Vector3::zeros()
-      }
-    })
-    .collect();
-  let magnitude = mag_sum
+  mag_sum
     .into_iter()
     .zip(count)
     .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 })
-    .collect();
-  (direction, magnitude)
+    .collect()
 }
 
 /// The nodal average over incident cells of the reduced grade-0 field (the

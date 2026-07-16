@@ -5,7 +5,7 @@ use manifold::{
 };
 use wgpu::util::DeviceExt;
 
-use crate::{mesh3d, scene::LineField};
+use crate::mesh3d;
 
 /// Fraction of the local curvature radius (see [`vertex_curvature_radius`])
 /// allowed as peak normal displacement, mirroring `WAVE_AMPLITUDE_FRACTION`'s
@@ -24,12 +24,9 @@ pub struct Vertex {
   /// surface with.
   pub normal: [f32; 3],
   /// The colormap scalar: a `ScalarField`'s signed 0-form value, or a
-  /// `LineField`'s nodal magnitude tinting the surface underneath the LIC.
+  /// `LineField`'s nodal magnitude tinting the surface its streamlines are
+  /// drawn on.
   pub value: f32,
-  /// A `LineField`'s per-vertex unit ambient tangent direction, interpolated
-  /// across each triangle and projected to screen space by the G-buffer pass;
-  /// zero for a scalar field, which has no line to draw.
-  pub direction: [f32; 3],
   /// The per-vertex cap on normal displacement magnitude: a fraction of the
   /// local curvature radius (`f32::INFINITY` where curvature imposes no
   /// bound), clamping the shared global `wave.amplitude` down wherever it
@@ -61,11 +58,6 @@ impl Vertex {
         wgpu::VertexAttribute {
           offset: std::mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
           shader_location: 3,
-          format: wgpu::VertexFormat::Float32x3,
-        },
-        wgpu::VertexAttribute {
-          offset: std::mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
-          shader_location: 4,
           format: wgpu::VertexFormat::Float32,
         },
       ],
@@ -75,7 +67,7 @@ impl Vertex {
   /// The wireframe pipeline's two per-edge-instance endpoint buffers: the
   /// same attribute layout as [`Self::desc`], but stepped once per drawn
   /// *instance* (an edge) instead of per vertex, and at locations shifted by
-  /// five so both of an edge's endpoints reach the same vertex-shader
+  /// four so both of an edge's endpoints reach the same vertex-shader
   /// invocation at once -- what a single `step_mode: Vertex` buffer can never
   /// expose, since it only ever holds the current vertex, never a neighbor.
   /// The six vertices of that invocation (drawn non-indexed) fan out into the
@@ -93,27 +85,22 @@ impl Vertex {
       attributes: &[
         wgpu::VertexAttribute {
           offset: 0,
-          shader_location: 5,
+          shader_location: 4,
           format: wgpu::VertexFormat::Float32x3,
         },
         wgpu::VertexAttribute {
           offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
-          shader_location: 6,
+          shader_location: 5,
           format: wgpu::VertexFormat::Float32x3,
         },
         wgpu::VertexAttribute {
           offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
-          shader_location: 7,
+          shader_location: 6,
           format: wgpu::VertexFormat::Float32,
         },
         wgpu::VertexAttribute {
           offset: std::mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
-          shader_location: 8,
-          format: wgpu::VertexFormat::Float32x3,
-        },
-        wgpu::VertexAttribute {
-          offset: std::mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
-          shader_location: 9,
+          shader_location: 7,
           format: wgpu::VertexFormat::Float32,
         },
       ],
@@ -135,34 +122,17 @@ pub struct MeshBuffer {
 }
 
 impl MeshBuffer {
-  /// The mesh's own triangle surface, colored by a 0-form and carrying no line
-  /// direction: the scalar-field mark.
+  /// The mesh's own triangle surface, colored by a per-vertex scalar: a
+  /// `ScalarField`'s 0-form, or a `LineField`'s nodal magnitude. Both marks
+  /// draw the same surface -- what a line field adds is the streamline ribbons
+  /// over it, which are their own geometry, not a vertex attribute.
   pub fn new(
     device: &wgpu::Device,
     topology: &Complex,
     coords: &MeshCoords,
-    zero_form: &[f64],
+    values: &[f64],
   ) -> Self {
-    let (vertices, indices, edge_a, edge_b) = surface_geometry(topology, coords, zero_form, None);
-    Self::from_raw(device, &vertices, &indices, &edge_a, &edge_b)
-  }
-
-  /// A line field: the surface colored by its nodal `magnitude` (the scalar
-  /// readout of the field, the same role [`Self::new`]'s 0-form plays for a
-  /// genuine scalar field), each vertex additionally carrying the field's unit
-  /// tangent `direction`. The direction is what the G-buffer/LIC passes draw
-  /// the streamlines from; the surface itself is not normal-displaced -- unlike
-  /// a scalar eigenmode, the magnitude is a derived tint, not the solution of a
-  /// scalar wave equation, so a baked-in displacement would be a claim this
-  /// field never makes.
-  pub fn from_line_field(
-    device: &wgpu::Device,
-    topology: &Complex,
-    coords: &MeshCoords,
-    field: &LineField,
-  ) -> Self {
-    let (vertices, indices, edge_a, edge_b) =
-      surface_geometry(topology, coords, &field.magnitude, Some(&field.direction));
+    let (vertices, indices, edge_a, edge_b) = surface_geometry(topology, coords, values);
     Self::from_raw(device, &vertices, &indices, &edge_a, &edge_b)
   }
 
@@ -208,15 +178,13 @@ impl MeshBuffer {
 }
 
 /// The mesh's triangle surface as GPU vertices: one per mesh vertex, carrying
-/// the colormap `value`, the outward unit normal, and an optional per-vertex
-/// line `direction`. Returns the fill index list and the 1-skeleton edge
+/// the colormap `value` and the outward unit normal. Returns the fill index list and the 1-skeleton edge
 /// list, split into its two endpoint arrays (`edge_a[i]`/`edge_b[i]` are edge
 /// `i`'s two ends) for the wireframe pass's per-instance buffers.
 fn surface_geometry(
   topology: &Complex,
   coords: &MeshCoords,
   value: &[f64],
-  direction: Option<&[na::Vector3<f64>]>,
 ) -> (Vec<Vertex>, Vec<u32>, Vec<Vertex>, Vec<Vertex>) {
   assert_eq!(
     topology.dim(),
@@ -259,14 +227,12 @@ fn surface_geometry(
       0.0
     };
     let n = vertex_normals[i].normalize();
-    let d = direction.map_or(na::Vector3::zeros(), |dir| dir[i]);
     let max_displacement = (CURVATURE_SAFETY_FRACTION as f64 * curvature_radius[i]) as f32;
 
     vertices.push(Vertex {
       position: [x, y, z],
       normal: [n.x as f32, n.y as f32, n.z as f32],
       value: value as f32,
-      direction: [d.x as f32, d.y as f32, d.z as f32],
       max_displacement,
     });
   }
