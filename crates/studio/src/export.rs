@@ -4,7 +4,8 @@
 //! Nothing here is a second renderer or a second display. A scene becomes a
 //! mesh and field display through `display.rs`, exactly as `app.rs`
 //! does it, and the only thing this module supplies that the window does not is
-//! where the frame's time comes from: $t_k = k \/ "fps"$ instead of a clock. If
+//! where the frame's time comes from: the standing wave's own period, sampled
+//! at $t_k = k T \/ N$, instead of a clock. If
 //! a material were constructed here, the two callers could disagree about what
 //! a field looks like -- which is the whole reason the display layer is not in
 //! `app.rs`.
@@ -20,7 +21,7 @@ use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
 use crate::gallery::{MeshSource, View};
 use crate::render::{FrameView, GpuContext, Renderer};
 use crate::scene::Scene;
-use crate::ui::panel::Selection;
+use crate::ui::Selection;
 
 /// The texture format every export renders and encodes at.
 ///
@@ -30,19 +31,44 @@ use crate::ui::panel::Selection;
 /// is an sRGB container, so the read-back bytes are already what it wants.
 const EXPORT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
-/// The supersampling factor an export renders at.
+/// The supersampling factor an export renders at when its resolution leaves
+/// room for it.
 ///
 /// Higher than the window's [`crate::render::DEFAULT_SSAA_SCALE`] for the one
 /// reason the window is lower: an export is not bound by a frame-rate budget,
 /// so the only question is what the image should look like, and the answer to
 /// that does not vary per invocation. It is therefore a property of exporting,
 /// not a knob -- nobody asks for a worse still.
+const EXPORT_SSAA_SCALE_MAX: u32 = 4;
+
+/// The supersampled pixel count one export may allocate its scene pass at.
 ///
-/// The cost is quadratic: the scene pass allocates a target this many times the
-/// export resolution *per axis*, so a large enough `--size` will exceed GPU
-/// memory. The fix when that lands is to derive the factor from a pixel budget,
-/// not to hand the caller a lever and let them find the limit by crashing.
-const EXPORT_SSAA_SCALE: u32 = 4;
+/// The scene pass holds a color and a depth target at the supersampled
+/// resolution, 4 bytes per pixel each, so this budget is 8 bytes times the
+/// count: a little over half a gigabyte at the value below, which is what a
+/// 1080p export at the full [`EXPORT_SSAA_SCALE_MAX`] already costs. Above it
+/// the factor steps down rather than the export dying: the cost is quadratic in
+/// the factor, so a resolution high enough to exhaust a GPU is reachable by
+/// asking for one (a 4K frame at 4x is 132 megapixels), and it is the pixels
+/// that are wanted, not the samples per pixel -- a large export is oversampled
+/// by its own size.
+const EXPORT_SSAA_PIXEL_BUDGET: u64 = 64 << 20;
+
+/// The largest supersampling factor `size` fits inside
+/// [`EXPORT_SSAA_PIXEL_BUDGET`], never above [`EXPORT_SSAA_SCALE_MAX`] and
+/// never below 1 -- an export resolution so large that even a single sample per
+/// pixel exceeds the budget is the caller's own request, and is passed through
+/// rather than silently shrunk into a smaller image than was asked for.
+///
+/// Derived, not asked for: the factor follows from the size and the hardware's
+/// limits, both of which the code knows and the caller does not.
+fn export_ssaa_scale(size: (u32, u32)) -> u32 {
+  let pixels = u64::from(size.0.max(1)) * u64::from(size.1.max(1));
+  (1..=EXPORT_SSAA_SCALE_MAX)
+    .take_while(|&ssaa| pixels * u64::from(ssaa) * u64::from(ssaa) <= EXPORT_SSAA_PIXEL_BUDGET)
+    .last()
+    .unwrap_or(1)
+}
 
 /// What one export asks for: which scene, which field of it, and at what
 /// resolution and cadence.
@@ -219,7 +245,8 @@ impl Displayed {
 
     let extent = scene_extent(&scene) as f32;
     let mesh = MeshDisplay::build(&ctx.device, &scene);
-    let field = FieldDisplay::build(ctx, &mesh, &scene, selection, extent);
+    let (field, attributes) = FieldDisplay::build(ctx, &scene, selection, extent);
+    mesh.write_attributes(&ctx.queue, &attributes);
     let aspect = spec.size.0.max(1) as f32 / spec.size.1.max(1) as f32;
     let camera = default_camera(&scene, aspect);
     let omega = eigenvalue_of(&scene, selection).map(f64::sqrt);
@@ -291,7 +318,7 @@ fn eigenvalue_of(scene: &Scene, selection: Selection) -> Option<f64> {
 /// clip piped through `ffmpeg`.
 pub fn export(spec: &ExportSpec, path: &Path) -> Result<(), String> {
   let ctx = headless_context().ok_or("no GPU adapter available for a headless render")?;
-  let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, EXPORT_SSAA_SCALE);
+  let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, export_ssaa_scale(spec.size));
   let target = ExportTarget::new(&ctx, spec.size);
   let displayed = Displayed::build(&ctx, spec)?;
 
@@ -392,6 +419,42 @@ fn export_video(
 mod tests {
   use super::*;
 
+  /// The derived supersampling factor stays inside the budget it exists to
+  /// respect, at every resolution: it never allocates more than
+  /// [`EXPORT_SSAA_PIXEL_BUDGET`] unless one sample per pixel already does, it
+  /// never exceeds [`EXPORT_SSAA_SCALE_MAX`], and it is never 0 (which would
+  /// allocate an empty target). Swept over the range a caller reaches, from a
+  /// thumbnail to well past 8K, rather than the one size the default happens to
+  /// be.
+  #[test]
+  fn the_export_supersampling_factor_respects_its_budget() {
+    let sizes = [
+      (1, 1),
+      (64, 64),
+      (640, 480),
+      (1920, 1080),
+      (3840, 2160),
+      (7680, 4320),
+      (30_000, 30_000),
+    ];
+    for size in sizes {
+      let ssaa = export_ssaa_scale(size);
+      assert!(
+        (1..=EXPORT_SSAA_SCALE_MAX).contains(&ssaa),
+        "{size:?}: {ssaa}"
+      );
+      let pixels = u64::from(size.0) * u64::from(size.1);
+      let allocated = pixels * u64::from(ssaa) * u64::from(ssaa);
+      assert!(
+        allocated <= EXPORT_SSAA_PIXEL_BUDGET || ssaa == 1,
+        "{size:?}: {ssaa}x allocates {allocated} px, over budget while it could step down"
+      );
+    }
+    // The factor only falls as the resolution rises: a bigger export never
+    // supersamples harder than a smaller one.
+    assert!(export_ssaa_scale((640, 480)) >= export_ssaa_scale((3840, 2160)));
+  }
+
   /// A headless render of a known view produces an image that is not a single
   /// flat color -- i.e. the frame graph actually drew the scene, rather than
   /// clearing and presenting the background.
@@ -430,7 +493,7 @@ mod tests {
        pipeline is not what this test exercises"
     );
 
-    let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, EXPORT_SSAA_SCALE);
+    let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, export_ssaa_scale(spec.size));
     let target = ExportTarget::new(&ctx, spec.size);
     let displayed = Displayed::build(&ctx, &spec).expect("the triforce scene builds");
 

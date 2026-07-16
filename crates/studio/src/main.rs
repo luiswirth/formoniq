@@ -13,7 +13,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 use formoniq_studio::export::{export, ExportSpec};
-use formoniq_studio::gallery::{MeshSource, View};
+use formoniq_studio::gallery::{BuiltinMesh, MeshSource, View};
 
 #[derive(Parser)]
 #[command(about = "A viewer for FEEC solutions on simplicial manifolds")]
@@ -32,8 +32,9 @@ enum Command {
     /// Which scene: a mesh eigenmode grade, or one of the Whitney galleries.
     #[arg(long, value_parser = parse_view, default_value = "grade0")]
     view: View,
-    /// Which mesh to build a `grade<k>` view on. Ignored by the Whitney views,
-    /// which carry their own fixed mesh.
+    /// Which mesh to build a `grade<k>` view on: `sphere`, `grid`, or a
+    /// built-in by name. Ignored by the Whitney views, which carry their own
+    /// fixed mesh.
     #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
     mesh: MeshSource,
     /// Which field of the view, in the picker's order. Defaults to the first,
@@ -43,9 +44,12 @@ enum Command {
     /// Export resolution, `WxH`. Independent of any window.
     #[arg(long, value_parser = parse_size, default_value = "1920x1080")]
     size: (u32, u32),
-    /// Frames to render (mp4). Defaults to exactly one period of the standing
-    /// wave, $2 pi \/ omega$, which is what makes the clip loop seamlessly; a
-    /// field that is not an eigenmode has no period and renders one still.
+    /// How densely to sample the standing wave's period (mp4). The clip is
+    /// exactly one period at any count -- that is what makes it loop seamlessly
+    /// -- so this only chooses how many frames that period is cut into.
+    /// Defaults to the count that makes playback at `--fps` run at wall-clock
+    /// speed. A field that is not an eigenmode has no period and renders one
+    /// still.
     #[arg(long)]
     frames: Option<u32>,
     #[arg(long, default_value_t = 60)]
@@ -68,11 +72,20 @@ fn parse_view(s: &str) -> Result<View, String> {
   }
 }
 
+/// The mesh names an export accepts: the two generated families, and every
+/// embedded built-in by its own name. A mesh the user loaded into the viewer is
+/// not among them -- `MeshSource::Custom` is not regenerable from its
+/// descriptor, so there is nothing here to name it by.
 fn parse_mesh(s: &str) -> Result<MeshSource, String> {
   match s {
     "sphere" => Ok(MeshSource::START),
     "grid" => Ok(MeshSource::Grid { cells_axis: 16 }),
-    _ => Err(format!("expected `sphere` or `grid`, got `{s}`")),
+    _ => BuiltinMesh::from_name(s)
+      .map(MeshSource::Builtin)
+      .ok_or_else(|| {
+        let builtins = BuiltinMesh::ALL.map(BuiltinMesh::name).join("`, `");
+        format!("expected `sphere`, `grid`, `{builtins}`, got `{s}`")
+      }),
   }
 }
 
