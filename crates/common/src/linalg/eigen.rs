@@ -1,46 +1,68 @@
 use super::faer::FaerLu;
 use super::nalgebra::{CooMatrix, CsrMatrix, Matrix, Vector};
 
+use std::fmt;
+
+/// Why [`sparse_shift_invert_eigen`] could not produce the wanted eigenpairs.
+///
+/// Not every failure is a bug in the caller's pencil: exceeding the iteration
+/// budget says only that *this* budget was too small, which an interactive
+/// caller can report and move on from.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EigenError {
+  /// $B$'s positive part is trivial, so the pencil has no finite eigenvalue.
+  NoFiniteEigenvalue,
+  /// $A - "shift" B$ stayed singular, or too ill-conditioned to solve with,
+  /// under every perturbation of the shift tried.
+  SingularPencil { shift: f64 },
+  /// The restart budget ran out with the worst wanted pair still at
+  /// `residual`.
+  NotConverged { shift: f64, residual: f64 },
+}
+impl fmt::Display for EigenError {
+  fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    match self {
+      Self::NoFiniteEigenvalue => write!(f, "B has no positive-seminorm direction"),
+      Self::SingularPencil { shift } => write!(
+        f,
+        "A - {shift}*B is singular under every shift perturbation"
+      ),
+      Self::NotConverged { shift, residual } => {
+        write!(
+          f,
+          "no convergence near shift {shift}; worst residual {residual:e}"
+        )
+      }
+    }
+  }
+}
+impl std::error::Error for EigenError {}
+
 /// The `k` eigenpairs of $A x = lambda B x$ ($A$, $B$ symmetric, $B$ PSD,
 /// possibly singular) nearest `shift`, ascending by eigenvalue, with
-/// $B$-orthonormal eigenvectors.
+/// $B$-orthonormal eigenvectors. Fewer than `k` when $B$'s positive part
+/// cannot support `k` independent directions.
 ///
 /// Spectral-transformation Lanczos (Ericsson-Ruhe): the wanted eigenpairs of
-/// the original pencil are the extremal eigenpairs of the shift-inverted
-/// operator $T = (A - "shift" B)^(-1) B$, which is self-adjoint in the
-/// $B$-seminorm $angle.l x, y angle.r_B = x^top B y$ even though $B$ may be
-/// singular — the exact structure that makes the mixed Hodge-Laplace pencil's
-/// rank-deficient mass block harmless: null directions of $B$ carry zero
-/// seminorm and are never mistaken for an eigenvector. Block-started, with
-/// block size $k$, so a degenerate eigenvalue of multiplicity up to $k$ — the
-/// harmonic space at `shift = 0` is exactly this case — is resolved in full,
-/// not collapsed onto a single direction the way plain single-vector Lanczos
-/// would. Thick-restarted once the Krylov dimension hits a cap, by simply
-/// re-seeding a fresh expansion from the best Ritz vectors found so far:
-/// self-adjointness of $T$ makes this warm-started restart rediscover the
-/// same projected operator (and fresh residual directions) without a
-/// hand-derived arrowhead correction. Full reorthogonalization throughout,
-/// since the wanted eigenvalues cluster near the shift by construction.
+/// the pencil are the extremal eigenpairs of $T = (A - "shift" B)^(-1) B$,
+/// which is self-adjoint in the $B$-seminorm even for singular $B$ — the
+/// structure that makes the mixed Hodge-Laplace pencil's rank-deficient mass
+/// block harmless, since null directions of $B$ carry zero seminorm and are
+/// never mistaken for an eigenvector. Block-started with block size $k$, so an
+/// eigenvalue of multiplicity up to $k$ — the harmonic space at `shift = 0` —
+/// is resolved in full rather than collapsed onto one direction. Restarted
+/// from the best Ritz vectors on hitting the Krylov cap, with full
+/// reorthogonalization throughout.
 ///
-/// Returned eigenvectors are $B$-seminorm-orthonormal directly whenever $B$
-/// is (locally) nonsingular there; on a singular $B$, one more application of
-/// $T$ recovers the correct null-space component before normalizing — the
-/// null space is invisible to every $B$-inner-product the Lanczos recurrence
-/// computes, so a raw Ritz combination leaves it arbitrary, and $T$'s own
-/// action (via $M$'s off-diagonal coupling) is what fixes it.
-///
-/// Panics if $A - "shift" B$ stays singular (or so ill-conditioned that a
-/// solve is numerically meaningless) after retrying with a perturbed shift,
-/// or if convergence is not reached within the restart budget — diagnostic
-/// panics matching this module's other primitives ([`FaerLu`],
-/// `self_adjoint_eigen`), not a `Result`, since no caller here would
-/// meaningfully recover.
+/// A raw Ritz vector's $ker B$ component is arbitrary, the $B$-inner products
+/// the recurrence computes being blind to it. One more application of $T$
+/// recovers it through $M$'s off-diagonal coupling.
 pub fn sparse_shift_invert_eigen(
   a: &CsrMatrix,
   b: &CsrMatrix,
   shift: f64,
   k: usize,
-) -> (Vector, Matrix) {
+) -> Result<(Vector, Matrix), EigenError> {
   let n = a.nrows();
   assert_eq!(a.nrows(), a.ncols());
   assert_eq!(b.nrows(), n);
@@ -48,38 +70,37 @@ pub fn sparse_shift_invert_eigen(
 
   let k = k.min(n);
   if k == 0 {
-    return (Vector::zeros(0), Matrix::zeros(n, 0));
+    return Ok((Vector::zeros(0), Matrix::zeros(n, 0)));
   }
 
   let a_norm = inf_norm(a);
   let b_norm = inf_norm(b);
-  let (lu, used_shift) = factor_with_retry(a, b, shift, a_norm);
+  let (lu, used_shift) = factor_with_retry(a, b, shift, a_norm)?;
 
   let target_dim = (4 * k).max(2 * k + 20).min(n);
-  let (mut basis, mut bbasis) = seed_block(n, k, b);
+  let (mut basis, mut bbasis) = seed_block(n, k, b)?;
 
-  // `proj` needs headroom beyond `target_dim`: the basis transiently
-  // overhangs it by a block's worth of still-unexpanded leftover vectors
-  // (the steady-state queue a block-seeded expansion carries), and every
-  // restart reseeds with at most `2k` vectors — a fixed bound independent of
-  // how many restart cycles have run.
+  // The basis overhangs `target_dim` by a block's worth of still-unexpanded
+  // leftovers, and a restart reseeds with at most `2k` — a bound independent
+  // of how many cycles have run.
   let proj_cap = (target_dim + 2 * k).min(n);
   let mut proj = Matrix::zeros(proj_cap, proj_cap);
   let mut dim = 0usize;
 
-  // Tight enough for the law tests' oracle comparisons, loose enough to be
-  // reachable on an indefinite mixed-KKT pencil: driving for one more order
-  // of magnitude there just cycles restarts without further improvement
-  // until rounding accumulates into instability.
+  // The backward error accepted per pair: the returned `x` is exact for a
+  // pencil perturbed by this much relative to $||A||$ and $||B||$. The floor
+  // is set by the shift-invert solve, accurate to $kappa(A - sigma B)
+  // epsilon$; on the mixed KKT pencil that conditioning grows like $h^(-2)$,
+  // so a tighter demand sits below the achievable backward error and only
+  // spins restarts.
   const RESIDUAL_TOL: f64 = 1e-9;
   const MAX_RESTART_CYCLES: usize = 100;
 
+  let mut worst = f64::INFINITY;
   for _cycle in 0..=MAX_RESTART_CYCLES {
-    // Breakdown on one vector (no residual left to extend the basis with)
-    // does not mean the whole process is exhausted: a block-seeded or
-    // restarted basis has other, still-unexpanded siblings whose own
-    // diagonal/cross terms are independently valid and still need filling.
-    // Only running out of existing vectors to expand is true exhaustion.
+    // Breakdown on one vector leaves the block's other, still-unexpanded
+    // siblings independently valid; only running out of vectors to expand is
+    // true exhaustion of the reachable invariant subspace.
     while dim < target_dim && dim < basis.len() {
       expand(&mut basis, &mut bbasis, &mut proj, dim, &lu, b);
       dim += 1;
@@ -94,54 +115,45 @@ pub fn sparse_shift_invert_eigen(
     order.sort_by(|&i, &j| theta[j].abs().total_cmp(&theta[i].abs()));
 
     let take = k.min(dim);
-    // The raw Ritz combination is already a good eigenvector whenever B is
-    // (locally) nonsingular. But the B-seminorm-orthonormal basis only ever
-    // sees a vector's B-inner products, so on a singular B its null-space
-    // component is arbitrary — exactly the sigma-component of a mixed
-    // Hodge-Laplace eigenvector. Fix it up only when needed, with one more
-    // application of T = M^(-1) B: T's own action fills in the null
-    // component correctly via M's off-diagonal coupling. Refining
-    // unconditionally would be wrong here too — within a degenerate cluster
-    // (already well resolved) it collapses distinct Ritz directions onto each
-    // other, since T acts as a near-identical scalar on the whole cluster.
-    let ritz = |idx: usize| -> (f64, Vector) {
-      let lambda = used_shift + 1.0 / theta[idx];
-      let y = combine(&basis, |l| s[(l, idx)], dim);
-      let raw_res = residual(a, b, lambda, &y, a_norm, b_norm);
-      if raw_res <= RESIDUAL_TOL {
-        return (lambda, y);
-      }
-      let mut x = lu.solve(&(b * &y));
-      let bnorm = (x.dot(&(b * &x))).sqrt();
-      if bnorm > 0.0 {
-        x /= bnorm;
-      }
-      (lambda, x)
+    let pairs: Vec<(f64, Vector, f64)> = {
+      let ritz = |idx: usize| -> (f64, Vector, f64) {
+        let lambda = used_shift + 1.0 / theta[idx];
+        let y = combine(&basis, |l| s[(l, idx)], dim);
+        let raw_res = residual(a, b, lambda, &y, a_norm, b_norm);
+        // Refine only when the raw pair misses: on a nonsingular $B$ it is
+        // already the answer, and one $T$-application on a converged pair only
+        // reintroduces the solve's own error.
+        if raw_res <= RESIDUAL_TOL {
+          return (lambda, y, raw_res);
+        }
+        let mut x = lu.solve(&(b * &y));
+        let bnorm = x.dot(&(b * &x)).sqrt();
+        if bnorm > 0.0 {
+          x /= bnorm;
+        }
+        let res = residual(a, b, lambda, &x, a_norm, b_norm);
+        (lambda, x, res)
+      };
+      order[..take].iter().map(|&i| ritz(i)).collect()
     };
 
-    let converged = order[..take].iter().all(|&i| {
-      let (lambda, x) = ritz(i);
-      residual(a, b, lambda, &x, a_norm, b_norm) <= RESIDUAL_TOL
-    });
+    worst = pairs.iter().map(|p| p.2).fold(0.0_f64, f64::max);
 
-    // Exhaustion means the Krylov space reachable from this starting block is
-    // provably complete: there is nothing further the algorithm could do, so
-    // the Ritz pairs in hand are returned regardless of the residual check —
-    // total on the degenerate boundary rather than looping forever.
-    if converged || exhausted {
-      let mut pairs: Vec<(f64, Vector)> = order[..take].iter().map(|&i| ritz(i)).collect();
+    // Exhaustion means the Krylov space reachable from this block is complete:
+    // nothing further is available, so return what is in hand rather than
+    // looping — total on the degenerate boundary.
+    if worst <= RESIDUAL_TOL || exhausted {
+      let mut pairs = pairs;
       pairs.sort_by(|p, q| p.0.total_cmp(&q.0));
       let eigenvals = Vector::from_iterator(pairs.len(), pairs.iter().map(|p| p.0));
       let eigenvecs = Matrix::from_fn(n, pairs.len(), |i, j| pairs[j].1[i]);
-      return (eigenvals, eigenvecs);
+      return Ok((eigenvals, eigenvecs));
     }
 
-    // Thick restart: warm-start the next cycle from just the best Ritz
-    // vectors found so far, and let the same expansion loop rediscover the
-    // projected operator (and fresh residual directions) from scratch. Not
-    // carrying the old leftover residual block forward keeps the basis's
-    // transient overhang past `dim` bounded by a fixed multiple of `k` across
-    // arbitrarily many restart cycles, rather than growing with each one.
+    // Restart from the best Ritz vectors alone, letting the same expansion
+    // loop rediscover the projected operator and fresh residual directions.
+    // Dropping the old leftovers is what keeps the basis's overhang past `dim`
+    // bounded across arbitrarily many cycles.
     let keep = (2 * k).min(target_dim.saturating_sub(1)).max(1);
 
     let mut new_basis = Vec::with_capacity(keep);
@@ -157,19 +169,17 @@ pub fn sparse_shift_invert_eigen(
     dim = 0;
   }
 
-  panic!(
-    "sparse_shift_invert_eigen: exceeded {MAX_RESTART_CYCLES} restart cycles \
-     converging {k} eigenpair(s) near shift {shift}"
-  );
+  Err(EigenError::NotConverged {
+    shift,
+    residual: worst,
+  })
 }
 
-/// Applies $T = M^(-1) B$ to `basis[idx]`, reorthogonalizes against every
-/// vector in `basis` so far (not just up to `idx`: a block-seeded or
-/// restarted basis has siblings past `idx` still awaiting their own
-/// expansion), and appends the $B$-normalized residual. Fills row/column
-/// `idx` of `proj` unconditionally; returns `None` (breakdown, no vector
-/// appended) when the residual's $B$-seminorm signals the reachable
-/// invariant subspace is exhausted.
+/// Applies $T = M^(-1) B$ to `basis[idx]`, reorthogonalizes against the whole
+/// basis (not just up to `idx`: siblings past it still await their own
+/// expansion), fills row/column `idx` of `proj`, and appends the
+/// $B$-normalized residual — unless its $B$-seminorm has broken down, in which
+/// case `proj` is still complete for `idx` and nothing is appended.
 fn expand(
   basis: &mut Vec<Vector>,
   bbasis: &mut Vec<Vector>,
@@ -177,7 +187,7 @@ fn expand(
   idx: usize,
   lu: &FaerLu,
   b: &CsrMatrix,
-) -> Option<f64> {
+) {
   let mut w = lu.solve(&bbasis[idx]);
 
   let mut h = vec![0.0; basis.len()];
@@ -199,19 +209,22 @@ fn expand(
   let beta_sq = w.dot(&bw);
   const BREAKDOWN_TOL_SQ: f64 = 1e-20;
   if beta_sq <= BREAKDOWN_TOL_SQ {
-    return None;
+    return;
   }
   let beta = beta_sq.sqrt();
   basis.push(&w / beta);
   bbasis.push(&bw / beta);
-  Some(beta)
 }
 
 /// `bs` mutually $B$-orthonormal deterministic pseudo-random seed vectors
-/// (fewer, if $B$'s positive part cannot support `bs` independent
-/// directions): the starting block whose width sets the maximum eigenvalue
-/// multiplicity the solve can resolve in one pass.
-fn seed_block(n: usize, bs: usize, b: &CsrMatrix) -> (Vec<Vector>, Vec<Vector>) {
+/// (fewer, if $B$'s positive part cannot support `bs` independent directions):
+/// the starting block, whose width is the largest eigenvalue multiplicity the
+/// solve can resolve in one pass.
+fn seed_block(
+  n: usize,
+  bs: usize,
+  b: &CsrMatrix,
+) -> Result<(Vec<Vector>, Vec<Vector>), EigenError> {
   let mut basis = Vec::with_capacity(bs);
   let mut bbasis = Vec::with_capacity(bs);
   let mut seed = 0u64;
@@ -233,16 +246,14 @@ fn seed_block(n: usize, bs: usize, b: &CsrMatrix) -> (Vec<Vector>, Vec<Vector>) 
       bbasis.push(&bv / norm);
     }
   }
-  assert!(
-    !basis.is_empty(),
-    "sparse_shift_invert_eigen: B has no reachable positive-seminorm direction; \
-     the pencil has no finite eigenvalue to seek"
-  );
-  (basis, bbasis)
+  if basis.is_empty() {
+    return Err(EigenError::NoFiniteEigenvalue);
+  }
+  Ok((basis, bbasis))
 }
 
-/// A deterministic splitmix64-style fill, so the solve is reproducible
-/// without pulling in a `rand` dependency for this one internal use.
+/// A deterministic splitmix64-style fill, so the solve is reproducible without
+/// pulling in a `rand` dependency for this one internal use.
 fn pseudo_random(seed: u64, index: u64) -> f64 {
   let mut z = seed
     .wrapping_mul(0x9E37_79B9_7F4A_7C15)
@@ -262,6 +273,8 @@ fn combine(vecs: &[Vector], coeff: impl Fn(usize) -> f64, dim: usize) -> Vector 
   out
 }
 
+/// The backward error of the pair $(lambda, x)$: the relative size of the
+/// smallest perturbation of $(A, B)$ making it exact.
 fn residual(
   a: &CsrMatrix,
   b: &CsrMatrix,
@@ -290,41 +303,55 @@ fn inf_norm(m: &CsrMatrix) -> f64 {
   row_sums.into_iter().fold(0.0_f64, f64::max)
 }
 
-/// $M = A - "shift" B$, factored via sparse LU. Retries with a
-/// scale-perturbed shift on singular factorization — generic only when
-/// `shift` lands exactly on an eigenvalue, which `shift = 0` does whenever
-/// the pencil has a harmonic space.
-fn factor_with_retry(a: &CsrMatrix, b: &CsrMatrix, shift: f64, a_norm: f64) -> (FaerLu, f64) {
+/// The shift `attempt` tries: the requested one first, then a geometrically
+/// growing perturbation alternating in sign, so the search stays centred on
+/// the target instead of drifting off one side.
+fn perturbed_shift(shift: f64, eps0: f64, attempt: usize) -> f64 {
+  if attempt == 0 {
+    return shift;
+  }
+  let step = eps0 * 2f64.powi(((attempt - 1) / 2) as i32);
+  if attempt % 2 == 1 {
+    shift + step
+  } else {
+    shift - step
+  }
+}
+
+/// $M = A - "shift" B$, factored via sparse LU. Retries with a perturbed shift
+/// on a singular factorization — generic only when `shift` lands exactly on an
+/// eigenvalue, which `shift = 0` does whenever the pencil has a harmonic
+/// space.
+fn factor_with_retry(
+  a: &CsrMatrix,
+  b: &CsrMatrix,
+  shift: f64,
+  a_norm: f64,
+) -> Result<(FaerLu, f64), EigenError> {
   const MAX_ATTEMPTS: usize = 16;
   let eps0 = f64::EPSILON.sqrt() * a_norm.max(1.0);
-  let mut current_shift = shift;
   for attempt in 0..MAX_ATTEMPTS {
+    let current_shift = perturbed_shift(shift, eps0, attempt);
     let m = shifted_matrix(a, b, current_shift);
     if let Some(lu) = FaerLu::try_new(m.clone()) {
-      // A merely non-singular-in-exact-arithmetic M can still be
-      // catastrophically ill-conditioned in floating point — `shift`
-      // landing so close to an eigenvalue that `sp_lu` "succeeds" but
+      // A shift landing near an eigenvalue leaves an M that factors but
       // amplifies noise into the near-null direction. The forward residual
-      // `M x - rhs` stays small even then (M nearly annihilates that
-      // direction), so it can't see the problem; round-tripping a probe
-      // vector through solve and checking it comes back unchanged can.
+      // cannot see this (M nearly annihilates that direction); a round trip
+      // can, recovering a probe to about $kappa(M) epsilon$ — so this rejects
+      // $kappa(M) gt.tilde 10^10$, past which the solve's error swamps the
+      // eigenvector it is meant to produce.
       let probe = Vector::from_iterator(
         m.nrows(),
         (0..m.nrows()).map(|i| pseudo_random(!0, i as u64)),
       );
       let rhs = &m * &probe;
       let resolved = lu.solve(&rhs);
-      let stable = (&resolved - &probe).norm() <= 1e-6 * probe.norm().max(1.0);
-      if stable {
-        return (lu, current_shift);
+      if (&resolved - &probe).norm() <= 1e-6 * probe.norm().max(1.0) {
+        return Ok((lu, current_shift));
       }
     }
-    current_shift = shift + eps0 * 2f64.powi(attempt as i32);
   }
-  panic!(
-    "sparse_shift_invert_eigen: A - shift*B remained singular after \
-     {MAX_ATTEMPTS} perturbations of shift {shift}"
-  );
+  Err(EigenError::SingularPencil { shift })
 }
 
 fn shifted_matrix(a: &CsrMatrix, b: &CsrMatrix, shift: f64) -> CsrMatrix {
@@ -371,7 +398,7 @@ mod test {
     let b = symmetric(n, |i, j| if i == j { n as f64 } else { 0.3 });
 
     for nev in 1..=n {
-      let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, nev);
+      let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, nev).unwrap();
       for k in 0..vals.len() {
         let x = vecs.column(k).into_owned();
         let residual = (&a * &x - vals[k] * (&b * &x)).norm();
@@ -392,7 +419,7 @@ mod test {
     oracle.sort_by(|x, y| x.abs().total_cmp(&y.abs()));
 
     for nev in 1..=n {
-      let (vals, _) = sparse_shift_invert_eigen(&csr(&a), &csr(&id), 0.0, nev);
+      let (vals, _) = sparse_shift_invert_eigen(&csr(&a), &csr(&id), 0.0, nev).unwrap();
       let mut got: Vec<f64> = vals.iter().copied().collect();
       let mut want = oracle[..nev].to_vec();
       got.sort_by(f64::total_cmp);
@@ -410,7 +437,7 @@ mod test {
     let a = symmetric(n, |i, j| if i == j { 2.0 * n as f64 } else { 0.5 });
     let b = symmetric(n, |i, j| if i == j { n as f64 } else { 0.3 });
 
-    let (_, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, n);
+    let (_, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, n).unwrap();
     for k in 0..vecs.ncols() {
       for l in 0..vecs.ncols() {
         let vk = vecs.column(k).into_owned();
@@ -432,7 +459,7 @@ mod test {
     // PSD but rank-deficient: the last coordinate carries no mass.
     let b = Matrix::from_fn(n, n, |i, j| if i == j && i + 1 < n { 1.0 } else { 0.0 });
 
-    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.1, n - 1);
+    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.1, n - 1).unwrap();
     assert_eq!(vals.len(), n - 1);
     for k in 0..vals.len() {
       assert!(vals[k].is_finite());
@@ -448,7 +475,7 @@ mod test {
   fn solves_the_scalar_pencil() {
     let a = Matrix::from_element(1, 1, 3.0);
     let b = Matrix::from_element(1, 1, 4.0);
-    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, 3);
+    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, 3).unwrap();
     assert_eq!(vals.len(), 1);
     assert!((vals[0] - 3.0 / 4.0).abs() < 1e-9);
     let x: Vector = vecs.column(0).into_owned();
@@ -458,9 +485,21 @@ mod test {
     );
     assert!((&a * &x - vals[0] * (&b * &x)).norm() < 1e-9);
 
-    let (vals0, vecs0) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, 0);
+    let (vals0, vecs0) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, 0).unwrap();
     assert_eq!(vals0.len(), 0);
     assert_eq!(vecs0.ncols(), 0);
+  }
+
+  /// A pencil with no finite eigenvalue at all ($B = 0$) is reported, not
+  /// panicked on.
+  #[test]
+  fn reports_a_pencil_without_finite_eigenvalues() {
+    let a = Matrix::identity(4, 4);
+    let b = Matrix::zeros(4, 4);
+    assert_eq!(
+      sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, 2),
+      Err(super::EigenError::NoFiniteEigenvalue)
+    );
   }
 
   /// A degenerate cluster of multiplicity `m` sitting exactly at the shift —
@@ -472,9 +511,8 @@ mod test {
     let m = 3;
     let rest = 4;
     let n = m + rest;
-    // B = I. A has an m-fold zero eigenvalue (the first m basis vectors) and
-    // `rest` nonzero eigenvalues elsewhere, mixed by a fixed orthonormal-ish
-    // change of basis so the cluster isn't axis-aligned with the seed.
+    // B = I. A has an m-fold zero eigenvalue and `rest` nonzero ones, mixed by
+    // a fixed change of basis so the cluster isn't axis-aligned with the seed.
     let b = Matrix::identity(n, n);
     let diag = Matrix::from_fn(n, n, |i, j| {
       if i != j || i < m {
@@ -483,14 +521,12 @@ mod test {
         (i - m + 1) as f64
       }
     });
-    // A small fixed rotation mixing coordinates, so the zero-eigenspace is
-    // not simply the first m standard basis vectors.
     let rot = Matrix::from_fn(n, n, |i, j| ((i * 5 + j * 3 + 1) % 7) as f64 - 3.0);
     let rot = rot.clone() + rot.transpose() + Matrix::identity(n, n) * (2.0 * n as f64);
     let a = &rot * &diag * &rot.transpose();
     let a = (&a + a.transpose()) * 0.5;
 
-    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, m);
+    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, m).unwrap();
     assert_eq!(vals.len(), m);
     for &v in vals.iter() {
       assert!(v.abs() < 1e-6, "expected a near-zero eigenvalue, got {v}");
@@ -500,9 +536,8 @@ mod test {
       let residual = (&a * &x - vals[k] * &x).norm();
       assert!(residual < 1e-6, "k={k} residual={residual:e}");
     }
-    // The m recovered eigenvectors are linearly independent (B-orthonormal),
-    // so together they span the whole zero-eigenspace rather than repeating
-    // one direction.
+    // The m recovered eigenvectors are B-orthonormal, hence independent, hence
+    // span the whole zero-eigenspace rather than repeating one direction.
     let gram = vecs.transpose() * &vecs;
     let dev = (&gram - Matrix::identity(m, m)).norm();
     assert!(
@@ -535,7 +570,7 @@ mod test {
     }
     let b = CsrMatrix::from(&ident);
 
-    let (vals, vecs) = sparse_shift_invert_eigen(&a, &b, 0.0, nev);
+    let (vals, vecs) = sparse_shift_invert_eigen(&a, &b, 0.0, nev).unwrap();
     assert_eq!(vals.len(), nev);
     for k in 0..nev {
       let x = vecs.column(k).into_owned();

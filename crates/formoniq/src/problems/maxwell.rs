@@ -48,6 +48,7 @@
 use crate::whitney_complex::WhitneyComplex;
 
 use common::linalg::{
+  eigen::{sparse_shift_invert_eigen, EigenError},
   faer::FaerCholesky,
   nalgebra::{bilinear_form_sparse, quadratic_form_sparse, CsrMatrix, Vector},
 };
@@ -399,18 +400,15 @@ pub fn solve_maxwell_curl_curl(
 /// extended by zero from the relative complex onto the full mesh.
 ///
 /// The frequency-domain counterpart of the time-domain solvers above, built
-/// from the very same operators. Solved by [`sparse_shift_invert_eigen`], the
-/// eigenvalues nearest $0$ so as to capture the static zero modes together
-/// with the lowest resonant frequencies.
-///
-/// [`sparse_shift_invert_eigen`]: common::linalg::eigen::sparse_shift_invert_eigen
+/// from the very same operators. Solved by [`sparse_shift_invert_eigen`] for
+/// the eigenvalues nearest $0$. $ker K$ contains every discrete gradient
+/// field, so `nmodes` must exceed its dimension before a resonance appears
+/// among the modes returned.
 pub fn solve_maxwell_cavity_modes(
   fes: WhitneyComplex,
   medium: Medium,
   nmodes: usize,
-) -> (Vector, Vec<Cochain>) {
-  use common::linalg::eigen::sparse_shift_invert_eigen;
-
+) -> Result<(Vector, Vec<Cochain>), EigenError> {
   let ops = MaxwellOperators::new(&fes, medium);
   let relative = fes.relative();
   let incl = relative.inclusion(1);
@@ -418,14 +416,14 @@ pub fn solve_maxwell_cavity_modes(
   let stiffness_rel = incl.transpose() * &ops.stiffness() * &incl;
   let mass_rel = incl.transpose() * &ops.mass_e * &incl;
 
-  let (eigenvals, eigenvecs) = sparse_shift_invert_eigen(&stiffness_rel, &mass_rel, 0.0, nmodes);
+  let (eigenvals, eigenvecs) = sparse_shift_invert_eigen(&stiffness_rel, &mass_rel, 0.0, nmodes)?;
 
   let modes = eigenvecs
     .column_iter()
     .map(|c| Cochain::new(1, &incl * c.into_owned()))
     .collect();
 
-  (eigenvals, modes)
+  Ok((eigenvals, modes))
 }
 
 #[cfg(test)]
