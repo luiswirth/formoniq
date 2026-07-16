@@ -137,11 +137,12 @@ impl Scene {
   /// the given geometry, filed into `fields` or `line_fields` through the
   /// same [`Self::field`] dispatch a raw Whitney basis function goes
   /// through: an eigenmode and a one-hot cochain differ only in where the
-  /// cochain comes from (a dense eigensolve vs. a Kronecker delta), not in
+  /// cochain comes from (an eigensolve vs. a Kronecker delta), not in
   /// how it is reconstructed or displayed.
   ///
-  /// The eigensolve is dense ($O(n^3)$ in the DOF count), so mesh resolution
-  /// controls both fidelity and cost.
+  /// A failed eigensolve contributes no fields and is reported on stderr: an
+  /// iteration budget too small for one mesh is not a reason to take the
+  /// viewer down.
   fn eigenmode_fields(
     topology: &Complex,
     coords: &MeshCoords,
@@ -155,8 +156,14 @@ impl Scene {
     };
 
     let metric = coords.to_edge_lengths(topology);
-    let (eigenvals, _, eigenfuncs) =
-      solve_hodge_laplace_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
+    let solved = solve_hodge_laplace_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
+    let (eigenvals, _, eigenfuncs) = match solved {
+      Ok(solved) => solved,
+      Err(err) => {
+        eprintln!("grade {grade} eigensolve failed: {err}");
+        return;
+      }
+    };
 
     for (i, (&lambda, col)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate() {
       let name = format!("mode {i} (grade {grade}, lambda = {lambda:.2})");
@@ -221,8 +228,8 @@ impl Scene {
   }
 
   /// The Hodge-Laplace eigenmodes of a *single* grade on a shared surface
-  /// mesh: the fields one grade's (dense, $O(n^3)$) eigensolve contributes,
-  /// split by their render mark. The unit the gallery computes lazily and
+  /// mesh: the fields one grade's eigensolve contributes, split by their
+  /// render mark. The unit the gallery computes lazily and
   /// memoizes -- the mesh is built once and passed in, so switching grade pays
   /// only for that grade's solve, and only the first time it is viewed. The
   /// discrete spherical harmonics are one instantiation, the mesh being a
@@ -247,7 +254,7 @@ impl Scene {
   }
 
   /// The bare icosphere carrying a single constant field: the mesh of
-  /// [`Self::spherical_harmonics`] without its (dense, $O(n^3)$) eigensolve.
+  /// [`Self::spherical_harmonics`] without its eigensolve.
   /// Stands in for the real scene so the viewer can show the sphere the instant
   /// the window opens, while the solve runs in the background and swaps the
   /// actual modes in when it lands. The lone field has no eigenvalue, so it is

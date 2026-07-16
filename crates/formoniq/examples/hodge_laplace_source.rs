@@ -91,10 +91,10 @@ fn main() {
           // boundary-vanishing cochains; the solver is one piece of code over both.
           let (_, galsol, _) = match bc {
             BoundaryCondition::Absolute => {
-              hodge_laplace::solve_hodge_laplace_source(&whitney, source, grade)
+              hodge_laplace::solve_hodge_laplace_source(&whitney, source, grade).unwrap()
             }
             BoundaryCondition::Relative => {
-              hodge_laplace::solve_hodge_laplace_source(&whitney.relative(), source, grade)
+              hodge_laplace::solve_hodge_laplace_source(&whitney.relative(), source, grade).unwrap()
             }
           };
 
