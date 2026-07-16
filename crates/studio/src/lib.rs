@@ -9,6 +9,7 @@ extern crate nalgebra as na;
 pub mod app;
 pub mod bake;
 pub mod demos;
+pub(crate) mod display;
 pub mod gallery;
 pub mod io;
 pub mod render;
