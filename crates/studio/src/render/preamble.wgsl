@@ -159,9 +159,27 @@ fn billboard_corner(world_a: vec3<f32>, world_b: vec3<f32>, perp: vec3<f32>, hal
     return self_world + perp * half_width * billboard_side(vertex_index);
 }
 
-// Small depth bias, scaled by `w` so it survives the perspective divide as a
-// constant NDC offset regardless of depth: pulls a segment toward the camera so
-// it draws on top of the coplanar face beneath it instead of z-fighting it.
-fn depth_biased(clip: vec4<f32>) -> vec4<f32> {
-    return vec4<f32>(clip.xy, clip.z - 0.0005 * clip.w, clip.w);
+// Nudges a corner toward the camera by a small multiple of the mark's own
+// half-width, so it draws on top of the coplanar face beneath it instead of
+// z-fighting it. Biasing in world space, by an amount tied to the mark's own
+// scale, keeps this an actual small distance regardless of how far the object
+// is from the camera -- a fixed NDC-space offset does not: under a
+// perspective projection the same NDC delta corresponds to an ever larger
+// eye-space distance the farther out it is applied, and past some distance it
+// exceeds the real depth gap between a surface's near and far side, letting
+// the far side's wireframe win the depth test against the near side's fill.
+//
+// The multiple has to clear float32 depth-buffer roundoff, not just be
+// "small": at a typical camera distance the perspective divide compresses a
+// world-space nudge of one half-width into only a handful of representable
+// depth steps, indistinguishable from the matrix multiply's own rounding
+// error -- which is z-fighting again, just at a much smaller and harder-to-see
+// bias than the old NDC-constant one. A handful of half-widths is still far
+// below any real front/back depth separation except within an imperceptible
+// sliver at the silhouette itself, where a biased line necessarily wins
+// against a true depth gap that shrinks continuously to zero.
+fn depth_biased_corner(corner: vec3<f32>, eye: vec3<f32>, half_width: f32) -> vec3<f32> {
+    let to_eye = eye - corner;
+    let dir = to_eye / max(length(to_eye), 1e-6);
+    return corner + dir * (4.0 * half_width);
 }
