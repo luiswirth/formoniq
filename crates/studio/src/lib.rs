@@ -64,44 +64,44 @@ const SPHERE_MODES: usize = 16;
 // lobe never overshoots the origin and inverts the surface.
 const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 
-/// The shared sphere mesh the harmonics gallery solves its grades against,
-/// built once so every per-grade eigensolve reuses it rather than remeshing.
-type SphereMesh = (Complex, MeshCoords);
+/// The shared surface mesh the gallery solves its grades against, built once
+/// so every per-grade eigensolve reuses it rather than remeshing.
+type Mesh = (Complex, MeshCoords);
 
 /// What the viewer is showing -- the unit a build, and its memoization, is
 /// keyed on. A picker in the UI switches this at runtime; the render path
 /// treats every `Scene` alike regardless of which `View` built it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum View {
-  /// A single grade of the sphere's discrete harmonics. The expensive case:
-  /// each grade is a dense eigensolve, run once and memoized, so only the grade
-  /// actually being viewed is ever computed.
-  SphereGrade(ExteriorGrade),
+  /// A single grade of the mesh's Hodge-Laplace eigenmodes. The expensive
+  /// case: each grade is a dense eigensolve, run once and memoized, so only the
+  /// grade actually being viewed is ever computed.
+  MeshGrade(ExteriorGrade),
   /// Every Whitney basis function of the reference triangle. Cheap to build.
   WhitneyBasis,
 }
 
 impl View {
-  /// The starting view when the viewer opens: grade 0 of the sphere.
-  const START: View = View::SphereGrade(0);
+  /// The starting view when the viewer opens: grade 0 of the mesh.
+  const START: View = View::MeshGrade(0);
 
   fn label(self) -> String {
     match self {
-      View::SphereGrade(grade) => format!("Spherical harmonics, grade {grade}"),
+      View::MeshGrade(grade) => format!("Eigenmodes, grade {grade}"),
       View::WhitneyBasis => "Whitney basis (reference triangle)".to_string(),
     }
   }
 }
 
-/// Builds the scene for `view`. For a sphere grade this runs that grade's dense
+/// Builds the scene for `view`. For a mesh grade this runs that grade's dense
 /// eigensolve against the shared `mesh` -- the expensive path the caller runs
 /// on a background thread and memoizes; the Whitney basis is cheap and ignores
 /// the mesh.
-fn build_view(view: View, mesh: &SphereMesh) -> Scene {
+fn build_view(view: View, mesh: &Mesh) -> Scene {
   match view {
-    View::SphereGrade(grade) => {
+    View::MeshGrade(grade) => {
       let (topology, coords) = mesh;
-      Scene::sphere_grade(topology, coords, grade, SPHERE_MODES)
+      Scene::mesh_grade(topology, coords, grade, SPHERE_MODES)
     }
     View::WhitneyBasis => Scene::whitney_basis(2),
   }
@@ -150,8 +150,8 @@ impl<T: Send + 'static> PendingLoad<T> {
   }
 }
 
-/// The gallery's lazy, memoized loader. Owns the shared sphere mesh; each
-/// view's scene is built at most once -- the expensive sphere grades on a
+/// The gallery's lazy, memoized loader. Owns the shared surface mesh; each
+/// view's scene is built at most once -- the expensive mesh grades on a
 /// background thread -- and cached, so revisiting a grade is instant and only
 /// the grades actually viewed are ever solved.
 ///
@@ -160,11 +160,11 @@ impl<T: Send + 'static> PendingLoad<T> {
 /// the pending build, and a landed result is only ever installed for the view
 /// it was built for.
 struct Gallery {
-  mesh: Arc<SphereMesh>,
+  mesh: Arc<Mesh>,
   current: View,
-  /// The last sphere grade viewed, so toggling to the Whitney basis and back
+  /// The last mesh grade viewed, so toggling to the Whitney basis and back
   /// resumes that grade rather than resetting to 0.
-  last_sphere_grade: ExteriorGrade,
+  last_mesh_grade: ExteriorGrade,
   cache: HashMap<View, Scene>,
   loading: Option<(View, PendingLoad<Scene>)>,
 }
@@ -174,13 +174,13 @@ impl Gallery {
   /// once while that view's real build runs in the background (delivered later
   /// by [`Self::poll`]). The placeholder shares the loader's mesh, so the
   /// window is up on the first frame without waiting on any eigensolve.
-  fn new(mesh: SphereMesh) -> (Self, Scene) {
+  fn new(mesh: Mesh) -> (Self, Scene) {
     let mesh = Arc::new(mesh);
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
     let mut gallery = Self {
       mesh,
       current: View::START,
-      last_sphere_grade: 0,
+      last_mesh_grade: 0,
       cache: HashMap::new(),
       loading: None,
     };
@@ -206,8 +206,8 @@ impl Gallery {
   /// or now building in the background (a spinner shows until [`Self::poll`]
   /// delivers it).
   fn request(&mut self, view: View) -> Option<Scene> {
-    if let View::SphereGrade(grade) = view {
-      self.last_sphere_grade = grade;
+    if let View::MeshGrade(grade) = view {
+      self.last_mesh_grade = grade;
     }
     if view == self.current && self.loading.is_none() {
       return None;
@@ -458,39 +458,59 @@ struct Entry<'a> {
   name: &'a str,
 }
 
-/// One degeneracy shell of an eigenmode list: the modes sharing a Laplace
-/// degree $l$, in the order the eigensolve returned them. A row of the orbital
-/// pyramid.
+/// One degeneracy shell of an eigenmode list: a maximal run of consecutive
+/// modes whose eigenvalues agree up to the clustering tolerance -- one
+/// degenerate eigenspace. A row of the orbital pyramid.
 struct Shell {
-  degree: usize,
+  /// A representative eigenvalue of the shell (its first member's), labelling
+  /// the row.
+  eigenvalue: f64,
   /// Indices into the entry list this shell was grouped from.
   members: Vec<usize>,
 }
 
-/// Groups a list of eigenmodes into its degeneracy shells, reading the Laplace
-/// degree $l$ back from each eigenvalue through the sphere's dispersion
-/// relation $lambda = l(l+1)$, i.e. $l = round((sqrt(1 + 4 lambda) - 1) / 2)$.
+/// The relative gap above which two consecutive eigenvalues are taken to lie in
+/// *different* degeneracy shells. Within a shell the discrete eigenvalues of a
+/// degenerate eigenspace differ only by the mesh's small symmetry-breaking
+/// error, far below this; between distinct shells they jump by an order-one
+/// fraction, far above it.
+const SHELL_REL_GAP: f64 = 0.3;
+
+/// An absolute tolerance, as a fraction of the spectrum's scale, added to the
+/// relative one so a cluster of (near-)zero modes -- a harmonic space, e.g. the
+/// constant 0-mode or a flat torus's two 1-cocycles -- stays together instead
+/// of splitting on numerical noise, where the relative gap alone has no scale.
+const SHELL_ABS_FRAC: f64 = 1e-6;
+
+/// Groups a list of eigenmodes into its degeneracy shells by clustering
+/// consecutive near-equal eigenvalues.
 ///
-/// On $S^2$ the whole de Rham complex shares this spectrum, so one rule shells
-/// every grade: the modes arrive sorted by $lambda$, clustered tightly around
-/// $l(l+1)$ (the discrete degeneracy an icosphere only approximately resolves),
-/// and consecutive modes of equal rounded degree are one degenerate eigenspace
-/// -- $2l+1$-fold at grade 0, the row of the pyramid. Organization derived
-/// purely from the eigensolver's output, no geometry.
+/// The modes arrive sorted by eigenvalue; a run whose successive gaps stay
+/// within [`SHELL_ABS_FRAC`]$dot lambda_max + $[`SHELL_REL_GAP`]$dot lambda$ is
+/// one degenerate eigenspace -- a row of the pyramid. This reads the
+/// organization straight off the spectrum, with no geometry: on $S^2$ the
+/// near-equal clusters are exactly the $(2l+1)$ spherical-harmonic shells,
+/// while on a generic mesh with no symmetry the eigenvalues are simple, every
+/// gap exceeds the tolerance, and each row collapses to a single member ordered
+/// by eigenvalue.
 ///
 /// `None` if any field carries no eigenvalue (not an eigenmode scene, e.g. the
 /// raw Whitney basis), where the caller keeps a flat list instead.
-fn degree_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Option<Vec<Shell>> {
+fn degeneracy_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Option<Vec<Shell>> {
+  let lambdas: Vec<f64> = eigenvalues.into_iter().collect::<Option<Vec<f64>>>()?;
+  let scale = lambdas.iter().map(|l| l.abs()).fold(0.0, f64::max).max(1.0);
+  let atol = SHELL_ABS_FRAC * scale;
   let mut shells: Vec<Shell> = Vec::new();
-  for (idx, eigenvalue) in eigenvalues.into_iter().enumerate() {
-    let lambda = eigenvalue?;
-    let degree = (((1.0 + 4.0 * lambda).max(0.0).sqrt() - 1.0) / 2.0).round() as usize;
-    match shells.last_mut() {
-      Some(shell) if shell.degree == degree => shell.members.push(idx),
-      _ => shells.push(Shell {
-        degree,
+  for (idx, &lambda) in lambdas.iter().enumerate() {
+    let same_shell =
+      idx > 0 && lambda - lambdas[idx - 1] <= atol + SHELL_REL_GAP * lambdas[idx - 1].abs();
+    if same_shell {
+      shells.last_mut().unwrap().members.push(idx);
+    } else {
+      shells.push(Shell {
+        eigenvalue: lambda,
         members: vec![idx],
-      }),
+      });
     }
   }
   Some(shells)
@@ -500,7 +520,7 @@ fn degree_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Option<V
 /// eigenvalues (the harmonics) they lay out as the orbital pyramid by degeneracy
 /// shell; otherwise (the raw Whitney basis) they fall back to a flat list.
 fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection) {
-  match degree_shells(entries.iter().map(|e| e.eigenvalue)) {
+  match degeneracy_shells(entries.iter().map(|e| e.eigenvalue)) {
     Some(shells) => pyramid(ui, &shells, entries, selection),
     None => {
       for entry in entries {
@@ -514,21 +534,21 @@ fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection)
 }
 
 /// Lays out one grade's eigenmodes as the orbital pyramid: one centered row per
-/// degeneracy shell, widening with $l$, each cell a mode selector labelled by
-/// its magnetic index $m$ (the within-shell offset, $-l..=l$ when the shell is
-/// the $2l+1$-fold grade-0 multiplet). Hovering a cell shows the mode's full
-/// name and eigenvalue.
+/// degeneracy shell, rows ordered by ascending eigenvalue and labelled by it,
+/// each cell a mode selector labelled by its centered within-shell offset (the
+/// magnetic index $m in -l..=l$ on the sphere's $2l+1$-fold grade-0 multiplet).
+/// Hovering a cell shows the mode's full name and eigenvalue.
 fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &mut Selection) {
   // A fixed cell size makes the columns line up into a grid; the matching
   // gutters left and right keep each row's cells centered under `vertical_centered`.
   const CELL: [f32; 2] = [30.0, 22.0];
-  const GUTTER: f32 = 44.0;
+  const GUTTER: f32 = 56.0;
   ui.vertical_centered(|ui| {
     for shell in shells {
       ui.horizontal(|ui| {
         ui.add_sized(
           [GUTTER, CELL[1]],
-          egui::Label::new(format!("l = {}", shell.degree)),
+          egui::Label::new(format!("λ = {:.1}", shell.eigenvalue)),
         );
         let n = shell.members.len() as isize;
         for (pos, &idx) in shell.members.iter().enumerate() {
@@ -1485,7 +1505,7 @@ impl<'a> State<'a> {
     );
   }
 
-  /// Builds and tessellates the control panel: the family picker, the sphere's
+  /// Builds and tessellates the control panel: the family picker, the mesh's
   /// per-grade tabs, that grade's orbital-pyramid mode picker (or a spinner
   /// while it solves), and the camera-mode toggle. Reads out of `self` into
   /// plain locals before entering the `egui::Context::run_ui` closure, since
@@ -1504,11 +1524,11 @@ impl<'a> State<'a> {
     let shown_view = self.gallery.loading_view().unwrap_or(self.gallery.current);
     let is_loading = self.gallery.is_loading();
     let loading_label = self.gallery.loading_view().map(View::label);
-    let last_sphere_grade = self.gallery.last_sphere_grade;
+    let last_mesh_grade = self.gallery.last_mesh_grade;
     let max_grade = self.gallery.mesh.0.dim();
 
     // The current scene's modes, as the picker needs them. Scalar and line
-    // fields both feed in; for a single sphere grade exactly one list is
+    // fields both feed in; for a single mesh grade exactly one list is
     // populated, so the pyramid is over that grade alone.
     let entries: Vec<Entry> = self
       .scene
@@ -1540,21 +1560,21 @@ impl<'a> State<'a> {
 
     let full_output = ctx.run_ui(raw_input, |ctx| {
       egui::Window::new("Gallery").show(ctx, |ui| {
-        let on_sphere = matches!(shown_view, View::SphereGrade(_));
+        let on_eigenmodes = matches!(shown_view, View::MeshGrade(_));
         ui.horizontal(|ui| {
+          if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() {
+            requested_view = View::MeshGrade(last_mesh_grade);
+          }
           if ui
-            .selectable_label(on_sphere, "Spherical harmonics")
+            .selectable_label(!on_eigenmodes, "Whitney basis")
             .clicked()
           {
-            requested_view = View::SphereGrade(last_sphere_grade);
-          }
-          if ui.selectable_label(!on_sphere, "Whitney basis").clicked() {
             requested_view = View::WhitneyBasis;
           }
         });
         ui.separator();
 
-        if let View::SphereGrade(grade) = shown_view {
+        if let View::MeshGrade(grade) = shown_view {
           // One tab per grade of the de Rham complex; every grade is solved and
           // shown, the top grade through its Hodge star just like grade 0.
           ui.horizontal(|ui| {
@@ -1563,7 +1583,7 @@ impl<'a> State<'a> {
                 .selectable_label(g == grade, grade_mark_label(g, max_grade))
                 .clicked()
               {
-                requested_view = View::SphereGrade(g);
+                requested_view = View::MeshGrade(g);
               }
             }
           });
@@ -1578,8 +1598,8 @@ impl<'a> State<'a> {
             }
           });
         } else {
-          if matches!(shown_view, View::SphereGrade(_)) {
-            ui.label("rows: degree l · cells: order m");
+          if matches!(shown_view, View::MeshGrade(_)) {
+            ui.label("rows: degeneracy shell (λ) · cells: order");
           }
           render_modes(ui, &entries, &mut selection);
         }
@@ -2028,4 +2048,50 @@ pub async fn run() {
   let event_loop = EventLoop::new().unwrap();
   let mut app = App::default();
   let _ = event_loop.run_app(&mut app);
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  fn shell_sizes(eigenvalues: &[f64]) -> Vec<usize> {
+    degeneracy_shells(eigenvalues.iter().map(|&l| Some(l)))
+      .unwrap()
+      .iter()
+      .map(|s| s.members.len())
+      .collect()
+  }
+
+  /// The measured subdivision-3 icosphere grade-0 spectrum clusters into the
+  /// $(2l+1)$ spherical-harmonic shells: the near-equal multiplets group, the
+  /// order-one jumps between degrees split.
+  #[test]
+  fn sphere_spectrum_recovers_2l_plus_1_shells() {
+    let spectrum = [0.00, 2.01, 2.01, 2.01, 6.07, 6.07, 6.07, 6.07, 6.07, 12.24];
+    assert_eq!(shell_sizes(&spectrum), vec![1, 3, 5, 1]);
+  }
+
+  /// A near-zero harmonic space (a flat torus's two 1-cocycles) stays one shell
+  /// rather than splitting on numerical noise, since the absolute tolerance
+  /// carries a scale the relative gap alone lacks near zero.
+  #[test]
+  fn near_zero_harmonics_stay_one_shell() {
+    let spectrum = [-1e-9, 2e-9, 4.0, 4.0];
+    assert_eq!(shell_sizes(&spectrum), vec![2, 2]);
+  }
+
+  /// A generic simple spectrum -- no symmetry, no degeneracy -- degenerates the
+  /// pyramid to one member per row, ordered by eigenvalue.
+  #[test]
+  fn simple_spectrum_gives_singletons() {
+    let spectrum = [1.0, 2.5, 4.0, 6.0, 9.0];
+    assert_eq!(shell_sizes(&spectrum), vec![1, 1, 1, 1, 1]);
+  }
+
+  /// A field carrying no eigenvalue (the raw Whitney basis) has no shell
+  /// structure, so the caller falls back to a flat list.
+  #[test]
+  fn missing_eigenvalue_declines_to_shell() {
+    assert!(degeneracy_shells([Some(1.0), None, Some(2.0)]).is_none());
+  }
 }
