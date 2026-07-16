@@ -1229,6 +1229,7 @@ dependencies = [
  "formoniq",
  "log",
  "manifold",
+ "naga",
  "nalgebra",
  "pollster",
  "wasm-bindgen",

@@ -40,7 +40,7 @@ fn grade1_whitney_basis_is_an_in_plane_line_field() {
   let scene = Scene::whitney_basis(2);
   assert_eq!(scene.line_fields.len(), 3);
   for field in &scene.line_fields {
-    assert!(field.max_magnitude() > 1e-6);
+    assert!(field.bounds().1 > 1e-6);
     for direction in &field.direction {
       assert!(direction.z.abs() < 1e-12);
     }

@@ -992,19 +992,29 @@ fn build_field_display(
     Selection::Line(index) => {
       let field = &scene.line_fields[index];
       let mesh_buffer = MeshBuffer::from_line_field(device, &scene.topology, &scene.coords, field);
-      // The tint is the signed magnitude $|V| cos(sqrt(lambda) t)$, so the
-      // colormap range is symmetric $[-m, m]$ about zero: the pulse runs
-      // through the colormap's midpoint and flips as the cosine crosses zero,
-      // unlike an unsigned scalar that starts at 0. The LIC direction is
-      // static, so there is no geometric displacement -- `wave_amplitude` is 0
-      // and only `wave_omega` (the tint clock) carries the mode's frequency.
-      let peak = field.max_magnitude().max(f64::from(f32::EPSILON)) as f32;
+      let (raw_min, raw_max) = field.bounds();
+      // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
+      // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
+      // through the midpoint and flips as the cosine crosses zero. A static
+      // field has no such pulse (wave_omega below is 0, cos(0) = 1), so its
+      // tint is the unsigned $|V|_g$ itself: using its true range instead of
+      // widening to symmetric keeps the colormap from spending half its
+      // span on negative values the field never takes. The LIC direction is
+      // static either way, so there is no geometric displacement --
+      // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
+      // the mode's frequency.
+      let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
+      let (field_min, field_max) = if field.eigenvalue.is_some() {
+        (-peak, peak)
+      } else {
+        (raw_min, raw_max)
+      };
       let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
 
       FieldDisplay {
         mesh_buffer,
-        field_min: -peak,
-        field_max: peak,
+        field_min,
+        field_max,
         wave_amplitude: 0.0,
         wave_omega,
       }
@@ -1068,6 +1078,11 @@ struct State<'a> {
   wave_buffer: wgpu::Buffer,
   wave_bind_group: wgpu::BindGroup,
 
+  // The wireframe's screen-space pixel width, rewritten each frame alongside
+  // `wave_buffer` from the current supersampled render-target size.
+  screen_buffer: wgpu::Buffer,
+  screen_bind_group: wgpu::BindGroup,
+
   // Mouse state for orbit controls
   mouse_pressed: bool,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
@@ -1120,6 +1135,23 @@ struct BoundsUniform {
   _pad1: f32,
   _pad2: f32,
 }
+
+/// The wireframe pipeline's screen-space thickening state: the supersampled
+/// render-target size a pixel offset is measured against, and the line
+/// half-width in that same pixel space. See `wireframe.wgsl`.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
+struct ScreenUniform {
+  viewport: [f32; 2],
+  half_width_px: f32,
+  _pad: f32,
+}
+
+/// The wireframe's on-screen width, in swapchain (not supersampled) pixels --
+/// what actually reaches the eye once the downsample pass box-filters the
+/// supersampled scene down. Wide enough to read clearly against a filled
+/// surface without swamping fine mesh detail.
+const WIREFRAME_WIDTH_PX: f32 = 1.6;
 
 /// Shared state for the G-buffer and LIC passes: the viewport (to project the
 /// tangent to pixels and to step in texel units), the object-space noise
@@ -1293,6 +1325,43 @@ impl<'a> State<'a> {
       label: Some("wave_bind_group"),
     });
 
+    // The wireframe's screen-space pixel width: rewritten every frame
+    // (alongside the LIC pass's own viewport-sized uniform) from whatever the
+    // current supersampled render-target size is, so it survives a resize.
+    let (ss_width, ss_height) = supersampled_size(&config);
+    let screen_uniform = ScreenUniform {
+      viewport: [ss_width as f32, ss_height as f32],
+      half_width_px: 0.5 * WIREFRAME_WIDTH_PX * SSAA_SCALE as f32,
+      _pad: 0.0,
+    };
+    let screen_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Screen Buffer"),
+      contents: bytemuck::cast_slice(&[screen_uniform]),
+      usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+    });
+    let screen_bind_group_layout =
+      device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        entries: &[wgpu::BindGroupLayoutEntry {
+          binding: 0,
+          visibility: wgpu::ShaderStages::VERTEX,
+          ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+          },
+          count: None,
+        }],
+        label: Some("screen_bind_group_layout"),
+      });
+    let screen_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+      layout: &screen_bind_group_layout,
+      entries: &[wgpu::BindGroupEntry {
+        binding: 0,
+        resource: screen_buffer.as_entire_binding(),
+      }],
+      label: Some("screen_bind_group"),
+    });
+
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: Some("Shader"),
       source: wgpu::ShaderSource::Wgsl(include_str!("render/shader.wgsl").into()),
@@ -1350,7 +1419,9 @@ impl<'a> State<'a> {
       cache: None,
     });
 
-    // Wireframe pipeline — LineList with camera-only bind group
+    // Wireframe pipeline — instanced screen-space-thick quads, one per edge
+    // (see `wireframe.wgsl`), reading each edge's two endpoints off two
+    // parallel per-instance vertex buffers.
     let wireframe_shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
       label: Some("Wireframe Shader"),
       source: wgpu::ShaderSource::Wgsl(include_str!("render/wireframe.wgsl").into()),
@@ -1362,6 +1433,7 @@ impl<'a> State<'a> {
         bind_group_layouts: &[
           Some(&camera_bind_group_layout),
           Some(&wave_bind_group_layout),
+          Some(&screen_bind_group_layout),
         ],
         immediate_size: 0,
       });
@@ -1373,7 +1445,7 @@ impl<'a> State<'a> {
         module: &wireframe_shader,
         entry_point: Some("vs_main"),
         compilation_options: Default::default(),
-        buffers: &[Vertex::desc()],
+        buffers: &[Vertex::desc_endpoint_a(), Vertex::desc_endpoint_b()],
       },
       fragment: Some(wgpu::FragmentState {
         module: &wireframe_shader,
@@ -1386,7 +1458,7 @@ impl<'a> State<'a> {
         })],
       }),
       primitive: wgpu::PrimitiveState {
-        topology: wgpu::PrimitiveTopology::LineList,
+        topology: wgpu::PrimitiveTopology::TriangleList,
         strip_index_format: None,
         front_face: wgpu::FrontFace::Ccw,
         cull_mode: None,
@@ -1400,7 +1472,6 @@ impl<'a> State<'a> {
       cache: None,
     });
 
-    let (ss_width, ss_height) = supersampled_size(&config);
     let depth_view = create_depth_texture(&device, ss_width, ss_height);
     let scene_color_view = create_scene_color_texture(&device, config.format, ss_width, ss_height);
 
@@ -1757,6 +1828,8 @@ impl<'a> State<'a> {
       wave_omega,
       wave_buffer,
       wave_bind_group,
+      screen_buffer,
+      screen_bind_group,
       mouse_pressed: false,
       last_mouse_pos: None,
       gallery,
@@ -2270,6 +2343,20 @@ impl<'a> State<'a> {
       .queue
       .write_buffer(&self.lic_buffer, 0, bytemuck::cast_slice(&[lic_uniform]));
 
+    // Same supersampled viewport the LIC pass just used, so the wireframe's
+    // pixel half-width tracks a resize instead of only being set once at
+    // startup.
+    let screen_uniform = ScreenUniform {
+      viewport: [ss_width as f32, ss_height as f32],
+      half_width_px: 0.5 * WIREFRAME_WIDTH_PX * SSAA_SCALE as f32,
+      _pad: 0.0,
+    };
+    self.queue.write_buffer(
+      &self.screen_buffer,
+      0,
+      bytemuck::cast_slice(&[screen_uniform]),
+    );
+
     let output = match self.surface.get_current_texture() {
       wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
       wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
@@ -2419,12 +2506,10 @@ impl<'a> State<'a> {
         wire_pass.set_pipeline(&self.wireframe_pipeline);
         wire_pass.set_bind_group(0, &self.camera_bind_group, &[]);
         wire_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-        wire_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
-        wire_pass.set_index_buffer(
-          self.mesh_buffer.wireframe_index_buffer.slice(..),
-          wgpu::IndexFormat::Uint32,
-        );
-        wire_pass.draw_indexed(0..self.mesh_buffer.num_wireframe_indices, 0, 0..1);
+        wire_pass.set_bind_group(2, &self.screen_bind_group, &[]);
+        wire_pass.set_vertex_buffer(0, self.mesh_buffer.wireframe_a_buffer.slice(..));
+        wire_pass.set_vertex_buffer(1, self.mesh_buffer.wireframe_b_buffer.slice(..));
+        wire_pass.draw(0..6, 0..self.mesh_buffer.num_wireframe_edges);
       }
     } else {
       let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -2467,12 +2552,10 @@ impl<'a> State<'a> {
       render_pass.set_pipeline(&self.wireframe_pipeline);
       render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
       render_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-      render_pass.set_vertex_buffer(0, self.mesh_buffer.vertex_buffer.slice(..));
-      render_pass.set_index_buffer(
-        self.mesh_buffer.wireframe_index_buffer.slice(..),
-        wgpu::IndexFormat::Uint32,
-      );
-      render_pass.draw_indexed(0..self.mesh_buffer.num_wireframe_indices, 0, 0..1);
+      render_pass.set_bind_group(2, &self.screen_bind_group, &[]);
+      render_pass.set_vertex_buffer(0, self.mesh_buffer.wireframe_a_buffer.slice(..));
+      render_pass.set_vertex_buffer(1, self.mesh_buffer.wireframe_b_buffer.slice(..));
+      render_pass.draw(0..6, 0..self.mesh_buffer.num_wireframe_edges);
     }
 
     // Antialiasing: box-filter the supersampled scene color target down into
