@@ -1087,10 +1087,10 @@ struct State<'a> {
   wave_buffer: wgpu::Buffer,
   wave_bind_group: wgpu::BindGroup,
 
-  // The wireframe's screen-space pixel width, rewritten each frame alongside
-  // `wave_buffer` from the current supersampled render-target size.
-  screen_buffer: wgpu::Buffer,
-  screen_bind_group: wgpu::BindGroup,
+  // The wireframe's world-space half-width, rewritten alongside `wave_buffer`
+  // whenever `amplitude_scale` changes (a new mesh or view).
+  wireframe_buffer: wgpu::Buffer,
+  wireframe_bind_group: wgpu::BindGroup,
 
   // Mouse state for orbit controls
   mouse_pressed: bool,
@@ -1145,22 +1145,25 @@ struct BoundsUniform {
   _pad2: f32,
 }
 
-/// The wireframe pipeline's screen-space thickening state: the supersampled
-/// render-target size a pixel offset is measured against, and the line
-/// half-width in that same pixel space. See `wireframe.wgsl`.
+/// The wireframe pipeline's world-space thickening state: the line
+/// half-width, in the same world units the mesh's own coordinates are in.
+/// See `wireframe.wgsl`.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
-struct ScreenUniform {
-  viewport: [f32; 2],
-  half_width_px: f32,
-  _pad: f32,
+struct WireframeUniform {
+  half_width_world: f32,
+  _pad0: f32,
+  _pad1: f32,
+  _pad2: f32,
 }
 
-/// The wireframe's on-screen width, in swapchain (not supersampled) pixels --
-/// what actually reaches the eye once the downsample pass box-filters the
-/// supersampled scene down. Wide enough to read clearly against a filled
-/// surface without swamping fine mesh detail.
-const WIREFRAME_WIDTH_PX: f32 = 2.2;
+/// The wireframe's half-width as a fraction of the scene's own extent
+/// ([`scene_extent`]) -- the same object-intrinsic scale
+/// `WAVE_AMPLITUDE_FRACTION` uses for the standing-wave displacement --
+/// rather than a fixed screen-pixel count, so the line reads the same
+/// thickness whether the mesh is zoomed to fill the screen or shrunk to a
+/// corner of it.
+const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
 
 /// Shared state for the G-buffer and LIC passes: the viewport (to project the
 /// tangent to pixels and to step in texel units), the object-space noise
@@ -1334,21 +1337,21 @@ impl<'a> State<'a> {
       label: Some("wave_bind_group"),
     });
 
-    // The wireframe's screen-space pixel width: rewritten every frame
-    // (alongside the LIC pass's own viewport-sized uniform) from whatever the
-    // current supersampled render-target size is, so it survives a resize.
-    let (ss_width, ss_height) = supersampled_size(&config);
-    let screen_uniform = ScreenUniform {
-      viewport: [ss_width as f32, ss_height as f32],
-      half_width_px: 0.5 * WIREFRAME_WIDTH_PX * SSAA_SCALE as f32,
-      _pad: 0.0,
+    // The wireframe's world-space half-width: rewritten alongside `amplitude_scale`
+    // (a new mesh or view), so it stays a fixed fraction of the object's own
+    // size rather than a screen-pixel count.
+    let wireframe_uniform = WireframeUniform {
+      half_width_world: WIREFRAME_WIDTH_FRACTION * amplitude_scale,
+      _pad0: 0.0,
+      _pad1: 0.0,
+      _pad2: 0.0,
     };
-    let screen_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Screen Buffer"),
-      contents: bytemuck::cast_slice(&[screen_uniform]),
+    let wireframe_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Wireframe Width Buffer"),
+      contents: bytemuck::cast_slice(&[wireframe_uniform]),
       usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
     });
-    let screen_bind_group_layout =
+    let wireframe_width_bind_group_layout =
       device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
         entries: &[wgpu::BindGroupLayoutEntry {
           binding: 0,
@@ -1360,15 +1363,15 @@ impl<'a> State<'a> {
           },
           count: None,
         }],
-        label: Some("screen_bind_group_layout"),
+        label: Some("wireframe_width_bind_group_layout"),
       });
-    let screen_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      layout: &screen_bind_group_layout,
+    let wireframe_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+      layout: &wireframe_width_bind_group_layout,
       entries: &[wgpu::BindGroupEntry {
         binding: 0,
-        resource: screen_buffer.as_entire_binding(),
+        resource: wireframe_buffer.as_entire_binding(),
       }],
-      label: Some("screen_bind_group"),
+      label: Some("wireframe_bind_group"),
     });
 
     let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
@@ -1442,7 +1445,7 @@ impl<'a> State<'a> {
         bind_group_layouts: &[
           Some(&camera_bind_group_layout),
           Some(&wave_bind_group_layout),
-          Some(&screen_bind_group_layout),
+          Some(&wireframe_width_bind_group_layout),
         ],
         immediate_size: 0,
       });
@@ -1481,6 +1484,7 @@ impl<'a> State<'a> {
       cache: None,
     });
 
+    let (ss_width, ss_height) = supersampled_size(&config);
     let depth_view = create_depth_texture(&device, ss_width, ss_height);
     let scene_color_view = create_scene_color_texture(&device, config.format, ss_width, ss_height);
 
@@ -1837,8 +1841,8 @@ impl<'a> State<'a> {
       wave_omega,
       wave_buffer,
       wave_bind_group,
-      screen_buffer,
-      screen_bind_group,
+      wireframe_buffer,
+      wireframe_bind_group,
       mouse_pressed: false,
       last_mouse_pos: None,
       gallery,
@@ -2352,18 +2356,20 @@ impl<'a> State<'a> {
       .queue
       .write_buffer(&self.lic_buffer, 0, bytemuck::cast_slice(&[lic_uniform]));
 
-    // Same supersampled viewport the LIC pass just used, so the wireframe's
-    // pixel half-width tracks a resize instead of only being set once at
-    // startup.
-    let screen_uniform = ScreenUniform {
-      viewport: [ss_width as f32, ss_height as f32],
-      half_width_px: 0.5 * WIREFRAME_WIDTH_PX * SSAA_SCALE as f32,
-      _pad: 0.0,
+    // Rewritten every frame (cheap, and simpler than hunting down every place
+    // `amplitude_scale` itself changes) rather than only once at startup, so
+    // the wireframe's world-space half-width always tracks the scene
+    // currently on display.
+    let wireframe_uniform = WireframeUniform {
+      half_width_world: WIREFRAME_WIDTH_FRACTION * self.amplitude_scale,
+      _pad0: 0.0,
+      _pad1: 0.0,
+      _pad2: 0.0,
     };
     self.queue.write_buffer(
-      &self.screen_buffer,
+      &self.wireframe_buffer,
       0,
-      bytemuck::cast_slice(&[screen_uniform]),
+      bytemuck::cast_slice(&[wireframe_uniform]),
     );
 
     let output = match self.surface.get_current_texture() {
@@ -2515,7 +2521,7 @@ impl<'a> State<'a> {
         wire_pass.set_pipeline(&self.wireframe_pipeline);
         wire_pass.set_bind_group(0, &self.camera_bind_group, &[]);
         wire_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-        wire_pass.set_bind_group(2, &self.screen_bind_group, &[]);
+        wire_pass.set_bind_group(2, &self.wireframe_bind_group, &[]);
         wire_pass.set_vertex_buffer(0, self.mesh_buffer.wireframe_a_buffer.slice(..));
         wire_pass.set_vertex_buffer(1, self.mesh_buffer.wireframe_b_buffer.slice(..));
         wire_pass.draw(0..6, 0..self.mesh_buffer.num_wireframe_edges);
@@ -2561,7 +2567,7 @@ impl<'a> State<'a> {
       render_pass.set_pipeline(&self.wireframe_pipeline);
       render_pass.set_bind_group(0, &self.camera_bind_group, &[]);
       render_pass.set_bind_group(1, &self.wave_bind_group, &[]);
-      render_pass.set_bind_group(2, &self.screen_bind_group, &[]);
+      render_pass.set_bind_group(2, &self.wireframe_bind_group, &[]);
       render_pass.set_vertex_buffer(0, self.mesh_buffer.wireframe_a_buffer.slice(..));
       render_pass.set_vertex_buffer(1, self.mesh_buffer.wireframe_b_buffer.slice(..));
       render_pass.draw(0..6, 0..self.mesh_buffer.num_wireframe_edges);
