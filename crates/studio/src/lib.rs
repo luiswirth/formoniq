@@ -7,10 +7,10 @@
 extern crate nalgebra as na;
 
 pub mod app;
+pub mod bake;
 pub mod demos;
 pub mod gallery;
 pub mod io;
-pub mod mesh3d;
 pub mod render;
 pub mod scene;
 pub mod streamline;

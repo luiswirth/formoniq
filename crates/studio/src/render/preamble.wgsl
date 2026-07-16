@@ -12,56 +12,56 @@
 // were allocated at, and an `override` is what makes the two one number.
 override SSAA_SCALE: i32 = 2;
 
-struct CameraUniform {
+// Where and when the scene is seen from: bound at group 0 by every pipeline.
+// Time is the frame's; the frequency it is multiplied by belongs to the field on
+// display, and so arrives in that item's material.
+struct Frame {
     view_proj: mat4x4<f32>,
     // World-space eye position, `w` unused: the billboard construction below
     // needs it directly, not only the matrix it feeds into.
     eye: vec4<f32>,
-};
-
-// Standing-wave animation of an eigenmode: $u(t) = a cos(omega t)$. A surface
-// vertex is additively displaced along its own outward normal times its scalar
-// value (the classical membrane picture). A field with no eigenvalue has
-// `omega = 0` and `amplitude = 0`, so the same code leaves it static.
-struct Wave {
     time: f32,
-    amplitude: f32,
-    omega: f32,
-    _pad: f32,
+    _pad: vec3<f32>,
 };
 
-// Colormap normalization range for the field on display.
-struct Bounds {
+// How a filled surface is drawn: its colormap normalization range, and the
+// standing-wave animation of an eigenmode, $u(t) = a cos(omega t)$ -- a vertex
+// additively displaced along its own outward normal times its scalar value (the
+// classical membrane picture). A field with no eigenvalue has `omega = 0` and
+// `amplitude = 0`, so the same code leaves it static.
+struct SurfaceMaterial {
     min_val: f32,
     max_val: f32,
-    _pad1: f32,
-    _pad2: f32,
+    wave_amplitude: f32,
+    wave_omega: f32,
 };
 
-// A segment pass's world-space half-width: a fixed fraction of the scene's own
-// extent (set on the Rust side), not a pixel count, so a line reads the same
-// thickness whether the mesh fills the screen or sits in a corner of it.
-// Padded with scalars, not a `vec3<f32>`: a vec3 carries 16-byte alignment,
-// which would push the struct to 32 bytes against the uniform's 16.
-struct SegmentWidth {
+// How a segment mark is drawn: its ink (`rgb` plus a base opacity), its
+// world-space half-width -- a fixed fraction of the scene's own extent, set on
+// the Rust side, not a pixel count, so a line reads the same thickness whether
+// the mesh fills the screen or sits in a corner of it -- the opacity it fades to
+// at the standing wave's node, and the wave it rides.
+struct SegmentMaterial {
+    color: vec4<f32>,
     half_width_world: f32,
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
+    fade_floor: f32,
+    wave_amplitude: f32,
+    wave_omega: f32,
 };
 
 // The standing wave's instantaneous phase factor $cos(omega t)$: the one
-// oscillator the displacement, the colormap pulse and the streamline fade all
-// read, so they cannot drift out of phase.
-fn wave_osc(wave: Wave) -> f32 {
-    return cos(wave.omega * wave.time);
+// oscillator the displacement, the colormap pulse and the segment fade all read,
+// so they cannot drift out of phase.
+fn wave_osc(frame: Frame, omega: f32) -> f32 {
+    return cos(omega * frame.time);
 }
 
 // The wave-displaced world position of one vertex, clamped to that vertex's own
 // curvature cap so a thin or sharply curved feature never folds through its
-// focal point.
-fn wave_displace(wave: Wave, position: vec3<f32>, normal: vec3<f32>, value: f32, max_displacement: f32) -> vec3<f32> {
-    let raw = wave.amplitude * wave_osc(wave) * value;
+// focal point. A vertex with a zero normal -- a mark that sits on no surface --
+// is left where it is by the same expression.
+fn wave_displace(amplitude: f32, osc: f32, position: vec3<f32>, normal: vec3<f32>, value: f32, max_displacement: f32) -> vec3<f32> {
+    let raw = amplitude * osc * value;
     let capped = clamp(raw, -max_displacement, max_displacement);
     return position + capped * normal;
 }
@@ -74,8 +74,8 @@ fn colormap(t: f32) -> vec3<f32> {
     return vec3<f32>(r, g, b);
 }
 
-fn colormap_in(bounds: Bounds, value: f32) -> vec3<f32> {
-    return colormap((value - bounds.min_val) / (bounds.max_val - bounds.min_val));
+fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
+    return colormap((value - material.min_val) / (material.max_val - material.min_val));
 }
 
 // A segment (a mesh edge, a traced streamline step) drawn with constant

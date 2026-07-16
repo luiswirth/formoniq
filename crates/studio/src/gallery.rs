@@ -167,7 +167,7 @@ pub(crate) enum View {
   /// triangle. Cheap to build.
   WhitneyBasis,
   /// Every Whitney basis function ("global shape function") of the triforce
-  /// teaching mesh ([`crate::mesh3d::triforce`]): the same construction as
+  /// teaching mesh ([`crate::demos::triforce`]): the same construction as
   /// [`View::WhitneyBasis`], but a DOF simplex's support now spans the
   /// several cells incident to it instead of a single reference cell. Cheap
   /// to build, and mesh-independent like the reference-cell basis.

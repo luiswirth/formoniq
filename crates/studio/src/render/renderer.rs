@@ -1,16 +1,15 @@
 //! The frame graph: the passes, the transient targets they draw through, and
-//! the one `render` that records them into a caller's `TextureView`.
+//! the one `render` that records a draw list into a caller's `TextureView`.
 
 use super::{
-  camera::{Camera, CameraUniform},
+  camera::Camera,
   context::GpuContext,
   downsample::{DownsamplePass, SceneColorBinding},
   fill::FillPass,
-  mesh::MeshBuffer,
-  streamline::{StreamlineBuffer, StreamlinePass},
-  uniform::{BoundsUniform, SegmentWidth, Uniforms, WaveUniform},
-  wireframe::WireframePass,
-  DEPTH_FORMAT, SSAA_SCALE, STREAMLINE_WIDTH_FRACTION, WIREFRAME_WIDTH_FRACTION,
+  item::{DrawList, RenderItem},
+  segments::SegmentPass,
+  uniform::{FrameUniform, SegmentMaterial, SurfaceMaterial, UniformBinding, UniformPool},
+  DEPTH_FORMAT, SSAA_SCALE,
 };
 
 /// The background the scene is cleared to.
@@ -21,26 +20,12 @@ const CLEAR_COLOR: wgpu::Color = wgpu::Color {
   a: 1.0,
 };
 
-/// Everything one frame draws, as the caller states it: the baked geometry, the
-/// material parameters of the field on display, and where and when it is seen
-/// from. Borrowed, not owned -- the renderer holds no scene, no camera and no
-/// clock between frames.
-pub struct SceneView<'a> {
-  pub mesh: &'a MeshBuffer,
-  /// The traced curves of a line field, `None` for a scalar field. Their
-  /// presence *is* the line-field mark: there is no branch to pick.
-  pub streamlines: Option<&'a StreamlineBuffer>,
-  /// The colormap range the fill normalizes against.
-  pub field_min: f32,
-  pub field_max: f32,
-  /// The standing wave: peak displacement and $omega = sqrt(lambda)$. A field
-  /// with no eigenvalue passes zeros and is drawn static by the same code.
-  pub wave_amplitude: f32,
-  pub wave_omega: f32,
-  /// The object's own coordinate extent (its radius), which fixes the
-  /// world-space width of every segment mark -- object-intrinsic, so a line
-  /// reads the same thickness on any mesh however finely triangulated.
-  pub extent: f32,
+/// One frame, as the caller states it: what to draw, and where and when it is
+/// seen from. Borrowed, not owned -- the renderer holds no scene, no camera and
+/// no clock between frames.
+pub struct FrameView<'a> {
+  /// The batches and their materials, in submission order.
+  pub items: &'a DrawList<'a>,
   pub camera: &'a Camera,
   /// The size of `target`, in pixels. The renderer allocates its own
   /// intermediates from this, so a window resize and an export resolution are
@@ -116,25 +101,38 @@ impl Targets {
 /// drift.
 pub struct Renderer {
   format: wgpu::TextureFormat,
-  uniforms: Uniforms,
+  frame: UniformBinding<FrameUniform>,
+  surface_materials: UniformPool<SurfaceMaterial>,
+  segment_materials: UniformPool<SegmentMaterial>,
   fill: FillPass,
-  wireframe: WireframePass,
-  streamline: StreamlinePass,
+  segments: SegmentPass,
   downsample: DownsamplePass,
   targets: Option<Targets>,
 }
 
 impl Renderer {
   pub fn new(ctx: &GpuContext, format: wgpu::TextureFormat) -> Self {
+    use wgpu::ShaderStages as Stages;
     let device = &ctx.device;
-    let uniforms = Uniforms::new(device);
+    // Every uniform here is visible in both stages: the fill pulses its colormap
+    // by the same $cos(sqrt(lambda) t)$ that displaces it, and the segment marks
+    // fade by it.
+    let frame = UniformBinding::new(
+      device,
+      "frame",
+      Stages::VERTEX_FRAGMENT,
+      FrameUniform::default(),
+    );
+    let surface_materials = UniformPool::new(device, "surface material", Stages::VERTEX_FRAGMENT);
+    let segment_materials = UniformPool::new(device, "segment material", Stages::VERTEX_FRAGMENT);
     Self {
       format,
-      fill: FillPass::new(device, format, &uniforms),
-      wireframe: WireframePass::new(device, format, &uniforms),
-      streamline: StreamlinePass::new(device, format, &uniforms),
+      fill: FillPass::new(device, format, &frame, &surface_materials),
+      segments: SegmentPass::new(device, format, &frame, &segment_materials),
       downsample: DownsamplePass::new(device, format),
-      uniforms,
+      frame,
+      surface_materials,
+      segment_materials,
       // Allocated on the first frame, from the size the caller renders at:
       // there is no size to guess at construction, and a window that never
       // opens should allocate nothing.
@@ -146,40 +144,36 @@ impl Renderer {
     self.format
   }
 
-  fn write_uniforms(&self, queue: &wgpu::Queue, view: &SceneView) {
-    let mut camera_uniform = CameraUniform::new();
-    camera_uniform.update_view_proj(view.camera);
-    self.uniforms.camera.write(queue, camera_uniform);
-    self.uniforms.wave.write(
-      queue,
-      WaveUniform {
-        time: view.time,
-        amplitude: view.wave_amplitude,
-        omega: view.wave_omega,
-        _pad: 0.0,
-      },
-    );
-    self.uniforms.bounds.write(
-      queue,
-      BoundsUniform {
-        min_val: view.field_min,
-        max_val: view.field_max,
-        _pad1: 0.0,
-        _pad2: 0.0,
-      },
-    );
-    let width = |fraction: f32| SegmentWidth {
-      half_width_world: fraction * view.extent,
-      ..Default::default()
-    };
+  /// Writes the frame uniform and each item's material into its own binding.
+  /// Returns, per item, the pool index it draws with: its position among the
+  /// items of its own kind.
+  fn write_uniforms(&mut self, ctx: &GpuContext, view: &FrameView) -> Vec<usize> {
     self
-      .uniforms
-      .wireframe_width
-      .write(queue, width(WIREFRAME_WIDTH_FRACTION));
-    self
-      .uniforms
-      .streamline_width
-      .write(queue, width(STREAMLINE_WIDTH_FRACTION));
+      .frame
+      .write(&ctx.queue, FrameUniform::new(view.camera, view.time));
+
+    let (mut nsurfaces, mut nsegments) = (0, 0);
+    view
+      .items
+      .items
+      .iter()
+      .map(|item| match item {
+        RenderItem::Surface(_, material) => {
+          self
+            .surface_materials
+            .write(&ctx.device, &ctx.queue, nsurfaces, *material);
+          nsurfaces += 1;
+          nsurfaces - 1
+        }
+        RenderItem::Segments(_, material) => {
+          self
+            .segment_materials
+            .write(&ctx.device, &ctx.queue, nsegments, *material);
+          nsegments += 1;
+          nsegments - 1
+        }
+      })
+      .collect()
   }
 
   /// Records one frame of `view` into `target`.
@@ -192,9 +186,9 @@ impl Renderer {
     ctx: &GpuContext,
     encoder: &mut wgpu::CommandEncoder,
     target: &wgpu::TextureView,
-    view: &SceneView,
+    view: &FrameView,
   ) {
-    self.write_uniforms(&ctx.queue, view);
+    let materials = self.write_uniforms(ctx, view);
 
     if self.targets.as_ref().is_none_or(|t| t.size != view.size) {
       self.targets = Some(Targets::new(
@@ -206,10 +200,10 @@ impl Renderer {
     }
     let targets = self.targets.as_ref().expect("just ensured");
 
-    // The scene, at the supersampled resolution: the surface, then a line
-    // field's ribbons over it, then the wireframe on top. One linear sequence
-    // for every field -- the reduced grade picks the *marks* (a scalar field
-    // carries no streamlines), never a branch through the graph.
+    // The scene, at the supersampled resolution: the draw list, in the order
+    // the caller gave it. One linear sequence for every field -- the reduced
+    // grade and the baked dimension decide which *items* exist, never a branch
+    // through the graph.
     {
       let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Scene Pass"),
@@ -235,11 +229,23 @@ impl Renderer {
         multiview_mask: None,
       });
 
-      self.fill.draw(&mut pass, &self.uniforms, view.mesh);
-      if let Some(streamlines) = view.streamlines {
-        self.streamline.draw(&mut pass, &self.uniforms, streamlines);
+      let frame = self.frame.bind_group();
+      for (item, &material) in view.items.items.iter().zip(&materials) {
+        match item {
+          RenderItem::Surface(batch, _) => self.fill.draw(
+            &mut pass,
+            frame,
+            self.surface_materials.bind_group(material),
+            batch,
+          ),
+          RenderItem::Segments(batch, _) => self.segments.draw(
+            &mut pass,
+            frame,
+            self.segment_materials.bind_group(material),
+            batch,
+          ),
+        }
       }
-      self.wireframe.draw(&mut pass, &self.uniforms, view.mesh);
     }
 
     // Antialiasing: box-filter the supersampled target down into the caller's

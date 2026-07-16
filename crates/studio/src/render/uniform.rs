@@ -1,15 +1,20 @@
 //! The renderer's uniforms: the binding helper, the values themselves, and the
-//! bundle every pass reads them from.
+//! per-item pools.
 //!
 //! Every uniform in this crate is the same shape -- a `Pod` struct at
 //! `@group(_) @binding(0)` -- so the buffer/layout/bind-group triple is written
 //! once here rather than at each pipeline. Each struct mirrors a WGSL struct of
 //! the same name in `preamble.wgsl`, field for field.
+//!
+//! The split is frame versus item: [`FrameUniform`] is where and when the scene
+//! is seen from, and every pipeline binds it at group 0; a *material* is what
+//! one [`super::item::RenderItem`] is drawn like, at group 1, one binding per
+//! item out of a [`UniformPool`].
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
-use super::camera::CameraUniform;
+use super::camera::Camera;
 
 /// A `T`-valued uniform bound at `@group(_) @binding(0)`: the buffer that backs
 /// it, the layout a pipeline declares it with, and the bind group a pass sets.
@@ -75,78 +80,125 @@ impl<T: Pod> UniformBinding<T> {
   }
 }
 
-/// Per-frame standing-wave state: $u(t) = "amplitude" dot "value" dot cos(omega t)$,
-/// displacing each vertex along its own normal and pulsing its color by the
-/// same factor.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
-pub struct WaveUniform {
-  pub time: f32,
-  pub amplitude: f32,
-  pub omega: f32,
-  pub _pad: f32,
+/// One `UniformBinding<T>` per item of a draw list, grown on demand and reused
+/// across frames.
+///
+/// A material belongs to an item and a bind group belongs to a buffer, so a
+/// frame drawing $m$ items of one kind needs $m$ bindings. The pool is what lets
+/// that count be a property of the scene -- several manifolds, several overlays
+/// -- rather than a fixed set the renderer declares up front.
+pub struct UniformPool<T: Pod + Default> {
+  label: &'static str,
+  visibility: wgpu::ShaderStages,
+  bindings: Vec<UniformBinding<T>>,
 }
 
-/// Colormap normalization range for the field currently on display.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
-pub struct BoundsUniform {
-  pub min_val: f32,
-  pub max_val: f32,
-  pub _pad1: f32,
-  pub _pad2: f32,
-}
-
-/// A segment pass's world-space half-width, in the same units the mesh's own
-/// coordinates are in. One type, two bindings: the wireframe and the streamline
-/// ribbons are the same billboard-quad technique at two different widths.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
-pub struct SegmentWidth {
-  pub half_width_world: f32,
-  pub _pad0: f32,
-  pub _pad1: f32,
-  pub _pad2: f32,
-}
-
-/// Every uniform the frame graph binds, in one place: created once, rewritten
-/// per frame, and handed to each pass both at pipeline creation (for the
-/// layouts) and at draw time (for the bind groups).
-pub struct Uniforms {
-  pub camera: UniformBinding<CameraUniform>,
-  pub wave: UniformBinding<WaveUniform>,
-  pub bounds: UniformBinding<BoundsUniform>,
-  pub wireframe_width: UniformBinding<SegmentWidth>,
-  pub streamline_width: UniformBinding<SegmentWidth>,
-}
-
-impl Uniforms {
-  pub fn new(device: &wgpu::Device) -> Self {
-    use wgpu::ShaderStages as Stages;
+impl<T: Pod + Default> UniformPool<T> {
+  pub fn new(device: &wgpu::Device, label: &'static str, visibility: wgpu::ShaderStages) -> Self {
+    // One binding up front: the layout a pipeline is built with is a property
+    // of a binding here, and pipelines exist before any item does.
+    let bindings = vec![UniformBinding::new(device, label, visibility, T::default())];
     Self {
-      camera: UniformBinding::new(device, "camera", Stages::VERTEX, CameraUniform::new()),
-      // Also visible in the fragment stage: the fill pulses its colormap by the
-      // same $cos(sqrt(lambda) t)$ that displaces it, and the ribbons fade by
-      // it.
-      wave: UniformBinding::new(
-        device,
-        "wave",
-        Stages::VERTEX_FRAGMENT,
-        WaveUniform::default(),
-      ),
-      bounds: UniformBinding::new(device, "bounds", Stages::FRAGMENT, BoundsUniform::default()),
-      wireframe_width: UniformBinding::new(
-        device,
-        "wireframe width",
-        Stages::VERTEX,
-        SegmentWidth::default(),
-      ),
-      streamline_width: UniformBinding::new(
-        device,
-        "streamline width",
-        Stages::VERTEX,
-        SegmentWidth::default(),
-      ),
+      label,
+      visibility,
+      bindings,
     }
   }
+
+  /// The layout every binding of this pool shares.
+  pub fn layout(&self) -> &wgpu::BindGroupLayout {
+    self.bindings[0].layout()
+  }
+
+  /// Writes `value` into the `index`th binding, allocating up to it if needed.
+  pub fn write(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, index: usize, value: T) {
+    while self.bindings.len() <= index {
+      self.bindings.push(UniformBinding::new(
+        device,
+        self.label,
+        self.visibility,
+        T::default(),
+      ));
+    }
+    self.bindings[index].write(queue, value);
+  }
+
+  pub fn bind_group(&self, index: usize) -> &wgpu::BindGroup {
+    self.bindings[index].bind_group()
+  }
+}
+
+/// Where and when the scene is seen from: the one uniform every pipeline binds,
+/// at group 0.
+///
+/// Time is here, not in a material, because it is the frame's -- the windowed
+/// loop passes wall-clock seconds, an exporter passes $t_k = k \/ "fps"$ -- while
+/// the frequency $omega$ it is multiplied by belongs to the field on display,
+/// and so lives in that item's material.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Pod, Zeroable)]
+pub struct FrameUniform {
+  view_proj: [[f32; 4]; 4],
+  /// World-space eye position, `w` unused: the billboard construction needs it
+  /// directly, not only the matrix it feeds into.
+  eye: [f32; 4],
+  time: f32,
+  _pad: [f32; 3],
+}
+
+impl Default for FrameUniform {
+  fn default() -> Self {
+    Self {
+      view_proj: nalgebra::Matrix4::identity().into(),
+      eye: [0.0; 4],
+      time: 0.0,
+      _pad: [0.0; 3],
+    }
+  }
+}
+
+impl FrameUniform {
+  pub fn new(camera: &Camera, time: f32) -> Self {
+    let eye = camera.eye();
+    Self {
+      view_proj: camera.build_view_projection_matrix().into(),
+      eye: [eye.x, eye.y, eye.z, 1.0],
+      time,
+      _pad: [0.0; 3],
+    }
+  }
+}
+
+/// How a filled surface is drawn: the colormap range it normalizes against and
+/// the standing wave that displaces and pulses it.
+///
+/// A field with no eigenvalue passes `wave_omega = 0` and `wave_amplitude = 0`,
+/// so $cos(0) = 1$ and the same code draws it static.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
+pub struct SurfaceMaterial {
+  pub min_val: f32,
+  pub max_val: f32,
+  pub wave_amplitude: f32,
+  pub wave_omega: f32,
+}
+
+/// How a segment mark is drawn. One material serves the wireframe, a line
+/// field's ribbons and a 1-manifold's own cells -- one technique at different
+/// ink and width, not three passes.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
+pub struct SegmentMaterial {
+  /// The mark's ink: `rgb` plus the base opacity every fragment starts at.
+  pub color: [f32; 4],
+  /// Half-width in world space, in the same units the mesh's own coordinates
+  /// are in -- not a pixel count, so a line reads the same thickness whether the
+  /// mesh fills the screen or sits in a corner of it.
+  pub half_width_world: f32,
+  /// Opacity at the standing wave's node, relative to the crest: an eigenmode's
+  /// ribbons fade where the field vanishes and the curves are meaningless. A
+  /// mark that does not fade passes 1.
+  pub fade_floor: f32,
+  pub wave_amplitude: f32,
+  pub wave_omega: f32,
 }

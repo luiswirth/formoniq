@@ -7,25 +7,12 @@ interactive viewer.
 
 ## Current state
 
-- `src/lib.rs` (~3000 lines) interleaves six concerns: the gallery model
-  (`MeshSource`, `View`, `Gallery`, `PendingLoad`), egui panel widgets
-  (`degeneracy_shells`, `pyramid`, `grade_grid`), GPU resource factories,
-  uniform structs, a `State` that hand-builds six pipelines, the frame graph,
-  and the winit `App`.
-- The seam out is dimension-bound: `render/mesh.rs::surface_geometry` asserts
-  `topology.dim() == 2`. The intrinsic layer (`scene.rs`, `streamline.rs`) is
-  already dimension-agnostic; only the bake and renderer are triangle-only.
-- Two parallel bakes exist: `TriangleSurface3D` (io) and `surface_geometry`
-  (render), sharing helpers but not a type.
-- Two segment renderers exist: the wireframe pass and the streamline ribbon
-  pass are the same technique (instanced screen-facing quads, paired
-  per-instance endpoint buffers) duplicated in Rust and WGSL.
-- Rendering is welded to the window: `State` owns the surface, egui, and an
-  `Instant`; there is no offscreen path. `std::time::Instant` and
-  `pollster::block_on` in `resumed` both panic on wasm32, so the wasm target
-  is currently broken despite its scaffolding.
-- Boilerplate causes: no uniform-binding helper, no pass abstraction. Every
-  uniform is buffer + layout + bind group + `_pad` fields by hand.
+- There is no offscreen path: `app.rs` owns the surface, egui and an `Instant`,
+  and only it drives the renderer. `std::time::Instant` and
+  `pollster::block_on` in `resumed` both panic on wasm32, so the wasm target is
+  currently broken despite its scaffolding.
+- Colormap, camera clamps and a handful of error paths are still the thesis-era
+  ones; see step 5.
 
 ## Target architecture
 
@@ -51,12 +38,12 @@ src/
     camera.rs     (unchanged)
     preamble.wgsl shared types/functions, prepended to every body
     *.wgsl
-  io/             obj, blender (unchanged shape)
+  io/             obj, blender, surface (the interchange intermediate)
 ```
 
 Deleted: `ui/mod.rs` stub, `examples/_check_spectrum.rs`, `mesh3d.rs`
 (contents absorbed by `bake.rs` and `demos.rs`), `TriangleSurface3D` as a
-public seam (io keeps whatever thin intermediate it needs).
+public seam (io keeps it as its own thin intermediate).
 
 ### The bake: `BakedMesh`
 
@@ -68,13 +55,13 @@ streams.
 
 ```rust
 pub struct BakedMesh {
-  positions: ...,           // static per-vertex: position, normal,
-                            // max_displacement (f32, R^3)
-  attributes: ...,          // per-field: value, direction -- swappable
-                            // without rebaking
-  cells: PrimBatch,         // Triangles | Segments | Points, by min(d, 2)
-  wireframe: Vec<[u32; 2]>, // derived 1-skeleton overlay
+  positions: Vec<BakedVertex>, // static per-vertex: position, normal,
+                               // max_displacement (f32, R^3)
+  cells: PrimBatch,            // Triangles | Segments | Points, by min(d, 2)
+  wireframe: Vec<[u32; 2]>,    // derived 1-skeleton overlay
 }
+
+fn attributes(values: &[f64]) -> Vec<f32>; // per-field, swappable without rebaking
 ```
 
 - Dimension dispatch lives only here: 2-cells bake to wound triangles,
@@ -87,7 +74,10 @@ pub struct BakedMesh {
   merging is batching -- a draw-call optimization, not an abstraction -- and
   it destroys per-object identity (visibility, bounds, colormap, picking).
 - The static/per-field split means switching eigenmodes rewrites only the
-  attribute stream, not positions, normals, curvature, or winding.
+  attribute stream, not positions, normals, curvature, or winding. The bake is
+  therefore a function of the mesh alone, and the attribute stream a separate
+  function of the field -- rather than one struct carrying both, where the
+  split would be a convention instead of a signature.
 
 ### The draw list
 
@@ -182,6 +172,21 @@ Each step is one or more commits, each green under `cargo fmt --all`,
    traversed in opposite directions by its two triangles);
    `Scene::whitney_basis(d)` sweep. Update `CLAUDE.md` in the same commit
    (see below).
+
+   The segment merge is one pipeline, not two off one shader: what remained
+   after the endpoint types unified was blend and depth, and both dissolve.
+   Alpha-blending with $alpha = 1$ *is* `REPLACE`, so the wireframe loses
+   nothing; and the wireframe never needed to write depth, since nothing in the
+   scene is drawn after it, while the translucent ribbons must not. Ink, width,
+   end taper and the node fade become the material; a mark that does not ride the
+   standing wave carries a zero normal, which makes the displacement the identity
+   on it rather than a branch.
+
+   `PrimBatch::Points` bakes but carries no mark yet -- the same "a future mark,
+   not a special case to route around" the reduced grade $>= 2$ gets in step 5.
+   The curvature cap likewise has no meaning for $d >= 3$'s boundary surface (the
+   volume's own estimators are not the boundary's), so displacement there is
+   uncapped rather than clamped by a quantity that means something else.
 4. **Export.** `export.rs` + CLI: PNG, then ffmpeg pipe, then `--panels`.
    Headless smoke test: render a known view, assert readback is non-uniform
    (skip when no adapter is available).

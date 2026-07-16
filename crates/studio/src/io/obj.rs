@@ -20,7 +20,7 @@ use std::fmt;
 use common::linalg::nalgebra::Matrix;
 use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 
-use crate::mesh3d::TriangleSurface3D;
+use crate::io::surface::TriangleSurface3D;
 
 /// Why an OBJ string could not be read as a surface mesh.
 #[derive(Debug)]

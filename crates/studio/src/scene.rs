@@ -347,7 +347,7 @@ impl Scene {
 
     let (topology, coords) = standard_coord_complex(cell_dim);
     // The renderer is 3D-only; a reference cell of `dim < 3` embeds as
-    // itself in the `z = 0` plane, same as `mesh3d::TriangleSurface3D` does
+    // itself in the `z = 0` plane, same as `bake.rs` does
     // for any other flat surface. A no-op once `cell_dim >= 3`.
     let coords = coords.embed_euclidean(cell_dim.max(3));
     Self::whitney_basis_on(topology, coords)
@@ -362,7 +362,7 @@ impl Scene {
     Self::whitney_basis_on(topology, coords)
   }
 
-  /// Three worked grade-1 examples on [`crate::mesh3d::triforce`] -- a
+  /// Three worked grade-1 examples on [`crate::demos::triforce`] -- a
   /// constant field, a pure-curl field and a pure-divergence field -- each an
   /// explicit linear combination of GSFs rather than a single one-hot
   /// cochain, going through the same reduced-grade reconstruction regardless.
@@ -664,7 +664,7 @@ mod tests {
   /// subsimplex of a single reference cell.
   #[test]
   fn whitney_basis_mesh_has_one_field_per_mesh_simplex() {
-    let (topology, coords) = crate::mesh3d::triforce();
+    let (topology, coords) = crate::demos::triforce();
     assert_eq!(topology.nsimplices(0), 6);
     assert_eq!(topology.nsimplices(1), 9);
     assert_eq!(topology.nsimplices(2), 4);
@@ -680,7 +680,7 @@ mod tests {
   /// panicking, which is the actual thing under test.
   #[test]
   fn whitney_examples_are_three_named_line_fields() {
-    let (topology, coords) = crate::mesh3d::triforce();
+    let (topology, coords) = crate::demos::triforce();
     let scene = Scene::whitney_examples(topology, coords);
     assert!(scene.fields.is_empty());
     let names: Vec<_> = scene.line_fields.iter().map(|f| f.name.as_str()).collect();

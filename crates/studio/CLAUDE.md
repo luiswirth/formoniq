@@ -35,11 +35,18 @@ as it can go before either one commits.
   `MeshCoords`, `Cochain` — rather than a lossy export format, so the coloring,
   the displacement and the choice of render mark stay decisions of the viewer,
   made on the real object.
-- **`TriangleSurface3D` (the bake) is the seam out.** It is deliberately
-  dimension-specific and coordinate-full: winding and embedding fixed at 3, the
-  two things the core keeps out, because a graphics API and an interchange file
-  both need them. Downstream of the bake there are no FEEC types, only ambient
-  geometry.
+- **The bake is the seam out.** It reduces a complex to what a rasterizer draws:
+  simplices of dimension $<= 2$ embedded in $RR^3$, with winding and embedding
+  made explicit — the two things the core keeps out, because a graphics API and
+  an interchange file both need them. Downstream of the bake there are no FEEC
+  types, only ambient geometry.
+
+  The bake's vertex table splits by what a datum depends on: the static half is a
+  function of the mesh and its embedding alone (position, normal, curvature cap,
+  winding), the other is the field on it (one scalar per vertex). Switching
+  fields, or scrubbing a trajectory, therefore rewrites only the attribute
+  stream. A datum that would have to be recomputed to change fields is in the
+  wrong half.
 
 Between the two the discipline is lived, not hoped for: a curve integrator works
 in the barycentric charts of the atlas and crosses cells through the
@@ -58,12 +65,24 @@ always $3$, is a unification, not a special case.
 allows. A point set, a curve and a surface are one `MeshCoords`-in-$RR^3$
 pipeline across grades, not three renderers — a curve renderer split off from a
 surface renderer would be the `if dim == 3` of the parent, reappearing here.
-Grade is reduced before it is drawn: a $k$-form reduces to its *reduced grade*
-$min(k, n-k)$ through the Hodge star, and the render mark is chosen on that. The
-dispatch is total — the case distinction lives in the mark, not smeared through
-the renderer — and the grades the current ambient does not yet reach are where it
-extends, not branches to route around. Where a visualization genuinely forces a
-case distinction, confine it to the mark, the way the reduction does.
+
+Two reductions carry that, and they are the same move made on the two axes:
+
+- **Grade reduces to a mark.** A $k$-form reduces to its *reduced grade*
+  $min(k, n-k)$ through the Hodge star, and the render mark is chosen on that.
+- **Intrinsic dimension reduces to a render primitive.** An $n$-manifold reduces
+  to the primitive $min(n, 2)$ in the bake: a surface to wound triangles, a curve
+  to segments, a point cloud to points, and a solid to the 2-simplices of its
+  boundary — all of it an observer in $RR^3$ can see.
+
+Each case distinction is confined to its own reduction — to the mark, and to the
+bake — never smeared through the renderer, which sees only which *items* a frame
+has, never why. The consequence is that one segment pipeline serves the wireframe
+overlay, a line field's traced ribbons and a 1-manifold's own cells: they were
+one technique described three times, and what differed between them (ink, width,
+taper, whether the mark rides the wave) is material data. What the current
+ambient does not yet reach — a reduced grade $>= 2$, a point cloud's mark — is
+where these extend, not a branch to route around.
 
 ## The extrinsic freedom is the embedding, not the metric
 
@@ -79,6 +98,24 @@ does not mathematically need one — and every metric here is the one the embedd
 already induces. What `studio` grants itself over the core is the embedding and
 the ambient space, and the global geometry read off them; nothing about the
 metric changes.
+
+## The layers of the viewer
+
+The two seams say where the embedding enters. These say who may know what, and
+they bind the same way the parent's invariants do:
+
+- **The model is GPU-free.** The gallery and the scene are the mathematics and
+  the state of the viewer; neither names a device, a buffer or a pipeline. What
+  is shown is decided there and baked afterward, never the other way round.
+- **The renderer sees baked geometry and explicit time, and nothing else.** No
+  FEEC types, no clock, no window, no surface. Time is an argument, so the
+  interactive loop passes wall-clock seconds and an exporter passes
+  $t_k = k \/ "fps"$; the frames are deterministic either way, and the two cannot
+  drift because there is one frame graph. A frame is a *draw list* — batches with
+  their materials, in submission order — so the number of things on screen is the
+  caller's, never a fixed set the renderer declares.
+- **The UI is a pure function of the model** returning requested changes, not a
+  mutator of it.
 
 ## Rendering
 
@@ -98,8 +135,12 @@ Two durable conventions, kept general on purpose:
 
 ## Anti-goals
 
-- No renderer specialized to a fixed intrinsic dimension or grade where the
-  reduced-grade dispatch covers it. One pipeline, marks chosen by the reduction.
+- No renderer specialized to a fixed intrinsic dimension or grade where the two
+  reductions cover it. Marks chosen by the grade's reduction, primitives by the
+  dimension's; no second pipeline for what is one technique at a different ink.
+- No dimension dispatch outside the bake, and no grade dispatch outside the mark.
+  A `match` on either anywhere else is the case distinction escaping its
+  reduction.
 - No embedding leaking in outside the two seams; no ambient assumption above
   dimension 3.
 - No claiming metric use as the extrinsic divergence — the divergence is the

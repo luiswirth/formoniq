@@ -1,6 +1,6 @@
 use common::linalg::nalgebra::Vector;
 
-use crate::mesh3d::TriangleSurface3D;
+use crate::io::surface::TriangleSurface3D;
 use manifold::geometry::coord::mesh::MeshCoords;
 use manifold::topology::complex::Complex;
 

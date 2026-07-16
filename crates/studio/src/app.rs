@@ -1,8 +1,7 @@
 //! The windowed viewer: winit event loop, wgpu surface, egui integration and
 //! input handling. Consumes the gallery model (`gallery.rs`) and the panel
-//! (`ui/panel.rs`), turns the current selection into the geometry and material
-//! parameters of one [`SceneView`], and hands that to the [`Renderer`], which
-//! owns every pipeline.
+//! (`ui/panel.rs`), turns the current selection into a baked [`DrawList`], and
+//! hands that to the [`Renderer`], which owns every pipeline.
 //!
 //! This is the one place a clock and a surface exist. The renderer takes time
 //! as an argument, so a headless exporter can drive the same frame graph from a
@@ -18,13 +17,14 @@ use winit::{
   window::{Window, WindowId},
 };
 
+use crate::bake::{self, BakedMesh};
 use crate::demos::default_selection;
 use crate::gallery::{Gallery, MeshSource, View};
 use crate::render::{
   camera::Camera,
-  mesh::MeshBuffer,
-  streamline::StreamlineBuffer,
-  {GpuContext, Renderer, SceneView},
+  item::{DrawList, RenderItem, SegmentBatch, SurfaceBatch},
+  uniform::{SegmentMaterial, SurfaceMaterial},
+  {FrameView, GpuContext, Renderer},
 };
 use crate::scene::Scene;
 use crate::ui::panel::{Entry, PanelModel, Selection};
@@ -45,6 +45,33 @@ use wasm_bindgen::prelude::*;
 /// orbital-lobe shape rather than a faint ripple. Kept below 1 so a negative
 /// lobe never overshoots the origin and inverts the surface.
 const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
+
+/// The wireframe's half-width as a fraction of the scene's own extent (its
+/// radius) -- the same object-intrinsic scale the standing-wave displacement
+/// uses -- rather than a fixed screen-pixel count, so the line reads the same
+/// thickness whether the mesh is zoomed to fill the screen or shrunk to a corner
+/// of it.
+const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
+
+/// The streamline ribbon's half-width, on the same object-intrinsic scale.
+const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
+
+/// The streamline ribbons' ink: dark enough to separate from any colormap
+/// sample, not pure black, so the curves read as drawn on the surface rather
+/// than as holes cut through it. Deliberately not the colormap: the surface
+/// carries the magnitude and the curves carry the direction, so tinting a ribbon
+/// by the field would restate what the fill beneath it already says -- and
+/// restate it invisibly, since that colormap is three sinusoids at 120 degree
+/// phase offsets, whose channels sum to a constant, making it iso-luminant.
+/// Against a backdrop of constant mid luminance, a near-black ink is the one
+/// choice that separates everywhere.
+const STREAMLINE_INK: [f32; 4] = [0.05, 0.05, 0.07, 1.0];
+
+/// The opacity the ribbons of an eigenmode fade to at the standing wave's node,
+/// where the field vanishes and the curves are meaningless -- never fully, since
+/// the integral curves of a standing mode are the same set at every phase, and
+/// blinking them out entirely would read as the geometry changing.
+const STREAMLINE_NODE_OPACITY: f32 = 0.25;
 
 /// Streamline separation, as a fraction of the scene extent (its radius) --
 /// object-intrinsic, like the wave amplitude, so the line density is a property
@@ -121,32 +148,68 @@ fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   camera
 }
 
-/// The geometry and material parameters for showing one field of a scene: the
-/// one place a [`Selection`] turns into something drawable, built at startup and
-/// whenever the UI switches the field. Everything here is static per field --
-/// the renderer only re-times it per frame.
+/// The scene's geometry on the GPU: what a mesh bakes to, and nothing a field
+/// decides. Rebuilt when the scene changes, never when the field does.
+struct MeshDisplay {
+  /// The filled surface, absent for a bake with no fill (a curve, a point
+  /// cloud), whose only mark is its segments.
+  surface: Option<SurfaceBatch>,
+  /// The 1-skeleton overlay of a surface, or a 1-manifold's own cells. Empty for
+  /// a bake with neither, which draws nothing rather than being a case to
+  /// exclude.
+  segments: SegmentBatch,
+}
+
+impl MeshDisplay {
+  fn build(device: &wgpu::Device, scene: &Scene) -> Self {
+    let baked = BakedMesh::new(&scene.topology, &scene.coords);
+    let vertices = baked.segment_vertices();
+    let values = vec![0.0; vertices.len()];
+    let segments = match &baked.cells {
+      crate::bake::PrimBatch::Segments(cells) => cells.as_slice(),
+      _ => &baked.wireframe,
+    };
+    Self {
+      surface: SurfaceBatch::new(device, &baked),
+      segments: SegmentBatch::new(device, &vertices, &values, segments),
+    }
+  }
+
+  /// Rebinds the mesh to a different field: one buffer write per stream, no
+  /// rebake.
+  fn write_attributes(&self, queue: &wgpu::Queue, attributes: &[f32]) {
+    if let Some(surface) = &self.surface {
+      surface.write_attributes(queue, attributes);
+    }
+    self.segments.write_attributes(queue, attributes);
+  }
+}
+
+/// The material parameters for showing one field of a scene, and the geometry
+/// only that field has: the one place a [`Selection`] turns into something
+/// drawable. Everything here is static per field -- the renderer only re-times
+/// it per frame.
 struct FieldDisplay {
-  mesh_buffer: MeshBuffer,
-  /// The traced streamlines of a line field, `None` for a scalar field.
-  streamlines: Option<StreamlineBuffer>,
-  field_min: f32,
-  field_max: f32,
-  wave_amplitude: f32,
-  wave_omega: f32,
+  /// The traced streamlines of a line field, `None` for a scalar field. Their
+  /// presence *is* the line-field mark: there is no branch to pick.
+  streamlines: Option<SegmentBatch>,
+  surface: SurfaceMaterial,
+  wireframe: SegmentMaterial,
+  streamline: SegmentMaterial,
 }
 
 impl FieldDisplay {
   fn build(
-    device: &wgpu::Device,
+    ctx: &GpuContext,
+    mesh: &MeshDisplay,
     scene: &Scene,
     selection: Selection,
     amplitude_scale: f32,
   ) -> Self {
-    match selection {
+    let (streamlines, attributes, surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
         let (raw_min, raw_max) = field.bounds();
-        let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, field.values());
 
         let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
         // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
@@ -166,33 +229,33 @@ impl FieldDisplay {
         // its colormap range is symmetric $[-s, s]$ about the midpoint -- the
         // same reasoning as the line field's tint. A static field keeps its own
         // asymmetric range.
-        let (field_min, field_max) = if field.eigenvalue.is_some() {
+        let (min_val, max_val) = if field.eigenvalue.is_some() {
           (-field_scale, field_scale)
         } else {
           (raw_min, raw_max)
         };
 
-        Self {
-          mesh_buffer,
-          streamlines: None,
-          field_min,
-          field_max,
-          wave_amplitude,
-          wave_omega,
-        }
+        (
+          None,
+          bake::attributes(field.values()),
+          SurfaceMaterial {
+            min_val,
+            max_val,
+            wave_amplitude,
+            wave_omega,
+          },
+        )
       }
       Selection::Line(index) => {
         let field = &scene.line_fields[index];
-        // The surface is the same fill a scalar field gets, tinted by the
-        // field's nodal magnitude: the curves carry the direction, so the
-        // surface has only the magnitude left to say.
-        let mesh_buffer = MeshBuffer::new(device, &scene.topology, &scene.coords, &field.magnitude);
         // The integral curves of the true Whitney field, traced on the manifold
         // at a separation fixed to the object's own extent (not its mesh width).
         let d_sep = f64::from(STREAMLINE_SEPARATION_FRACTION * amplitude_scale);
         let traced =
           crate::streamline::trace(&scene.topology, &scene.coords, &field.cochain, d_sep);
-        let streamlines = Some(StreamlineBuffer::new(device, &traced));
+        let (vertices, values, segments) = bake::bake_streamlines(&traced);
+        let streamlines = SegmentBatch::new(&ctx.device, &vertices, &values, &segments);
+
         let (raw_min, raw_max) = field.bounds();
         // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
         // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
@@ -205,23 +268,67 @@ impl FieldDisplay {
         // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
         // the mode's frequency.
         let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
-        let (field_min, field_max) = if field.eigenvalue.is_some() {
+        let (min_val, max_val) = if field.eigenvalue.is_some() {
           (-peak, peak)
         } else {
           (raw_min, raw_max)
         };
-        let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
 
-        Self {
-          mesh_buffer,
-          streamlines,
-          field_min,
-          field_max,
-          wave_amplitude: 0.0,
-          wave_omega,
-        }
+        (
+          Some(streamlines),
+          // The surface is the same fill a scalar field gets, tinted by the
+          // field's nodal magnitude: the curves carry the direction, so the
+          // surface has only the magnitude left to say.
+          bake::attributes(&field.magnitude),
+          SurfaceMaterial {
+            min_val,
+            max_val,
+            wave_amplitude: 0.0,
+            wave_omega: field.eigenvalue.map_or(0.0, f64::sqrt) as f32,
+          },
+        )
       }
+    };
+
+    mesh.write_attributes(&ctx.queue, &attributes);
+
+    Self {
+      streamlines,
+      surface,
+      // The wireframe rides the surface's own wave, so it tracks the displaced
+      // mesh rather than the flat rest one, and it has no node to fade at.
+      wireframe: SegmentMaterial {
+        color: [0.0, 0.0, 0.0, 1.0],
+        half_width_world: WIREFRAME_WIDTH_FRACTION * amplitude_scale,
+        fade_floor: 1.0,
+        wave_amplitude: surface.wave_amplitude,
+        wave_omega: surface.wave_omega,
+      },
+      // The ribbons share the wave's clock but not its displacement: the samples
+      // sit on the undisplaced surface, so only the node fade reads the mode.
+      streamline: SegmentMaterial {
+        color: STREAMLINE_INK,
+        half_width_world: STREAMLINE_WIDTH_FRACTION * amplitude_scale,
+        fade_floor: STREAMLINE_NODE_OPACITY,
+        wave_amplitude: 0.0,
+        wave_omega: surface.wave_omega,
+      },
     }
+  }
+
+  /// The frame's items, in submission order: the surface writes depth, and the
+  /// marks over it -- a line field's ribbons, then the wireframe -- only test
+  /// against it, so they blend in the order given.
+  fn draw_list<'a>(&'a self, mesh: &'a MeshDisplay) -> DrawList<'a> {
+    let mut items = Vec::new();
+    if let Some(surface) = &mesh.surface {
+      items.push(RenderItem::Surface(surface, self.surface));
+    }
+    if let Some(streamlines) = &self.streamlines {
+      items.push(RenderItem::Segments(streamlines, self.streamline));
+    }
+    items.push(RenderItem::Segments(&mesh.segments, self.wireframe));
+    DrawList { items }
   }
 }
 
@@ -233,6 +340,7 @@ struct State<'a> {
   renderer: Renderer,
 
   camera: Camera,
+  mesh_display: MeshDisplay,
   display: FieldDisplay,
 
   /// The standing wave's phase origin, reset whenever the field changes so a
@@ -306,7 +414,8 @@ impl<'a> State<'a> {
     let (gallery, scene) = Gallery::new(MeshSource::START);
     let selection = default_selection(&scene);
     let amplitude_scale = scene_extent(&scene) as f32;
-    let display = FieldDisplay::build(&ctx.device, &scene, selection, amplitude_scale);
+    let mesh_display = MeshDisplay::build(&ctx.device, &scene);
+    let display = FieldDisplay::build(&ctx, &mesh_display, &scene, selection, amplitude_scale);
 
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
 
@@ -329,6 +438,7 @@ impl<'a> State<'a> {
       size,
       renderer,
       camera,
+      mesh_display,
       display,
       start_time: std::time::Instant::now(),
       mouse_pressed: false,
@@ -354,7 +464,8 @@ impl<'a> State<'a> {
   fn apply_field(&mut self, selection: Selection) {
     self.selection = selection;
     self.display = FieldDisplay::build(
-      &self.ctx.device,
+      &self.ctx,
+      &self.mesh_display,
       &self.scene,
       selection,
       self.amplitude_scale,
@@ -427,6 +538,7 @@ impl<'a> State<'a> {
     self.amplitude_scale = scene_extent(&scene) as f32;
     let selection = default_selection(&scene);
     self.scene = scene;
+    self.mesh_display = MeshDisplay::build(&self.ctx.device, &self.scene);
     self.apply_field(selection);
     self.camera = default_camera(&self.scene, self.camera.aspect);
   }
@@ -676,21 +788,16 @@ impl<'a> State<'a> {
         label: Some("Render Encoder"),
       });
 
-    let scene_view = SceneView {
-      mesh: &self.display.mesh_buffer,
-      streamlines: self.display.streamlines.as_ref(),
-      field_min: self.display.field_min,
-      field_max: self.display.field_max,
-      wave_amplitude: self.display.wave_amplitude,
-      wave_omega: self.display.wave_omega,
-      extent: self.amplitude_scale,
+    let items = self.display.draw_list(&self.mesh_display);
+    let frame_view = FrameView {
+      items: &items,
       camera: &self.camera,
       size: (self.config.width, self.config.height),
       time: self.start_time.elapsed().as_secs_f32(),
     };
     self
       .renderer
-      .render(&self.ctx, &mut encoder, &view, &scene_view);
+      .render(&self.ctx, &mut encoder, &view, &frame_view);
 
     // egui composites over the renderer's output, in the same submission: the
     // one thing the windowed wrapper draws that the frame graph does not.
