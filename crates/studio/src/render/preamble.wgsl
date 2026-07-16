@@ -21,7 +21,13 @@ struct Frame {
     // needs it directly, not only the matrix it feeds into.
     eye: vec4<f32>,
     time: f32,
-    _pad: vec3<f32>,
+    // Three scalars, not a `vec3<f32>`: a WGSL vector is 16-aligned, so a
+    // `vec3` here would start a new 16-byte slot past `time` rather than fill
+    // out its one -- padding that pads the struct wider instead of closing it.
+    // The Rust mirror is `[f32; 3]`, aligned as its element, and these match it.
+    _pad0: f32,
+    _pad1: f32,
+    _pad2: f32,
 };
 
 // How a filled surface is drawn: its colormap normalization range, and the

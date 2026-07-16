@@ -23,6 +23,13 @@ use super::camera::Camera;
 /// face value: WGSL rounds a uniform struct up to a 16-byte multiple and
 /// `#[repr(C)]` does not, so the padding is written out rather than left to the
 /// two languages to agree on by luck.
+///
+/// Padding is written in *scalars*, never a vector: WGSL aligns a `vec3<f32>`
+/// to 16 bytes where Rust aligns `[f32; 3]` to 4, so a `vec3` tail does not pad
+/// a struct closed -- it opens a fresh slot and pads it wider than its mirror.
+/// The rule that makes the mirroring real is that the two declarations agree on
+/// *bytes*, which reading them side by side does not establish and
+/// `render::tests::uniform_layouts_match_wgsl` does.
 pub struct UniformBinding<T: Pod> {
   buffer: wgpu::Buffer,
   layout: wgpu::BindGroupLayout,
