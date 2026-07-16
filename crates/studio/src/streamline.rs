@@ -482,7 +482,7 @@ mod tests {
   #[test]
   fn constant_field_streamlines_are_straight() {
     let (topology, coords) = crate::demos::triforce();
-    let scene = Scene::whitney_examples(topology, coords);
+    let scene = Scene::cochains(topology, coords, &crate::demos::triforce_examples());
     let field = scene
       .line_fields
       .iter()
@@ -510,7 +510,7 @@ mod tests {
   #[test]
   fn distinct_streamlines_stay_separated() {
     let (topology, coords) = crate::demos::triforce();
-    let scene = Scene::whitney_examples(topology, coords);
+    let scene = Scene::cochains(topology, coords, &crate::demos::triforce_examples());
     let field = scene
       .line_fields
       .iter()

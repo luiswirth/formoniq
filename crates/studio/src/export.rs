@@ -16,9 +16,8 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::demos::build_view;
 use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
-use crate::gallery::{MeshSource, View};
+use crate::gallery::{MeshSource, Study};
 use crate::render::{FrameView, GpuContext, Renderer};
 use crate::scene::Scene;
 use crate::ui::Selection;
@@ -73,7 +72,7 @@ fn export_ssaa_scale(size: (u32, u32)) -> u32 {
 /// What one export asks for: which scene, which field of it, and at what
 /// resolution and cadence.
 pub struct ExportSpec {
-  pub view: View,
+  pub study: Study,
   pub mesh_source: MeshSource,
   /// Which field of the built scene to show, indexed over the scene's scalar
   /// fields and then its line fields -- the picker's own order. `None` opens on
@@ -231,7 +230,7 @@ struct Displayed {
 impl Displayed {
   fn build(ctx: &GpuContext, spec: &ExportSpec) -> Result<Self, String> {
     let mesh_data = spec.mesh_source.build()?;
-    let scene = build_view(spec.view, &mesh_data);
+    let scene = spec.study.build(&mesh_data);
 
     let selection = match spec.field {
       None => crate::demos::default_selection(&scene),
@@ -473,23 +472,22 @@ mod tests {
       return;
     };
     let spec = ExportSpec {
-      view: View::WhitneyExamplesMesh,
-      mesh_source: MeshSource::START,
+      study: Study::Cochains(crate::demos::triforce_examples()),
+      mesh_source: MeshSource::Triforce,
       field: Some(0),
       size: (64, 64),
       frames: None,
       fps: 30,
     };
-    // The premise of the test, checked rather than assumed: if this view ever
+    // The premise of the test, checked rather than assumed: if this study ever
     // stopped carrying a line field, the render below would still pass while
     // silently no longer covering the segment pipeline.
-    let scene = build_view(
-      spec.view,
-      &spec.mesh_source.build().expect("the sphere builds"),
-    );
+    let scene = spec
+      .study
+      .build(&spec.mesh_source.build().expect("the triforce builds"));
     assert!(
       !scene.line_fields.is_empty(),
-      "the Whitney examples are grade-1 line fields; without one the segment \
+      "the triforce cochains are grade-1 line fields; without one the segment \
        pipeline is not what this test exercises"
     );
 
