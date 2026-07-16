@@ -57,9 +57,9 @@ pub(crate) type Mesh = (Complex, MeshCoords);
 
 /// One of the CC0 surface meshes the studio ships as a built-in gallery,
 /// embedded in the binary (see `assets/meshes`, and its `SOURCES.md` for
-/// provenance). Chosen to span topology -- genus 0 and genus 1, down to a
-/// 7-vertex torus -- so the harmonic (zero-eigenvalue) modes the gallery shows
-/// at grade 1 range over $dim H^1 = 2 g$.
+/// provenance). Chosen to span topology -- genus 0 and genus 1 -- so the
+/// harmonic (zero-eigenvalue) modes the gallery shows at grade 1 range over
+/// $dim H^1 = 2 g$.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum BuiltinMesh {
   /// Spot the cow (genus 0).
@@ -68,25 +68,16 @@ pub enum BuiltinMesh {
   Bob,
   /// Blub the fish (genus 0); the largest, so the slowest to solve.
   Blub,
-  /// The Császár polyhedron: a diagonal-free 7-vertex triangulation of the
-  /// torus (genus 1).
-  Csaszar,
 }
 
 impl BuiltinMesh {
-  pub const ALL: [BuiltinMesh; 4] = [
-    BuiltinMesh::Spot,
-    BuiltinMesh::Bob,
-    BuiltinMesh::Blub,
-    BuiltinMesh::Csaszar,
-  ];
+  pub const ALL: [BuiltinMesh; 3] = [BuiltinMesh::Spot, BuiltinMesh::Bob, BuiltinMesh::Blub];
 
   pub(crate) fn label(self) -> &'static str {
     match self {
       BuiltinMesh::Spot => "Spot (cow)",
       BuiltinMesh::Bob => "Bob",
       BuiltinMesh::Blub => "Blub (fish)",
-      BuiltinMesh::Csaszar => "Császár torus",
     }
   }
 
@@ -99,7 +90,6 @@ impl BuiltinMesh {
       BuiltinMesh::Spot => "spot",
       BuiltinMesh::Bob => "bob",
       BuiltinMesh::Blub => "blub",
-      BuiltinMesh::Csaszar => "csaszar",
     }
   }
 
@@ -117,7 +107,6 @@ impl BuiltinMesh {
       BuiltinMesh::Spot => include_str!("../assets/meshes/spot.obj"),
       BuiltinMesh::Bob => include_str!("../assets/meshes/bob.obj"),
       BuiltinMesh::Blub => include_str!("../assets/meshes/blub.obj"),
-      BuiltinMesh::Csaszar => include_str!("../assets/meshes/csaszar.obj"),
     }
   }
 }
@@ -237,6 +226,11 @@ pub enum Study {
   /// A named list of explicit cochains -- the triforce worked examples today, a
   /// loaded cochain file later.
   Cochains(Vec<NamedCochain>),
+  /// The grade-1 Hodge decomposition of a probe field, exposed as four
+  /// switchable fields: the input and its exact, coexact and harmonic shells.
+  /// The harmonic shell is nonzero exactly on a mesh with grade-1 homology, so
+  /// this is the study that shows the topology of the surface directly.
+  HodgeDecomposition,
 }
 
 impl Study {
@@ -253,6 +247,7 @@ impl Study {
       Study::Eigenmodes { grade, .. } => format!("Eigenmodes, grade {grade}"),
       Study::WhitneyBasis => "Whitney basis".to_string(),
       Study::Cochains(_) => "Cochains".to_string(),
+      Study::HodgeDecomposition => "Hodge decomposition".to_string(),
     }
   }
 
@@ -266,6 +261,7 @@ impl Study {
       Study::Eigenmodes { grade, nmodes } => Scene::mesh_grade(topology, coords, *grade, *nmodes),
       Study::WhitneyBasis => Scene::whitney_basis_mesh(topology.clone(), coords.clone()),
       Study::Cochains(specs) => Scene::cochains(topology.clone(), coords.clone(), specs),
+      Study::HodgeDecomposition => Scene::hodge_decomposition(topology.clone(), coords.clone()),
     }
   }
 }
@@ -332,7 +328,7 @@ pub(crate) fn presets() -> Vec<Preset> {
     },
     Preset {
       name: "Harmonic 1-forms",
-      mesh: MeshSource::Builtin(BuiltinMesh::Csaszar),
+      mesh: MeshSource::Builtin(BuiltinMesh::Bob),
       study: Study::Eigenmodes {
         grade: 1,
         nmodes: DEFAULT_NMODES,
@@ -358,6 +354,16 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::Triforce,
       study: Study::Cochains(crate::demos::triforce_examples()),
       selection: Some(Selection::Line(0)),
+    },
+    Preset {
+      // A genus-1 surface, so the harmonic shell is genuinely 2-dimensional
+      // ($b_1 = 2$) rather than empty: the decomposition is the full
+      // exact + coexact + harmonic, not the contractible Helmholtz special
+      // case. Opens on the harmonic shell -- the component that sees the hole.
+      name: "Hodge decomposition",
+      mesh: MeshSource::Builtin(BuiltinMesh::Bob),
+      study: Study::HodgeDecomposition,
+      selection: Some(Selection::Line(3)),
     },
   ]
 }

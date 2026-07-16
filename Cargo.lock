@@ -1237,6 +1237,7 @@ dependencies = [
  "bytemuck",
  "clap",
  "common",
+ "continuum",
  "ddf",
  "egui",
  "egui-file-dialog",
