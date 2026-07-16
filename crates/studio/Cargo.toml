@@ -29,6 +29,13 @@ egui-winit = "0.35.0"
 cfg-if = "1.0.4"
 bytemuck = { version = "1.25.1", features = ["derive"] }
 
+[dev-dependencies]
+# Pinned to the same version wgpu resolves internally (see the `wgpu` pin
+# above): validates the WGSL source files against the exact frontend wgpu
+# itself uses to build pipelines, so a shader that fails at pipeline-creation
+# time fails `cargo test` first instead.
+naga = { version = "29.0.4", features = ["wgsl-in"] }
+
 # Native-only: an in-egui file browser for loading a custom mesh. Pure Rust
 # (its only extra deps are `directories` and `sysinfo`), so it pulls in no GTK,
 # no D-Bus portal and no platform toolkit -- unlike a native-dialog crate. The

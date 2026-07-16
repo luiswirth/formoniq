@@ -144,11 +144,23 @@ struct FieldMeta {
 }
 
 impl LineField {
-  /// Largest nodal magnitude, for tint normalization. Symmetric bounds
-  /// $[-m, m]$ follow from it, since the animated tint $|V| cos(sqrt(lambda) t)$
-  /// is signed even though $|V|$ is not.
-  pub fn max_magnitude(&self) -> f64 {
-    self.magnitude.iter().copied().fold(0.0, f64::max)
+  /// Magnitude range across the field, for colormap normalization -- the
+  /// [`ScalarField::bounds`] of the nodal magnitude. Unsigned by
+  /// construction ($|V|_g >= 0$), so a static field's true range starts at
+  /// (or near) zero; the caller widens it to the symmetric $[-m, m]$ an
+  /// animated tint needs, since $|V| cos(sqrt(lambda) t)$ swings negative
+  /// even though $|V|$ itself never does.
+  pub fn bounds(&self) -> (f32, f32) {
+    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+    for &v in &self.magnitude {
+      lo = lo.min(v);
+      hi = hi.max(v);
+    }
+    if lo < hi {
+      (lo as f32, hi as f32)
+    } else {
+      (-1.0, 1.0)
+    }
   }
 }
 

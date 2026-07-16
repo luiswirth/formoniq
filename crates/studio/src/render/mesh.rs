@@ -71,14 +71,67 @@ impl Vertex {
       ],
     }
   }
+
+  /// The wireframe pipeline's two per-edge-instance endpoint buffers: the
+  /// same attribute layout as [`Self::desc`], but stepped once per drawn
+  /// *instance* (an edge) instead of per vertex, and at locations shifted by
+  /// five so both of an edge's endpoints reach the same vertex-shader
+  /// invocation at once -- what a single `step_mode: Vertex` buffer can never
+  /// expose, since it only ever holds the current vertex, never a neighbor.
+  /// The six vertices of that invocation (drawn non-indexed) fan out into the
+  /// edge's thickened quad; see `wireframe.wgsl`.
+  pub fn desc_endpoint_a<'a>() -> wgpu::VertexBufferLayout<'a> {
+    wgpu::VertexBufferLayout {
+      step_mode: wgpu::VertexStepMode::Instance,
+      ..Self::desc()
+    }
+  }
+  pub fn desc_endpoint_b<'a>() -> wgpu::VertexBufferLayout<'a> {
+    wgpu::VertexBufferLayout {
+      array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+      step_mode: wgpu::VertexStepMode::Instance,
+      attributes: &[
+        wgpu::VertexAttribute {
+          offset: 0,
+          shader_location: 5,
+          format: wgpu::VertexFormat::Float32x3,
+        },
+        wgpu::VertexAttribute {
+          offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
+          shader_location: 6,
+          format: wgpu::VertexFormat::Float32x3,
+        },
+        wgpu::VertexAttribute {
+          offset: std::mem::size_of::<[f32; 6]>() as wgpu::BufferAddress,
+          shader_location: 7,
+          format: wgpu::VertexFormat::Float32,
+        },
+        wgpu::VertexAttribute {
+          offset: std::mem::size_of::<[f32; 7]>() as wgpu::BufferAddress,
+          shader_location: 8,
+          format: wgpu::VertexFormat::Float32x3,
+        },
+        wgpu::VertexAttribute {
+          offset: std::mem::size_of::<[f32; 10]>() as wgpu::BufferAddress,
+          shader_location: 9,
+          format: wgpu::VertexFormat::Float32,
+        },
+      ],
+    }
+  }
 }
 
 pub struct MeshBuffer {
   pub vertex_buffer: wgpu::Buffer,
   pub index_buffer: wgpu::Buffer,
   pub num_indices: u32,
-  pub wireframe_index_buffer: wgpu::Buffer,
-  pub num_wireframe_indices: u32,
+  /// The edge list's two endpoints, as parallel per-instance vertex buffers
+  /// (index `i` of each is one edge): bound together to the wireframe
+  /// pipeline and drawn non-indexed, 6 vertices per instance. See
+  /// [`Vertex::desc_endpoint_a`].
+  pub wireframe_a_buffer: wgpu::Buffer,
+  pub wireframe_b_buffer: wgpu::Buffer,
+  pub num_wireframe_edges: u32,
 }
 
 impl MeshBuffer {
@@ -90,9 +143,8 @@ impl MeshBuffer {
     coords: &MeshCoords,
     zero_form: &[f64],
   ) -> Self {
-    let (vertices, indices, wireframe_indices) =
-      surface_geometry(topology, coords, zero_form, None);
-    Self::from_raw(device, &vertices, &indices, &wireframe_indices)
+    let (vertices, indices, edge_a, edge_b) = surface_geometry(topology, coords, zero_form, None);
+    Self::from_raw(device, &vertices, &indices, &edge_a, &edge_b)
   }
 
   /// A line field: the surface colored by its nodal `magnitude` (the scalar
@@ -109,16 +161,17 @@ impl MeshBuffer {
     coords: &MeshCoords,
     field: &LineField,
   ) -> Self {
-    let (vertices, indices, wireframe_indices) =
+    let (vertices, indices, edge_a, edge_b) =
       surface_geometry(topology, coords, &field.magnitude, Some(&field.direction));
-    Self::from_raw(device, &vertices, &indices, &wireframe_indices)
+    Self::from_raw(device, &vertices, &indices, &edge_a, &edge_b)
   }
 
   fn from_raw(
     device: &wgpu::Device,
     vertices: &[Vertex],
     indices: &[u32],
-    wireframe_indices: &[u32],
+    edge_a: &[Vertex],
+    edge_b: &[Vertex],
   ) -> Self {
     let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
       label: Some("Vertex Buffer"),
@@ -132,32 +185,39 @@ impl MeshBuffer {
       usage: wgpu::BufferUsages::INDEX,
     });
 
-    let wireframe_index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-      label: Some("Wireframe Index Buffer"),
-      contents: bytemuck::cast_slice(wireframe_indices),
-      usage: wgpu::BufferUsages::INDEX,
+    let wireframe_a_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Wireframe Endpoint A Buffer"),
+      contents: bytemuck::cast_slice(edge_a),
+      usage: wgpu::BufferUsages::VERTEX,
+    });
+    let wireframe_b_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+      label: Some("Wireframe Endpoint B Buffer"),
+      contents: bytemuck::cast_slice(edge_b),
+      usage: wgpu::BufferUsages::VERTEX,
     });
 
     Self {
       vertex_buffer,
       index_buffer,
       num_indices: indices.len() as u32,
-      wireframe_index_buffer,
-      num_wireframe_indices: wireframe_indices.len() as u32,
+      wireframe_a_buffer,
+      wireframe_b_buffer,
+      num_wireframe_edges: edge_a.len() as u32,
     }
   }
 }
 
 /// The mesh's triangle surface as GPU vertices: one per mesh vertex, carrying
 /// the colormap `value`, the outward unit normal, and an optional per-vertex
-/// line `direction`. Returns the fill index list and the 1-skeleton edge index
-/// list (a line list for the wireframe pass).
+/// line `direction`. Returns the fill index list and the 1-skeleton edge
+/// list, split into its two endpoint arrays (`edge_a[i]`/`edge_b[i]` are edge
+/// `i`'s two ends) for the wireframe pass's per-instance buffers.
 fn surface_geometry(
   topology: &Complex,
   coords: &MeshCoords,
   value: &[f64],
   direction: Option<&[na::Vector3<f64>]>,
-) -> (Vec<Vertex>, Vec<u32>, Vec<u32>) {
+) -> (Vec<Vertex>, Vec<u32>, Vec<Vertex>, Vec<Vertex>) {
   assert_eq!(
     topology.dim(),
     2,
@@ -213,12 +273,13 @@ fn surface_geometry(
 
   let indices: Vec<u32> = triangles.iter().flat_map(|t| t.map(|v| v as u32)).collect();
 
-  let mut edge_indices = Vec::new();
+  let mut edge_a = Vec::new();
+  let mut edge_b = Vec::new();
   for edge in topology.edges().handle_iter() {
     let verts = &edge.simplex().vertices;
-    edge_indices.push(verts[0] as u32);
-    edge_indices.push(verts[1] as u32);
+    edge_a.push(vertices[verts[0]]);
+    edge_b.push(vertices[verts[1]]);
   }
 
-  (vertices, indices, edge_indices)
+  (vertices, indices, edge_a, edge_b)
 }
