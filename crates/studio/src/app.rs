@@ -33,6 +33,13 @@ use egui_wgpu::{
 };
 use egui_winit::State as EguiWinitState;
 
+/// The control shell's zoom relative to the window's own scale factor: every
+/// egui widget is drawn at this fraction of its native point size, shrinking the
+/// content-sized sidebars so they leave the viewport most of the frame. Below 1
+/// because the default egui metrics are tuned for a full-window tool, not a
+/// pair of sidebars flanking a 3D scene.
+const UI_ZOOM: f32 = 0.75;
+
 struct State<'a> {
   surface: Surface<'a>,
   ctx: GpuContext,
@@ -44,11 +51,12 @@ struct State<'a> {
   mesh_display: MeshDisplay,
   display: FieldDisplay,
 
-  /// The standing wave's phase origin, reset whenever the field changes so a
-  /// newly selected mode starts at its crest. The renderer takes the elapsed
-  /// time as an argument, so this clock lives here, in the windowed loop, and
-  /// nowhere below.
-  start_time: std::time::Instant,
+  /// The standing wave's transport clock: the elapsed animation time the
+  /// renderer is handed each frame, pausable from the transport bar and reset
+  /// whenever the field changes so a newly selected mode starts at its crest.
+  /// The renderer takes the time as an argument, so this clock lives here, in
+  /// the windowed loop, and nowhere below.
+  clock: WaveClock,
 
   // Mouse state for orbit controls
   mouse_pressed: bool,
@@ -128,6 +136,11 @@ impl<'a> State<'a> {
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
 
     let egui_ctx = egui::Context::default();
+    // Downscale the whole control shell relative to the window: the panels size
+    // to their content (a slider, the eigenmode pyramid, the readout row), so
+    // shrinking every widget uniformly is what keeps the sidebars from eating
+    // the viewport, rather than hand-tuning each one's width.
+    egui_ctx.set_zoom_factor(UI_ZOOM);
     let egui_winit_state = EguiWinitState::new(
       egui_ctx.clone(),
       egui::ViewportId::ROOT,
@@ -148,7 +161,7 @@ impl<'a> State<'a> {
       camera,
       mesh_display,
       display,
-      start_time: std::time::Instant::now(),
+      clock: WaveClock::new(),
       mouse_pressed: false,
       last_mouse_pos: None,
       gallery,
@@ -178,7 +191,7 @@ impl<'a> State<'a> {
       .mesh_display
       .write_attributes(&self.ctx.queue, &attributes);
     self.display = display;
-    self.start_time = std::time::Instant::now();
+    self.clock.restart();
   }
 
   /// Switches the displayed field within the current scene. Everything else
@@ -397,6 +410,14 @@ impl<'a> State<'a> {
       )
       .collect();
 
+    // The displayed field's eigenvalue, for the transport readouts: it is what
+    // gives the standing wave a frequency to report, and `None` for a field
+    // with no wave at all.
+    let eigenvalue = match self.selection {
+      Selection::Scalar(i) => self.scene.fields[i].eigenvalue,
+      Selection::Line(i) => self.scene.line_fields[i].eigenvalue,
+    };
+
     let model = PanelModel {
       mesh_source: mesh_source.clone(),
       study: study.clone(),
@@ -410,6 +431,9 @@ impl<'a> State<'a> {
       selection: self.selection,
       top_down: self.camera.top_down,
       presets: &self.presets,
+      eigenvalue,
+      playing: self.clock.playing,
+      time: self.clock.time(),
     };
 
     // Borrow only the file dialog into the closure: the rest of the panel is
@@ -419,15 +443,16 @@ impl<'a> State<'a> {
     let file_dialog = &mut self.file_dialog;
 
     let mut response = None;
-    let full_output = ctx.run_ui(raw_input, |ctx| {
-      response = Some(crate::ui::panel(ctx, &model));
+    let full_output = ctx.run_ui(raw_input, |ui| {
+      response = Some(crate::ui::panel(ui, &model));
 
       // The file browser draws as its own window and opens on the panel's
-      // request; it must be updated within the frame, after the panel.
+      // request; it must be updated within the frame, after the panel. `Ui`
+      // derefs to `Context`, which is what `FileDialog::update` takes.
       if response.as_ref().unwrap().load_obj_clicked {
         file_dialog.pick_file();
       }
-      file_dialog.update(ctx);
+      file_dialog.update(ui);
     });
     let response = response.expect("the closure always runs exactly once");
 
@@ -458,6 +483,11 @@ impl<'a> State<'a> {
         self.camera.top_down = response.top_down;
       }
     }
+
+    // The transport toggle is orthogonal to which field is shown -- pausing
+    // the wave neither changes the pair nor the selection -- so it applies
+    // regardless of the branch above, and only when it actually moved.
+    self.clock.set_playing(response.playing);
 
     self
       .egui_winit_state
@@ -524,7 +554,7 @@ impl<'a> State<'a> {
       items: &items,
       camera: &self.camera,
       size: (self.config.width, self.config.height),
-      time: self.start_time.elapsed().as_secs_f32(),
+      time: self.clock.time(),
     };
     self
       .renderer
@@ -578,6 +608,56 @@ impl<'a> State<'a> {
     output.present();
 
     Ok(())
+  }
+}
+
+/// The standing wave's transport clock: elapsed animation time, pausable
+/// without losing the phase reached. Time advances only while `playing`; a
+/// pause freezes the accumulated total and a resume starts a fresh wall-clock
+/// span from it, so the wave holds still under the cursor and picks up exactly
+/// where it stopped -- the phase is never discontinuous across a toggle.
+struct WaveClock {
+  playing: bool,
+  /// Animation seconds accumulated before the current play span.
+  base: f32,
+  /// Wall-clock start of the current play span; unread while paused.
+  anchor: std::time::Instant,
+}
+
+impl WaveClock {
+  fn new() -> Self {
+    Self {
+      playing: true,
+      base: 0.0,
+      anchor: std::time::Instant::now(),
+    }
+  }
+
+  /// The elapsed animation time to hand the renderer this frame.
+  fn time(&self) -> f32 {
+    if self.playing {
+      self.base + self.anchor.elapsed().as_secs_f32()
+    } else {
+      self.base
+    }
+  }
+
+  /// Plays or pauses without moving the phase: the time reached is folded into
+  /// `base` and a new span begins, so `time()` is continuous across the change.
+  fn set_playing(&mut self, playing: bool) {
+    if playing == self.playing {
+      return;
+    }
+    self.base = self.time();
+    self.anchor = std::time::Instant::now();
+    self.playing = playing;
+  }
+
+  /// Back to the crest: a newly selected mode starts at $t = 0$, keeping the
+  /// current play/pause state.
+  fn restart(&mut self) {
+    self.base = 0.0;
+    self.anchor = std::time::Instant::now();
   }
 }
 
