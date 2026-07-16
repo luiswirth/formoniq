@@ -72,6 +72,37 @@ impl Gramian {
   pub fn basis_angle(&self, i: usize, j: usize) -> f64 {
     self.basis_angle_cos(i, j).acos()
   }
+
+  /// Squared distance between two of the $"dim"+1$ points this Gramian is the
+  /// edge metric of: vertex $0$ (the Gramian's own origin) and its $"dim"$
+  /// basis vectors, read as vertices $1..="dim"$. $d(0,j)^2$ is the basis
+  /// vector's own norm; $d(i,j)^2$ for $i,j >= 1$ follows from the law of
+  /// cosines applied to the two edges from the origin,
+  /// $d(i,j)^2 = g_(i-1,i-1) + g_(j-1,j-1) - 2 g_(i-1,j-1)$.
+  fn vertex_dist_sq(&self, i: usize, j: usize) -> f64 {
+    if i == j {
+      0.0
+    } else if i == 0 {
+      self.basis_norm_sq(j - 1)
+    } else if j == 0 {
+      self.basis_norm_sq(i - 1)
+    } else {
+      self.basis_norm_sq(i - 1) + self.basis_norm_sq(j - 1) - 2.0 * self.basis_inner(i - 1, j - 1)
+    }
+  }
+
+  /// The interior angle at vertex `v`, between its edges to vertices `a` and
+  /// `b` (all in $0..="dim"$, vertex $0$ the Gramian's own origin): the law
+  /// of cosines applied to the squared distance between any two of the
+  /// simplex's vertices (vertex $0$ the Gramian's own origin). Generalizes
+  /// [`Self::basis_angle`] (the case $v = 0$) to any of the simplex's
+  /// $"dim"+1$ corners, not just the one the Gramian is based at.
+  pub fn vertex_angle(&self, v: usize, a: usize, b: usize) -> f64 {
+    let d_va = self.vertex_dist_sq(v, a);
+    let d_vb = self.vertex_dist_sq(v, b);
+    let d_ab = self.vertex_dist_sq(a, b);
+    ((d_va + d_vb - d_ab) / (2.0 * (d_va * d_vb).sqrt())).acos()
+  }
 }
 impl std::ops::Index<(usize, usize)> for Gramian {
   type Output = f64;
