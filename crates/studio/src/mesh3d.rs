@@ -106,12 +106,22 @@ impl TriangleSurface3D {
 /// adjacency, not from geometry (a 2-simplex in $RR^3$ has no signed
 /// determinant to read a winding off of).
 ///
+/// A canonical undirected-edge key: the vertex pair sorted so `(a, b)` and
+/// `(b, a)` hash identically. Shared by every edge-adjacency computation in
+/// this file.
+fn edge_key(a: usize, b: usize) -> (usize, usize) {
+  if a < b {
+    (a, b)
+  } else {
+    (b, a)
+  }
+}
+
 /// Fixes the orientation of one triangle per connected component arbitrarily;
 /// the result is correct up to that per-component choice of global sign, which
 /// is exactly the ambiguity a normal field has on an orientable surface.
 /// Assumes a manifold surface (each edge shared by at most two triangles).
 pub fn orient_triangles(triangles: &[[usize; 3]]) -> Vec<[usize; 3]> {
-  let edge_key = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
   let directed_edges = |t: [usize; 3]| [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])];
 
   let mut edge_to_tris: HashMap<(usize, usize), Vec<usize>> = HashMap::new();
