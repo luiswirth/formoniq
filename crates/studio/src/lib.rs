@@ -79,17 +79,70 @@ const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 /// so every per-grade eigensolve reuses it rather than remeshing.
 type Mesh = (Complex, MeshCoords);
 
-/// The family and refinement of surface mesh the eigenmode gallery solves on --
-/// a chosen, rebuildable input, not a fixed sphere. Switching family or moving
-/// the refinement slider remeshes and re-solves the current grade.
-///
-/// Both families are 2D surfaces, as the renderer requires. Nothing downstream
-/// distinguishes them: the eigensolve, the reduced-grade dispatch and the
-/// degeneracy clustering are all mesh-agnostic, and the camera reads a curved
-/// sphere (perspective orbit) from a flat grid (top-down orthographic) off the
-/// coordinates alone. The sphere's spherical harmonics are then one mesh's
-/// spectrum among others, not a privileged case.
+/// One of the CC0 surface meshes the studio ships as a built-in gallery,
+/// embedded in the binary (see `assets/meshes`, and its `SOURCES.md` for
+/// provenance). Chosen to span topology -- genus 0 and genus 1, down to a
+/// 7-vertex torus -- so the harmonic (zero-eigenvalue) modes the gallery shows
+/// at grade 1 range over $dim H^1 = 2 g$.
 #[derive(Clone, Copy, PartialEq, Eq)]
+enum BuiltinMesh {
+  /// Spot the cow (genus 0).
+  Spot,
+  /// Bob (genus 1).
+  Bob,
+  /// Blub the fish (genus 0); the largest, so the slowest to solve.
+  Blub,
+  /// The Császár polyhedron: a diagonal-free 7-vertex triangulation of the
+  /// torus (genus 1).
+  Csaszar,
+}
+
+impl BuiltinMesh {
+  const ALL: [BuiltinMesh; 4] = [
+    BuiltinMesh::Spot,
+    BuiltinMesh::Bob,
+    BuiltinMesh::Blub,
+    BuiltinMesh::Csaszar,
+  ];
+
+  fn label(self) -> &'static str {
+    match self {
+      BuiltinMesh::Spot => "Spot (cow)",
+      BuiltinMesh::Bob => "Bob",
+      BuiltinMesh::Blub => "Blub (fish)",
+      BuiltinMesh::Csaszar => "Császár torus",
+    }
+  }
+
+  /// The embedded OBJ source of the mesh. Baked in with `include_str!`, so it
+  /// travels with the binary and needs no filesystem at runtime (and works on
+  /// wasm). If the git-LFS content was never fetched this is the LFS pointer
+  /// text, which [`crate::io::obj::parse`] reports as an empty mesh rather than
+  /// silently mis-loading.
+  fn obj(self) -> &'static str {
+    match self {
+      BuiltinMesh::Spot => include_str!("../assets/meshes/spot.obj"),
+      BuiltinMesh::Bob => include_str!("../assets/meshes/bob.obj"),
+      BuiltinMesh::Blub => include_str!("../assets/meshes/blub.obj"),
+      BuiltinMesh::Csaszar => include_str!("../assets/meshes/csaszar.obj"),
+    }
+  }
+}
+
+/// The chosen source of the surface mesh the eigenmode gallery solves on -- a
+/// runtime input, not a fixed sphere. A generated family carries its refinement
+/// (moved by a slider); a built-in or a user-loaded file carries none.
+///
+/// Nothing downstream distinguishes the variants: the eigensolve, the reduced
+/// grade dispatch and the degeneracy clustering are all mesh-agnostic, and the
+/// camera reads a curved surface (perspective orbit) from a flat one (top-down
+/// orthographic) off the coordinates alone. The sphere's spherical harmonics
+/// are then one mesh's spectrum among others, not a privileged case.
+///
+/// [`Self::Custom`] is not regenerable -- the loaded mesh lives in the gallery,
+/// keyed by this descriptor for the picker -- so it is the one variant
+/// [`Self::build`] cannot serve.
+#[derive(Clone, PartialEq)]
 enum MeshSource {
   /// An icosphere of the given subdivision depth.
   Sphere { subdivisions: usize },
@@ -98,6 +151,10 @@ enum MeshSource {
   /// (Neumann) one, and its degeneracies (a mode and its transpose share an
   /// eigenvalue) fill the pyramid's rows just as the sphere's multiplets do.
   Grid { cells_axis: usize },
+  /// One of the embedded CC0 gallery meshes.
+  Builtin(BuiltinMesh),
+  /// A mesh the user loaded from an OBJ file, named for the picker.
+  Custom { name: String },
 }
 
 impl MeshSource {
@@ -107,19 +164,40 @@ impl MeshSource {
     subdivisions: SPHERE_SUBDIVISIONS,
   };
 
-  fn build(self) -> Mesh {
+  fn label(&self) -> String {
+    match self {
+      MeshSource::Sphere { .. } => "Sphere".to_string(),
+      MeshSource::Grid { .. } => "Grid".to_string(),
+      MeshSource::Builtin(builtin) => builtin.label().to_string(),
+      MeshSource::Custom { name } => name.clone(),
+    }
+  }
+
+  /// Builds the mesh for a regenerable source. `Err` carries a human-readable
+  /// reason (a malformed embedded asset -- e.g. an unfetched LFS pointer),
+  /// which the caller surfaces without disturbing the current mesh.
+  ///
+  /// Panics on [`Self::Custom`]: a loaded mesh is installed directly and never
+  /// rebuilt from its descriptor.
+  fn build(&self) -> Result<Mesh, String> {
     match self {
       MeshSource::Sphere { subdivisions } => {
-        manifold::gen::sphere::mesh_sphere_surface(subdivisions)
+        Ok(manifold::gen::sphere::mesh_sphere_surface(*subdivisions))
       }
       MeshSource::Grid { cells_axis } => {
         let (topology, coords) =
-          manifold::gen::cartesian::CartesianMeshInfo::new_unit(2, cells_axis)
+          manifold::gen::cartesian::CartesianMeshInfo::new_unit(2, *cells_axis)
             .compute_coord_complex();
         // The renderer draws in 3D and reads the surface normal off the
         // embedding; the grid is planar in $RR^2$, so lift it into the $z = 0$
         // plane of $RR^3$, exactly as the flat reference-cell scenes do.
-        (topology, coords.embed_euclidean(3))
+        Ok((topology, coords.embed_euclidean(3)))
+      }
+      MeshSource::Builtin(builtin) => {
+        crate::io::obj::parse(builtin.obj()).map_err(|e| format!("{}: {e}", builtin.label()))
+      }
+      MeshSource::Custom { .. } => {
+        unreachable!("a custom mesh is installed directly, never rebuilt from its descriptor")
       }
     }
   }
@@ -227,6 +305,10 @@ struct Gallery {
   last_mesh_grade: ExteriorGrade,
   cache: HashMap<View, Scene>,
   loading: Option<(View, PendingLoad<Scene>)>,
+  /// The last mesh-source failure (a malformed OBJ, an unfetched asset),
+  /// surfaced in the panel until the next successful mesh change. `None` when
+  /// the current mesh loaded cleanly.
+  error: Option<String>,
 }
 
 impl Gallery {
@@ -235,7 +317,8 @@ impl Gallery {
   /// by [`Self::poll`]). The placeholder shares the loader's mesh, so the
   /// window is up on the first frame without waiting on any eigensolve.
   fn new(source: MeshSource) -> (Self, Scene) {
-    let mesh = Arc::new(source.build());
+    // The starting source is the icosphere, whose build is infallible.
+    let mesh = Arc::new(source.build().expect("the starting mesh builds"));
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
     let mut gallery = Self {
       mesh_source: source,
@@ -244,14 +327,35 @@ impl Gallery {
       last_mesh_grade: 0,
       cache: HashMap::new(),
       loading: None,
+      error: None,
     };
     gallery.spawn(View::START);
     (gallery, placeholder)
   }
 
-  /// Rebuilds the mesh from a new source and re-solves the current grade
-  /// against it. The per-grade eigensolves are all tied to the old mesh, so
-  /// they are dropped from the cache (the reference-cell Whitney basis is
+  /// Switches to a regenerable source (a generated family or a built-in mesh),
+  /// building its mesh first so a failure leaves the current one untouched.
+  /// `Ok(Some(scene))` is the placeholder to show while the re-solve runs;
+  /// `Ok(None)` is a no-op source change, or one under a view that ignores the
+  /// mesh; `Err` is a build failure to surface.
+  fn select_source(&mut self, source: MeshSource) -> Result<Option<Scene>, String> {
+    if source == self.mesh_source {
+      return Ok(None);
+    }
+    let mesh = source.build()?;
+    Ok(self.install_mesh(source, mesh))
+  }
+
+  /// Installs a mesh loaded from an OBJ file as the [`MeshSource::Custom`]
+  /// source, named for the picker. Unlike a regenerable source there is nothing
+  /// to build -- the mesh is already in hand -- so this always takes effect.
+  fn load_custom(&mut self, name: String, mesh: Mesh) -> Option<Scene> {
+    self.install_mesh(MeshSource::Custom { name }, mesh)
+  }
+
+  /// Adopts `mesh` under `source` and re-solves the current grade against it.
+  /// The per-grade eigensolves are all tied to the old mesh, so they are
+  /// dropped from the cache (the reference-cell Whitney basis is
   /// mesh-independent and kept); the current grade's solve is respawned in the
   /// background.
   ///
@@ -259,13 +363,11 @@ impl Gallery {
   /// that solve runs -- or `None` when the current view does not depend on the
   /// mesh (the Whitney basis), where nothing visible changes and only the
   /// stored source is updated, taking effect the next time a mesh grade is
-  /// shown. A re-selection of the current source is a no-op.
-  fn set_mesh_source(&mut self, source: MeshSource) -> Option<Scene> {
-    if source == self.mesh_source {
-      return None;
-    }
+  /// shown.
+  fn install_mesh(&mut self, source: MeshSource, mesh: Mesh) -> Option<Scene> {
+    self.error = None;
     self.mesh_source = source;
-    self.mesh = Arc::new(source.build());
+    self.mesh = Arc::new(mesh);
     self
       .cache
       .retain(|view, _| !matches!(view, View::MeshGrade(_)));
@@ -279,6 +381,10 @@ impl Gallery {
       }
       View::WhitneyBasis => None,
     }
+  }
+
+  fn set_error(&mut self, error: String) {
+    self.error = Some(error);
   }
 
   fn spawn(&mut self, view: View) {
@@ -834,6 +940,13 @@ struct State<'a> {
   egui_ctx: egui::Context,
   egui_winit_state: EguiWinitState,
   egui_renderer: EguiRenderer,
+
+  // The in-egui file browser for loading a custom OBJ mesh. Persistent (it
+  // holds the browser's own navigation state across frames), updated every
+  // frame inside the egui pass, and polled for a pick afterward. Native-only:
+  // wasm has no filesystem to browse.
+  #[cfg(not(target_arch = "wasm32"))]
+  file_dialog: egui_file_dialog::FileDialog,
 }
 
 /// Per-frame standing-wave state: $u(t) = "amplitude" dot "value" dot cos(omega t)$,
@@ -1431,6 +1544,10 @@ impl<'a> State<'a> {
       egui_ctx,
       egui_winit_state,
       egui_renderer,
+      #[cfg(not(target_arch = "wasm32"))]
+      file_dialog: egui_file_dialog::FileDialog::new()
+        .add_file_filter_extensions("Wavefront OBJ", vec!["obj"])
+        .default_file_filter("Wavefront OBJ"),
     }
   }
 
@@ -1479,13 +1596,39 @@ impl<'a> State<'a> {
     }
   }
 
-  /// Rebuilds the gallery's mesh from a new source and installs the placeholder
-  /// it hands back (the new mesh, shown at once) while the current grade
-  /// re-solves in the background. A no-op source change, or one under a view
-  /// that ignores the mesh, installs nothing.
+  /// Switches the gallery's mesh to a regenerable source and installs the
+  /// placeholder it hands back (the new mesh, shown at once) while the current
+  /// grade re-solves in the background. A no-op source change, or one under a
+  /// view that ignores the mesh, installs nothing; a build failure is recorded
+  /// on the gallery and shown in the panel, leaving the current mesh in place.
   fn set_mesh_source(&mut self, source: MeshSource) {
-    if let Some(scene) = self.gallery.set_mesh_source(source) {
-      self.install_scene(scene);
+    match self.gallery.select_source(source) {
+      Ok(Some(scene)) => self.install_scene(scene),
+      Ok(None) => {}
+      Err(error) => self.gallery.set_error(error),
+    }
+  }
+
+  /// Loads a user-picked OBJ file as a custom mesh: reads it, parses it through
+  /// the tolerant reader, and either installs it (re-solving the current grade)
+  /// or records the parse/read error in the panel. Reading a file the user
+  /// chose is not itself a side effect, so it needs no confirmation.
+  #[cfg(not(target_arch = "wasm32"))]
+  fn load_obj_path(&mut self, path: std::path::PathBuf) {
+    let name = path.file_name().map_or_else(
+      || "mesh.obj".to_string(),
+      |s| s.to_string_lossy().into_owned(),
+    );
+    let loaded = std::fs::read_to_string(&path)
+      .map_err(|e| e.to_string())
+      .and_then(|obj| crate::io::obj::parse(&obj).map_err(|e| e.to_string()));
+    match loaded {
+      Ok(mesh) => {
+        if let Some(scene) = self.gallery.load_custom(name, mesh) {
+          self.install_scene(scene);
+        }
+      }
+      Err(error) => self.gallery.set_error(format!("{name}: {error}")),
     }
   }
 
@@ -1655,11 +1798,19 @@ impl<'a> State<'a> {
       )
       .collect();
 
-    let mesh_source = self.gallery.mesh_source;
+    let mesh_source = self.gallery.mesh_source.clone();
+    let mesh_error = self.gallery.error.clone();
     let mut requested_view = shown_view;
-    let mut requested_mesh_source = mesh_source;
+    let mut requested_mesh_source = mesh_source.clone();
     let mut selection = self.selection;
     let mut top_down = self.camera.top_down;
+
+    // Borrow only the file dialog into the closure (native): the rest of the
+    // panel is driven by the plain locals above, so this disjoint field can be
+    // touched inside the closure without conflicting with the `&mut self` calls
+    // after it. Its own borrow ends with the closure, before those calls.
+    #[cfg(not(target_arch = "wasm32"))]
+    let file_dialog = &mut self.file_dialog;
 
     let full_output = ctx.run_ui(raw_input, |ctx| {
       egui::Window::new("Gallery").show(ctx, |ui| {
@@ -1678,23 +1829,46 @@ impl<'a> State<'a> {
         ui.separator();
 
         if let View::MeshGrade(grade) = shown_view {
-          // Mesh family and refinement: the surface the eigenmodes live on is a
-          // chosen input, not a fixed sphere. Changing either remeshes and
-          // re-solves the current grade (`requested_mesh_source`, applied after
-          // the closure).
+          // Mesh source: the surface the eigenmodes live on is a chosen input,
+          // not a fixed sphere -- a generated family, a built-in gallery mesh,
+          // or a loaded OBJ. Picking any remeshes and re-solves the current
+          // grade (`requested_mesh_source`, applied after the closure).
           ui.horizontal(|ui| {
-            let is_sphere = matches!(requested_mesh_source, MeshSource::Sphere { .. });
-            if ui.selectable_label(is_sphere, "Sphere").clicked() {
-              requested_mesh_source = MeshSource::Sphere {
-                subdivisions: SPHERE_SUBDIVISIONS,
-              };
-            }
-            if ui.selectable_label(!is_sphere, "Grid").clicked() {
-              requested_mesh_source = MeshSource::Grid {
-                cells_axis: GRID_CELLS_DEFAULT,
-              };
+            egui::ComboBox::from_id_salt("mesh-source")
+              .selected_text(requested_mesh_source.label())
+              .show_ui(ui, |ui| {
+                // A generated family resets to its default refinement when
+                // first chosen; re-picking the current family keeps the
+                // slider's value.
+                let is_sphere = matches!(requested_mesh_source, MeshSource::Sphere { .. });
+                if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
+                  requested_mesh_source = MeshSource::Sphere {
+                    subdivisions: SPHERE_SUBDIVISIONS,
+                  };
+                }
+                let is_grid = matches!(requested_mesh_source, MeshSource::Grid { .. });
+                if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
+                  requested_mesh_source = MeshSource::Grid {
+                    cells_axis: GRID_CELLS_DEFAULT,
+                  };
+                }
+                for builtin in BuiltinMesh::ALL {
+                  let selected = requested_mesh_source == MeshSource::Builtin(builtin);
+                  if ui.selectable_label(selected, builtin.label()).clicked() {
+                    requested_mesh_source = MeshSource::Builtin(builtin);
+                  }
+                }
+              });
+            // Opens the in-egui file browser; the pick is retrieved after the
+            // closure (`file_dialog.take_picked`). Native-only: wasm has no
+            // filesystem to browse.
+            #[cfg(not(target_arch = "wasm32"))]
+            if ui.button("Load OBJ…").clicked() {
+              file_dialog.pick_file();
             }
           });
+          // A generated family carries a refinement slider; a built-in or
+          // loaded mesh has none.
           match &mut requested_mesh_source {
             MeshSource::Sphere { subdivisions } => {
               ui.add(
@@ -1704,6 +1878,10 @@ impl<'a> State<'a> {
             MeshSource::Grid { cells_axis } => {
               ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
             }
+            MeshSource::Builtin(_) | MeshSource::Custom { .. } => {}
+          }
+          if let Some(error) = &mesh_error {
+            ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
           }
           ui.separator();
 
@@ -1739,24 +1917,42 @@ impl<'a> State<'a> {
         ui.separator();
         ui.checkbox(&mut top_down, "Top-down (orthographic, drag to pan)");
       });
+
+      // The file browser draws as its own window; it must be updated within the
+      // frame, after the panel that opens it.
+      #[cfg(not(target_arch = "wasm32"))]
+      file_dialog.update(ctx);
     });
 
-    // Remeshing and switching view both replace the field set and the camera's
-    // natural orientation wholesale, so the `selection`/`top_down` picked this
-    // same frame belong to the view being left and must not be applied
-    // afterward -- `set_mesh_source`/`set_view` choose both anew for what they
-    // land on. A mesh change re-solves the current grade, so it takes priority
-    // over a same-frame grade switch (at most one widget moves per frame
-    // anyway).
-    if requested_mesh_source != mesh_source {
-      self.set_mesh_source(requested_mesh_source);
-    } else if requested_view != shown_view {
-      self.set_view(requested_view);
-    } else {
-      self.set_field(selection);
-      if top_down != self.camera.top_down {
-        self.camera.top_down = top_down;
-        self.update_camera_buffer();
+    // A finished file pick, a mesh-source change and a view switch each replace
+    // the field set and the camera's natural orientation wholesale, so the
+    // `selection`/`top_down` picked this same frame belong to the view being
+    // left and must not be applied afterward -- the mesh/view setters choose
+    // both anew for what they land on. They are mutually exclusive in priority
+    // (at most one such widget moves per frame anyway); a load or a mesh change
+    // re-solves the current grade, so both precede a same-frame grade switch.
+    #[cfg(not(target_arch = "wasm32"))]
+    let loaded_file = match self.file_dialog.take_picked() {
+      Some(path) => {
+        self.load_obj_path(path);
+        true
+      }
+      None => false,
+    };
+    #[cfg(target_arch = "wasm32")]
+    let loaded_file = false;
+
+    if !loaded_file {
+      if requested_mesh_source != mesh_source {
+        self.set_mesh_source(requested_mesh_source);
+      } else if requested_view != shown_view {
+        self.set_view(requested_view);
+      } else {
+        self.set_field(selection);
+        if top_down != self.camera.top_down {
+          self.camera.top_down = top_down;
+          self.update_camera_buffer();
+        }
       }
     }
 
