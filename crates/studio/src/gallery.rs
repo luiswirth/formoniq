@@ -10,6 +10,7 @@
 //! opens on -- a value the browser fills the two axes from, never a build path
 //! of its own.
 
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use ddf::cochain::Cochain;
@@ -150,6 +151,13 @@ pub enum MeshSource {
   Builtin(BuiltinMesh),
   /// A mesh the user loaded from an OBJ file, named for the picker.
   Custom { name: String },
+  /// A mesh saved by the engine's own serialization: a directory holding
+  /// `topology.cbor` ([`Complex::save`]) and `coords.cbor`
+  /// ([`MeshCoords::save`]). The general escape hatch for anything the
+  /// gallery does not generate itself -- a solve's output mesh, a mesh
+  /// exported for a paper figure -- regenerable from the path alone, unlike
+  /// [`Self::Custom`].
+  File(PathBuf),
 }
 
 impl MeshSource {
@@ -167,6 +175,10 @@ impl MeshSource {
       MeshSource::Triforce => "Triforce".to_string(),
       MeshSource::Builtin(builtin) => builtin.label().to_string(),
       MeshSource::Custom { name } => name.clone(),
+      MeshSource::File(path) => path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string_lossy().into_owned()),
     }
   }
 
@@ -202,6 +214,13 @@ impl MeshSource {
       }
       MeshSource::Custom { .. } => {
         unreachable!("a custom mesh is installed directly, never rebuilt from its descriptor")
+      }
+      MeshSource::File(path) => {
+        let topology = Complex::load(path.join("topology.cbor"))
+          .map_err(|e| format!("{}: {e}", path.display()))?;
+        let coords = MeshCoords::load(path.join("coords.cbor"))
+          .map_err(|e| format!("{}: {e}", path.display()))?;
+        Ok((topology, coords))
       }
     }
   }
@@ -283,10 +302,17 @@ pub enum CochainSpec {
   /// (positively oriented) edge orientation -- so the value lands on the mesh's
   /// own edge regardless of that mesh's internal edge indexing.
   ByEdges(Vec<(usize, usize, f64)>),
+  /// A cochain saved by [`Cochain::save`], loaded by path -- the general
+  /// counterpart to [`MeshSource::File`], for a cochain the gallery did not
+  /// itself solve.
+  File(PathBuf),
 }
 
 impl CochainSpec {
-  /// Resolves the spec to a cochain on `topology`.
+  /// Resolves the spec to a cochain on `topology`. Panics if a
+  /// [`Self::File`] cochain fails to load or is incompatible with
+  /// `topology` -- a build-time failure the caller surfaces the same way as
+  /// any other malformed input, not a silent placeholder.
   pub(crate) fn resolve(&self, topology: &Complex) -> Cochain {
     match self {
       CochainSpec::ByEdges(entries) => {
@@ -296,6 +322,16 @@ impl CochainSpec {
           coeffs[edges.kidx_by_simplex(&Simplex::new(vec![v0, v1]))] = value;
         }
         Cochain::new(1, coeffs)
+      }
+      CochainSpec::File(path) => {
+        let cochain = Cochain::load(path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        assert!(
+          cochain.is_compatible_with(topology),
+          "{}: cochain of grade {} does not match the mesh",
+          path.display(),
+          cochain.grade()
+        );
+        cochain
       }
     }
   }

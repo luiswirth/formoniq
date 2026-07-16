@@ -43,24 +43,8 @@ const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
 /// The streamline ribbon's half-width, on the same object-intrinsic scale.
 const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
 
-/// The streamline ribbons' core: dark enough to separate from any bright
-/// colormap sample, not pure black, so the curves read as drawn on the surface
-/// rather than as holes cut through it.
-const STREAMLINE_INK: [f32; 4] = [0.05, 0.05, 0.07, 1.0];
-
-/// The ribbons' halo, drawn wider and beneath the core (see
-/// [`STREAMLINE_HALO_WIDTH_FRACTION`]). Neither colormap this viewer offers is
-/// iso-luminant -- viridis runs dark to bright, the diverging map dark-blue to
-/// white to dark-red -- so no single fixed ink separates from every sample of
-/// either. A light halo around the dark core is the outline that does: the
-/// core separates where the backdrop is bright, the halo where it is dark, and
-/// one of the two always holds.
-const STREAMLINE_HALO: [f32; 4] = [0.92, 0.92, 0.90, 1.0];
-
-/// The halo's half-width, wider than the core's own
-/// [`STREAMLINE_WIDTH_FRACTION`] by enough to remain visible as a ring around
-/// it rather than being fully occluded by the core drawn on top.
-const STREAMLINE_HALO_WIDTH_FRACTION: f32 = 0.009;
+/// The streamline ribbons' ink: pure white, single pass, no outline.
+const STREAMLINE_INK: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
 /// The opacity the ribbons of an eigenmode fade to at the standing wave's node,
 /// where the field vanishes and the curves are meaningless -- never fully, since
@@ -201,7 +185,6 @@ pub(crate) struct FieldDisplay {
   streamlines: Option<SegmentBatch>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
-  streamline_halo: SegmentMaterial,
   streamline: SegmentMaterial,
 }
 
@@ -318,15 +301,6 @@ impl FieldDisplay {
       },
       // The ribbons share the wave's clock but not its displacement: the samples
       // sit on the undisplaced surface, so only the node fade reads the mode.
-      // Drawn as a light halo, then this dark core on top of it -- see
-      // `STREAMLINE_HALO`'s doc comment for why one ink is not enough.
-      streamline_halo: SegmentMaterial {
-        color: STREAMLINE_HALO,
-        half_width_world: STREAMLINE_HALO_WIDTH_FRACTION * amplitude_scale,
-        fade_floor: STREAMLINE_NODE_OPACITY,
-        wave_amplitude: 0.0,
-        wave_omega: surface.wave_omega,
-      },
       streamline: SegmentMaterial {
         color: STREAMLINE_INK,
         half_width_world: STREAMLINE_WIDTH_FRACTION * amplitude_scale,
@@ -347,10 +321,6 @@ impl FieldDisplay {
       items.push(RenderItem::Surface(surface, self.surface));
     }
     if let Some(streamlines) = &self.streamlines {
-      // Halo first, then the narrower core on top: the same batch drawn
-      // twice, since the outline is two materials over one geometry, not two
-      // geometries.
-      items.push(RenderItem::Segments(streamlines, self.streamline_halo));
       items.push(RenderItem::Segments(streamlines, self.streamline));
     }
     items.push(RenderItem::Segments(&mesh.segments, self.wireframe));
