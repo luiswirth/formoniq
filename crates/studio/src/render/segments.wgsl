@@ -55,9 +55,10 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     let world_b = wave_displace(material.wave_amplitude, osc, b.position, b.normal, b.value, b.max_displacement);
     let perp = billboard_perp(world_a, world_b, frame.eye.xyz);
     let corner = billboard_corner(world_a, world_b, perp, material.half_width_world, vertex_index);
+    let biased_corner = depth_biased_corner(corner, frame.eye.xyz, material.half_width_world);
 
     var out: VertexOutput;
-    out.clip_position = depth_biased(frame.view_proj * vec4<f32>(corner, 1.0));
+    out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
     out.taper = select(a.taper, b.taper, billboard_is_b(vertex_index));
     return out;
 }
