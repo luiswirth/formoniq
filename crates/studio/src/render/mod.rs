@@ -1,25 +1,120 @@
+//! The renderer: pipelines, transient targets and the frame graph, recorded
+//! into any caller-supplied `TextureView`.
+//!
+//! Nothing here knows about a window, a surface or a clock -- the target
+//! format, the target size and the time are all inputs -- so the interactive
+//! viewer and a headless export drive one frame graph and cannot drift.
+
 pub mod camera;
+pub mod context;
+pub mod downsample;
+pub mod fill;
 pub mod mesh;
+pub mod renderer;
 pub mod streamline;
+pub mod uniform;
+pub mod wireframe;
+
+pub use context::GpuContext;
+pub use renderer::{Renderer, SceneView};
+
+const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// Supersampling factor applied per axis (so 4x the pixel count) to the scene
+/// pass before a box filter downsamples it back to the target. MSAA was
+/// rejected: a single supersampled offscreen target antialiases the fill and
+/// the segment marks uniformly, at the cost of the extra fill rate. Reaches the
+/// WGSL side as the preamble's `SSAA_SCALE` override, so the box filter and the
+/// target allocation are one number rather than two that must be kept in sync.
+const SSAA_SCALE: u32 = 2;
+
+/// The wireframe's half-width as a fraction of the scene's own extent (its
+/// radius) -- the same object-intrinsic scale the standing-wave displacement
+/// uses -- rather than a fixed screen-pixel count, so the line reads the same
+/// thickness whether the mesh is zoomed to fill the screen or shrunk to a
+/// corner of it.
+const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
+
+/// The streamline ribbon's half-width, on the same object-intrinsic scale.
+const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
+
+/// The WGSL source of one pass: the shared preamble (types, pure functions, the
+/// `SSAA_SCALE` override) followed by the body. Concatenated because WGSL has
+/// no `#include`; the shader test validates this same concatenation, so a
+/// preamble/body mismatch fails `cargo test` rather than pipeline creation.
+fn shader_source(body: &str) -> String {
+  format!("{}\n{body}", include_str!("preamble.wgsl"))
+}
+
+/// The pipeline-constant assignment every pipeline here is built with: the WGSL
+/// `SSAA_SCALE` override, from the Rust constant.
+fn compilation_options<'a>() -> wgpu::PipelineCompilationOptions<'a> {
+  wgpu::PipelineCompilationOptions {
+    constants: &[("SSAA_SCALE", SSAA_SCALE as f64)],
+    ..Default::default()
+  }
+}
+
+fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::ShaderModule {
+  device.create_shader_module(wgpu::ShaderModuleDescriptor {
+    label: Some(label),
+    source: wgpu::ShaderSource::Wgsl(shader_source(body).into()),
+  })
+}
+
+/// The depth state the scene passes share: the fill and the wireframe write it;
+/// the alpha-blended streamline ribbons only test against it.
+fn depth_stencil(write: bool) -> wgpu::DepthStencilState {
+  wgpu::DepthStencilState {
+    format: DEPTH_FORMAT,
+    depth_write_enabled: Some(write),
+    depth_compare: Some(wgpu::CompareFunction::Less),
+    stencil: wgpu::StencilState::default(),
+    bias: wgpu::DepthBiasState::default(),
+  }
+}
+
+/// The triangle-list primitive state shared by every pipeline here: nothing is
+/// culled, since a surface is viewed from both sides.
+fn primitive() -> wgpu::PrimitiveState {
+  wgpu::PrimitiveState {
+    topology: wgpu::PrimitiveTopology::TriangleList,
+    front_face: wgpu::FrontFace::Ccw,
+    cull_mode: None,
+    ..Default::default()
+  }
+}
+
+fn color_target(
+  format: wgpu::TextureFormat,
+  blend: wgpu::BlendState,
+) -> Option<wgpu::ColorTargetState> {
+  Some(wgpu::ColorTargetState {
+    format,
+    blend: Some(blend),
+    write_mask: wgpu::ColorWrites::ALL,
+  })
+}
 
 #[cfg(test)]
 mod tests {
   /// Every WGSL source in this module parses and validates against naga's own
   /// frontend -- the one wgpu itself uses to build a pipeline -- so a broken
   /// shader fails `cargo test` instead of the pipeline-creation panic at
-  /// startup a syntax or type error would otherwise cause.
+  /// startup a syntax or type error would otherwise cause. Validated as the
+  /// preamble/body concatenation the pipelines are actually built from, never
+  /// the body alone.
   #[test]
   fn shaders_parse_and_validate() {
-    let sources: &[(&str, &str)] = &[
-      ("shader.wgsl", include_str!("shader.wgsl")),
+    let bodies: &[(&str, &str)] = &[
+      ("fill.wgsl", include_str!("fill.wgsl")),
       ("wireframe.wgsl", include_str!("wireframe.wgsl")),
-      ("gbuffer.wgsl", include_str!("gbuffer.wgsl")),
-      ("lic.wgsl", include_str!("lic.wgsl")),
       ("streamline.wgsl", include_str!("streamline.wgsl")),
       ("downsample.wgsl", include_str!("downsample.wgsl")),
     ];
-    for (name, source) in sources {
-      let module = naga::front::wgsl::parse_str(source)
+    for (name, body) in bodies {
+      let source = super::shader_source(body);
+      let module = naga::front::wgsl::parse_str(&source)
         .unwrap_or_else(|e| panic!("{name} failed to parse: {e}"));
       naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),

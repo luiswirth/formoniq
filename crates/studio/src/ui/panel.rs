@@ -24,26 +24,6 @@ pub(crate) enum Selection {
   Line(usize),
 }
 
-impl Selection {
-  pub(crate) fn is_line(self) -> bool {
-    matches!(self, Selection::Line(_))
-  }
-}
-
-/// How a line field is drawn: the default is evenly-spaced [`Streamlines`], the
-/// integral curves of the field traced on the manifold; [`Lic`] is the older
-/// dense line-integral-convolution texture, kept as an alternative for
-/// high-frequency fields a discrete curve set would undersample. Only a line
-/// field's mark is selectable; a scalar field ignores this.
-///
-/// [`Streamlines`]: LineMark::Streamlines
-/// [`Lic`]: LineMark::Lic
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum LineMark {
-  Streamlines,
-  Lic,
-}
-
 /// One mode of the currently shown scene, as the picker needs it: the field's
 /// [`Selection`], its original grade (before the reduction to a render mark),
 /// its eigenvalue (for the degeneracy layout), its DOF label (for the basis
@@ -246,7 +226,6 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) mesh_source: MeshSource,
   pub(crate) mesh_error: Option<String>,
   pub(crate) selection: Selection,
-  pub(crate) line_mark: LineMark,
   pub(crate) top_down: bool,
 }
 
@@ -258,7 +237,6 @@ pub(crate) struct PanelResponse {
   pub(crate) requested_view: View,
   pub(crate) requested_mesh_source: MeshSource,
   pub(crate) selection: Selection,
-  pub(crate) line_mark: LineMark,
   pub(crate) top_down: bool,
   /// Whether "Load OBJ…" was clicked -- the one request the panel cannot
   /// resolve itself, since opening the native file browser is the caller's
@@ -276,7 +254,6 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
   let mut requested_view = model.shown_view;
   let mut requested_mesh_source = model.mesh_source.clone();
   let mut selection = model.selection;
-  let mut line_mark = model.line_mark;
   let mut top_down = model.top_down;
   let mut load_obj_clicked = false;
 
@@ -404,18 +381,6 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
       render_modes(ui, &model.entries, &mut selection, model.scene_dim);
     }
 
-    // The mark is only meaningful for a line field, and it applies to the
-    // one on screen, so it follows the displayed selection rather than the
-    // one this frame's picker may just have moved to.
-    if selection.is_line() {
-      ui.separator();
-      ui.horizontal(|ui| {
-        ui.label("line mark:");
-        ui.radio_value(&mut line_mark, LineMark::Streamlines, "streamlines");
-        ui.radio_value(&mut line_mark, LineMark::Lic, "LIC");
-      });
-    }
-
     ui.separator();
     ui.checkbox(&mut top_down, "Top-down (orthographic, drag to pan)");
   });
@@ -424,7 +389,6 @@ pub(crate) fn panel(ctx: &egui::Context, model: &PanelModel) -> PanelResponse {
     requested_view,
     requested_mesh_source,
     selection,
-    line_mark,
     top_down,
     load_obj_clicked,
   }

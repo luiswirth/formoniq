@@ -44,12 +44,12 @@ src/
     context.rs    GpuContext { device, queue } -- with or without a surface
     renderer.rs   Renderer: pipelines, intermediates, frame graph
     item.rs       RenderItem, DrawList, GPU batch buffers
-    uniform.rs    UniformBinding<T: Pod>
+    uniform.rs    UniformBinding<T: Pod>, the uniform values, the bundle
     fill.rs       triangle fill pass
     segments.rs   one segment pass (wireframe, streamlines, 1-manifold cells)
-    lic.rs        G-buffer + LIC passes, noise texture
     downsample.rs SSAA resolve
     camera.rs     (unchanged)
+    preamble.wgsl shared types/functions, prepended to every body
     *.wgsl
   io/             obj, blender (unchanged shape)
 ```
@@ -99,8 +99,8 @@ more items.
 
 ### The renderer/window split
 
-`Renderer` owns pipelines and transient targets (SSAA color, depth,
-G-buffer; resized on demand) and records the frame graph into any caller
+`Renderer` owns pipelines and transient targets (SSAA color, depth; resized on
+demand) and records the frame graph into any caller
 `TextureView`:
 
 ```rust
@@ -168,6 +168,13 @@ Each step is one or more commits, each green under `cargo fmt --all`,
    dissolve `State` into `Renderer` (target-view-agnostic,
    format-parameterized, time as input) plus the windowed wrapper.
    Deduplicate WGSL through the shared preamble and `override` constants.
+   Drop the LIC mark and its G-buffer: it and the streamlines are two
+   renderings of the same reduced grade-1 field, and the streamlines are the
+   intrinsic one -- traced through the atlas rather than advected in pixel
+   space, hence view-independent where the LIC never was. Dropping it takes
+   the only branch out of the frame graph, along with `LineMark`, the nodal
+   `direction` the G-buffer alone consumed, and the `Vertex` attribute
+   carrying it.
 3. **BakedMesh + draw list.** Dimension-dispatched bake with the shared
    vertex table; one segment pipeline replacing the wireframe/streamline
    twins; delete the `dim == 2` assert and the duplicate bake. Law tests:
