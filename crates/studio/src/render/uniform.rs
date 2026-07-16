@@ -181,6 +181,13 @@ impl FrameUniform {
 ///
 /// A field with no eigenvalue passes `wave_omega = 0` and `wave_amplitude = 0`,
 /// so $cos(0) = 1$ and the same code draws it static.
+///
+/// Diverging vs. sequential is a property of the *field* -- a signed quantity
+/// centered at zero, or an unsigned magnitude -- not a global shader choice, so
+/// it travels as material data alongside the range it is read against. `1.0`
+/// for diverging (`min_val`/`max_val` symmetric about zero), `0.0` for
+/// sequential. A scalar `f32`, never a `bool`: `Pod` requires it, and WGSL has
+/// no bool uniform either.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
 pub struct SurfaceMaterial {
@@ -188,6 +195,7 @@ pub struct SurfaceMaterial {
   pub max_val: f32,
   pub wave_amplitude: f32,
   pub wave_omega: f32,
+  pub diverging: f32,
 }
 
 /// How a segment mark is drawn. One material serves the wireframe, a line

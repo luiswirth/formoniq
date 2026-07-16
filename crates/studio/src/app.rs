@@ -33,9 +33,6 @@ use egui_wgpu::{
 };
 use egui_winit::State as EguiWinitState;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 struct State<'a> {
   surface: Surface<'a>,
   ctx: GpuContext,
@@ -77,9 +74,7 @@ struct State<'a> {
 
   // The in-egui file browser for loading a custom OBJ mesh. Persistent (it
   // holds the browser's own navigation state across frames), updated every
-  // frame inside the egui pass, and polled for a pick afterward. Native-only:
-  // wasm has no filesystem to browse.
-  #[cfg(not(target_arch = "wasm32"))]
+  // frame inside the egui pass, and polled for a pick afterward.
   file_dialog: egui_file_dialog::FileDialog,
 }
 
@@ -154,7 +149,6 @@ impl<'a> State<'a> {
       egui_ctx,
       egui_winit_state,
       egui_renderer,
-      #[cfg(not(target_arch = "wasm32"))]
       file_dialog: egui_file_dialog::FileDialog::new()
         .add_file_filter_extensions("Wavefront OBJ", vec!["obj"])
         .default_file_filter("Wavefront OBJ"),
@@ -213,7 +207,6 @@ impl<'a> State<'a> {
   /// the tolerant reader, and either installs it (re-solving the current grade)
   /// or records the parse/read error in the panel. Reading a file the user
   /// chose is not itself a side effect, so it needs no confirmation.
-  #[cfg(not(target_arch = "wasm32"))]
   fn load_obj_path(&mut self, path: std::path::PathBuf) {
     let name = path.file_name().map_or_else(
       || "mesh.obj".to_string(),
@@ -309,8 +302,15 @@ impl<'a> State<'a> {
           winit::event::MouseScrollDelta::LineDelta(_, y) => *y,
           winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.1,
         };
-        self.camera.distance -= scroll;
-        self.camera.distance = self.camera.distance.clamp(1.0, 100.0);
+        // A step and a clamp range as fractions of the scene's own extent, not
+        // absolute constants: an OBJ loaded at extent 1000 must zoom and clamp
+        // at the same fractions a unit sphere does, not snap into the mesh on
+        // the first scroll because 100 was tuned for the sphere.
+        self.camera.distance -= scroll * 0.1 * self.amplitude_scale;
+        self.camera.distance = self
+          .camera
+          .distance
+          .clamp(0.05 * self.amplitude_scale, 50.0 * self.amplitude_scale);
       }
       _ => {}
     }
@@ -377,11 +377,10 @@ impl<'a> State<'a> {
       top_down: self.camera.top_down,
     };
 
-    // Borrow only the file dialog into the closure (native): the rest of the
-    // panel is driven by `model`, so this disjoint field can be touched inside
-    // the closure without conflicting with the `&mut self` calls after it. Its
-    // own borrow ends with the closure, before those calls.
-    #[cfg(not(target_arch = "wasm32"))]
+    // Borrow only the file dialog into the closure: the rest of the panel is
+    // driven by `model`, so this disjoint field can be touched inside the
+    // closure without conflicting with the `&mut self` calls after it. Its own
+    // borrow ends with the closure, before those calls.
     let file_dialog = &mut self.file_dialog;
 
     let mut response = None;
@@ -390,13 +389,10 @@ impl<'a> State<'a> {
 
       // The file browser draws as its own window and opens on the panel's
       // request; it must be updated within the frame, after the panel.
-      #[cfg(not(target_arch = "wasm32"))]
-      {
-        if response.as_ref().unwrap().load_obj_clicked {
-          file_dialog.pick_file();
-        }
-        file_dialog.update(ctx);
+      if response.as_ref().unwrap().load_obj_clicked {
+        file_dialog.pick_file();
       }
+      file_dialog.update(ctx);
     });
     let response = response.expect("the closure always runs exactly once");
 
@@ -407,7 +403,6 @@ impl<'a> State<'a> {
     // both anew for what they land on. They are mutually exclusive in priority
     // (at most one such widget moves per frame anyway); a load or a mesh change
     // re-solves the current grade, so both precede a same-frame grade switch.
-    #[cfg(not(target_arch = "wasm32"))]
     let loaded_file = match self.file_dialog.take_picked() {
       Some(path) => {
         self.load_obj_path(path);
@@ -415,8 +410,6 @@ impl<'a> State<'a> {
       }
       None => false,
     };
-    #[cfg(target_arch = "wasm32")]
-    let loaded_file = false;
 
     if !loaded_file {
       if response.requested_mesh_source != mesh_source {
@@ -473,10 +466,7 @@ impl<'a> State<'a> {
       wgpu::CurrentSurfaceTexture::Timeout
       | wgpu::CurrentSurfaceTexture::Occluded
       | wgpu::CurrentSurfaceTexture::Validation => {
-        // Blocking sleep is unavailable on the wasm32 target (the browser's
-        // own event loop already paces redraws there); native is what can
-        // spin a CPU core unbounded.
-        #[cfg(not(target_arch = "wasm32"))]
+        // A backstop against this turning into a full-throttle retry spin.
         std::thread::sleep(std::time::Duration::from_millis(16));
         return Ok(());
       }
@@ -579,20 +569,6 @@ impl<'a> ApplicationHandler for App<'a> {
           .unwrap(),
       );
 
-      #[cfg(target_arch = "wasm32")]
-      {
-        use winit::platform::web::WindowExtWebSys;
-        web_sys::window()
-          .and_then(|win| win.document())
-          .and_then(|doc| {
-            let dst = doc.get_element_by_id("wasm-example")?;
-            let canvas = web_sys::Element::from(window.canvas()?);
-            dst.append_child(&canvas).ok()?;
-            Some(())
-          })
-          .expect("Couldn't append canvas to document body.");
-      }
-
       let state = pollster::block_on(State::new(window.clone()));
       self.window = Some(window);
       self.state = Some(state);
@@ -659,16 +635,8 @@ impl<'a> ApplicationHandler for App<'a> {
   }
 }
 
-#[cfg_attr(target_arch = "wasm32", wasm_bindgen(start))]
 pub async fn run() {
-  cfg_if::cfg_if! {
-      if #[cfg(target_arch = "wasm32")] {
-          std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-          console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
-      } else {
-          env_logger::init();
-      }
-  }
+  env_logger::init();
 
   let event_loop = EventLoop::new().unwrap();
   let mut app = App::default();

@@ -4,9 +4,6 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-[lib]
-crate-type = ["cdylib", "rlib"]
-
 [dependencies]
 # Internal workspace dependencies
 formoniq = { path = "../formoniq" }
@@ -26,8 +23,13 @@ env_logger = "0.11.11"
 egui = "0.35.0"
 egui-wgpu = "0.35.0"
 egui-winit = "0.35.0"
-cfg-if = "1.0.4"
 bytemuck = { version = "1.25.1", features = ["derive"] }
+# An in-egui file browser for loading a custom mesh. Pure Rust (its only extra
+# deps are `directories` and `sysinfo`), so it pulls in no GTK, no D-Bus portal
+# and no platform toolkit -- unlike a native-dialog crate.
+egui-file-dialog = "0.14.1"
+clap = { version = "4.6.2", features = ["derive"] }
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [dev-dependencies]
 # Pinned to the same version wgpu resolves internally (see the `wgpu` pin
@@ -35,23 +37,3 @@ bytemuck = { version = "1.25.1", features = ["derive"] }
 # itself uses to build pipelines, so a shader that fails at pipeline-creation
 # time fails `cargo test` first instead.
 naga = { version = "29.0.4", features = ["wgsl-in"] }
-
-# Native-only: an in-egui file browser for loading a custom mesh. Pure Rust
-# (its only extra deps are `directories` and `sysinfo`), so it pulls in no GTK,
-# no D-Bus portal and no platform toolkit -- unlike a native-dialog crate. The
-# wasm target has no filesystem to browse, so the feature is native-only.
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-clap = { version = "4.6.2", features = ["derive"] }
-egui-file-dialog = "0.14.1"
-image = { version = "0.25.10", default-features = false, features = ["png"] }
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-console_error_panic_hook = "0.1.7"
-console_log = "1.0"
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = [
-    "Document",
-    "Window",
-    "Element",
-] }

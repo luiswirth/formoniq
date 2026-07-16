@@ -58,7 +58,7 @@ pub fn write_3dmesh_animation<'a, 'b>(
   filename: impl AsRef<Path>,
   coords_frames: impl IntoIterator<Item = &'a MeshCoords>,
   time_frames: impl IntoIterator<Item = f64>,
-) {
+) -> std::io::Result<()> {
   let mdd_frames: Vec<Vec<[f32; 3]>> = coords_frames
     .into_iter()
     .map(|coords| {
@@ -70,7 +70,7 @@ pub fn write_3dmesh_animation<'a, 'b>(
     .collect();
   let time_frames: Vec<f32> = time_frames.into_iter().map(|t| t as f32).collect();
 
-  write_mdd_file(filename, &mdd_frames, &time_frames).unwrap();
+  write_mdd_file(filename, &mdd_frames, &time_frames)
 }
 
 pub fn write_displacement_animation<'a>(
@@ -78,7 +78,7 @@ pub fn write_displacement_animation<'a>(
   base_surface: &TriangleSurface3D,
   displacements_frames: impl IntoIterator<Item = &'a Vector>,
   frame_times: impl IntoIterator<Item = f64>,
-) {
+) -> std::io::Result<()> {
   let coords_frames: Vec<_> = displacements_frames
     .into_iter()
     .map(|displacement| {
@@ -89,5 +89,5 @@ pub fn write_displacement_animation<'a>(
     })
     .collect();
 
-  write_3dmesh_animation(filename, &coords_frames, frame_times);
+  write_3dmesh_animation(filename, &coords_frames, frame_times)
 }
