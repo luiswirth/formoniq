@@ -24,7 +24,7 @@ use winit::{
 use crate::demos::default_selection;
 use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
 use crate::gallery::{Gallery, MeshSource, View};
-use crate::render::{camera::Camera, FrameView, GpuContext, Renderer};
+use crate::render::{camera::Camera, FrameView, GpuContext, Renderer, DEFAULT_SSAA_SCALE};
 use crate::scene::Scene;
 use crate::ui::panel::{Entry, PanelModel, Selection};
 
@@ -109,7 +109,7 @@ impl<'a> State<'a> {
       .unwrap();
     surface.configure(&ctx.device, &config);
 
-    let renderer = Renderer::new(&ctx, config.format);
+    let renderer = Renderer::new(&ctx, config.format, DEFAULT_SSAA_SCALE);
 
     // Show the window immediately: the gallery opens on a cheap placeholder of
     // the starting mesh and builds the first grade's eigenmodes in the

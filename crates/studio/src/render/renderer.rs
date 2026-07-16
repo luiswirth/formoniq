@@ -9,7 +9,7 @@ use super::{
   item::{DrawList, RenderItem},
   segments::SegmentPass,
   uniform::{FrameUniform, SegmentMaterial, SurfaceMaterial, UniformBinding, UniformPool},
-  DEPTH_FORMAT, SSAA_SCALE,
+  DEPTH_FORMAT,
 };
 
 /// The background the scene is cleared to.
@@ -49,9 +49,9 @@ struct Targets {
 
 impl Targets {
   /// The supersampled resolution every scene pass renders at: the caller's own
-  /// size scaled by [`SSAA_SCALE`] per axis.
-  fn supersampled(size: (u32, u32)) -> (u32, u32) {
-    (size.0.max(1) * SSAA_SCALE, size.1.max(1) * SSAA_SCALE)
+  /// size scaled by the renderer's supersampling factor per axis.
+  fn supersampled(size: (u32, u32), ssaa: u32) -> (u32, u32) {
+    (size.0.max(1) * ssaa, size.1.max(1) * ssaa)
   }
 
   fn new(
@@ -59,8 +59,9 @@ impl Targets {
     format: wgpu::TextureFormat,
     downsample: &DownsamplePass,
     size: (u32, u32),
+    ssaa: u32,
   ) -> Self {
-    let (width, height) = Self::supersampled(size);
+    let (width, height) = Self::supersampled(size, ssaa);
     let extent = wgpu::Extent3d {
       width,
       height,
@@ -101,6 +102,7 @@ impl Targets {
 /// drift.
 pub struct Renderer {
   format: wgpu::TextureFormat,
+  ssaa: u32,
   frame: UniformBinding<FrameUniform>,
   surface_materials: UniformPool<SurfaceMaterial>,
   segment_materials: UniformPool<SegmentMaterial>,
@@ -111,7 +113,13 @@ pub struct Renderer {
 }
 
 impl Renderer {
-  pub fn new(ctx: &GpuContext, format: wgpu::TextureFormat) -> Self {
+  /// A renderer for `format`, supersampling the scene pass by `ssaa` per axis.
+  ///
+  /// The factor is fixed here rather than per frame because it is baked into
+  /// every pipeline as the WGSL `SSAA_SCALE` override; a caller that wants a
+  /// different one builds a different renderer. See [`super::DEFAULT_SSAA_SCALE`]
+  /// for the interactive choice.
+  pub fn new(ctx: &GpuContext, format: wgpu::TextureFormat, ssaa: u32) -> Self {
     use wgpu::ShaderStages as Stages;
     let device = &ctx.device;
     // Every uniform here is visible in both stages: the fill pulses its colormap
@@ -127,9 +135,10 @@ impl Renderer {
     let segment_materials = UniformPool::new(device, "segment material", Stages::VERTEX_FRAGMENT);
     Self {
       format,
-      fill: FillPass::new(device, format, &frame, &surface_materials),
-      segments: SegmentPass::new(device, format, &frame, &segment_materials),
-      downsample: DownsamplePass::new(device, format),
+      ssaa,
+      fill: FillPass::new(device, format, &frame, &surface_materials, ssaa),
+      segments: SegmentPass::new(device, format, &frame, &segment_materials, ssaa),
+      downsample: DownsamplePass::new(device, format, ssaa),
       frame,
       surface_materials,
       segment_materials,
@@ -196,6 +205,7 @@ impl Renderer {
         self.format,
         &self.downsample,
         view.size,
+        self.ssaa,
       ));
     }
     let targets = self.targets.as_ref().expect("just ensured");

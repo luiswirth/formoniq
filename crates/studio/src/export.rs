@@ -1,0 +1,445 @@
+//! Headless rendering: the same frame graph the window drives, recorded into an
+//! offscreen texture and read back to the CPU.
+//!
+//! Nothing here is a second renderer or a second display. A scene becomes a
+//! mesh and field display through `display.rs`, exactly as `app.rs`
+//! does it, and the only thing this module supplies that the window does not is
+//! where the frame's time comes from: $t_k = k \/ "fps"$ instead of a clock. If
+//! a material were constructed here, the two callers could disagree about what
+//! a field looks like -- which is the whole reason the display layer is not in
+//! `app.rs`.
+//!
+//! Native-only: there is no filesystem to write to on wasm, and no subprocess
+//! to pipe to.
+
+use std::io::Write;
+use std::path::Path;
+
+use crate::demos::build_view;
+use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
+use crate::gallery::{MeshSource, View};
+use crate::render::{FrameView, GpuContext, Renderer};
+use crate::scene::Scene;
+use crate::ui::panel::Selection;
+
+/// The texture format every export renders and encodes at.
+///
+/// `Srgb` because the window's swapchain is: the shaders write linear values
+/// that the target's sRGB encoding converts on write, so an export target
+/// without it would come out visibly darker than the same frame on screen. PNG
+/// is an sRGB container, so the read-back bytes are already what it wants.
+const EXPORT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+/// The supersampling factor an export renders at.
+///
+/// Higher than the window's [`crate::render::DEFAULT_SSAA_SCALE`] for the one
+/// reason the window is lower: an export is not bound by a frame-rate budget,
+/// so the only question is what the image should look like, and the answer to
+/// that does not vary per invocation. It is therefore a property of exporting,
+/// not a knob -- nobody asks for a worse still.
+///
+/// The cost is quadratic: the scene pass allocates a target this many times the
+/// export resolution *per axis*, so a large enough `--size` will exceed GPU
+/// memory. The fix when that lands is to derive the factor from a pixel budget,
+/// not to hand the caller a lever and let them find the limit by crashing.
+const EXPORT_SSAA_SCALE: u32 = 4;
+
+/// What one export asks for: which scene, which field of it, and at what
+/// resolution and cadence.
+pub struct ExportSpec {
+  pub view: View,
+  pub mesh_source: MeshSource,
+  /// Which field of the built scene to show, indexed over the scene's scalar
+  /// fields and then its line fields -- the picker's own order. `None` opens on
+  /// the same first mode the viewer does.
+  pub field: Option<usize>,
+  pub size: (u32, u32),
+  /// How many frames to sample the period with. `None` picks the count that
+  /// makes playback at `fps` run at wall-clock speed.
+  pub frames: Option<u32>,
+  /// Playback rate of the written clip. It does not decide *which* instants are
+  /// rendered -- the period does -- only how fast they are played back.
+  pub fps: u32,
+}
+
+/// A GPU context with no surface: the same device the window gets, asked for
+/// without anything to present to.
+///
+/// `None` when the machine offers no adapter at all (a CI container without a
+/// software rasterizer), which callers treat as "cannot export here" rather
+/// than as a failure.
+pub fn headless_context() -> Option<GpuContext> {
+  let instance = wgpu::Instance::default();
+  let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
+    power_preference: wgpu::PowerPreference::HighPerformance,
+    compatible_surface: None,
+    force_fallback_adapter: false,
+  }))
+  .ok()?;
+  let (device, queue) =
+    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
+  Some(GpuContext { device, queue })
+}
+
+/// The offscreen target and the buffer frames are read back through.
+///
+/// A texture-to-buffer copy requires each row to start at a
+/// [`wgpu::COPY_BYTES_PER_ROW_ALIGNMENT`] boundary, so the buffer is padded to
+/// that stride and the padding is dropped on the way out. The scene's own width
+/// is almost never a multiple of 64 pixels, so this is the normal path, not an
+/// edge case.
+struct ExportTarget {
+  texture: wgpu::Texture,
+  view: wgpu::TextureView,
+  buffer: wgpu::Buffer,
+  size: (u32, u32),
+  padded_bytes_per_row: u32,
+}
+
+impl ExportTarget {
+  fn new(ctx: &GpuContext, size: (u32, u32)) -> Self {
+    let (width, height) = (size.0.max(1), size.1.max(1));
+    let unpadded_bytes_per_row = width * 4;
+    let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+    let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
+
+    let texture = ctx.device.create_texture(&wgpu::TextureDescriptor {
+      label: Some("Export Target"),
+      size: wgpu::Extent3d {
+        width,
+        height,
+        depth_or_array_layers: 1,
+      },
+      mip_level_count: 1,
+      sample_count: 1,
+      dimension: wgpu::TextureDimension::D2,
+      format: EXPORT_FORMAT,
+      usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+      view_formats: &[],
+    });
+    let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+    let buffer = ctx.device.create_buffer(&wgpu::BufferDescriptor {
+      label: Some("Export Readback"),
+      size: u64::from(padded_bytes_per_row) * u64::from(height),
+      usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
+      mapped_at_creation: false,
+    });
+
+    Self {
+      texture,
+      view,
+      buffer,
+      size: (width, height),
+      padded_bytes_per_row,
+    }
+  }
+
+  /// Renders one frame and returns it as tightly packed RGBA rows.
+  fn frame(&self, ctx: &GpuContext, renderer: &mut Renderer, view: &FrameView) -> Vec<u8> {
+    let mut encoder = ctx
+      .device
+      .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Export Encoder"),
+      });
+    renderer.render(ctx, &mut encoder, &self.view, view);
+    encoder.copy_texture_to_buffer(
+      wgpu::TexelCopyTextureInfo {
+        texture: &self.texture,
+        mip_level: 0,
+        origin: wgpu::Origin3d::ZERO,
+        aspect: wgpu::TextureAspect::All,
+      },
+      wgpu::TexelCopyBufferInfo {
+        buffer: &self.buffer,
+        layout: wgpu::TexelCopyBufferLayout {
+          offset: 0,
+          bytes_per_row: Some(self.padded_bytes_per_row),
+          rows_per_image: Some(self.size.1),
+        },
+      },
+      wgpu::Extent3d {
+        width: self.size.0,
+        height: self.size.1,
+        depth_or_array_layers: 1,
+      },
+    );
+    ctx.queue.submit(std::iter::once(encoder.finish()));
+
+    let slice = self.buffer.slice(..);
+    let (tx, rx) = std::sync::mpsc::channel();
+    slice.map_async(wgpu::MapMode::Read, move |r| {
+      let _ = tx.send(r);
+    });
+    // The map completes on a queue callback, so the queue has to be pumped for
+    // it to ever fire: unlike the windowed loop, nothing else here polls.
+    let _ = ctx.device.poll(wgpu::PollType::wait_indefinitely());
+    rx.recv()
+      .expect("the map callback always sends")
+      .expect("mapping an export readback buffer cannot fail");
+
+    let unpadded = (self.size.0 * 4) as usize;
+    let pixels = slice
+      .get_mapped_range()
+      .chunks_exact(self.padded_bytes_per_row as usize)
+      .flat_map(|row| row[..unpadded].to_vec())
+      .collect();
+    self.buffer.unmap();
+    pixels
+  }
+}
+
+/// One scene, built and displayed: everything an export needs that does not
+/// change from frame to frame.
+///
+/// The mesh display is kept alive alongside the field display because the draw
+/// list borrows both.
+struct Displayed {
+  mesh: MeshDisplay,
+  field: FieldDisplay,
+  camera: crate::render::camera::Camera,
+  /// The selected field's standing-wave frequency $omega = sqrt(lambda)$, or
+  /// `None` for a field that is not an eigenmode and so has no period.
+  omega: Option<f64>,
+}
+
+impl Displayed {
+  fn build(ctx: &GpuContext, spec: &ExportSpec) -> Result<Self, String> {
+    let mesh_data = spec.mesh_source.build()?;
+    let scene = build_view(spec.view, &mesh_data);
+
+    let selection = match spec.field {
+      None => crate::demos::default_selection(&scene),
+      Some(index) => selection_at(&scene, index).ok_or_else(|| {
+        format!(
+          "--field {index} is out of range: this view has {} field(s)",
+          scene.fields.len() + scene.line_fields.len()
+        )
+      })?,
+    };
+
+    let extent = scene_extent(&scene) as f32;
+    let mesh = MeshDisplay::build(&ctx.device, &scene);
+    let field = FieldDisplay::build(ctx, &mesh, &scene, selection, extent);
+    let aspect = spec.size.0.max(1) as f32 / spec.size.1.max(1) as f32;
+    let camera = default_camera(&scene, aspect);
+    let omega = eigenvalue_of(&scene, selection).map(f64::sqrt);
+
+    Ok(Self {
+      mesh,
+      field,
+      camera,
+      omega,
+    })
+  }
+
+  /// The standing wave's period $T = 2 pi \/ omega$, or `None` for a field that
+  /// does not oscillate: one that is not an eigenmode, and equally a harmonic
+  /// mode ($lambda = 0$), whose period is unbounded rather than large.
+  fn period(&self) -> Option<f64> {
+    self
+      .omega
+      .filter(|&omega| omega > 1e-9)
+      .map(|omega| std::f64::consts::TAU / omega)
+  }
+
+  /// The instants one clip renders: $t_k = k T \/ N$, for $k in {0, ..., N-1}$.
+  ///
+  /// The period is what is sampled, and `fps` is only the rate it is played
+  /// back at -- which is the way round that makes the loop exact. Sampling
+  /// $t_k = k \/ "fps"$ instead would divide the period by a number it has no
+  /// reason to divide evenly: the wrap from the last frame to the first would
+  /// jump by whatever phase the rounding left over, up to half a frame. Here
+  /// $N$ divides $T$ by construction, so frame $N$ *is* frame $0$ and the clip
+  /// closes on itself.
+  ///
+  /// `frames` therefore chooses how densely the period is sampled; its default
+  /// is the count that makes playback at `fps` run at wall-clock speed. A field
+  /// with no period does not move, so it is one still.
+  fn frame_times(&self, spec: &ExportSpec) -> Vec<f32> {
+    let Some(period) = self.period() else {
+      return vec![0.0];
+    };
+    let n = spec
+      .frames
+      .unwrap_or_else(|| (period * f64::from(spec.fps)).round().max(1.0) as u32);
+    (0..n.max(1))
+      .map(|k| (f64::from(k) * period / f64::from(n.max(1))) as f32)
+      .collect()
+  }
+}
+
+/// The scene's fields in the picker's order -- scalars, then line fields --
+/// indexed flat, which is what `--field N` names.
+fn selection_at(scene: &Scene, index: usize) -> Option<Selection> {
+  if index < scene.fields.len() {
+    Some(Selection::Scalar(index))
+  } else if index - scene.fields.len() < scene.line_fields.len() {
+    Some(Selection::Line(index - scene.fields.len()))
+  } else {
+    None
+  }
+}
+
+fn eigenvalue_of(scene: &Scene, selection: Selection) -> Option<f64> {
+  match selection {
+    Selection::Scalar(i) => scene.fields[i].eigenvalue,
+    Selection::Line(i) => scene.line_fields[i].eigenvalue,
+  }
+}
+
+/// Renders `spec` and writes it to `path`, as a PNG still or, for an `.mp4`, a
+/// clip piped through `ffmpeg`.
+pub fn export(spec: &ExportSpec, path: &Path) -> Result<(), String> {
+  let ctx = headless_context().ok_or("no GPU adapter available for a headless render")?;
+  let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, EXPORT_SSAA_SCALE);
+  let target = ExportTarget::new(&ctx, spec.size);
+  let displayed = Displayed::build(&ctx, spec)?;
+
+  let is_video = path
+    .extension()
+    .is_some_and(|e| e.eq_ignore_ascii_case("mp4"));
+  if is_video {
+    export_video(&ctx, &mut renderer, &target, &displayed, spec, path)
+  } else {
+    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0);
+    write_png(&pixels, target.size, path)
+  }
+}
+
+/// One frame of the displayed scene at `time`. The one place a `FrameView` is
+/// built here, so the still and the clip cannot differ in anything but `time`.
+fn render_at(
+  ctx: &GpuContext,
+  renderer: &mut Renderer,
+  target: &ExportTarget,
+  displayed: &Displayed,
+  time: f32,
+) -> Vec<u8> {
+  let items = displayed.field.draw_list(&displayed.mesh);
+  let frame = FrameView {
+    items: &items,
+    camera: &displayed.camera,
+    size: target.size,
+    time,
+  };
+  target.frame(ctx, renderer, &frame)
+}
+
+fn write_png(pixels: &[u8], size: (u32, u32), path: &Path) -> Result<(), String> {
+  image::save_buffer(path, pixels, size.0, size.1, image::ColorType::Rgba8)
+    .map_err(|e| format!("writing {}: {e}", path.display()))
+}
+
+/// Pipes raw frames to an `ffmpeg` subprocess.
+///
+/// No encoder is vendored: `ffmpeg` is the one dependency an export of this kind
+/// has that `cargo` cannot supply, so its absence is reported as itself rather
+/// than as a broken pipe.
+fn export_video(
+  ctx: &GpuContext,
+  renderer: &mut Renderer,
+  target: &ExportTarget,
+  displayed: &Displayed,
+  spec: &ExportSpec,
+  path: &Path,
+) -> Result<(), String> {
+  let times = displayed.frame_times(spec);
+  let (width, height) = target.size;
+
+  let mut child = std::process::Command::new("ffmpeg")
+    .args(["-y", "-f", "rawvideo", "-pix_fmt", "rgba"])
+    .args(["-s", &format!("{width}x{height}")])
+    .args(["-r", &spec.fps.to_string()])
+    .args(["-i", "-"])
+    // yuv420p and even dimensions are what makes the result playable outside a
+    // developer's own machine: the pixel format every H.264 decoder implements,
+    // and the chroma subsampling that requires both axes to be even.
+    .args(["-an", "-vcodec", "libx264", "-pix_fmt", "yuv420p"])
+    .args(["-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2"])
+    .arg(path)
+    .stdin(std::process::Stdio::piped())
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .spawn()
+    .map_err(|e| match e.kind() {
+      std::io::ErrorKind::NotFound => {
+        "`ffmpeg` was not found on PATH; it is required to write an .mp4 (a .png \
+         still needs no external tool)"
+          .to_string()
+      }
+      _ => format!("starting ffmpeg: {e}"),
+    })?;
+
+  let mut stdin = child.stdin.take().expect("stdin was piped");
+  for (k, &time) in times.iter().enumerate() {
+    let pixels = render_at(ctx, renderer, target, displayed, time);
+    stdin
+      .write_all(&pixels)
+      .map_err(|e| format!("piping frame {k} to ffmpeg: {e}"))?;
+  }
+  drop(stdin);
+
+  let status = child
+    .wait()
+    .map_err(|e| format!("waiting for ffmpeg: {e}"))?;
+  if !status.success() {
+    return Err(format!("ffmpeg exited with {status}"));
+  }
+  Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// A headless render of a known view produces an image that is not a single
+  /// flat color -- i.e. the frame graph actually drew the scene, rather than
+  /// clearing and presenting the background.
+  ///
+  /// Pointed at grade 1, not the viewer's starting grade 0: a grade-1 field
+  /// reduces to the streamline mark, so this is the one check in the suite that
+  /// exercises the segment pipeline with a real item behind it. Grade 0 draws
+  /// scalars only and would leave that path untested.
+  ///
+  /// Skipped, not failed, where no adapter exists: a machine without a GPU
+  /// cannot answer the question either way.
+  #[test]
+  fn headless_render_draws_the_scene() {
+    let Some(ctx) = headless_context() else {
+      eprintln!("no GPU adapter; skipping headless render test");
+      return;
+    };
+    let spec = ExportSpec {
+      view: View::WhitneyExamplesMesh,
+      mesh_source: MeshSource::START,
+      field: Some(0),
+      size: (64, 64),
+      frames: None,
+      fps: 30,
+    };
+    // The premise of the test, checked rather than assumed: if this view ever
+    // stopped carrying a line field, the render below would still pass while
+    // silently no longer covering the segment pipeline.
+    let scene = build_view(
+      spec.view,
+      &spec.mesh_source.build().expect("the sphere builds"),
+    );
+    assert!(
+      !scene.line_fields.is_empty(),
+      "the Whitney examples are grade-1 line fields; without one the segment \
+       pipeline is not what this test exercises"
+    );
+
+    let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, EXPORT_SSAA_SCALE);
+    let target = ExportTarget::new(&ctx, spec.size);
+    let displayed = Displayed::build(&ctx, &spec).expect("the triforce scene builds");
+
+    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0);
+    assert_eq!(pixels.len(), 64 * 64 * 4);
+    let first = &pixels[..4];
+    assert!(
+      pixels.chunks_exact(4).any(|px| px != first),
+      "every pixel is identical: the scene did not draw"
+    );
+  }
+}

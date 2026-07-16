@@ -107,11 +107,23 @@ they bind the same way the parent's invariants do:
 - **The model is GPU-free.** The gallery and the scene are the mathematics and
   the state of the viewer; neither names a device, a buffer or a pipeline. What
   is shown is decided there and baked afterward, never the other way round.
+- **The display is the callers' shared reduction.** What turns a scene and a
+  selection into a draw list -- the bake, the materials, the framing, the
+  object-intrinsic fractions the marks are scaled by -- belongs to neither
+  caller. A window and a headless export build it identically and differ only in
+  where the frame's time comes from; a material constructed at a caller instead
+  is how the two silently come to disagree about what a field looks like. The
+  corollary is the CLI's: nothing the code can decide from the object or the
+  context is asked of the user, because a knob with one right answer only lets
+  the answer be wrong.
 - **The renderer sees baked geometry and explicit time, and nothing else.** No
   FEEC types, no clock, no window, no surface. Time is an argument, so the
-  interactive loop passes wall-clock seconds and an exporter passes
-  $t_k = k \/ "fps"$; the frames are deterministic either way, and the two cannot
-  drift because there is one frame graph. A frame is a *draw list* — batches with
+  interactive loop passes wall-clock seconds and an exporter passes the instant
+  it means to render; the frames are deterministic either way, and the two cannot
+  drift because there is one frame graph. Which instants those are is the
+  exporter's business and not the renderer's: an oscillating field has a period,
+  and a clip that samples it as $t_k = k T \/ N$ closes on itself exactly, where
+  one pinned to the playback grid would not. A frame is a *draw list* — batches with
   their materials, in submission order — so the number of things on screen is the
   caller's, never a fixed set the renderer declares.
 - **The UI is a pure function of the model** returning requested changes, not a

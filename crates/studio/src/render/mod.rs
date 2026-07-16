@@ -19,13 +19,15 @@ pub use renderer::{FrameView, Renderer};
 
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 
-/// Supersampling factor applied per axis (so 4x the pixel count) to the scene
-/// pass before a box filter downsamples it back to the target. MSAA was
-/// rejected: a single supersampled offscreen target antialiases the fill and
-/// the segment marks uniformly, at the cost of the extra fill rate. Reaches the
-/// WGSL side as the preamble's `SSAA_SCALE` override, so the box filter and the
-/// target allocation are one number rather than two that must be kept in sync.
-const SSAA_SCALE: u32 = 2;
+/// The supersampling factor per axis a [`Renderer`] uses when its caller names
+/// none: what an interactive window can afford at frame rate. An export is not
+/// bound by that budget and passes its own.
+///
+/// Supersampling is applied per axis (so the square of this in pixel count) to
+/// the scene pass, before a box filter downsamples it back to the target. MSAA
+/// was rejected: a single supersampled offscreen target antialiases the fill
+/// and the segment marks uniformly, at the cost of the extra fill rate.
+pub const DEFAULT_SSAA_SCALE: u32 = 2;
 
 /// The WGSL source of one pass: the shared preamble (types, pure functions, the
 /// `SSAA_SCALE` override) followed by the body. Concatenated because WGSL has
@@ -40,13 +42,25 @@ fn shader_source(body: &str) -> String {
 /// checked against their Rust mirrors without a pass around them.
 const PREAMBLE: &str = include_str!("preamble.wgsl");
 
-/// The pipeline-constant assignment every pipeline here is built with: the WGSL
-/// `SSAA_SCALE` override, from the Rust constant.
-fn compilation_options<'a>() -> wgpu::PipelineCompilationOptions<'a> {
+/// The pipeline-constant assignment every pipeline here is built with.
+///
+/// `constants` is borrowed, so a caller builds it with [`ssaa_constants`] and
+/// keeps it alive across its pipeline creation. That indirection is the price
+/// of the factor being a value rather than a literal, and it is what makes the
+/// box filter's divisor and the target allocation one number: the WGSL
+/// `SSAA_SCALE` override and `Targets::supersampled` read the same `u32`.
+fn compilation_options<'a>(
+  constants: &'a [(&'a str, f64)],
+) -> wgpu::PipelineCompilationOptions<'a> {
   wgpu::PipelineCompilationOptions {
-    constants: &[("SSAA_SCALE", SSAA_SCALE as f64)],
+    constants,
     ..Default::default()
   }
+}
+
+/// The `SSAA_SCALE` override assignment for a supersampling factor.
+fn ssaa_constants(ssaa: u32) -> [(&'static str, f64); 1] {
+  [("SSAA_SCALE", f64::from(ssaa))]
 }
 
 fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::ShaderModule {

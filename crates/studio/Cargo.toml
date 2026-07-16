@@ -41,7 +41,9 @@ naga = { version = "29.0.4", features = ["wgsl-in"] }
 # no D-Bus portal and no platform toolkit -- unlike a native-dialog crate. The
 # wasm target has no filesystem to browse, so the feature is native-only.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+clap = { version = "4.6.2", features = ["derive"] }
 egui-file-dialog = "0.14.1"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = "0.1.7"

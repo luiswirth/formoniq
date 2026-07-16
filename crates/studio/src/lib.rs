@@ -10,6 +10,8 @@ pub mod app;
 pub mod bake;
 pub mod demos;
 pub(crate) mod display;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod export;
 pub mod gallery;
 pub mod io;
 pub mod render;

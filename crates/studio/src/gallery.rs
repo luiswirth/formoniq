@@ -36,7 +36,7 @@ pub(crate) type Mesh = (Complex, MeshCoords);
 /// 7-vertex torus -- so the harmonic (zero-eigenvalue) modes the gallery shows
 /// at grade 1 range over $dim H^1 = 2 g$.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum BuiltinMesh {
+pub enum BuiltinMesh {
   /// Spot the cow (genus 0).
   Spot,
   /// Bob (genus 1).
@@ -92,9 +92,9 @@ impl BuiltinMesh {
 ///
 /// [`Self::Custom`] is not regenerable -- the loaded mesh lives in the gallery,
 /// keyed by this descriptor for the picker -- so it is the one variant
-/// [`Self::build`] cannot serve.
+/// `build` cannot serve.
 #[derive(Clone, PartialEq)]
-pub(crate) enum MeshSource {
+pub enum MeshSource {
   /// An icosphere of the given subdivision depth.
   Sphere { subdivisions: usize },
   /// A triangulated unit square with the given number of cells per axis, a
@@ -111,7 +111,7 @@ pub(crate) enum MeshSource {
 impl MeshSource {
   /// The mesh the gallery opens on: the icosphere, matching the historical
   /// startup.
-  pub(crate) const START: MeshSource = MeshSource::Sphere {
+  pub const START: MeshSource = MeshSource::Sphere {
     subdivisions: SPHERE_SUBDIVISIONS,
   };
 
@@ -158,7 +158,7 @@ impl MeshSource {
 /// keyed on. A picker in the UI switches this at runtime; the render path
 /// treats every `Scene` alike regardless of which `View` built it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum View {
+pub enum View {
   /// A single grade of the mesh's Hodge-Laplace eigenmodes. The expensive
   /// case: each grade is an eigensolve, run once and memoized, so only the
   /// grade actually being viewed is ever computed.
@@ -183,7 +183,7 @@ pub(crate) enum View {
 
 impl View {
   /// The starting view when the viewer opens: grade 0 of the mesh.
-  pub(crate) const START: View = View::MeshGrade(0);
+  pub const START: View = View::MeshGrade(0);
 
   pub(crate) fn label(self) -> String {
     match self {
