@@ -32,8 +32,13 @@ const SSAA_SCALE: u32 = 2;
 /// no `#include`; the shader test validates this same concatenation, so a
 /// preamble/body mismatch fails `cargo test` rather than pipeline creation.
 fn shader_source(body: &str) -> String {
-  format!("{}\n{body}", include_str!("preamble.wgsl"))
+  format!("{PREAMBLE}\n{body}")
 }
+
+/// The preamble alone: every shader's prefix, and a WGSL module in its own
+/// right, which is what lets the uniform structs it declares be laid out and
+/// checked against their Rust mirrors without a pass around them.
+const PREAMBLE: &str = include_str!("preamble.wgsl");
 
 /// The pipeline-constant assignment every pipeline here is built with: the WGSL
 /// `SSAA_SCALE` override, from the Rust constant.
@@ -110,6 +115,59 @@ mod tests {
       )
       .validate(&module)
       .unwrap_or_else(|e| panic!("{name} failed to validate: {e}"));
+    }
+  }
+
+  /// Every uniform's WGSL struct has the size its `#[repr(C)]` Rust mirror
+  /// does, as naga lays it out -- the same computation wgpu validates a bind
+  /// group against.
+  ///
+  /// The two languages do not share an alignment rule (a WGSL vector is
+  /// 16-aligned; a Rust array is aligned as its element), so "mirrors it field
+  /// for field" is a claim about bytes that reading the two declarations
+  /// side by side does not check. A mismatch is otherwise invisible until a
+  /// draw call fails validation at runtime, which is exactly the error this
+  /// test exists to turn into a compile-time-adjacent one.
+  #[test]
+  fn uniform_layouts_match_wgsl() {
+    use naga::proc::Layouter;
+
+    let module = naga::front::wgsl::parse_str(super::PREAMBLE).expect("preamble failed to parse");
+    naga::valid::Validator::new(
+      naga::valid::ValidationFlags::all(),
+      naga::valid::Capabilities::all(),
+    )
+    .validate(&module)
+    .expect("preamble failed to validate");
+
+    let mut layouter = Layouter::default();
+    layouter
+      .update(module.to_ctx())
+      .expect("preamble failed to lay out");
+
+    let expected: &[(&str, usize)] = &[
+      ("Frame", size_of::<super::uniform::FrameUniform>()),
+      (
+        "SurfaceMaterial",
+        size_of::<super::uniform::SurfaceMaterial>(),
+      ),
+      (
+        "SegmentMaterial",
+        size_of::<super::uniform::SegmentMaterial>(),
+      ),
+    ];
+
+    for (name, rust_size) in expected {
+      let (handle, _) = module
+        .types
+        .iter()
+        .find(|(_, ty)| ty.name.as_deref() == Some(name))
+        .unwrap_or_else(|| panic!("preamble declares no struct `{name}`"));
+      let wgsl_size = layouter[handle].size as usize;
+      assert_eq!(
+        wgsl_size, *rust_size,
+        "`{name}`: WGSL lays it out at {wgsl_size} bytes, Rust at {rust_size}"
+      );
     }
   }
 }
