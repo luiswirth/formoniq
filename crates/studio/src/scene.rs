@@ -7,7 +7,7 @@ use manifold::{
     coord::{mesh::MeshCoords, simplex::SimplexRefExt},
     metric::geometry::Geometry,
   },
-  topology::{complex::Complex, simplex::standard_subsimps},
+  topology::complex::Complex,
   Dim,
 };
 
@@ -59,6 +59,14 @@ pub struct ScalarField {
   /// viewer. `None` for a field that is not an eigenfunction (e.g. a raw
   /// Whitney basis function), which disables the standing-wave animation.
   pub eigenvalue: Option<f64>,
+  /// The DOF simplex this field is dual to, as its vertex tuple (e.g.
+  /// `"01"`), when the field is a raw Whitney basis function. `None` for a
+  /// solved field (an eigenmode), which has no single dual simplex -- the
+  /// same is-this-a-basis-function distinction [`Self::eigenvalue`] makes,
+  /// mirrored: exactly one of the two is `Some` on any field this crate
+  /// produces. Lets the picker group basis functions by grade and label each
+  /// cell by its DOF without reparsing [`Self::name`].
+  pub dof_label: Option<String>,
 }
 
 /// A named line field on the surface: the reduced-grade-1 mark, drawn with
@@ -98,6 +106,8 @@ pub struct LineField {
   pub magnitude: Vec<f64>,
   /// See [`ScalarField::eigenvalue`].
   pub eigenvalue: Option<f64>,
+  /// See [`ScalarField::dof_label`].
+  pub dof_label: Option<String>,
 }
 
 impl ScalarField {
@@ -120,6 +130,17 @@ impl ScalarField {
       (-1.0, 1.0)
     }
   }
+}
+
+/// The display metadata a reconstructed field carries regardless of which
+/// render mark it lands in -- everything [`Scene::field`] needs beyond the
+/// cochain itself, bundled so the two independent `Option`s
+/// ([`ScalarField::eigenvalue`]/[`ScalarField::dof_label`]) don't turn the
+/// constructor into an unreadable run of positional arguments.
+struct FieldMeta {
+  name: String,
+  eigenvalue: Option<f64>,
+  dof_label: Option<String>,
 }
 
 impl LineField {
@@ -171,9 +192,12 @@ impl Scene {
       Self::field(
         topology,
         coords,
-        name,
+        FieldMeta {
+          name,
+          eigenvalue: Some(lambda),
+          dof_label: None,
+        },
         cochain,
-        Some(lambda),
         fields,
         line_fields,
       );
@@ -277,6 +301,7 @@ impl Scene {
       grade: 0,
       cochain: Cochain::new(0, na::DVector::zeros(nvertices)),
       eigenvalue: None,
+      dof_label: None,
     }];
     Self {
       topology,
@@ -305,13 +330,9 @@ impl Scene {
   }
 
   /// Every Whitney basis function ("local shape function") of the standard
-  /// reference cell of dimension `cell_dim`, visualized as nothing but a
-  /// reconstructed field of a one-hot cochain: the basis function dual to a DOF
-  /// simplex $sigma$ *is* the cochain $c_tau = delta_(sigma tau)$, so there is
-  /// no separate "evaluate a Whitney form" code path here -- the interpolant
-  /// and the sharp musical isomorphism are exactly the general machinery a
-  /// solved field (an eigenmode, or a future loaded cochain) goes through too.
-  /// One field per subsimplex of every grade $0..=$ `cell_dim`.
+  /// reference cell of dimension `cell_dim` -- the single-cell case of the
+  /// shared construction below, where every DOF simplex's support is the one
+  /// cell itself.
   pub fn whitney_basis(cell_dim: Dim) -> Self {
     use manifold::geometry::coord::mesh::standard_coord_complex;
 
@@ -320,13 +341,41 @@ impl Scene {
     // itself in the `z = 0` plane, same as `mesh3d::TriangleSurface3D` does
     // for any other flat surface. A no-op once `cell_dim >= 3`.
     let coords = coords.embed_euclidean(cell_dim.max(3));
+    Self::whitney_basis_on(topology, coords)
+  }
 
+  /// Every Whitney basis function ("global shape function") of an arbitrary
+  /// simplicial mesh -- the multi-cell case of the shared construction below,
+  /// where a DOF simplex's support spans every cell incident to it, which is
+  /// exactly where the LSF/GSF distinction shows up on screen: the same
+  /// one-hot-cochain construction, just no longer confined to a single cell.
+  pub fn whitney_basis_mesh(topology: Complex, coords: MeshCoords) -> Self {
+    Self::whitney_basis_on(topology, coords)
+  }
+
+  /// Shared construction for [`Self::whitney_basis`] and
+  /// [`Self::whitney_basis_mesh`]: one field per DOF simplex of every grade
+  /// $0..=$ `topology.dim()`, each the reconstructed field of a one-hot
+  /// cochain -- the basis function dual to a DOF simplex $sigma$ *is* the
+  /// cochain $c_tau = delta_(sigma tau)$, so there is no separate "evaluate a
+  /// Whitney form" code path here. The interpolant and the sharp musical
+  /// isomorphism are exactly the general machinery a solved field (an
+  /// eigenmode, or a future loaded cochain) goes through too. DOF simplices
+  /// are named by their vertex tuple straight off `topology`'s own
+  /// colexicographic skeleton order, which coincides with
+  /// `standard_subsimps` on the single-cell reference complex.
+  fn whitney_basis_on(topology: Complex, coords: MeshCoords) -> Self {
+    let dim = topology.dim();
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
-    for grade in 0..=cell_dim {
+    for grade in 0..=dim {
       let ndofs = topology.nsimplices(grade);
-      for (idof, dof_simp) in standard_subsimps(cell_dim, grade).enumerate() {
-        let label = dof_simp.iter().map(|v| v.to_string()).collect::<String>();
+      for (idof, dof_simp) in topology.skeleton_raw(grade).iter().enumerate() {
+        let label = dof_simp
+          .vertices
+          .iter()
+          .map(|v| v.to_string())
+          .collect::<String>();
         let name = format!("W^{grade}_{{{label}}}");
 
         let mut coeffs = na::DVector::zeros(ndofs);
@@ -336,9 +385,12 @@ impl Scene {
         Self::field(
           &topology,
           &coords,
-          name,
+          FieldMeta {
+            name,
+            eigenvalue: None,
+            dof_label: Some(label),
+          },
           cochain,
-          None,
           &mut fields,
           &mut line_fields,
         );
@@ -368,12 +420,16 @@ impl Scene {
   fn field(
     topology: &Complex,
     coords: &MeshCoords,
-    name: String,
+    meta: FieldMeta,
     cochain: Cochain,
-    eigenvalue: Option<f64>,
     fields: &mut Vec<ScalarField>,
     line_fields: &mut Vec<LineField>,
   ) {
+    let FieldMeta {
+      name,
+      eigenvalue,
+      dof_label,
+    } = meta;
     let n = topology.dim();
     let k = cochain.grade();
     match k.min(n - k) {
@@ -391,6 +447,7 @@ impl Scene {
           grade: k,
           cochain,
           eigenvalue,
+          dof_label,
         });
       }
       1 => {
@@ -402,6 +459,7 @@ impl Scene {
           direction,
           magnitude,
           eigenvalue,
+          dof_label,
         });
       }
       reduced => todo!(
@@ -513,4 +571,34 @@ fn to_vec3(v: &Vector) -> na::Vector3<f64> {
     if v.len() > 1 { v[1] } else { 0.0 },
     if v.len() > 2 { v[2] } else { 0.0 },
   )
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// The reference triangle's LSF gallery: one field per subsimplex of every
+  /// grade, split into scalar densities (grades 0 and 2, the latter through
+  /// the top-form Hodge star) and the grade-1 line field.
+  #[test]
+  fn whitney_basis_reference_triangle_has_one_field_per_subsimplex() {
+    let scene = Scene::whitney_basis(2);
+    assert_eq!(scene.fields.len(), 3 + 1); // 3 vertices, 1 face
+    assert_eq!(scene.line_fields.len(), 3); // 3 edges
+  }
+
+  /// The triforce mesh's GSF gallery: same reduction, but every DOF simplex
+  /// is now a global simplex of a 4-cell, 6-vertex, 9-edge mesh instead of a
+  /// subsimplex of a single reference cell.
+  #[test]
+  fn whitney_basis_mesh_has_one_field_per_mesh_simplex() {
+    let (topology, coords) = crate::mesh3d::triforce();
+    assert_eq!(topology.nsimplices(0), 6);
+    assert_eq!(topology.nsimplices(1), 9);
+    assert_eq!(topology.nsimplices(2), 4);
+
+    let scene = Scene::whitney_basis_mesh(topology, coords);
+    assert_eq!(scene.fields.len(), 6 + 4); // vertices, and faces via ⋆
+    assert_eq!(scene.line_fields.len(), 9); // edges
+  }
 }

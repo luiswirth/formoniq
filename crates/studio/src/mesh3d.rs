@@ -8,7 +8,7 @@
 
 use std::collections::HashMap;
 
-use common::linalg::nalgebra::VectorView;
+use common::linalg::nalgebra::{Matrix, VectorView};
 use manifold::{
   geometry::coord::{mesh::MeshCoords, simplex::SimplexCoords},
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
@@ -158,6 +158,37 @@ pub fn orient_triangles(triangles: &[[usize; 3]]) -> Vec<[usize; 3]> {
     }
   }
   oriented
+}
+
+/// The "triforce" teaching mesh: a central equilateral triangle with one
+/// congruent triangle mirrored outward across each of its three edges, four
+/// cells in all. The same layout as `plot/in/triforce`, the thesis figures'
+/// worked example of a global shape function -- reused here rather than
+/// invented anew, so [`crate::scene::Scene::whitney_basis_mesh`] on it
+/// reproduces those figures. Every interior edge is shared by exactly two
+/// cells and the one interior vertex by three, enough to show a global shape
+/// function's multi-cell support without the mesh itself being interesting.
+pub fn triforce() -> (Complex, MeshCoords) {
+  let sqrt3_2 = 3f64.sqrt() / 2.0;
+  #[rustfmt::skip]
+  let positions: [[f64; 2]; 6] = [
+    [ 0.0, 0.0],
+    [ 1.0, 0.0],
+    [ 0.5, sqrt3_2],
+    [-0.5, sqrt3_2],
+    [ 1.5, sqrt3_2],
+    [ 0.5, -sqrt3_2],
+  ];
+  let cells: [[usize; 3]; 4] = [[0, 1, 2], [0, 2, 3], [1, 4, 2], [0, 1, 5]];
+
+  let columns: Vec<_> = positions.iter().map(|p| na::dvector![p[0], p[1]]).collect();
+  let coords = MeshCoords::from(Matrix::from_columns(&columns));
+  let simplices = cells
+    .into_iter()
+    .map(|c| Simplex::from_word(c.to_vec()).1)
+    .collect();
+  let skeleton = Skeleton::new(simplices);
+  TriangleSurface3D::from_coord_skeleton(skeleton, coords).into_coord_complex()
 }
 
 /// Per-vertex normals of a triangle surface embedded in $RR^3$: the average of
