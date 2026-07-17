@@ -74,6 +74,29 @@ const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
 /// The streamline ribbons' ink: pure white, single pass, no outline.
 const STREAMLINE_INK: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
+/// The arrow glyph's length, on the same object-intrinsic scale as every other
+/// mark's: uniform across the mark, since the glyph carries the direction and
+/// the fill beneath it carries the magnitude (see `glyph.rs`). Longer than the
+/// ribbons are wide by an order of magnitude, because a glyph has to read as an
+/// arrow -- a shaft and a head, both legible -- and not as a thick dot.
+const GLYPH_LENGTH_FRACTION: f32 = 0.06;
+
+/// The glyph's half-width: the arrowhead's, which its base spans in full, and
+/// which [`GLYPH_SHAFT_WIDTH_FRACTION`] narrows the shaft down from.
+const GLYPH_WIDTH_FRACTION: f32 = 0.012;
+
+/// The arrowhead's length as a fraction of the glyph's own, and the shaft's
+/// half-width as a fraction of the head's base. A head a third of the arrow, on
+/// a shaft a third of its width: the proportions of a drawn arrow, self-similar
+/// at every glyph since both are fractions.
+const GLYPH_HEAD_LENGTH_FRACTION: f32 = 0.36;
+const GLYPH_SHAFT_WIDTH_FRACTION: f32 = 0.32;
+
+/// The glyphs' ink: the ribbons' white, at reduced opacity so a lattice of them
+/// reads as a field rather than as a wall of marks. They are drawn under the
+/// ribbons and over the fill.
+const GLYPH_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.75];
+
 /// The opacity the ribbons of an eigenmode fade to at the standing wave's node,
 /// where the field vanishes and the curves are meaningless -- never fully, since
 /// the integral curves of a standing mode are the same set at every phase, and
@@ -287,6 +310,12 @@ pub(crate) struct FieldDisplay {
   /// The traced streamlines of a line field, `None` for a scalar field. Their
   /// presence *is* the line-field mark: there is no branch to pick.
   streamlines: Option<SegmentBatch>,
+  /// The arrow glyphs of a line field, `None` for a scalar field: the same
+  /// reduction read a third way. The ribbons integrate the field, the particles
+  /// flow it, and the glyphs simply evaluate it -- at points the atlas places
+  /// (the interior barycentric lattice of each cell) rather than a tracer's
+  /// seeding or a population's respawn.
+  glyphs: Option<SegmentBatch>,
   /// The advected particles of a line field, absent for a scalar field and for
   /// a field that vanishes everywhere (which seeds nowhere).
   ///
@@ -299,6 +328,7 @@ pub(crate) struct FieldDisplay {
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
   streamline: SegmentMaterial,
+  glyph: SegmentMaterial,
   particle: ParticleMaterial,
 }
 
@@ -313,7 +343,7 @@ impl FieldDisplay {
     selection: Selection,
     amplitude_scale: f32,
   ) -> (Self, Vec<f32>) {
-    let (streamlines, particles, attributes, surface) = match selection {
+    let (streamlines, glyphs, particles, attributes, surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
         let (raw_min, raw_max) = field.bounds();
@@ -343,6 +373,7 @@ impl FieldDisplay {
         };
 
         (
+          None,
           None,
           None,
           bake::attributes(field.values()),
@@ -391,6 +422,20 @@ impl FieldDisplay {
         // whatever the cochain's units. A field that vanishes everywhere has no
         // scale to divide by and simply does not move.
         let peak = crate::advect::peak_speed(&scene.topology, &scene.coords, &field.cochain);
+
+        // The same peak the advection normalizes by, read as the glyph fade's
+        // reference: a glyph's opacity is its own magnitude against the field's
+        // greatest, so the mark reports where the field is strong without
+        // spending its length on it.
+        let (vertices, values, segments) = crate::glyph::bake_glyphs(
+          &scene.topology,
+          &scene.coords,
+          &field.cochain,
+          f64::from(GLYPH_LENGTH_FRACTION * amplitude_scale),
+          peak,
+        );
+        let glyphs = SegmentBatch::new(&ctx.device, &vertices, &values, &segments);
+
         let particles = (peak > 0.0)
           .then(|| {
             let step = PARTICLE_SPEED_FRACTION * f64::from(amplitude_scale)
@@ -410,6 +455,7 @@ impl FieldDisplay {
 
         (
           Some(streamlines),
+          Some(glyphs),
           particles,
           // The surface is the same fill a scalar field gets, tinted by the
           // field's nodal magnitude: the curves carry the direction, so the
@@ -428,6 +474,7 @@ impl FieldDisplay {
 
     let display = Self {
       streamlines,
+      glyphs,
       particles,
       surface,
       // The wireframe rides the surface's own wave, so it tracks the displaced
@@ -438,6 +485,7 @@ impl FieldDisplay {
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
+        ..SegmentMaterial::PLAIN
       },
       // The ribbons share the wave's clock but not its displacement: the samples
       // sit on the undisplaced surface, so only the node fade reads the mode.
@@ -447,6 +495,20 @@ impl FieldDisplay {
         fade_floor: STREAMLINE_NODE_OPACITY,
         wave_amplitude: 0.0,
         wave_omega: surface.wave_omega,
+        ..SegmentMaterial::PLAIN
+      },
+      // The glyphs share the ribbons' clock and node fade -- they are the same
+      // field, so they vanish where it does -- and differ only in the taper that
+      // makes a segment an arrow.
+      glyph: SegmentMaterial {
+        color: GLYPH_INK,
+        half_width_world: GLYPH_WIDTH_FRACTION * amplitude_scale,
+        fade_floor: STREAMLINE_NODE_OPACITY,
+        wave_amplitude: 0.0,
+        wave_omega: surface.wave_omega,
+        head_length_fraction: GLYPH_HEAD_LENGTH_FRACTION,
+        shaft_width_fraction: GLYPH_SHAFT_WIDTH_FRACTION,
+        _pad0: [0.0; 2],
       },
       // The speed normalization is the display's, not the bake's: the bake was
       // handed a step chosen so the *peak* covers
@@ -475,6 +537,9 @@ impl FieldDisplay {
     let mut items = Vec::new();
     if let Some(surface) = &mesh.surface {
       items.push(RenderItem::Surface(surface, self.surface));
+    }
+    if let Some(glyphs) = self.glyphs.as_ref().filter(|_| marks.glyphs) {
+      items.push(RenderItem::Segments(glyphs, self.glyph));
     }
     if let Some(streamlines) = self.streamlines.as_ref().filter(|_| marks.streamlines) {
       items.push(RenderItem::Segments(streamlines, self.streamline));

@@ -1,7 +1,12 @@
 // Segment marks: the mesh's 1-skeleton, a line field's traced integral curves,
-// and a 1-manifold's own cells -- one shader, because they are one technique
-// (the preamble's billboard-quad construction, one instance per segment) at
-// different ink and width.
+// a 1-manifold's own cells, and the arrow glyphs of a line field -- one shader,
+// because they are one technique (the preamble's billboard-quad construction,
+// one instance per segment) at different ink, width and taper.
+//
+// The arrow is the taper and nothing else: the quad, the billboard and the
+// vertex path are the ribbon's, and the head is a function the fragment cuts the
+// quad's silhouette down to. Everything the mark needs is therefore material
+// data, which is what keeps a fourth mark from being a fourth pipeline.
 //
 // The two endpoints arrive as two separate per-instance vertex buffers
 // (`SegmentBatch::layouts` in `item.rs`) bound side by side, since a
@@ -42,7 +47,27 @@ struct EndpointB {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) opacity: f32,
+    // Where the fragment sits in the quad: `along` runs 0 at A to 1 at B, and
+    // `across` runs -1 to 1 in units of the material's half-width. The two
+    // coordinates the ink profile is a function of.
+    @location(1) along: f32,
+    @location(2) across: f32,
 };
+
+// The mark's half-width at `along`, as a fraction of the material's own: the
+// shaft's constant fraction until the head begins, then the head's linear taper
+// from its full-width base to a point at the tip.
+//
+// This is the whole of what makes a segment an arrow, and it is why an arrow is
+// not a second pipeline: a plain segment passes `head_length_fraction = 0` and
+// `shaft_width_fraction = 1`, and the expression collapses to a constant 1 --
+// the full quad, exactly the mark this shader drew before there were arrows.
+fn segment_profile(material: SegmentMaterial, along: f32) -> f32 {
+    let head = max(material.head_length_fraction, 1e-6);
+    let head_start = 1.0 - material.head_length_fraction;
+    let taper = clamp((1.0 - along) / head, 0.0, 1.0);
+    return select(material.shaft_width_fraction, taper, along > head_start);
+}
 
 @vertex
 fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
@@ -60,6 +85,8 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     var out: VertexOutput;
     out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
     out.opacity = select(a.opacity, b.opacity, billboard_is_b(vertex_index));
+    out.along = select(0.0, 1.0, billboard_is_b(vertex_index));
+    out.across = billboard_side(vertex_index);
     return out;
 }
 
@@ -71,6 +98,17 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // entirely would read as the geometry changing. A mark with no such story to
     // tell passes `fade_floor = 1`, and the envelope is constant.
     let env = abs(wave_osc(frame, material.wave_omega));
-    let alpha = material.color.a * in.opacity * mix(material.fade_floor, 1.0, env);
+
+    // The quad is cut down to the mark's own silhouette, one screen pixel of
+    // gradient wide, so the edge is resolved rather than aliased. `fwidth` is
+    // the profile's rate of change in screen space, so the softening is a pixel
+    // whatever the mark's world width and however the quad is foreshortened --
+    // and on a plain segment, whose profile is a constant 1, it antialiases the
+    // straight edge the quad already had.
+    let profile = segment_profile(material, in.along);
+    let edge = fwidth(in.across) + fwidth(profile);
+    let ink = 1.0 - smoothstep(-edge, edge, abs(in.across) - profile);
+
+    let alpha = material.color.a * in.opacity * mix(material.fade_floor, 1.0, env) * ink;
     return vec4<f32>(material.color.rgb, alpha);
 }

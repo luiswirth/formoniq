@@ -258,4 +258,33 @@ pub struct SegmentMaterial {
   pub fade_floor: f32,
   pub wave_amplitude: f32,
   pub wave_omega: f32,
+  /// The arrowhead's length, as a fraction of the segment's own length: the
+  /// mark's *taper*, and the whole of what makes a segment an arrow.
+  ///
+  /// Self-similar on purpose -- a fraction, not a world length -- so every glyph
+  /// of a mark is the same arrow at the same proportions. Zero is a plain
+  /// segment, and it is the identity rather than a branch: the head occupies
+  /// none of the quad, and the profile below is the shaft's everywhere.
+  pub head_length_fraction: f32,
+  /// The shaft's half-width as a fraction of [`Self::half_width_world`], which
+  /// the head's base spans in full. One is a plain segment of uniform width.
+  pub shaft_width_fraction: f32,
+  pub _pad0: [f32; 2],
+}
+
+impl SegmentMaterial {
+  /// The taper of a mark that has none: a segment of uniform width, its ink
+  /// filling the quad edge to edge. The wireframe's and the ribbons' -- they
+  /// spread the material's fields with this rather than restating the numbers,
+  /// so an arrow is legible as the one mark that departs from it.
+  pub const PLAIN: Self = Self {
+    color: [0.0; 4],
+    half_width_world: 0.0,
+    fade_floor: 1.0,
+    wave_amplitude: 0.0,
+    wave_omega: 0.0,
+    head_length_fraction: 0.0,
+    shaft_width_fraction: 1.0,
+    _pad0: [0.0; 2],
+  };
 }

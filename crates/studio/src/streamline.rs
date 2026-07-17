@@ -38,7 +38,7 @@ use manifold::{
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
 };
 
-use crate::scene::reduced_form;
+use crate::{bake::to_vec3, scene::reduced_form};
 
 /// One sample of a traced streamline: its ambient position, the unit ambient
 /// field direction there (for the ribbon's orientation), and the field
@@ -357,11 +357,11 @@ impl Tracer<'_> {
     let handle = cell.handle(self.topology);
     let coord_simplex = handle.coord_simplex(self.coords);
     let bary = local2bary(&Local::new(x.clone()));
-    let pos = vec3(coord_simplex.bary2global(&bary).vector());
+    let pos = to_vec3(coord_simplex.bary2global(&bary).vector());
     let form = reduced_form(self.interpolant.eval(&MeshPoint::new(cell, bary)), metric);
     let magnitude = form.norm(metric);
     let ambient = coord_simplex.pushforward_vector(form.sharp(metric).coeffs());
-    let tangent = vec3(&ambient)
+    let tangent = to_vec3(&ambient)
       .try_normalize(1e-12)
       .unwrap_or_else(na::Vector3::zeros);
     StreamPoint {
@@ -400,8 +400,8 @@ impl Tracer<'_> {
   /// The outward unit normal of a cell, from its two spanning edge vectors.
   fn cell_normal(&self, cell: SimplexIdx) -> na::Vector3<f64> {
     let coord_simplex = cell.handle(self.topology).coord_simplex(self.coords);
-    let e0 = vec3(&coord_simplex.spanning_vector(0));
-    let e1 = vec3(&coord_simplex.spanning_vector(1));
+    let e0 = to_vec3(&coord_simplex.spanning_vector(0));
+    let e1 = to_vec3(&coord_simplex.spanning_vector(1));
     e0.cross(&e1)
       .try_normalize(1e-12)
       .unwrap_or_else(na::Vector3::zeros)
@@ -455,14 +455,6 @@ impl SpatialHash {
 }
 
 /// A nalgebra column, zero-padded to an ambient 3-vector.
-fn vec3(v: &Vector) -> na::Vector3<f64> {
-  na::Vector3::new(
-    v[0],
-    if v.len() > 1 { v[1] } else { 0.0 },
-    if v.len() > 2 { v[2] } else { 0.0 },
-  )
-}
-
 /// An ambient 3-vector as a tagged coordinate, for [`PointLocator::locate`].
 fn coord3(p: na::Vector3<f64>) -> Coord {
   Coord::from_iterator(3, [p.x, p.y, p.z])

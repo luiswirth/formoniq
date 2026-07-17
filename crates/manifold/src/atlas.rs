@@ -209,6 +209,43 @@ pub fn ref_lattice(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usiz
   compositions(dim + 1, refinement)
 }
 
+/// The lattice points strictly inside the reference cell: $k_i >= 1$ for every
+/// $i$, so the point lies on no face.
+///
+/// $ mono(L)_R^n = { k in L_R^n : k > 0 } = 1 + L_(R - n - 1)^n $
+///
+/// The shift *is* the enumeration -- an interior point is an arbitrary point
+/// with one unit already spent on each part -- so there are $binom(R - 1, n)$ of
+/// them, and no separate combinatorics. $R = n + 1$ spends every unit and leaves
+/// the barycenter alone; below that the interior is empty, which is the honest
+/// answer rather than an error: a refinement too coarse to have an inside has
+/// none.
+///
+/// This, not [`ref_lattice`], is what a per-cell sample set wants, and for a
+/// mathematical reason rather than to dodge the double-count on a shared facet:
+/// a section is only chart-independent in its *tangential* part, so at a point
+/// of a facet the two incident charts genuinely disagree and the value there is
+/// not the cell's to report. The open cell is where a section has a value at
+/// all.
+pub fn ref_lattice_interior(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
+  refinement
+    .checked_sub(dim + 1)
+    .into_iter()
+    .flat_map(move |rest| compositions(dim + 1, rest))
+    .map(|k| k.into_iter().map(|k| k + 1).collect())
+}
+
+/// [`ref_lattice_interior`] as barycentric weights.
+pub fn ref_lattice_interior_bary(dim: Dim, refinement: usize) -> impl Iterator<Item = Bary> {
+  let scale = (refinement as f64).recip();
+  ref_lattice_interior(dim, refinement).map(move |k| {
+    Bary::new(Vector::from_iterator(
+      k.len(),
+      k.into_iter().map(|k| k as f64 * scale),
+    ))
+  })
+}
+
 /// [`ref_lattice`] as barycentric weights, $lambda = k \/ R$.
 pub fn ref_lattice_bary(dim: Dim, refinement: usize) -> impl Iterator<Item = Bary> {
   let scale = (refinement as f64).recip();
@@ -327,6 +364,39 @@ mod test {
           assert_eq!(restricted, facet);
         }
       }
+    }
+  }
+
+  /// The interior is exactly the lattice minus every face: $binom(R-1, n)$
+  /// points, each on no face, and none of the boundary ones missed.
+  #[test]
+  fn lattice_interior_is_the_lattice_off_the_faces() {
+    for dim in 0..=4 {
+      for refinement in 1..=6 {
+        let interior: Vec<_> = ref_lattice_interior(dim, refinement).collect();
+        let expected: Vec<_> = ref_lattice(dim, refinement)
+          .filter(|k| k.iter().all(|&k| k >= 1))
+          .collect();
+        assert_eq!(interior, expected);
+        assert_eq!(
+          interior.len(),
+          refinement.checked_sub(1).map_or(0, |r| binomial(r, dim))
+        );
+      }
+    }
+  }
+
+  /// The base case of the interior: $R = n + 1$ spends one unit on each part and
+  /// leaves the barycenter alone, and below that there is no inside to have.
+  #[test]
+  fn lattice_interior_bottoms_out_at_the_barycenter() {
+    for dim in 0..=4 {
+      for refinement in 0..=dim {
+        assert_eq!(ref_lattice_interior(dim, refinement).count(), 0);
+      }
+      let base: Vec<_> = ref_lattice_interior_bary(dim, dim + 1).collect();
+      assert_eq!(base.len(), 1);
+      assert_relative_eq!(base[0].view(), barycenter_bary(dim).view());
     }
   }
 

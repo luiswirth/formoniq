@@ -23,6 +23,7 @@
 use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
+use common::linalg::nalgebra::Vector;
 use manifold::{
   geometry::coord::{mesh::MeshCoords, vertex_curvature_radius},
   topology::complex::Complex,
@@ -237,12 +238,16 @@ pub fn bake_streamlines(
   (vertices, attributes, segments)
 }
 
-/// A vertex's ambient position: $RR^3$ is the viewer's one ambient space, so a
-/// mesh embedded in fewer dimensions embeds as itself in the missing ones' zero
+/// An ambient vector in the viewer's one ambient space: $RR^3$, so a mesh
+/// embedded in fewer dimensions embeds as itself in the missing ones' zero
 /// planes -- the codimension case, not a special case.
+pub fn to_vec3(v: &Vector) -> na::Vector3<f64> {
+  na::Vector3::from_iterator((0..3).map(|i| v.get(i).copied().unwrap_or(0.0)))
+}
+
+/// A vertex's ambient position.
 fn embed_r3(coords: &MeshCoords, vertex: usize) -> na::Vector3<f64> {
-  let c = coords.coord(vertex);
-  na::Vector3::from_iterator((0..3).map(|i| c.get(i).copied().unwrap_or(0.0)))
+  to_vec3(&coords.coord(vertex).view().into_owned())
 }
 
 /// The vertex tuples of the complex's cells, as indices into the baked vertex
