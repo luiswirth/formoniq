@@ -62,8 +62,8 @@ pub fn triforce() -> (Complex, MeshCoords) {
 /// triforce mesh, as data: each a [`CochainSpec::ByEdges`] whose coefficients
 /// reproduce `plot/in/triforce`'s `constant`/`rot`/`div` cochains. Addressed by
 /// vertex pair rather than by the exporter's file order, since a mesh's own
-/// edge indexing need not agree with it -- the resolution against the mesh
-/// happens in [`CochainSpec::resolve`] at build time.
+/// edge indexing need not agree with it -- resolving against the mesh is
+/// [`CochainSpec`]'s own, at build time.
 pub fn triforce_examples() -> Vec<NamedCochain> {
   // (v0, v1, constant, curl, div), v0 < v1 matching the canonical (positively
   // oriented) edge orientation both `plot/in/triforce` and the triforce

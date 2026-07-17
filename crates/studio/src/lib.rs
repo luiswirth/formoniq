@@ -13,7 +13,7 @@ pub mod demos;
 pub(crate) mod display;
 pub mod export;
 pub mod gallery;
-pub mod glyph;
+pub(crate) mod glyph;
 pub mod io;
 pub mod render;
 pub mod scene;

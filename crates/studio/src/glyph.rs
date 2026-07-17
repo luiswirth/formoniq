@@ -103,7 +103,7 @@ fn glyph_refinement(dim: manifold::Dim, diameter: f64, target_spacing: f64) -> u
 /// The glyphs sit on the undisplaced surface and carry no field value, so the
 /// zero normal makes the standing-wave displacement the identity on them, the
 /// same way a traced curve's samples do.
-pub fn bake_glyphs(
+pub(crate) fn bake_glyphs(
   topology: &Complex,
   coords: &MeshCoords,
   cochain: &Cochain,
