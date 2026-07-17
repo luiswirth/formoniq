@@ -58,6 +58,15 @@ const ZOOM_PER_NOTCH: f32 = 0.15;
 const FLY_EXTENTS_PER_SECOND: f32 = 0.5;
 const SPRINT_FACTOR: f32 = 3.0;
 
+/// Orthographic keyboard navigation: `WASD` pans this many view-heights per
+/// second, `Space`/`Shift` zoom at this many e-folds per second. Screen-relative
+/// rather than world-relative like the perspective fly, because a flat view has
+/// a natural on-screen scale -- its half-extent -- and no depth to fly into, so
+/// panning a fraction of the visible region per second is what keeps the feel
+/// constant across zoom.
+const PAN_SCREENS_PER_SECOND: f32 = 1.2;
+const KEY_ZOOM_PER_SECOND: f32 = 2.5;
+
 /// What a held mouse button means. The three are one rotation primitive and one
 /// translation: orbit and look differ *only* in the center they rotate about
 /// ([`Camera::rotate`]), and pan is the translation that keeps the pivot's depth
@@ -462,19 +471,28 @@ impl<'a> State<'a> {
         button,
         ..
       } => {
-        self.drag = match button {
-          winit::event::MouseButton::Left => {
-            let pivot = self.center_point();
-            // The pivot depth is re-established here and nowhere else: it is
-            // what pan and the orthographic frustum read as "the depth of what I
-            // am looking at", and a press on the geometry is the one moment that
-            // has a real answer for them.
-            self.camera.pivot_distance = (pivot - self.camera.eye).norm();
-            Some(Drag::Orbit { pivot })
+        self.drag = if self.camera.orthographic {
+          // A flat, face-on view does not rotate: tumbling it would only tilt
+          // the plane away from the observer, which is the one thing the
+          // orthographic view exists to keep square. So every button pans and
+          // the view stays a 2D map -- the one place the interaction reads the
+          // projection, mirrored in the keyboard split below.
+          Some(Drag::Pan)
+        } else {
+          match button {
+            winit::event::MouseButton::Left => {
+              let pivot = self.center_point();
+              // The pivot depth is re-established here and nowhere else: it is
+              // what pan and the orthographic frustum read as "the depth of what
+              // I am looking at", and a press on the geometry is the one moment
+              // that has a real answer for them.
+              self.camera.pivot_distance = (pivot - self.camera.eye).norm();
+              Some(Drag::Orbit { pivot })
+            }
+            winit::event::MouseButton::Right => Some(Drag::Look),
+            winit::event::MouseButton::Middle => Some(Drag::Pan),
+            _ => None,
           }
-          winit::event::MouseButton::Right => Some(Drag::Look),
-          winit::event::MouseButton::Middle => Some(Drag::Pan),
-          _ => None,
         };
         self.last_mouse_pos = self.cursor;
       }
@@ -525,7 +543,9 @@ impl<'a> State<'a> {
           winit::event::MouseScrollDelta::LineDelta(_, y) => *y,
           winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.1,
         };
-        self.zoom(scroll);
+        // The wheel zooms where the cursor points, under either projection.
+        let focus = self.cursor_point();
+        self.zoom_by(scroll * ZOOM_PER_NOTCH, focus);
       }
       _ => {}
     }
@@ -568,21 +588,76 @@ impl<'a> State<'a> {
     self.camera.ray(ndc_x, ndc_y)
   }
 
-  /// Zoom toward the point under the cursor, multiplicatively.
+  /// Zoom about `focus` by `e_folds`, multiplicatively: positive brings the eye
+  /// nearer (`exp(-e_folds) < 1`).
   ///
-  /// Toward the cursor rather than the view axis, so a detail is brought closer
-  /// by pointing at it instead of by re-centering afterward. Multiplicative so
-  /// the step shrinks with the remaining distance: the approach is asymptotic,
-  /// which is what makes a fixed clamp unnecessary -- the surface cannot be
-  /// scrolled through, however long the wheel is turned.
-  fn zoom(&mut self, scroll: f32) {
-    let focus = self.cursor_point();
-    let factor = (-scroll * ZOOM_PER_NOTCH).exp();
+  /// The one zoom primitive, shared by the wheel and the orthographic keys.
+  /// Multiplicative, so the step is a fraction of the remaining distance and the
+  /// approach is asymptotic -- the surface cannot be zoomed through, which is
+  /// what makes a fixed clamp unnecessary. The pivot depth scales with it: that
+  /// is the orthographic frustum's only sense of scale, so this is exactly what
+  /// makes a parallel projection zoom at all rather than sit at a fixed
+  /// magnification.
+  fn zoom_by(&mut self, e_folds: f32, focus: nalgebra::Point3<f32>) {
+    let factor = (-e_folds).exp();
     self.camera.eye = focus + (self.camera.eye - focus) * factor;
-    // The pivot depth scales with the same factor: it is the orthographic
-    // frustum's only sense of scale, so this is exactly what makes a parallel
-    // projection zoom at all rather than sit at a fixed magnification.
     self.camera.pivot_distance *= factor;
+  }
+
+  /// Keyboard navigation, dispatched by projection.
+  ///
+  /// The two views have different natural motions -- a perspective camera flies
+  /// through the scene, an orthographic one slides across a flat view and zooms
+  /// -- so this is where the interaction reads the projection, the keyboard
+  /// counterpart to the mouse split at the button press. The primitives beneath
+  /// (the eye translation, the multiplicative zoom) are shared; only which key
+  /// drives which is chosen here.
+  fn apply_movement(&mut self, dt: f32) {
+    if self.keys_held.is_empty() {
+      return;
+    }
+    if self.camera.orthographic {
+      self.apply_ortho_movement(dt);
+    } else {
+      self.apply_fly_movement(dt);
+    }
+  }
+
+  /// Orthographic navigation: `WASD` pans the flat view, `Space`/`Shift` zoom
+  /// out/in, `Ctrl` sprints. No motion along the view -- a parallel projection
+  /// has no depth to move into, so a "forward" key would change nothing but the
+  /// clip planes.
+  fn apply_ortho_movement(&mut self, dt: f32) {
+    use winit::keyboard::KeyCode;
+    let held = |code| self.keys_held.contains(&code);
+    let axis = |pos, neg| f32::from(held(pos)) - f32::from(held(neg));
+    let sprint = if held(KeyCode::ControlLeft) || held(KeyCode::ControlRight) {
+      SPRINT_FACTOR
+    } else {
+      1.0
+    };
+
+    // Pan in the view plane, screen-relative: a fraction of the visible height
+    // per second, so a keypress covers the same on-screen distance however far
+    // zoomed -- the same scale the mouse pan reads, one from seconds and one
+    // from pixels.
+    let pan = self.camera.right() * axis(KeyCode::KeyD, KeyCode::KeyA)
+      + self.camera.up() * axis(KeyCode::KeyW, KeyCode::KeyS);
+    if let Some(direction) = pan.try_normalize(1e-6) {
+      let (_, half_height) = self.camera.ortho_half_extent();
+      let speed = PAN_SCREENS_PER_SECOND * 2.0 * half_height * sprint;
+      self.camera.eye += direction * speed * dt;
+    }
+
+    // Zoom about the view center: `Space` out, `Shift` in. About the center and
+    // not the cursor because a key is not a pointing gesture -- the wheel is the
+    // one that zooms where you point.
+    let zoom_in = f32::from(held(KeyCode::ShiftLeft) || held(KeyCode::ShiftRight));
+    let e_folds = (zoom_in - f32::from(held(KeyCode::Space))) * KEY_ZOOM_PER_SECOND * sprint * dt;
+    if e_folds != 0.0 {
+      let focus = self.center_point();
+      self.zoom_by(e_folds, focus);
+    }
   }
 
   /// Fly the eye: `WASD` along the view, `Space`/`Shift` along world up, `Ctrl`
@@ -599,10 +674,6 @@ impl<'a> State<'a> {
   /// actually ascending -- is what keeps a pitched-over camera navigable.
   fn apply_fly_movement(&mut self, dt: f32) {
     use winit::keyboard::KeyCode;
-    if self.keys_held.is_empty() {
-      return;
-    }
-
     let held = |code| self.keys_held.contains(&code);
     let axis = |pos, neg| f32::from(held(pos)) - f32::from(held(neg));
 
@@ -750,6 +821,9 @@ impl<'a> State<'a> {
         self.set_study(response.requested_study);
       } else {
         self.set_field(response.selection);
+        if response.orthographic && !self.camera.orthographic {
+          self.camera.snap_top_down();
+        }
         self.camera.orthographic = response.orthographic;
       }
     }
@@ -814,7 +888,7 @@ impl<'a> State<'a> {
     let now = std::time::Instant::now();
     let dt = (now - self.last_frame).as_secs_f32();
     self.last_frame = now;
-    self.apply_fly_movement(dt);
+    self.apply_movement(dt);
 
     let (paint_jobs, textures_delta, pixels_per_point) = self.run_ui(window);
 

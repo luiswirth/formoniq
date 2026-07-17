@@ -82,11 +82,14 @@ pub struct Camera {
   pub fovy: f32,
   pub znear: f32,
   pub zfar: f32,
-  /// Orthographic vs. perspective. *Only* a projection, with no interaction
-  /// model attached: every gesture means the same thing under both. A flat mesh
-  /// viewed face-on wants parallel projection because nothing in it has depth
-  /// for a vanishing point to act on -- which says nothing about how the mouse
-  /// should behave.
+  /// Orthographic vs. perspective, selecting both the projection and the
+  /// navigation it is paired with. A flat mesh viewed face-on wants parallel
+  /// projection -- nothing in it has depth for a vanishing point to act on --
+  /// and wants a 2D-map interaction to match: it does not rotate, since tumbling
+  /// a face-on plane only tilts it away, so it pans and zooms where a
+  /// perspective view orbits and flies. The primitives are shared and only the
+  /// input binding differs, which is chosen in the window's input handler, not
+  /// here; this flag is the one bit both read.
   pub orthographic: bool,
 }
 
@@ -174,6 +177,22 @@ impl Camera {
     // where the pitch clamp saturates and swallows part of the requested delta.
     let rotation = self.frame() * before.transpose();
     self.eye = center + rotation * (self.eye - center);
+  }
+
+  /// Reorients the camera to look straight down the world $-z$ onto the plane,
+  /// keeping the point it was looking at fixed under the view.
+  ///
+  /// What entering orthographic mode needs: a face-on 2D view is only face-on
+  /// from directly above, so the projection change alone is not enough -- an
+  /// oblique perspective pose reprojected orthographically is a skewed
+  /// parallelogram, not the square plan the flat view is for. The pivot is held
+  /// as the anchor, and `yaw` snaps to $pi/2$ so screen-right lands on world
+  /// $+x$ ([`Self::right`]) and the plane keeps its own axes.
+  pub fn snap_top_down(&mut self) {
+    let pivot = self.pivot();
+    self.yaw = FRAC_PI_2;
+    self.pitch = -FRAC_PI_2;
+    self.eye = pivot - self.forward() * self.pivot_distance;
   }
 
   /// Half-width/height of the visible region at the pivot's depth: the
@@ -331,6 +350,20 @@ mod tests {
         at(yaw, pitch).right().dot(&WORLD_UP).abs() < 1e-6,
         "yaw={yaw} pitch={pitch}"
       );
+    }
+  }
+
+  /// Snapping top-down lands the view exactly on world $-z$ from any oblique
+  /// pose, and holds the pivot: the plane the flat view is for is square, and
+  /// centered where the perspective camera left off.
+  #[test]
+  fn snap_top_down_is_face_on() {
+    for (yaw, pitch) in sweep() {
+      let mut c = at(yaw, pitch);
+      let pivot = c.pivot();
+      c.snap_top_down();
+      assert!((c.forward() - Vector3::new(0.0, 0.0, -1.0)).norm() < 1e-6);
+      assert!((c.pivot() - pivot).norm() < 1e-4, "yaw={yaw} pitch={pitch}");
     }
   }
 
