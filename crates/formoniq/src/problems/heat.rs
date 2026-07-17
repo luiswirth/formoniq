@@ -24,10 +24,16 @@ use exterior::ExteriorGrade;
 /// $E$ the inclusion of the relative complex) turns the constrained problem
 /// into the unconstrained linear system $E^T M E dot(u_0) = E^T A E u_0 +
 /// E^T (A hat(g) + "source")$ that [`LinearIrk`] solves directly.
+///
+/// Total on the closed manifold: with no boundary (`boundary = None`) the
+/// relative complex is the full one (the inclusion $E$ is the identity), the
+/// lift $hat(g)$ vanishes, and the whole flow is unconstrained -- the Neumann
+/// heat equation, the same base case [`super::wave::solve_wave`] carries.
+/// `boundary_values` is read only when `boundary` is `Some`.
 #[allow(clippy::too_many_arguments)]
 pub fn solve_heat(
   whitney: &WhitneyComplex,
-  boundary: &BoundaryWhitneyComplex,
+  boundary: Option<&BoundaryWhitneyComplex>,
   grade: ExteriorGrade,
   nsteps: usize,
   dt: f64,
@@ -45,7 +51,10 @@ pub fn solve_heat(
   let mass_rel = inclusion.transpose() * &mass * &inclusion;
   let op_rel = inclusion.transpose() * &op * &inclusion;
 
-  let lift = boundary.extend_cochain(boundary_values).into_coeffs();
+  let lift = match boundary {
+    Some(boundary) => boundary.extend_cochain(boundary_values).into_coeffs(),
+    None => Vector::zeros(mass.nrows()),
+  };
   let source = &mass * source_data.coeffs();
   let forcing_rel: Vector = inclusion.transpose() * (&op * &lift + &source);
 
