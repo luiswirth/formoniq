@@ -8,8 +8,9 @@ use exterior::ExteriorGrade;
 use manifold::{topology::simplex::Simplex, Dim};
 
 use crate::gallery::{
-  BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, GRID_CELLS_DEFAULT, GRID_CELLS_MAX,
-  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
+  BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
+  GRID_CELLS_DEFAULT, GRID_CELLS_MAX, HEAT_FINAL_TIME, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX,
+  SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX, WAVE_FINAL_TIME,
 };
 use crate::scene::{dof_label, FieldOffers};
 
@@ -437,6 +438,11 @@ pub(crate) struct PanelModel<'a> {
   /// sqrt(lambda)$. `None` for a field with no standing wave (a raw Whitney
   /// basis function, an explicit cochain).
   pub(crate) eigenvalue: Option<f64>,
+  /// The displayed field's trajectory position `(solve_time, duration)`, when it
+  /// is a sampled solve (heat, wave). `None` for a static field or an eigenmode;
+  /// at most one of this and [`Self::eigenvalue`] is `Some`. Drives the transport
+  /// readout and enables play/pause for a trajectory.
+  pub(crate) trajectory: Option<(f64, f64)>,
   /// Whether the standing-wave clock is running, driving the play/pause control.
   pub(crate) playing: bool,
   /// The clock's current time $t$, for the transport readout.
@@ -538,6 +544,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           .clicked()
         {
           requested_study = Study::HodgeDecomposition;
+        }
+        let on_heat = matches!(model.study, Study::Heat { .. });
+        if ui.selectable_label(on_heat, "Heat").clicked() && !on_heat {
+          requested_study = Study::Heat {
+            nsteps: DEFAULT_TRAJECTORY_STEPS,
+            final_time: HEAT_FINAL_TIME,
+          };
+        }
+        let on_wave = matches!(model.study, Study::Wave { .. });
+        if ui.selectable_label(on_wave, "Wave").clicked() && !on_wave {
+          requested_study = Study::Wave {
+            nsteps: DEFAULT_TRAJECTORY_STEPS,
+            final_time: WAVE_FINAL_TIME,
+          };
         }
         if matches!(model.study, Study::Cochains(_)) {
           let _ = ui.selectable_label(true, "Cochains");
@@ -659,6 +679,12 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           Study::HodgeDecomposition => {
             ui.label("ω = dα + δβ + h");
           }
+          Study::Heat { .. } => {
+            ui.label("∂ₜu = −Δu");
+          }
+          Study::Wave { .. } => {
+            ui.label("∂ₜₜu = −Δu");
+          }
           Study::Cochains(_) => {}
         };
         render_modes(ui, &model.entries, &mut selection, model.scene_dim);
@@ -729,10 +755,12 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     ui.add_space(2.0);
     ui.horizontal(|ui| {
       let omega = model.eigenvalue.map(|l| l.max(0.0).sqrt());
-      let has_wave = omega.is_some_and(|w| w > 1e-9);
+      // A field runs a clock when it oscillates (an eigenmode) or when it is a
+      // sampled trajectory; only a static or harmonic field has nothing to play.
+      let has_clock = omega.is_some_and(|w| w > 1e-9) || model.trajectory.is_some();
       let label = if playing { "⏸" } else { "▶" };
       if ui
-        .add_enabled(has_wave, egui::Button::new(label))
+        .add_enabled(has_clock, egui::Button::new(label))
         .on_hover_text(if playing { "Pause" } else { "Play" })
         .clicked()
       {
@@ -740,24 +768,28 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       }
       ui.separator();
 
-      match omega {
-        Some(omega) if omega > 1e-9 => {
-          ui.monospace(format!("t = {:.2} s", model.time));
-          ui.separator();
-          ui.monospace(format!(
-            "λ = {:.4}",
-            round_for_display(model.eigenvalue.unwrap(), 4)
-          ));
-          ui.monospace(format!("ω = {omega:.4}"));
-          ui.monospace(format!("T = {:.2} s", std::f64::consts::TAU / omega));
-        }
-        // A harmonic mode ($lambda = 0$) is a genuine eigenmode with no
-        // oscillation: its period is unbounded, not large.
-        Some(_) => {
-          ui.monospace("λ = 0 · harmonic (no oscillation)");
-        }
-        None => {
-          ui.monospace("static field · no standing wave");
+      if let Some((solve_time, duration)) = model.trajectory {
+        ui.monospace(format!("t = {solve_time:.3} / {duration:.3}"));
+      } else {
+        match omega {
+          Some(omega) if omega > 1e-9 => {
+            ui.monospace(format!("t = {:.2} s", model.time));
+            ui.separator();
+            ui.monospace(format!(
+              "λ = {:.4}",
+              round_for_display(model.eigenvalue.unwrap(), 4)
+            ));
+            ui.monospace(format!("ω = {omega:.4}"));
+            ui.monospace(format!("T = {:.2} s", std::f64::consts::TAU / omega));
+          }
+          // A harmonic mode ($lambda = 0$) is a genuine eigenmode with no
+          // oscillation: its period is unbounded, not large.
+          Some(_) => {
+            ui.monospace("λ = 0 · harmonic (no oscillation)");
+          }
+          None => {
+            ui.monospace("static field · no standing wave");
+          }
         }
       }
     });
