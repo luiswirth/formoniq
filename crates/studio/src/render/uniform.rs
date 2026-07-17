@@ -224,30 +224,6 @@ pub struct PostUniform {
   pub _pad0: f32,
 }
 
-/// How a particle mark is drawn: the ink and radius of one advected speck.
-///
-/// No wave: the standing-wave clock displaces a surface and fades a ribbon, but
-/// a particle already carries the field's own motion. Riding a second
-/// oscillation on top of the advection would be two clocks on one mark.
-#[repr(C)]
-#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
-pub struct ParticleMaterial {
-  /// The speck's ink: `rgb` plus the opacity at its own center, before the
-  /// Gaussian falloff.
-  pub color: [f32; 4],
-  /// The speck's radius in world space, on the same object-intrinsic scale
-  /// every other mark's width uses.
-  pub radius_world: f32,
-  /// The ambient distance a particle at the field's peak magnitude covers in one
-  /// step: the normalization that turns a speck's own speed into a fraction of
-  /// the field's range, so the tint means the same thing whatever the cochain's
-  /// units.
-  pub speed_scale: f32,
-  /// How many radii a peak-speed speck stretches along its motion.
-  pub stretch: f32,
-  pub _pad0: f32,
-}
-
 /// How a segment mark is drawn. One material serves the wireframe, a line
 /// field's ribbons and a 1-manifold's own cells -- one technique at different
 /// ink and width, not three passes.

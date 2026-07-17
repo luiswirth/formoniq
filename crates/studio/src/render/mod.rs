@@ -32,13 +32,13 @@ const DEPTH_CLEAR: f32 = 0.0;
 
 /// The format every scene pass draws into, and the bloom chain with it.
 ///
-/// Float, and therefore *unbounded*, which is the whole of the point: the
-/// particles blend additively, so a filament where a hundred specks overlap
-/// carries a hundred times one speck's light. An 8-bit target saturates at 1.0
-/// and throws that away -- a filament of a hundred and a filament of four come
-/// out the same white -- so the accumulation that is meant to be the image is
-/// destroyed at the blend, before any pass could shade it. Here it survives to
-/// the resolve, which is the only place that has to fit it into a display.
+/// Float, and therefore *unbounded*, which is the whole of the point: a dense
+/// trail lifts the surface's radiance above 1, so a filament where the flow
+/// bunches carries many times a still region's light. An 8-bit target saturates
+/// at 1.0 and throws that away -- a bright filament and a faint one come out the
+/// same white -- so the overflow that is meant to be the image is destroyed at
+/// the blend, before any pass could shade it. Here it survives to the resolve,
+/// which is the only place that has to fit it into a display.
 ///
 /// The range is what matters, not the precision: a 16-bit *unorm* target would
 /// give 256 times the levels and clip at 1.0 just the same.
@@ -49,11 +49,11 @@ pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// actually exceed 1, as opposed to one that is clamped to `[0, 1]` by
 /// construction (a colormapped fill, a wireframe or glyph ribbon).
 ///
-/// Only the additively blended particles overflow -- see the invariant in
-/// `bloom.wgsl` -- so this is the material-specific fact the resolve needs to
-/// decide, per pixel, whether the tone curve or a plain clamp is the correct
-/// crossing. A single scalar is enough: coverage, not radiance, so `R8Unorm`
-/// rather than a float format.
+/// Only a deposit-lifted fill overflows -- see the invariant in `bloom.wgsl` --
+/// so this is the material-specific fact the resolve needs to decide, per pixel,
+/// whether the tone curve or a plain clamp is the correct crossing. A single
+/// scalar is enough: coverage, not radiance, so `R8Unorm` rather than a float
+/// format.
 pub const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
 
 /// The supersampling factor per axis a [`Renderer`] uses when its caller names
@@ -164,7 +164,6 @@ mod tests {
       ("downsample.wgsl", include_str!("downsample.wgsl")),
       ("advect.wgsl", include_str!("advect.wgsl")),
       ("bloom.wgsl", include_str!("bloom.wgsl")),
-      ("particles.wgsl", include_str!("particles.wgsl")),
       ("deposit.wgsl", include_str!("deposit.wgsl")),
     ];
     for (name, body) in bodies {
@@ -216,10 +215,6 @@ mod tests {
       (
         "SegmentMaterial",
         size_of::<super::uniform::SegmentMaterial>(),
-      ),
-      (
-        "ParticleMaterial",
-        size_of::<super::uniform::ParticleMaterial>(),
       ),
       ("Post", size_of::<super::uniform::PostUniform>()),
       ("Particle", size_of::<super::advect::Particle>()),

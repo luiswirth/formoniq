@@ -37,9 +37,9 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // The box filter, weighted by $1 \/ (1 + "luma")$ rather than evenly.
     //
     // An even mean was right while the target was 8-bit and everything in it was
-    // bounded by 1. In HDR it is not: one subsample of an additive filament can
-    // be a hundred times its neighbours, so it alone decides the pixel, and as
-    // the particle drifts sub-pixel between frames the pixel flickers -- the
+    // bounded by 1. In HDR it is not: one subsample of a bright filament can
+    // be many times its neighbours, so it alone decides the pixel, and as
+    // the filament drifts sub-pixel between frames the pixel flickers -- the
     // firefly. Weighting each subsample down by its own brightness is what makes
     // the mean stable under that motion. It costs a slight understatement of a
     // genuinely isolated highlight, which the bloom then puts back as glow.
