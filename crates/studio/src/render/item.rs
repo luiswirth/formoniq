@@ -14,7 +14,8 @@
 use bytemuck::Pod;
 use wgpu::util::DeviceExt;
 
-use super::uniform::{SegmentMaterial, SurfaceMaterial};
+use super::particles::ParticleBatch;
+use super::uniform::{ParticleMaterial, SegmentMaterial, SurfaceMaterial};
 use crate::bake::{BakedMesh, BakedVertex, PrimBatch, SegmentVertex};
 
 /// A `VERTEX` buffer holding `data`, never empty: a zero-length
@@ -242,6 +243,11 @@ fn gather(values: &[f32], segments: &[[u32; 2]], end: usize) -> Vec<f32> {
 pub enum RenderItem<'a> {
   Surface(&'a SurfaceBatch, SurfaceMaterial),
   Segments(&'a SegmentBatch, SegmentMaterial),
+  /// An advected particle population. Unlike the others its geometry is written
+  /// by the GPU rather than uploaded, so the frame must step it before the scene
+  /// pass reads it -- which is why a draw list is stepped and then drawn, not
+  /// simply drawn.
+  Particles(&'a ParticleBatch, ParticleMaterial),
 }
 
 /// Everything one frame draws, in submission order. The order is the caller's

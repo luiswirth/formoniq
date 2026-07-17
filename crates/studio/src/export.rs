@@ -327,7 +327,7 @@ pub fn export(spec: &ExportSpec, path: &Path) -> Result<(), String> {
   if is_video {
     export_video(&ctx, &mut renderer, &target, &displayed, spec, path)
   } else {
-    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0);
+    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0, 0);
     write_png(&pixels, target.size, path)
   }
 }
@@ -348,21 +348,33 @@ pub fn export_frame_png(ctx: &GpuContext, frame: &FrameView, path: &Path) -> Res
   write_png(&pixels, target.size, path)
 }
 
-/// One frame of the displayed scene at `time`. The one place a `FrameView` is
-/// built here, so the still and the clip cannot differ in anything but `time`.
+/// One frame of the displayed scene at `time`, advecting `steps` further first.
+/// The one place a `FrameView` is built here, so the still and the clip cannot
+/// differ in anything but the instant they name.
+///
+/// `steps` is separate from `time` because a particle population is stepped, not
+/// evaluated: the caller owns how far it has already gone. See
+/// [`crate::display::steps_at`].
 fn render_at(
   ctx: &GpuContext,
   renderer: &mut Renderer,
   target: &ExportTarget,
   displayed: &Displayed,
   time: f32,
+  steps: u32,
 ) -> Vec<u8> {
-  let items = displayed.field.draw_list(&displayed.mesh);
+  let items = displayed
+    .field
+    .draw_list(&displayed.mesh, crate::ui::Marks::default());
   let frame = FrameView {
     items: &items,
     camera: &displayed.camera,
     size: target.size,
     time,
+    steps,
+    // An export has no viewer to ask, so it takes the display's own default --
+    // the same rung the window opens on.
+    post: crate::display::post_uniform(crate::ui::Post::default()),
   };
   target.frame(ctx, renderer, &frame)
 }
@@ -413,8 +425,15 @@ fn export_video(
     })?;
 
   let mut stdin = child.stdin.take().expect("stdin was piped");
+  // The particles are stepped across the clip rather than restarted per frame:
+  // one population, carried forward, so consecutive frames are consecutive
+  // instants of one flow. The times are increasing, so each frame owes the
+  // difference.
+  let mut steps_taken = 0;
   for (k, &time) in times.iter().enumerate() {
-    let pixels = render_at(ctx, renderer, target, displayed, time);
+    let steps = crate::display::steps_at(time).saturating_sub(steps_taken);
+    steps_taken += steps;
+    let pixels = render_at(ctx, renderer, target, displayed, time, steps);
     stdin
       .write_all(&pixels)
       .map_err(|e| format!("piping frame {k} to ffmpeg: {e}"))?;
@@ -511,7 +530,12 @@ mod tests {
     let target = ExportTarget::new(&ctx, spec.size);
     let displayed = Displayed::build(&ctx, &spec).expect("the triforce scene builds");
 
-    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0);
+    // Stepped, not merely drawn. A line field carries an advected population,
+    // and with zero steps its compute pass never runs -- so the dispatch, its
+    // bind group and the layout the pipeline was built against would all go
+    // unexercised while this test still passed. wgpu validates on submit, so a
+    // mismatch here is a panic rather than a silent pass.
+    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0, 4);
     assert_eq!(pixels.len(), 64 * 64 * 4);
     let first = &pixels[..4];
     assert!(

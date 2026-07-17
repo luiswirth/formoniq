@@ -3,8 +3,9 @@
 // constants and pure functions -- never a binding, since the group a uniform
 // sits in is a property of the pipeline that uses it, not of the value.
 //
-// Each struct here is the WGSL side of a `#[repr(C)]` Rust uniform of the same
-// name in `uniform.rs`; the two must stay byte-identical.
+// Each struct here is the WGSL side of a `#[repr(C)]` Rust mirror of the same
+// name -- a uniform in `uniform.rs`, or a storage element declared beside the
+// pass that owns it; the two must stay byte-identical.
 
 // The supersampling factor per axis every scene pass renders at, set from Rust
 // (`render::SSAA_SCALE`) as a pipeline constant rather than duplicated as a
@@ -114,8 +115,8 @@ fn diverging(t: f32) -> vec3<f32> {
 const SATURATION_BOOST: f32 = 1.6;
 
 fn saturate_color(color: vec3<f32>) -> vec3<f32> {
-    let luminance = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
-    return clamp(mix(vec3<f32>(luminance), color, SATURATION_BOOST), vec3<f32>(0.0), vec3<f32>(1.0));
+    let luma = luminance(color);
+    return clamp(mix(vec3<f32>(luma), color, SATURATION_BOOST), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
 fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
@@ -193,4 +194,152 @@ fn depth_biased_corner(corner: vec3<f32>, eye: vec3<f32>, half_width: f32) -> ve
     let to_eye = eye - corner;
     let dir = to_eye / max(length(to_eye), 1e-6);
     return corner + dir * (4.0 * half_width);
+}
+
+// A particle, i.e. a `MeshPoint`, plus what respawning it needs.
+//
+// `vec4` carries the weights for every intrinsic dimension the ambient reaches:
+// a triangle uses three components and leaves `w` at zero, a tetrahedron uses
+// all four. Not a padded 3-vector -- the fourth slot is a real barycentric
+// weight one dimension up, which is why a surface and a solid share this buffer
+// without a branch.
+//
+// `life` counts down in frame steps and `epoch` counts respawns: integers, so a
+// particle's whole future is a function of `(id, epoch)` and the pass is
+// reproducible frame for frame. An exporter that steps from a fixed seed to
+// reach its instant gets the trajectory the viewer showed.
+struct Particle {
+    lambda: vec4<f32>,
+    cell: u32,
+    life: u32,
+    epoch: u32,
+    _pad: u32,
+};
+
+// The per-cell topology half of the bake: the cell across the facet opposite
+// vertex $i$, or `NO_NEIGHBOUR` where the manifold has boundary.
+struct Cell {
+    neighbour: vec4<u32>,
+};
+
+struct AdvectParams {
+    particle_count: u32,
+    seed_count: u32,
+    // A respawned particle lives `life_min + hash % life_spread` frame steps.
+    // The spread is not cosmetic: with one shared lifetime the entire
+    // population expires together and the field visibly breathes.
+    life_min: u32,
+    life_spread: u32,
+    // $d$: a frame's step is $2^d$ ticks, and the bake carries levels $0..=d$.
+    // The residual crossing error is one tick, so this is the exponent that
+    // buys exactness -- at $d = 16$ the error is below `f32` epsilon, which is
+    // the only precision this pass has to begin with.
+    depth: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
+};
+
+// How a particle mark is drawn: its ink (`rgb` plus a peak opacity) and its
+// world-space radius -- a fraction of the scene's own extent, like every other
+// mark's width, so a speck reads the same size whether the object fills the
+// screen or sits in a corner of it.
+struct ParticleMaterial {
+    color: vec4<f32>,
+    radius_world: f32,
+    // The ambient distance a particle at the field's *peak* magnitude covers in
+    // one step: what normalizes a speck's own speed into $[0, 1]$, so the tint
+    // and the elongation read the field's dynamic range rather than the
+    // cochain's units.
+    speed_scale: f32,
+    // How many radii a peak-speed speck stretches along its own motion.
+    stretch: f32,
+    _pad0: f32,
+};
+
+// A screen-facing quad around a point, of constant world-space radius: the
+// point mark's billboard, as `billboard_perp`/`billboard_corner` are the
+// segment's.
+//
+// WebGPU has no point size -- a `PointList` rasterizes at one pixel with no
+// portable control -- so a particle is an instanced quad exactly as a thick
+// line is. The two axes are built from the view direction rather than from a
+// fixed world axis, so the quad faces the camera from every angle; the two
+// corner tables are the segment billboard's, reread as the two signs of a
+// (u, v) corner rather than an (endpoint, side) pair.
+fn billboard_point_corner(center: vec3<f32>, eye: vec3<f32>, radius: f32, vertex_index: u32) -> vec3<f32> {
+    let view_vec = eye - center;
+    let view_dir = view_vec / max(length(view_vec), 1e-6);
+    // Any world axis not parallel to the view works; the fallback covers the
+    // pole, where the first cross product degenerates.
+    var up_hint = vec3<f32>(0.0, 1.0, 0.0);
+    if abs(view_dir.y) > 0.999 {
+        up_hint = vec3<f32>(1.0, 0.0, 0.0);
+    }
+    let right = normalize(cross(up_hint, view_dir));
+    let up = cross(view_dir, right);
+    let u = select(-1.0, 1.0, billboard_is_b(vertex_index));
+    let v = billboard_side(vertex_index);
+    return center + (right * u + up * v) * radius;
+}
+
+// Relative luminance (Rec. 709), the one place those weights are written down.
+fn luminance(color: vec3<f32>) -> f32 {
+    return dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
+}
+
+// How the scene's radiance is brought to the display: the exposure it is read
+// at, how far its overflow is allowed to spill, and which curve closes it.
+//
+// A uniform rather than pipeline `override`s, unlike `SSAA_SCALE`: an override
+// is baked when the pipeline is built, so toggling one would mean a second
+// pipeline or a rebuild. `SSAA_SCALE` earns that -- it sizes the targets, so it
+// cannot change without reallocating them anyway -- and these do not.
+struct Post {
+    exposure: f32,
+    // How much of the blurred glow is added back. Zero disables bloom by
+    // arithmetic, which is what lets the frame graph skip the chain without the
+    // result depending on whether it did.
+    bloom_intensity: f32,
+    // 1.0 for the filmic curve, 0.0 for a hard clamp.
+    tonemap: f32,
+    _pad0: f32,
+};
+
+// The filmic curve: Narkowicz's rational fit to the shape of the ACES
+// RRT+ODT. Not ACES itself -- a cheap lookalike of its S-curve.
+fn aces(x: vec3<f32>) -> vec3<f32> {
+    let a = 2.51;
+    let b = 0.03;
+    let c = 2.43;
+    let d = 0.59;
+    let e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), vec3<f32>(0.0), vec3<f32>(1.0));
+}
+
+// The one crossing from unbounded linear radiance to a bounded display.
+//
+// The scene target is float, so a filament where a hundred specks overlap
+// really does carry a hundred times one speck's light. Something has to decide
+// what that means in $[0, 1]$, and these are the only two honest answers:
+//
+// - **Clamp** is what an 8-bit target did implicitly, and is therefore not an
+//   approximation of the old renderer but exactly it -- everything at or below
+//   1 is untouched, everything above is white. The whole range above 1 is lost.
+// - **The curve** keeps that range, at a price that is unavoidable rather than
+//   a flaw in this particular fit: $[0, 1]$ is already fully spent by the marks
+//   that live there, so headroom above 1 *must* take range from below it. Every
+//   mark shifts -- mids up, highlights down, hues skewed as the channels
+//   compress at different rates.
+//
+// Which is why the choice is exposed rather than decided here. There is no
+// right answer, only the question of whether the dynamic range or the palette
+// matters more for what is being looked at.
+fn display_transform(post: Post, radiance: vec3<f32>) -> vec3<f32> {
+    let exposed = radiance * post.exposure;
+    return select(
+        clamp(exposed, vec3<f32>(0.0), vec3<f32>(1.0)),
+        aces(exposed),
+        post.tonemap > 0.5,
+    );
 }

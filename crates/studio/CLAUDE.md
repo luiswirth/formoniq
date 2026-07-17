@@ -125,6 +125,33 @@ they bind the same way the parent's invariants do:
   one pinned to the playback grid would not. A frame is a *draw list* — batches with
   their materials, in submission order — so the number of things on screen is the
   caller's, never a fixed set the renderer declares.
+
+  **A simulation is stepped to an instant, not evaluated at one**, and that is
+  the one honest extension of "time is an argument". A standing wave is a
+  function of $t$, so any frame can be asked for directly; a mark that carries
+  state — an advected population — has no such closed form, and a caller can only
+  say how far to advance it. So the count of steps is an argument beside the
+  seconds, and what keeps the two callers from drifting is no longer the
+  stateless graph but a *deterministic* one: the state's own randomness must be a
+  pure function of the thing and its generation, never of a clock, so that a
+  given count means the same picture to a window and to an exporter. A mark that
+  cannot promise that does not belong in the frame graph.
+
+- **Radiance is the scene's, the display's range is the target's, and one pass
+  crosses between them.** The scene target is float and unbounded because
+  additive marks accumulate — clipping at the blend destroys the very quantity
+  the mark is made of. Everything that must happen in radiance (filtering,
+  spilling light) happens before the crossing; the tone map *is* the crossing,
+  and it is last. This is a real ordering, not a preference: anything that maps
+  the range earlier leaves the passes after it nothing above 1 to find, and they
+  fail silently rather than loudly.
+
+  What the crossing costs is unavoidable and worth stating plainly: $[0, 1]$ is
+  already fully spent by the marks that live there, so headroom above 1 must take
+  range from below it, and every mark shifts. There is no setting that avoids
+  this — only the choice of whether the dynamic range or the palette matters more
+  for what is being looked at, which is exactly the kind of question the code
+  cannot settle from the object, and therefore one of the few the viewer is asked.
 - **The UI is a pure function of the model** returning requested changes, not a
   mutator of it.
 

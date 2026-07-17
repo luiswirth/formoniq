@@ -10,3 +10,15 @@ members = [
   "crates/common",
   "crates/studio",
 ]
+
+# Dependencies are compiled optimized even in a debug build. The workspace's own
+# crates are not: they stay at `opt-level = 0`, where a backtrace and a debugger
+# still mean something.
+#
+# The asymmetry is the point. nalgebra and faer are inner-loop numerics -- a
+# sparse LU, a dense QZ, a mass assembly's element products -- and nothing here
+# is ever debugged by stepping into them, so compiling them unoptimized buys no
+# insight and costs minutes on every `cargo test`. This changes what the tests
+# cost, never what they check.
+[profile.dev.package."*"]
+opt-level = 3

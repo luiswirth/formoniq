@@ -40,6 +40,11 @@ use egui_winit::State as EguiWinitState;
 /// pair of sidebars flanking a 3D scene.
 const UI_ZOOM: f32 = 0.75;
 
+/// The most advection steps one frame will catch up on. At the advection's own
+/// rate this is a few frames' worth, so ordinary jitter is absorbed and a long
+/// stall is not.
+const MAX_STEPS_PER_FRAME: u32 = 8;
+
 struct State<'a> {
   surface: Surface<'a>,
   ctx: GpuContext,
@@ -51,12 +56,31 @@ struct State<'a> {
   mesh_display: MeshDisplay,
   display: FieldDisplay,
 
+  /// Which of a line field's marks are drawn. Viewer state, not the field's:
+  /// both marks are built whatever this says, so toggling one costs a draw call
+  /// and never a rebake.
+  marks: crate::ui::Marks,
+
+  /// How the scene's light reaches the display. Viewer state for the same
+  /// reason: it rebuilds nothing, and it is a question about what is being
+  /// looked for rather than about the object.
+  post: crate::ui::Post,
+
   /// The standing wave's transport clock: the elapsed animation time the
   /// renderer is handed each frame, pausable from the transport bar and reset
   /// whenever the field changes so a newly selected mode starts at its crest.
   /// The renderer takes the time as an argument, so this clock lives here, in
   /// the windowed loop, and nowhere below.
   clock: WaveClock,
+
+  /// Advection steps already taken by the particles on display.
+  ///
+  /// The renderer steps a population forward; it cannot evaluate one at an
+  /// instant. So the window remembers how far it has stepped and asks only for
+  /// the difference. Reset to the clock's current count whenever the field
+  /// changes, because a fresh `FieldDisplay` is a fresh population sitting at
+  /// its seeds -- not one that owes the whole elapsed history at once.
+  steps_taken: u32,
 
   // Mouse state for orbit controls
   mouse_pressed: bool,
@@ -166,6 +190,9 @@ impl<'a> State<'a> {
       mesh_display,
       display,
       clock: WaveClock::new(),
+      steps_taken: 0,
+      marks: crate::ui::Marks::default(),
+      post: crate::ui::Post::default(),
       mouse_pressed: false,
       last_mouse_pos: None,
       gallery,
@@ -187,6 +214,22 @@ impl<'a> State<'a> {
     }
   }
 
+  /// The advection steps this frame owes: how far the clock has run, less how
+  /// far the population has already been stepped.
+  ///
+  /// Clamped, because the count is derived from a clock the loop does not
+  /// control: a stall, a paused window or a debugger breakpoint would otherwise
+  /// present a frame with thousands of dispatches to catch up on, and the catch-up
+  /// would itself stall the next frame. Dropping the excess lets the flow fall
+  /// behind the wave clock rather than freezing the viewer -- the honest failure
+  /// for a mark whose whole job is to be watched.
+  fn pending_steps(&mut self) -> u32 {
+    let owed = crate::display::steps_at(self.clock.time()).saturating_sub(self.steps_taken);
+    let steps = owed.min(MAX_STEPS_PER_FRAME);
+    self.steps_taken += steps;
+    steps
+  }
+
   /// Displays `selection` of the *current* scene, rebuilding exactly the pieces
   /// that depend on it and restarting the wave clock. Unconditional -- callers
   /// that only want to act on an actual change (the common case) go through
@@ -200,6 +243,9 @@ impl<'a> State<'a> {
       .write_attributes(&self.ctx.queue, &attributes);
     self.display = display;
     self.clock.restart();
+    // A fresh `FieldDisplay` is a fresh population, sitting at its seeds. It
+    // owes nothing, and the restarted clock owes nothing either.
+    self.steps_taken = 0;
   }
 
   /// Switches the displayed field within the current scene. Everything else
@@ -437,6 +483,8 @@ impl<'a> State<'a> {
       entries,
       mesh_error: self.gallery.error.clone(),
       selection: self.selection,
+      marks: self.marks,
+      post: self.post,
       top_down: self.camera.top_down,
       presets: &self.presets,
       eigenvalue,
@@ -498,9 +546,13 @@ impl<'a> State<'a> {
       }
     }
 
-    // The transport toggle is orthogonal to which field is shown -- pausing
-    // the wave neither changes the pair nor the selection -- so it applies
-    // regardless of the branch above, and only when it actually moved.
+    // These are orthogonal to which field is shown -- pausing the wave, hiding a
+    // mark, changing the display transform: none of them touches the pair, the
+    // selection or a buffer. So they apply regardless of the branch above, where
+    // being inside it would silently drop a toggle that happened to fire on the
+    // same frame as a mesh or study change.
+    self.marks = response.marks;
+    self.post = response.post;
     self.clock.set_playing(response.playing);
 
     // A finished export pick is likewise orthogonal to the shown pair: it reads
@@ -526,12 +578,16 @@ impl<'a> State<'a> {
   /// still is exactly what is on screen (minus the egui panels). A write failure
   /// is surfaced in the panel rather than aborting the loop.
   fn export_current_png(&mut self, path: &std::path::Path) {
-    let items = self.display.draw_list(&self.mesh_display);
+    let items = self.display.draw_list(&self.mesh_display, self.marks);
     let frame = FrameView {
       items: &items,
       camera: &self.camera,
       size: (self.config.width, self.config.height),
       time: self.clock.time(),
+      // The window's own particles, at the point they have already reached:
+      // the still is what is on screen, so it steps them no further.
+      steps: 0,
+      post: crate::display::post_uniform(self.post),
     };
     if let Err(error) = crate::export::export_frame_png(&self.ctx, &frame, path) {
       self.gallery.set_error(error);
@@ -587,12 +643,18 @@ impl<'a> State<'a> {
         label: Some("Render Encoder"),
       });
 
-    let items = self.display.draw_list(&self.mesh_display);
+    // Taken before the draw list borrows `self`, not because the order matters
+    // to the frame but because the step accounting is a mutation and the list
+    // is a borrow of what it accounts for.
+    let steps = self.pending_steps();
+    let items = self.display.draw_list(&self.mesh_display, self.marks);
     let frame_view = FrameView {
       items: &items,
       camera: &self.camera,
       size: (self.config.width, self.config.height),
       time: self.clock.time(),
+      steps,
+      post: crate::display::post_uniform(self.post),
     };
     self
       .renderer
