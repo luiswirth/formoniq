@@ -356,6 +356,45 @@ pub fn combinations(n: usize, card: usize) -> impl Iterator<Item = Combination> 
   Combination::all(card).take(binomial(n, card))
 }
 
+/// All weak compositions of `total` into `parts` nonnegative parts:
+/// the tuples $k in NN_0^p$ with $sum_i k_i = "total"$, of which there are
+/// $binom("total" + p - 1, p - 1)$.
+///
+/// The multiset sibling of [`Combination`], and enumerated as one: a
+/// composition is $p - 1$ bars among $"total" + p - 1$ slots (stars and bars),
+/// so this is [`combinations`] read through that bijection. The order is the
+/// colex order of the bars, and it is therefore the same convention the rest of
+/// the crate indexes by.
+///
+/// Total at both ends: one part admits only $("total")$, and no parts admit
+/// only the empty composition of zero.
+pub fn compositions(parts: usize, total: usize) -> impl Iterator<Item = Vec<usize>> {
+  let bars = parts.saturating_sub(1);
+  let slots = total + bars;
+  let count = if parts == 0 {
+    usize::from(total == 0)
+  } else {
+    binomial(slots, bars)
+  };
+  combinations(slots, bars).take(count).map(move |bar_set| {
+    if parts == 0 {
+      return Vec::new();
+    }
+    // The gaps the bars cut the slots into, reversed so that the leading part
+    // is the last gap: that is what makes `total = 1` list the parts in the
+    // order the standard basis places the vertices.
+    let mut composition = Vec::with_capacity(bars + 1);
+    let mut previous = None;
+    for bar in bar_set.iter() {
+      composition.push(bar - previous.map_or(0, |p| p + 1));
+      previous = Some(bar);
+    }
+    composition.push(slots - previous.map_or(0, |p| p + 1));
+    composition.reverse();
+    composition
+  })
+}
+
 /// Matrix of the boundary operator
 /// $diff: "colex-ordered card-subsets of" {0,..,n-1} -> "(card-1)-subsets"$,
 /// built from the alternating deletions. Satisfies $diff compose diff = 0$.
@@ -394,6 +433,28 @@ mod test {
   use super::*;
 
   use itertools::Itertools;
+
+  /// Stars and bars: $binom("total" + p - 1, p - 1)$ distinct tuples summing to
+  /// `total`. Total at the degenerate end, where no parts can compose only zero.
+  #[test]
+  fn compositions_are_stars_and_bars() {
+    for parts in 0..=5 {
+      for total in 0..=5 {
+        let all: Vec<_> = compositions(parts, total).collect();
+        let expected = if parts == 0 {
+          usize::from(total == 0)
+        } else {
+          binomial(total + parts - 1, parts - 1)
+        };
+        assert_eq!(all.len(), expected);
+        assert_eq!(all.iter().unique().count(), all.len());
+        for composition in &all {
+          assert_eq!(composition.len(), parts);
+          assert_eq!(composition.iter().sum::<usize>(), total);
+        }
+      }
+    }
+  }
 
   #[test]
   fn colex_enumeration_and_rank_are_inverse() {
