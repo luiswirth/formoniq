@@ -5,19 +5,20 @@
 //! from one loop: the scalar heat equation at $k = 0$, the vector one at
 //! $k = 1$, the top-form flow at $k = n$, all the same code.
 //!
-//! The operator is the up-Laplacian $delta dif$ (the stiffness $D^T M D$),
-//! which is the *full* Hodge Laplacian at grade $0$ and its assemblable part at
-//! higher grade. It is symmetric positive semidefinite, so the energy
+//! The operator is the full Hodge Laplacian $Delta = dif delta + delta dif$,
+//! assembled in mixed form through the auxiliary $sigma = delta u$ (see
+//! [`formoniq::problems::heat::solve_heat`]). It is symmetric positive
+//! semidefinite, so the energy
 //! $ E(t) = 1/2 norm(u)_(L^2)^2 $
-//! is a Lyapunov functional: $dot(E) = -(u, delta dif u) = -norm(dif u)^2 <= 0$
-//! for any initial state, and Radau IIA, being L-stable, inherits the monotone
-//! decay unconditionally. The table shows $E$ falling monotonically from any
-//! starting bump (here a boundary-compatible eigenform, held at zero on
-//! $diff K$).
+//! is a Lyapunov functional: $dot(E) = -(u, Delta u) = -(norm(dif u)^2 +
+//! norm(delta u)^2) <= 0$ for any initial state, and Radau IIA, being L-stable,
+//! inherits the monotone decay unconditionally. The table shows $E$ falling
+//! monotonically from a starting bump (a boundary-compatible eigenform, held at
+//! zero on $diff K$ via the relative complex).
 //!
-//! At top grade $dif u = 0$, so $delta dif = 0$ and the flow is static --- the
-//! trivial total case, and why that row holds its energy rather than being
-//! excluded.
+//! At top grade $dif u = 0$ and $sigma = delta u$ is the only term; at grade
+//! $0$ there is no $sigma$ and $Delta = delta dif$ --- both the trivial total
+//! cases, run by the same code.
 
 #[path = "util/mod.rs"]
 mod util;
@@ -39,7 +40,7 @@ fn main() {
   const NSTEPS: usize = 40;
   const FINAL_TIME: f64 = 1.0;
 
-  println!("Heat u_t = -δd u on [0,π]^n, relative (Dirichlet) BC — Radau IIA.");
+  println!("Heat u_t = -Δu on [0,π]^n, relative (Dirichlet) BC — Radau IIA.");
   println!("Energy E = ½‖u‖²_L² dissipates monotonically.\n");
   println!(
     "| {:>3} | {:>5} | {:>10} | {:>10} | {:>10} | {:>7} |",
@@ -66,22 +67,13 @@ fn main() {
         &topology,
         3,
       );
-      let boundary = whitney.boundary().expect("the box has a boundary");
-      let boundary_values = boundary.trace_cochain(&initial);
       let source = Cochain::new(grade, Vector::zeros(whitney.ndofs(grade)));
 
+      // Homogeneous Dirichlet conditions are exactly the relative complex; the
+      // starting eigenform already vanishes on $diff K$, so it lives there.
+      let relative = whitney.relative();
       let dt = FINAL_TIME / NSTEPS as f64;
-      let solution = solve_heat(
-        &whitney,
-        Some(&boundary),
-        grade,
-        NSTEPS,
-        dt,
-        &boundary_values,
-        initial,
-        source,
-        1.0,
-      );
+      let solution = solve_heat(&relative, grade, NSTEPS, dt, &initial, &source, 1.0);
 
       let energy = |c: &Cochain| 0.5 * quadratic_form_sparse(&mass, c.coeffs());
       let e0 = energy(&solution[0]);

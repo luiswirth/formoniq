@@ -262,6 +262,81 @@ mod test {
     assert_relative_eq!(y[0], exact, epsilon = 1e-2);
   }
 
+  /// A singular mass matrix turns $M dot(y) = A y$ into an index-1
+  /// differential-algebraic system: the shape the mixed Hodge-Laplace
+  /// evolution problems produce, where the auxiliary $sigma = delta u$ carries
+  /// no time derivative. The 1-dof model is $sigma = u$ (algebraic),
+  /// $dot(u) = -lambda sigma$, i.e. $M = mat(0,0;0,1)$,
+  /// $A = mat(-1,1;-lambda,0)$, whose $u$-component is the exact decay
+  /// $u(t) = u_0 e^(-lambda t)$. Radau IIA is stiffly accurate, so it solves
+  /// the algebraic constraint at every stage and reproduces the decay even
+  /// though $M$ is not invertible -- the fact the heat and wave solvers rely
+  /// on.
+  #[test]
+  fn radau_iia_solves_index_one_dae_with_singular_mass() {
+    let lambda = 2.0;
+
+    let mut m = CooMatrix::new(2, 2);
+    m.push(1, 1, 1.0);
+    let mass = CsrMatrix::from(&m);
+
+    let mut a = CooMatrix::new(2, 2);
+    a.push(0, 0, -1.0);
+    a.push(0, 1, 1.0);
+    a.push(1, 0, -lambda);
+    let op = CsrMatrix::from(&a);
+
+    let dt = 0.05;
+    let irk = LinearIrk::new(Tableau::radau_iia(2), &mass, op, dt);
+
+    let mut y = Vector::from_row_slice(&[1.0, 1.0]);
+    let mut t = 0.0;
+    for _ in 0..40 {
+      y = irk.step(&y, t, |_| Vector::zeros(2));
+      t += dt;
+      // The algebraic constraint sigma = u holds after each step.
+      assert_relative_eq!(y[0], y[1], epsilon = 1e-9);
+    }
+    let exact = (-lambda * t).exp();
+    assert_relative_eq!(y[1], exact, epsilon = 1e-4);
+  }
+
+  /// The wave solver feeds Gauss-Legendre a singular-mass DAE too: the mixed
+  /// $(sigma, u, w)$ form with $sigma = delta u$ algebraic, $dot(u) = w$,
+  /// $dot(w) = -Delta u = -sigma$ at 1 dof. Because the constraint is linear,
+  /// the reduced $(u, w)$ dynamics are a genuine linear Hamiltonian oscillator,
+  /// and Gauss-Legendre conserves its quadratic energy
+  /// $1/2 (u^2 + w^2) = 1/2 (norm(delta u)^2 + norm(dot(u))^2)$ exactly even
+  /// through the algebraic $sigma$.
+  #[test]
+  fn gauss_legendre_conserves_energy_on_singular_mass_wave_dae() {
+    let mut m = CooMatrix::new(3, 3);
+    m.push(1, 1, 1.0);
+    m.push(2, 2, 1.0);
+    let mass = CsrMatrix::from(&m);
+
+    let mut a = CooMatrix::new(3, 3);
+    a.push(0, 0, -1.0);
+    a.push(0, 1, 1.0); // sigma = u
+    a.push(1, 2, 1.0); // u_t = w
+    a.push(2, 0, -1.0); // w_t = -sigma
+    let op = CsrMatrix::from(&a);
+
+    let dt = 0.3;
+    let irk = LinearIrk::new(Tableau::gauss_legendre(2), &mass, op, dt);
+
+    let mut y = Vector::from_row_slice(&[1.0, 1.0, 0.0]);
+    let energy0 = 0.5 * (y[1] * y[1] + y[2] * y[2]);
+    let mut t = 0.0;
+    for _ in 0..500 {
+      y = irk.step(&y, t, |_| Vector::zeros(3));
+      t += dt;
+      assert_relative_eq!(y[0], y[1], epsilon = 1e-9);
+    }
+    let energy = 0.5 * (y[1] * y[1] + y[2] * y[2]);
+    assert_relative_eq!(energy, energy0, epsilon = 1e-9);
+  }
+
   /// A constant forcing steers the linear system to its steady state
   /// $y_infty = -A^(-1) f$; both tableaus must reach it.
   #[test]

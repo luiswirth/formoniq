@@ -5,23 +5,23 @@
 //! $0 <= k <= n$ from one loop --- the scalar wave equation at $k = 0$, the
 //! vector (curl-curl) one at $k = 1$, the top-form flow at $k = n$.
 //!
-//! The operator is the up-Laplacian $delta dif$ (the stiffness $K = D^T M D$),
-//! the full Hodge Laplacian at grade $0$ and its assemblable part above. The
-//! semi-discrete energy
-//! $ E = 1/2 (u^T K u + dot(u)^T M dot(u)) $
-//! --- potential plus kinetic --- is conserved: Gauss-Legendre is symplectic
-//! and, applied to this linear system, conserves $E$ to roundoff. The table
-//! shows $E$ holding across the run; the drift column is the largest relative
-//! departure over all steps.
+//! The operator is the full Hodge Laplacian $Delta = dif delta + delta dif$,
+//! assembled in mixed form through the auxiliary $sigma = delta u$ (see
+//! [`formoniq::problems::wave::solve_wave`]). The semi-discrete energy
+//! $ E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(dot(u))^2) $
+//! --- potential (down- and up-parts) plus kinetic --- is conserved:
+//! Gauss-Legendre is symplectic and, applied to this linear system, conserves
+//! $E$ to roundoff. The table shows $E$ holding across the run; the drift
+//! column is the largest relative departure over all steps.
 //!
-//! At top grade $dif u = 0$, so $K = 0$ and the potential energy vanishes: from
-//! rest the state is static at zero energy --- the trivial total case.
+//! At top grade $dif u = 0$ so the up-part vanishes; at grade $0$ there is no
+//! $sigma$ and the down-part vanishes --- both run by the same code.
 
 #[path = "util/mod.rs"]
 mod util;
 
 use {
-  common::linalg::nalgebra::{CsrMatrix, Vector},
+  common::linalg::nalgebra::Vector,
   ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt},
   formoniq::{
     problems::wave::{cfl_dt, solve_wave, WaveState},
@@ -44,8 +44,8 @@ fn main() {
   const CFL_FRACTION: f64 = 0.2;
   const WAVE_SPEED: f64 = 1.0;
 
-  println!("Wave u_tt = -δd u on [0,π]^n, relative (Dirichlet) BC — Gauss-Legendre.");
-  println!("Energy E = ½(uᵀKu + u̇ᵀMu̇) is conserved.\n");
+  println!("Wave u_tt = -Δu on [0,π]^n, relative (Dirichlet) BC — Gauss-Legendre.");
+  println!("Energy E = ½(‖δu‖² + ‖du‖² + ‖u̇‖²) is conserved.\n");
   println!(
     "| {:>3} | {:>5} | {:>10} | {:>10} | {:>10} | {:>8} |",
     "dim", "grade", "E(0)", "E(½T)", "E(T)", "drift",
@@ -60,11 +60,9 @@ fn main() {
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     for grade in 0..=dim {
-      let laplace = CsrMatrix::from(&whitney.codif_dif(grade));
-      let mass = CsrMatrix::from(&whitney.mass(grade));
-
       // Released from rest with a boundary-compatible bump: the relative
-      // eigenform vanishes on $diff K$.
+      // eigenform vanishes on $diff K$, so homogeneous Dirichlet conditions are
+      // exactly the relative complex.
       let form = BoxEigenform::new(dim, grade, BoundaryCondition::Relative);
       let initial = derham_map(
         &form.solution().pullback_on(&topology, &coords),
@@ -72,6 +70,7 @@ fn main() {
         3,
       );
       let state = WaveState::new(initial.into_coeffs(), Vector::zeros(whitney.ndofs(grade)));
+      let relative = whitney.relative();
 
       let dt = CFL_FRACTION * cfl_dt(&metric, WAVE_SPEED);
       let nsteps = (DURATION / dt).ceil() as usize;
@@ -80,9 +79,12 @@ fn main() {
         .collect();
 
       let force = Cochain::new(grade, Vector::zeros(whitney.ndofs(grade)));
-      let solution = solve_wave(&whitney, grade, &times, state, force);
+      let solution = solve_wave(&relative, grade, &times, state, force);
 
-      let energies: Vec<f64> = solution.iter().map(|s| s.energy(&laplace, &mass)).collect();
+      let energies: Vec<f64> = solution
+        .iter()
+        .map(|s| s.energy(&relative, grade))
+        .collect();
       let e0 = energies[0];
       let e_half = energies[nsteps / 2];
       let e_final = *energies.last().unwrap();

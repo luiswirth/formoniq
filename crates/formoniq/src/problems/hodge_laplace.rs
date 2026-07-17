@@ -156,6 +156,104 @@ pub fn solve_hodge_laplace_evp<C: HilbertComplex>(
   Ok((eigenvals, eigen_sigmas, eigen_us))
 }
 
+/// The factored per-grade blocks of the Hodge-Laplace differential complex
+/// around grade $k$ --- the mass matrices $M_(k-1), M_k, M_(k+1)$ and the
+/// metric-free coboundaries $D^(k-1), D^k$ --- assembled on any
+/// [`HilbertComplex`], so the trait alone decides natural (full complex) versus
+/// essential (relative complex) boundary conditions.
+///
+/// These are the pieces the mixed *evolution* problems ([`crate::problems::heat`],
+/// [`crate::problems::wave`]) build their block systems from: the down-coupling
+/// $sigma = delta u in Lambda^(k-1)$ and the up-coupling $omega = dif u in
+/// Lambda^(k+1)$. The two degenerate grades --- $k = 0$ has no $sigma$ space,
+/// $k = n$ has no $omega$ space --- are carried as correctly shaped *empty*
+/// blocks rather than special-cased, so the block systems assemble uniformly at
+/// every grade.
+pub struct HodgeBlocks {
+  pub n_sigma: usize,
+  pub n_u: usize,
+  pub n_omega: usize,
+  pub mass_sigma: CsrMatrix,
+  pub mass_u: CsrMatrix,
+  pub mass_omega: CsrMatrix,
+  /// $D^(k-1): Lambda^(k-1) -> Lambda^k$, shape $n_u times n_sigma$.
+  pub dif_dn: CsrMatrix,
+  /// $D^k: Lambda^k -> Lambda^(k+1)$, shape $n_omega times n_u$.
+  pub dif_up: CsrMatrix,
+}
+impl HodgeBlocks {
+  pub fn compute<C: HilbertComplex>(complex: &C, grade: ExteriorGrade) -> Self {
+    assert!(grade <= complex.dim());
+    let empty = |r: usize, c: usize| CsrMatrix::from(&CooMatrix::zeros(r, c));
+
+    let n_u = complex.ndofs(grade);
+    let mass_u = CsrMatrix::from(&complex.mass(grade));
+
+    let (n_sigma, mass_sigma, dif_dn) = if grade > 0 {
+      let n_sigma = complex.ndofs(grade - 1);
+      (
+        n_sigma,
+        CsrMatrix::from(&complex.mass(grade - 1)),
+        complex.dif(grade - 1),
+      )
+    } else {
+      (0, empty(0, 0), empty(n_u, 0))
+    };
+
+    let (n_omega, mass_omega, dif_up) = if grade < complex.dim() {
+      let n_omega = complex.ndofs(grade + 1);
+      (
+        n_omega,
+        CsrMatrix::from(&complex.mass(grade + 1)),
+        complex.dif(grade),
+      )
+    } else {
+      (0, empty(0, 0), empty(0, n_u))
+    };
+
+    Self {
+      n_sigma,
+      n_u,
+      n_omega,
+      mass_sigma,
+      mass_u,
+      mass_omega,
+      dif_dn,
+      dif_up,
+    }
+  }
+
+  /// The weak codifferential coupling $angle.l dif tau, u angle.r$ as a matrix
+  /// $(D^(k-1))^T M_k$, shape $n_sigma times n_u$: the $sigma <- u$ block.
+  pub fn codif_dn(&self) -> CsrMatrix {
+    self.dif_dn.transpose() * &self.mass_u
+  }
+
+  /// The weak exterior-derivative coupling $angle.l dif sigma, v angle.r$ as a
+  /// matrix $M_k D^(k-1)$, shape $n_u times n_sigma$: the $u <- sigma$ block.
+  pub fn dif_sigma(&self) -> CsrMatrix {
+    &self.mass_u * &self.dif_dn
+  }
+
+  /// The weak coupling $angle.l omega, dif v angle.r$ as a matrix
+  /// $(D^k)^T M_(k+1)$, shape $n_u times n_omega$: the $u <- omega$ block.
+  pub fn codif_up(&self) -> CsrMatrix {
+    self.dif_up.transpose() * &self.mass_omega
+  }
+
+  /// The weak coupling $angle.l dif mu, phi angle.r$ as a matrix
+  /// $M_(k+1) D^k$, shape $n_omega times n_u$: the $omega <- u$ block.
+  pub fn dif_omega(&self) -> CsrMatrix {
+    &self.mass_omega * &self.dif_up
+  }
+
+  /// The up-Laplacian stiffness $K = (D^k)^T M_(k+1) D^k$ ($delta dif$), shape
+  /// $n_u^2$. Zero at top grade, where $dif u = 0$.
+  pub fn stiff(&self) -> CsrMatrix {
+    self.dif_up.transpose() * &self.mass_omega * &self.dif_up
+  }
+}
+
 pub struct MixedGalmats {
   mass_sigma: GalMat,
   dif_sigma: GalMat,
