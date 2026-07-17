@@ -14,7 +14,8 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, Subcommand};
 use formoniq_studio::export::{export, ExportSpec};
 use formoniq_studio::gallery::{
-  BuiltinMesh, CochainSpec, MeshSource, NamedCochain, Study, DEFAULT_NMODES, REFERENCE_CELL_DIM,
+  BuiltinMesh, CochainSpec, MeshSource, NamedCochain, Study, DEFAULT_NMODES,
+  DEFAULT_TRAJECTORY_STEPS, HEAT_FINAL_TIME, REFERENCE_CELL_DIM, WAVE_FINAL_TIME,
 };
 
 #[derive(Parser)]
@@ -73,6 +74,14 @@ fn parse_study(s: &str) -> Result<Study, String> {
     "whitney" => Ok(Study::WhitneyBasis),
     "hodge" | "decomposition" => Ok(Study::HodgeDecomposition),
     "triforce-examples" => Ok(Study::Cochains(formoniq_studio::demos::triforce_examples())),
+    "heat" => Ok(Study::Heat {
+      nsteps: DEFAULT_TRAJECTORY_STEPS,
+      final_time: HEAT_FINAL_TIME,
+    }),
+    "wave" => Ok(Study::Wave {
+      nsteps: DEFAULT_TRAJECTORY_STEPS,
+      final_time: WAVE_FINAL_TIME,
+    }),
     _ => s
       .strip_prefix("grade")
       .and_then(|g| g.parse().ok())
@@ -80,7 +89,9 @@ fn parse_study(s: &str) -> Result<Study, String> {
         grade,
         nmodes: DEFAULT_NMODES,
       })
-      .ok_or_else(|| format!("expected `grade<k>`, `whitney` or `hodge`, got `{s}`")),
+      .ok_or_else(|| {
+        format!("expected `grade<k>`, `whitney`, `hodge`, `heat` or `wave`, got `{s}`")
+      }),
   }
 }
 

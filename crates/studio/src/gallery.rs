@@ -52,6 +52,17 @@ pub(crate) const REFERENCE_CELL_DIM_MAX: Dim = 3;
 // half-built final row.
 pub const DEFAULT_NMODES: usize = 16;
 
+// A time-dependent study samples its solution at this many steps over the
+// solve's final time. Enough that the linear interpolation between frames reads
+// as continuous motion at the trajectory's playback rate.
+pub const DEFAULT_TRAJECTORY_STEPS: usize = 160;
+// The heat flow's final time: long enough for the initial bump to diffuse and
+// visibly decay on the unit-scale gallery meshes. The wave equation's, in the
+// same units: several periods of the lowest modes, so the fronts propagate and
+// reflect rather than barely stirring.
+pub const HEAT_FINAL_TIME: f64 = 0.5;
+pub const WAVE_FINAL_TIME: f64 = 12.0;
+
 /// The shared surface mesh a study solves against, built once so every
 /// per-grade eigensolve reuses it rather than remeshing.
 pub(crate) type Mesh = (Complex, MeshCoords);
@@ -250,6 +261,14 @@ pub enum Study {
   /// The harmonic shell is nonzero exactly on a mesh with grade-1 homology, so
   /// this is the study that shows the topology of the surface directly.
   HodgeDecomposition,
+  /// The heat flow $diff_t u = -Delta u$ of a localized bump, as a sampled
+  /// trajectory: the parabolic smoothing of the Hodge-Laplacian shown directly
+  /// rather than through its spectrum. `nsteps` samples over `final_time`.
+  Heat { nsteps: usize, final_time: f64 },
+  /// The wave equation $diff_(t t) u = -Delta u$ of a localized bump at rest, as
+  /// a sampled trajectory: the hyperbolic counterpart of [`Self::Heat`], fronts
+  /// propagating and reflecting off any boundary.
+  Wave { nsteps: usize, final_time: f64 },
 }
 
 impl Study {
@@ -267,6 +286,8 @@ impl Study {
       Study::WhitneyBasis => "Whitney basis".to_string(),
       Study::Cochains(_) => "Cochains".to_string(),
       Study::HodgeDecomposition => "Hodge decomposition".to_string(),
+      Study::Heat { .. } => "Heat equation".to_string(),
+      Study::Wave { .. } => "Wave equation".to_string(),
     }
   }
 
@@ -281,6 +302,12 @@ impl Study {
       Study::WhitneyBasis => Scene::whitney_basis_mesh(topology.clone(), coords.clone()),
       Study::Cochains(specs) => Scene::cochains(topology.clone(), coords.clone(), specs),
       Study::HodgeDecomposition => Scene::hodge_decomposition(topology.clone(), coords.clone()),
+      Study::Heat { nsteps, final_time } => {
+        Scene::heat(topology.clone(), coords.clone(), *nsteps, *final_time)
+      }
+      Study::Wave { nsteps, final_time } => {
+        Scene::wave(topology.clone(), coords.clone(), *nsteps, *final_time)
+      }
     }
   }
 }
@@ -400,6 +427,24 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::Builtin(BuiltinMesh::Bob),
       study: Study::HodgeDecomposition,
       selection: Some(Selection::Line(3)),
+    },
+    Preset {
+      name: "Heat equation",
+      mesh: MeshSource::START,
+      study: Study::Heat {
+        nsteps: DEFAULT_TRAJECTORY_STEPS,
+        final_time: HEAT_FINAL_TIME,
+      },
+      selection: None,
+    },
+    Preset {
+      name: "Wave equation",
+      mesh: MeshSource::START,
+      study: Study::Wave {
+        nsteps: DEFAULT_TRAJECTORY_STEPS,
+        final_time: WAVE_FINAL_TIME,
+      },
+      selection: None,
     },
   ]
 }

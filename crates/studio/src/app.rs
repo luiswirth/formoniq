@@ -309,6 +309,43 @@ impl<'a> State<'a> {
     steps
   }
 
+  /// The current solve-time position of the displayed trajectory: the wave
+  /// clock's wall-seconds mapped onto the trajectory's own `duration`, looping
+  /// every [`crate::display::TRAJECTORY_LOOP_SECONDS`]. The physical $dif t$ is a
+  /// stability choice, so playback maps the sampled interval onto a watchable one
+  /// rather than running at solve speed.
+  fn trajectory_solve_time(&self, duration: f64) -> f64 {
+    if duration <= 0.0 {
+      return 0.0;
+    }
+    let phase =
+      (f64::from(self.clock.time()) / crate::display::TRAJECTORY_LOOP_SECONDS).rem_euclid(1.0);
+    phase * duration
+  }
+
+  /// Re-bakes the displayed field's stream from its interpolated frame at the
+  /// current clock time, when that field is a trajectory. A no-op otherwise:
+  /// a static field and a standing wave are baked once and re-timed on the GPU,
+  /// so only a sampled trajectory owes a per-frame CPU rewrite -- exactly the
+  /// "scrubbing a trajectory rewrites only the field stream" the bake draws.
+  fn rebake_trajectory(&self) {
+    let time_model = self.scene.field_time(self.selection);
+    let Some(duration) = time_model.duration() else {
+      return;
+    };
+    let base = self.scene.field_cochain(self.selection);
+    let cochain = time_model.frame_at(base, self.trajectory_solve_time(duration));
+    let (attributes, _) = crate::display::field_attributes(
+      &self.scene.topology,
+      &self.scene.coords,
+      &cochain,
+      self.mesh_display.cell_corners(),
+    );
+    self
+      .mesh_display
+      .write_attributes(&self.ctx.queue, &attributes);
+  }
+
   /// Displays `selection` of the *current* scene, rebuilding exactly the pieces
   /// that depend on it and restarting the wave clock. Unconditional -- callers
   /// that only want to act on an actual change (the common case) go through
@@ -721,7 +758,7 @@ impl<'a> State<'a> {
       .map(|(i, f)| Entry {
         selection: Selection::Scalar(i),
         grade: f.grade,
-        eigenvalue: f.eigenvalue,
+        eigenvalue: f.time.eigenvalue(),
         dof: f.dof.as_ref(),
         name: f.name.as_str(),
       })
@@ -734,20 +771,21 @@ impl<'a> State<'a> {
           .map(|(i, f)| Entry {
             selection: Selection::Line(i),
             grade: f.grade,
-            eigenvalue: f.eigenvalue,
+            eigenvalue: f.time.eigenvalue(),
             dof: f.dof.as_ref(),
             name: f.name.as_str(),
           }),
       )
       .collect();
 
-    // The displayed field's eigenvalue, for the transport readouts: it is what
-    // gives the standing wave a frequency to report, and `None` for a field
-    // with no wave at all.
-    let eigenvalue = match self.selection {
-      Selection::Scalar(i) => self.scene.fields[i].eigenvalue,
-      Selection::Line(i) => self.scene.line_fields[i].eigenvalue,
-    };
+    // The displayed field's temporal model, for the transport readouts: an
+    // eigenvalue gives the standing wave a frequency to report; a trajectory
+    // gives a solve-time position within its duration. At most one is `Some`.
+    let time_model = self.scene.field_time(self.selection);
+    let eigenvalue = time_model.eigenvalue();
+    let trajectory = time_model
+      .duration()
+      .map(|duration| (self.trajectory_solve_time(duration), duration));
 
     let model = PanelModel {
       mesh_source: mesh_source.clone(),
@@ -767,6 +805,7 @@ impl<'a> State<'a> {
       orthographic: self.camera.orthographic,
       presets: &self.presets,
       eigenvalue,
+      trajectory,
       playing: self.clock.playing,
       time: self.clock.time(),
     };
@@ -933,6 +972,11 @@ impl<'a> State<'a> {
       .create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some("Render Encoder"),
       });
+
+    // A trajectory's field stream is re-baked from its current frame before the
+    // draw list is built; a static field or standing wave rebakes nothing (the
+    // GPU re-times those), so this is a no-op away from a trajectory.
+    self.rebake_trajectory();
 
     // Taken before the draw list borrows `self`, not because the order matters
     // to the frame but because the step accounting is a mutation and the list

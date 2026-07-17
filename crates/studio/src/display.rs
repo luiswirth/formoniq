@@ -342,6 +342,35 @@ pub(crate) struct FieldAttributes {
   pub(crate) height: Vec<f32>,
 }
 
+/// How long a [`crate::scene::FieldTime::Trajectory`] takes to play through
+/// once, in wall-clock seconds, before looping. A fixed span rather than the
+/// solve's own final time: the physical $dif t$ is set by stability (CFL), not
+/// by what reads well, so the playback maps that interval onto a watchable one.
+pub(crate) const TRAJECTORY_LOOP_SECONDS: f64 = 6.0;
+
+/// The two field streams for a cochain -- the per-corner cell-local colormap
+/// value and the per-vertex continuous displacement height -- together with the
+/// colormap's raw range. Extracted from [`FieldDisplay::build`] so a trajectory's
+/// caller can recompute them per frame from an interpolated frame and rewrite
+/// them into the mesh, which is the whole of scrubbing a trajectory.
+pub(crate) fn field_attributes(
+  topology: &manifold::topology::complex::Complex,
+  coords: &manifold::geometry::coord::mesh::MeshCoords,
+  cochain: &ddf::cochain::Cochain,
+  cell_corners: &[crate::bake::CellCorner],
+) -> (FieldAttributes, (f32, f32)) {
+  let colors = crate::scene::surface_corner_values(topology, coords, cochain, cell_corners);
+  let heights = crate::scene::nodal_heights(topology, coords, cochain);
+  let bounds = crate::scene::corner_bounds(&colors);
+  (
+    FieldAttributes {
+      color: bake::attributes(&colors),
+      height: bake::attributes(&heights),
+    },
+    bounds,
+  )
+}
+
 /// The material parameters for showing one field of a scene, and the geometry
 /// only that field has: the one place a [`Selection`] turns into something
 /// drawable. Everything here is static per field -- the renderer only re-times
@@ -397,18 +426,8 @@ impl FieldDisplay {
       Selection::Scalar(index) => &scene.fields[index].cochain,
       Selection::Line(index) => &scene.line_fields[index].cochain,
     };
-    let colors = crate::scene::surface_corner_values(
-      &scene.topology,
-      &scene.coords,
-      cochain,
-      mesh.cell_corners(),
-    );
-    let heights = crate::scene::nodal_heights(&scene.topology, &scene.coords, cochain);
-    let (raw_min, raw_max) = crate::scene::corner_bounds(&colors);
-    let attributes = FieldAttributes {
-      color: bake::attributes(&colors),
-      height: bake::attributes(&heights),
-    };
+    let (attributes, (raw_min, raw_max)) =
+      field_attributes(&scene.topology, &scene.coords, cochain, mesh.cell_corners());
 
     let (glyphs, particles, speed_ratio, mut surface) = match selection {
       Selection::Scalar(index) => {
@@ -419,11 +438,11 @@ impl FieldDisplay {
         // Whitney basis function): no dispersion relation to animate at, so
         // the wave collapses to no displacement rather than a special case
         // here.
-        let wave_omega = field.eigenvalue.map_or(0.0, f64::sqrt) as f32;
+        let wave_omega = field.time.wave_omega();
         // Normalized by the field's own peak so every mode reaches the same peak
         // displacement -- a fraction of the object's extent, not its mesh width,
         // so the lobes read at orbital scale regardless of resolution.
-        let wave_amplitude = if field.eigenvalue.is_some() {
+        let wave_amplitude = if field.time.animates() {
           WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale
         } else {
           0.0
@@ -432,7 +451,7 @@ impl FieldDisplay {
         // its colormap range is symmetric $[-s, s]$ about the midpoint -- the
         // same reasoning as the line field's tint. A static field keeps its own
         // asymmetric range.
-        let (min_val, max_val) = if field.eigenvalue.is_some() {
+        let (min_val, max_val) = if field.time.animates() {
           (-field_scale, field_scale)
         } else {
           (raw_min, raw_max)
@@ -449,7 +468,7 @@ impl FieldDisplay {
             wave_omega,
             // Diverging exactly where the range above was widened to
             // symmetric: a signed eigenmode pulse, not an unsigned magnitude.
-            diverging: f32::from(field.eigenvalue.is_some()),
+            diverging: f32::from(field.time.animates()),
             // The identity: a scalar field has no particles and lays no trail.
             deposit_floor: 1.0,
             deposit_gain: 0.0,
@@ -469,7 +488,7 @@ impl FieldDisplay {
         // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
         // the mode's frequency.
         let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
-        let (min_val, max_val) = if field.eigenvalue.is_some() {
+        let (min_val, max_val) = if field.time.animates() {
           (-peak, peak)
         } else {
           (raw_min, raw_max)
@@ -535,8 +554,8 @@ impl FieldDisplay {
             min_val,
             max_val,
             wave_amplitude: 0.0,
-            wave_omega: field.eigenvalue.map_or(0.0, f64::sqrt) as f32,
-            diverging: f32::from(field.eigenvalue.is_some()),
+            wave_omega: field.time.wave_omega(),
+            diverging: f32::from(field.time.animates()),
             // The identity until the deposit below exists; patched then.
             deposit_floor: 1.0,
             deposit_gain: 0.0,

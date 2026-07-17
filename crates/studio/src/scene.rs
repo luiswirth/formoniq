@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
 use continuum::field::DiffFormClosure;
 
@@ -44,6 +46,104 @@ pub struct Scene {
   pub line_fields: Vec<LineField>,
 }
 
+/// How a field varies in time -- the temporal model the render clock reads, one
+/// axis orthogonal to the render mark (which the reduced grade picks) and the
+/// spatial cochain.
+///
+/// Three cases dissolving into one generality, not three mechanisms:
+///
+/// - [`Self::Static`] is a field with no clock.
+/// - [`Self::StandingWave`] is the analytic special case
+///   $u(t) = cos(sqrt(lambda) t) phi$: one spatial mode modulated by a scalar
+///   the GPU evaluates in closed form, so the cochain is baked once and the
+///   vertex shader re-times it (`wave_omega`, `wave_amplitude`).
+/// - [`Self::Trajectory`] is the general sampled case: a time-indexed family of
+///   cochains from a solve (heat, wave), with no closed form. It is interpolated
+///   on the CPU and its field stream is re-baked per frame -- exactly the
+///   "scrubbing a trajectory rewrites only the field stream" the bake anticipates.
+///
+/// The eigenmode is the degenerate one-mode-with-known-modulation point of the
+/// trajectory, which is why the two share every display path below and differ
+/// only in where the animation is evaluated. The previous `Option<f64>`
+/// eigenvalue was already this axis in two states (`None`/`Some`); this names the
+/// third.
+#[derive(Clone)]
+pub enum FieldTime {
+  Static,
+  StandingWave { eigenvalue: f64 },
+  Trajectory { dt: f64, frames: Vec<Cochain> },
+}
+
+impl FieldTime {
+  /// The Hodge-Laplace eigenvalue driving the analytic standing wave, when the
+  /// field is one. `None` for a static field and for a sampled trajectory --
+  /// neither is animated by a dispersion relation. What the UI reads for the
+  /// degeneracy pyramid and the transport frequency readout.
+  pub fn eigenvalue(&self) -> Option<f64> {
+    match self {
+      FieldTime::StandingWave { eigenvalue } => Some(*eigenvalue),
+      _ => None,
+    }
+  }
+
+  /// The GPU standing wave's angular frequency $omega = sqrt(lambda)$. Zero for
+  /// anything the GPU does not modulate in closed form -- a static field, and a
+  /// trajectory, whose height stream is rewritten per frame on the CPU instead
+  /// (so $cos(0 dot.c t) = 1$ applies the current frame's height at full
+  /// amplitude, statically).
+  pub fn wave_omega(&self) -> f32 {
+    self.eigenvalue().map_or(0.0, f64::sqrt) as f32
+  }
+
+  /// Whether the field animates the surface's displacement height at all -- an
+  /// eigenmode riding $cos(sqrt(lambda) t)$, or a trajectory whose per-frame
+  /// height moves. A static field does not, so it offers no displacement toggle
+  /// and takes an asymmetric (non-diverging) colormap.
+  pub fn animates(&self) -> bool {
+    !matches!(self, FieldTime::Static)
+  }
+
+  /// Whether the field is a sampled trajectory, whose field stream the caller
+  /// must re-bake per frame (the GPU has no closed form for it).
+  pub fn is_trajectory(&self) -> bool {
+    matches!(self, FieldTime::Trajectory { .. })
+  }
+
+  /// The trajectory's total solve-time span $T = dif t dot.c (N - 1)$, the
+  /// interval the transport scrubs and the export samples. `None` for a field
+  /// that is not a sampled trajectory.
+  pub fn duration(&self) -> Option<f64> {
+    match self {
+      FieldTime::Trajectory { dt, frames } => Some(dt * frames.len().saturating_sub(1) as f64),
+      _ => None,
+    }
+  }
+
+  /// The field's cochain at solve-time `t`, linearly interpolated between the
+  /// bracketing sampled frames -- lerping coefficients *is* lerping the Whitney
+  /// field, since the interpolation is linear in them. For a static field or a
+  /// standing wave the spatial cochain does not itself vary (the GPU modulates
+  /// the standing wave), so `base` is returned unchanged. `t` is clamped to the
+  /// sampled interval; the caller's own loop decides the wrap.
+  pub fn frame_at<'a>(&'a self, base: &'a Cochain, t: f64) -> Cow<'a, Cochain> {
+    match self {
+      FieldTime::Trajectory { dt, frames } if frames.len() > 1 && *dt > 0.0 => {
+        let last = frames.len() - 1;
+        let x = (t / dt).clamp(0.0, last as f64);
+        let i = x.floor() as usize;
+        if i >= last {
+          return Cow::Borrowed(&frames[last]);
+        }
+        let s = x - i as f64;
+        let (a, b) = (frames[i].coeffs(), frames[i + 1].coeffs());
+        Cow::Owned(Cochain::new(frames[i].grade(), a + (b - a) * s))
+      }
+      FieldTime::Trajectory { frames, .. } => Cow::Borrowed(&frames[0]),
+      _ => Cow::Borrowed(base),
+    }
+  }
+}
+
 /// A named scalar field on the surface: the reduced-grade-0 mark, a density
 /// coloring the surface and displacing it as a standing wave.
 ///
@@ -61,19 +161,18 @@ pub struct ScalarField {
   /// gallery can organize by original grade, not by the render mark the reduced
   /// grade happens to share with grade 0.
   pub grade: ExteriorGrade,
+  /// The field's spatial representative: the cochain the static readout, the
+  /// colormap range and the initial frame are read from. For a
+  /// [`FieldTime::Trajectory`] this is its first frame (the initial condition);
+  /// the moving field is read through [`FieldTime::frame_at`] on [`Self::time`].
   pub cochain: Cochain,
-  /// The Hodge-Laplace eigenvalue $lambda$ this field is an eigenfunction of,
-  /// when it is one. For the wave equation $partial_t^2 u + Delta u = 0$ this
-  /// is the square of the mode's own temporal frequency, $omega = sqrt(lambda)$
-  /// -- the standing wave for *this* mode, not a frequency picked by the
-  /// viewer. `None` for a field that is not an eigenfunction (e.g. a raw
-  /// Whitney basis function), which disables the standing-wave animation.
-  pub eigenvalue: Option<f64>,
+  /// How this field varies in time: a static field, an eigenmode's standing
+  /// wave, or a solve's sampled trajectory. Was an `Option<f64>` eigenvalue; see
+  /// [`FieldTime`].
+  pub time: FieldTime,
   /// The DOF simplex this field is dual to, when the field is a raw Whitney
-  /// basis function. `None` for a solved field (an eigenmode), which has no
-  /// single dual simplex -- the same is-this-a-basis-function distinction
-  /// [`Self::eigenvalue`] makes, mirrored: exactly one of the two is `Some` on
-  /// any field this crate produces. Lets the picker group basis functions by
+  /// basis function. `None` for a solved field (an eigenmode, a trajectory),
+  /// which has no single dual simplex. Lets the picker group basis functions by
   /// grade and label each cell by its DOF (via `dof_label`) without reparsing
   /// [`Self::name`]. Kept as the simplex, not its rendered label, so the DOF is
   /// a typed value the UI formats rather than a string the model commits to.
@@ -105,8 +204,8 @@ pub struct LineField {
   /// [`WhitneyInterpolant`]) cell by cell -- there is no per-vertex reduction,
   /// because a reduced-grade field has no single value at a shared vertex.
   pub cochain: Cochain,
-  /// See [`ScalarField::eigenvalue`].
-  pub eigenvalue: Option<f64>,
+  /// See [`ScalarField::time`].
+  pub time: FieldTime,
   /// See [`ScalarField::dof`].
   pub dof: Option<Simplex>,
 }
@@ -153,7 +252,7 @@ pub(crate) fn corner_bounds(values: &[f64]) -> (f32, f32) {
 /// constructor into an unreadable run of positional arguments.
 struct FieldMeta {
   name: String,
-  eigenvalue: Option<f64>,
+  time: FieldTime,
   dof: Option<Simplex>,
 }
 
@@ -193,7 +292,7 @@ impl Scene {
   pub(crate) fn offers(&self, selection: Selection) -> FieldOffers {
     match selection {
       Selection::Scalar(index) => FieldOffers {
-        displacement: self.fields[index].eigenvalue.is_some(),
+        displacement: self.fields[index].time.animates(),
         marks: false,
       },
       Selection::Line(_) => FieldOffers {
@@ -243,7 +342,7 @@ impl Scene {
         topology,
         FieldMeta {
           name,
-          eigenvalue: Some(lambda),
+          time: FieldTime::StandingWave { eigenvalue: lambda },
           dof: None,
         },
         cochain,
@@ -349,7 +448,7 @@ impl Scene {
       name: "loading...".to_string(),
       grade: 0,
       cochain: Cochain::new(0, na::DVector::zeros(nvertices)),
-      eigenvalue: None,
+      time: FieldTime::Static,
       dof: None,
     }];
     Self {
@@ -421,7 +520,7 @@ impl Scene {
         &topology,
         FieldMeta {
           name: named.name.clone(),
-          eigenvalue: None,
+          time: FieldTime::Static,
           dof: None,
         },
         named.spec.resolve(&topology),
@@ -474,7 +573,7 @@ impl Scene {
         &topology,
         FieldMeta {
           name: name.to_string(),
-          eigenvalue: None,
+          time: FieldTime::Static,
           dof: None,
         },
         cochain,
@@ -519,7 +618,7 @@ impl Scene {
           &topology,
           FieldMeta {
             name,
-            eigenvalue: None,
+            time: FieldTime::Static,
             dof: Some(dof_simp.clone()),
           },
           cochain,
@@ -534,6 +633,128 @@ impl Scene {
       coords,
       fields,
       line_fields,
+    }
+  }
+
+  /// The heat flow $diff_t u = -kappa Delta u$ of a localized initial bump, as a
+  /// single grade-0 [`FieldTime::Trajectory`] field: the sampled solution the
+  /// transport scrubs and the surface re-bakes per frame. The bump diffuses and
+  /// decays -- the parabolic smoothing of the Hodge-Laplacian, shown directly
+  /// rather than through its spectrum.
+  ///
+  /// Mesh-agnostic: on a closed surface (sphere, Bob) the boundary is empty and
+  /// the relative complex is the identity; on a mesh with boundary the trace is
+  /// held fixed at the bump's boundary values (near zero for an interior bump).
+  /// The same [`solve_heat`] serves both.
+  ///
+  /// [`solve_heat`]: formoniq::problems::heat::solve_heat
+  pub fn heat(topology: Complex, coords: MeshCoords, nsteps: usize, final_time: f64) -> Self {
+    use formoniq::{problems::heat::solve_heat, whitney_complex::WhitneyComplex};
+
+    let metric = coords.to_edge_lengths(&topology);
+    let whitney = WhitneyComplex::new(&topology, &metric);
+    // `None` on a closed mesh (the sphere, Bob): no boundary to hold, so the
+    // flow is the free Neumann heat equation. `solve_heat` is total there.
+    let boundary = whitney.boundary();
+
+    let initial = ambient_bump(&topology, &coords);
+    let boundary_values = boundary.as_ref().map_or_else(
+      || Cochain::new(0, na::DVector::zeros(0)),
+      |b| b.trace_cochain(&initial),
+    );
+    let source = Cochain::new(0, na::DVector::zeros(whitney.ndofs(0)));
+    let dt = final_time / nsteps.max(1) as f64;
+    let frames = solve_heat(
+      &whitney,
+      boundary.as_ref(),
+      0,
+      nsteps,
+      dt,
+      &boundary_values,
+      initial.clone(),
+      source,
+      1.0,
+    );
+
+    Self::trajectory_scene(topology, coords, initial, dt, frames)
+  }
+
+  /// The wave equation $diff_(t t) u = -Delta u$ of a localized initial bump at
+  /// rest, as a single grade-0 [`FieldTime::Trajectory`] field. The bump splits
+  /// and its fronts propagate, reflecting off any boundary -- the hyperbolic
+  /// counterpart of [`Self::heat`], on the same initial data and the same
+  /// mesh-agnostic footing (a closed mesh uses the identity inclusion).
+  ///
+  /// [`solve_wave`]: formoniq::problems::wave::solve_wave
+  pub fn wave(topology: Complex, coords: MeshCoords, nsteps: usize, final_time: f64) -> Self {
+    use formoniq::{
+      problems::wave::{solve_wave, WaveState},
+      whitney_complex::WhitneyComplex,
+    };
+
+    let metric = coords.to_edge_lengths(&topology);
+    let whitney = WhitneyComplex::new(&topology, &metric);
+
+    let initial = ambient_bump(&topology, &coords);
+    let ndofs = whitney.ndofs(0);
+    let dt = final_time / nsteps.max(1) as f64;
+    let times: Vec<f64> = (0..=nsteps).map(|k| k as f64 * dt).collect();
+    let state = WaveState::new(initial.coeffs().clone(), na::DVector::zeros(ndofs));
+    let force = Cochain::new(0, na::DVector::zeros(ndofs));
+    let frames = solve_wave(&whitney, 0, &times, state, force)
+      .into_iter()
+      .map(|s| Cochain::new(0, s.pos))
+      .collect();
+
+    Self::trajectory_scene(topology, coords, initial, dt, frames)
+  }
+
+  /// Files a solved grade-0 trajectory into a scene through the same `field`
+  /// dispatch every other field goes through: the trajectory's first frame is
+  /// its spatial representative, the sampled family its [`FieldTime`].
+  fn trajectory_scene(
+    topology: Complex,
+    coords: MeshCoords,
+    initial: Cochain,
+    dt: f64,
+    frames: Vec<Cochain>,
+  ) -> Self {
+    let mut fields = Vec::new();
+    let mut line_fields = Vec::new();
+    Self::field(
+      &topology,
+      FieldMeta {
+        name: "trajectory".to_string(),
+        time: FieldTime::Trajectory { dt, frames },
+        dof: None,
+      },
+      initial,
+      &mut fields,
+      &mut line_fields,
+    );
+    Self {
+      topology,
+      coords,
+      fields,
+      line_fields,
+    }
+  }
+
+  /// The displayed field's temporal model, for the transport clock and the
+  /// per-frame re-bake the caller drives.
+  pub(crate) fn field_time(&self, selection: Selection) -> &FieldTime {
+    match selection {
+      Selection::Scalar(i) => &self.fields[i].time,
+      Selection::Line(i) => &self.line_fields[i].time,
+    }
+  }
+
+  /// The displayed field's spatial representative cochain -- the `base` a
+  /// [`FieldTime::frame_at`] reads at each instant.
+  pub(crate) fn field_cochain(&self, selection: Selection) -> &Cochain {
+    match selection {
+      Selection::Scalar(i) => &self.fields[i].cochain,
+      Selection::Line(i) => &self.line_fields[i].cochain,
     }
   }
 
@@ -555,11 +776,7 @@ impl Scene {
     fields: &mut Vec<ScalarField>,
     line_fields: &mut Vec<LineField>,
   ) {
-    let FieldMeta {
-      name,
-      eigenvalue,
-      dof,
-    } = meta;
+    let FieldMeta { name, time, dof } = meta;
     let n = topology.dim();
     let k = cochain.grade();
     match k.min(n - k) {
@@ -572,7 +789,7 @@ impl Scene {
           name,
           grade: k,
           cochain,
-          eigenvalue,
+          time,
           dof,
         });
       }
@@ -581,7 +798,7 @@ impl Scene {
           name,
           grade: k,
           cochain,
-          eigenvalue,
+          time,
           dof,
         });
       }
@@ -858,9 +1075,154 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
   derham_map(&pulled, topology, 2)
 }
 
+/// A localized grade-0 initial condition for a time-dependent solve, defined off
+/// the mesh's own coordinates: a Gaussian in ambient distance centered on the
+/// vertex *nearest* the centroid, of width a fixed fraction of the coordinate
+/// extent. Pulled onto the mesh through the `ddf` bridge and de Rham mapped to a
+/// 0-cochain, so it lands on any embedded surface without assuming a shape.
+///
+/// The nearest-to-centroid vertex, not the farthest: on a mesh with boundary
+/// (the flat grid) the farthest vertex is a boundary corner, where a held
+/// boundary would pin the bump instead of letting it diffuse; the nearest one is
+/// interior, so its boundary trace is near zero and the flow is free. On a closed
+/// mesh every vertex is on the surface, so the nearest merely also works where a
+/// boundary exists.
+fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
+  let n = coords.dim();
+  let nvertices = coords.nvertices().max(1) as f64;
+  let centroid = coords
+    .coord_iter()
+    .fold(Vector::zeros(n), |acc, c| acc + *c)
+    / nvertices;
+
+  let extent = coords
+    .coord_iter()
+    .map(|c| (*c - &centroid).norm())
+    .fold(0.0, f64::max);
+  let center = coords
+    .coord_iter()
+    .min_by(|a, b| {
+      (**a - &centroid)
+        .norm()
+        .total_cmp(&(**b - &centroid).norm())
+    })
+    .map_or_else(|| centroid.clone(), |c| (*c).into_owned());
+  let sigma = 0.25 * extent.max(1e-6);
+
+  let field = DiffFormClosure::scalar(
+    move |p| {
+      let r2 = (p.vector() - &center).norm_squared();
+      (-r2 / (2.0 * sigma * sigma)).exp()
+    },
+    n,
+  );
+  let pulled = field.pullback_on(topology, coords);
+  derham_map(&pulled, topology, 2)
+}
+
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// A trajectory's frame at an instant is the linear interpolation of its
+  /// bracketing samples, clamped to the sampled interval: the interpolation is
+  /// linear in the cochain coefficients, so it is exact at the samples and
+  /// affine between them, and its duration is $dif t (N - 1)$.
+  #[test]
+  fn frame_at_interpolates_between_samples() {
+    let frames = vec![
+      Cochain::new(0, na::DVector::from_vec(vec![0.0, 0.0])),
+      Cochain::new(0, na::DVector::from_vec(vec![2.0, -2.0])),
+      Cochain::new(0, na::DVector::from_vec(vec![4.0, -4.0])),
+    ];
+    let time = FieldTime::Trajectory { dt: 0.5, frames };
+    let base = Cochain::new(0, na::DVector::zeros(2));
+
+    assert_eq!(time.duration(), Some(1.0));
+    // Exact at the two endpoints of the sampled interval.
+    assert_eq!(time.frame_at(&base, 0.0).coeffs()[0], 0.0);
+    assert_eq!(time.frame_at(&base, 1.0).coeffs()[0], 4.0);
+    // Affine at the quarter point of the first (dt = 0.5) interval: halfway.
+    let mid = time.frame_at(&base, 0.25);
+    assert!((mid.coeffs()[0] - 1.0).abs() < 1e-12);
+    assert!((mid.coeffs()[1] + 1.0).abs() < 1e-12);
+    // Clamped past the end rather than extrapolated.
+    assert_eq!(time.frame_at(&base, 100.0).coeffs()[0], 4.0);
+  }
+
+  /// The heat flow of a localized bump is one grade-0 trajectory that decays:
+  /// the parabolic Hodge-Laplacian damps the $L^2$ norm monotonically toward the
+  /// held boundary, and the field animates (offers displacement) because it is a
+  /// trajectory, not because it is an eigenmode. `nsteps` steps give `nsteps + 1`
+  /// sampled frames.
+  #[test]
+  fn heat_trajectory_decays_and_animates() {
+    let (topology, coords) = crate::gallery::MeshSource::Grid { cells_axis: 6 }
+      .build()
+      .unwrap();
+    let scene = Scene::heat(topology, coords, 20, 0.2);
+
+    assert_eq!(scene.fields.len(), 1);
+    assert!(scene.line_fields.is_empty());
+    let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
+      panic!("the heat flow is a trajectory");
+    };
+    assert_eq!(frames.len(), 21);
+    let l2 = |c: &Cochain| c.coeffs().norm();
+    assert!(
+      l2(frames.last().unwrap()) < l2(&frames[0]),
+      "the heat flow damps the bump"
+    );
+    assert!(scene.offers(Selection::Scalar(0)).displacement);
+    assert!(scene.fields[0].time.eigenvalue().is_none());
+  }
+
+  /// The heat flow is total on a *closed* mesh, where there is no boundary to
+  /// hold: `solve_heat` runs the free Neumann flow (identity inclusion, zero
+  /// lift) instead of panicking on an empty boundary subcomplex. The regression
+  /// for the sphere preset, whose background solve otherwise never completes.
+  /// Mass is conserved (the constant is the Neumann kernel), so the bump spreads
+  /// rather than decaying to zero -- the peak drops while the total does not.
+  #[test]
+  fn heat_flow_is_total_on_a_closed_mesh() {
+    use manifold::gen::sphere::mesh_sphere_surface;
+    let (topology, coords) = mesh_sphere_surface(2);
+    let scene = Scene::heat(topology, coords, 10, 0.2);
+
+    let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
+      panic!("the heat flow is a trajectory");
+    };
+    assert_eq!(frames.len(), 11);
+    let peak = |c: &Cochain| c.coeffs().amax();
+    assert!(
+      peak(frames.last().unwrap()) < peak(&frames[0]),
+      "the closed-mesh heat flow spreads the bump"
+    );
+  }
+
+  /// The wave equation of the same bump is one grade-0 trajectory that does not
+  /// decay: the symplectic integrator conserves energy, so the $L^2$ norm stays
+  /// bounded near its initial value rather than damping away. Like heat, it
+  /// animates without being an eigenmode.
+  #[test]
+  fn wave_trajectory_is_a_bounded_animating_trajectory() {
+    let (topology, coords) = crate::gallery::MeshSource::Grid { cells_axis: 6 }
+      .build()
+      .unwrap();
+    let scene = Scene::wave(topology, coords, 30, 4.0);
+
+    let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
+      panic!("the wave equation is a trajectory");
+    };
+    assert_eq!(frames.len(), 31);
+    let l2 = |c: &Cochain| c.coeffs().norm();
+    let initial = l2(&frames[0]);
+    assert!(
+      frames.iter().all(|f| l2(f) <= 4.0 * initial),
+      "the conservative wave flow stays bounded"
+    );
+    assert!(scene.offers(Selection::Scalar(0)).displacement);
+  }
 
   /// What a field offers is its reduced grade's answer, and the answer is total
   /// on the range the ambient reaches: every field of the reference cell in

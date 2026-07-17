@@ -307,10 +307,7 @@ fn selection_at(scene: &Scene, index: usize) -> Option<Selection> {
 }
 
 fn eigenvalue_of(scene: &Scene, selection: Selection) -> Option<f64> {
-  match selection {
-    Selection::Scalar(i) => scene.fields[i].eigenvalue,
-    Selection::Line(i) => scene.line_fields[i].eigenvalue,
-  }
+  scene.field_time(selection).eigenvalue()
 }
 
 /// Renders `spec` and writes it to `path`, as a PNG still or, for an `.mp4`, a
