@@ -10,11 +10,9 @@ use super::{
   downsample::{DownsamplePass, SceneColorBinding},
   fill::FillPass,
   item::{DrawList, RenderItem},
-  particles::ParticlePass,
   segments::SegmentPass,
   uniform::{
-    FrameUniform, ParticleMaterial, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding,
-    UniformPool,
+    FrameUniform, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding, UniformPool,
   },
   DEPTH_CLEAR, DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
 };
@@ -140,11 +138,9 @@ pub struct Renderer {
   frame: UniformBinding<FrameUniform>,
   surface_materials: UniformPool<SurfaceMaterial>,
   segment_materials: UniformPool<SegmentMaterial>,
-  particle_materials: UniformPool<ParticleMaterial>,
   post: UniformBinding<PostUniform>,
   fill: FillPass,
   segments: SegmentPass,
-  particles: ParticlePass,
   advect: AdvectPass,
   deposit: DepositPass,
   /// The atlas binding of a frame with no deposit: a 1x1 zero texture, which
@@ -176,7 +172,6 @@ impl Renderer {
     );
     let surface_materials = UniformPool::new(device, "surface material", Stages::VERTEX_FRAGMENT);
     let segment_materials = UniformPool::new(device, "segment material", Stages::VERTEX_FRAGMENT);
-    let particle_materials = UniformPool::new(device, "particle material", Stages::VERTEX_FRAGMENT);
     let post = UniformBinding::new(device, "post", Stages::FRAGMENT, PostUniform::default());
     Self {
       format,
@@ -186,7 +181,6 @@ impl Renderer {
       // the one that has to know what it is.
       fill: FillPass::new(device, SCENE_FORMAT, &frame, &surface_materials, ssaa),
       segments: SegmentPass::new(device, SCENE_FORMAT, &frame, &segment_materials, ssaa),
-      particles: ParticlePass::new(device, SCENE_FORMAT, &frame, &particle_materials, ssaa),
       advect: AdvectPass::new(device),
       deposit: DepositPass::new(device),
       dummy_deposit: dummy_read_bind_group(device),
@@ -195,7 +189,6 @@ impl Renderer {
       frame,
       surface_materials,
       segment_materials,
-      particle_materials,
       post,
       // Allocated on the first frame, from the size the caller renders at:
       // there is no size to guess at construction, and a window that never
@@ -208,36 +201,6 @@ impl Renderer {
     self.format
   }
 
-  /// Steps a population (and its trails) without drawing a frame: the burn-in.
-  ///
-  /// A fresh population sits stacked on its seeds and a fresh atlas is blank;
-  /// the equilibrium both are meant to be seen in is reached only after the
-  /// transient -- exactly a sampler's burn-in, and stepped through the same
-  /// per-step advect/deposit pair a frame steps, so a warmed display is
-  /// bit-identical to one that ran on screen for the same count. Submitted
-  /// here rather than deferred, because the caller's next frame must already
-  /// be in equilibrium.
-  pub fn warmup(
-    &self,
-    ctx: &GpuContext,
-    particles: &super::particles::ParticleBatch,
-    deposit: Option<&super::deposit::DepositBatch>,
-    steps: u32,
-  ) {
-    let mut encoder = ctx
-      .device
-      .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-        label: Some("Warmup Encoder"),
-      });
-    for _ in 0..steps {
-      self.advect.dispatch(&mut encoder, particles, 1);
-      if let Some(deposit) = deposit {
-        self.deposit.record(&mut encoder, deposit);
-      }
-    }
-    ctx.queue.submit(std::iter::once(encoder.finish()));
-  }
-
   /// Writes the frame uniform and each item's material into its own binding.
   /// Returns, per item, the pool index it draws with: its position among the
   /// items of its own kind.
@@ -247,7 +210,7 @@ impl Renderer {
       .write(&ctx.queue, FrameUniform::new(view.camera, view.time));
     self.post.write(&ctx.queue, view.post);
 
-    let (mut nsurfaces, mut nsegments, mut nparticles) = (0, 0, 0);
+    let (mut nsurfaces, mut nsegments) = (0, 0);
     view
       .items
       .items
@@ -266,13 +229,6 @@ impl Renderer {
             .write(&ctx.device, &ctx.queue, nsegments, *material);
           nsegments += 1;
           nsegments - 1
-        }
-        RenderItem::Particles(_, material) => {
-          self
-            .particle_materials
-            .write(&ctx.device, &ctx.queue, nparticles, *material);
-          nparticles += 1;
-          nparticles - 1
         }
       })
       .collect()
@@ -304,19 +260,18 @@ impl Renderer {
     let targets = self.targets.as_ref().expect("just ensured");
 
     // The advection, before the scene pass reads what it writes. A compute pass
-    // cannot be nested in a render pass, so this is the frame's first act
-    // rather than an item's own business -- and it is still one linear
-    // sequence: an item that advects nothing contributes no dispatch.
+    // cannot be nested in a render pass, so this is the frame's first act. The
+    // population is field state the frame advances, never a mark it draws, so it
+    // is stepped from beside the items: a frame with no population contributes
+    // no dispatch.
     //
     // The deposit is stepped *inside* the step loop, after each dispatch, not
     // once per frame: the trail must be a function of the step count alone, so
     // a frame owing several steps lays several splats, and a window and an
     // exporter that reach the same count show the same trail.
     for _ in 0..view.steps {
-      for item in &view.items.items {
-        if let RenderItem::Particles(batch, _) = item {
-          self.advect.dispatch(encoder, batch, 1);
-        }
+      if let Some(particles) = view.items.particles {
+        self.advect.dispatch(encoder, particles, 1);
       }
       if let Some(deposit) = view.items.deposit {
         self.deposit.record(encoder, deposit);
@@ -383,12 +338,6 @@ impl Renderer {
             &mut pass,
             frame,
             self.segment_materials.bind_group(material),
-            batch,
-          ),
-          RenderItem::Particles(batch, _) => self.particles.draw(
-            &mut pass,
-            frame,
-            self.particle_materials.bind_group(material),
             batch,
           ),
         }

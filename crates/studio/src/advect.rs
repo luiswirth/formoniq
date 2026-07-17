@@ -44,10 +44,7 @@ use common::{gramian::RiemannianMetric, linalg::nalgebra::Matrix};
 use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
 use manifold::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
-  geometry::{
-    coord::{mesh::MeshCoords, simplex::SimplexRefExt},
-    metric::geometry::Geometry,
-  },
+  geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
   Dim,
 };
@@ -83,15 +80,6 @@ pub struct AdvectBake {
   pub neighbours: Vec<[u32; 4]>,
   /// The `Transition` relabellings, indexed `4 * cell + facet`.
   pub transitions: Vec<Mat4>,
-  /// The ambient position of each cell's local vertices, indexed
-  /// `4 * cell + vertex`, `w` unused.
-  ///
-  /// The one extrinsic thing here, and it is deliberately the *last* thing: the
-  /// advection never reads it, because a particle has no ambient position while
-  /// it moves. Only the draw pass does, recovering
-  /// $p = sum_i lambda_i P_i$ -- the cell's own affine parametrization, applied
-  /// at the very end. This is the bake seam, not a shortcut through it.
-  pub cell_positions: Vec<[f32; 4]>,
   pub seeds: Vec<Seed>,
 }
 
@@ -118,18 +106,9 @@ impl AdvectBake {
     let mut flows = Vec::with_capacity(topology.cells().len() * (depth as usize + 1));
     let mut neighbours = Vec::with_capacity(topology.cells().len());
     let mut transitions = Vec::with_capacity(topology.cells().len() * MAX_VERTICES);
-    let mut cell_positions = Vec::with_capacity(topology.cells().len() * MAX_VERTICES);
 
     for cell in topology.cells().handle_iter() {
       let metric = coords.cell_metric(cell);
-      let mut vertex_positions = [[0.0f32; 4]; MAX_VERTICES];
-      for (i, coord) in cell.coord_simplex(coords).coord_iter().enumerate() {
-        for axis in 0..3 {
-          vertex_positions[i][axis] = coord[axis] as f32;
-        }
-      }
-      cell_positions.extend_from_slice(&vertex_positions);
-
       let generator = flow_generator(&interpolant, cell.idx(), &metric);
 
       // One exponential, then `depth` squarings: level $k$ is $(e^(M h))^(2^k)$
@@ -164,7 +143,6 @@ impl AdvectBake {
       flows,
       neighbours,
       transitions,
-      cell_positions,
       seeds: seeds(topology, coords, seed_count),
     }
   }

@@ -225,7 +225,6 @@ impl<'a> State<'a> {
     let mesh_display = MeshDisplay::build(&ctx.device, &scene);
     let (display, attributes) =
       FieldDisplay::build(&ctx, &scene, &mesh_display, selection, amplitude_scale);
-    display.warm_up(&ctx, &renderer);
     mesh_display.write_attributes(&ctx.queue, &attributes);
 
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
@@ -314,7 +313,6 @@ impl<'a> State<'a> {
       selection,
       self.amplitude_scale,
     );
-    display.warm_up(&self.ctx, &self.renderer);
     self
       .mesh_display
       .write_attributes(&self.ctx.queue, &attributes);

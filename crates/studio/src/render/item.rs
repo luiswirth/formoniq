@@ -15,7 +15,7 @@ use bytemuck::Pod;
 use wgpu::util::DeviceExt;
 
 use super::particles::ParticleBatch;
-use super::uniform::{ParticleMaterial, SegmentMaterial, SurfaceMaterial};
+use super::uniform::{SegmentMaterial, SurfaceMaterial};
 use crate::bake::{BakedMesh, BakedVertex, PrimBatch, SegmentVertex};
 
 /// A `VERTEX` buffer holding `data`, never empty: a zero-length
@@ -271,21 +271,24 @@ fn gather(values: &[f32], segments: &[[u32; 2]], end: usize) -> Vec<f32> {
 pub enum RenderItem<'a> {
   Surface(&'a SurfaceBatch, SurfaceMaterial),
   Segments(&'a SegmentBatch, SegmentMaterial),
-  /// An advected particle population. Unlike the others its geometry is written
-  /// by the GPU rather than uploaded, so the frame must step it before the scene
-  /// pass reads it -- which is why a draw list is stepped and then drawn, not
-  /// simply drawn.
-  Particles(&'a ParticleBatch, ParticleMaterial),
 }
 
 /// Everything one frame draws, in submission order. The order is the caller's
 /// statement of what lies over what: the surface writes depth and the segment
 /// marks over it only test against it, so they blend in the order given.
+///
+/// The advected population and the atlas it trails into sit *beside* the items,
+/// not among them: both are field state the frame advances before it draws, not
+/// marks it draws. The population is stepped by the compute pass and read only
+/// through the deposit it splats into -- it is never itself on screen.
 #[derive(Default)]
 pub struct DrawList<'a> {
   pub items: Vec<RenderItem<'a>>,
+  /// The population the frame steps, when it has one. Written by the GPU, read
+  /// by the deposit's splat -- so it is stepped, never drawn.
+  pub particles: Option<&'a ParticleBatch>,
   /// The deposit atlas the particles trail into and the fill reads, when the
-  /// frame has both. Beside the items rather than one of them: it is stepped
-  /// with the advection and read by the fill, so it belongs to no single mark.
+  /// frame has both. Beside the items for the same reason: it is stepped with
+  /// the advection and read by the fill, so it belongs to no single mark.
   pub deposit: Option<&'a super::deposit::DepositBatch>,
 }

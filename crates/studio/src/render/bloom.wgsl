@@ -8,11 +8,11 @@
 // a few texels.
 //
 // **What blooms is what overflows, and that is not a rule this code enforces.**
-// The threshold keeps only what exceeds the display range. A colormapped fill is
-// clamped to $[0, 1]$ and cannot; a black wireframe cannot; the additively
-// blended particles are the only mark that accumulates past 1, and they do it
-// exactly where they pile up. So the physical criterion (this is more light than
-// can be shown) and the intended one (the particle density is the thing that
+// The threshold keeps only what exceeds the display range. A plain colormapped
+// fill is clamped to $[0, 1]$ and cannot; a black wireframe cannot; only a
+// fill the deposit lifts past 1 overflows, and it does so exactly where the flow
+// bunches into a dense filament. So the physical criterion (this is more light
+// than can be shown) and the intended one (the trail density is the thing that
 // glows) coincide, and no pass needs to know which mark it is looking at.
 
 @group(0) @binding(0) var source: texture_2d<f32>;
@@ -46,7 +46,7 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 // and it is load-bearing rather than a tuning preference. Everything below 1.0
 // is a mark that fits in the display and is not emitting: a colormapped fill
 // (clamped to $[0, 1]$ by `saturate_color`), a black wireframe, a white
-// glyph. Only the additively blended particles exceed 1.0. A knee reaching
+// glyph. Only a deposit-lifted fill exceeds 1.0. A knee reaching
 // under 1.0 therefore does not soften the selection, it *breaks* it -- at
 // `KNEE = 0.6` against `THRESHOLD = 1.0` the ramp opened at 0.4 and the fill's
 // own bright end bled a sixth of itself into the glow, haloing the heatmap into
@@ -80,8 +80,8 @@ fn box_4(uv: vec2<f32>, texel: vec2<f32>) -> vec3<f32> {
 // The scene, thresholded, into the top of the chain.
 //
 // The four taps are averaged by Karis's weighting, $w = 1 \/ (1 + "luma")$,
-// rather than evenly. A single speck far brighter than its neighbours would
-// otherwise dominate its own 2x2 and, as the particle moves sub-pixel between
+// rather than evenly. A single texel far brighter than its neighbours would
+// otherwise dominate its own 2x2 and, as the filament drifts sub-pixel between
 // frames, flicker the whole blurred halo it seeds -- the firefly. Weighting by
 // the inverse of brightness is what makes the average stable under that motion,
 // at the cost of slightly understating a genuinely isolated highlight.

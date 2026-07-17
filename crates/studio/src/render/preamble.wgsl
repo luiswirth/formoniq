@@ -269,49 +269,6 @@ struct DepositParams {
     _pad2: u32,
 };
 
-// How a particle mark is drawn: its ink (`rgb` plus a peak opacity) and its
-// world-space radius -- a fraction of the scene's own extent, like every other
-// mark's width, so a speck reads the same size whether the object fills the
-// screen or sits in a corner of it.
-struct ParticleMaterial {
-    color: vec4<f32>,
-    radius_world: f32,
-    // The ambient distance a particle at the field's *peak* magnitude covers in
-    // one step: what normalizes a speck's own speed into $[0, 1]$, so the tint
-    // and the elongation read the field's dynamic range rather than the
-    // cochain's units.
-    speed_scale: f32,
-    // How many radii a peak-speed speck stretches along its own motion.
-    stretch: f32,
-    _pad0: f32,
-};
-
-// A screen-facing quad around a point, of constant world-space radius: the
-// point mark's billboard, as `billboard_perp`/`billboard_corner` are the
-// segment's.
-//
-// WebGPU has no point size -- a `PointList` rasterizes at one pixel with no
-// portable control -- so a particle is an instanced quad exactly as a thick
-// line is. The two axes are built from the view direction rather than from a
-// fixed world axis, so the quad faces the camera from every angle; the two
-// corner tables are the segment billboard's, reread as the two signs of a
-// (u, v) corner rather than an (endpoint, side) pair.
-fn billboard_point_corner(center: vec3<f32>, eye: vec3<f32>, radius: f32, vertex_index: u32) -> vec3<f32> {
-    let view_vec = eye - center;
-    let view_dir = view_vec / max(length(view_vec), 1e-6);
-    // Any world axis not parallel to the view works; the fallback covers the
-    // pole, where the first cross product degenerates.
-    var up_hint = vec3<f32>(0.0, 1.0, 0.0);
-    if abs(view_dir.y) > 0.999 {
-        up_hint = vec3<f32>(1.0, 0.0, 0.0);
-    }
-    let right = normalize(cross(up_hint, view_dir));
-    let up = cross(view_dir, right);
-    let u = select(-1.0, 1.0, billboard_is_b(vertex_index));
-    let v = billboard_side(vertex_index);
-    return center + (right * u + up * v) * radius;
-}
-
 // Relative luminance (Rec. 709), the one place those weights are written down.
 fn luminance(color: vec3<f32>) -> f32 {
     return dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));

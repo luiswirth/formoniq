@@ -23,7 +23,7 @@ use crate::render::{
   deposit::DepositBatch,
   item::{DrawList, RenderItem, SegmentBatch, SurfaceBatch},
   particles::ParticleBatch,
-  uniform::{ParticleMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
+  uniform::{PostUniform, SegmentMaterial, SurfaceMaterial},
   GpuContext,
 };
 use crate::scene::Scene;
@@ -112,46 +112,15 @@ const GLYPH_OUTLINE_WIDTH_FRACTION: f32 = 0.0032;
 /// blinking it out entirely would read as the geometry changing.
 const GLYPH_NODE_OPACITY: f32 = 0.25;
 
-/// The advected particles' radius, on the same object-intrinsic scale as every
-/// other mark's width.
-///
-/// Read together with [`PARTICLE_COUNT`]: the two are one setting. What the eye
-/// judges is the light per unit area, which is the count times the speck's own
-/// area times its opacity -- so a count raised or lowered without moving these
-/// gives a saturated wash or an empty one, and neither is a picture of the
-/// field. At a million specks each is a grain of the collective, sized just
-/// above the supersampled pixel, not an individually legible dot.
-const PARTICLE_RADIUS_FRACTION: f32 = 0.0016;
-
-/// The particles' ink: a warm white, additively blended, so overlapping specks
-/// accumulate into a bright density rather than occluding one another.
-///
-/// Far below full opacity because a speck is one sample among a million and
-/// the accumulation is what should read -- and because the target is HDR, so
-/// what a pile-up exceeds 1.0 by is what blooms. Opacity here is therefore a
-/// *glow* setting as much as a brightness one. The heads are deliberately
-/// faint against their own trails: the deposit carries the structure, the
-/// specks the motion across it.
-const PARTICLE_INK: [f32; 4] = [1.0, 0.86, 0.62, 0.012];
-
 /// How fast the fastest particle crosses the object: scene radii per second, at
 /// the field's peak magnitude.
 ///
 /// Object-intrinsic, exactly as the glyph spacing is, so the flow reads
 /// at the same pace whether the mesh is a unit sphere or an OBJ at arbitrary
-/// scale, and regardless of the cochain's own units. Slow on purpose: a speck
-/// that moves a few pixels per frame reads as motion, and one that jumps across
-/// the screen reads as flicker. This is the knob that makes a trail-less
-/// particle legible at all.
+/// scale, and regardless of the cochain's own units. Slow on purpose: a trail
+/// laid a few pixels per step reads as flow, and one that jumps across the
+/// screen reads as flicker. This is the knob that sets the pace of the flow.
 const PARTICLE_SPEED_FRACTION: f64 = 0.10;
-
-/// How many radii a peak-speed speck stretches along its own motion.
-///
-/// This is motion blur, not a trail: the elongation is derived from the speck's
-/// own velocity in the vertex shader and stores nothing. A round speck moving
-/// several radii per frame reads as a jumping dot; the same speck drawn along
-/// its chord reads as a direction, which is what the mark is for.
-const PARTICLE_STRETCH: f32 = 4.0;
 
 /// The advection's fixed rate, in steps per second of animation time.
 ///
@@ -201,17 +170,6 @@ const DEPOSIT_FLOOR: f32 = 0.3;
 /// calibration is arithmetic over the actual count, decay and atlas budget,
 /// never a hand-tuned brightness.
 const DEPOSIT_MEAN_LIFT: f32 = 1.0;
-
-/// The burn-in a fresh population is stepped through before it is first shown.
-///
-/// A new population sits stacked on its seeds and its atlas is blank; what the
-/// viewer is meant to see is the *equilibrium* -- the invariant distribution
-/// the respawning flow settles into -- and that has no closed form to sample,
-/// so it is reached the way a Markov chain's is: run the transient off screen.
-/// One mean lifetime forgets the seeding, and it covers the trail's own
-/// settling ($approx 4 tau$) with room to spare. In steps, not seconds: the
-/// warmed state is a pure function of the count, shared by window and export.
-const WARMUP_STEPS: u32 = 360;
 
 /// The advection steps that have elapsed by `time`.
 ///
@@ -394,7 +352,6 @@ pub(crate) struct FieldDisplay {
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
   glyph: SegmentMaterial,
-  particle: ParticleMaterial,
 }
 
 impl FieldDisplay {
@@ -619,36 +576,17 @@ impl FieldDisplay {
         outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION / GLYPH_WIDTH_FRACTION,
         _pad0: 0.0,
       },
-      // The speed normalization is the display's, not the bake's: the bake was
-      // handed a step chosen so the *peak* covers
-      // `PARTICLE_SPEED_FRACTION` of the object's radius each second, so the
-      // peak's ambient displacement per step is that same fraction over the
-      // step rate -- known here without measuring anything.
-      particle: ParticleMaterial {
-        color: PARTICLE_INK,
-        radius_world: PARTICLE_RADIUS_FRACTION * amplitude_scale,
-        speed_scale: PARTICLE_SPEED_FRACTION as f32 * amplitude_scale / STEPS_PER_SECOND,
-        stretch: PARTICLE_STRETCH,
-        _pad0: 0.0,
-      },
     };
     (display, attributes)
   }
 
-  /// Runs the burn-in: steps a fresh population and its trails to equilibrium
-  /// before anything is drawn. Called once per build, by both callers, so the
-  /// first frame either shows is already the settled flow rather than the
-  /// seeding transient. A display with no population is already wherever it
-  /// will ever be, and this is the no-op it deserves.
-  pub(crate) fn warm_up(&self, ctx: &GpuContext, renderer: &crate::render::Renderer) {
-    if let Some(particles) = &self.particles {
-      renderer.warmup(ctx, particles, self.deposit.as_ref(), WARMUP_STEPS);
-    }
-  }
-
   /// The frame's items, in submission order: the surface writes depth, and the
-  /// marks over it -- a line field's glyphs, its particles, then the wireframe
-  /// -- only test against it, so they blend in the order given.
+  /// marks over it -- a line field's glyphs, then the wireframe -- only test
+  /// against it, so they blend in the order given.
+  ///
+  /// The advected population is not among them: it is never on screen. It flows
+  /// the field and lays its trail into the deposit atlas the surface reads, so
+  /// it rides beside the items, stepped and never drawn.
   ///
   /// The two views enter the way the two objects do. A setting that is off drops
   /// an item rather than switching the frame graph, which the renderer cannot
@@ -665,20 +603,22 @@ impl FieldDisplay {
     field_view: FieldView,
   ) -> DrawList<'a> {
     // The wireframe rides the surface's wave, so the two amplitudes are one
-    // setting; the glyphs and particles sample the undisplaced surface and
-    // carry a zero amplitude already.
+    // setting; the glyphs sample the undisplaced surface and carry a zero
+    // amplitude already.
     let (mut surface, mut wireframe) = (self.surface, self.wireframe);
     if !field_view.displacement {
       surface.wave_amplitude = 0.0;
       wireframe.wave_amplitude = 0.0;
     }
-    // The trails follow the particles' own toggle: without the population the
-    // atlas is neither stepped nor bound, so the material reverts to the
-    // identity rather than dimming the fill to a floor no trail will ever lift.
-    let deposit = self
-      .deposit
+    // The population is stepped only when the flow is shown, and the trail
+    // follows it: without the population the atlas is neither stepped nor bound,
+    // so the material reverts to the identity rather than dimming the fill to a
+    // floor no trail will ever lift.
+    let particles = self
+      .particles
       .as_ref()
-      .filter(|_| self.particles.is_some() && field_view.marks.particles);
+      .filter(|_| field_view.marks.particles);
+    let deposit = self.deposit.as_ref().filter(|_| particles.is_some());
     if deposit.is_none() {
       surface.deposit_floor = 1.0;
       surface.deposit_gain = 0.0;
@@ -691,16 +631,13 @@ impl FieldDisplay {
     if let Some(glyphs) = self.glyphs.as_ref().filter(|_| field_view.marks.glyphs) {
       items.push(RenderItem::Segments(glyphs, self.glyph));
     }
-    if let Some(particles) = self
-      .particles
-      .as_ref()
-      .filter(|_| field_view.marks.particles)
-    {
-      items.push(RenderItem::Particles(particles, self.particle));
-    }
     if mesh_view.wireframe {
       items.push(RenderItem::Segments(&mesh.segments, wireframe));
     }
-    DrawList { items, deposit }
+    DrawList {
+      items,
+      particles,
+      deposit,
+    }
   }
 }
