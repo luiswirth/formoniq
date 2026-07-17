@@ -1023,16 +1023,7 @@ impl<'a> ApplicationHandler for App<'a> {
       .consumed;
 
     match event {
-      WindowEvent::CloseRequested
-      | WindowEvent::KeyboardInput {
-        event:
-          winit::event::KeyEvent {
-            state: ElementState::Pressed,
-            logical_key: winit::keyboard::Key::Named(winit::keyboard::NamedKey::Escape),
-            ..
-          },
-        ..
-      } => event_loop.exit(),
+      WindowEvent::CloseRequested => event_loop.exit(),
       WindowEvent::Resized(physical_size) => {
         state.resize(physical_size);
       }
