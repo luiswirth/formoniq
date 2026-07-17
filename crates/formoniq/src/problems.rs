@@ -1,4 +1,4 @@
-pub mod hodge_laplace;
+pub mod elliptic;
 
 pub mod heat;
 pub mod maxwell;

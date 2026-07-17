@@ -6,7 +6,7 @@ use common::linalg::{
 };
 
 use crate::{
-  problems::hodge_laplace::HodgeBlocks,
+  problems::elliptic::HodgeBlocks,
   time::{LinearIrk, Tableau},
   whitney_complex::HilbertComplex,
 };
@@ -98,7 +98,7 @@ pub fn solve_heat<C: HilbertComplex>(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::problems::hodge_laplace::solve_hodge_laplace_source;
+  use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
   use common::linalg::nalgebra::quadratic_form_sparse;
   use manifold::gen::cartesian::CartesianMeshInfo;
@@ -145,7 +145,7 @@ mod test {
   /// The full Hodge Laplacian, not merely its up-part: the steady state of
   /// $dot(u) = -Delta u + f$ must solve $Delta u = f$, i.e. reproduce the
   /// independently assembled and factored static mixed Hodge-Laplace solution
-  /// [`solve_hodge_laplace_source`]. Run at grade $1$ on a topologically
+  /// [`solve_source`]. Run at grade $1$ on a topologically
   /// trivial box (relative $b_1 = 0$, so the steady state is unique), where the
   /// down-part $dif delta$ is genuinely nonzero --- the two code paths agreeing
   /// pins it down.
@@ -165,8 +165,7 @@ mod test {
 
     let mass_rel = CsrMatrix::from(&relative.mass(grade));
     let galvec = &inclusion * (&mass_rel * &f_rel);
-    let (_sigma, u_static, _p) =
-      solve_hodge_laplace_source(&relative, galvec, grade).expect("static solve");
+    let (_sigma, u_static, _p) = solve_source(&relative, galvec, grade).expect("static solve");
 
     // Radau IIA's fixed point is exactly the steady state, so a large step
     // reaches it fast (and exactly, independent of dt).

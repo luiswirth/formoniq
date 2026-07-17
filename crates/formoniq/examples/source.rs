@@ -29,7 +29,7 @@ use {
   common::util::algebraic_convergence_rate,
   ddf::section::CoordFieldExt,
   formoniq::{
-    assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::hodge_laplace,
+    assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::elliptic,
     whitney_complex::WhitneyComplex,
   },
   manifold::gen::cartesian::CartesianMeshInfo,
@@ -90,11 +90,9 @@ fn main() {
           // Absolute BC is the full Whitney complex, relative BC its subcomplex of
           // boundary-vanishing cochains; the solver is one piece of code over both.
           let (_, galsol, _) = match bc {
-            BoundaryCondition::Absolute => {
-              hodge_laplace::solve_hodge_laplace_source(&whitney, source, grade).unwrap()
-            }
+            BoundaryCondition::Absolute => elliptic::solve_source(&whitney, source, grade).unwrap(),
             BoundaryCondition::Relative => {
-              hodge_laplace::solve_hodge_laplace_source(&whitney.relative(), source, grade).unwrap()
+              elliptic::solve_source(&whitney.relative(), source, grade).unwrap()
             }
           };
 

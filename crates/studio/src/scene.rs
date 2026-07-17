@@ -321,12 +321,10 @@ impl Scene {
     fields: &mut Vec<ScalarField>,
     line_fields: &mut Vec<LineField>,
   ) {
-    use formoniq::{
-      problems::hodge_laplace::solve_hodge_laplace_evp, whitney_complex::WhitneyComplex,
-    };
+    use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
 
     let metric = coords.to_edge_lengths(topology);
-    let solved = solve_hodge_laplace_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
+    let solved = solve_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
     let (eigenvals, _, eigenfuncs) = match solved {
       Ok(solved) => solved,
       Err(err) => {
@@ -938,7 +936,7 @@ pub(crate) fn hodge_decompose(
 ) -> Result<HodgeParts, common::linalg::eigen::EigenError> {
   use common::linalg::nalgebra::CsrMatrix;
   use formoniq::{
-    problems::hodge_laplace::{solve_hodge_laplace_harmonics, solve_hodge_laplace_source},
+    problems::elliptic::{solve_harmonics, solve_source},
     whitney_complex::WhitneyComplex,
   };
 
@@ -951,8 +949,8 @@ pub(crate) fn hodge_decompose(
   let mass = CsrMatrix::from(&complex.mass(grade));
   let source_galvec = &mass * input.coeffs();
 
-  let (sigma, _u, p) = solve_hodge_laplace_source(&complex, source_galvec, grade)?;
-  let harmonics = solve_hodge_laplace_harmonics(&complex, grade)?;
+  let (sigma, _u, p) = solve_source(&complex, source_galvec, grade)?;
+  let harmonics = solve_harmonics(&complex, grade)?;
 
   // exact $= dif sigma$. At grade 0 the $sigma in Lambda^(-1)$ space is empty,
   // so the exact shell is identically zero.
@@ -1003,9 +1001,7 @@ pub(crate) fn hodge_decompose(
 /// added.
 pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Cochain {
   use common::linalg::nalgebra::CsrMatrix;
-  use formoniq::{
-    problems::hodge_laplace::solve_hodge_laplace_harmonics, whitney_complex::WhitneyComplex,
-  };
+  use formoniq::{problems::elliptic::solve_harmonics, whitney_complex::WhitneyComplex};
 
   let swirl = hodge_probe_form(topology, coords);
   let metric = coords.to_edge_lengths(topology);
@@ -1013,7 +1009,7 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
   let mass = CsrMatrix::from(&complex.mass(1));
   let m_norm = |v: &Vector| (&mass * v).dot(v).max(0.0).sqrt();
 
-  match solve_hodge_laplace_harmonics(&complex, 1) {
+  match solve_harmonics(&complex, 1) {
     Ok(harmonics) if harmonics.ncols() > 0 => {
       let h0 = harmonics.column(0).clone_owned();
       let (swirl_norm, h0_norm) = (m_norm(swirl.coeffs()), m_norm(&h0));
