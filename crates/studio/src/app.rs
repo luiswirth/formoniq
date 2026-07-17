@@ -45,6 +45,54 @@ const UI_ZOOM: f32 = 0.75;
 /// stall is not.
 const MAX_STEPS_PER_FRAME: u32 = 8;
 
+/// Radians of rotation per pixel dragged, and the fraction of the distance to
+/// the cursor's point one scroll notch closes. Zoom is multiplicative, so
+/// approach is asymptotic: the step shrinks with the distance and the object
+/// cannot be scrolled through.
+const RADIANS_PER_PIXEL: f32 = 0.005;
+const ZOOM_PER_NOTCH: f32 = 0.15;
+
+/// Fly speed as a fraction of the scene's own extent per second, and the sprint
+/// multiplier. Object-intrinsic like the framing: a mesh loaded at extent 1000
+/// crosses itself in the same seconds a unit sphere does.
+const FLY_EXTENTS_PER_SECOND: f32 = 0.5;
+const SPRINT_FACTOR: f32 = 3.0;
+
+/// What a held mouse button means. The three are one rotation primitive and one
+/// translation: orbit and look differ *only* in the center they rotate about
+/// ([`Camera::rotate`]), and pan is the translation that keeps the pivot's depth
+/// under the cursor.
+#[derive(Clone, Copy)]
+enum Drag {
+  /// Rotate about where the *view axis* meets the mesh, picked when the drag
+  /// began and held for its duration -- re-deriving it mid-drag would move the
+  /// center the gesture is defined by, since the eye is what the gesture moves.
+  ///
+  /// Neither of the two tempting alternatives:
+  ///
+  /// *Not the point under the cursor.* That center is off the view axis, so the
+  /// object swings across the viewport instead of spinning in place, and it
+  /// moves with every press, so no two drags agree.
+  ///
+  /// *Not a depth along the axis* ([`Camera::pivot`]). That is the object's
+  /// centroid at the default framing and follows a zoom, but it is a point in
+  /// air: fly toward the mesh and the depth goes stale, leaving the center
+  /// buried behind the surface and the orbit swinging about the inside of the
+  /// object. Re-picking against the geometry is what makes flying and orbiting
+  /// compose -- it is derived from what is actually there, so nothing it depends
+  /// on can drift.
+  ///
+  /// The cost, paid knowingly: on a solid framed whole, the axis meets the
+  /// *near* surface rather than the centroid, so the bulk swings a little more
+  /// than a true turntable would.
+  Orbit {
+    pivot: nalgebra::Point3<f32>,
+  },
+  /// Rotate about the eye: the view turns in place.
+  Look,
+  Pan,
+}
+
 struct State<'a> {
   surface: Surface<'a>,
   ctx: GpuContext,
@@ -82,9 +130,23 @@ struct State<'a> {
   /// its seeds -- not one that owes the whole elapsed history at once.
   steps_taken: u32,
 
-  // Mouse state for orbit controls
-  mouse_pressed: bool,
+  /// The drag in progress, if any: which gesture the held button means.
+  drag: Option<Drag>,
+  /// The cursor's position, tracked whether or not a button is down -- a press
+  /// does not carry one, and a press is exactly when the pivot must be picked
+  /// from under it.
+  cursor: Option<winit::dpi::PhysicalPosition<f64>>,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
+
+  /// Physical keys currently held, for the fly controls (`WASD` +
+  /// `Space`/`Shift`/`Ctrl`). Tracked independently of winit's own key-repeat
+  /// so movement follows the frame rate, not the repeat rate.
+  keys_held: std::collections::HashSet<winit::keyboard::KeyCode>,
+  /// Wall-clock time of the last frame, for the fly controls' `dt`. Distinct
+  /// from [`WaveClock`]: that one is the pausable animation clock the
+  /// renderer is handed, this is real elapsed time, which movement must
+  /// always follow even while the wave is paused.
+  last_frame: std::time::Instant,
 
   // The lazy, memoized per-grade loader: which view is current, which is
   // building in the background, and the cache of already-solved scenes. The
@@ -193,8 +255,11 @@ impl<'a> State<'a> {
       steps_taken: 0,
       marks: crate::ui::Marks::default(),
       post: crate::ui::Post::default(),
-      mouse_pressed: false,
+      drag: None,
+      cursor: None,
       last_mouse_pos: None,
+      keys_held: std::collections::HashSet::new(),
+      last_frame: std::time::Instant::now(),
       gallery,
       scene,
       selection,
@@ -363,39 +428,86 @@ impl<'a> State<'a> {
 
   fn handle_input(&mut self, event: &WindowEvent) {
     match event {
-      WindowEvent::MouseInput {
-        state: button_state,
-        button: winit::event::MouseButton::Left,
+      WindowEvent::KeyboardInput {
+        event:
+          winit::event::KeyEvent {
+            physical_key: winit::keyboard::PhysicalKey::Code(code),
+            state: key_state,
+            repeat: false,
+            ..
+          },
         ..
       } => {
-        self.mouse_pressed = *button_state == ElementState::Pressed;
-        if !self.mouse_pressed {
-          self.last_mouse_pos = None;
-        }
+        match key_state {
+          ElementState::Pressed => self.keys_held.insert(*code),
+          ElementState::Released => self.keys_held.remove(code),
+        };
+      }
+      // Held keys are meaningless once the window stops receiving key events
+      // for them; without this a key released while the window was
+      // unfocused would stay "held" forever.
+      WindowEvent::Focused(false) => self.keys_held.clear(),
+      WindowEvent::MouseInput {
+        state: ElementState::Pressed,
+        button,
+        ..
+      } => {
+        self.drag = match button {
+          winit::event::MouseButton::Left => {
+            let pivot = self.center_point();
+            // The pivot depth is re-established here and nowhere else: it is
+            // what pan and the orthographic frustum read as "the depth of what I
+            // am looking at", and a press on the geometry is the one moment that
+            // has a real answer for them.
+            self.camera.pivot_distance = (pivot - self.camera.eye).norm();
+            Some(Drag::Orbit { pivot })
+          }
+          winit::event::MouseButton::Right => Some(Drag::Look),
+          winit::event::MouseButton::Middle => Some(Drag::Pan),
+          _ => None,
+        };
+        self.last_mouse_pos = self.cursor;
+      }
+      WindowEvent::MouseInput {
+        state: ElementState::Released,
+        ..
+      } => {
+        self.drag = None;
+        self.last_mouse_pos = None;
       }
       WindowEvent::CursorMoved { position, .. } => {
-        if self.mouse_pressed {
-          if let Some(last) = self.last_mouse_pos {
-            let dx = (position.x - last.x) as f32;
-            let dy = (position.y - last.y) as f32;
-            if self.camera.top_down {
-              // Drag-to-pan: the content follows the cursor, like dragging a
-              // sheet of paper -- the opposite sense from orbit, where the
-              // camera follows the cursor around the scene. World-per-pixel
-              // comes from the same half-extent the orthographic frustum
-              // itself is sized from, so panning and zooming agree on scale.
-              let (_, half_height) = self.camera.ortho_half_extent();
-              let world_per_pixel = 2.0 * half_height / self.size.height.max(1) as f32;
-              self.camera.target.x -= dx * world_per_pixel;
-              self.camera.target.y += dy * world_per_pixel;
-            } else {
-              self.camera.yaw += dx * 0.005;
-              self.camera.pitch -= dy * 0.005;
-              // Clamp pitch to avoid gimbal lock
-              self.camera.pitch = self.camera.pitch.clamp(-1.5, 1.5);
-            }
+        self.cursor = Some(*position);
+        let (Some(drag), Some(last)) = (self.drag, self.last_mouse_pos) else {
+          return;
+        };
+        let dx = (position.x - last.x) as f32;
+        let dy = (position.y - last.y) as f32;
+        self.last_mouse_pos = Some(*position);
+
+        match drag {
+          // One primitive, two centers -- the whole content of the
+          // orbit/look distinction.
+          // `pivot_distance` needs no update: a rigid rotation about the pivot
+          // conserves the distance to it, which is the invariant that keeps the
+          // framing steady across a drag.
+          Drag::Orbit { pivot } => {
+            self
+              .camera
+              .rotate(dx * RADIANS_PER_PIXEL, dy * RADIANS_PER_PIXEL, pivot);
           }
-          self.last_mouse_pos = Some(*position);
+          Drag::Look => {
+            let eye = self.camera.eye;
+            self
+              .camera
+              .rotate(dx * RADIANS_PER_PIXEL, dy * RADIANS_PER_PIXEL, eye);
+          }
+          // The content follows the cursor, like dragging a sheet of paper, so
+          // the eye moves against it. Scaled at the pivot's depth, which is
+          // what makes the grabbed point track the cursor exactly.
+          Drag::Pan => {
+            let scale = self.camera.world_per_pixel(self.size.height);
+            self.camera.eye += (self.camera.up() * dy - self.camera.right() * dx) * scale;
+          }
         }
       }
       WindowEvent::MouseWheel { delta, .. } => {
@@ -403,18 +515,102 @@ impl<'a> State<'a> {
           winit::event::MouseScrollDelta::LineDelta(_, y) => *y,
           winit::event::MouseScrollDelta::PixelDelta(pos) => pos.y as f32 * 0.1,
         };
-        // A step and a clamp range as fractions of the scene's own extent, not
-        // absolute constants: an OBJ loaded at extent 1000 must zoom and clamp
-        // at the same fractions a unit sphere does, not snap into the mesh on
-        // the first scroll because 100 was tuned for the sphere.
-        self.camera.distance -= scroll * 0.1 * self.amplitude_scale;
-        self.camera.distance = self
-          .camera
-          .distance
-          .clamp(0.05 * self.amplitude_scale, 50.0 * self.amplitude_scale);
+        self.zoom(scroll);
       }
       _ => {}
     }
+  }
+
+  /// Where a ray meets the mesh, or -- on a miss, and for a bake with no
+  /// surface at all -- the point at the current pivot depth along it. The
+  /// fallback is what keeps the gestures built on this total: pointing at empty
+  /// space still yields a point, rather than making every caller conditional on
+  /// having hit something.
+  fn pick(
+    &self,
+    (origin, dir): (nalgebra::Point3<f32>, nalgebra::Vector3<f32>),
+  ) -> nalgebra::Point3<f32> {
+    let t = self
+      .mesh_display
+      .raycast(origin, dir)
+      .unwrap_or(self.camera.pivot_distance);
+    origin + dir * t
+  }
+
+  /// Where the view axis meets the mesh: the orbit's center.
+  fn center_point(&self) -> nalgebra::Point3<f32> {
+    self.pick(self.camera.ray(0.0, 0.0))
+  }
+
+  /// Where the cursor's ray meets the mesh: the zoom's focus.
+  fn cursor_point(&self) -> nalgebra::Point3<f32> {
+    self.pick(self.cursor_ray())
+  }
+
+  /// The cursor's ray, or the viewport center's when the cursor is outside the
+  /// window.
+  fn cursor_ray(&self) -> (nalgebra::Point3<f32>, nalgebra::Vector3<f32>) {
+    let Some(pos) = self.cursor else {
+      return self.camera.ray(0.0, 0.0);
+    };
+    let ndc_x = 2.0 * (pos.x as f32 / self.size.width.max(1) as f32) - 1.0;
+    let ndc_y = 1.0 - 2.0 * (pos.y as f32 / self.size.height.max(1) as f32);
+    self.camera.ray(ndc_x, ndc_y)
+  }
+
+  /// Zoom toward the point under the cursor, multiplicatively.
+  ///
+  /// Toward the cursor rather than the view axis, so a detail is brought closer
+  /// by pointing at it instead of by re-centering afterward. Multiplicative so
+  /// the step shrinks with the remaining distance: the approach is asymptotic,
+  /// which is what makes a fixed clamp unnecessary -- the surface cannot be
+  /// scrolled through, however long the wheel is turned.
+  fn zoom(&mut self, scroll: f32) {
+    let focus = self.cursor_point();
+    let factor = (-scroll * ZOOM_PER_NOTCH).exp();
+    self.camera.eye = focus + (self.camera.eye - focus) * factor;
+    // The pivot depth scales with the same factor: it is the orthographic
+    // frustum's only sense of scale, so this is exactly what makes a parallel
+    // projection zoom at all rather than sit at a fixed magnification.
+    self.camera.pivot_distance *= factor;
+  }
+
+  /// Fly the eye: `WASD` along the view, `Space`/`Shift` along world up, `Ctrl`
+  /// to sprint.
+  ///
+  /// Forward is where the camera *looks*, pitch included -- not the yaw-only
+  /// level flight a first-person game uses. That split exists to respect a
+  /// ground plane, and a mesh in $RR^3$ has none: nothing here is standing on
+  /// anything, so flight has no reason to stay level.
+  ///
+  /// Ascent is the exception and is deliberately *world* up, not the screen's:
+  /// panning the view up-screen is what the middle button already does, so
+  /// leaving `Space` to mean the one thing that survives any orientation --
+  /// actually ascending -- is what keeps a pitched-over camera navigable.
+  fn apply_fly_movement(&mut self, dt: f32) {
+    use winit::keyboard::KeyCode;
+    if self.keys_held.is_empty() {
+      return;
+    }
+
+    let held = |code| self.keys_held.contains(&code);
+    let axis = |pos, neg| f32::from(held(pos)) - f32::from(held(neg));
+
+    let delta = self.camera.forward() * axis(KeyCode::KeyW, KeyCode::KeyS)
+      + self.camera.right() * axis(KeyCode::KeyD, KeyCode::KeyA)
+      + crate::render::camera::WORLD_UP
+        * (f32::from(held(KeyCode::Space))
+          - f32::from(held(KeyCode::ShiftLeft) || held(KeyCode::ShiftRight)));
+
+    let Some(direction) = delta.try_normalize(1e-6) else {
+      return;
+    };
+    let sprint = if held(KeyCode::ControlLeft) || held(KeyCode::ControlRight) {
+      SPRINT_FACTOR
+    } else {
+      1.0
+    };
+    self.camera.eye += direction * FLY_EXTENTS_PER_SECOND * self.amplitude_scale * sprint * dt;
   }
 
   /// Builds the panel's model snapshot, hands it to [`crate::ui::panel`]
@@ -485,7 +681,7 @@ impl<'a> State<'a> {
       selection: self.selection,
       marks: self.marks,
       post: self.post,
-      top_down: self.camera.top_down,
+      orthographic: self.camera.orthographic,
       presets: &self.presets,
       eigenvalue,
       playing: self.clock.playing,
@@ -520,7 +716,7 @@ impl<'a> State<'a> {
 
     // A finished file pick, a preset, a mesh-source change and a study switch
     // each replace the field set and the camera's natural orientation
-    // wholesale, so the `selection`/`top_down` picked this same frame belong to
+    // wholesale, so the `selection`/`orthographic` picked this same frame belong to
     // the pair being left and must not be applied afterward -- the setters
     // choose both anew for what they land on. They are mutually exclusive in
     // priority (at most one such widget moves per frame anyway); a preset sets
@@ -542,7 +738,7 @@ impl<'a> State<'a> {
         self.set_study(response.requested_study);
       } else {
         self.set_field(response.selection);
-        self.camera.top_down = response.top_down;
+        self.camera.orthographic = response.orthographic;
       }
     }
 
@@ -599,6 +795,12 @@ impl<'a> State<'a> {
     // is built is what makes the field pickers reflect the new scene on the
     // very frame it lands, rather than one frame late.
     self.poll_view_load();
+
+    let now = std::time::Instant::now();
+    let dt = (now - self.last_frame).as_secs_f32();
+    self.last_frame = now;
+    self.apply_fly_movement(dt);
+
     let (paint_jobs, textures_delta, pixels_per_point) = self.run_ui(window);
 
     // Registered unconditionally, ahead of the surface-acquire early-returns

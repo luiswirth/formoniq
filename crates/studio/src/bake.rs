@@ -189,6 +189,64 @@ impl BakedMesh {
       })
       .collect()
   }
+
+  /// The nearest hit of the ray `origin + t * dir` ($t > 0$) on the baked
+  /// surface, as that `t`. `None` when the ray misses, and for a bake with no
+  /// surface to hit -- a curve or a point cloud, whose measure-zero image in
+  /// $RR^3$ no ray meets in general position, so a miss is the honest answer
+  /// rather than a case to exclude.
+  ///
+  /// Ambient geometry on the bake, which is exactly what a bake is for and what
+  /// `studio`'s extrinsic license covers. Against the *undisplaced* positions:
+  /// the standing wave is a vertex-shader displacement, and the caller wants
+  /// the point of the object, not of the frame it happened to be caught in.
+  pub fn raycast(&self, origin: na::Vector3<f32>, dir: na::Vector3<f32>) -> Option<f32> {
+    let PrimBatch::Triangles(triangles) = &self.cells else {
+      return None;
+    };
+    triangles
+      .iter()
+      .filter_map(|&[a, b, c]| {
+        let vertex = |i: u32| na::Vector3::from(self.positions[i as usize].position);
+        ray_triangle(origin, dir, vertex(a), vertex(b), vertex(c))
+      })
+      .min_by(|a, b| a.total_cmp(b))
+  }
+}
+
+/// Möller-Trumbore: the ray `origin + t * dir` against one triangle, as that
+/// `t`. Two-sided -- a pick must land on a surface seen from its back exactly
+/// as on one seen from its front, and a mesh whose winding says otherwise is
+/// still a mesh the user is pointing at.
+fn ray_triangle(
+  origin: na::Vector3<f32>,
+  dir: na::Vector3<f32>,
+  a: na::Vector3<f32>,
+  b: na::Vector3<f32>,
+  c: na::Vector3<f32>,
+) -> Option<f32> {
+  const EPS: f32 = 1e-7;
+  let (ab, ac) = (b - a, c - a);
+  let pvec = dir.cross(&ac);
+  let det = ab.dot(&pvec);
+  // The ray runs parallel to the triangle's plane: it either misses or grazes
+  // it edge-on, and neither is a point to pivot about.
+  if det.abs() < EPS {
+    return None;
+  }
+  let inv_det = 1.0 / det;
+  let tvec = origin - a;
+  let u = tvec.dot(&pvec) * inv_det;
+  if !(-EPS..=1.0 + EPS).contains(&u) {
+    return None;
+  }
+  let qvec = tvec.cross(&ab);
+  let v = dir.dot(&qvec) * inv_det;
+  if v < -EPS || u + v > 1.0 + EPS {
+    return None;
+  }
+  let t = ac.dot(&qvec) * inv_det;
+  (t > EPS).then_some(t)
 }
 
 /// The per-field half of the vertex table: the colormap scalar, one per entry of

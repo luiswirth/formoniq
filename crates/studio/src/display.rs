@@ -224,33 +224,39 @@ pub(crate) fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   // tuned for the sphere: an icosphere of radius 1 gives back exactly the
   // prior hardcoded 3.0, and a unit reference triangle frames itself too.
   let (centroid, extent) = scene_centroid_and_extent(scene);
-  // A mesh flat in the z = 0 plane (the reference cell scenes: nothing has
-  // been displaced off it yet) is looked down onto from above, along its own
-  // normal, in orthographic top-down mode, rather than the angled perspective
-  // orbit tuned for a fully 3D shape like the sphere.
+  // A mesh flat in the z = 0 plane (the reference cell scenes: nothing has been
+  // displaced off it yet) is looked down onto from straight above, along its own
+  // normal and in parallel projection, rather than from the angled perspective
+  // orbit a fully 3D shape like the sphere wants. Only the pose and the
+  // projection differ; the controls are the same camera's either way.
   let z_extent = scene
     .coords
     .coord_iter()
     .map(|c| if c.len() > 2 { c[2].abs() } else { 0.0 })
     .fold(0.0, f64::max);
   let is_planar = z_extent < 1e-9 * extent;
-  // `|yaw| = pi/2` keeps the eye's x-offset at exactly zero (see the
-  // `direction` formula in `Camera::build_view_projection_matrix`): only
-  // `pitch` should change for a top-down-ish view, since any other yaw skews
-  // the eye diagonally in x and rotates the on-screen framing away from the
-  // mesh's own axes. The sign flips between the two defaults because it also
-  // fixes the handedness of the screen's local `right` axis -- without it,
-  // screen-right ends up world $-x$ instead of $+x$, mirroring the mesh
-  // left-to-right.
-  let pitch: f32 = if is_planar { -1.2 } else { 0.3 };
-  let yaw: f32 = if is_planar { 1.57 } else { -1.57 };
+  // Straight down ($theta = -pi/2$) is an ordinary pose, reachable and framed
+  // like any other -- it is the pole the old `look_at` camera could not go to,
+  // and having to stop short of it is what made top-down a mode of its own.
+  // `yaw = pi/2` puts screen-right on world $+x$ (`Camera::right`), so a plane
+  // seen from above keeps its own axes; the 3D default's $-pi/2$ is the
+  // mirrored convention it has always had.
+  let (yaw, pitch) = if is_planar {
+    (std::f32::consts::FRAC_PI_2, -std::f32::consts::FRAC_PI_2)
+  } else {
+    (-std::f32::consts::FRAC_PI_2, 0.3)
+  };
 
   let mut camera = Camera::new(aspect);
-  camera.target = nalgebra::Point3::new(centroid[0] as f32, centroid[1] as f32, centroid[2] as f32);
-  camera.distance = 3.0 * extent as f32;
-  camera.pitch = pitch;
   camera.yaw = yaw;
-  camera.top_down = is_planar;
+  camera.pitch = pitch;
+  camera.pivot_distance = 3.0 * extent as f32;
+  camera.orthographic = is_planar;
+  // The eye is the state and the pivot is derived, so the framing is stated
+  // that way round: back off the centroid along the view by the framing
+  // distance.
+  let centroid = nalgebra::Point3::new(centroid[0] as f32, centroid[1] as f32, centroid[2] as f32);
+  camera.eye = centroid - camera.forward() * camera.pivot_distance;
   // Fractions of the scene's own extent, not absolute constants: an OBJ loaded
   // at an arbitrary scale must clip and clamp at the same fraction a unit
   // sphere does, not at whatever constant happened to fit that sphere.
@@ -269,6 +275,10 @@ pub(crate) struct MeshDisplay {
   /// a bake with neither, which draws nothing rather than being a case to
   /// exclude.
   segments: SegmentBatch,
+  /// The bake kept CPU-side, for the picking the camera's pivot needs. Held
+  /// rather than rebuilt per pick: it is already what was uploaded, so a second
+  /// bake could only disagree with what is on screen.
+  baked: BakedMesh,
 }
 
 impl MeshDisplay {
@@ -283,7 +293,15 @@ impl MeshDisplay {
     Self {
       surface: SurfaceBatch::new(device, &baked),
       segments: SegmentBatch::new(device, &vertices, &values, segments),
+      baked,
     }
+  }
+
+  /// Where a world-space ray meets the mesh, as a distance along it. `None` on
+  /// a miss, which every caller must have an answer for -- a curve and a point
+  /// cloud have no surface to hit at all.
+  pub(crate) fn raycast(&self, origin: na::Point3<f32>, dir: na::Vector3<f32>) -> Option<f32> {
+    self.baked.raycast(origin.coords, dir)
   }
 
   /// Rebinds the mesh to a different field: one buffer write per stream, no

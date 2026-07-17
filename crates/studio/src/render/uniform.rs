@@ -166,7 +166,7 @@ impl Default for FrameUniform {
 
 impl FrameUniform {
   pub fn new(camera: &Camera, time: f32) -> Self {
-    let eye = camera.eye();
+    let eye = camera.eye;
     Self {
       view_proj: camera.build_view_projection_matrix().into(),
       eye: [eye.x, eye.y, eye.z, 1.0],

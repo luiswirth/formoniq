@@ -349,7 +349,7 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) selection: Selection,
   pub(crate) marks: Marks,
   pub(crate) post: Post,
-  pub(crate) top_down: bool,
+  pub(crate) orthographic: bool,
   pub(crate) presets: &'a [Preset],
   /// The displayed field's Hodge-Laplace eigenvalue $lambda$, when it is an
   /// eigenmode: the transport bar reports it and its frequency $omega =
@@ -376,7 +376,7 @@ pub(crate) struct PanelResponse {
   pub(crate) selection: Selection,
   pub(crate) marks: Marks,
   pub(crate) post: Post,
-  pub(crate) top_down: bool,
+  pub(crate) orthographic: bool,
   /// Whether the standing wave should be running after this frame -- the
   /// play/pause toggle. Defaults to the model's own state when the control
   /// wasn't touched, like the other fields.
@@ -411,7 +411,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut selection = model.selection;
   let mut marks = model.marks;
   let mut post = model.post;
-  let mut top_down = model.top_down;
+  let mut orthographic = model.orthographic;
   let mut playing = model.playing;
   let mut load_obj_clicked = false;
   let mut export_png_clicked = false;
@@ -602,8 +602,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       });
 
       ui.separator();
-      ui.checkbox(&mut top_down, "Top-down")
-        .on_hover_text("Orthographic, drag to pan");
+      ui.checkbox(&mut orthographic, "Orthographic")
+        .on_hover_text("Parallel projection: no vanishing point, so a flat mesh keeps its scale");
 
       // Writes exactly what is on screen -- the current field, camera and wave
       // phase -- as a PNG still, at the window's own resolution and the export
@@ -667,7 +667,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     selection,
     marks,
     post,
-    top_down,
+    orthographic,
     playing,
     load_obj_clicked,
     export_png_clicked,
