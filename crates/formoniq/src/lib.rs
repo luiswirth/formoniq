@@ -6,4 +6,5 @@ pub mod bc;
 pub mod fe;
 pub mod operators;
 pub mod problems;
+pub mod time;
 pub mod whitney_complex;
