@@ -18,9 +18,6 @@
 //!   magnetism is preserved *exactly*, a consequence of $dif compose dif = 0$.
 //! - the leapfrog invariant is flat to ~1e-15 relative: the symplectic scheme
 //!   has no energy drift, only the physical exchange between the reservoirs.
-//!
-//! For comparison the same cavity is also run through the second-order
-//! curl-curl form (the grade-1 vector wave equation), reporting its energy.
 
 extern crate nalgebra as na;
 
@@ -29,8 +26,7 @@ use continuum::field::DiffFormClosure;
 use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
 use formoniq::{
   problems::maxwell::{
-    leapfrog_energy, solve_maxwell_curl_curl, solve_maxwell_leapfrog, CurlCurlState,
-    MaxwellOperators, MaxwellState, Medium,
+    leapfrog_energy, solve_maxwell_mixed, MaxwellOperators, MaxwellState, Medium,
   },
   whitney_complex::WhitneyComplex,
 };
@@ -82,7 +78,7 @@ fn main() {
   println!("dt = {dt:.4}, steps = {nsteps}\n");
 
   let current = Vector::zeros(fes.ndofs(1));
-  let solution = solve_maxwell_leapfrog(fes, medium, &times, initial, &current);
+  let solution = solve_maxwell_mixed(fes, medium, &times, initial, &current);
 
   // Report every few steps.
   println!(
@@ -110,40 +106,5 @@ fn main() {
   println!(
     "\nGauss law dif B = 0 preserved to roundoff (||dB|| ~ 1e-15); \
      leapfrog energy flat to ~1e-15 relative.\n"
-  );
-
-  // ---------------------------------------------------------------------------
-  // The same cavity through the second-order curl-curl form for comparison.
-  // ---------------------------------------------------------------------------
-  let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
-  let (topology, coords) = box_mesh.compute_coord_complex();
-  let metric = coords.to_edge_lengths(&topology);
-  let fes = WhitneyComplex::new(&topology, &metric);
-  let ops = MaxwellOperators::new(&fes, medium);
-  let stiffness = ops.stiffness();
-
-  let e0 = derham_map(&e_field.pullback_on(&topology, &coords), &topology, 3);
-  let e_dot0 = Cochain::new(1, Vector::zeros(fes.ndofs(1)));
-  let initial = CurlCurlState::new(e0, e_dot0);
-
-  let forcing = Vector::zeros(fes.ndofs(1));
-  let solution = solve_maxwell_curl_curl(fes, medium, &times, initial, &forcing);
-
-  // The curl-curl (wave) energy 1/2 (eps ||e_dot||^2 + e^T K e) is a different
-  // conserved quantity than the first-order field energy: the wave energy of
-  // M e_double_dot + K e = 0. Under explicit stepping it oscillates within a
-  // bounded band (symplectic stability), rather than drifting.
-  let energies: Vec<f64> = solution
-    .iter()
-    .map(|s| s.energy(&ops, &stiffness))
-    .collect();
-  let energy_mean = energies.iter().sum::<f64>() / energies.len() as f64;
-  let energy_min = energies.iter().cloned().fold(f64::INFINITY, f64::min);
-  let energy_max = energies.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
-  let band = (energy_max - energy_min) / energy_mean;
-  println!(
-    "curl-curl wave energy over {nsteps} steps: mean {energy_mean:.4}, \
-     band [{energy_min:.4}, {energy_max:.4}] = {:.1}% (bounded, no drift)",
-    100.0 * band
   );
 }

@@ -27,7 +27,7 @@
 //!
 //! - **Charge conservation is exact.** Because $D_2 D_1 = 0$ (the tested law
 //!   $dif compose dif = 0$), the magnetic Gauss law $dif B = 0$ is preserved to
-//!   roundoff by the [leapfrog integrator][solve_maxwell_leapfrog] -- no
+//!   roundoff by the [leapfrog integrator][solve_maxwell_mixed] -- no
 //!   magnetic monopoles are ever created.
 //! - **The wave equation is the scalar wave equation, one grade up.**
 //!   Eliminating $b$ gives the curl-curl form
@@ -194,7 +194,7 @@ impl MaxwellState {
 /// leapfrog invariant is conserved to roundoff in the source-free case (and is
 /// positive definite precisely under the CFL condition). `curr` supplies $e^n$
 /// and $b^(n-1/2)$, `next` supplies $b^(n+1/2)$: the two consecutive states of
-/// the trajectory returned by [`solve_maxwell_leapfrog`].
+/// the trajectory returned by [`solve_maxwell_mixed`].
 pub fn leapfrog_energy(curr: &MaxwellState, next: &MaxwellState, ops: &MaxwellOperators) -> f64 {
   0.5
     * (quadratic_form_sparse(&ops.mass_e, curr.e.coeffs())
@@ -226,7 +226,7 @@ pub fn leapfrog_energy(curr: &MaxwellState, next: &MaxwellState, ops: &MaxwellOp
 /// [`crate::operators::SourceElVec`]), held constant in time; pass a zero
 /// vector for the source-free case. `times` is the sequence
 /// $[t_0, t_1, dots, T]$ of time nodes.
-pub fn solve_maxwell_leapfrog(
+pub fn solve_maxwell_mixed(
   fes: WhitneyComplex,
   medium: Medium,
   times: &[f64],
@@ -283,104 +283,6 @@ pub fn solve_maxwell_leapfrog(
     solution.push(MaxwellState::new(
       Cochain::new(1, e.clone()),
       Cochain::new(2, b.clone()),
-    ));
-  }
-
-  solution
-}
-
-/// The state of the second-order (curl-curl) wave form: the electric field and
-/// its time derivative, both 1-cochains.
-#[derive(Clone)]
-pub struct CurlCurlState {
-  /// $e in C^1$: electric field 1-cochain.
-  pub e: Cochain,
-  /// $dot(e) in C^1$: its time derivative.
-  pub e_dot: Cochain,
-}
-impl CurlCurlState {
-  pub fn new(e: Cochain, e_dot: Cochain) -> Self {
-    assert_eq!(e.grade(), 1);
-    assert_eq!(e_dot.grade(), 1);
-    Self { e, e_dot }
-  }
-
-  /// The energy $cal(E) = 1/2 (epsilon norm(dot(e))^2 + e^T K e)$ of the
-  /// curl-curl wave, conserved in the source-free case.
-  pub fn energy(&self, ops: &MaxwellOperators, stiffness: &CsrMatrix) -> f64 {
-    0.5
-      * (quadratic_form_sparse(&ops.mass_e, self.e_dot.coeffs())
-        + quadratic_form_sparse(stiffness, self.e.coeffs()))
-  }
-}
-
-/// Solve the second-order curl-curl wave form of Maxwell for the electric
-/// field alone,
-///
-/// $ M_epsilon dot.double(e) + K e = -dot(j),
-///   quad K = D_1^T M_(mu^(-1)) D_1, $
-///
-/// the vector wave equation obtained by eliminating the magnetic field. This
-/// is the grade-1 analogue of the scalar wave equation
-/// [`crate::problems::wave`]; the stiffness $K$ is the up-Laplacian
-/// [`WhitneyComplex::codif_dif`] weighted by $mu^(-1)$.
-///
-/// Explicit (symplectic Euler) time stepping, with the same PEC treatment as
-/// [`solve_maxwell_leapfrog`]: $dot(e)$ is constrained to the relative complex.
-/// `forcing` is the constant load $-dot(j)$; pass a zero vector for the
-/// source-free case.
-pub fn solve_maxwell_curl_curl(
-  fes: WhitneyComplex,
-  medium: Medium,
-  times: &[f64],
-  initial: CurlCurlState,
-  forcing: &Vector,
-) -> Vec<CurlCurlState> {
-  let ops = MaxwellOperators::new(&fes, medium);
-  let stiffness = ops.stiffness();
-
-  let inclusion = fes
-    .boundary()
-    .is_some()
-    .then(|| fes.relative().inclusion(1));
-  let velocity_mass = match &inclusion {
-    Some(incl) => incl.transpose() * &ops.mass_e * incl,
-    None => ops.mass_e.clone(),
-  };
-  let mass_cholesky = FaerCholesky::new(velocity_mass);
-
-  // Project the initial data onto the relative complex (PEC).
-  let project = |v: &Vector| match &inclusion {
-    Some(incl) => incl * (incl.transpose() * v),
-    None => v.clone(),
-  };
-  let mut e = project(initial.e.coeffs());
-  let mut e_dot = project(initial.e_dot.coeffs());
-
-  let mut solution = Vec::with_capacity(times.len());
-  solution.push(CurlCurlState::new(
-    Cochain::new(1, e.clone()),
-    Cochain::new(1, e_dot.clone()),
-  ));
-
-  let last_step = times.len().saturating_sub(2);
-  for (istep, t01) in times.windows(2).enumerate() {
-    println!("Solving Maxwell (curl-curl) at step={istep}/{last_step}...");
-    let [t0, t1] = t01 else { unreachable!() };
-    let dt = t1 - t0;
-
-    // Symplectic Euler: update the velocity with the current stiffness force,
-    // then advance the field with the new velocity.
-    let rhs = &ops.mass_e * &e_dot + dt * (forcing - &stiffness * &e);
-    e_dot = match &inclusion {
-      Some(incl) => incl * mass_cholesky.solve(&(incl.transpose() * rhs)),
-      None => mass_cholesky.solve(&rhs),
-    };
-    e += dt * &e_dot;
-
-    solution.push(CurlCurlState::new(
-      Cochain::new(1, e.clone()),
-      Cochain::new(1, e_dot.clone()),
     ));
   }
 
@@ -458,7 +360,7 @@ mod test {
 
     let times: Vec<f64> = (0..=20).map(|i| 0.05 * i as f64).collect();
     let current = Vector::zeros(fes.ndofs(1));
-    let solution = solve_maxwell_leapfrog(fes, Medium::vacuum(), &times, initial, &current);
+    let solution = solve_maxwell_mixed(fes, Medium::vacuum(), &times, initial, &current);
 
     // The magnetic charge starts at zero and must stay at zero throughout.
     for state in &solution {
@@ -486,7 +388,7 @@ mod test {
     let dt = 0.02;
     let times: Vec<f64> = (0..=200).map(|i| dt * i as f64).collect();
     let current = Vector::zeros(fes.ndofs(1));
-    let solution = solve_maxwell_leapfrog(fes, Medium::vacuum(), &times, initial, &current);
+    let solution = solve_maxwell_mixed(fes, Medium::vacuum(), &times, initial, &current);
 
     let energy0 = leapfrog_energy(&solution[0], &solution[1], &ops);
     assert!(energy0 > 0.0);
