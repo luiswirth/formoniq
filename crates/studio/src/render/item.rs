@@ -79,6 +79,7 @@ const SURFACE_STATIC: [wgpu::VertexAttribute; 3] = baked_attributes(0);
 const SURFACE_VALUE: [wgpu::VertexAttribute; 1] = value_attribute(3);
 const SURFACE_DEPOSIT_UV: [wgpu::VertexAttribute; 1] =
   [attribute(0, 4, wgpu::VertexFormat::Float32x2)];
+const SURFACE_HEIGHT: [wgpu::VertexAttribute; 1] = value_attribute(5);
 const SEGMENT_A: [wgpu::VertexAttribute; 4] = segment_attributes(0);
 const SEGMENT_B: [wgpu::VertexAttribute; 4] = segment_attributes(4);
 const SEGMENT_VALUE_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
@@ -88,18 +89,24 @@ const GLYPH: [wgpu::VertexAttribute; 5] = glyph_attributes();
 /// A filled triangle surface: per-corner vertex streams, three corners per
 /// triangle, unshared.
 ///
-/// Unshared, unlike the earlier indexed table, because the deposit-atlas texel
-/// coordinate is per corner *per triangle*: two triangles sharing a mesh
-/// vertex map it into two different atlas blocks, so a shared vertex has no
-/// one coordinate to carry. The gather is the same move [`SegmentBatch`]
-/// already makes for its endpoints, and the per-field values are re-gathered
-/// through the retained triangle list exactly as its `write_attributes` does.
+/// Unshared, unlike an indexed table, for two reasons that coincide. The
+/// deposit-atlas texel coordinate is per corner *per triangle* -- two triangles
+/// sharing a mesh vertex map it into two different atlas blocks. And the field's
+/// *colormap* value is likewise per corner *per cell*: a reduced-grade Whitney
+/// form is discontinuous across cells, so a shared vertex has no one value to
+/// carry, and reading it once per corner in the corner's own cell is what keeps
+/// a basis function's support from bleeding into cells it vanishes on. The
+/// colormap stream is therefore already in corner order and written straight
+/// through. The *displacement* height, in contrast, is a geometric height of
+/// one connected surface and must stay single-valued at a shared vertex, so it
+/// is the one stream given per mesh vertex and gathered into corner order here.
 pub struct SurfaceBatch {
   corners: wgpu::Buffer,
-  attributes: wgpu::Buffer,
+  colors: wgpu::Buffer,
+  heights: wgpu::Buffer,
   deposit_uvs: wgpu::Buffer,
-  /// The triangle list over the *mesh* vertex table, retained so a field
-  /// change re-gathers its per-vertex values into corner order.
+  /// The triangle list over the *mesh* vertex table, retained so a field change
+  /// re-gathers the per-vertex displacement height into corner order.
   triangles: Vec<[u32; 3]>,
   ncorners: u32,
 }
@@ -109,7 +116,7 @@ impl SurfaceBatch {
   /// produced no fill (a curve, a point cloud), whose marks are its segments
   /// instead. `deposit_uvs` is the per-corner atlas texel coordinate stream
   /// (normalized), three per triangle -- zeros for a mesh with no atlas. The
-  /// attribute stream starts at zero; a field fills it through
+  /// field streams start at zero; a field fills them through
   /// [`Self::write_attributes`].
   pub fn new(device: &wgpu::Device, baked: &BakedMesh, deposit_uvs: &[[f32; 2]]) -> Option<Self> {
     let PrimBatch::Triangles(triangles) = &baked.cells else {
@@ -121,36 +128,39 @@ impl SurfaceBatch {
       .flatten()
       .map(|&i| baked.positions[i as usize])
       .collect();
+    let zeros = vec![0.0f32; corners.len()];
     Some(Self {
       corners: vertex_buffer(device, "Surface Corners", &corners),
-      attributes: vertex_buffer(device, "Surface Attributes", &vec![0.0f32; corners.len()]),
+      colors: vertex_buffer(device, "Surface Colors", &zeros),
+      heights: vertex_buffer(device, "Surface Heights", &zeros),
       deposit_uvs: vertex_buffer(device, "Surface Deposit UVs", deposit_uvs),
       ncorners: corners.len() as u32,
       triangles: triangles.clone(),
     })
   }
 
-  /// Rebinds the surface to a different field of the same mesh: `values` is
-  /// per *mesh* vertex, gathered here into corner order. One buffer write, no
-  /// rebake.
-  pub fn write_attributes(&self, queue: &wgpu::Queue, values: &[f32]) {
-    if values.is_empty() {
-      return;
+  /// Rebinds the surface to a different field of the same mesh. `colors` is
+  /// per corner (three per triangle, cell-local) and written straight through;
+  /// `heights` is per *mesh* vertex and gathered here into corner order. One
+  /// buffer write each, no rebake.
+  pub fn write_attributes(&self, queue: &wgpu::Queue, colors: &[f32], heights: &[f32]) {
+    if !colors.is_empty() {
+      queue.write_buffer(&self.colors, 0, bytemuck::cast_slice(colors));
     }
     let gathered: Vec<f32> = self
       .triangles
       .iter()
       .flatten()
-      .map(|&i| values[i as usize])
+      .map(|&i| heights[i as usize])
       .collect();
     if !gathered.is_empty() {
-      queue.write_buffer(&self.attributes, 0, bytemuck::cast_slice(&gathered));
+      queue.write_buffer(&self.heights, 0, bytemuck::cast_slice(&gathered));
     }
   }
 
-  /// The static stream at locations 0..=2, the per-field value at 3, the
-  /// deposit texel coordinate at 4.
-  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 3] {
+  /// The static stream at locations 0..=2, the per-corner colormap value at 3,
+  /// the deposit texel coordinate at 4, the displacement height at 5.
+  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 4] {
     [
       wgpu::VertexBufferLayout {
         array_stride: size_of::<BakedVertex>() as wgpu::BufferAddress,
@@ -167,13 +177,19 @@ impl SurfaceBatch {
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &SURFACE_DEPOSIT_UV,
       },
+      wgpu::VertexBufferLayout {
+        array_stride: size_of::<f32>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &SURFACE_HEIGHT,
+      },
     ]
   }
 
   pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
     pass.set_vertex_buffer(0, self.corners.slice(..));
-    pass.set_vertex_buffer(1, self.attributes.slice(..));
+    pass.set_vertex_buffer(1, self.colors.slice(..));
     pass.set_vertex_buffer(2, self.deposit_uvs.slice(..));
+    pass.set_vertex_buffer(3, self.heights.slice(..));
     pass.draw(0..self.ncorners, 0..1);
   }
 }

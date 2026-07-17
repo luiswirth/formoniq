@@ -1,10 +1,13 @@
-// Scalar surface fill: the per-vertex value (a 0-form, or a line field's nodal
-// magnitude) colormapped, displaced along the vertex normal as a standing
-// wave, and lit by the deposit atlas where a particle population trails one.
+// Scalar surface fill: the per-corner cell-local value (a density, or a line
+// field's magnitude) colormapped, displaced along the vertex normal as a
+// standing wave, and lit by the deposit atlas where a particle population trails
+// one.
 //
-// Three vertex streams, mirroring the bake's static/per-field split: the
-// corner stream is a function of the mesh alone, the value stream of the field
-// on it, and the deposit coordinate of the mesh's atlas layout. The deposit
+// Four vertex streams, mirroring the bake's static/per-field split: the corner
+// stream is a function of the mesh alone, the value and height streams of the
+// field on it (the discontinuous colormap and the continuous displacement
+// height respectively), and the deposit coordinate of the mesh's atlas layout.
+// The deposit
 // coordinate is interpolated plainly -- the map (cell, bary) -> atlas texel is
 // affine per triangle, so the rasterizer's interpolation of the three corner
 // values *is* that map at every fragment, and no per-fragment lookup exists.
@@ -20,6 +23,10 @@ struct VertexInput {
     @location(2) max_displacement: f32,
     @location(3) value: f32,
     @location(4) deposit_uv: vec2<f32>,
+    // The displacement height, per mesh vertex (so a shared vertex stays
+    // single-valued and the surface does not tear), distinct from `value`, the
+    // per-corner cell-local colormap scalar.
+    @location(5) height: f32,
 };
 
 struct VertexOutput {
@@ -34,7 +41,7 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     out.value = model.value;
     out.deposit_uv = model.deposit_uv;
     let osc = wave_osc(frame, material.wave_omega);
-    let position = wave_displace(material.wave_amplitude, osc, model.position, model.normal, model.value, model.max_displacement);
+    let position = wave_displace(material.wave_amplitude, osc, model.position, model.normal, model.height, model.max_displacement);
     out.clip_position = frame.view_proj * vec4<f32>(position, 1.0);
     return out;
 }

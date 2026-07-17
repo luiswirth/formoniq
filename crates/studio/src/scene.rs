@@ -1,7 +1,7 @@
 use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
 use continuum::field::DiffFormClosure;
 
-use crate::bake::to_vec3;
+use crate::bake::CellCorner;
 use crate::ui::Selection;
 use ddf::{
   cochain::Cochain, derham::derham_map, section::CoordFieldExt,
@@ -10,11 +10,11 @@ use ddf::{
 use exterior::{ExteriorGrade, MultiForm};
 use manifold::{
   atlas::MeshPoint,
-  geometry::{
-    coord::{mesh::MeshCoords, simplex::SimplexRefExt},
-    metric::geometry::Geometry,
+  geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
+  topology::{
+    complex::Complex,
+    handle::{SimplexIdx, SimplexRef},
   },
-  topology::complex::Complex,
   Dim,
 };
 
@@ -43,12 +43,14 @@ pub struct Scene {
   pub line_fields: Vec<LineField>,
 }
 
-/// A named scalar field on the surface: a 0-cochain, one value per vertex.
+/// A named scalar field on the surface: the reduced-grade-0 mark, a density
+/// coloring the surface and displacing it as a standing wave.
 ///
-/// A grade-0 form is one directly; a top-grade ($k = n$) form becomes one by
-/// the pointwise Hodge star $star: Lambda^n -> Lambda^0$, nodal-sampled to the
-/// vertices. From here the two are indistinguishable -- the same density
-/// colormap and the same normal-displacement standing wave.
+/// A grade-0 form is a density directly; a top-grade ($k = n$) form becomes one
+/// by the pointwise Hodge star $star: Lambda^n -> Lambda^0$. Either way the
+/// density is read per cell at draw time (`surface_corner_values`), not stored
+/// -- so the top form's discontinuity across cells survives to the colormap
+/// instead of being averaged away.
 #[derive(Clone)]
 pub struct ScalarField {
   pub name: String,
@@ -80,9 +82,8 @@ pub struct ScalarField {
 /// glyphs and advected particles.
 ///
 /// A grade-1 (or, via the Hodge star, grade-$(n-1)$) form reduces to a genuine
-/// tangent *line* field. Its (unsigned) nodal magnitude is the same per-vertex
-/// recovery a [`ScalarField`] uses, and tints the surface the marks are drawn
-/// on.
+/// tangent *line* field. Its (unsigned) magnitude $|V|_g$ is read per cell
+/// (`surface_corner_values`) and tints the surface the marks are drawn on.
 ///
 /// The glyphs are static: $ker$ and $sharp$ are scale-invariant, so the
 /// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves them fixed and swings
@@ -97,41 +98,30 @@ pub struct LineField {
   /// form keeps $k = n-1$ even though it is drawn through its Hodge star. See
   /// [`ScalarField::grade`].
   pub grade: ExteriorGrade,
-  /// The original $k$-cochain this field was reduced from, kept whole so the
-  /// viewer can reconstruct the *true* Whitney field $W c$ (via
-  /// [`WhitneyInterpolant`]) rather than only the nodal average below. The
-  /// glyph and particle marks read $((W c)|_"reduced")^sharp$ cell by cell; the
-  /// nodal `magnitude` below is the coarser readout the surface tint uses.
+  /// The original $k$-cochain, kept whole so the surface tint, the glyphs and
+  /// the particles all read the *true* Whitney field $W c$ (via
+  /// [`WhitneyInterpolant`]) cell by cell -- there is no per-vertex reduction,
+  /// because a reduced-grade field has no single value at a shared vertex.
   pub cochain: Cochain,
-  /// Per-vertex nodal magnitude $|V|_g$, the intrinsic chart-independent scalar
-  /// averaged across incident cells: what tints the surface, times
-  /// $cos(sqrt(lambda) t)$ per frame so the sign flips through zero.
-  pub magnitude: Vec<f64>,
   /// See [`ScalarField::eigenvalue`].
   pub eigenvalue: Option<f64>,
   /// See [`ScalarField::dof_label`].
   pub dof_label: Option<String>,
 }
 
-impl ScalarField {
-  pub fn values(&self) -> &[f64] {
-    self.cochain.coeffs().as_slice()
+/// The colormap range of a per-corner value stream, for normalization. Falls
+/// back to a unit range on an empty or constant field so the viewer never
+/// normalizes by a zero span.
+pub(crate) fn corner_bounds(values: &[f64]) -> (f32, f32) {
+  let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+  for &v in values {
+    lo = lo.min(v);
+    hi = hi.max(v);
   }
-
-  /// Value range across the field, for colormap normalization. Falls back to a
-  /// unit range on an empty or constant field so the viewer never normalizes by
-  /// a zero span.
-  pub fn bounds(&self) -> (f32, f32) {
-    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-    for &v in self.values() {
-      lo = lo.min(v);
-      hi = hi.max(v);
-    }
-    if lo < hi {
-      (lo as f32, hi as f32)
-    } else {
-      (-1.0, 1.0)
-    }
+  if lo < hi {
+    (lo as f32, hi as f32)
+  } else {
+    (-1.0, 1.0)
   }
 }
 
@@ -144,27 +134,6 @@ struct FieldMeta {
   name: String,
   eigenvalue: Option<f64>,
   dof_label: Option<String>,
-}
-
-impl LineField {
-  /// Magnitude range across the field, for colormap normalization -- the
-  /// [`ScalarField::bounds`] of the nodal magnitude. Unsigned by
-  /// construction ($|V|_g >= 0$), so a static field's true range starts at
-  /// (or near) zero; the caller widens it to the symmetric $[-m, m]$ an
-  /// animated tint needs, since $|V| cos(sqrt(lambda) t)$ swings negative
-  /// even though $|V|$ itself never does.
-  pub fn bounds(&self) -> (f32, f32) {
-    let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-    for &v in &self.magnitude {
-      lo = lo.min(v);
-      hi = hi.max(v);
-    }
-    if lo < hi {
-      (lo as f32, hi as f32)
-    } else {
-      (-1.0, 1.0)
-    }
-  }
 }
 
 /// What the selected field offers to be read with -- which of
@@ -251,7 +220,6 @@ impl Scene {
       let cochain = Cochain::new(grade, col.into_owned());
       Self::field(
         topology,
-        coords,
         FieldMeta {
           name,
           eigenvalue: Some(lambda),
@@ -430,7 +398,6 @@ impl Scene {
     for named in specs {
       Self::field(
         &topology,
-        &coords,
         FieldMeta {
           name: named.name.clone(),
           eigenvalue: None,
@@ -484,7 +451,6 @@ impl Scene {
     for (name, cochain) in named {
       Self::field(
         &topology,
-        &coords,
         FieldMeta {
           name: name.to_string(),
           eigenvalue: None,
@@ -535,7 +501,6 @@ impl Scene {
 
         Self::field(
           &topology,
-          &coords,
           FieldMeta {
             name,
             eigenvalue: None,
@@ -562,15 +527,13 @@ impl Scene {
   /// function ([`Self::whitney_basis`]) and a solved field arrive at.
   ///
   /// The Hodge star is what makes the dispatch total. A reduced grade of 0
-  /// ($k = 0$ or $k = n$) is a scalar density: grade 0 needs no reconstruction
-  /// (a Whitney 0-form is the barycentric-linear function through its vertex
-  /// values, which the rasterizer already interpolates), while $k = n$ stars
-  /// pointwise to a 0-form and is nodal-sampled. A reduced grade of 1 ($k = 1$
-  /// or $k = n-1$) reduces to a genuine tangent line field. A reduced grade
-  /// $>= 2$ is only reachable at $n >= 4$ and has no mark yet.
+  /// ($k = 0$ or $k = n$) is a scalar density, a reduced grade of 1 ($k = 1$ or
+  /// $k = n-1$) a tangent line field, and a reduced grade $>= 2$ (only reachable
+  /// at $n >= 4$) has no mark yet. The reduction is not applied here: the
+  /// original cochain is stored whole, and the render mark reads it per cell at
+  /// draw time (see [`surface_corner_values`]).
   fn field(
     topology: &Complex,
-    coords: &MeshCoords,
     meta: FieldMeta,
     cochain: Cochain,
     fields: &mut Vec<ScalarField>,
@@ -585,14 +548,10 @@ impl Scene {
     let k = cochain.grade();
     match k.min(n - k) {
       0 => {
-        // k == 0: the coefficients already are the vertex values. k == n: the
-        // pointwise Hodge star of the top form, nodal-sampled to a 0-cochain.
-        let cochain = if k == 0 {
-          cochain
-        } else {
-          let interpolant = WhitneyInterpolant::new(cochain, topology);
-          Cochain::new(0, nodal_scalar_density(topology, coords, &interpolant))
-        };
+        // The original $k$-cochain is kept whole; the reduction to a density (a
+        // pointwise Hodge star for $k = n$, the identity for $k = 0$) is read
+        // per cell at draw time by [`surface_corner_values`], never averaged
+        // into the stored field.
         fields.push(ScalarField {
           name,
           grade: k,
@@ -602,13 +561,10 @@ impl Scene {
         });
       }
       1 => {
-        let interpolant = WhitneyInterpolant::new(cochain, topology);
-        let magnitude = nodal_line_magnitude(topology, coords, &interpolant);
         line_fields.push(LineField {
           name,
           grade: k,
-          cochain: interpolant.cochain().clone(),
-          magnitude,
+          cochain,
           eigenvalue,
           dof_label,
         });
@@ -635,79 +591,95 @@ pub(crate) fn reduced_form(form: MultiForm, metric: &RiemannianMetric) -> MultiF
   }
 }
 
-/// The nodal average over incident cells of the reduced grade-1 field's
-/// magnitude $|V|_g$, the intrinsic chart-independent scalar the surface is
-/// tinted by. Unlike grade 0, a grade-1 field has no canonical value at a
-/// vertex -- only the *tangential* part of a section is chart-independent there
-/// (the atlas's own invariant), so incident cells genuinely disagree, and
-/// averaging is the same nodal recovery classical FEM postprocessing uses for a
-/// piecewise, not globally, single-valued quantity.
+/// The surface colormap scalar at every rendered triangle corner, read *in the
+/// corner's own cell* -- three per triangle, in [`CellCorner`] order.
 ///
-/// The metric is what makes this well defined: $|V|_g$ is a scalar, so the
-/// average is of numbers, not of vectors in cell-local frames that no shared
-/// frame relates. The field's *direction* has no such nodal recovery worth
-/// keeping -- the glyph and particle marks read the true Whitney field cell by
-/// cell instead.
-fn nodal_line_magnitude(
+/// This is the fix for the discontinuity the reduced-grade fields have: a
+/// Whitney form is single-valued only in its *tangential* part across a face, so
+/// incident cells disagree at a shared vertex and its support ends exactly on
+/// cell edges. A per-vertex value shared between cells therefore leaks a basis
+/// function's magnitude into cells outside its support (via the rasterizer's
+/// interpolation across the shared vertex). Reading the field once per corner,
+/// each in its own cell, keeps the support exact: a cell the form vanishes on
+/// contributes three zeros and stays black.
+///
+/// A reduced grade of 0 takes the density (the signed 0-form coefficient); a
+/// reduced grade of 1 takes the magnitude $|V|_g$, the intrinsic
+/// chart-independent scalar (the direction is left to the glyph and particle
+/// marks, which read the true Whitney field cell by cell already).
+pub(crate) fn surface_corner_values(
   topology: &Complex,
   coords: &MeshCoords,
-  interpolant: &WhitneyInterpolant,
+  cochain: &Cochain,
+  cell_corners: &[CellCorner],
 ) -> Vec<f64> {
-  let nvertices = topology.skeleton_raw(0).len();
-  let mut mag_sum = vec![0.0; nvertices];
-  let mut count = vec![0u32; nvertices];
-  for cell in topology.cells().handle_iter() {
+  let n = topology.dim();
+  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
+  let mut values = Vec::with_capacity(3 * cell_corners.len());
+  for cc in cell_corners {
+    let cell = SimplexIdx::new(n, cc.cell).handle(topology);
     let metric = coords.cell_metric(cell);
-    // The affine parametrization $psi_K: hat(K) -> RR^N$ whose differential
-    // pushes the sharped vector's coefficients (in the cell's own local
-    // tangent basis, the basis `metric` is expressed in) out into the ambient
-    // frame the renderer draws in -- the one place the embedding enters.
-    let coord_simplex = cell.coord_simplex(coords);
-    for (ilocal, &v) in cell.simplex().vertices.iter().enumerate() {
-      let mut weights = na::DVector::zeros(cell.nvertices());
-      weights[ilocal] = 1.0;
-      let point = MeshPoint::new(cell.idx(), weights.into());
-      let local = reduced_form(interpolant.eval(&point), &metric).sharp(&metric);
-      let ambient = coord_simplex.pushforward_vector(local.coeffs());
-      mag_sum[v] += to_vec3(&ambient).norm();
-      count[v] += 1;
+    for &ilocal in &cc.local {
+      values.push(reduced_value(&interpolant, cell, &metric, ilocal));
     }
   }
-  mag_sum
-    .into_iter()
-    .zip(count)
-    .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 })
-    .collect()
+  values
 }
 
-/// The nodal average over incident cells of the reduced grade-0 field (the
-/// pointwise Hodge star of a top-grade form), one signed value per vertex.
-fn nodal_scalar_density(
+/// The per-vertex displacement height: the reduced field's nodal average over
+/// the cells incident at each vertex.
+///
+/// The colormap must be discontinuous (see [`surface_corner_values`]), but the
+/// standing-wave *displacement* is a geometric height of one connected object,
+/// and a shared vertex has one position -- displacing its incident cells' copies
+/// apart would tear the surface (or the curve). So displacement takes this
+/// continuous nodal recovery, exact for a genuine 0-form whose incident cells
+/// already agree. It is a function of the field alone, not of the render
+/// primitive, so it is defined at every dimension -- a 1-manifold has no fill to
+/// average corners over, yet its curve still displaces.
+pub(crate) fn nodal_heights(
   topology: &Complex,
   coords: &MeshCoords,
-  interpolant: &WhitneyInterpolant,
-) -> Vector {
+  cochain: &Cochain,
+) -> Vec<f64> {
+  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   let nvertices = topology.skeleton_raw(0).len();
   let mut sum = vec![0.0; nvertices];
   let mut count = vec![0u32; nvertices];
   for cell in topology.cells().handle_iter() {
     let metric = coords.cell_metric(cell);
     for (ilocal, &v) in cell.simplex().vertices.iter().enumerate() {
-      let mut weights = na::DVector::zeros(cell.nvertices());
-      weights[ilocal] = 1.0;
-      let point = MeshPoint::new(cell.idx(), weights.into());
-      let density = reduced_form(interpolant.eval(&point), &metric).coeffs()[0];
-      sum[v] += density;
+      sum[v] += reduced_value(&interpolant, cell, &metric, ilocal);
       count[v] += 1;
     }
   }
-  Vector::from_iterator(
-    nvertices,
-    sum
-      .into_iter()
-      .zip(count)
-      .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 }),
-  )
+  sum
+    .into_iter()
+    .zip(count)
+    .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 })
+    .collect()
+}
+
+/// The reduced field's scalar readout at one cell vertex, in that cell's chart:
+/// the signed density for a reduced grade of 0, the magnitude $|V|_g$ for a
+/// reduced grade of 1 (the direction is the glyph and particle marks' to carry).
+/// The one place the reduction is evaluated, shared by the per-corner colormap
+/// and the per-vertex height so the two cannot drift.
+fn reduced_value(
+  interpolant: &WhitneyInterpolant,
+  cell: SimplexRef,
+  metric: &RiemannianMetric,
+  ilocal: usize,
+) -> f64 {
+  let mut weights = na::DVector::zeros(cell.nvertices());
+  weights[ilocal] = 1.0;
+  let point = MeshPoint::new(cell.idx(), weights.into());
+  let form = reduced_form(interpolant.eval(&point), metric);
+  if form.grade() == 0 {
+    form.coeffs()[0]
+  } else {
+    form.norm(metric)
+  }
 }
 
 /// The three $L^2$-orthogonal shells of the discrete Hodge decomposition of a
@@ -1049,5 +1021,76 @@ mod tests {
     assert!(scene.fields.is_empty());
     let names: Vec<_> = scene.line_fields.iter().map(|f| f.name.as_str()).collect();
     assert_eq!(names, ["constant field", "pure curl", "pure div"]);
+  }
+
+  /// The top-grade Whitney form stars to a constant density: on the flat
+  /// reference triangle its pointwise Hodge star is the same nonzero scalar at
+  /// every corner, so the surface renders as a flat color rather than blank.
+  #[test]
+  fn grade_top_whitney_basis_stars_to_a_constant_nonzero_density() {
+    let scene = Scene::whitney_basis(2);
+    let density = scene.fields.last().unwrap();
+    let baked = crate::bake::BakedMesh::new(&scene.topology, &scene.coords);
+    let colors = surface_corner_values(
+      &scene.topology,
+      &scene.coords,
+      &density.cochain,
+      &baked.cell_corners,
+    );
+    assert!(!colors.is_empty());
+    assert!(colors.iter().all(|&v| v.abs() > 1e-9));
+    assert!(colors.iter().all(|&v| (v - colors[0]).abs() < 1e-9));
+  }
+
+  /// The regression theorem for the surface tint: a Whitney basis field's
+  /// support is exactly the cells its DOF simplex bounds. Read per corner in the
+  /// corner's own cell, every cell the form vanishes on reads exactly zero at
+  /// all three corners -- so a basis function no longer bleeds into cells that do
+  /// not contain its DOF. A per-vertex tint could not state this: the DOF's
+  /// endpoints carry a nonzero nodal value into every incident cell.
+  #[test]
+  fn whitney_basis_support_is_exactly_its_dof_cells() {
+    let (topology, coords) = crate::demos::triforce();
+    let scene = Scene::whitney_basis_mesh(topology, coords);
+    let baked = crate::bake::BakedMesh::new(&scene.topology, &scene.coords);
+    let n = scene.topology.dim();
+
+    let basis = scene
+      .fields
+      .iter()
+      .map(|f| (f.name.as_str(), &f.cochain))
+      .chain(
+        scene
+          .line_fields
+          .iter()
+          .map(|f| (f.name.as_str(), &f.cochain)),
+      );
+    for (name, cochain) in basis {
+      // The DOF simplex, as its vertex set, from the single nonzero cochain
+      // entry (a Whitney basis function is dual to exactly one simplex).
+      let idof = cochain
+        .coeffs()
+        .iter()
+        .position(|&c| c.abs() > 0.5)
+        .expect("a basis DOF");
+      let dof_vertices = &scene
+        .topology
+        .skeleton_raw(cochain.grade())
+        .simplex_by_kidx(idof)
+        .vertices;
+
+      let colors =
+        surface_corner_values(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
+      for (cc, corners) in baked.cell_corners.iter().zip(colors.chunks_exact(3)) {
+        let cell = SimplexIdx::new(n, cc.cell).handle(&scene.topology);
+        let supported = dof_vertices
+          .iter()
+          .all(|v| cell.simplex().vertices.contains(v));
+        assert!(
+          supported || corners.iter().all(|&v| v.abs() < 1e-9),
+          "field {name} tints a cell outside the support of its DOF {dof_vertices:?}",
+        );
+      }
+    }
   }
 }

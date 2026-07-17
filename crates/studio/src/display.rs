@@ -312,14 +312,34 @@ impl MeshDisplay {
     self.baked.raycast(origin.coords, dir)
   }
 
-  /// Rebinds the mesh to a different field: one buffer write per stream, no
-  /// rebake.
-  pub(crate) fn write_attributes(&self, queue: &wgpu::Queue, attributes: &[f32]) {
-    if let Some(surface) = &self.surface {
-      surface.write_attributes(queue, attributes);
-    }
-    self.segments.write_attributes(queue, attributes);
+  /// The rendered triangles' cell-corner map, for reading a field per corner in
+  /// its own cell (see [`crate::scene::surface_corner_values`]).
+  pub(crate) fn cell_corners(&self) -> &[crate::bake::CellCorner] {
+    &self.baked.cell_corners
   }
+
+  /// Rebinds the mesh to a different field: one buffer write per stream, no
+  /// rebake. The colormap value goes per corner (cell-local); the displacement
+  /// height goes per mesh vertex to both the surface and the wireframe riding
+  /// its wave.
+  pub(crate) fn write_attributes(&self, queue: &wgpu::Queue, attributes: &FieldAttributes) {
+    if let Some(surface) = &self.surface {
+      surface.write_attributes(queue, &attributes.color, &attributes.height);
+    }
+    self.segments.write_attributes(queue, &attributes.height);
+  }
+}
+
+/// The two field streams a [`FieldDisplay`] hands back for the GPU: the
+/// per-corner cell-local colormap value, and the per-vertex continuous
+/// displacement height. Split because they answer different questions -- the
+/// honest (discontinuous) field readout versus the single-valued height of one
+/// connected surface -- and coincide only for a genuine 0-form.
+pub(crate) struct FieldAttributes {
+  /// Per rendered corner (three per triangle), in the bake's triangle order.
+  pub(crate) color: Vec<f32>,
+  /// Per mesh vertex.
+  pub(crate) height: Vec<f32>,
 }
 
 /// The material parameters for showing one field of a scene, and the geometry
@@ -355,21 +375,44 @@ pub(crate) struct FieldDisplay {
 }
 
 impl FieldDisplay {
-  /// The field's display and the attribute stream it decides, one scalar per
-  /// baked vertex -- which a caller writes into a [`MeshDisplay`] with
-  /// [`MeshDisplay::write_attributes`]. Returned rather than written here: see
-  /// the type's own doc.
+  /// The field's display and the attribute streams it decides -- which a caller
+  /// writes into a [`MeshDisplay`] with [`MeshDisplay::write_attributes`].
+  /// Returned rather than written here: see the type's own doc.
   pub(crate) fn build(
     ctx: &GpuContext,
     scene: &Scene,
     mesh: &MeshDisplay,
     selection: Selection,
     amplitude_scale: f32,
-  ) -> (Self, Vec<f32>) {
-    let (glyphs, particles, speed_ratio, attributes, mut surface) = match selection {
+  ) -> (Self, FieldAttributes) {
+    // The field is read once per rendered corner, each in its own cell, so a
+    // reduced-grade Whitney form's discontinuity across cells reaches the
+    // colormap intact -- a basis function's support ends on cell edges and does
+    // not bleed into the cells it vanishes on. The displacement height is the
+    // continuous nodal recovery of that same value, single-valued per vertex so
+    // the surface does not tear. Both are functions of the field, computed once
+    // here for either mark; the colormap range follows from the colors so it
+    // spans exactly what is drawn.
+    let cochain = match selection {
+      Selection::Scalar(index) => &scene.fields[index].cochain,
+      Selection::Line(index) => &scene.line_fields[index].cochain,
+    };
+    let colors = crate::scene::surface_corner_values(
+      &scene.topology,
+      &scene.coords,
+      cochain,
+      mesh.cell_corners(),
+    );
+    let heights = crate::scene::nodal_heights(&scene.topology, &scene.coords, cochain);
+    let (raw_min, raw_max) = crate::scene::corner_bounds(&colors);
+    let attributes = FieldAttributes {
+      color: bake::attributes(&colors),
+      height: bake::attributes(&heights),
+    };
+
+    let (glyphs, particles, speed_ratio, mut surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
-        let (raw_min, raw_max) = field.bounds();
 
         let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
         // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
@@ -399,7 +442,6 @@ impl FieldDisplay {
           None,
           None,
           0.0,
-          bake::attributes(field.values()),
           SurfaceMaterial {
             min_val,
             max_val,
@@ -416,7 +458,6 @@ impl FieldDisplay {
       }
       Selection::Line(index) => {
         let field = &scene.line_fields[index];
-        let (raw_min, raw_max) = field.bounds();
         // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
         // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
         // through the midpoint and flips as the cosine crosses zero. A static
@@ -488,9 +529,8 @@ impl FieldDisplay {
           particles,
           speed_ratio,
           // The surface is the same fill a scalar field gets, tinted by the
-          // field's nodal magnitude: the glyphs carry the direction, so the
+          // field's cell-local magnitude: the glyphs carry the direction, so the
           // surface has only the magnitude left to say.
-          bake::attributes(&field.magnitude),
           SurfaceMaterial {
             min_val,
             max_val,

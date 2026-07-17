@@ -26,7 +26,7 @@ use bytemuck::{Pod, Zeroable};
 use common::linalg::nalgebra::Vector;
 use manifold::{
   geometry::coord::{mesh::MeshCoords, vertex_curvature_radius},
-  topology::complex::Complex,
+  topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex},
   Dim,
 };
 
@@ -112,6 +112,26 @@ pub enum PrimBatch {
   Points(Vec<u32>),
 }
 
+/// Which cell one rendered triangle's field is read in, and where its corners
+/// sit in that cell.
+///
+/// A reduced-grade field is discontinuous across cells -- only the *tangential*
+/// part of a section is chart-independent, so incident cells genuinely disagree
+/// at a shared vertex, and there is no single value to interpolate. The honest
+/// readout is therefore per corner, in the corner's *own* cell: this map is what
+/// the per-corner sampling is written against. For a surface mesh the cell is
+/// the triangle itself; for a solid's rendered boundary face it is the unique
+/// cell that face bounds. The dimension reduction stays confined here, in the
+/// bake, exactly as the primitive choice is.
+#[derive(Debug, Clone, Copy)]
+pub struct CellCorner {
+  /// The cell (colex rank in the top skeleton) whose chart the field is read in.
+  pub cell: KSimplexIdx,
+  /// Each corner's local vertex index within `cell`'s colex vertex tuple, in the
+  /// rendered triangle's own (wound) corner order.
+  pub local: [usize; 3],
+}
+
 /// One complex, baked: a shared vertex table plus the index streams over it.
 ///
 /// One `BakedMesh` per complex, never merged across complexes. Cross-mesh
@@ -126,6 +146,10 @@ pub struct BakedMesh {
   /// where the cells already *are* the 1-skeleton ($n <= 1$), so a curve's
   /// edges are drawn once rather than twice.
   pub wireframe: Vec<[u32; 2]>,
+  /// One entry per rendered triangle, in the same order as
+  /// [`PrimBatch::Triangles`], mapping it to the cell its field is read in.
+  /// Empty for a bake with no fill (a curve, a point cloud).
+  pub cell_corners: Vec<CellCorner>,
 }
 
 impl BakedMesh {
@@ -196,10 +220,16 @@ impl BakedMesh {
       })
       .collect();
 
+    let cell_corners = match &cells {
+      PrimBatch::Triangles(triangles) => cell_corners(topology, triangles),
+      _ => Vec::new(),
+    };
+
     Self {
       positions,
       cells,
       wireframe,
+      cell_corners,
     }
   }
 
@@ -300,6 +330,43 @@ fn embed_r3(coords: &MeshCoords, vertex: usize) -> na::Vector3<f64> {
 /// its indices.
 fn cell_indices<const N: usize>(topology: &Complex) -> Vec<[u32; N]> {
   skeleton_indices(topology, topology.dim())
+}
+
+/// The [`CellCorner`] of each rendered triangle, in triangle order.
+///
+/// The owning cell is the one coface of the triangle's 2-simplex: itself when
+/// the mesh is a surface (a 2-simplex is a cell), the unique cell it bounds when
+/// the mesh is a solid whose boundary is what got baked. Reads the local indices
+/// off the *wound* triangle, so they track the corner order the vertex streams
+/// are built in.
+fn cell_corners(topology: &Complex, triangles: &[[u32; 3]]) -> Vec<CellCorner> {
+  let faces = topology.skeleton(2);
+  triangles
+    .iter()
+    .map(|&tri| {
+      // The rendered triangle is wound (its corner order is the winding pass's,
+      // not colex); a `Simplex` is the colex-sorted vertex set, so sort for the
+      // lookup while keeping `tri`'s order for the local-index map below.
+      let mut sorted: Vec<usize> = tri.iter().map(|&v| v as usize).collect();
+      sorted.sort_unstable();
+      let cell = faces
+        .handle_by_simplex(&Simplex::new(sorted))
+        .cells()
+        .next()
+        .expect("a rendered triangle bounds a cell");
+      let cell_vertices = &cell.simplex().vertices;
+      let local = tri.map(|v| {
+        cell_vertices
+          .iter()
+          .position(|&u| u == v as usize)
+          .expect("a rendered triangle's vertex lies in the cell it bounds")
+      });
+      CellCorner {
+        cell: cell.kidx(),
+        local,
+      }
+    })
+    .collect()
 }
 
 fn skeleton_indices<const N: usize>(topology: &Complex, dim: Dim) -> Vec<[u32; N]> {
@@ -503,20 +570,32 @@ mod tests {
 
   /// Every field of every Whitney basis gallery bakes, at every dimension the
   /// ambient reaches: the scene's grade reduction and the bake's dimension
-  /// reduction compose without a hole.
+  /// reduction compose without a hole, and each field samples to one colormap
+  /// value per rendered corner and one displacement height per mesh vertex.
   #[test]
   fn every_whitney_basis_field_bakes() {
-    use crate::scene::Scene;
+    use crate::scene::{nodal_heights, surface_corner_values, Scene};
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
       assert!(!scene.fields.is_empty());
       let baked = BakedMesh::new(&scene.topology, &scene.coords);
       assert_eq!(baked.positions.len(), scene.coords.nvertices());
-      for field in &scene.fields {
-        assert_eq!(attributes(field.values()).len(), baked.positions.len());
-      }
-      for field in &scene.line_fields {
-        assert_eq!(attributes(&field.magnitude).len(), baked.positions.len());
+      let ncorners = match &baked.cells {
+        PrimBatch::Triangles(triangles) => 3 * triangles.len(),
+        _ => 0,
+      };
+      assert_eq!(baked.cell_corners.len(), ncorners / 3);
+      let cochains = scene
+        .fields
+        .iter()
+        .map(|f| &f.cochain)
+        .chain(scene.line_fields.iter().map(|f| &f.cochain));
+      for cochain in cochains {
+        let colors =
+          surface_corner_values(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
+        assert_eq!(colors.len(), ncorners);
+        let heights = nodal_heights(&scene.topology, &scene.coords, cochain);
+        assert_eq!(heights.len(), baked.positions.len());
       }
     }
   }
