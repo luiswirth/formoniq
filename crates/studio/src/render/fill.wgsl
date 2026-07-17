@@ -30,11 +30,22 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     return out;
 }
 
+struct FsOut {
+    @location(0) color: vec4<f32>,
+    // A colormapped fill is clamped to `[0, 1]` by the colormap itself, and so
+    // never overflows -- see `display_transform`'s note on `unbounded_mask`.
+    // Always zero: the fill never asks the tone curve for anything.
+    @location(1) unbounded: f32,
+};
+
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOutput) -> FsOut {
     // Pulse the color by the same standing-wave factor that displaces the
     // surface: an eigenmode's crest and trough swing through the (symmetric)
     // colormap in sync with the up/down motion. A non-eigenmode has omega = 0,
     // so cos(0) = 1 leaves the color static.
-    return vec4<f32>(colormap_in(material, in.value * wave_osc(frame, material.wave_omega)), 1.0);
+    var out: FsOut;
+    out.color = vec4<f32>(colormap_in(material, in.value * wave_osc(frame, material.wave_omega)), 1.0);
+    out.unbounded = 0.0;
+    return out;
 }

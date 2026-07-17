@@ -19,6 +19,7 @@ use super::{
   item::SegmentBatch,
   primitive, shader_module, ssaa_constants,
   uniform::{FrameUniform, SegmentMaterial, UniformPool},
+  MASK_FORMAT,
 };
 
 pub struct SegmentPass {
@@ -53,7 +54,10 @@ impl SegmentPass {
         module: &shader,
         entry_point: Some("fs_main"),
         compilation_options: compilation_options(&constants),
-        targets: &[color_target(format, wgpu::BlendState::ALPHA_BLENDING)],
+        targets: &[
+          color_target(format, wgpu::BlendState::ALPHA_BLENDING),
+          color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),
+        ],
       }),
       primitive: primitive(),
       depth_stencil: Some(depth_stencil(false)),

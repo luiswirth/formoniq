@@ -36,6 +36,18 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// give 256 times the levels and clip at 1.0 just the same.
 pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
+/// The format of the unbounded-coverage mask the scene pass writes alongside
+/// [`SCENE_FORMAT`]: how much of a texel's radiance came from a mark that can
+/// actually exceed 1, as opposed to one that is clamped to `[0, 1]` by
+/// construction (a colormapped fill, a wireframe or streamline ribbon).
+///
+/// Only the additively blended particles overflow -- see the invariant in
+/// `bloom.wgsl` -- so this is the material-specific fact the resolve needs to
+/// decide, per pixel, whether the tone curve or a plain clamp is the correct
+/// crossing. A single scalar is enough: coverage, not radiance, so `R8Unorm`
+/// rather than a float format.
+pub const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
+
 /// The supersampling factor per axis a [`Renderer`] uses when its caller names
 /// none: what an interactive window can afford at frame rate. An export is not
 /// bound by that budget and passes its own.

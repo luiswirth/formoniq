@@ -338,11 +338,22 @@ fn aces(x: vec3<f32>) -> vec3<f32> {
 // Which is why the choice is exposed rather than decided here. There is no
 // right answer, only the question of whether the dynamic range or the palette
 // matters more for what is being looked at.
-fn display_transform(post: Post, radiance: vec3<f32>) -> vec3<f32> {
+//
+// That question only *arises* for a mark that can actually overflow. A
+// colormapped fill and a segment ribbon are clamped to `[0, 1]` by
+// construction -- see the same invariant `bloom.wgsl`'s prefilter turns on --
+// so clamp is not a mode for them, it is the identity, and running the curve
+// over them regardless is what skewed the heatmap's palette for no gain: the
+// curve was never asked whether there was anything above 1 to reconcile.
+// `unbounded_mask` is that question, answered per pixel by the marks that
+// drew there rather than guessed from the radiance's own value -- a value near
+// 1 cannot tell a saturated fill from a faint overlap of particles, but the
+// scene pass that wrote it already knows. It is a coverage fraction rather
+// than a bit so a particle's own antialiased edge, or its blend with a fill
+// beneath it, crosses over smoothly instead of at a hard seam.
+fn display_transform(post: Post, radiance: vec3<f32>, unbounded_mask: f32) -> vec3<f32> {
     let exposed = radiance * post.exposure;
-    return select(
-        clamp(exposed, vec3<f32>(0.0), vec3<f32>(1.0)),
-        aces(exposed),
-        post.tonemap > 0.5,
-    );
+    let clamped = clamp(exposed, vec3<f32>(0.0), vec3<f32>(1.0));
+    let curved = select(clamped, aces(exposed), post.tonemap > 0.5);
+    return mix(clamped, curved, unbounded_mask);
 }

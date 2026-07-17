@@ -10,6 +10,9 @@
 @group(0) @binding(0) var scene_tex: texture_2d<f32>;
 @group(0) @binding(1) var bloom_tex: texture_2d<f32>;
 @group(0) @binding(2) var bloom_sampler: sampler;
+// The unbounded-coverage mask the scene pass wrote alongside `scene_tex`: see
+// `MASK_FORMAT` and `display_transform`'s note on `unbounded_mask`.
+@group(0) @binding(3) var mask_tex: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> post: Post;
 
 struct VertexOutput {
@@ -43,16 +46,23 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     var sum = vec3<f32>(0.0);
     var weight_sum = 0.0;
     var alpha = 0.0;
+    var mask = 0.0;
     for (var dy: i32 = 0; dy < SSAA_SCALE; dy = dy + 1) {
         for (var dx: i32 = 0; dx < SSAA_SCALE; dx = dx + 1) {
-            let texel = textureLoad(scene_tex, base + vec2<i32>(dx, dy), 0);
+            let coord = base + vec2<i32>(dx, dy);
+            let texel = textureLoad(scene_tex, coord, 0);
             let weight = 1.0 / (1.0 + luminance(texel.rgb));
             sum += texel.rgb * weight;
             weight_sum += weight;
             alpha += texel.a;
+            // Plain mean, not luminance-weighted: this is a coverage fraction,
+            // not radiance, so every subsample counts equally regardless of
+            // how bright it is.
+            mask += textureLoad(mask_tex, coord, 0).r;
         }
     }
     let resolved = sum / max(weight_sum, 1e-6);
+    let unbounded_mask = mask / f32(SSAA_SCALE * SSAA_SCALE);
 
     // The glow is sampled, not loaded: the chain is at half the scene's
     // resolution and below, so bilinear across it is what keeps the halo smooth
@@ -63,6 +73,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // read this same untone-mapped target, and adding its light afterwards --
     // or tone mapping before the chain -- would leave the threshold nothing
     // above 1 to find and silently make bloom a no-op.
-    let mapped = display_transform(post, resolved + glow * post.bloom_intensity);
+    let mapped = display_transform(post, resolved + glow * post.bloom_intensity, unbounded_mask);
     return vec4<f32>(mapped, alpha / f32(SSAA_SCALE * SSAA_SCALE));
 }

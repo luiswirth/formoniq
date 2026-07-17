@@ -6,6 +6,7 @@ use super::{
   item::SurfaceBatch,
   primitive, shader_module, ssaa_constants,
   uniform::{FrameUniform, SurfaceMaterial, UniformBinding, UniformPool},
+  MASK_FORMAT,
 };
 
 pub struct FillPass {
@@ -40,7 +41,10 @@ impl FillPass {
         module: &shader,
         entry_point: Some("fs_main"),
         compilation_options: compilation_options(&constants),
-        targets: &[color_target(format, wgpu::BlendState::REPLACE)],
+        targets: &[
+          color_target(format, wgpu::BlendState::REPLACE),
+          color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),
+        ],
       }),
       primitive: primitive(),
       depth_stencil: Some(depth_stencil(true)),

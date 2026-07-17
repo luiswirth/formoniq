@@ -15,6 +15,7 @@ use super::{
   advect::{compute_bind_group_layout, AdvectParams, Cell, Particle},
   color_target, compilation_options, depth_stencil, primitive, shader_module, ssaa_constants,
   uniform::{FrameUniform, ParticleMaterial, UniformBinding, UniformPool},
+  MASK_FORMAT,
 };
 use crate::advect::{AdvectBake, Seed};
 
@@ -213,17 +214,38 @@ impl ParticlePass {
         // Additive, so overlapping specks accumulate into density instead of
         // occluding each other -- which is also what makes the population
         // order-independent, and hence sortable not at all.
-        targets: &[color_target(
-          format,
-          wgpu::BlendState {
-            color: wgpu::BlendComponent {
-              src_factor: wgpu::BlendFactor::SrcAlpha,
-              dst_factor: wgpu::BlendFactor::One,
-              operation: wgpu::BlendOperation::Add,
+        targets: &[
+          color_target(
+            format,
+            wgpu::BlendState {
+              color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::SrcAlpha,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Add,
+              },
+              alpha: wgpu::BlendComponent::OVER,
             },
-            alpha: wgpu::BlendComponent::OVER,
-          },
-        )],
+          ),
+          // `Max`, unlike the color target: the mask is a coverage fraction,
+          // not an accumulating radiance, so a texel a hundred specks pile onto
+          // should read as the coverage of whichever covers it most, not their
+          // sum saturating on the first handful.
+          color_target(
+            MASK_FORMAT,
+            wgpu::BlendState {
+              color: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Max,
+              },
+              alpha: wgpu::BlendComponent {
+                src_factor: wgpu::BlendFactor::One,
+                dst_factor: wgpu::BlendFactor::One,
+                operation: wgpu::BlendOperation::Max,
+              },
+            },
+          ),
+        ],
       }),
       primitive: primitive(),
       // Tests depth so the far side of a surface stays hidden; writes none,
