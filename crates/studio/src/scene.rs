@@ -1,5 +1,7 @@
 use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
 use continuum::field::DiffFormClosure;
+
+use crate::bake::to_vec3;
 use ddf::{
   cochain::Cochain, derham::derham_map, section::CoordFieldExt,
   whitney::interpolant::WhitneyInterpolant,
@@ -821,15 +823,6 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
   );
   let pulled = field.pullback_on(topology, coords);
   derham_map(&pulled, topology, 2)
-}
-
-/// A nalgebra vector of ambient coordinates, zero-padded to 3D.
-fn to_vec3(v: &Vector) -> na::Vector3<f64> {
-  na::Vector3::new(
-    v[0],
-    if v.len() > 1 { v[1] } else { 0.0 },
-    if v.len() > 2 { v[2] } else { 0.0 },
-  )
 }
 
 #[cfg(test)]
