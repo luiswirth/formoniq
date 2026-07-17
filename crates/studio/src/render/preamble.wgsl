@@ -176,23 +176,22 @@ fn billboard_corner(world_a: vec3<f32>, world_b: vec3<f32>, perp: vec3<f32>, hal
 
 // Nudges a corner toward the camera by a small multiple of the mark's own
 // half-width, so it draws on top of the coplanar face beneath it instead of
-// z-fighting it. Biasing in world space, by an amount tied to the mark's own
-// scale, keeps this an actual small distance regardless of how far the object
-// is from the camera -- a fixed NDC-space offset does not: under a
-// perspective projection the same NDC delta corresponds to an ever larger
-// eye-space distance the farther out it is applied, and past some distance it
-// exceeds the real depth gap between a surface's near and far side, letting
-// the far side's wireframe win the depth test against the near side's fill.
+// z-fighting it. Coplanar is the whole difficulty: the true depth gap is zero,
+// so something has to break the tie, and it may as well be a distance the mark
+// already has.
 //
-// The multiple has to clear float32 depth-buffer roundoff, not just be
-// "small": at a typical camera distance the perspective divide compresses a
-// world-space nudge of one half-width into only a handful of representable
-// depth steps, indistinguishable from the matrix multiply's own rounding
-// error -- which is z-fighting again, just at a much smaller and harder-to-see
-// bias than the old NDC-constant one. A handful of half-widths is still far
-// below any real front/back depth separation except within an imperceptible
-// sliver at the silhouette itself, where a biased line necessarily wins
-// against a true depth gap that shrinks continuously to zero.
+// World space, and tied to the mark's own scale, so the nudge is a fixed small
+// distance rather than a fixed small *depth* -- an NDC-space offset would stand
+// for an ever larger eye-space distance the farther out it is applied, and past
+// some distance would exceed a surface's own front-to-back gap, letting the far
+// side's wireframe win against the near side's fill.
+//
+// The multiple is not a precision threshold: the depth buffer is reversed-Z
+// float, whose resolution is roughly uniform in $z$, so a world-space nudge
+// survives the divide at any zoom. It only has to beat coplanarity, and stay
+// far below any real front/back separation -- which it does everywhere except
+// an imperceptible sliver at the silhouette, where that separation shrinks
+// continuously to zero and a biased line necessarily wins.
 fn depth_biased_corner(corner: vec3<f32>, eye: vec3<f32>, half_width: f32) -> vec3<f32> {
     let to_eye = eye - corner;
     let dir = to_eye / max(length(to_eye), 1e-6);

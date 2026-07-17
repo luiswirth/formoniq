@@ -15,7 +15,7 @@ use super::{
     FrameUniform, ParticleMaterial, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding,
     UniformPool,
   },
-  DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
+  DEPTH_CLEAR, DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
 };
 
 /// The background the scene is cleared to: a near-black the lit surface and the
@@ -308,7 +308,7 @@ impl Renderer {
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
           view: &targets.depth_view,
           depth_ops: Some(wgpu::Operations {
-            load: wgpu::LoadOp::Clear(1.0),
+            load: wgpu::LoadOp::Clear(DEPTH_CLEAR),
             store: wgpu::StoreOp::Store,
           }),
           stencil_ops: None,
