@@ -55,7 +55,7 @@ pub use transition::Transition;
 use crate::Dim;
 
 use common::{
-  combo::{factorial_f64, Combination},
+  combo::{compositions, factorial_f64, Combination},
   coord::{CoordSpace, Coords, CoordsRef},
   linalg::nalgebra::{Matrix, RowVector, Vector},
 };
@@ -173,6 +173,53 @@ pub fn ref_vertices(dim: Dim) -> Matrix {
   vertices
 }
 
+/// The barycentric lattice of the reference $n$-simplex at refinement $R$: the
+/// weights whose parts are whole multiples of $1 \/ R$, as integer numerators.
+///
+/// $ L_R^n = { k in NN_0^(n+1) : sum_i k_i = R }, quad lambda = k \/ R $
+///
+/// The compositions of $R$ into $n + 1$ parts, hence $binom(R + n, n)$ points,
+/// in the colex order of [`compositions`]. The integers are the primitive and
+/// the weights the wrapper ([`ref_lattice_bary`]): a lattice point is an exact
+/// combinatorial object, and the two properties below are identities on the
+/// integers that would only be approximate equalities on the weights.
+///
+/// Affine, hence metric-free and embedding-free, hence a function of [`Dim`]
+/// alone -- every chart of the atlas carries the *same* lattice, and a cell's
+/// share of it is uniform in the chart no matter the cell's size or shape. It
+/// is not uniform in any metric, and on a manifold with no global coordinates
+/// there is nothing else for "uniform" to mean.
+///
+/// Two properties are what make it worth having:
+///
+/// - **It closes on the faces.** A point with $k_i = 0$ lies on the face
+///   opposite vertex $i$, and the sub-lattice there *is* $L_R^(n-1)$ at the same
+///   $R$. Two cells sharing a facet therefore agree on the lattice points of it
+///   up to the vertex labelling -- which is exactly a [`Transition`] -- so the
+///   agreement is combinatorial and needs no spatial tolerance.
+/// - **It extends [`ref_vertices`].** $R = 1$ *is* the vertex set, in the same
+///   order; $R$ refines it from there. $R = 0$ is not a refinement and admits no
+///   point ($lambda = k \/ 0$), so $R >= 1$. The barycenter is a lattice point
+///   only when $(n+1) | R$.
+pub fn ref_lattice(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
+  assert!(
+    refinement >= 1,
+    "A lattice needs a refinement of at least one."
+  );
+  compositions(dim + 1, refinement)
+}
+
+/// [`ref_lattice`] as barycentric weights, $lambda = k \/ R$.
+pub fn ref_lattice_bary(dim: Dim, refinement: usize) -> impl Iterator<Item = Bary> {
+  let scale = (refinement as f64).recip();
+  ref_lattice(dim, refinement).map(move |k| {
+    Bary::new(Vector::from_iterator(
+      k.len(),
+      k.into_iter().map(|k| k as f64 * scale),
+    ))
+  })
+}
+
 /// The spanning vectors $v_i = e_(p_i) - e_(p_0)$ of a face of the reference
 /// cell, in the cell's reference frame, as the columns of an $n times k$ matrix.
 ///
@@ -215,6 +262,73 @@ mod test {
   use super::*;
 
   use approx::assert_relative_eq;
+  use common::combo::binomial;
+
+  /// The lattice has $binom(R + n, n)$ points, each a composition of $R$.
+  #[test]
+  fn lattice_is_a_composition_set() {
+    for dim in 0..=4 {
+      for refinement in 1..=5 {
+        let lattice: Vec<_> = ref_lattice(dim, refinement).collect();
+        assert_eq!(lattice.len(), binomial(refinement + dim, dim));
+        for point in &lattice {
+          assert_eq!(point.len(), dim + 1);
+          assert_eq!(point.iter().sum::<usize>(), refinement);
+        }
+        let unique: std::collections::HashSet<_> = lattice.iter().collect();
+        assert_eq!(unique.len(), lattice.len());
+      }
+    }
+  }
+
+  /// $L_1^n$ *is* the vertex set of the reference cell, in the order
+  /// [`ref_vertices`] places it: the lattice extends the vertices rather than
+  /// merely containing them.
+  #[test]
+  fn lattice_at_refinement_one_is_the_vertices() {
+    for dim in 0..=4 {
+      let vertices = ref_vertices(dim);
+      for (ivertex, bary) in ref_lattice_bary(dim, 1).enumerate() {
+        assert_relative_eq!(bary2local(&bary).view(), &vertices.column(ivertex));
+      }
+    }
+  }
+
+  /// The weights are barycentric, and every lattice point is a point of the
+  /// closed cell.
+  #[test]
+  fn lattice_bary_lies_in_the_cell() {
+    for dim in 0..=4 {
+      for refinement in 1..=5 {
+        for bary in ref_lattice_bary(dim, refinement) {
+          assert_relative_eq!(bary.view().sum(), 1.0);
+          assert!(is_bary_inside(&bary));
+        }
+      }
+    }
+  }
+
+  /// The lattice closes on the faces: the points vanishing on vertex `i` are,
+  /// with that weight dropped, exactly the facet's own lattice at the same $R$.
+  /// This is what lets two cells agree on a shared facet combinatorially.
+  #[test]
+  fn lattice_restricts_to_the_facet_lattice() {
+    for dim in 1..=4 {
+      for refinement in 1..=5 {
+        let facet: std::collections::HashSet<_> = ref_lattice(dim - 1, refinement).collect();
+        for ivertex in 0..=dim {
+          let restricted: std::collections::HashSet<_> = ref_lattice(dim, refinement)
+            .filter(|k| k[ivertex] == 0)
+            .map(|mut k| {
+              k.remove(ivertex);
+              k
+            })
+            .collect();
+          assert_eq!(restricted, facet);
+        }
+      }
+    }
+  }
 
   /// The two chart coordinate systems are mutually inverse.
   #[test]
