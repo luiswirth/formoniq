@@ -327,7 +327,10 @@ cargo run --release --example hodge_laplace_source
 ```
 
 Commit messages: `scope: imperative summary`, e.g. `manifold: cache boundary
-operators lazily`. Keep commits structurally coherent — one idea each.
+operators lazily`. Keep commits structurally coherent — one idea each where
+that's easily reached from what's already staged or in progress; splitting
+unrelated changes is not worth contorting history over, so bundling a few into
+one commit is fine when separating them would be the more artificial move.
 
 A change to the design is not finished until this file reflects it, in the same
 commit. Where CLAUDE.md and the code disagree, one of them is a bug — and it is
