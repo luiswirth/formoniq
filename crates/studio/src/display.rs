@@ -18,11 +18,39 @@ use crate::bake::{self, BakedMesh};
 use crate::render::{
   camera::Camera,
   item::{DrawList, RenderItem, SegmentBatch, SurfaceBatch},
-  uniform::{SegmentMaterial, SurfaceMaterial},
+  particles::ParticleBatch,
+  uniform::{ParticleMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
   GpuContext,
 };
 use crate::scene::Scene;
-use crate::ui::Selection;
+use crate::ui::{Marks, Post, Selection};
+
+/// The exposure the scene's radiance is read at, before the display transform.
+///
+/// One, because the marks are already authored in display units: a colormap
+/// lands in $[0, 1]$ by construction, and the particles' overflow is set by
+/// their own ink and count. Exposure is the knob for when that stops being true.
+const EXPOSURE: f32 = 1.0;
+
+/// How much of the blurred glow is added back -- how far the light that will not
+/// fit is allowed to spread, rather than how bright it is.
+const BLOOM_INTENSITY: f32 = 0.85;
+
+/// The display transform for a [`Post`] rung: the one place its meaning becomes
+/// numbers.
+///
+/// The ladder is the model's, the strengths are the display's, and the renderer
+/// sees neither -- only the uniform. Which is why bloom's "off" is an intensity
+/// of zero rather than a flag: the resolve multiplies by it unconditionally, so
+/// the frame graph can skip the chain without the image knowing.
+pub(crate) fn post_uniform(post: Post) -> PostUniform {
+  PostUniform {
+    exposure: EXPOSURE,
+    bloom_intensity: if post.blooms() { BLOOM_INTENSITY } else { 0.0 },
+    tonemap: f32::from(post.tone_maps()),
+    _pad0: 0.0,
+  }
+}
 
 /// Peak standing-wave displacement, as a fraction of the scene's own coordinate
 /// extent (its radius) -- an object-intrinsic scale, independent of how finely
@@ -51,6 +79,82 @@ const STREAMLINE_INK: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 /// the integral curves of a standing mode are the same set at every phase, and
 /// blinking them out entirely would read as the geometry changing.
 const STREAMLINE_NODE_OPACITY: f32 = 0.25;
+
+/// The advected particles' radius, on the same object-intrinsic scale as every
+/// other mark's width.
+///
+/// Read together with [`PARTICLE_COUNT`]: the two are one setting. What the eye
+/// judges is the light per unit area, which is the count times the speck's own
+/// area times its opacity -- so a count raised or lowered without moving these
+/// gives a saturated wash or an empty one, and neither is a picture of the
+/// field. This is the size at which a speck is individually legible, which is
+/// the regime the count below chooses.
+const PARTICLE_RADIUS_FRACTION: f32 = 0.0026;
+
+/// The particles' ink: a warm white, additively blended, so overlapping specks
+/// accumulate into a bright density rather than occluding one another.
+///
+/// Below full opacity because a speck is one sample among many and the
+/// accumulation is what should read -- and because the target is HDR, so what a
+/// pile-up exceeds 1.0 by is what blooms. Opacity here is therefore a *glow*
+/// setting as much as a brightness one.
+const PARTICLE_INK: [f32; 4] = [1.0, 0.86, 0.62, 0.10];
+
+/// How fast the fastest particle crosses the object: scene radii per second, at
+/// the field's peak magnitude.
+///
+/// Object-intrinsic, exactly as the streamline separation is, so the flow reads
+/// at the same pace whether the mesh is a unit sphere or an OBJ at arbitrary
+/// scale, and regardless of the cochain's own units. Slow on purpose: a speck
+/// that moves a few pixels per frame reads as motion, and one that jumps across
+/// the screen reads as flicker. This is the knob that makes a trail-less
+/// particle legible at all.
+const PARTICLE_SPEED_FRACTION: f64 = 0.10;
+
+/// How many radii a peak-speed speck stretches along its own motion.
+///
+/// This is motion blur, not a trail: the elongation is derived from the speck's
+/// own velocity in the vertex shader and stores nothing. A round speck moving
+/// several radii per frame reads as a jumping dot; the same speck drawn along
+/// its chord reads as a direction, which is what the mark is for.
+const PARTICLE_STRETCH: f32 = 4.0;
+
+/// The advection's fixed rate, in steps per second of animation time.
+///
+/// The bake exponentiates one step's worth of field time, so the step is fixed
+/// and only their *number* varies with elapsed time. Tied to the animation
+/// clock rather than the frame rate: a slow frame takes more steps, not shorter
+/// ones, and the flow runs at the same speed on any machine.
+pub(crate) const STEPS_PER_SECOND: f32 = 60.0;
+
+/// The dyadic resolution of one step: a step is $2^"depth"$ ticks, and a facet
+/// crossing lands within one tick of the true crossing. At this depth that
+/// residue is far below the `f32` the whole pass runs in, and the cost is one
+/// mat-vec per level only on the steps that actually cross.
+const ADVECT_DEPTH: u32 = 10;
+
+/// How many particles, and how many distinct sites they are born at.
+///
+/// A count where an individual speck can still be followed by eye, and the flow
+/// is read from watching them move rather than from the density they pile into.
+/// The two regimes are genuinely different pictures, not more or less of one:
+/// far higher and no speck is legible, so only the accumulated density carries
+/// anything, and the radius and opacity above have to come down to keep it from
+/// saturating to a flat wash. Move the count and those two move with it.
+///
+/// The seeds are far fewer than the particles: a seed is a *place* to be born,
+/// not a particle, and many pass through each over a session.
+const PARTICLE_COUNT: u32 = 100_000;
+const PARTICLE_SEEDS: usize = 16_384;
+
+/// The advection steps that have elapsed by `time`.
+///
+/// The count is a function of the instant, not an accumulator, so it is the
+/// same number for the window and for an exporter aiming at that instant --
+/// which is what makes the two agree on where a particle is.
+pub(crate) fn steps_at(time: f32) -> u32 {
+  (time.max(0.0) * STEPS_PER_SECOND) as u32
+}
 
 /// Streamline separation, as a fraction of the scene extent (its radius) --
 /// object-intrinsic, like the wave amplitude, so the line density is a property
@@ -183,9 +287,19 @@ pub(crate) struct FieldDisplay {
   /// The traced streamlines of a line field, `None` for a scalar field. Their
   /// presence *is* the line-field mark: there is no branch to pick.
   streamlines: Option<SegmentBatch>,
+  /// The advected particles of a line field, absent for a scalar field and for
+  /// a field that vanishes everywhere (which seeds nowhere).
+  ///
+  /// The same reduced grade-1 field the streamlines trace, read the other way:
+  /// the curves are the field's geometry, standing still, and the particles are
+  /// its dynamics. Both are intrinsic -- one integrated on the CPU through the
+  /// atlas, one on the GPU through the same charts and transitions -- so they
+  /// are two marks on one reduction, not a mark and its screen-space twin.
+  particles: Option<ParticleBatch>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
   streamline: SegmentMaterial,
+  particle: ParticleMaterial,
 }
 
 impl FieldDisplay {
@@ -199,7 +313,7 @@ impl FieldDisplay {
     selection: Selection,
     amplitude_scale: f32,
   ) -> (Self, Vec<f32>) {
-    let (streamlines, attributes, surface) = match selection {
+    let (streamlines, particles, attributes, surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
         let (raw_min, raw_max) = field.bounds();
@@ -229,6 +343,7 @@ impl FieldDisplay {
         };
 
         (
+          None,
           None,
           bake::attributes(field.values()),
           SurfaceMaterial {
@@ -270,8 +385,32 @@ impl FieldDisplay {
           (raw_min, raw_max)
         };
 
+        // The particles flow the same field, on the object's own clock: the
+        // peak magnitude sets what "one step" is worth, so the fastest speck
+        // covers `PARTICLE_SPEED_FRACTION` of the object's radius each second
+        // whatever the cochain's units. A field that vanishes everywhere has no
+        // scale to divide by and simply does not move.
+        let peak = crate::advect::peak_speed(&scene.topology, &scene.coords, &field.cochain);
+        let particles = (peak > 0.0)
+          .then(|| {
+            let step = PARTICLE_SPEED_FRACTION * f64::from(amplitude_scale)
+              / peak
+              / f64::from(STEPS_PER_SECOND);
+            let bake = crate::advect::AdvectBake::new(
+              &scene.topology,
+              &scene.coords,
+              &field.cochain,
+              step,
+              ADVECT_DEPTH,
+              PARTICLE_SEEDS,
+            );
+            ParticleBatch::new(&ctx.device, &bake, PARTICLE_COUNT)
+          })
+          .flatten();
+
         (
           Some(streamlines),
+          particles,
           // The surface is the same fill a scalar field gets, tinted by the
           // field's nodal magnitude: the curves carry the direction, so the
           // surface has only the magnitude left to say.
@@ -289,6 +428,7 @@ impl FieldDisplay {
 
     let display = Self {
       streamlines,
+      particles,
       surface,
       // The wireframe rides the surface's own wave, so it tracks the displaced
       // mesh rather than the flat rest one, and it has no node to fade at.
@@ -308,20 +448,39 @@ impl FieldDisplay {
         wave_amplitude: 0.0,
         wave_omega: surface.wave_omega,
       },
+      // The speed normalization is the display's, not the bake's: the bake was
+      // handed a step chosen so the *peak* covers
+      // `PARTICLE_SPEED_FRACTION` of the object's radius each second, so the
+      // peak's ambient displacement per step is that same fraction over the
+      // step rate -- known here without measuring anything.
+      particle: ParticleMaterial {
+        color: PARTICLE_INK,
+        radius_world: PARTICLE_RADIUS_FRACTION * amplitude_scale,
+        speed_scale: PARTICLE_SPEED_FRACTION as f32 * amplitude_scale / STEPS_PER_SECOND,
+        stretch: PARTICLE_STRETCH,
+        _pad0: 0.0,
+      },
     };
     (display, attributes)
   }
 
   /// The frame's items, in submission order: the surface writes depth, and the
-  /// marks over it -- a line field's ribbons, then the wireframe -- only test
-  /// against it, so they blend in the order given.
-  pub(crate) fn draw_list<'a>(&'a self, mesh: &'a MeshDisplay) -> DrawList<'a> {
+  /// marks over it -- a line field's ribbons, its particles, then the wireframe
+  /// -- only test against it, so they blend in the order given.
+  ///
+  /// `marks` drops items rather than switching the frame graph. A mark that is
+  /// off is simply not in the list, which the renderer cannot tell from a field
+  /// that never had one -- so the toggle costs no branch below this line.
+  pub(crate) fn draw_list<'a>(&'a self, mesh: &'a MeshDisplay, marks: Marks) -> DrawList<'a> {
     let mut items = Vec::new();
     if let Some(surface) = &mesh.surface {
       items.push(RenderItem::Surface(surface, self.surface));
     }
-    if let Some(streamlines) = &self.streamlines {
+    if let Some(streamlines) = self.streamlines.as_ref().filter(|_| marks.streamlines) {
       items.push(RenderItem::Segments(streamlines, self.streamline));
+    }
+    if let Some(particles) = self.particles.as_ref().filter(|_| marks.particles) {
+      items.push(RenderItem::Particles(particles, self.particle));
     }
     items.push(RenderItem::Segments(&mesh.segments, self.wireframe));
     DrawList { items }

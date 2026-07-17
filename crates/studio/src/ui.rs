@@ -12,6 +12,81 @@ use crate::gallery::{
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
 };
 
+/// How much of the scene's light survives to the display.
+///
+/// A ladder, not a product: each rung includes the one below it, and the fourth
+/// cell of the two-checkbox version -- bloom without the curve -- is not a
+/// picture anyone wants. The glow would be added and then clipped, so the cores
+/// go flat white and only the fringes survive. Offering it would be a knob whose
+/// only use is to be wrong.
+///
+/// The reason the choice exists at all is that there is no right answer. The
+/// scene target is unbounded and the display is not, so keeping the range above
+/// 1 *must* spend range below it -- see `display_transform` in the preamble.
+/// Whether the dynamic range or the palette matters more is a question about
+/// what is being looked at, which is exactly the kind the code cannot settle
+/// from the object.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) enum Post {
+  /// The display's range, hard. What an 8-bit target did implicitly, so this is
+  /// not an approximation of the renderer before HDR but exactly it.
+  Clamp,
+  /// The whole range, compressed by the filmic curve.
+  Tonemap,
+  /// The curve, plus the light that spills past what can be shown.
+  #[default]
+  Bloom,
+}
+
+impl Post {
+  pub(crate) fn label(self) -> &'static str {
+    match self {
+      Self::Clamp => "Clamp",
+      Self::Tonemap => "Tone map",
+      Self::Bloom => "Bloom",
+    }
+  }
+
+  /// Every rung above [`Post::Clamp`] maps the full range.
+  pub(crate) fn tone_maps(self) -> bool {
+    self != Self::Clamp
+  }
+
+  pub(crate) fn blooms(self) -> bool {
+    self == Self::Bloom
+  }
+
+  pub(crate) const ALL: [Self; 3] = [Self::Clamp, Self::Tonemap, Self::Bloom];
+}
+
+/// Which of a line field's marks are drawn.
+///
+/// The two are not a choice between renderings of one thing; they answer
+/// different questions about the same reduced grade-1 field. The streamlines are
+/// its *geometry* -- the integral curves, evenly spaced, standing still, the
+/// whole picture legible in one frame and in a still. The particles are its
+/// *dynamics* -- where the flow carries a point, and how fast, legible only in
+/// motion. Both are traced through the same atlas and the same transitions, one
+/// on the CPU and one on the GPU, so neither is the other's approximation.
+///
+/// Hence a toggle rather than a mode: the honest default is both, and which one
+/// a reader wants is a question about what they are looking for, not something
+/// the code can decide from the object.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct Marks {
+  pub(crate) streamlines: bool,
+  pub(crate) particles: bool,
+}
+
+impl Default for Marks {
+  fn default() -> Self {
+    Self {
+      streamlines: true,
+      particles: true,
+    }
+  }
+}
+
 /// Which field of a scene is on display: its reduced grade decides the mark
 /// ([`crate::scene::Scene`]'s own rule), and this is that choice's UI-facing
 /// form -- a scalar field colors the surface with its own value; a line field
@@ -259,6 +334,8 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) entries: Vec<Entry<'a>>,
   pub(crate) mesh_error: Option<String>,
   pub(crate) selection: Selection,
+  pub(crate) marks: Marks,
+  pub(crate) post: Post,
   pub(crate) top_down: bool,
   pub(crate) presets: &'a [Preset],
   /// The displayed field's Hodge-Laplace eigenvalue $lambda$, when it is an
@@ -284,6 +361,8 @@ pub(crate) struct PanelResponse {
   /// applies it in preference to the individual `requested_*` fields.
   pub(crate) requested_preset: Option<usize>,
   pub(crate) selection: Selection,
+  pub(crate) marks: Marks,
+  pub(crate) post: Post,
   pub(crate) top_down: bool,
   /// Whether the standing wave should be running after this frame -- the
   /// play/pause toggle. Defaults to the model's own state when the control
@@ -317,6 +396,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut requested_study = model.study.clone();
   let mut requested_preset = None;
   let mut selection = model.selection;
+  let mut marks = model.marks;
+  let mut post = model.post;
   let mut top_down = model.top_down;
   let mut playing = model.playing;
   let mut load_obj_clicked = false;
@@ -483,6 +564,28 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         render_modes(ui, &model.entries, &mut selection, model.scene_dim);
       }
 
+      // Only a line field has these marks, so only a line field is asked. A
+      // scalar field's surface is its whole rendering, and a toggle with nothing
+      // to toggle is a knob whose only use is to be wrong.
+      if matches!(model.selection, Selection::Line(_)) {
+        ui.separator();
+        ui.label("Marks");
+        ui.checkbox(&mut marks.streamlines, "Streamlines")
+          .on_hover_text("Evenly spaced integral curves: the field's geometry, in one frame");
+        ui.checkbox(&mut marks.particles, "Particles")
+          .on_hover_text("Advected points: the field's dynamics, legible in motion");
+      }
+
+      // Radio, not two checkboxes: the rungs are cumulative, so the states are
+      // three and not four.
+      ui.separator();
+      ui.label("Light");
+      ui.horizontal_wrapped(|ui| {
+        for rung in Post::ALL {
+          ui.radio_value(&mut post, rung, rung.label());
+        }
+      });
+
       ui.separator();
       ui.checkbox(&mut top_down, "Top-down")
         .on_hover_text("Orthographic, drag to pan");
@@ -547,6 +650,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     requested_study,
     requested_preset,
     selection,
+    marks,
+    post,
     top_down,
     playing,
     load_obj_clicked,

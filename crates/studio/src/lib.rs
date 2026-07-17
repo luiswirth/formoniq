@@ -6,6 +6,7 @@
 
 extern crate nalgebra as na;
 
+pub mod advect;
 pub mod app;
 pub mod bake;
 pub mod demos;
