@@ -50,56 +50,54 @@ fn box_sweep() {
   // is $RR$ in degree 0, the Hodge Laplacian is the zero operator, and the whole
   // spectrum is ${0}$ with multiplicity $b_0 = 1$. It carries no convergence (a
   // point does not refine), but it runs on exactly the same code.
+  // Both boundary conditions: absolute (natural / Neumann) on the full
+  // Whitney complex, relative (essential / Dirichlet) on its
+  // boundary-vanishing subcomplex. The zero-eigenvalue count is the harmonic
+  // dimension — $b_k (K)$ for absolute, $b_k (K, diff K)$ for relative — so
+  // the harmonic mode sits at grade $0$ for absolute and top grade for
+  // relative, staging Poincaré--Lefschetz duality. On the point ($n = 0$)
+  // the boundary is empty and the two coincide.
+  const BCS: [BoundaryCondition; 2] = [BoundaryCondition::Absolute, BoundaryCondition::Relative];
+
   for dim in 0..=3 {
     for grade in 0..=dim {
-      // Both boundary conditions: absolute (natural / Neumann) on the full
-      // Whitney complex, relative (essential / Dirichlet) on its
-      // boundary-vanishing subcomplex. The zero-eigenvalue count is the harmonic
-      // dimension — $b_k (K)$ for absolute, $b_k (K, diff K)$ for relative — so
-      // the harmonic mode sits at grade $0$ for absolute and top grade for
-      // relative, staging Poincaré--Lefschetz duality. On the point ($n = 0$)
-      // the boundary is empty and the two coincide.
-      for bc in [BoundaryCondition::Absolute, BoundaryCondition::Relative] {
-        let relative = bc == BoundaryCondition::Relative;
-        println!(
-          "\nHodge-Laplace spectrum — dim {dim}, grade {grade}, {}",
-          bc.label()
-        );
-        println!(
-          "| {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
-          "r", "ncells"
-        );
+      // The eigensolve is a sparse shift-invert Lanczos, so the budget is set
+      // by wall-clock patience for a hand-run sweep, not by a dense O(N^3)
+      // ceiling.
+      const MAX_DOFS: usize = 20_000;
 
-        // The eigensolve is a sparse shift-invert Lanczos, so the budget is set
-        // by wall-clock patience for a hand-run sweep, not by a dense O(N^3)
-        // ceiling.
-        const MAX_DOFS: usize = 20_000;
+      // Rows are gathered per BC and printed as grouped tables afterwards, so
+      // the mesh and Whitney complex — independent of `bc` — are built once
+      // per refinement and shared by both BCs, not duplicated.
+      // History of the lowest eigenvalues per level, for the three-point
+      // Richardson estimate of each eigenvalue's convergence order.
+      let mut history: [Vec<Vec<f64>>; 2] = [const { Vec::new() }; 2];
+      let mut rows: [Vec<String>; 2] = [const { Vec::new() }; 2];
+      let mut prev_ndofs = 0;
+      for irefine in 0u32..=8 {
+        let nboxes_per_dim = 2usize.pow(irefine);
+        let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
+        let (topology, coords) = box_mesh.compute_coord_complex();
+        let metric = coords.to_edge_lengths(&topology);
+        let whitney = WhitneyComplex::new(&topology, &metric);
 
-        // History of the lowest eigenvalues per level, for the three-point
-        // Richardson estimate of each eigenvalue's convergence order.
-        let mut history: Vec<Vec<f64>> = Vec::new();
-        let mut prev_ndofs = 0;
-        for irefine in 0u32..=8 {
-          let nboxes_per_dim = 2usize.pow(irefine);
-          let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
-          let (topology, coords) = box_mesh.compute_coord_complex();
-          let metric = coords.to_edge_lengths(&topology);
-          let whitney = WhitneyComplex::new(&topology, &metric);
+        let ndofs = whitney.ndofs(grade)
+          + if grade > 0 {
+            whitney.ndofs(grade - 1)
+          } else {
+            0
+          };
+        // Stop once the solve would exceed the budget, or once refinement
+        // no longer grows the mesh — a 0-manifold is a single point and does not
+        // subdivide, so it has exactly one level.
+        if !history[0].is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
+          break;
+        }
+        prev_ndofs = ndofs;
 
-          let ndofs = whitney.ndofs(grade)
-            + if grade > 0 {
-              whitney.ndofs(grade - 1)
-            } else {
-              0
-            };
-          // Stop once the solve would exceed the budget, or once refinement
-          // no longer grows the mesh — a 0-manifold is a single point and does not
-          // subdivide, so it has exactly one level.
-          if !history.is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
-            break;
-          }
-          prev_ndofs = ndofs;
-
+        let ncells = topology.cells().len();
+        for (i, bc) in BCS.into_iter().enumerate() {
+          let relative = bc == BoundaryCondition::Relative;
           let (eigenvals, _, _) = if relative {
             hodge_laplace::solve_hodge_laplace_evp(&whitney.relative(), grade, neigen).unwrap()
           } else {
@@ -112,12 +110,12 @@ fn box_sweep() {
           // Richardson: with three successive levels the ratio of consecutive
           // differences estimates the order without knowing the exact eigenvalue.
           // FEEC eigenvalues converge as $O(h^2)$, so expect a rate near 2.
-          let rates: Option<Vec<f64>> = match history.as_slice() {
+          let rates: Option<Vec<f64>> = match history[i].as_slice() {
             [.., older, newer] => Some(
               (0..eigenvals.len().min(newer.len()).min(older.len()))
-                .map(|i| {
+                .map(|j| {
                   let (d_old, d_new) =
-                    ((newer[i] - older[i]).abs(), (eigenvals[i] - newer[i]).abs());
+                    ((newer[j] - older[j]).abs(), (eigenvals[j] - newer[j]).abs());
                   algebraic_convergence_rate(d_new, d_old)
                 })
                 .collect(),
@@ -125,21 +123,38 @@ fn box_sweep() {
             _ => None,
           };
 
-          let ncells = topology.cells().len();
-          print!("| {irefine:>2} | {ncells:>7} |");
-          for (i, &lambda) in eigenvals.iter().enumerate() {
+          let mut row = format!("| {irefine:>2} | {ncells:>7} |");
+          for (j, &lambda) in eigenvals.iter().enumerate() {
             // A near-zero eigenvalue is a harmonic mode: FEEC captures it exactly,
             // so a "convergence rate" would only compare solver noise — mark it,
             // and the coarsest levels with no prior triple, absent.
             let rate = rates
               .as_ref()
-              .and_then(|rates| rates.get(i).copied())
+              .and_then(|rates| rates.get(j).copied())
               .filter(|_| lambda.abs() > 1e-6);
-            print!(" {:>7}({:>6})", report::eigval(lambda), report::rate(rate));
+            row.push_str(&format!(
+              " {:>7}({:>6})",
+              report::eigval(lambda),
+              report::rate(rate)
+            ));
           }
-          println!();
+          rows[i].push(row);
 
-          history.push(eigenvals);
+          history[i].push(eigenvals);
+        }
+      }
+
+      for (i, bc) in BCS.into_iter().enumerate() {
+        println!(
+          "\nHodge-Laplace spectrum — dim {dim}, grade {grade}, {}",
+          bc.label()
+        );
+        println!(
+          "| {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
+          "r", "ncells"
+        );
+        for row in &rows[i] {
+          println!("{row}");
         }
       }
     }

@@ -41,44 +41,44 @@ use std::f64::consts::PI;
 fn main() {
   tracing_subscriber::fmt::init();
 
+  const BCS: [BoundaryCondition; 2] = [BoundaryCondition::Absolute, BoundaryCondition::Relative];
+
   for dim in 1..=3 {
     for grade in 0..=dim {
-      for bc in [BoundaryCondition::Absolute, BoundaryCondition::Relative] {
-        let form = BoxEigenform::new(dim, grade, bc);
-        println!(
-          "\nHodge-Laplace source — dim {dim}, grade {grade}, {} — Δu = {}u",
-          bc.label(),
-          form.eigenvalue()
-        );
-        println!(
-          "| {:>2} | {:>7} | {:>9} | {:>7} | {:>9} | {:>7} |",
-          "r", "ncells", "L2 err", "L2 conv", "Hd err", "Hd conv",
-        );
+      let forms = BCS.map(|bc| BoxEigenform::new(dim, grade, bc));
 
-        // Whenever the harmonic space is nontrivial, fixing the harmonic part
-        // runs a sparse shift-invert Lanczos solve for exactly the harmonic
-        // dimension's worth of eigenpairs, so the budget here is wall-clock
-        // patience for a hand-run sweep, not a dense O(N^3) ceiling.
-        const MAX_DOFS: usize = 20_000;
+      // Whenever the harmonic space is nontrivial, fixing the harmonic part
+      // runs a sparse shift-invert Lanczos solve for exactly the harmonic
+      // dimension's worth of eigenpairs, so the budget here is wall-clock
+      // patience for a hand-run sweep, not a dense O(N^3) ceiling.
+      const MAX_DOFS: usize = 20_000;
 
-        let mut errors_l2 = Vec::new();
-        let mut errors_hd = Vec::new();
-        for irefine in 0u32..=8 {
-          let nboxes_per_dim = 2usize.pow(irefine);
-          let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
-          let (topology, coords) = box_mesh.compute_coord_complex();
-          let metric = coords.to_edge_lengths(&topology);
-          let whitney = WhitneyComplex::new(&topology, &metric);
+      // Rows are gathered per BC and printed as grouped tables afterwards,
+      // so the mesh and Whitney complex — independent of `bc` — are built
+      // once per refinement and shared by both BCs, not duplicated.
+      let mut errors_l2 = [const { Vec::new() }; 2];
+      let mut errors_hd = [const { Vec::new() }; 2];
+      let mut rows = [const { Vec::new() }; 2];
+      for irefine in 0u32..=8 {
+        let nboxes_per_dim = 2usize.pow(irefine);
+        let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
+        let (topology, coords) = box_mesh.compute_coord_complex();
+        let metric = coords.to_edge_lengths(&topology);
+        let whitney = WhitneyComplex::new(&topology, &metric);
 
-          let ndofs = whitney.ndofs(grade)
-            + if grade > 0 {
-              whitney.ndofs(grade - 1)
-            } else {
-              0
-            };
-          if !errors_l2.is_empty() && ndofs > MAX_DOFS {
-            break;
-          }
+        let ndofs = whitney.ndofs(grade)
+          + if grade > 0 {
+            whitney.ndofs(grade - 1)
+          } else {
+            0
+          };
+        if !errors_l2[0].is_empty() && ndofs > MAX_DOFS {
+          break;
+        }
+
+        let ncells = topology.cells().len();
+        for (i, bc) in BCS.into_iter().enumerate() {
+          let form = &forms[i];
 
           // The continuum eigenform becomes a field on the mesh by pullback along
           // the affine cell charts; everything downstream is intrinsic.
@@ -105,8 +105,8 @@ fn main() {
           };
 
           let error_l2 = fe_l2_error(&galsol, &solution, &topology, &metric);
-          let conv_l2 = conv(&errors_l2, error_l2);
-          errors_l2.push(error_l2);
+          let conv_l2 = conv(&errors_l2[i], error_l2);
+          errors_l2[i].push(error_l2);
 
           // Top grade: $dif u = 0$ identically, so there is no $H(dif)$ error to
           // converge — the two columns are marked absent rather than filled with a
@@ -115,21 +115,35 @@ fn main() {
             Some(dif_solution_field) => {
               let dif_solution = dif_solution_field.pullback_on(&topology, &coords);
               let error_hd = fe_l2_error(&galsol.dif(&topology), &dif_solution, &topology, &metric);
-              let conv_hd = conv(&errors_hd, error_hd);
-              errors_hd.push(error_hd);
+              let conv_hd = conv(&errors_hd[i], error_hd);
+              errors_hd[i].push(error_hd);
               (Some(error_hd), Some(conv_hd))
             }
             None => (None, None),
           };
 
-          let ncells = topology.cells().len();
-          println!(
+          rows[i].push(format!(
             "| {irefine:>2} | {ncells:>7} | {:>9} | {:>7} | {:>9} | {:>7} |",
             report::err(Some(error_l2)),
             report::rate(Some(conv_l2)),
             report::err(error_hd),
             report::rate(conv_hd),
-          );
+          ));
+        }
+      }
+
+      for (i, bc) in BCS.into_iter().enumerate() {
+        println!(
+          "\nHodge-Laplace source — dim {dim}, grade {grade}, {} — Δu = {}u",
+          bc.label(),
+          forms[i].eigenvalue()
+        );
+        println!(
+          "| {:>2} | {:>7} | {:>9} | {:>7} | {:>9} | {:>7} |",
+          "r", "ncells", "L2 err", "L2 conv", "Hd err", "Hd conv",
+        );
+        for row in &rows[i] {
+          println!("{row}");
         }
       }
     }
