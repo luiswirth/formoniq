@@ -3,10 +3,19 @@
 // because they are one technique (the preamble's billboard-quad construction,
 // one instance per segment) at different ink, width and taper.
 //
-// The arrow is the taper and nothing else: the quad, the billboard and the
-// vertex path are the ribbon's, and the head is a function the fragment cuts the
-// quad's silhouette down to. Everything the mark needs is therefore material
-// data, which is what keeps a fourth mark from being a fourth pipeline.
+// The arrow is a silhouette the fragment cuts the quad down to, and nothing
+// else: the quad, the billboard and the vertex path are the ribbon's. The mark
+// is the region inside a signed distance to the arrow polygon -- a shaft
+// rectangle fused to a head triangle -- so the outline is that same distance a
+// fixed world-space band further out, uniform on every edge, both barbs and the
+// tip alike. A plain segment is the same construction with a zero-length head:
+// the polygon degenerates to the full rectangle, exactly the mark this shader
+// drew before there were arrows, which is what keeps a fourth mark from being a
+// fourth pipeline.
+//
+// The quad is inflated outward by that band so the rim has room on every side --
+// past the tip, behind the tail, beyond the widest barb. A mark with no outline
+// (a mesh edge, a ribbon) inflates by zero and is untouched.
 //
 // The two endpoints arrive as two separate per-instance vertex buffers
 // (`SegmentBatch::layouts` in `item.rs`) bound side by side, since a
@@ -47,42 +56,47 @@ struct EndpointB {
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
     @location(0) opacity: f32,
-    // Where the fragment sits in the quad: `along` runs 0 at A to 1 at B, and
-    // `across` runs -1 to 1 in units of the material's half-width. The two
-    // coordinates the ink profile is a function of.
-    @location(1) along: f32,
-    @location(2) across: f32,
+    // The fragment's position in the arrow's own world frame: `xy.x` runs along
+    // the segment from the tail at 0 to the tip at `seg_len`, `xy.y` across it,
+    // both in world units so the signed distance below is Euclidean and its
+    // outline band is one constant world width on every edge.
+    @location(1) xy: vec2<f32>,
+    @location(2) seg_len: f32,
 };
 
-// The mark's half-width at `along`, as a fraction of the material's own: the
-// shaft's constant fraction until the head begins, then the head's linear taper
-// from its full-width base to a point at the tip.
-//
-// This is the whole of what makes a segment an arrow, and it is why an arrow is
-// not a second pipeline: a plain segment passes `head_length_fraction = 0` and
-// `shaft_width_fraction = 1`, and the expression collapses to a constant 1 --
-// the full quad, exactly the mark this shader drew before there were arrows.
-fn segment_profile(material: SegmentMaterial, along: f32, blend_half: f32) -> f32 {
-    let head = max(material.head_length_fraction, 1e-6);
-    let head_start = 1.0 - material.head_length_fraction;
-    let taper = clamp((1.0 - along) / head, 0.0, 1.0);
-    // Blended, not switched, across `head_start`: the taper reaches 1 there
-    // (the head's full-width base) while the shaft sits at
-    // `shaft_width_fraction` on the other side, so a hard `select` is a genuine
-    // discontinuity in the profile. `fwidth` below differentiates across it,
-    // and one row of fragments would see the whole shaft-to-head jump as its
-    // screen-space derivative -- the antialiasing edge computed from that
-    // blows open into a visible seam exactly at the join.
-    //
-    // `blend_half` is `fwidth(along)`, the caller's one-pixel footprint in
-    // `along`, not a fraction of the head's length: sizing it from the
-    // geometry would round the corner into a visible curve at any zoom where
-    // that fraction covers more than a pixel. Tied to the pixel instead, the
-    // blend is exactly the antialiasing this shader already does at every
-    // other edge -- a corner smoothed over the one pixel it occupies, never
-    // wider, so it reads as sharp at any zoom.
-    let blend = smoothstep(head_start - blend_half, head_start + blend_half, along);
-    return mix(material.shaft_width_fraction, taper, blend);
+// The signed distance from `p` to the arrow polygon (iq's `sdPolygon`),
+// negative inside. Seven vertices: the shaft rectangle
+// (half-width `shaft_hw`, from the tail at x = 0 to the head base at `x_head`)
+// fused to the head triangle (full half-width `hw` at the base, a point at the
+// tip `x = seg_len`). A zero-length head collapses `x_head` onto the tip and the
+// polygon degenerates to the plain rectangle; the `max(dot(e,e), ...)` guards
+// the zero-length edges that leaves behind.
+fn sd_arrow(p: vec2<f32>, seg_len: f32, hw: f32, head_len: f32, shaft_frac: f32) -> f32 {
+    let x_head = seg_len - head_len;
+    let shaft_hw = shaft_frac * hw;
+    var v = array<vec2<f32>, 7>(
+        vec2<f32>(0.0, -shaft_hw),
+        vec2<f32>(x_head, -shaft_hw),
+        vec2<f32>(x_head, -hw),
+        vec2<f32>(seg_len, 0.0),
+        vec2<f32>(x_head, hw),
+        vec2<f32>(x_head, shaft_hw),
+        vec2<f32>(0.0, shaft_hw),
+    );
+    var d = dot(p - v[0], p - v[0]);
+    var s = 1.0;
+    for (var i = 0u; i < 7u; i = i + 1u) {
+        let j = select(i - 1u, 6u, i == 0u);
+        let e = v[j] - v[i];
+        let w = p - v[i];
+        let proj = w - e * clamp(dot(w, e) / max(dot(e, e), 1e-12), 0.0, 1.0);
+        d = min(d, dot(proj, proj));
+        let c = vec3<bool>((p.y >= v[i].y), (p.y < v[j].y), (e.x * w.y > e.y * w.x));
+        if (all(c) || all(!c)) {
+            s = -s;
+        }
+    }
+    return s * sqrt(d);
 }
 
 @vertex
@@ -94,15 +108,34 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     let osc = wave_osc(frame, material.wave_omega);
     let world_a = wave_displace(material.wave_amplitude, osc, a.position, a.normal, a.value, a.max_displacement);
     let world_b = wave_displace(material.wave_amplitude, osc, b.position, b.normal, b.value, b.max_displacement);
-    let perp = billboard_perp(world_a, world_b, frame.eye.xyz);
-    let corner = billboard_corner(world_a, world_b, perp, material.half_width_world, vertex_index);
-    let biased_corner = depth_biased_corner(corner, frame.eye.xyz, material.half_width_world);
+
+    let seg_vec = world_b - world_a;
+    let seg_len = max(length(seg_vec), 1e-6);
+    let seg_dir = seg_vec / seg_len;
+
+    // The quad is grown outward by the rim's own width (with slack for its
+    // antialiased outer edge) so the outline has room on every side -- past the
+    // tip, behind the tail, beyond the widest barb. A mark with no outline
+    // inflates by zero and keeps the exact quad it had.
+    let outline_world = material.outline_width_fraction * material.half_width_world;
+    let margin = outline_world * 1.5;
+    let a_ext = world_a - seg_dir * margin;
+    let b_ext = world_b + seg_dir * margin;
+    let half_w = material.half_width_world + margin;
+
+    let perp = billboard_perp(a_ext, b_ext, frame.eye.xyz);
+    let corner = billboard_corner(a_ext, b_ext, perp, half_w, vertex_index);
+    let biased_corner = depth_biased_corner(corner, frame.eye.xyz, half_w);
 
     var out: VertexOutput;
     out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
     out.opacity = select(a.opacity, b.opacity, billboard_is_b(vertex_index));
-    out.along = select(0.0, 1.0, billboard_is_b(vertex_index));
-    out.across = billboard_side(vertex_index);
+    // The corner's coordinates in the arrow frame, exact under linear
+    // interpolation: the tail edge sits at x = 0 and the tip at x = seg_len,
+    // with the inflated ends reaching to -margin and seg_len + margin.
+    let x = select(-margin, seg_len + margin, billboard_is_b(vertex_index));
+    out.xy = vec2<f32>(x, billboard_side(vertex_index) * half_w);
+    out.seg_len = seg_len;
     return out;
 }
 
@@ -123,23 +156,24 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // tell passes `fade_floor = 1`, and the envelope is constant.
     let env = abs(wave_osc(frame, material.wave_omega));
 
-    // The quad is cut down to the mark's own silhouette, one screen pixel of
+    // The quad is cut down to the arrow's own silhouette, one screen pixel of
     // gradient wide, so the edge is resolved rather than aliased. `fwidth` is
-    // the profile's rate of change in screen space, so the softening is a pixel
+    // the distance's rate of change in screen space, so the softening is a pixel
     // whatever the mark's world width and however the quad is foreshortened --
-    // and on a plain segment, whose profile is a constant 1, it antialiases the
-    // straight edge the quad already had.
-    let profile = segment_profile(material, in.along, fwidth(in.along));
-    let edge = fwidth(in.across) + fwidth(profile);
-    let dist = abs(in.across) - profile;
+    // and on a plain segment, whose polygon is the full rectangle, it
+    // antialiases the straight edge the quad already had.
+    let head_len = material.head_length_fraction * in.seg_len;
+    let dist = sd_arrow(in.xy, in.seg_len, material.half_width_world, head_len, material.shaft_width_fraction);
+    let edge = max(fwidth(dist), 1e-6);
     let ink = 1.0 - smoothstep(-edge, edge, dist);
 
-    // The outline is the same silhouette again, `outline_width_fraction`
-    // further out: a second boundary at a fixed world-space remove from the
-    // first; `ink` and `rim` are the fraction covered inside each, together
-    // in the same units `dist` already is. Zero draws no rim -- `rim` and
-    // `ink` coincide, and the ink-only path below is exact, not a case split.
-    let rim = 1.0 - smoothstep(-edge, edge, dist - material.outline_width_fraction);
+    // The outline is the same silhouette again, a fixed world width further out:
+    // a second boundary at `outline_world` from the first; `ink` and `rim` are
+    // the fraction covered inside each, in the same world units `dist` already
+    // is. Zero draws no rim -- `rim` and `ink` coincide, and the ink-only path
+    // below is exact, not a case split.
+    let outline_world = material.outline_width_fraction * material.half_width_world;
+    let rim = 1.0 - smoothstep(-edge, edge, dist - outline_world);
 
     // Standard alpha compositing of the ink (the material's own color) over
     // the rim (opaque black), both already faded by the envelope and the
