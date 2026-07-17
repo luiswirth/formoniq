@@ -76,20 +76,19 @@ pub struct ScalarField {
   pub dof_label: Option<String>,
 }
 
-/// A named line field on the surface: the reduced-grade-1 mark, drawn with
-/// line-integral convolution rather than sampled arrow glyphs.
+/// A named line field on the surface: the reduced-grade-1 mark, drawn as arrow
+/// glyphs and advected particles.
 ///
 /// A grade-1 (or, via the Hodge star, grade-$(n-1)$) form reduces to a genuine
-/// tangent *line* field, drawn as its integral curves: the mark is the traced
-/// streamlines of the true Whitney field, evenly spaced at a separation fixed
-/// to the object's own extent. Its (unsigned) nodal magnitude is the same
-/// per-vertex recovery a [`ScalarField`] uses, and tints the surface the curves
-/// are drawn on.
+/// tangent *line* field. Its (unsigned) nodal magnitude is the same per-vertex
+/// recovery a [`ScalarField`] uses, and tints the surface the marks are drawn
+/// on.
 ///
-/// The curves are static: $ker$ and $sharp$ are scale-invariant, so the
-/// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves the lines fixed and
-/// swings only the magnitude tint through zero. A single real eigenmode does
-/// not travel, so the curves are never advected.
+/// The glyphs are static: $ker$ and $sharp$ are scale-invariant, so the
+/// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves them fixed and swings
+/// only the magnitude tint through zero. A single real eigenmode does not
+/// travel, so the glyphs are never advected -- only the particles are, on the
+/// object's own clock.
 #[derive(Clone)]
 pub struct LineField {
   pub name: String,
@@ -101,7 +100,7 @@ pub struct LineField {
   /// The original $k$-cochain this field was reduced from, kept whole so the
   /// viewer can reconstruct the *true* Whitney field $W c$ (via
   /// [`WhitneyInterpolant`]) rather than only the nodal average below. The
-  /// streamline tracer integrates $((W c)|_"reduced")^sharp$ cell by cell; the
+  /// glyph and particle marks read $((W c)|_"reduced")^sharp$ cell by cell; the
   /// nodal `magnitude` below is the coarser readout the surface tint uses.
   pub cochain: Cochain,
   /// Per-vertex nodal magnitude $|V|_g$, the intrinsic chart-independent scalar
@@ -182,9 +181,8 @@ pub(crate) struct FieldOffers {
   /// so the toggle would control nothing.
   pub(crate) displacement: bool,
   /// Whether the field has marks of its own: a reduced grade of 1 is a tangent
-  /// line field, and the glyphs, streamlines and particles are its three
-  /// readings. A density has no mark beyond the surface it paints, which is the
-  /// mesh's.
+  /// line field, and the glyphs and particles are its two readings. A density
+  /// has no mark beyond the surface it paints, which is the mesh's.
   pub(crate) marks: bool,
 }
 
@@ -648,8 +646,8 @@ pub(crate) fn reduced_form(form: MultiForm, metric: &RiemannianMetric) -> MultiF
 /// The metric is what makes this well defined: $|V|_g$ is a scalar, so the
 /// average is of numbers, not of vectors in cell-local frames that no shared
 /// frame relates. The field's *direction* has no such nodal recovery worth
-/// keeping -- the streamline tracer reads the true Whitney field cell by cell
-/// instead.
+/// keeping -- the glyph and particle marks read the true Whitney field cell by
+/// cell instead.
 fn nodal_line_magnitude(
   topology: &Complex,
   coords: &MeshCoords,

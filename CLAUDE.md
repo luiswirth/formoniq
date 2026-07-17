@@ -46,7 +46,7 @@ Crate ladder, each layer adding exactly one thing —
 | `continuum` | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `ddf`       | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
 | `formoniq`  | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `problems::` (hodge_laplace, maxwell, heat, wave, ...) |
-| `studio`    | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, streamline line field), a wgpu/winit/egui renderer, native and wasm |
+| `studio`    | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `manifold` never about forms.

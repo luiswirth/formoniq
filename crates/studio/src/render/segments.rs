@@ -1,7 +1,7 @@
 //! The segment pass: every 1-dimensional mark, drawn as instanced billboard
 //! quads of constant world-space thickness. See `segments.wgsl`.
 //!
-//! One pipeline serves the wireframe overlay, a line field's traced streamline
+//! One pipeline serves the wireframe overlay, a line field's arrow-glyph
 //! ribbons and a 1-manifold's own cells. They were three descriptions of one
 //! technique; what differed -- ink, width, end taper, whether the mark rides the
 //! standing-wave displacement -- is data now: the material, and the endpoint's

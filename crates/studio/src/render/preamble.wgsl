@@ -62,7 +62,8 @@ struct SegmentMaterial {
     wave_omega: f32,
     head_length_fraction: f32,
     shaft_width_fraction: f32,
-    _pad0: vec2<f32>,
+    outline_width_fraction: f32,
+    _pad0: f32,
 };
 
 // The standing wave's instantaneous phase factor $cos(omega t)$: the one
@@ -127,7 +128,7 @@ fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
     return saturate_color(select(viridis(t), diverging(t), material.diverging > 0.5));
 }
 
-// A segment (a mesh edge, a traced streamline step) drawn with constant
+// A segment (a mesh edge, a glyph ribbon step) drawn with constant
 // world-space thickness. A `LineList` primitive rasterizes at a fixed,
 // backend-defined 1px in wgpu -- there is no portable line-width control -- and
 // all but disappears once the supersampled scene pass is filtered down. Instead

@@ -17,7 +17,6 @@ pub(crate) mod glyph;
 pub mod io;
 pub mod render;
 pub mod scene;
-pub mod streamline;
 pub mod ui;
 
 pub use app::run;

@@ -62,18 +62,34 @@ struct VertexOutput {
 // not a second pipeline: a plain segment passes `head_length_fraction = 0` and
 // `shaft_width_fraction = 1`, and the expression collapses to a constant 1 --
 // the full quad, exactly the mark this shader drew before there were arrows.
-fn segment_profile(material: SegmentMaterial, along: f32) -> f32 {
+fn segment_profile(material: SegmentMaterial, along: f32, blend_half: f32) -> f32 {
     let head = max(material.head_length_fraction, 1e-6);
     let head_start = 1.0 - material.head_length_fraction;
     let taper = clamp((1.0 - along) / head, 0.0, 1.0);
-    return select(material.shaft_width_fraction, taper, along > head_start);
+    // Blended, not switched, across `head_start`: the taper reaches 1 there
+    // (the head's full-width base) while the shaft sits at
+    // `shaft_width_fraction` on the other side, so a hard `select` is a genuine
+    // discontinuity in the profile. `fwidth` below differentiates across it,
+    // and one row of fragments would see the whole shaft-to-head jump as its
+    // screen-space derivative -- the antialiasing edge computed from that
+    // blows open into a visible seam exactly at the join.
+    //
+    // `blend_half` is `fwidth(along)`, the caller's one-pixel footprint in
+    // `along`, not a fraction of the head's length: sizing it from the
+    // geometry would round the corner into a visible curve at any zoom where
+    // that fraction covers more than a pixel. Tied to the pixel instead, the
+    // blend is exactly the antialiasing this shader already does at every
+    // other edge -- a corner smoothed over the one pixel it occupies, never
+    // wider, so it reads as sharp at any zoom.
+    let blend = smoothstep(head_start - blend_half, head_start + blend_half, along);
+    return mix(material.shaft_width_fraction, taper, blend);
 }
 
 @vertex
 fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     // The same standing-wave displacement the fill applies, so the wireframe
     // tracks the displaced surface instead of the flat rest mesh. A mark that
-    // does not sit on a displaced surface -- a traced streamline, a curve's own
+    // does not sit on a displaced surface -- a glyph ribbon, a curve's own
     // cells -- carries a zero normal, and the displacement is the identity on it.
     let osc = wave_osc(frame, material.wave_omega);
     let world_a = wave_displace(material.wave_amplitude, osc, a.position, a.normal, a.value, a.max_displacement);
@@ -113,13 +129,31 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // whatever the mark's world width and however the quad is foreshortened --
     // and on a plain segment, whose profile is a constant 1, it antialiases the
     // straight edge the quad already had.
-    let profile = segment_profile(material, in.along);
+    let profile = segment_profile(material, in.along, fwidth(in.along));
     let edge = fwidth(in.across) + fwidth(profile);
-    let ink = 1.0 - smoothstep(-edge, edge, abs(in.across) - profile);
+    let dist = abs(in.across) - profile;
+    let ink = 1.0 - smoothstep(-edge, edge, dist);
 
-    let alpha = material.color.a * in.opacity * mix(material.fade_floor, 1.0, env) * ink;
+    // The outline is the same silhouette again, `outline_width_fraction`
+    // further out: a second boundary at a fixed world-space remove from the
+    // first; `ink` and `rim` are the fraction covered inside each, together
+    // in the same units `dist` already is. Zero draws no rim -- `rim` and
+    // `ink` coincide, and the ink-only path below is exact, not a case split.
+    let rim = 1.0 - smoothstep(-edge, edge, dist - material.outline_width_fraction);
+
+    // Standard alpha compositing of the ink (the material's own color) over
+    // the rim (opaque black), both already faded by the envelope and the
+    // mark's own opacity -- so the rim fades out with the ink it outlines
+    // rather than staying a solid black skeleton once the ink above it is
+    // gone.
+    let envelope = in.opacity * mix(material.fade_floor, 1.0, env);
+    let ink_a = material.color.a * envelope * ink;
+    let rim_a = envelope * max(rim - ink, 0.0);
+    let alpha = ink_a + rim_a * (1.0 - ink_a);
+    let rgb = material.color.rgb * (ink_a / max(alpha, 1e-5));
+
     var out: FsOut;
-    out.color = vec4<f32>(material.color.rgb, alpha);
+    out.color = vec4<f32>(rgb, alpha);
     out.unbounded = 0.0;
     return out;
 }

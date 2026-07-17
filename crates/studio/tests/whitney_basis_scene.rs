@@ -31,27 +31,6 @@ fn grade2_whitney_basis_stars_to_a_constant_nonzero_density() {
   assert!(values.iter().all(|&v| (v - first).abs() < 1e-9));
 }
 
-/// Grade-1 basis functions reduce to nonzero tangent line fields whose integral
-/// curves lie in the reference triangle's own plane -- the standard embedding's
-/// ambient frame coincides with the cell's local frame, so a curve tangent to
-/// the surface can never leave $z = 0$. The tracer integrates the true Whitney
-/// field in the barycentric charts, so this is a statement about the field
-/// itself, not about any nodal average of it.
-#[test]
-fn grade1_whitney_basis_traces_in_plane_curves() {
-  let scene = Scene::whitney_basis(2);
-  assert_eq!(scene.line_fields.len(), 3);
-  for field in &scene.line_fields {
-    assert!(field.bounds().1 > 1e-6);
-    let traced =
-      formoniq_studio::streamline::trace(&scene.topology, &scene.coords, &field.cochain, 0.09);
-    assert!(!traced.lines.is_empty());
-    for sample in traced.lines.iter().flatten() {
-      assert!(sample.pos.z.abs() < 1e-12);
-    }
-  }
-}
-
 /// The dispatch is total in every dimension via min(k, n-k): on the
 /// tetrahedron ($n = 3$) grade 0 and grade 3 are densities, grade 1 and grade 2
 /// (starred to grade 1) are line fields -- none are dropped.

@@ -19,7 +19,7 @@ use super::{
 };
 
 /// The background the scene is cleared to: a near-black the lit surface and the
-/// light streamline halo both separate from.
+/// light glyph halo both separate from.
 ///
 /// Stated *linearly*, because that is what the scene target is -- radiance, in
 /// [`SCENE_FORMAT`] -- and the resolve is what carries it across to the display.

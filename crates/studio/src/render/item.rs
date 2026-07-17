@@ -2,7 +2,7 @@
 //! made of.
 //!
 //! A batch owns buffers and nothing else; an item is a batch plus the material
-//! it is drawn with. A surface, its wireframe overlay and its traced streamline
+//! it is drawn with. A surface, its wireframe overlay and a line field's glyph
 //! ribbons are three items over two batch kinds, and several manifolds in one
 //! scene are simply more items -- the renderer never learns how many there will
 //! be.
@@ -20,7 +20,7 @@ use crate::bake::{BakedMesh, BakedVertex, PrimBatch, SegmentVertex};
 
 /// A `VERTEX` buffer holding `data`, never empty: a zero-length
 /// `create_buffer_init` is rejected, and an empty batch (a field with no
-/// streamlines, a curve with no wireframe overlay) still needs valid buffers to
+/// glyphs, a curve with no wireframe overlay) still needs valid buffers to
 /// bind. The batch's own count stays the true one, so the pad is never drawn.
 fn vertex_buffer<T: Pod + Default>(device: &wgpu::Device, label: &str, data: &[T]) -> wgpu::Buffer {
   let pad = [T::default()];
