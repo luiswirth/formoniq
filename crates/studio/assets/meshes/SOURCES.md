@@ -19,3 +19,12 @@ attribution; this note records provenance anyway.
 
 Tracked with git LFS (see `.gitattributes`); run `git lfs pull` to fetch the
 actual mesh data.
+
+## Test fixtures
+
+Not part of the picker gallery above -- meshes kept small on purpose, embedded
+for a specific unit test rather than curated for viewing.
+
+| file        | is                                  | notes |
+| ----------- | ----------------------------------- | ----- |
+| torus0.msh  | genus-1 surface (Gmsh 4.1)          | 127 vertices, 254 triangles; the boundary surface Gmsh meshes by default for an OpenCASCADE `Torus(1)` primitive, coarsest of a refinement family. $b_1 = 2$ -- used by `scene::tests::hodge_decomposition_splits_orthogonally` as the fast genus-bearing case in place of Bob, whose harmonic solve at ~3k vertices dominates the whole workspace test suite's runtime. |

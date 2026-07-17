@@ -950,28 +950,44 @@ mod tests {
     assert_eq!(scene.line_fields.len(), 9); // edges
   }
 
-  /// The Hodge decomposition is a theorem, not a golden number. On Bob (a
-  /// genus-1 surface, so $b_1 = 2$) the probe 1-form splits into three shells
-  /// that sum back to it exactly, are pairwise $L^2$-orthogonal, and carry a
-  /// genuinely nonzero harmonic component -- the part the two handle cycles pair
-  /// with. The flat unit square is the contractible base case: the same solve,
+  /// The Hodge decomposition is a theorem, not a golden number. On a genus-1
+  /// surface ($b_1 = 2$) the probe 1-form splits into three shells that sum
+  /// back to it exactly, are pairwise $L^2$-orthogonal, and carry a genuinely
+  /// nonzero harmonic component -- the part the two handle cycles pair with.
+  /// The flat unit square is the contractible base case: the same solve,
   /// harmonic shell identically zero because there is no grade-1 homology to
-  /// project onto. The harmonic dimension is read off the complex and must equal
-  /// the surface's first Betti number in each case.
+  /// project onto. The harmonic dimension is read off the complex and must
+  /// equal the surface's first Betti number in each case.
+  ///
+  /// Deliberately not Bob or another gallery mesh: those run to several
+  /// thousand vertices, and the harmonic solve at that size dominates the
+  /// entire workspace test suite's runtime. `torus0.msh` -- a genus-1 surface
+  /// at 127 vertices, the coarsest level of a Gmsh refinement family -- is kept
+  /// as a fixture solely for this test (see `assets/meshes/SOURCES.md`).
   #[test]
   fn hodge_decomposition_splits_orthogonally() {
-    use crate::gallery::{BuiltinMesh, MeshSource};
+    use crate::gallery::MeshSource;
     use common::linalg::nalgebra::CsrMatrix;
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
+    use manifold::io::gmsh::gmsh2coord_complex;
 
-    for (source, betti_1) in [
-      (MeshSource::Builtin(BuiltinMesh::Bob), 2usize),
-      (MeshSource::Grid { cells_axis: 4 }, 0usize),
+    let torus = || gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));
+
+    for (label, build, betti_1) in [
+      (
+        "torus0.msh",
+        &torus as &dyn Fn() -> (Complex, MeshCoords),
+        2usize,
+      ),
+      (
+        "Grid",
+        &(|| MeshSource::Grid { cells_axis: 4 }.build().unwrap()),
+        0usize,
+      ),
     ] {
-      let label = source.label();
-      let (topology, coords) = source.build().unwrap();
+      let (topology, coords) = build();
       assert!(
-        topology.nsimplices(2) > 0,
+        topology.nsimplices(1) > 0,
         "{label}: mesh built empty (unfetched asset?)"
       );
 
