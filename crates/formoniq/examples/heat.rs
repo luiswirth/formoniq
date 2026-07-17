@@ -73,7 +73,7 @@ fn main() {
       let dt = FINAL_TIME / NSTEPS as f64;
       let solution = solve_heat(
         &whitney,
-        &boundary,
+        Some(&boundary),
         grade,
         NSTEPS,
         dt,
