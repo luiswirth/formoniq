@@ -70,6 +70,34 @@ pub struct SegmentVertex {
   pub opacity: f32,
 }
 
+/// A vertex of a glyph mark: a corner of the flat quad an arrow is drawn on,
+/// lying in its surface cell. Unlike a [`SegmentVertex`] it carries no billboard
+/// -- the arrow has a plane, its cell's -- so the corner's world position is
+/// final, and the fragment reads the arrow's silhouette from the quad-local
+/// coordinate and clips it to the cell from the barycentric one.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
+pub struct GlyphVertex {
+  /// The corner's world position, in the cell's plane on the undisplaced
+  /// surface.
+  pub position: [f32; 3],
+  /// The corner in the arrow's own frame: `x` along the field from the tail at
+  /// `0` to the tip at `length`, `y` across it, both in world units. The
+  /// coordinate the fragment's arrow silhouette is a function of.
+  pub arrow_xy: [f32; 2],
+  /// The arrow's length in world units, so the fragment can place the head. One
+  /// value per glyph, carried on every corner.
+  pub length: f32,
+  /// Opacity multiplier in $[0, 1]$: the field's magnitude here against its
+  /// peak, so a vanishing field's arrow fades rather than points arbitrarily.
+  pub opacity: f32,
+  /// The corner's barycentric coordinate within its cell, padded to four with
+  /// ones. The clip discards a fragment where any weight is negative, i.e.
+  /// outside the cell the arrow was sampled in; the pad is ones so a cell of
+  /// intrinsic dimension below three never trips it.
+  pub cell_bary: [f32; 4],
+}
+
 /// The primitives one complex's cells bake to, at dimension $min(n, 2)$.
 /// Indices into [`BakedMesh::positions`].
 #[derive(Debug, Clone)]
