@@ -722,7 +722,7 @@ impl<'a> State<'a> {
         selection: Selection::Scalar(i),
         grade: f.grade,
         eigenvalue: f.eigenvalue,
-        dof_label: f.dof_label.as_deref(),
+        dof: f.dof.as_ref(),
         name: f.name.as_str(),
       })
       .chain(
@@ -735,7 +735,7 @@ impl<'a> State<'a> {
             selection: Selection::Line(i),
             grade: f.grade,
             eigenvalue: f.eigenvalue,
-            dof_label: f.dof_label.as_deref(),
+            dof: f.dof.as_ref(),
             name: f.name.as_str(),
           }),
       )

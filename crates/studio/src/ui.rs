@@ -5,13 +5,13 @@
 //! panel itself never touches.
 
 use exterior::ExteriorGrade;
-use manifold::Dim;
+use manifold::{topology::simplex::Simplex, Dim};
 
 use crate::gallery::{
   BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, GRID_CELLS_DEFAULT, GRID_CELLS_MAX,
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
 };
-use crate::scene::FieldOffers;
+use crate::scene::{dof_label, FieldOffers};
 
 /// How much of the scene's light survives to the display.
 ///
@@ -165,7 +165,7 @@ pub(crate) enum Selection {
 
 /// One mode of the currently shown scene, as the picker needs it: the field's
 /// [`Selection`], its original grade (before the reduction to a render mark),
-/// its eigenvalue (for the degeneracy layout), its DOF label (for the basis
+/// its eigenvalue (for the degeneracy layout), its DOF simplex (for the basis
 /// grid) and its full name (for the hover). The render mark the selection
 /// resolves to is decided elsewhere by the reduced grade; here a mode is just
 /// a selectable cell.
@@ -173,7 +173,7 @@ pub(crate) struct Entry<'a> {
   pub(crate) selection: Selection,
   pub(crate) grade: ExteriorGrade,
   pub(crate) eigenvalue: Option<f64>,
-  pub(crate) dof_label: Option<&'a str>,
+  pub(crate) dof: Option<&'a Simplex>,
   pub(crate) name: &'a str,
 }
 
@@ -256,10 +256,21 @@ fn degeneracy_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Opti
 /// over a DOF dropdown instead, since they carry a DOF label but no
 /// eigenvalue; anything carrying neither -- not produced today, but the
 /// totality this dispatch is answering to -- falls back to one flat list.
+/// The DOF picker's text for one entry: its DOF simplex formatted as a label,
+/// falling back to the field's name where there is no DOF -- not reached from
+/// the picker (which opens only when every entry has one), but total rather than
+/// a panic.
+fn dof_text(entry: &Entry) -> String {
+  entry
+    .dof
+    .map(dof_label)
+    .unwrap_or_else(|| entry.name.to_string())
+}
+
 fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
   if let Some(shells) = degeneracy_shells(entries.iter().map(|e| e.eigenvalue)) {
     pyramid(ui, &shells, entries, selection);
-  } else if entries.iter().all(|e| e.dof_label.is_some()) {
+  } else if entries.iter().all(|e| e.dof.is_some()) {
     dof_picker(ui, entries, selection, n);
   } else {
     for entry in entries {
@@ -319,13 +330,12 @@ fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
     .unwrap_or(first_member);
   let selected_entry = &entries[selected_idx];
   egui::ComboBox::from_id_salt("whitney-dof")
-    .selected_text(selected_entry.dof_label.unwrap_or(selected_entry.name))
+    .selected_text(dof_text(selected_entry))
     .show_ui(ui, |ui| {
       for &idx in &members {
         let entry = &entries[idx];
         let selected = *selection == entry.selection;
-        let label = entry.dof_label.unwrap_or(entry.name);
-        if ui.selectable_label(selected, label).clicked() {
+        if ui.selectable_label(selected, dof_text(entry)).clicked() {
           *selection = entry.selection;
         }
       }

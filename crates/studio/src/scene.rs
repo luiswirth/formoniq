@@ -14,6 +14,7 @@ use manifold::{
   topology::{
     complex::Complex,
     handle::{SimplexIdx, SimplexRef},
+    simplex::Simplex,
   },
   Dim,
 };
@@ -68,14 +69,15 @@ pub struct ScalarField {
   /// viewer. `None` for a field that is not an eigenfunction (e.g. a raw
   /// Whitney basis function), which disables the standing-wave animation.
   pub eigenvalue: Option<f64>,
-  /// The DOF simplex this field is dual to, as its vertex tuple (e.g.
-  /// `"01"`), when the field is a raw Whitney basis function. `None` for a
-  /// solved field (an eigenmode), which has no single dual simplex -- the
-  /// same is-this-a-basis-function distinction [`Self::eigenvalue`] makes,
-  /// mirrored: exactly one of the two is `Some` on any field this crate
-  /// produces. Lets the picker group basis functions by grade and label each
-  /// cell by its DOF without reparsing [`Self::name`].
-  pub dof_label: Option<String>,
+  /// The DOF simplex this field is dual to, when the field is a raw Whitney
+  /// basis function. `None` for a solved field (an eigenmode), which has no
+  /// single dual simplex -- the same is-this-a-basis-function distinction
+  /// [`Self::eigenvalue`] makes, mirrored: exactly one of the two is `Some` on
+  /// any field this crate produces. Lets the picker group basis functions by
+  /// grade and label each cell by its DOF (via `dof_label`) without reparsing
+  /// [`Self::name`]. Kept as the simplex, not its rendered label, so the DOF is
+  /// a typed value the UI formats rather than a string the model commits to.
+  pub dof: Option<Simplex>,
 }
 
 /// A named line field on the surface: the reduced-grade-1 mark, drawn as arrow
@@ -105,8 +107,27 @@ pub struct LineField {
   pub cochain: Cochain,
   /// See [`ScalarField::eigenvalue`].
   pub eigenvalue: Option<f64>,
-  /// See [`ScalarField::dof_label`].
-  pub dof_label: Option<String>,
+  /// See [`ScalarField::dof`].
+  pub dof: Option<Simplex>,
+}
+
+/// The vertex-tuple label of a DOF simplex, e.g. `013` for the face
+/// $\{0, 1, 3\}$. Single-digit vertices concatenate; once any vertex reaches two
+/// digits the tuple is comma-separated, so the label stays unambiguous on a mesh
+/// with ten or more vertices. Purely a display of the typed [`ScalarField::dof`]
+/// / [`LineField::dof`], computed at the UI boundary rather than stored.
+pub(crate) fn dof_label(dof: &Simplex) -> String {
+  let separator = if dof.vertices.iter().all(|&v| v < 10) {
+    ""
+  } else {
+    ","
+  };
+  dof
+    .vertices
+    .iter()
+    .map(ToString::to_string)
+    .collect::<Vec<_>>()
+    .join(separator)
 }
 
 /// The colormap range of a per-corner value stream, for normalization. Falls
@@ -128,12 +149,12 @@ pub(crate) fn corner_bounds(values: &[f64]) -> (f32, f32) {
 /// The display metadata a reconstructed field carries regardless of which
 /// render mark it lands in -- everything [`Scene::field`] needs beyond the
 /// cochain itself, bundled so the two independent `Option`s
-/// ([`ScalarField::eigenvalue`]/[`ScalarField::dof_label`]) don't turn the
+/// ([`ScalarField::eigenvalue`]/[`ScalarField::dof`]) don't turn the
 /// constructor into an unreadable run of positional arguments.
 struct FieldMeta {
   name: String,
   eigenvalue: Option<f64>,
-  dof_label: Option<String>,
+  dof: Option<Simplex>,
 }
 
 /// What the selected field offers to be read with -- which of
@@ -223,7 +244,7 @@ impl Scene {
         FieldMeta {
           name,
           eigenvalue: Some(lambda),
-          dof_label: None,
+          dof: None,
         },
         cochain,
         fields,
@@ -329,7 +350,7 @@ impl Scene {
       grade: 0,
       cochain: Cochain::new(0, na::DVector::zeros(nvertices)),
       eigenvalue: None,
-      dof_label: None,
+      dof: None,
     }];
     Self {
       topology,
@@ -401,7 +422,7 @@ impl Scene {
         FieldMeta {
           name: named.name.clone(),
           eigenvalue: None,
-          dof_label: None,
+          dof: None,
         },
         named.spec.resolve(&topology),
         &mut fields,
@@ -454,7 +475,7 @@ impl Scene {
         FieldMeta {
           name: name.to_string(),
           eigenvalue: None,
-          dof_label: None,
+          dof: None,
         },
         cochain,
         &mut fields,
@@ -488,12 +509,7 @@ impl Scene {
     for grade in 0..=dim {
       let ndofs = topology.nsimplices(grade);
       for (idof, dof_simp) in topology.skeleton_raw(grade).iter().enumerate() {
-        let label = dof_simp
-          .vertices
-          .iter()
-          .map(|v| v.to_string())
-          .collect::<String>();
-        let name = format!("W^{grade}_{{{label}}}");
+        let name = format!("W^{grade}_{{{}}}", dof_label(dof_simp));
 
         let mut coeffs = na::DVector::zeros(ndofs);
         coeffs[idof] = 1.0;
@@ -504,7 +520,7 @@ impl Scene {
           FieldMeta {
             name,
             eigenvalue: None,
-            dof_label: Some(label),
+            dof: Some(dof_simp.clone()),
           },
           cochain,
           &mut fields,
@@ -542,7 +558,7 @@ impl Scene {
     let FieldMeta {
       name,
       eigenvalue,
-      dof_label,
+      dof,
     } = meta;
     let n = topology.dim();
     let k = cochain.grade();
@@ -557,7 +573,7 @@ impl Scene {
           grade: k,
           cochain,
           eigenvalue,
-          dof_label,
+          dof,
         });
       }
       1 => {
@@ -566,7 +582,7 @@ impl Scene {
           grade: k,
           cochain,
           eigenvalue,
-          dof_label,
+          dof,
         });
       }
       _reduced => {
