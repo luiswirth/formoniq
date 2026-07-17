@@ -2,6 +2,7 @@ use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
 use continuum::field::DiffFormClosure;
 
 use crate::bake::to_vec3;
+use crate::ui::Selection;
 use ddf::{
   cochain::Cochain, derham::derham_map, section::CoordFieldExt,
   whitney::interpolant::WhitneyInterpolant,
@@ -167,7 +168,53 @@ impl LineField {
   }
 }
 
+/// What the selected field offers to be read with -- which of
+/// [`crate::ui::FieldView`]'s settings are live.
+///
+/// The mesh side has no counterpart: every scene has geometry, so its settings
+/// are always live and there is nothing to gate. Only the field is asked, and
+/// the answer is its reduced grade's.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct FieldOffers {
+  /// Whether the field drives a standing wave. A reduced grade of 0 displaces
+  /// the surface along its normal, and only an eigenmode has the dispersion
+  /// relation to do it at: without an eigenvalue the amplitude is already zero,
+  /// so the toggle would control nothing.
+  pub(crate) displacement: bool,
+  /// Whether the field has marks of its own: a reduced grade of 1 is a tangent
+  /// line field, and the glyphs, streamlines and particles are its three
+  /// readings. A density has no mark beyond the surface it paints, which is the
+  /// mesh's.
+  pub(crate) marks: bool,
+}
+
+impl FieldOffers {
+  /// Whether the field offers anything at all -- false for a density that is no
+  /// eigenmode (a raw Whitney basis function), whose whole rendering is the
+  /// tint on the mesh's surface.
+  pub(crate) fn any(self) -> bool {
+    self.displacement || self.marks
+  }
+}
+
 impl Scene {
+  /// The reduced grade's answer to what its field can be read with, and the one
+  /// place it is asked outside the display: a selection already *is* the
+  /// reduction (which list it indexes is which mark it landed in), so this
+  /// reads it off rather than dispatching on grade a second time.
+  pub(crate) fn offers(&self, selection: Selection) -> FieldOffers {
+    match selection {
+      Selection::Scalar(index) => FieldOffers {
+        displacement: self.fields[index].eigenvalue.is_some(),
+        marks: false,
+      },
+      Selection::Line(_) => FieldOffers {
+        displacement: false,
+        marks: true,
+      },
+    }
+  }
+
   /// Hodge-Laplace eigenmodes of a single grade -- standing-wave normal
   /// modes, $Delta u = lambda u$ -- of an arbitrary simplicial surface with
   /// the given geometry, filed into `fields` or `line_fields` through the
@@ -828,6 +875,69 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// What a field offers is its reduced grade's answer, and the answer is total
+  /// on the range the ambient reaches: every field of the reference cell in
+  /// every dimension is asked, and each gets the reading its reduction earns --
+  /// a density the surface it paints (nothing of its own), a line field its
+  /// three marks. Nothing is dropped and nothing is asked twice.
+  #[test]
+  fn offers_follow_the_reduced_grade_in_every_dimension() {
+    for dim in 1..=3 {
+      let scene = Scene::whitney_basis(dim);
+      for index in 0..scene.fields.len() {
+        let offers = scene.offers(Selection::Scalar(index));
+        assert!(!offers.marks, "dim {dim}: a density has no mark of its own");
+      }
+      for index in 0..scene.line_fields.len() {
+        let offers = scene.offers(Selection::Line(index));
+        assert!(offers.marks, "dim {dim}: a line field offers its marks");
+        assert!(
+          !offers.displacement,
+          "dim {dim}: a line field's curves are static -- there is no wave to ride"
+        );
+      }
+    }
+  }
+
+  /// Displacement is offered exactly when there is a standing wave to toggle,
+  /// which is what an eigenvalue is: the same distinction `FieldDisplay::build`
+  /// makes when it hands a field with none an amplitude of zero. A raw Whitney
+  /// basis function is that field, and a grade-0 eigenmode of the same cell
+  /// complex is its counterpart -- so the two together are the rule, not one
+  /// example of it.
+  #[test]
+  fn displacement_is_offered_exactly_to_a_standing_wave() {
+    let basis = Scene::whitney_basis(2);
+    for index in 0..basis.fields.len() {
+      assert!(
+        !basis.offers(Selection::Scalar(index)).displacement,
+        "a Whitney basis function is no eigenmode: its amplitude is already zero"
+      );
+      assert!(!basis.offers(Selection::Scalar(index)).any());
+    }
+
+    let (topology, coords) = crate::gallery::MeshSource::Grid { cells_axis: 4 }
+      .build()
+      .unwrap();
+    let (fields, _) = Scene::eigenmodes_grade(&topology, &coords, 0, 4);
+    let scene = Scene {
+      topology,
+      coords,
+      fields,
+      line_fields: Vec::new(),
+    };
+    assert!(
+      !scene.fields.is_empty(),
+      "the grade-0 eigensolve produced modes"
+    );
+    for index in 0..scene.fields.len() {
+      assert!(
+        scene.offers(Selection::Scalar(index)).displacement,
+        "a grade-0 eigenmode has a wave to ride"
+      );
+    }
+  }
 
   /// The reference triangle's LSF gallery: one field per subsimplex of every
   /// grade, split into scalar densities (grades 0 and 2, the latter through
