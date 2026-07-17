@@ -200,15 +200,15 @@ fn degeneracy_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Opti
 
 /// Renders the modes of the currently shown scene as a picker. Eigenmodes
 /// (the harmonics) lay out as the orbital pyramid by degeneracy shell; raw
-/// Whitney basis functions (LSFs and GSFs alike) lay out as a grid by grade
-/// instead, since they carry a DOF label but no eigenvalue; anything carrying
-/// neither -- not produced today, but the totality this dispatch is answering
-/// to -- falls back to one flat list.
+/// Whitney basis functions (LSFs and GSFs alike) lay out as a grade tab row
+/// over a DOF dropdown instead, since they carry a DOF label but no
+/// eigenvalue; anything carrying neither -- not produced today, but the
+/// totality this dispatch is answering to -- falls back to one flat list.
 fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
   if let Some(shells) = degeneracy_shells(entries.iter().map(|e| e.eigenvalue)) {
     pyramid(ui, &shells, entries, selection);
   } else if entries.iter().all(|e| e.dof_label.is_some()) {
-    grade_grid(ui, entries, selection, n);
+    dof_picker(ui, entries, selection, n);
   } else {
     for entry in entries {
       let selected = *selection == entry.selection;
@@ -219,49 +219,63 @@ fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection,
   }
 }
 
-/// Lays out a Whitney basis gallery (LSFs or GSFs) as one row per grade,
-/// ordered $0..=n$ and labelled by [`grade_mark_label`], each row a wrapped
-/// flow of DOF cells -- unlike the eigenmode pyramid there is no natural width
-/// to center on, since a mesh's edge count need not match its vertex or face
-/// count. Hovering a cell shows the basis function's full name.
-fn grade_grid(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
-  const CELL: [f32; 2] = [30.0, 22.0];
-  // A mesh's DOF count is unbounded (a reference cell has a handful, a
-  // built-in surface thousands), and the grid is a flat button-per-DOF flow
-  // with no natural width to wrap on -- left unbounded it grows the panel to
-  // the mesh's simplex count instead of the screen's. A fixed-height scroll
-  // area keeps the layout identical at every DOF count and bounds it to the
-  // viewport instead, rather than special-casing which meshes are "small
-  // enough" to browse this way.
-  const GRID_MAX_HEIGHT: f32 = 240.0;
-  egui::ScrollArea::vertical()
-    .max_height(GRID_MAX_HEIGHT)
-    .show(ui, |ui| {
-      for grade in 0..=n {
-        let members: Vec<usize> = entries
-          .iter()
-          .enumerate()
-          .filter(|(_, e)| e.grade == grade)
-          .map(|(i, _)| i)
-          .collect();
-        if members.is_empty() {
-          continue;
+/// Picks one Whitney basis function: a grade tab row (as the eigenmode grade
+/// tabs, but a view over one already-solved scene rather than a re-solve),
+/// then a dropdown over that grade's DOFs alone. A mesh's DOF count is
+/// unbounded (a reference cell has a handful, a built-in surface thousands),
+/// and every grade shown flat at once -- the previous layout -- grew the
+/// inspector to the mesh's simplex count; collapsed behind a dropdown, the
+/// panel's size no longer depends on the mesh. The active grade is read off
+/// the current selection, so switching tabs jumps to that grade's first DOF
+/// and the next frame's tab highlight follows it.
+fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
+  let current_grade = entries
+    .iter()
+    .find(|e| e.selection == *selection)
+    .map_or(0, |e| e.grade);
+
+  let mut active_grade = current_grade;
+  ui.horizontal_wrapped(|ui| {
+    for grade in 0..=n {
+      if entries.iter().any(|e| e.grade == grade)
+        && ui
+          .selectable_label(current_grade == grade, grade_mark_label(grade, n))
+          .clicked()
+      {
+        active_grade = grade;
+      }
+    }
+  });
+
+  let members: Vec<usize> = entries
+    .iter()
+    .enumerate()
+    .filter(|(_, e)| e.grade == active_grade)
+    .map(|(i, _)| i)
+    .collect();
+  let Some(&first_member) = members.first() else {
+    return;
+  };
+  if active_grade != current_grade {
+    *selection = entries[first_member].selection;
+  }
+
+  let selected_idx = members
+    .iter()
+    .copied()
+    .find(|&i| entries[i].selection == *selection)
+    .unwrap_or(first_member);
+  let selected_entry = &entries[selected_idx];
+  egui::ComboBox::from_id_salt("whitney-dof")
+    .selected_text(selected_entry.dof_label.unwrap_or(selected_entry.name))
+    .show_ui(ui, |ui| {
+      for &idx in &members {
+        let entry = &entries[idx];
+        let selected = *selection == entry.selection;
+        let label = entry.dof_label.unwrap_or(entry.name);
+        if ui.selectable_label(selected, label).clicked() {
+          *selection = entry.selection;
         }
-        ui.label(grade_mark_label(grade, n));
-        ui.horizontal_wrapped(|ui| {
-          for idx in members {
-            let entry = &entries[idx];
-            let selected = *selection == entry.selection;
-            let label = entry.dof_label.unwrap_or(entry.name);
-            if ui
-              .add_sized(CELL, egui::Button::selectable(selected, label))
-              .on_hover_text(entry.name)
-              .clicked()
-            {
-              *selection = entry.selection;
-            }
-          }
-        });
       }
     });
 }
