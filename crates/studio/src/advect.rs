@@ -194,6 +194,31 @@ pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     .fold(0.0, f64::max)
 }
 
+/// The field's *mean* magnitude over the manifold, area-weighted: the
+/// barycenter samples of [`peak_speed`], averaged by the cells' metric volume
+/// instead of maximized.
+///
+/// What the deposit's ink calibration divides by: with splats inked by arc
+/// length, the equilibrium trail brightness is set by the *average* speed of
+/// the population, not the peak, and the average is the field's own
+/// area-weighted mean -- an exact quantity of the field, not a tuned ratio.
+pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> f64 {
+  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
+  let (mut weighted, mut total) = (0.0, 0.0);
+  for cell in topology.cells().handle_iter() {
+    let metric = coords.cell_metric(cell);
+    let weight = metric.det_sqrt();
+    let point = MeshPoint::barycenter(cell.idx());
+    weighted += weight * reduced_form(interpolant.eval(&point), &metric).norm(&metric);
+    total += weight;
+  }
+  if total > 0.0 {
+    weighted / total
+  } else {
+    0.0
+  }
+}
+
 /// The generator $M = (dif lambda \/ dif x) hat(V)$ of one cell.
 ///
 /// $hat(V)$ is read off the *reference vertices*, which is not a sampling

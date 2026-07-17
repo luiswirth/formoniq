@@ -41,12 +41,20 @@ struct Frame {
 // magnitude (sequential, dark-to-bright low-to-high). Material data, not a
 // global shader choice: which one applies is a property of the field, decided
 // once in `display.rs` alongside the range itself.
+// `deposit_floor`/`deposit_gain` are the flow's illumination of the surface:
+// the fill's radiance is the colormap times `floor + gain * D`, with $D$ the
+// deposit atlas sample. Hue stays the field's (the data); the trails carry
+// *luminance*, in unbounded radiance, so a dense filament exceeds 1 and
+// blooms. A field with no deposit passes floor 1 and gain 0, which is the
+// identity -- "no trails" is arithmetic, not a pipeline.
 struct SurfaceMaterial {
     min_val: f32,
     max_val: f32,
     wave_amplitude: f32,
     wave_omega: f32,
     diverging: f32,
+    deposit_floor: f32,
+    deposit_gain: f32,
 };
 
 // How a segment mark is drawn: its ink (`rgb` plus a base opacity), its
@@ -237,6 +245,24 @@ struct AdvectParams {
     // The residual crossing error is one tick, so this is the exponent that
     // buys exactness -- at $d = 16$ the error is below `f32` epsilon, which is
     // the only precision this pass has to begin with.
+    depth: u32,
+    _pad0: u32,
+    _pad1: u32,
+    _pad2: u32,
+};
+
+// The deposit atlas passes' one uniform: the atlas side in texels, the splat
+// footprint radius (texels), the ink density (deposited energy per *texel of
+// path* -- see `fs_splat` for why arc length, not time, is the measure), the
+// survival factor of one step's exponential fade, and the advection's dyadic
+// depth (which names the whole-step flow level the splat's own displacement is
+// read off). All per *step*, never per second: the deposit is stepped state,
+// and its determinism contract is the advection's own.
+struct DepositParams {
+    atlas_size: f32,
+    radius: f32,
+    energy: f32,
+    decay: f32,
     depth: u32,
     _pad0: u32,
     _pad1: u32,

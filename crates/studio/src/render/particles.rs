@@ -34,6 +34,12 @@ const LIFE_SPREAD: u32 = 240;
 pub struct ParticleBatch {
   compute_bind_group: wgpu::BindGroup,
   draw_bind_group: wgpu::BindGroup,
+  /// The particle storage buffer itself, kept beyond its bind groups: the
+  /// deposit's splat pass binds the same population through its own layout.
+  particles: wgpu::Buffer,
+  /// The baked flow levels, kept for the same reason: the splat derives each
+  /// particle's displacement from the whole-step flow, as the draw pass does.
+  flows: wgpu::Buffer,
   count: u32,
 }
 
@@ -114,8 +120,20 @@ impl ParticleBatch {
     Some(Self {
       compute_bind_group,
       draw_bind_group,
+      particles,
+      flows,
       count,
     })
+  }
+
+  /// The particle storage buffer, for the deposit's splat bind group.
+  pub(crate) fn particle_buffer(&self) -> &wgpu::Buffer {
+    &self.particles
+  }
+
+  /// The baked flow-level buffer, for the same.
+  pub(crate) fn flow_buffer(&self) -> &wgpu::Buffer {
+    &self.flows
   }
 
   pub(super) fn compute_bind_group(&self) -> &wgpu::BindGroup {

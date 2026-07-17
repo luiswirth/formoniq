@@ -9,6 +9,7 @@ pub mod advect;
 pub mod bloom;
 pub mod camera;
 pub mod context;
+pub mod deposit;
 pub mod downsample;
 pub mod fill;
 pub mod item;
@@ -164,6 +165,7 @@ mod tests {
       ("advect.wgsl", include_str!("advect.wgsl")),
       ("bloom.wgsl", include_str!("bloom.wgsl")),
       ("particles.wgsl", include_str!("particles.wgsl")),
+      ("deposit.wgsl", include_str!("deposit.wgsl")),
     ];
     for (name, body) in bodies {
       let source = super::shader_source(body);
@@ -223,6 +225,7 @@ mod tests {
       ("Particle", size_of::<super::advect::Particle>()),
       ("Cell", size_of::<super::advect::Cell>()),
       ("AdvectParams", size_of::<super::advect::AdvectParams>()),
+      ("DepositParams", size_of::<super::deposit::DepositParams>()),
     ];
 
     for (name, rust_size) in expected {

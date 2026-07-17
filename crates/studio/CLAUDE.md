@@ -161,6 +161,18 @@ they bind the same way the parent's invariants do:
   this — only the choice of whether the dynamic range or the palette matters more
   for what is being looked at, which is exactly the kind of question the code
   cannot settle from the object, and therefore one of the few the viewer is asked.
+- **State lives on the manifold; the screen is presentation only.** Screen-space
+  passes are not suspect in themselves -- bloom, supersampling and the tone map
+  are screen-space and correctly so, because they model the observation (the
+  lens, the eye), never the field. The line is *persistence*: anything that
+  survives a frame is a claim about the object, and the object lives on the
+  manifold, where the camera cannot touch it. A pass that reads only this
+  frame's image may be screen-space; a texture that accumulates across frames
+  must be manifold data, indexed by chart and barycentric coordinate -- the
+  deposit atlas is the constructive example, and a screen-space trail or
+  history buffer is the violation: it would bake the camera into the state, and
+  every orbit or export would smear a history that was never the field's. The
+  test is the same cut the radiance/display split makes, extended along time.
 - **The UI is a pure function of the model** returning requested changes, not a
   mutator of it.
 
