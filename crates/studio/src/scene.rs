@@ -642,10 +642,12 @@ impl Scene {
   /// decays -- the parabolic smoothing of the Hodge-Laplacian, shown directly
   /// rather than through its spectrum.
   ///
-  /// Mesh-agnostic: on a closed surface (sphere, Bob) the boundary is empty and
-  /// the relative complex is the identity; on a mesh with boundary the trace is
-  /// held fixed at the bump's boundary values (near zero for an interior bump).
-  /// The same [`solve_heat`] serves both.
+  /// Mesh-agnostic: the boundary condition is carried entirely by which complex
+  /// the flow runs on. The relative complex is the identity on a closed surface
+  /// (sphere, Bob), where it is the free Neumann heat equation, and homogeneous
+  /// essential (Dirichlet) on a mesh with boundary, holding the trace at zero
+  /// (the interior bump is near zero there already). The same [`solve_heat`]
+  /// serves both.
   ///
   /// [`solve_heat`]: formoniq::problems::heat::solve_heat
   pub fn heat(topology: Complex, coords: MeshCoords, nsteps: usize, final_time: f64) -> Self {
@@ -653,28 +655,12 @@ impl Scene {
 
     let metric = coords.to_edge_lengths(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
-    // `None` on a closed mesh (the sphere, Bob): no boundary to hold, so the
-    // flow is the free Neumann heat equation. `solve_heat` is total there.
-    let boundary = whitney.boundary();
+    let relative = whitney.relative();
 
     let initial = ambient_bump(&topology, &coords);
-    let boundary_values = boundary.as_ref().map_or_else(
-      || Cochain::new(0, na::DVector::zeros(0)),
-      |b| b.trace_cochain(&initial),
-    );
     let source = Cochain::new(0, na::DVector::zeros(whitney.ndofs(0)));
     let dt = final_time / nsteps.max(1) as f64;
-    let frames = solve_heat(
-      &whitney,
-      boundary.as_ref(),
-      0,
-      nsteps,
-      dt,
-      &boundary_values,
-      initial.clone(),
-      source,
-      1.0,
-    );
+    let frames = solve_heat(&relative, 0, nsteps, dt, &initial, &source, 1.0);
 
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
@@ -1178,8 +1164,9 @@ mod tests {
   }
 
   /// The heat flow is total on a *closed* mesh, where there is no boundary to
-  /// hold: `solve_heat` runs the free Neumann flow (identity inclusion, zero
-  /// lift) instead of panicking on an empty boundary subcomplex. The regression
+  /// hold: `solve_heat` runs the free Neumann flow (the relative complex is the
+  /// identity inclusion there) instead of panicking on an empty boundary
+  /// subcomplex. The regression
   /// for the sphere preset, whose background solve otherwise never completes.
   /// Mass is conserved (the constant is the Neumann kernel), so the bump spreads
   /// rather than decaying to zero -- the peak drops while the total does not.
