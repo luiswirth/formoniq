@@ -26,7 +26,7 @@ Research code, under active development.
 
 ```sh
 cargo test --workspace
-cargo run --release --example hodge_laplace_source
+cargo run --release --example source
 ```
 
 The examples under `crates/formoniq/examples/` are the end-to-end demonstrations
