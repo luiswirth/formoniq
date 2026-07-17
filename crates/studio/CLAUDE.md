@@ -115,6 +115,15 @@ they bind the same way the parent's invariants do:
   corollary is the CLI's: nothing the code can decide from the object or the
   context is asked of the user, because a knob with one right answer only lets
   the answer be wrong.
+- **What is asked divides by the object it reads.** Two objects are on screen —
+  the mesh, and the field read on it — and `MeshDisplay`/`FieldDisplay` is
+  already that split, so the settings mirror the seam rather than laying a second
+  taxonomy over it. The mesh's are always live: a scene without geometry is not a
+  scene. The field's are its reduced grade's answer, asked where that rule
+  already lives, so a knob appears exactly when it has something to do. Neither
+  costs a branch below the model — a setting naming an item drops it from the
+  draw list, and one naming a deformation the items ride is a material at zero,
+  the shape bloom's "off" already has.
 - **The renderer sees baked geometry and explicit time, and nothing else.** No
   FEEC types, no clock, no window, no surface. Time is an argument, so the
   interactive loop passes wall-clock seconds and an exporter passes the instant

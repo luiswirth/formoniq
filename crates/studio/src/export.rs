@@ -363,9 +363,11 @@ fn render_at(
   time: f32,
   steps: u32,
 ) -> Vec<u8> {
-  let items = displayed
-    .field
-    .draw_list(&displayed.mesh, crate::ui::Marks::default());
+  let items = displayed.field.draw_list(
+    &displayed.mesh,
+    crate::ui::MeshView::default(),
+    crate::ui::FieldView::default(),
+  );
   let frame = FrameView {
     items: &items,
     camera: &displayed.camera,

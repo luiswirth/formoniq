@@ -11,6 +11,7 @@ use crate::gallery::{
   BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, GRID_CELLS_DEFAULT, GRID_CELLS_MAX,
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
 };
+use crate::scene::FieldOffers;
 
 /// How much of the scene's light survives to the display.
 ///
@@ -57,6 +58,63 @@ impl Post {
   }
 
   pub(crate) const ALL: [Self; 3] = [Self::Clamp, Self::Tonemap, Self::Bloom];
+}
+
+/// What of the mesh itself is drawn: [`crate::display::MeshDisplay`]'s items.
+///
+/// The seam is `display.rs`'s own: the mesh is the object every scene has, and
+/// the field is read *on* it. So these are independent of which field is
+/// selected and unchanged by switching one -- and there is no availability rule
+/// to write, because a scene without geometry is not a scene.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct MeshView {
+  /// The filled cells. The surface is the mesh's own geometry -- a field only
+  /// paints it -- which is why it is here rather than among the field's marks.
+  ///
+  /// It is also what writes depth, so with it off the marks and the wireframe
+  /// stop occluding and the far side of the mesh shows through. That is the
+  /// picture a reader turning it off is asking for, not an artifact to guard
+  /// against.
+  pub(crate) surface: bool,
+  /// The drawn 1-skeleton: an overlay on a surface, the cells themselves on a
+  /// curve. One item under one name, since the bake already unified the two --
+  /// so toggling it off on a 1-manifold leaves an empty picture, which is the
+  /// correct total answer and not a case to exclude.
+  pub(crate) wireframe: bool,
+}
+
+impl Default for MeshView {
+  fn default() -> Self {
+    Self {
+      surface: true,
+      wireframe: true,
+    }
+  }
+}
+
+/// How the selected field is read on that mesh: [`crate::display::FieldDisplay`]'s
+/// items and the deformation it drives. Which of these apply is the reduced
+/// grade's answer, and [`crate::scene::Scene::offers`] is where it is asked.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct FieldView {
+  /// The standing wave's displacement of the mesh along its normal.
+  ///
+  /// Not a mark: it is no item of the draw list but a deformation the mesh's
+  /// own items ride -- the field's material writing into the mesh's geometry,
+  /// which is exactly what `wave_amplitude` already is. Hence "off" is an
+  /// amplitude of zero, the same zero a field with no eigenvalue is given, and
+  /// it costs no branch below the display.
+  pub(crate) displacement: bool,
+  pub(crate) marks: Marks,
+}
+
+impl Default for FieldView {
+  fn default() -> Self {
+    Self {
+      displacement: true,
+      marks: Marks::default(),
+    }
+  }
 }
 
 /// Which of a line field's marks are drawn.
@@ -361,7 +419,12 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) entries: Vec<Entry<'a>>,
   pub(crate) mesh_error: Option<String>,
   pub(crate) selection: Selection,
-  pub(crate) marks: Marks,
+  pub(crate) mesh_view: MeshView,
+  pub(crate) field_view: FieldView,
+  /// Which of `field_view`'s settings the selected field actually offers -- the
+  /// reduced grade's answer, decided in [`crate::scene::Scene::offers`] so the
+  /// panel asks rather than dispatches.
+  pub(crate) offers: FieldOffers,
   pub(crate) post: Post,
   pub(crate) orthographic: bool,
   pub(crate) presets: &'a [Preset],
@@ -388,7 +451,8 @@ pub(crate) struct PanelResponse {
   /// applies it in preference to the individual `requested_*` fields.
   pub(crate) requested_preset: Option<usize>,
   pub(crate) selection: Selection,
-  pub(crate) marks: Marks,
+  pub(crate) mesh_view: MeshView,
+  pub(crate) field_view: FieldView,
   pub(crate) post: Post,
   pub(crate) orthographic: bool,
   /// Whether the standing wave should be running after this frame -- the
@@ -423,7 +487,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut requested_study = model.study.clone();
   let mut requested_preset = None;
   let mut selection = model.selection;
-  let mut marks = model.marks;
+  let mut mesh_view = model.mesh_view;
+  let mut field_view = model.field_view;
   let mut post = model.post;
   let mut orthographic = model.orthographic;
   let mut playing = model.playing;
@@ -479,7 +544,11 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // The mesh axis: every study runs on every mesh, so the picker is always
       // shown. A generated family resets to its default refinement when first
       // chosen; re-picking the current family keeps the slider's value.
-      ui.label("Mesh");
+      //
+      // "Mesh source", not "Mesh": this is which object to build, while the
+      // inspector's "Mesh" is what of it to draw. Two questions, and the longer
+      // name is the one that says which this is.
+      ui.label("Mesh source");
       egui::ComboBox::from_id_salt("mesh-source")
         .selected_text(requested_mesh.label())
         .show_ui(ui, |ui| {
@@ -591,18 +660,37 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         render_modes(ui, &model.entries, &mut selection, model.scene_dim);
       }
 
-      // Only a line field has these marks, so only a line field is asked. A
-      // scalar field's surface is its whole rendering, and a toggle with nothing
-      // to toggle is a knob whose only use is to be wrong.
-      if matches!(model.selection, Selection::Line(_)) {
+      // What is drawn, in two sections by which object the setting reads: the
+      // mesh, and the field read on it. That is `display.rs`'s own seam between
+      // `MeshDisplay` and `FieldDisplay`, so these mirror a distinction the code
+      // already makes rather than laying a second taxonomy over it.
+      ui.separator();
+      ui.label("Mesh");
+      ui.checkbox(&mut mesh_view.surface, "Surface")
+        .on_hover_text("The filled cells. Also what writes depth: with it off, the marks stop occluding and the far side shows through");
+      ui.checkbox(&mut mesh_view.wireframe, "Wireframe")
+        .on_hover_text("The drawn 1-skeleton: an overlay on a surface, the cells themselves on a curve");
+
+      // The field side is the only one gated, and it asks rather than
+      // dispatches: which settings a field offers is its reduced grade's answer
+      // (`Scene::offers`). A knob with nothing to toggle is a knob whose only
+      // use is to be wrong -- and a section with no knobs is one too, so a
+      // density that is no eigenmode shows no section at all.
+      if model.offers.any() {
         ui.separator();
-        ui.label("Marks");
-        ui.checkbox(&mut marks.glyphs, "Glyphs")
-          .on_hover_text("Arrows on each cell's barycentric lattice: the field at a point");
-        ui.checkbox(&mut marks.streamlines, "Streamlines")
-          .on_hover_text("Evenly spaced integral curves: the field's geometry, in one frame");
-        ui.checkbox(&mut marks.particles, "Particles")
-          .on_hover_text("Advected points: the field's dynamics, legible in motion");
+        ui.label("Field");
+        if model.offers.displacement {
+          ui.checkbox(&mut field_view.displacement, "Displacement")
+            .on_hover_text("The standing wave, along the surface's normal: the mode's own geometry");
+        }
+        if model.offers.marks {
+          ui.checkbox(&mut field_view.marks.glyphs, "Glyphs")
+            .on_hover_text("Arrows on each cell's barycentric lattice: the field at a point");
+          ui.checkbox(&mut field_view.marks.streamlines, "Streamlines")
+            .on_hover_text("Evenly spaced integral curves: the field's geometry, in one frame");
+          ui.checkbox(&mut field_view.marks.particles, "Particles")
+            .on_hover_text("Advected points: the field's dynamics, legible in motion");
+        }
       }
 
       // Radio, not two checkboxes: the rungs are cumulative, so the states are
@@ -679,7 +767,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     requested_study,
     requested_preset,
     selection,
-    marks,
+    mesh_view,
+    field_view,
     post,
     orthographic,
     playing,

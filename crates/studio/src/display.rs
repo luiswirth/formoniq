@@ -23,7 +23,7 @@ use crate::render::{
   GpuContext,
 };
 use crate::scene::Scene;
-use crate::ui::{Marks, Post, Selection};
+use crate::ui::{FieldView, MeshView, Post, Selection};
 
 /// The exposure the scene's radiance is read at, before the display transform.
 ///
@@ -551,24 +551,53 @@ impl FieldDisplay {
   /// marks over it -- a line field's ribbons, its particles, then the wireframe
   /// -- only test against it, so they blend in the order given.
   ///
-  /// `marks` drops items rather than switching the frame graph. A mark that is
-  /// off is simply not in the list, which the renderer cannot tell from a field
-  /// that never had one -- so the toggle costs no branch below this line.
-  pub(crate) fn draw_list<'a>(&'a self, mesh: &'a MeshDisplay, marks: Marks) -> DrawList<'a> {
-    let mut items = Vec::new();
-    if let Some(surface) = &mesh.surface {
-      items.push(RenderItem::Surface(surface, self.surface));
+  /// The two views enter the way the two objects do. A setting that is off drops
+  /// an item rather than switching the frame graph, which the renderer cannot
+  /// tell from a field that never had one; the `Option`s stay the structural
+  /// truth beneath it, since a mark with no batch is unavailable whatever the
+  /// bool says. Displacement is the one that drops nothing: it is a material,
+  /// so its "off" is an amplitude of zero -- the same zero [`Self::build`]
+  /// already gives a field with no eigenvalue, and the same shape as bloom's
+  /// intensity of zero. Either way the toggle costs no branch below this line.
+  pub(crate) fn draw_list<'a>(
+    &'a self,
+    mesh: &'a MeshDisplay,
+    mesh_view: MeshView,
+    field_view: FieldView,
+  ) -> DrawList<'a> {
+    // The wireframe rides the surface's wave, so the two amplitudes are one
+    // setting; the ribbons, glyphs and particles sample the undisplaced surface
+    // and carry a zero amplitude already.
+    let (mut surface, mut wireframe) = (self.surface, self.wireframe);
+    if !field_view.displacement {
+      surface.wave_amplitude = 0.0;
+      wireframe.wave_amplitude = 0.0;
     }
-    if let Some(glyphs) = self.glyphs.as_ref().filter(|_| marks.glyphs) {
+
+    let mut items = Vec::new();
+    if let Some(batch) = mesh.surface.as_ref().filter(|_| mesh_view.surface) {
+      items.push(RenderItem::Surface(batch, surface));
+    }
+    if let Some(glyphs) = self.glyphs.as_ref().filter(|_| field_view.marks.glyphs) {
       items.push(RenderItem::Segments(glyphs, self.glyph));
     }
-    if let Some(streamlines) = self.streamlines.as_ref().filter(|_| marks.streamlines) {
+    if let Some(streamlines) = self
+      .streamlines
+      .as_ref()
+      .filter(|_| field_view.marks.streamlines)
+    {
       items.push(RenderItem::Segments(streamlines, self.streamline));
     }
-    if let Some(particles) = self.particles.as_ref().filter(|_| marks.particles) {
+    if let Some(particles) = self
+      .particles
+      .as_ref()
+      .filter(|_| field_view.marks.particles)
+    {
       items.push(RenderItem::Particles(particles, self.particle));
     }
-    items.push(RenderItem::Segments(&mesh.segments, self.wireframe));
+    if mesh_view.wireframe {
+      items.push(RenderItem::Segments(&mesh.segments, wireframe));
+    }
     DrawList { items }
   }
 }

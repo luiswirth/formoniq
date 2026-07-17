@@ -104,10 +104,13 @@ struct State<'a> {
   mesh_display: MeshDisplay,
   display: FieldDisplay,
 
-  /// Which of a line field's marks are drawn. Viewer state, not the field's:
-  /// both marks are built whatever this says, so toggling one costs a draw call
-  /// and never a rebake.
-  marks: crate::ui::Marks,
+  /// What of the mesh is drawn, and how the selected field is read on it: the
+  /// two objects on screen, settled separately because they are separate. Viewer
+  /// state, not either object's -- everything is built whatever these say, so a
+  /// toggle costs a draw call (or, for the displacement, a material field) and
+  /// never a rebake.
+  mesh_view: crate::ui::MeshView,
+  field_view: crate::ui::FieldView,
 
   /// How the scene's light reaches the display. Viewer state for the same
   /// reason: it rebuilds nothing, and it is a question about what is being
@@ -253,7 +256,8 @@ impl<'a> State<'a> {
       display,
       clock: WaveClock::new(),
       steps_taken: 0,
-      marks: crate::ui::Marks::default(),
+      mesh_view: crate::ui::MeshView::default(),
+      field_view: crate::ui::FieldView::default(),
       post: crate::ui::Post::default(),
       drag: None,
       cursor: None,
@@ -679,7 +683,9 @@ impl<'a> State<'a> {
       entries,
       mesh_error: self.gallery.error.clone(),
       selection: self.selection,
-      marks: self.marks,
+      mesh_view: self.mesh_view,
+      field_view: self.field_view,
+      offers: self.scene.offers(self.selection),
       post: self.post,
       orthographic: self.camera.orthographic,
       presets: &self.presets,
@@ -747,7 +753,8 @@ impl<'a> State<'a> {
     // selection or a buffer. So they apply regardless of the branch above, where
     // being inside it would silently drop a toggle that happened to fire on the
     // same frame as a mesh or study change.
-    self.marks = response.marks;
+    self.mesh_view = response.mesh_view;
+    self.field_view = response.field_view;
     self.post = response.post;
     self.clock.set_playing(response.playing);
 
@@ -774,7 +781,9 @@ impl<'a> State<'a> {
   /// still is exactly what is on screen (minus the egui panels). A write failure
   /// is surfaced in the panel rather than aborting the loop.
   fn export_current_png(&mut self, path: &std::path::Path) {
-    let items = self.display.draw_list(&self.mesh_display, self.marks);
+    let items = self
+      .display
+      .draw_list(&self.mesh_display, self.mesh_view, self.field_view);
     let frame = FrameView {
       items: &items,
       camera: &self.camera,
@@ -849,7 +858,9 @@ impl<'a> State<'a> {
     // to the frame but because the step accounting is a mutation and the list
     // is a borrow of what it accounts for.
     let steps = self.pending_steps();
-    let items = self.display.draw_list(&self.mesh_display, self.marks);
+    let items = self
+      .display
+      .draw_list(&self.mesh_display, self.mesh_view, self.field_view);
     let frame_view = FrameView {
       items: &items,
       camera: &self.camera,
