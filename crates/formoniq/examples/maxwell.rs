@@ -25,9 +25,7 @@ use common::linalg::nalgebra::Vector;
 use continuum::field::DiffFormClosure;
 use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
 use formoniq::{
-  problems::maxwell::{
-    leapfrog_energy, solve_maxwell_mixed, MaxwellOperators, MaxwellState, Medium,
-  },
+  problems::maxwell::{leapfrog_energy, solve_mixed, MaxwellOperators, MaxwellState, Medium},
   whitney_complex::WhitneyComplex,
 };
 use manifold::gen::cartesian::CartesianMeshInfo;
@@ -78,7 +76,7 @@ fn main() {
   println!("dt = {dt:.4}, steps = {nsteps}\n");
 
   let current = Vector::zeros(fes.ndofs(1));
-  let solution = solve_maxwell_mixed(fes, medium, &times, initial, &current);
+  let solution = solve_mixed(fes, medium, &times, initial, &current);
 
   // Report every few steps.
   println!(

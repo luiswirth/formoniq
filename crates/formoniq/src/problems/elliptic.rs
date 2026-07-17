@@ -27,17 +27,17 @@ use std::mem;
 /// so the caller is oblivious to the boundary condition. `p` is the harmonic
 /// component of $u$, fixed to zero against the harmonic space $cal(H)^k$.
 ///
-/// Fails only where [`solve_hodge_laplace_harmonics`] does: the harmonic basis
+/// Fails only where [`solve_harmonics`] does: the harmonic basis
 /// is an eigensolve.
 ///
 /// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
 /// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
-pub fn solve_hodge_laplace_source<C: HilbertComplex>(
+pub fn solve_source<C: HilbertComplex>(
   complex: &C,
   source_galvec: GalVec,
   grade: ExteriorGrade,
 ) -> Result<(Cochain, Cochain, Cochain), EigenError> {
-  let harmonics = solve_hodge_laplace_harmonics(complex, grade)?;
+  let harmonics = solve_harmonics(complex, grade)?;
 
   let galmats = MixedGalmats::compute(complex, grade);
 
@@ -107,7 +107,7 @@ pub fn solve_hodge_laplace_source<C: HilbertComplex>(
   Ok((sigma, u, p))
 }
 
-pub fn solve_hodge_laplace_harmonics<C: HilbertComplex>(
+pub fn solve_harmonics<C: HilbertComplex>(
   complex: &C,
   grade: ExteriorGrade,
 ) -> Result<Matrix, EigenError> {
@@ -122,7 +122,7 @@ pub fn solve_hodge_laplace_harmonics<C: HilbertComplex>(
     return Ok(Matrix::zeros(nwhitneys, 0));
   }
 
-  let (eigenvals, _, harmonics) = solve_hodge_laplace_evp(complex, grade, homology_dim)?;
+  let (eigenvals, _, harmonics) = solve_evp(complex, grade, homology_dim)?;
   assert!(eigenvals.iter().all(|&eigenval| eigenval <= 1e-12));
   Ok(harmonics)
 }
@@ -130,7 +130,7 @@ pub fn solve_hodge_laplace_harmonics<C: HilbertComplex>(
 /// The `neigenvalues` eigenpairs of the mixed Hodge-Laplace pencil nearest
 /// $0$, as $(lambda, sigma, u)$. Fewer, on a complex whose DOFs cannot support
 /// that many.
-pub fn solve_hodge_laplace_evp<C: HilbertComplex>(
+pub fn solve_evp<C: HilbertComplex>(
   complex: &C,
   grade: ExteriorGrade,
   neigenvalues: usize,

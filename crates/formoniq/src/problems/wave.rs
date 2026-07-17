@@ -1,7 +1,7 @@
 //! Module for the Wave Equation, the prototypical hyperbolic PDE.
 
 use crate::{
-  problems::hodge_laplace::HodgeBlocks,
+  problems::elliptic::HodgeBlocks,
   time::{LinearIrk, Tableau},
   whitney_complex::HilbertComplex,
 };

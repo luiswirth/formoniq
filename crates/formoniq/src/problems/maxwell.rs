@@ -27,7 +27,7 @@
 //!
 //! - **Charge conservation is exact.** Because $D_2 D_1 = 0$ (the tested law
 //!   $dif compose dif = 0$), the magnetic Gauss law $dif B = 0$ is preserved to
-//!   roundoff by the [leapfrog integrator][solve_maxwell_mixed] -- no
+//!   roundoff by the [leapfrog integrator][solve_mixed] -- no
 //!   magnetic monopoles are ever created.
 //! - **The wave equation is the scalar wave equation, one grade up.**
 //!   Eliminating $b$ gives the curl-curl form
@@ -48,7 +48,6 @@
 use crate::whitney_complex::WhitneyComplex;
 
 use common::linalg::{
-  eigen::{sparse_shift_invert_eigen, EigenError},
   faer::FaerCholesky,
   nalgebra::{bilinear_form_sparse, quadratic_form_sparse, CsrMatrix, Vector},
 };
@@ -194,7 +193,7 @@ impl MaxwellState {
 /// leapfrog invariant is conserved to roundoff in the source-free case (and is
 /// positive definite precisely under the CFL condition). `curr` supplies $e^n$
 /// and $b^(n-1/2)$, `next` supplies $b^(n+1/2)$: the two consecutive states of
-/// the trajectory returned by [`solve_maxwell_mixed`].
+/// the trajectory returned by [`solve_mixed`].
 pub fn leapfrog_energy(curr: &MaxwellState, next: &MaxwellState, ops: &MaxwellOperators) -> f64 {
   0.5
     * (quadratic_form_sparse(&ops.mass_e, curr.e.coeffs())
@@ -226,7 +225,7 @@ pub fn leapfrog_energy(curr: &MaxwellState, next: &MaxwellState, ops: &MaxwellOp
 /// [`crate::operators::SourceElVec`]), held constant in time; pass a zero
 /// vector for the source-free case. `times` is the sequence
 /// $[t_0, t_1, dots, T]$ of time nodes.
-pub fn solve_maxwell_mixed(
+pub fn solve_mixed(
   fes: WhitneyComplex,
   medium: Medium,
   times: &[f64],
@@ -292,42 +291,6 @@ pub fn solve_maxwell_mixed(
 /// Resonant modes of a perfect-electric-conductor cavity: the generalized
 /// eigenvalue problem
 ///
-/// $ K e = omega^2 M_epsilon e, quad K = D_1^T M_(mu^(-1)) D_1, $
-///
-/// on the relative complex $C^1 (K, diff K)$. The nonzero eigenvalues
-/// $omega^2$ are the squared resonant angular frequencies of the cavity; the
-/// kernel of $K$ (gradient fields and, on a topologically nontrivial domain,
-/// harmonic fields) are the static zero modes. Returns the eigenvalues
-/// $omega^2$ together with the corresponding electric-field eigen-cochains,
-/// extended by zero from the relative complex onto the full mesh.
-///
-/// The frequency-domain counterpart of the time-domain solvers above, built
-/// from the very same operators. Solved by [`sparse_shift_invert_eigen`] for
-/// the eigenvalues nearest $0$. $ker K$ contains every discrete gradient
-/// field, so `nmodes` must exceed its dimension before a resonance appears
-/// among the modes returned.
-pub fn solve_maxwell_cavity_modes(
-  fes: WhitneyComplex,
-  medium: Medium,
-  nmodes: usize,
-) -> Result<(Vector, Vec<Cochain>), EigenError> {
-  let ops = MaxwellOperators::new(&fes, medium);
-  let relative = fes.relative();
-  let incl = relative.inclusion(1);
-
-  let stiffness_rel = incl.transpose() * &ops.stiffness() * &incl;
-  let mass_rel = incl.transpose() * &ops.mass_e * &incl;
-
-  let (eigenvals, eigenvecs) = sparse_shift_invert_eigen(&stiffness_rel, &mass_rel, 0.0, nmodes)?;
-
-  let modes = eigenvecs
-    .column_iter()
-    .map(|c| Cochain::new(1, &incl * c.into_owned()))
-    .collect();
-
-  Ok((eigenvals, modes))
-}
-
 #[cfg(test)]
 mod test {
   use super::*;
@@ -360,7 +323,7 @@ mod test {
 
     let times: Vec<f64> = (0..=20).map(|i| 0.05 * i as f64).collect();
     let current = Vector::zeros(fes.ndofs(1));
-    let solution = solve_maxwell_mixed(fes, Medium::vacuum(), &times, initial, &current);
+    let solution = solve_mixed(fes, Medium::vacuum(), &times, initial, &current);
 
     // The magnetic charge starts at zero and must stay at zero throughout.
     for state in &solution {
@@ -388,7 +351,7 @@ mod test {
     let dt = 0.02;
     let times: Vec<f64> = (0..=200).map(|i| dt * i as f64).collect();
     let current = Vector::zeros(fes.ndofs(1));
-    let solution = solve_maxwell_mixed(fes, Medium::vacuum(), &times, initial, &current);
+    let solution = solve_mixed(fes, Medium::vacuum(), &times, initial, &current);
 
     let energy0 = leapfrog_energy(&solution[0], &solution[1], &ops);
     assert!(energy0 > 0.0);

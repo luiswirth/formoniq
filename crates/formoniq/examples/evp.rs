@@ -20,7 +20,7 @@ mod util;
 
 use {
   common::util::algebraic_convergence_rate,
-  formoniq::{problems::hodge_laplace, whitney_complex::WhitneyComplex},
+  formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
   manifold::gen::cartesian::CartesianMeshInfo,
   util::{report, BoundaryCondition},
 };
@@ -99,9 +99,9 @@ fn box_sweep() {
         for (i, bc) in BCS.into_iter().enumerate() {
           let relative = bc == BoundaryCondition::Relative;
           let (eigenvals, _, _) = if relative {
-            hodge_laplace::solve_hodge_laplace_evp(&whitney.relative(), grade, neigen).unwrap()
+            elliptic::solve_evp(&whitney.relative(), grade, neigen).unwrap()
           } else {
-            hodge_laplace::solve_hodge_laplace_evp(&whitney, grade, neigen).unwrap()
+            elliptic::solve_evp(&whitney, grade, neigen).unwrap()
           };
           // The coarsest levels can carry fewer DOFs than the requested count,
           // and then the eigensolver returns fewer pairs.
@@ -182,11 +182,8 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
   let grade: usize = prompt("Enter exterior grade.")?.parse()?;
   let neigen: usize = prompt("Enter number of eigenvalues.")?.parse()?;
 
-  let (eigenvals, _, _) = hodge_laplace::solve_hodge_laplace_evp(
-    &WhitneyComplex::new(&topology, &metric),
-    grade,
-    neigen,
-  )?;
+  let (eigenvals, _, _) =
+    elliptic::solve_evp(&WhitneyComplex::new(&topology, &metric), grade, neigen)?;
   for (i, &lambda) in eigenvals.iter().enumerate() {
     println!("eigenvalue {i}: {lambda:.4}");
   }
