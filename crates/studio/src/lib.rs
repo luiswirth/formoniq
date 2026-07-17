@@ -10,6 +10,7 @@ pub mod advect;
 pub mod app;
 pub mod bake;
 pub mod demos;
+pub(crate) mod deposit;
 pub(crate) mod display;
 pub mod export;
 pub mod gallery;

@@ -6,6 +6,7 @@ use super::{
   bloom::{BloomChain, BloomPass},
   camera::Camera,
   context::GpuContext,
+  deposit::{dummy_read_bind_group, DepositPass},
   downsample::{DownsamplePass, SceneColorBinding},
   fill::FillPass,
   item::{DrawList, RenderItem},
@@ -145,6 +146,10 @@ pub struct Renderer {
   segments: SegmentPass,
   particles: ParticlePass,
   advect: AdvectPass,
+  deposit: DepositPass,
+  /// The atlas binding of a frame with no deposit: a 1x1 zero texture, which
+  /// the fill's floor-1/gain-0 material makes the identity.
+  dummy_deposit: wgpu::BindGroup,
   bloom: BloomPass,
   downsample: DownsamplePass,
   targets: Option<Targets>,
@@ -183,6 +188,8 @@ impl Renderer {
       segments: SegmentPass::new(device, SCENE_FORMAT, &frame, &segment_materials, ssaa),
       particles: ParticlePass::new(device, SCENE_FORMAT, &frame, &particle_materials, ssaa),
       advect: AdvectPass::new(device),
+      deposit: DepositPass::new(device),
+      dummy_deposit: dummy_read_bind_group(device),
       bloom: BloomPass::new(device),
       downsample: DownsamplePass::new(device, format, &post, ssaa),
       frame,
@@ -199,6 +206,36 @@ impl Renderer {
 
   pub fn format(&self) -> wgpu::TextureFormat {
     self.format
+  }
+
+  /// Steps a population (and its trails) without drawing a frame: the burn-in.
+  ///
+  /// A fresh population sits stacked on its seeds and a fresh atlas is blank;
+  /// the equilibrium both are meant to be seen in is reached only after the
+  /// transient -- exactly a sampler's burn-in, and stepped through the same
+  /// per-step advect/deposit pair a frame steps, so a warmed display is
+  /// bit-identical to one that ran on screen for the same count. Submitted
+  /// here rather than deferred, because the caller's next frame must already
+  /// be in equilibrium.
+  pub fn warmup(
+    &self,
+    ctx: &GpuContext,
+    particles: &super::particles::ParticleBatch,
+    deposit: Option<&super::deposit::DepositBatch>,
+    steps: u32,
+  ) {
+    let mut encoder = ctx
+      .device
+      .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+        label: Some("Warmup Encoder"),
+      });
+    for _ in 0..steps {
+      self.advect.dispatch(&mut encoder, particles, 1);
+      if let Some(deposit) = deposit {
+        self.deposit.record(&mut encoder, deposit);
+      }
+    }
+    ctx.queue.submit(std::iter::once(encoder.finish()));
   }
 
   /// Writes the frame uniform and each item's material into its own binding.
@@ -270,9 +307,19 @@ impl Renderer {
     // cannot be nested in a render pass, so this is the frame's first act
     // rather than an item's own business -- and it is still one linear
     // sequence: an item that advects nothing contributes no dispatch.
-    for item in &view.items.items {
-      if let RenderItem::Particles(batch, _) = item {
-        self.advect.dispatch(encoder, batch, view.steps);
+    //
+    // The deposit is stepped *inside* the step loop, after each dispatch, not
+    // once per frame: the trail must be a function of the step count alone, so
+    // a frame owing several steps lays several splats, and a window and an
+    // exporter that reach the same count show the same trail.
+    for _ in 0..view.steps {
+      for item in &view.items.items {
+        if let RenderItem::Particles(batch, _) = item {
+          self.advect.dispatch(encoder, batch, 1);
+        }
+      }
+      if let Some(deposit) = view.items.deposit {
+        self.deposit.record(encoder, deposit);
       }
     }
 
@@ -319,12 +366,17 @@ impl Renderer {
       });
 
       let frame = self.frame.bind_group();
+      let deposit = view
+        .items
+        .deposit
+        .map_or(&self.dummy_deposit, |d| d.read_bind_group());
       for (item, &material) in view.items.items.iter().zip(&materials) {
         match item {
           RenderItem::Surface(batch, _) => self.fill.draw(
             &mut pass,
             frame,
             self.surface_materials.bind_group(material),
+            deposit,
             batch,
           ),
           RenderItem::Segments(batch, _) => self.segments.draw(

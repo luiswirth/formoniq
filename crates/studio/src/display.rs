@@ -14,9 +14,13 @@
 //! what one field decides -- its materials, its own geometry, its attribute
 //! stream. Switching modes rewrites the second alone.
 
+use manifold::geometry::metric::geometry::Geometry;
+
 use crate::bake::{self, BakedMesh};
+use crate::deposit::DepositLayout;
 use crate::render::{
   camera::Camera,
+  deposit::DepositBatch,
   item::{DrawList, RenderItem, SegmentBatch, SurfaceBatch},
   particles::ParticleBatch,
   uniform::{ParticleMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
@@ -115,18 +119,20 @@ const GLYPH_NODE_OPACITY: f32 = 0.25;
 /// judges is the light per unit area, which is the count times the speck's own
 /// area times its opacity -- so a count raised or lowered without moving these
 /// gives a saturated wash or an empty one, and neither is a picture of the
-/// field. This is the size at which a speck is individually legible, which is
-/// the regime the count below chooses.
-const PARTICLE_RADIUS_FRACTION: f32 = 0.0026;
+/// field. At a million specks each is a grain of the collective, sized just
+/// above the supersampled pixel, not an individually legible dot.
+const PARTICLE_RADIUS_FRACTION: f32 = 0.0016;
 
 /// The particles' ink: a warm white, additively blended, so overlapping specks
 /// accumulate into a bright density rather than occluding one another.
 ///
-/// Below full opacity because a speck is one sample among many and the
-/// accumulation is what should read -- and because the target is HDR, so what a
-/// pile-up exceeds 1.0 by is what blooms. Opacity here is therefore a *glow*
-/// setting as much as a brightness one.
-const PARTICLE_INK: [f32; 4] = [1.0, 0.86, 0.62, 0.10];
+/// Far below full opacity because a speck is one sample among a million and
+/// the accumulation is what should read -- and because the target is HDR, so
+/// what a pile-up exceeds 1.0 by is what blooms. Opacity here is therefore a
+/// *glow* setting as much as a brightness one. The heads are deliberately
+/// faint against their own trails: the deposit carries the structure, the
+/// specks the motion across it.
+const PARTICLE_INK: [f32; 4] = [1.0, 0.86, 0.62, 0.012];
 
 /// How fast the fastest particle crosses the object: scene radii per second, at
 /// the field's peak magnitude.
@@ -163,17 +169,49 @@ const ADVECT_DEPTH: u32 = 10;
 
 /// How many particles, and how many distinct sites they are born at.
 ///
-/// A count where an individual speck can still be followed by eye, and the flow
-/// is read from watching them move rather than from the density they pile into.
-/// The two regimes are genuinely different pictures, not more or less of one:
-/// far higher and no speck is legible, so only the accumulated density carries
-/// anything, and the radius and opacity above have to come down to keep it from
-/// saturating to a flat wash. Move the count and those two move with it.
+/// The count chooses the *collective* regime: no individual speck is meant to
+/// be followed, and the picture is the density the population piles into and
+/// the trails it lays in the deposit atlas -- which is why the radius and ink
+/// above sit far below what a followable speck would want. The three are one
+/// setting: move the count and they move with it.
 ///
 /// The seeds are far fewer than the particles: a seed is a *place* to be born,
 /// not a particle, and many pass through each over a session.
-const PARTICLE_COUNT: u32 = 100_000;
-const PARTICLE_SEEDS: usize = 16_384;
+const PARTICLE_COUNT: u32 = 1_000_000;
+const PARTICLE_SEEDS: usize = 65_536;
+
+/// How long a laid trail survives, as the time for one deposit to decay to
+/// $1\/e$. Together with [`PARTICLE_SPEED_FRACTION`] this *is* the streak
+/// length: the fastest particles draw tails of about their speed times this,
+/// $approx 0.15$ object radii, long enough to read as flow lines and short
+/// enough not to smear the whole surface uniform.
+const DEPOSIT_DECAY_SECONDS: f32 = 1.5;
+
+/// The fill's brightness where no trail has passed, as a fraction of its plain
+/// (un-deposited) radiance. Below 1 on purpose: the flow's illumination has to
+/// take its contrast from somewhere, and dimming the still regions is what
+/// makes the lit filaments read as light rather than as a paler colormap.
+const DEPOSIT_FLOOR: f32 = 0.3;
+
+/// The equilibrium trail brightness the gain is calibrated to: the lift
+/// `floor + gain * D` at the *average* deposit density, were the population
+/// spread uniformly. 1 makes the average trail exactly restore the plain
+/// radiance -- so still regions sit at the floor, ordinary streaks at nominal,
+/// and the filaments where the flow bunches overshoot 1 and bloom. The
+/// calibration is arithmetic over the actual count, decay and atlas budget,
+/// never a hand-tuned brightness.
+const DEPOSIT_MEAN_LIFT: f32 = 1.0;
+
+/// The burn-in a fresh population is stepped through before it is first shown.
+///
+/// A new population sits stacked on its seeds and its atlas is blank; what the
+/// viewer is meant to see is the *equilibrium* -- the invariant distribution
+/// the respawning flow settles into -- and that has no closed form to sample,
+/// so it is reached the way a Markov chain's is: run the transient off screen.
+/// One mean lifetime forgets the seeding, and it covers the trail's own
+/// settling ($approx 4 tau$) with room to spare. In steps, not seconds: the
+/// warmed state is a pure function of the count, shared by window and export.
+const WARMUP_STEPS: u32 = 360;
 
 /// The advection steps that have elapsed by `time`.
 ///
@@ -278,11 +316,23 @@ pub(crate) struct MeshDisplay {
   /// rather than rebuilt per pick: it is already what was uploaded, so a second
   /// bake could only disagree with what is on screen.
   baked: BakedMesh,
+  /// The deposit atlas layout: a function of the mesh and its metric alone
+  /// (like the bake's static half), so it lives here; the trail *state* over
+  /// it is a field's, and is built by [`FieldDisplay`]. Empty away from
+  /// intrinsic dimension 2.
+  deposit_layout: DepositLayout,
 }
 
 impl MeshDisplay {
   pub(crate) fn build(device: &wgpu::Device, scene: &Scene) -> Self {
     let baked = BakedMesh::new(&scene.topology, &scene.coords);
+    let deposit_layout = DepositLayout::new(&scene.topology, &scene.coords);
+    let deposit_uvs = match &baked.cells {
+      crate::bake::PrimBatch::Triangles(triangles) => {
+        deposit_layout.corner_uvs(&scene.topology, triangles)
+      }
+      _ => Vec::new(),
+    };
     let vertices = baked.segment_vertices();
     let values = vec![0.0; vertices.len()];
     let segments = match &baked.cells {
@@ -290,9 +340,10 @@ impl MeshDisplay {
       _ => &baked.wireframe,
     };
     Self {
-      surface: SurfaceBatch::new(device, &baked),
+      surface: SurfaceBatch::new(device, &baked, &deposit_uvs),
       segments: SegmentBatch::new(device, &vertices, &values, segments),
       baked,
+      deposit_layout,
     }
   }
 
@@ -336,6 +387,10 @@ pub(crate) struct FieldDisplay {
   /// its dynamics, integrated on the GPU through the same charts and
   /// transitions.
   particles: Option<ParticleBatch>,
+  /// The trails those particles lay down: the deposit atlas, stepped with the
+  /// advection and read by the fill as illumination. Present exactly when the
+  /// particles are and the mesh carries an atlas (intrinsic dimension 2).
+  deposit: Option<DepositBatch>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
   glyph: SegmentMaterial,
@@ -350,10 +405,11 @@ impl FieldDisplay {
   pub(crate) fn build(
     ctx: &GpuContext,
     scene: &Scene,
+    mesh: &MeshDisplay,
     selection: Selection,
     amplitude_scale: f32,
   ) -> (Self, Vec<f32>) {
-    let (glyphs, particles, attributes, surface) = match selection {
+    let (glyphs, particles, speed_ratio, attributes, mut surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
         let (raw_min, raw_max) = field.bounds();
@@ -385,6 +441,7 @@ impl FieldDisplay {
         (
           None,
           None,
+          0.0,
           bake::attributes(field.values()),
           SurfaceMaterial {
             min_val,
@@ -394,6 +451,9 @@ impl FieldDisplay {
             // Diverging exactly where the range above was widened to
             // symmetric: a signed eigenmode pulse, not an unsigned magnitude.
             diverging: f32::from(field.eigenvalue.is_some()),
+            // The identity: a scalar field has no particles and lays no trail.
+            deposit_floor: 1.0,
+            deposit_gain: 0.0,
           },
         )
       }
@@ -454,9 +514,20 @@ impl FieldDisplay {
           })
           .flatten();
 
+        // The population's mean speed as a fraction of the peak the step is
+        // normalized to: with splats inked by arc length, this is what the
+        // equilibrium trail brightness actually scales with, and it is an
+        // exact area-weighted quantity of the field, not a tuned ratio.
+        let speed_ratio = if peak > 0.0 {
+          crate::advect::mean_speed(&scene.topology, &scene.coords, &field.cochain) / peak
+        } else {
+          0.0
+        };
+
         (
           Some(glyphs),
           particles,
+          speed_ratio,
           // The surface is the same fill a scalar field gets, tinted by the
           // field's nodal magnitude: the glyphs carry the direction, so the
           // surface has only the magnitude left to say.
@@ -467,14 +538,59 @@ impl FieldDisplay {
             wave_amplitude: 0.0,
             wave_omega: field.eigenvalue.map_or(0.0, f64::sqrt) as f32,
             diverging: f32::from(field.eigenvalue.is_some()),
+            // The identity until the deposit below exists; patched then.
+            deposit_floor: 1.0,
+            deposit_gain: 0.0,
           },
         )
       }
     };
 
+    // The trails, where both halves exist: a population to lay them and an
+    // atlas to hold them. The decay is per step -- the deposit's determinism
+    // contract is the advection's own -- and the fill's gain is *calibrated*,
+    // not tuned: splats ink by arc length, so the equilibrium a uniformly
+    // spread population reaches is count times one splat's texels times the
+    // mean step length in texels times the decay's lifetime, over the texels
+    // the atlas covers -- and at that mean the lift is [`DEPOSIT_MEAN_LIFT`].
+    // Every factor is an exact quantity of the field, the population or the
+    // layout; whatever the count or budget becomes, the picture keeps its
+    // exposure.
+    let decay = (-1.0 / (DEPOSIT_DECAY_SECONDS * STEPS_PER_SECOND)).exp();
+    let deposit = particles.as_ref().and_then(|population| {
+      let layout = &mesh.deposit_layout;
+      let trails = DepositBatch::new(&ctx.device, layout, population, ADVECT_DEPTH, 1.0, decay)?;
+      // The mean step length in texels: the peak-normalized step in world
+      // units, scaled by the field's own mean/peak ratio, over the layout's
+      // world size of one texel (uniform per area by construction).
+      let step_world_peak =
+        PARTICLE_SPEED_FRACTION * f64::from(amplitude_scale) / f64::from(STEPS_PER_SECOND);
+      let total_area: f64 = scene
+        .topology
+        .cells()
+        .handle_iter()
+        .map(|cell| scene.coords.cell_metric(cell).det_sqrt() / 2.0)
+        .sum();
+      let used_texels = layout.used_texels().max(1) as f64;
+      let world_per_texel = (total_area / used_texels).sqrt().max(f64::EPSILON);
+      let mean_step_texels = step_world_peak * speed_ratio / world_per_texel;
+
+      let lifetime_steps = f64::from(DEPOSIT_DECAY_SECONDS) * f64::from(STEPS_PER_SECOND);
+      let mean_deposit = f64::from(population.count())
+        * crate::render::deposit::splat_footprint_integral()
+        * mean_step_texels
+        * lifetime_steps
+        / used_texels;
+      surface.deposit_floor = DEPOSIT_FLOOR;
+      surface.deposit_gain = ((f64::from(DEPOSIT_MEAN_LIFT) - f64::from(DEPOSIT_FLOOR))
+        / mean_deposit.max(f64::EPSILON)) as f32;
+      Some(trails)
+    });
+
     let display = Self {
       glyphs,
       particles,
+      deposit,
       surface,
       // The wireframe rides the surface's own wave, so it tracks the displaced
       // mesh rather than the flat rest one, and it has no node to fade at.
@@ -519,6 +635,17 @@ impl FieldDisplay {
     (display, attributes)
   }
 
+  /// Runs the burn-in: steps a fresh population and its trails to equilibrium
+  /// before anything is drawn. Called once per build, by both callers, so the
+  /// first frame either shows is already the settled flow rather than the
+  /// seeding transient. A display with no population is already wherever it
+  /// will ever be, and this is the no-op it deserves.
+  pub(crate) fn warm_up(&self, ctx: &GpuContext, renderer: &crate::render::Renderer) {
+    if let Some(particles) = &self.particles {
+      renderer.warmup(ctx, particles, self.deposit.as_ref(), WARMUP_STEPS);
+    }
+  }
+
   /// The frame's items, in submission order: the surface writes depth, and the
   /// marks over it -- a line field's glyphs, its particles, then the wireframe
   /// -- only test against it, so they blend in the order given.
@@ -545,6 +672,17 @@ impl FieldDisplay {
       surface.wave_amplitude = 0.0;
       wireframe.wave_amplitude = 0.0;
     }
+    // The trails follow the particles' own toggle: without the population the
+    // atlas is neither stepped nor bound, so the material reverts to the
+    // identity rather than dimming the fill to a floor no trail will ever lift.
+    let deposit = self
+      .deposit
+      .as_ref()
+      .filter(|_| self.particles.is_some() && field_view.marks.particles);
+    if deposit.is_none() {
+      surface.deposit_floor = 1.0;
+      surface.deposit_gain = 0.0;
+    }
 
     let mut items = Vec::new();
     if let Some(batch) = mesh.surface.as_ref().filter(|_| mesh_view.surface) {
@@ -563,6 +701,6 @@ impl FieldDisplay {
     if mesh_view.wireframe {
       items.push(RenderItem::Segments(&mesh.segments, wireframe));
     }
-    DrawList { items }
+    DrawList { items, deposit }
   }
 }

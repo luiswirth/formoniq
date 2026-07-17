@@ -65,56 +65,79 @@ const fn value_attribute(loc: u32) -> [wgpu::VertexAttribute; 1] {
 
 const SURFACE_STATIC: [wgpu::VertexAttribute; 3] = baked_attributes(0);
 const SURFACE_VALUE: [wgpu::VertexAttribute; 1] = value_attribute(3);
+const SURFACE_DEPOSIT_UV: [wgpu::VertexAttribute; 1] =
+  [attribute(0, 4, wgpu::VertexFormat::Float32x2)];
 const SEGMENT_A: [wgpu::VertexAttribute; 4] = segment_attributes(0);
 const SEGMENT_B: [wgpu::VertexAttribute; 4] = segment_attributes(4);
 const SEGMENT_VALUE_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
 const SEGMENT_VALUE_B: [wgpu::VertexAttribute; 1] = value_attribute(9);
 
-/// A filled triangle surface: the shared vertex table, the per-field attribute
-/// stream over it, and one index stream of wound triangles.
+/// A filled triangle surface: per-corner vertex streams, three corners per
+/// triangle, unshared.
+///
+/// Unshared, unlike the earlier indexed table, because the deposit-atlas texel
+/// coordinate is per corner *per triangle*: two triangles sharing a mesh
+/// vertex map it into two different atlas blocks, so a shared vertex has no
+/// one coordinate to carry. The gather is the same move [`SegmentBatch`]
+/// already makes for its endpoints, and the per-field values are re-gathered
+/// through the retained triangle list exactly as its `write_attributes` does.
 pub struct SurfaceBatch {
-  positions: wgpu::Buffer,
+  corners: wgpu::Buffer,
   attributes: wgpu::Buffer,
-  indices: wgpu::Buffer,
-  nindices: u32,
+  deposit_uvs: wgpu::Buffer,
+  /// The triangle list over the *mesh* vertex table, retained so a field
+  /// change re-gathers its per-vertex values into corner order.
+  triangles: Vec<[u32; 3]>,
+  ncorners: u32,
 }
 
 impl SurfaceBatch {
   /// The batch of a baked mesh whose cells are triangles; `None` for a bake that
   /// produced no fill (a curve, a point cloud), whose marks are its segments
-  /// instead. The attribute stream starts at zero; a field fills it through
+  /// instead. `deposit_uvs` is the per-corner atlas texel coordinate stream
+  /// (normalized), three per triangle -- zeros for a mesh with no atlas. The
+  /// attribute stream starts at zero; a field fills it through
   /// [`Self::write_attributes`].
-  pub fn new(device: &wgpu::Device, baked: &BakedMesh) -> Option<Self> {
+  pub fn new(device: &wgpu::Device, baked: &BakedMesh, deposit_uvs: &[[f32; 2]]) -> Option<Self> {
     let PrimBatch::Triangles(triangles) = &baked.cells else {
       return None;
     };
-    let indices: Vec<u32> = triangles.iter().flatten().copied().collect();
+    assert_eq!(deposit_uvs.len(), 3 * triangles.len());
+    let corners: Vec<BakedVertex> = triangles
+      .iter()
+      .flatten()
+      .map(|&i| baked.positions[i as usize])
+      .collect();
     Some(Self {
-      positions: vertex_buffer(device, "Surface Positions", &baked.positions),
-      attributes: vertex_buffer(
-        device,
-        "Surface Attributes",
-        &vec![0.0f32; baked.positions.len()],
-      ),
-      indices: device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("Surface Indices"),
-        contents: bytemuck::cast_slice(&indices),
-        usage: wgpu::BufferUsages::INDEX,
-      }),
-      nindices: indices.len() as u32,
+      corners: vertex_buffer(device, "Surface Corners", &corners),
+      attributes: vertex_buffer(device, "Surface Attributes", &vec![0.0f32; corners.len()]),
+      deposit_uvs: vertex_buffer(device, "Surface Deposit UVs", deposit_uvs),
+      ncorners: corners.len() as u32,
+      triangles: triangles.clone(),
     })
   }
 
-  /// Rebinds the surface to a different field of the same mesh: one buffer
-  /// write, no rebake.
-  pub fn write_attributes(&self, queue: &wgpu::Queue, attributes: &[f32]) {
-    if !attributes.is_empty() {
-      queue.write_buffer(&self.attributes, 0, bytemuck::cast_slice(attributes));
+  /// Rebinds the surface to a different field of the same mesh: `values` is
+  /// per *mesh* vertex, gathered here into corner order. One buffer write, no
+  /// rebake.
+  pub fn write_attributes(&self, queue: &wgpu::Queue, values: &[f32]) {
+    if values.is_empty() {
+      return;
+    }
+    let gathered: Vec<f32> = self
+      .triangles
+      .iter()
+      .flatten()
+      .map(|&i| values[i as usize])
+      .collect();
+    if !gathered.is_empty() {
+      queue.write_buffer(&self.attributes, 0, bytemuck::cast_slice(&gathered));
     }
   }
 
-  /// The static stream at locations 0..=2, the per-field value at 3.
-  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 2] {
+  /// The static stream at locations 0..=2, the per-field value at 3, the
+  /// deposit texel coordinate at 4.
+  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 3] {
     [
       wgpu::VertexBufferLayout {
         array_stride: size_of::<BakedVertex>() as wgpu::BufferAddress,
@@ -126,14 +149,19 @@ impl SurfaceBatch {
         step_mode: wgpu::VertexStepMode::Vertex,
         attributes: &SURFACE_VALUE,
       },
+      wgpu::VertexBufferLayout {
+        array_stride: size_of::<[f32; 2]>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Vertex,
+        attributes: &SURFACE_DEPOSIT_UV,
+      },
     ]
   }
 
   pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
-    pass.set_vertex_buffer(0, self.positions.slice(..));
+    pass.set_vertex_buffer(0, self.corners.slice(..));
     pass.set_vertex_buffer(1, self.attributes.slice(..));
-    pass.set_index_buffer(self.indices.slice(..), wgpu::IndexFormat::Uint32);
-    pass.draw_indexed(0..self.nindices, 0, 0..1);
+    pass.set_vertex_buffer(2, self.deposit_uvs.slice(..));
+    pass.draw(0..self.ncorners, 0..1);
   }
 }
 
@@ -256,4 +284,8 @@ pub enum RenderItem<'a> {
 #[derive(Default)]
 pub struct DrawList<'a> {
   pub items: Vec<RenderItem<'a>>,
+  /// The deposit atlas the particles trail into and the fill reads, when the
+  /// frame has both. Beside the items rather than one of them: it is stepped
+  /// with the advection and read by the fill, so it belongs to no single mark.
+  pub deposit: Option<&'a super::deposit::DepositBatch>,
 }

@@ -228,7 +228,7 @@ struct Displayed {
 }
 
 impl Displayed {
-  fn build(ctx: &GpuContext, spec: &ExportSpec) -> Result<Self, String> {
+  fn build(ctx: &GpuContext, renderer: &Renderer, spec: &ExportSpec) -> Result<Self, String> {
     let mesh_data = spec.mesh_source.build()?;
     let scene = spec.study.build(&mesh_data);
 
@@ -244,7 +244,10 @@ impl Displayed {
 
     let extent = scene_extent(&scene) as f32;
     let mesh = MeshDisplay::build(&ctx.device, &scene);
-    let (field, attributes) = FieldDisplay::build(ctx, &scene, selection, extent);
+    let (field, attributes) = FieldDisplay::build(ctx, &scene, &mesh, selection, extent);
+    // The same burn-in the window runs: the export's first frame is the
+    // settled flow, and a given step count names the same picture in both.
+    field.warm_up(ctx, renderer);
     mesh.write_attributes(&ctx.queue, &attributes);
     let aspect = spec.size.0.max(1) as f32 / spec.size.1.max(1) as f32;
     let camera = default_camera(&scene, aspect);
@@ -319,7 +322,7 @@ pub fn export(spec: &ExportSpec, path: &Path) -> Result<(), String> {
   let ctx = headless_context().ok_or("no GPU adapter available for a headless render")?;
   let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, export_ssaa_scale(spec.size));
   let target = ExportTarget::new(&ctx, spec.size);
-  let displayed = Displayed::build(&ctx, spec)?;
+  let displayed = Displayed::build(&ctx, &renderer, spec)?;
 
   let is_video = path
     .extension()
@@ -530,7 +533,7 @@ mod tests {
 
     let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, export_ssaa_scale(spec.size));
     let target = ExportTarget::new(&ctx, spec.size);
-    let displayed = Displayed::build(&ctx, &spec).expect("the triforce scene builds");
+    let displayed = Displayed::build(&ctx, &renderer, &spec).expect("the triforce scene builds");
 
     // Stepped, not merely drawn. A line field carries an advected population,
     // and with zero steps its compute pass never runs -- so the dispatch, its

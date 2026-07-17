@@ -196,6 +196,14 @@ pub struct SurfaceMaterial {
   pub wave_amplitude: f32,
   pub wave_omega: f32,
   pub diverging: f32,
+  /// The fill's radiance is the colormap times
+  /// `deposit_floor + deposit_gain * D`, with $D$ the deposit atlas sample:
+  /// the trails illuminate the surface rather than painting over it, so hue
+  /// stays the field's and the flow carries luminance. Floor 1 and gain 0 --
+  /// the identity -- for a field with no deposit; "no trails" is a value,
+  /// never a second pipeline.
+  pub deposit_floor: f32,
+  pub deposit_gain: f32,
 }
 
 /// How the scene's radiance reaches the display: the WGSL `Post`.
