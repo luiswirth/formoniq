@@ -21,9 +21,9 @@ use crate::deposit::DepositLayout;
 use crate::render::{
   camera::Camera,
   deposit::DepositBatch,
-  item::{DrawList, RenderItem, SegmentBatch, SurfaceBatch},
+  item::{DrawList, GlyphBatch, RenderItem, SegmentBatch, SurfaceBatch},
   particles::ParticleBatch,
-  uniform::{PostUniform, SegmentMaterial, SurfaceMaterial},
+  uniform::{GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
   GpuContext,
 };
 use crate::scene::Scene;
@@ -336,7 +336,7 @@ pub(crate) struct FieldDisplay {
   /// The arrow glyphs of a line field, `None` for a scalar field: the field
   /// evaluated -- at points the atlas places (the interior barycentric lattice
   /// of each cell) rather than a tracer's seeding or a population's respawn.
-  glyphs: Option<SegmentBatch>,
+  glyphs: Option<GlyphBatch>,
   /// The advected particles of a line field, absent for a scalar field and for
   /// a field that vanishes everywhere (which seeds nowhere).
   ///
@@ -351,7 +351,7 @@ pub(crate) struct FieldDisplay {
   deposit: Option<DepositBatch>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
-  glyph: SegmentMaterial,
+  glyph: GlyphMaterial,
 }
 
 impl FieldDisplay {
@@ -445,14 +445,16 @@ impl FieldDisplay {
         // reference: a glyph's opacity is its own magnitude against the field's
         // greatest, so the mark reports where the field is strong without
         // spending its length on it.
-        let (vertices, values, segments) = crate::glyph::bake_glyphs(
+        let vertices = crate::glyph::bake_glyphs(
           &scene.topology,
           &scene.coords,
           &field.cochain,
           f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
           peak,
+          f64::from(GLYPH_WIDTH_FRACTION * amplitude_scale),
+          f64::from(GLYPH_OUTLINE_WIDTH_FRACTION * amplitude_scale),
         );
-        let glyphs = SegmentBatch::new(&ctx.device, &vertices, &values, &segments);
+        let glyphs = GlyphBatch::new(&ctx.device, &vertices);
 
         let particles = (peak > 0.0)
           .then(|| {
@@ -557,24 +559,23 @@ impl FieldDisplay {
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
-        ..SegmentMaterial::PLAIN
       },
       // The glyphs share the surface's clock but not its displacement: the
       // samples sit on the undisplaced surface, so only the node fade reads the
-      // mode. The outline rides the same material -- `segments.wgsl` composites
-      // the rim under the ink in one pass -- as a fraction of this glyph's own
-      // half-width, so it stays `GLYPH_OUTLINE_WIDTH_FRACTION` world units out
-      // however the taper has already scaled the local width down.
-      glyph: SegmentMaterial {
+      // mode. The outline rides the same material -- `glyph.wgsl` composites the
+      // rim under the ink in one pass -- as a fraction of the glyph's own
+      // half-width, so it stays `GLYPH_OUTLINE_WIDTH_FRACTION` world units out.
+      // The clip to the cell is intrinsic to the flat mark and needs no flag.
+      glyph: GlyphMaterial {
         color: GLYPH_INK,
         half_width_world: GLYPH_WIDTH_FRACTION * amplitude_scale,
         fade_floor: GLYPH_NODE_OPACITY,
-        wave_amplitude: 0.0,
         wave_omega: surface.wave_omega,
         head_length_fraction: GLYPH_HEAD_LENGTH_FRACTION,
         shaft_width_fraction: GLYPH_SHAFT_WIDTH_FRACTION,
         outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION / GLYPH_WIDTH_FRACTION,
         _pad0: 0.0,
+        _pad1: 0.0,
       },
     };
     (display, attributes)
@@ -629,7 +630,7 @@ impl FieldDisplay {
       items.push(RenderItem::Surface(batch, surface));
     }
     if let Some(glyphs) = self.glyphs.as_ref().filter(|_| field_view.marks.glyphs) {
-      items.push(RenderItem::Segments(glyphs, self.glyph));
+      items.push(RenderItem::Glyphs(glyphs, self.glyph));
     }
     if mesh_view.wireframe {
       items.push(RenderItem::Segments(&mesh.segments, wireframe));

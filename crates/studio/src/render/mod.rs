@@ -12,6 +12,7 @@ pub mod context;
 pub mod deposit;
 pub mod downsample;
 pub mod fill;
+pub mod glyph;
 pub mod item;
 pub mod particles;
 pub mod renderer;
@@ -161,6 +162,7 @@ mod tests {
     let bodies: &[(&str, &str)] = &[
       ("fill.wgsl", include_str!("fill.wgsl")),
       ("segments.wgsl", include_str!("segments.wgsl")),
+      ("glyph.wgsl", include_str!("glyph.wgsl")),
       ("downsample.wgsl", include_str!("downsample.wgsl")),
       ("advect.wgsl", include_str!("advect.wgsl")),
       ("bloom.wgsl", include_str!("bloom.wgsl")),
@@ -216,6 +218,7 @@ mod tests {
         "SegmentMaterial",
         size_of::<super::uniform::SegmentMaterial>(),
       ),
+      ("GlyphMaterial", size_of::<super::uniform::GlyphMaterial>()),
       ("Post", size_of::<super::uniform::PostUniform>()),
       ("Particle", size_of::<super::advect::Particle>()),
       ("Cell", size_of::<super::advect::Cell>()),

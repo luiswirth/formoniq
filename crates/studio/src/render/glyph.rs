@@ -1,56 +1,51 @@
-//! The segment pass: a 1-dimensional mark with no plane to lie in, drawn as
-//! instanced billboard quads of constant world-space thickness. See
-//! `segments.wgsl`.
+//! The glyph pass: a line field's arrow glyphs, drawn as flat quads lying in
+//! their surface cells. See `glyph.wgsl`.
 //!
-//! One pipeline serves the wireframe overlay and a 1-manifold's own cells. They
-//! were two descriptions of one technique; what differed -- ink, width, whether
-//! the mark rides the standing-wave displacement -- is data now: the material,
-//! and the endpoint's own normal (zero where a mark does not sit on a displaced
-//! surface, which makes the displacement the identity on it). The arrow glyph,
-//! which has a plane (its surface cell), is a flat mark of its own -- see the
-//! `glyph` pass.
+//! Not billboarded, unlike the segment pass: an arrow has a plane, its cell's,
+//! so the quad is baked into it once and never turned toward the camera. That is
+//! also what lets the arrow clip itself to the cell -- each corner's barycentric
+//! coordinate is known in the plane -- which a section needs, since it has a
+//! value only on the open cell it was sampled in.
 //!
-//! The pass is alpha-blended and does not write depth. The ribbons must not:
-//! they are translucent, and a ribbon biased toward the camera and drawn first
-//! would otherwise occlude the wireframe edge it lies along. The wireframe need
-//! not: nothing in the scene is drawn after it, so its depth would never be
-//! read.
+//! Alpha-blended and depth-testing but not depth-writing, exactly as the segment
+//! marks: the arrows are translucent and lie over the fill, biased toward the
+//! camera off the surface they are coplanar with.
 
 use super::{
   color_target, compilation_options, depth_stencil,
-  item::SegmentBatch,
+  item::GlyphBatch,
   primitive, shader_module, ssaa_constants,
-  uniform::{FrameUniform, SegmentMaterial, UniformPool},
+  uniform::{FrameUniform, GlyphMaterial, UniformBinding, UniformPool},
   MASK_FORMAT,
 };
 
-pub struct SegmentPass {
+pub struct GlyphPass {
   pipeline: wgpu::RenderPipeline,
 }
 
-impl SegmentPass {
+impl GlyphPass {
   pub fn new(
     device: &wgpu::Device,
     format: wgpu::TextureFormat,
-    frame: &super::uniform::UniformBinding<FrameUniform>,
-    materials: &UniformPool<SegmentMaterial>,
+    frame: &UniformBinding<FrameUniform>,
+    materials: &UniformPool<GlyphMaterial>,
     ssaa: u32,
   ) -> Self {
     let constants = ssaa_constants(ssaa);
-    let shader = shader_module(device, "Segment Shader", include_str!("segments.wgsl"));
+    let shader = shader_module(device, "Glyph Shader", include_str!("glyph.wgsl"));
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
-      label: Some("Segment Pipeline Layout"),
+      label: Some("Glyph Pipeline Layout"),
       bind_group_layouts: &[Some(frame.layout()), Some(materials.layout())],
       immediate_size: 0,
     });
     let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Segment Pipeline"),
+      label: Some("Glyph Pipeline"),
       layout: Some(&layout),
       vertex: wgpu::VertexState {
         module: &shader,
         entry_point: Some("vs_main"),
         compilation_options: compilation_options(&constants),
-        buffers: &SegmentBatch::layouts(),
+        buffers: &GlyphBatch::layouts(),
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
@@ -75,7 +70,7 @@ impl SegmentPass {
     pass: &mut wgpu::RenderPass<'_>,
     frame: &wgpu::BindGroup,
     material: &wgpu::BindGroup,
-    batch: &SegmentBatch,
+    batch: &GlyphBatch,
   ) {
     pass.set_pipeline(&self.pipeline);
     pass.set_bind_group(0, frame, &[]);

@@ -18,9 +18,12 @@ override SSAA_SCALE: i32 = 2;
 // display, and so arrives in that item's material.
 struct Frame {
     view_proj: mat4x4<f32>,
-    // World-space eye position, `w` unused: the billboard construction below
-    // needs it directly, not only the matrix it feeds into.
-    eye: vec4<f32>,
+    // The camera's world-space forward axis, `w` unused: the billboard
+    // construction below aligns to the view plane (perpendicular to this), which
+    // is what makes a mark parallel to the image plane under both projections --
+    // a finite eye point would be the wrong reference under an orthographic one,
+    // whose rays are parallel and whose projection has no vanishing point.
+    view_dir: vec4<f32>,
     time: f32,
     // Three scalars, not a `vec3<f32>`: a WGSL vector is 16-aligned, so a
     // `vec3` here would start a new 16-byte slot past `time` rather than fill
@@ -68,10 +71,22 @@ struct SegmentMaterial {
     fade_floor: f32,
     wave_amplitude: f32,
     wave_omega: f32,
+};
+
+// How an arrow glyph is drawn: a flat mark in its surface cell, not a billboard.
+// `half_width_world` is the head's half-width and the world scale the fragment's
+// signed distance is in; the fractions are the arrow's proportions; the outline
+// is a fixed world band around the whole silhouette.
+struct GlyphMaterial {
+    color: vec4<f32>,
+    half_width_world: f32,
+    fade_floor: f32,
+    wave_omega: f32,
     head_length_fraction: f32,
     shaft_width_fraction: f32,
     outline_width_fraction: f32,
     _pad0: f32,
+    _pad1: f32,
 };
 
 // The standing wave's instantaneous phase factor $cos(omega t)$: the one
@@ -136,32 +151,31 @@ fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
     return saturate_color(select(viridis(t), diverging(t), material.diverging > 0.5));
 }
 
-// A segment (a mesh edge, a glyph ribbon step) drawn with constant
-// world-space thickness. A `LineList` primitive rasterizes at a fixed,
-// backend-defined 1px in wgpu -- there is no portable line-width control -- and
-// all but disappears once the supersampled scene pass is filtered down. Instead
-// each segment is an instanced quad: two triangles fanned from its two
-// endpoints, offset perpendicular to both the segment and the view direction,
-// so the quad stays screen-facing the way a billboard does.
+// A segment (a mesh edge, a curve's cell) drawn with constant world-space
+// thickness. A `LineList` primitive rasterizes at a fixed, backend-defined 1px
+// in wgpu -- there is no portable line-width control -- and all but disappears
+// once the supersampled scene pass is filtered down. Instead each segment is an
+// instanced quad: two triangles fanned from its two endpoints, offset
+// perpendicular to both the segment and the camera's forward axis, so the quad
+// lies in the view plane -- parallel to the image plane -- the way a billboard
+// does.
 //
-// One perpendicular per *segment*, from the midpoint's view direction, shared
-// by both corners so the quad is a parallelogram of constant width. Deriving it
-// separately at each endpoint's own (slightly different) view direction instead
-// tapers the quad into a wedge whenever the segment is long enough, relative to
-// the camera distance, for the two ends to look back at the camera along
-// visibly different directions -- exactly the coarse triforce mesh's few, large
-// triangles.
-fn billboard_perp(world_a: vec3<f32>, world_b: vec3<f32>, eye: vec3<f32>) -> vec3<f32> {
+// Aligned to the view plane (the constant forward axis), not turned to face the
+// eye point. The two agree under perspective up to a slight per-position tilt,
+// but under an orthographic projection they do not: its rays are parallel and it
+// has no vanishing point, so a quad facing a finite eye tilts by a different
+// amount at every position and never lies flat in the image. The forward axis is
+// one direction for the whole scene, so the quad is also a parallelogram of
+// constant width rather than a wedge -- correct under both projections with no
+// branch between them.
+fn billboard_perp(world_a: vec3<f32>, world_b: vec3<f32>, view_dir: vec3<f32>) -> vec3<f32> {
     let seg_vec = world_b - world_a;
     let seg_dir = seg_vec / max(length(seg_vec), 1e-6);
-    let mid = 0.5 * (world_a + world_b);
-    let view_vec = eye - mid;
-    let view_dir = view_vec / max(length(view_vec), 1e-6);
     let perp = cross(seg_dir, view_dir);
     let perp_len = length(perp);
-    // Segment pointing straight at the camera: no well-defined screen-facing
-    // perpendicular, but the quad also projects to ~zero screen length there,
-    // so any fallback direction is invisible anyway.
+    // Segment pointing straight along the view: no well-defined in-plane
+    // perpendicular, but the quad also projects to ~zero screen length there, so
+    // any fallback direction is invisible anyway.
     return select(perp / max(perp_len, 1e-6), vec3<f32>(1.0, 0.0, 0.0), perp_len < 1e-6);
 }
 
@@ -183,11 +197,16 @@ fn billboard_corner(world_a: vec3<f32>, world_b: vec3<f32>, perp: vec3<f32>, hal
     return self_world + perp * half_width * billboard_side(vertex_index);
 }
 
-// Nudges a corner toward the camera by a small multiple of the mark's own
-// half-width, so it draws on top of the coplanar face beneath it instead of
-// z-fighting it. Coplanar is the whole difficulty: the true depth gap is zero,
-// so something has to break the tie, and it may as well be a distance the mark
-// already has.
+// Nudges a corner toward the camera, along the view direction, by a small
+// multiple of the mark's own half-width, so it draws on top of the coplanar
+// face beneath it instead of z-fighting it. Coplanar is the whole difficulty:
+// the true depth gap is zero, so something has to break the tie, and it may as
+// well be a distance the mark already has.
+//
+// Along the view axis, not toward the eye point: under an orthographic
+// projection the two differ, and a nudge toward a finite eye would move a corner
+// laterally -- shifting the mark off the fill it outlines -- rather than purely
+// in depth. Along the forward axis the whole nudge is depth.
 //
 // World space, and tied to the mark's own scale, so the nudge is a fixed small
 // distance rather than a fixed small *depth* -- an NDC-space offset would stand
@@ -201,10 +220,8 @@ fn billboard_corner(world_a: vec3<f32>, world_b: vec3<f32>, perp: vec3<f32>, hal
 // far below any real front/back separation -- which it does everywhere except
 // an imperceptible sliver at the silhouette, where that separation shrinks
 // continuously to zero and a biased line necessarily wins.
-fn depth_biased_corner(corner: vec3<f32>, eye: vec3<f32>, half_width: f32) -> vec3<f32> {
-    let to_eye = eye - corner;
-    let dir = to_eye / max(length(to_eye), 1e-6);
-    return corner + dir * (4.0 * half_width);
+fn depth_biased_corner(corner: vec3<f32>, view_dir: vec3<f32>, half_width: f32) -> vec3<f32> {
+    return corner - view_dir * (4.0 * half_width);
 }
 
 // A particle, i.e. a `MeshPoint`, plus what respawning it needs.

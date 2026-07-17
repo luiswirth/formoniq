@@ -9,10 +9,12 @@ use super::{
   deposit::{dummy_read_bind_group, DepositPass},
   downsample::{DownsamplePass, SceneColorBinding},
   fill::FillPass,
+  glyph::GlyphPass,
   item::{DrawList, RenderItem},
   segments::SegmentPass,
   uniform::{
-    FrameUniform, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding, UniformPool,
+    FrameUniform, GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding,
+    UniformPool,
   },
   DEPTH_CLEAR, DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
 };
@@ -138,9 +140,11 @@ pub struct Renderer {
   frame: UniformBinding<FrameUniform>,
   surface_materials: UniformPool<SurfaceMaterial>,
   segment_materials: UniformPool<SegmentMaterial>,
+  glyph_materials: UniformPool<GlyphMaterial>,
   post: UniformBinding<PostUniform>,
   fill: FillPass,
   segments: SegmentPass,
+  glyphs: GlyphPass,
   advect: AdvectPass,
   deposit: DepositPass,
   /// The atlas binding of a frame with no deposit: a 1x1 zero texture, which
@@ -172,6 +176,7 @@ impl Renderer {
     );
     let surface_materials = UniformPool::new(device, "surface material", Stages::VERTEX_FRAGMENT);
     let segment_materials = UniformPool::new(device, "segment material", Stages::VERTEX_FRAGMENT);
+    let glyph_materials = UniformPool::new(device, "glyph material", Stages::VERTEX_FRAGMENT);
     let post = UniformBinding::new(device, "post", Stages::FRAGMENT, PostUniform::default());
     Self {
       format,
@@ -181,6 +186,7 @@ impl Renderer {
       // the one that has to know what it is.
       fill: FillPass::new(device, SCENE_FORMAT, &frame, &surface_materials, ssaa),
       segments: SegmentPass::new(device, SCENE_FORMAT, &frame, &segment_materials, ssaa),
+      glyphs: GlyphPass::new(device, SCENE_FORMAT, &frame, &glyph_materials, ssaa),
       advect: AdvectPass::new(device),
       deposit: DepositPass::new(device),
       dummy_deposit: dummy_read_bind_group(device),
@@ -189,6 +195,7 @@ impl Renderer {
       frame,
       surface_materials,
       segment_materials,
+      glyph_materials,
       post,
       // Allocated on the first frame, from the size the caller renders at:
       // there is no size to guess at construction, and a window that never
@@ -210,7 +217,7 @@ impl Renderer {
       .write(&ctx.queue, FrameUniform::new(view.camera, view.time));
     self.post.write(&ctx.queue, view.post);
 
-    let (mut nsurfaces, mut nsegments) = (0, 0);
+    let (mut nsurfaces, mut nsegments, mut nglyphs) = (0, 0, 0);
     view
       .items
       .items
@@ -229,6 +236,13 @@ impl Renderer {
             .write(&ctx.device, &ctx.queue, nsegments, *material);
           nsegments += 1;
           nsegments - 1
+        }
+        RenderItem::Glyphs(_, material) => {
+          self
+            .glyph_materials
+            .write(&ctx.device, &ctx.queue, nglyphs, *material);
+          nglyphs += 1;
+          nglyphs - 1
         }
       })
       .collect()
@@ -338,6 +352,12 @@ impl Renderer {
             &mut pass,
             frame,
             self.segment_materials.bind_group(material),
+            batch,
+          ),
+          RenderItem::Glyphs(batch, _) => self.glyphs.draw(
+            &mut pass,
+            frame,
+            self.glyph_materials.bind_group(material),
             batch,
           ),
         }

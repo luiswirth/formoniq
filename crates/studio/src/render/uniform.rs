@@ -146,9 +146,11 @@ impl<T: Pod + Default> UniformPool<T> {
 #[derive(Copy, Clone, Debug, Pod, Zeroable)]
 pub struct FrameUniform {
   view_proj: [[f32; 4]; 4],
-  /// World-space eye position, `w` unused: the billboard construction needs it
-  /// directly, not only the matrix it feeds into.
-  eye: [f32; 4],
+  /// The camera's world-space forward axis, `w` unused: the billboard
+  /// construction aligns to the view plane (perpendicular to it), which is what
+  /// keeps a mark parallel to the image plane under an orthographic projection
+  /// as well as a perspective one.
+  view_dir: [f32; 4],
   time: f32,
   _pad: [f32; 3],
 }
@@ -157,7 +159,7 @@ impl Default for FrameUniform {
   fn default() -> Self {
     Self {
       view_proj: nalgebra::Matrix4::identity().into(),
-      eye: [0.0; 4],
+      view_dir: [0.0; 4],
       time: 0.0,
       _pad: [0.0; 3],
     }
@@ -166,10 +168,10 @@ impl Default for FrameUniform {
 
 impl FrameUniform {
   pub fn new(camera: &Camera, time: f32) -> Self {
-    let eye = camera.eye;
+    let forward = camera.forward();
     Self {
       view_proj: camera.build_view_projection_matrix().into(),
-      eye: [eye.x, eye.y, eye.z, 1.0],
+      view_dir: [forward.x, forward.y, forward.z, 0.0],
       time,
       _pad: [0.0; 3],
     }
@@ -242,40 +244,36 @@ pub struct SegmentMaterial {
   pub fade_floor: f32,
   pub wave_amplitude: f32,
   pub wave_omega: f32,
-  /// The arrowhead's length, as a fraction of the segment's own length: the
-  /// mark's *taper*, and the whole of what makes a segment an arrow.
-  ///
-  /// Self-similar on purpose -- a fraction, not a world length -- so every glyph
-  /// of a mark is the same arrow at the same proportions. Zero is a plain
-  /// segment, and it is the identity rather than a branch: the head occupies
-  /// none of the quad, and the profile below is the shaft's everywhere.
-  pub head_length_fraction: f32,
-  /// The shaft's half-width as a fraction of [`Self::half_width_world`], which
-  /// the head's base spans in full. One is a plain segment of uniform width.
-  pub shaft_width_fraction: f32,
-  /// The outline's rim width, as a fraction of [`Self::half_width_world`] --
-  /// a fraction rather than a world length so the two stay a fixed world-space
-  /// distance apart wherever the taper has already scaled the local half-width
-  /// down. Zero draws no rim: a plain segment or the wireframe, which already
-  /// separates from the fill by being black.
-  pub outline_width_fraction: f32,
-  pub _pad0: f32,
 }
 
-impl SegmentMaterial {
-  /// The taper of a mark that has none: a segment of uniform width, its ink
-  /// filling the quad edge to edge. The wireframe's and the ribbons' -- they
-  /// spread the material's fields with this rather than restating the numbers,
-  /// so an arrow is legible as the one mark that departs from it.
-  pub const PLAIN: Self = Self {
-    color: [0.0; 4],
-    half_width_world: 0.0,
-    fade_floor: 1.0,
-    wave_amplitude: 0.0,
-    wave_omega: 0.0,
-    head_length_fraction: 0.0,
-    shaft_width_fraction: 1.0,
-    outline_width_fraction: 0.0,
-    _pad0: 0.0,
-  };
+/// How an arrow glyph is drawn: a flat mark lying in its surface cell, the
+/// field's direction read pointwise on the barycentric lattice. Unlike a
+/// segment it has a plane, so it is not billboarded; and it clips itself to its
+/// cell, since a section has a value only on the open cell it was sampled in.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
+pub struct GlyphMaterial {
+  /// The arrow's ink: `rgb` plus the base opacity every fragment starts at.
+  pub color: [f32; 4],
+  /// The arrowhead's half-width in world space, which its base spans in full and
+  /// the shaft narrows down from. The quad the arrow is drawn on is sized from
+  /// it in the bake, so it also fixes the world scale the fragment's signed
+  /// distance is measured in.
+  pub half_width_world: f32,
+  /// Opacity at the standing wave's node, relative to the crest: the glyphs of
+  /// an eigenmode fade where the field vanishes and an arrow is meaningless. A
+  /// static field passes 1.
+  pub fade_floor: f32,
+  pub wave_omega: f32,
+  /// The arrowhead's length as a fraction of the arrow's own, and the shaft's
+  /// half-width as a fraction of the head's base: the proportions of the drawn
+  /// arrow, self-similar since both are fractions.
+  pub head_length_fraction: f32,
+  pub shaft_width_fraction: f32,
+  /// The outline's rim width, as a fraction of [`Self::half_width_world`] -- a
+  /// fixed world-space band around the whole silhouette, drawn black so it
+  /// separates from either colormap beneath it. Zero draws no rim.
+  pub outline_width_fraction: f32,
+  pub _pad0: f32,
+  pub _pad1: f32,
 }

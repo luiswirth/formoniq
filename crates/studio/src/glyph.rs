@@ -9,13 +9,17 @@
 //! point, and a lattice of them tells you so at points that are placed by the
 //! chart alone.
 //!
-//! **The sample set is the interior lattice**
-//! ([`manifold::atlas::ref_lattice_interior`]) and not the full one. A section
-//! is chart-independent only in its tangential part, so
-//! on a shared facet the two incident charts genuinely disagree and the field
-//! has no single value to glyph; the open cell is where it has one. The interior
-//! is also what makes the sample set collision-free without a dedup, but that is
-//! the consequence, not the reason.
+//! **The sample set is the full lattice**
+//! ([`manifold::atlas::ref_lattice_bary`]), boundary included. The lattice
+//! closes on the faces: a point on a shared facet has the same ambient position
+//! from either incident cell (the two agree combinatorially, up to the
+//! [`Transition`]'s vertex relabelling), so a glyph there is drawn twice at one
+//! place rather than at two. Where a section's value is single-valued matters
+//! for what the arrow *reads*, but the grid the arrows sit on extends to the
+//! boundary as naturally as into the interior, and the field is glyphed on all
+//! of it.
+//!
+//! [`Transition`]: manifold::atlas::Transition
 //!
 //! **The glyphs never encode magnitude in their length.** The mark carries the
 //! direction and the fill beneath it carries the magnitude -- the same
@@ -30,13 +34,17 @@
 //! sample.** An arrow drawn tail-at-sample, head reaching forward, covers the
 //! cell unevenly: overshooting ahead of the point and leaving the ground
 //! behind it bare. Centering the arrow on its sample splits that reach evenly
-//! both ways, and sizing it to exactly the lattice's own spacing (the cell's
-//! diameter over its [`glyph_refinement`]) makes neighbouring arrows meet
-//! without overlapping -- a woven look rather than a field of loose splinters.
+//! both ways, and sizing it to a fixed fraction ([`GLYPH_LENGTH_FRACTION`]) of
+//! the lattice's tightest spacing (the shortest edge over its
+//! [`glyph_refinement`], since the spacing is anisotropic -- see [`cell_extent`])
+//! keeps a gap between neighbours rather than letting them meet tip-to-tail --
+//! each arrow reads as its own mark, filling most of the room the lattice gives
+//! it without a field of arrows fused into continuous lines.
 
+use common::{coord::Coord, linalg::nalgebra::Vector};
 use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
 use manifold::{
-  atlas::{ref_lattice_interior_bary, MeshPoint},
+  atlas::{ref_lattice_bary, MeshPoint},
   geometry::{
     coord::{mesh::MeshCoords, simplex::SimplexRefExt},
     metric::geometry::Geometry,
@@ -45,7 +53,7 @@ use manifold::{
 };
 
 use crate::{
-  bake::{to_vec3, BakedVertex, SegmentVertex},
+  bake::{to_vec3, GlyphVertex},
   scene::reduced_form,
 };
 
@@ -57,11 +65,31 @@ use crate::{
 /// target spacing.
 const GLYPH_REFINEMENT_MAX: usize = 8;
 
-/// The world-space diameter of a cell: the greatest distance between any two
-/// of its vertices. Cheap, since a cell has only `dim + 1` of them.
-fn cell_diameter(coord_simplex: &manifold::geometry::coord::simplex::SimplexCoords) -> f64 {
+/// The arrow's length as a fraction of its lattice's realized spacing. Less than
+/// one so neighbouring arrows keep a gap rather than meeting tip-to-tail: at 2/3
+/// the space between two collinear samples is a third empty, enough to read each
+/// arrow as its own mark while still filling most of the room the lattice gives
+/// it.
+const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
+
+/// The world-space diameter of a cell (greatest inter-vertex distance) and its
+/// shortest edge (least). Cheap, since a cell has only `dim + 1` vertices.
+///
+/// The two answer different questions. The diameter is the cell's overall size,
+/// and sets how many glyphs it earns ([`glyph_refinement`]). The shortest edge
+/// is what the glyph *length* keys off, because the lattice spacing is
+/// anisotropic: adjacent lattice points along an edge are that edge's length
+/// over the refinement apart, so the spacing differs by direction and only the
+/// shortest edge bounds it in every direction. An arrow sized to the diameter
+/// overruns the shorter directions and meets its neighbours there -- the right
+/// isosceles reference cell, edges $1, 1, sqrt(2)$, is the visible case; sized
+/// to the shortest edge it keeps its gap on any cell shape.
+///
+/// A `dim == 0` cell has no edge, so the shortest is `0.0` -- no lattice to
+/// space and no arrow to draw.
+fn cell_extent(coord_simplex: &manifold::geometry::coord::simplex::SimplexCoords) -> (f64, f64) {
   let vertices: Vec<_> = coord_simplex.coord_iter().collect();
-  vertices
+  let (min, max) = vertices
     .iter()
     .enumerate()
     .flat_map(|(i, vi)| {
@@ -69,7 +97,21 @@ fn cell_diameter(coord_simplex: &manifold::geometry::coord::simplex::SimplexCoor
         .iter()
         .map(move |vj| (vi.view() - vj.view()).norm())
     })
-    .fold(0.0, f64::max)
+    .fold((f64::INFINITY, 0.0_f64), |(mn, mx), d| (mn.min(d), mx.max(d)));
+  (if min.is_finite() { min } else { 0.0 }, max)
+}
+
+/// A barycentric weight vector as the four the glyph shader's cell clip
+/// reads, padded with ones above the cell's intrinsic dimension. The pad has to
+/// sit inside (the clip discards a fragment where any weight is negative), and
+/// one is the safe interior value; a zero would clip every fragment on a cell of
+/// dimension below three.
+fn bary_clip4(bary: &Vector) -> [f32; 4] {
+  let mut out = [1.0; 4];
+  for (slot, &weight) in out.iter_mut().zip(bary.iter()) {
+    *slot = weight as f32;
+  }
+  out
 }
 
 /// The refinement of the lattice a cell is glyphed on: chosen so the lattice's
@@ -92,77 +134,108 @@ fn glyph_refinement(dim: manifold::Dim, diameter: f64, target_spacing: f64) -> u
   raw.clamp(dim + 1, GLYPH_REFINEMENT_MAX)
 }
 
-/// The glyphs of a line field, baked as segments: one arrow per interior lattice
-/// point of each cell, centered on the point and running along the field.
+/// The glyphs of a line field, baked as flat arrow quads: one arrow per lattice
+/// point of each cell, centered on the point and lying in the cell's own plane.
 ///
 /// `target_spacing` is the world spacing the per-cell lattice aims for (see
-/// [`glyph_refinement`]), and doubles as the glyph length: `peak` is the
-/// field's greatest magnitude, which the fade is measured against.
+/// [`glyph_refinement`]); `peak` is the field's greatest magnitude, which the
+/// fade is measured against; `half_width` and `outline_width` are the arrow's
+/// world dimensions, which size the quad the fragment carves the arrow from.
 ///
-/// The glyphs sit on the undisplaced surface and carry no field value, so the
-/// zero normal makes the standing-wave displacement the identity on them, the
-/// same way a traced curve's samples do.
+/// The arrow lies in the cell rather than facing the camera, so its four corners
+/// are final geometry and each carries its barycentric coordinate directly
+/// (`global2bary`) -- which is what lets the fragment clip the
+/// arrow to the cell it was sampled in for free. Six corners per glyph, the two
+/// triangles of the quad, unindexed.
+///
+/// The glyphs sit on the undisplaced surface: the fragment biases them toward
+/// the camera off it, the way the wireframe is, so they draw over the fill
+/// rather than z-fighting it.
 pub(crate) fn bake_glyphs(
   topology: &Complex,
   coords: &MeshCoords,
   cochain: &Cochain,
   target_spacing: f64,
   peak: f64,
-) -> (Vec<SegmentVertex>, Vec<f32>, Vec<[u32; 2]>) {
+  half_width: f64,
+  outline_width: f64,
+) -> Vec<GlyphVertex> {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   let mut vertices = Vec::new();
-  let mut segments = Vec::new();
+  // The quad is grown past the arrow by the rim's own width, with slack for its
+  // antialiased outer edge, so the outline has room on every side.
+  let margin = outline_width * 1.5;
 
   for cell in topology.cells().handle_iter() {
     let metric = coords.cell_metric(cell);
-    // The affine parametrization $psi_K: hat(K) -> RR^N$, whose differential
-    // pushes the sharped vector out of the cell's own tangent frame into the
-    // ambient one the renderer draws in: the one place the embedding enters.
+    // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential pushes
+    // the sharped field out of the cell's tangent frame into the ambient one, and
+    // `global2bary` reads a corner back to the weights the clip tests. The one
+    // place the embedding enters.
     let coord_simplex = cell.coord_simplex(coords);
-    let diameter = cell_diameter(&coord_simplex);
+    let (min_edge, diameter) = cell_extent(&coord_simplex);
     let refinement = glyph_refinement(cell.dim(), diameter, target_spacing);
-    // The lattice's *realized* spacing, not the target it was rounded and
-    // clamped from -- what a neighbouring arrow's length must match for the
-    // two to meet exactly.
-    let length = diameter / refinement as f64;
-    for bary in ref_lattice_interior_bary(cell.dim(), refinement) {
-      let point = MeshPoint::new(cell.idx(), bary);
-      let local = reduced_form(interpolant.eval(&point), &metric).sharp(&metric);
-      let ambient = to_vec3(&coord_simplex.pushforward_vector(local.coeffs()));
-      let magnitude = ambient.norm();
+    // A fixed fraction of the lattice's realized spacing in its tightest
+    // direction (the shortest edge over the refinement), so neighbouring arrows
+    // keep a gap instead of meeting tip-to-tail on any cell shape -- not the
+    // diameter, which would only bound the spacing along the longest direction.
+    let length = GLYPH_LENGTH_FRACTION * min_edge / refinement as f64;
+    let cell_verts: Vec<Vector> = coord_simplex
+      .coord_iter()
+      .map(|v| v.view().into_owned())
+      .collect();
 
-      // A field that vanishes here points nowhere, and the glyph that would
-      // report a direction is drawn at zero opacity instead of being dropped:
-      // the arrow still exists at the same lattice point, so the mark's own
-      // geometry does not depend on the field's zero set.
-      let center = to_vec3(&coord_simplex.bary2global(point.bary()).view().into_owned());
-      let direction = if magnitude > 0.0 {
-        ambient / magnitude
-      } else {
-        na::Vector3::zeros()
-      };
+    for bary in ref_lattice_bary(cell.dim(), refinement) {
+      let point = MeshPoint::new(cell.idx(), bary);
+      let field = reduced_form(interpolant.eval(&point), &metric).sharp(&metric);
+      let ambient: Vector = coord_simplex.pushforward_vector(field.coeffs());
+      let magnitude = ambient.norm();
       let opacity = if peak > 0.0 {
         (magnitude / peak).clamp(0.0, 1.0)
       } else {
         0.0
       };
 
-      let base = vertices.len() as u32;
-      let half = direction * (length / 2.0);
-      for position in [center - half, center + half] {
-        vertices.push(SegmentVertex {
-          vertex: BakedVertex {
-            position: [position.x as f32, position.y as f32, position.z as f32],
-            normal: [0.0; 3],
-            max_displacement: 0.0,
-          },
+      // The arrow's in-plane frame. A field that vanishes here points nowhere,
+      // and its arrow is invisible (opacity 0), so any direction does -- the
+      // first spanning edge stands in. The perpendicular is an in-plane vector
+      // with the field component removed, so the whole arrow lies in the cell.
+      let direction = if magnitude > 0.0 {
+        &ambient / magnitude
+      } else {
+        (&cell_verts[1] - &cell_verts[0]).normalize()
+      };
+      let perp = cell_verts[1..]
+        .iter()
+        .map(|v| v - &cell_verts[0])
+        .map(|edge| &edge - &direction * edge.dot(&direction))
+        .find(|c| c.norm() > 1e-10)
+        .map(|c| c.normalize())
+        .unwrap_or_else(|| Vector::zeros(direction.len()));
+
+      let center = coord_simplex
+        .bary2global(point.bary())
+        .view()
+        .into_owned();
+      let corner = |x: f64, y: f64| -> GlyphVertex {
+        let world = &center + &direction * (x - length / 2.0) + &perp * y;
+        let cell_bary = coord_simplex.global2bary(&Coord::new(world.clone()));
+        let p = to_vec3(&world);
+        GlyphVertex {
+          position: [p.x as f32, p.y as f32, p.z as f32],
+          arrow_xy: [x as f32, y as f32],
+          length: length as f32,
           opacity: opacity as f32,
-        });
-      }
-      segments.push([base, base + 1]);
+          cell_bary: bary_clip4(&cell_bary.view().into_owned()),
+        }
+      };
+
+      let (x0, x1) = (-margin, length + margin);
+      let (y0, y1) = (-(half_width + margin), half_width + margin);
+      let (bl, br, tr, tl) = (corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1));
+      vertices.extend([bl, br, tr, bl, tr, tl]);
     }
   }
 
-  let attributes = vec![0.0; vertices.len()];
-  (vertices, attributes, segments)
+  vertices
 }

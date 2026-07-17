@@ -2,8 +2,8 @@
 //! made of.
 //!
 //! A batch owns buffers and nothing else; an item is a batch plus the material
-//! it is drawn with. A surface, its wireframe overlay and a line field's glyph
-//! ribbons are three items over two batch kinds, and several manifolds in one
+//! it is drawn with. A surface, its wireframe overlay and a line field's arrow
+//! glyphs are three items over three batch kinds, and several manifolds in one
 //! scene are simply more items -- the renderer never learns how many there will
 //! be.
 //!
@@ -15,8 +15,8 @@ use bytemuck::Pod;
 use wgpu::util::DeviceExt;
 
 use super::particles::ParticleBatch;
-use super::uniform::{SegmentMaterial, SurfaceMaterial};
-use crate::bake::{BakedMesh, BakedVertex, PrimBatch, SegmentVertex};
+use super::uniform::{GlyphMaterial, SegmentMaterial, SurfaceMaterial};
+use crate::bake::{BakedMesh, BakedVertex, GlyphVertex, PrimBatch, SegmentVertex};
 
 /// A `VERTEX` buffer holding `data`, never empty: a zero-length
 /// `create_buffer_init` is rejected, and an empty batch (a field with no
@@ -59,6 +59,18 @@ const fn segment_attributes(loc: u32) -> [wgpu::VertexAttribute; 4] {
   [p, n, m, attribute(28, loc + 3, wgpu::VertexFormat::Float32)]
 }
 
+/// A `GlyphVertex`'s five: world position, the arrow-frame coordinate, the
+/// arrow length, the opacity, then the cell-barycentric clip coordinate.
+const fn glyph_attributes() -> [wgpu::VertexAttribute; 5] {
+  [
+    attribute(0, 0, wgpu::VertexFormat::Float32x3),
+    attribute(12, 1, wgpu::VertexFormat::Float32x2),
+    attribute(20, 2, wgpu::VertexFormat::Float32),
+    attribute(24, 3, wgpu::VertexFormat::Float32),
+    attribute(28, 4, wgpu::VertexFormat::Float32x4),
+  ]
+}
+
 const fn value_attribute(loc: u32) -> [wgpu::VertexAttribute; 1] {
   [attribute(0, loc, wgpu::VertexFormat::Float32)]
 }
@@ -71,6 +83,7 @@ const SEGMENT_A: [wgpu::VertexAttribute; 4] = segment_attributes(0);
 const SEGMENT_B: [wgpu::VertexAttribute; 4] = segment_attributes(4);
 const SEGMENT_VALUE_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
 const SEGMENT_VALUE_B: [wgpu::VertexAttribute; 1] = value_attribute(9);
+const GLYPH: [wgpu::VertexAttribute; 5] = glyph_attributes();
 
 /// A filled triangle surface: per-corner vertex streams, three corners per
 /// triangle, unshared.
@@ -267,10 +280,47 @@ fn gather(values: &[f32], segments: &[[u32; 2]], end: usize) -> Vec<f32> {
   segments.iter().map(|s| values[s[end] as usize]).collect()
 }
 
+/// A glyph mark: the arrows of a line field, each a flat quad (two triangles,
+/// six corners) lying in its surface cell. One vertex buffer, drawn unindexed --
+/// the corners are already expanded, since a quad's diagonal is not shared the
+/// way a mesh edge is, and the arrow-frame coordinate differs per corner anyway.
+pub struct GlyphBatch {
+  corners: wgpu::Buffer,
+  ncorners: u32,
+}
+
+impl GlyphBatch {
+  /// `vertices` is the flat corner stream, six per glyph. An empty stream is a
+  /// valid batch that draws nothing.
+  pub fn new(device: &wgpu::Device, vertices: &[GlyphVertex]) -> Self {
+    Self {
+      corners: vertex_buffer(device, "Glyph Corners", vertices),
+      ncorners: vertices.len() as u32,
+    }
+  }
+
+  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 1] {
+    [wgpu::VertexBufferLayout {
+      array_stride: size_of::<GlyphVertex>() as wgpu::BufferAddress,
+      step_mode: wgpu::VertexStepMode::Vertex,
+      attributes: &GLYPH,
+    }]
+  }
+
+  pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+    if self.ncorners == 0 {
+      return;
+    }
+    pass.set_vertex_buffer(0, self.corners.slice(..));
+    pass.draw(0..self.ncorners, 0..1);
+  }
+}
+
 /// One thing a frame draws: a batch, and the material it is drawn with.
 pub enum RenderItem<'a> {
   Surface(&'a SurfaceBatch, SurfaceMaterial),
   Segments(&'a SegmentBatch, SegmentMaterial),
+  Glyphs(&'a GlyphBatch, GlyphMaterial),
 }
 
 /// Everything one frame draws, in submission order. The order is the caller's
