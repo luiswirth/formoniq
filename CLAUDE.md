@@ -323,7 +323,7 @@ commit, not a flaky one.
 The examples are the end-to-end check and are run by hand:
 
 ```sh
-cargo run --release --example hodge_laplace_source
+cargo run --release --example source
 ```
 
 Commit messages: `scope: imperative summary`, e.g. `manifold: cache boundary
