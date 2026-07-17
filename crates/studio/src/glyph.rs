@@ -97,7 +97,9 @@ fn cell_extent(coord_simplex: &manifold::geometry::coord::simplex::SimplexCoords
         .iter()
         .map(move |vj| (vi.view() - vj.view()).norm())
     })
-    .fold((f64::INFINITY, 0.0_f64), |(mn, mx), d| (mn.min(d), mx.max(d)));
+    .fold((f64::INFINITY, 0.0_f64), |(mn, mx), d| {
+      (mn.min(d), mx.max(d))
+    });
   (if min.is_finite() { min } else { 0.0 }, max)
 }
 
@@ -213,10 +215,7 @@ pub(crate) fn bake_glyphs(
         .map(|c| c.normalize())
         .unwrap_or_else(|| Vector::zeros(direction.len()));
 
-      let center = coord_simplex
-        .bary2global(point.bary())
-        .view()
-        .into_owned();
+      let center = coord_simplex.bary2global(point.bary()).view().into_owned();
       let corner = |x: f64, y: f64| -> GlyphVertex {
         let world = &center + &direction * (x - length / 2.0) + &perp * y;
         let cell_bary = coord_simplex.global2bary(&Coord::new(world.clone()));
@@ -232,7 +231,12 @@ pub(crate) fn bake_glyphs(
 
       let (x0, x1) = (-margin, length + margin);
       let (y0, y1) = (-(half_width + margin), half_width + margin);
-      let (bl, br, tr, tl) = (corner(x0, y0), corner(x1, y0), corner(x1, y1), corner(x0, y1));
+      let (bl, br, tr, tl) = (
+        corner(x0, y0),
+        corner(x1, y0),
+        corner(x1, y1),
+        corner(x0, y1),
+      );
       vertices.extend([bl, br, tr, bl, tr, tl]);
     }
   }

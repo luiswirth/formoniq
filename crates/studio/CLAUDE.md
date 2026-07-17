@@ -42,10 +42,24 @@ as it can go before either one commits.
 
   The bake's vertex table splits by what a datum depends on: the static half is a
   function of the mesh and its embedding alone (position, normal, curvature cap,
-  winding), the other is the field on it (one scalar per vertex). Switching
-  fields, or scrubbing a trajectory, therefore rewrites only the attribute
-  stream. A datum that would have to be recomputed to change fields is in the
-  wrong half.
+  winding), the other is the field on it. Switching fields, or scrubbing a
+  trajectory, therefore rewrites only the field stream. A datum that would have
+  to be recomputed to change fields is in the wrong half.
+
+  The field half is itself split, because a reduced-grade Whitney form is
+  **discontinuous across cells** — only the tangential part of a section is
+  chart-independent, so incident cells disagree at a shared vertex and a basis
+  function's support ends on cell edges. Its **colormap** value is therefore read
+  once *per rendered corner in the corner's own cell* (the fill's corners are
+  unshared already, for the deposit atlas), so a cell the form vanishes on stays
+  exactly black instead of inheriting a neighbour's value through a shared vertex.
+  A per-vertex tint cannot state this and silently bleeds a DOF's magnitude into
+  every incident cell. What genuinely *is* per vertex is the standing-wave
+  **displacement height**: a geometric height of one connected surface must be
+  single-valued at a vertex or the surface tears, so it takes the continuous
+  nodal recovery of that same value. Colormap and height coincide only for a
+  genuine 0-form; the split is the honest field readout versus the surface's
+  geometry.
 
 Between the two the discipline is lived, not hoped for: a curve integrator works
 in the barycentric charts of the atlas and crosses cells through the

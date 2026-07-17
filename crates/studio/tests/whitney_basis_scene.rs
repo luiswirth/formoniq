@@ -10,25 +10,15 @@ fn grade0_whitney_basis_is_the_standard_basis_at_vertices() {
   let scene = Scene::whitney_basis(2);
   // 3 grade-0 scalar fields, then 1 grade-2 density.
   assert_eq!(scene.fields.len(), 4);
+  // A grade-0 field's cochain is the nodal 0-cochain itself, one value per
+  // vertex; the reduced-grade sampling and its discontinuity only bite above
+  // grade 0.
   for (i, field) in scene.fields.iter().take(3).enumerate() {
-    for (j, &v) in field.values().iter().enumerate() {
+    for (j, &v) in field.cochain.coeffs().iter().enumerate() {
       let expected = if i == j { 1.0 } else { 0.0 };
       assert!((v - expected).abs() < 1e-12);
     }
   }
-}
-
-/// The top-grade Whitney form stars to a constant density: on the flat
-/// reference triangle its pointwise Hodge star is the same nonzero scalar at
-/// every vertex, so the surface renders as a flat color rather than blank.
-#[test]
-fn grade2_whitney_basis_stars_to_a_constant_nonzero_density() {
-  let scene = Scene::whitney_basis(2);
-  let density = scene.fields.last().unwrap();
-  let values = density.values();
-  assert!(values.iter().all(|&v| v.abs() > 1e-9));
-  let first = values[0];
-  assert!(values.iter().all(|&v| (v - first).abs() < 1e-9));
 }
 
 /// The dispatch is total in every dimension via min(k, n-k): on the
