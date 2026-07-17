@@ -496,9 +496,9 @@ mod tests {
   /// clearing and presenting the background.
   ///
   /// Pointed at grade 1, not the viewer's starting grade 0: a grade-1 field
-  /// reduces to the streamline mark, so this is the one check in the suite that
-  /// exercises the segment pipeline with a real item behind it. Grade 0 draws
-  /// scalars only and would leave that path untested.
+  /// reduces to a line field, whose particle advection is what this test's
+  /// stepping exercises. Grade 0 draws scalars only and would leave that path
+  /// untested.
   ///
   /// Skipped, not failed, where no adapter exists: a machine without a GPU
   /// cannot answer the question either way.
@@ -518,14 +518,14 @@ mod tests {
     };
     // The premise of the test, checked rather than assumed: if this study ever
     // stopped carrying a line field, the render below would still pass while
-    // silently no longer covering the segment pipeline.
+    // silently no longer covering the particle advection pipeline.
     let scene = spec
       .study
       .build(&spec.mesh_source.build().expect("the triforce builds"));
     assert!(
       !scene.line_fields.is_empty(),
-      "the triforce cochains are grade-1 line fields; without one the segment \
-       pipeline is not what this test exercises"
+      "the triforce cochains are grade-1 line fields; without one the particle \
+       advection pipeline is not what this test exercises"
     );
 
     let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, export_ssaa_scale(spec.size));

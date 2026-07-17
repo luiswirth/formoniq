@@ -119,21 +119,16 @@ impl Default for FieldView {
 
 /// Which of a line field's marks are drawn.
 ///
-/// The three are not a choice between renderings of one thing; they answer
-/// different questions about the same reduced grade-1 field. The streamlines are
-/// its *geometry* -- the integral curves, evenly spaced, standing still, the
-/// whole picture legible in one frame and in a still. The particles are its
-/// *dynamics* -- where the flow carries a point, and how fast, legible only in
-/// motion. Both are traced through the same atlas and the same transitions, one
-/// on the CPU and one on the GPU, so neither is the other's approximation.
+/// The two are not a choice between renderings of one thing; they answer
+/// different questions about the same reduced grade-1 field. The glyphs are the
+/// blunt question: not what the field does over a distance, but what it *is* at
+/// a point -- read off the Whitney interpolant with no integration at all, at
+/// points the atlas places rather than a tracer's seeding chooses.
 ///
-/// The glyphs are the third question and the blunt one: not what the field does
-/// over a distance, but what it *is* at a point -- read off the Whitney
-/// interpolant with no integration at all, at points the atlas places rather
-/// than a tracer's seeding chooses. That is what makes them worth having beside
-/// curves that are strictly more informative about the flow: a curve is a claim
-/// about the field's orbits, and a glyph is a claim about the field, and only
-/// the second can be checked against the cochain by eye.
+/// The particles are the other question, the field's *dynamics* -- where the
+/// flow carries a point, and how fast, legible only in motion. Both are traced
+/// through the same atlas and the same transitions, one evaluated pointwise and
+/// one integrated on the GPU, so neither is the other's approximation.
 ///
 /// Hence toggles rather than a mode: which of them a reader wants is a question
 /// about what they are looking for, not something the code can decide from the
@@ -141,18 +136,16 @@ impl Default for FieldView {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct Marks {
   pub(crate) glyphs: bool,
-  pub(crate) streamlines: bool,
   pub(crate) particles: bool,
 }
 
 impl Default for Marks {
   fn default() -> Self {
     Self {
-      // Off by default: the ribbons and the particles already cover the field,
-      // and a lattice of arrows over them is a second reading of the same
-      // reduction rather than a first look at it.
+      // Off by default: the particles already cover the field, and a lattice of
+      // arrows over them is a second reading of the same reduction rather than
+      // a first look at it.
       glyphs: false,
-      streamlines: true,
       particles: true,
     }
   }
@@ -161,8 +154,9 @@ impl Default for Marks {
 /// Which field of a scene is on display: its reduced grade decides the mark
 /// ([`crate::scene::Scene`]'s own rule), and this is that choice's UI-facing
 /// form -- a scalar field colors the surface with its own value; a line field
-/// colors the surface with its nodal magnitude and draws its traced streamlines
-/// on top. `PartialEq` so `egui::Ui::radio_value` can bind directly to it.
+/// colors the surface with its nodal magnitude and draws its glyphs and
+/// particles on top. `PartialEq` so `egui::Ui::radio_value` can bind directly to
+/// it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Selection {
   Scalar(usize),
@@ -686,8 +680,6 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         if model.offers.marks {
           ui.checkbox(&mut field_view.marks.glyphs, "Glyphs")
             .on_hover_text("Arrows on each cell's barycentric lattice: the field at a point");
-          ui.checkbox(&mut field_view.marks.streamlines, "Streamlines")
-            .on_hover_text("Evenly spaced integral curves: the field's geometry, in one frame");
           ui.checkbox(&mut field_view.marks.particles, "Particles")
             .on_hover_text("Advected points: the field's dynamics, legible in motion");
         }

@@ -68,12 +68,6 @@ const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 /// of it.
 const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
 
-/// The streamline ribbon's half-width, on the same object-intrinsic scale.
-const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
-
-/// The streamline ribbons' ink: pure white, single pass, no outline.
-const STREAMLINE_INK: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
-
 /// The world-space spacing the glyph lattice aims for within a cell, on the
 /// same object-intrinsic scale as every other mark's: not a fixed sample
 /// count, but a target density, so a coarse mesh's large cells earn several
@@ -95,16 +89,24 @@ const GLYPH_WIDTH_FRACTION: f32 = 0.012;
 const GLYPH_HEAD_LENGTH_FRACTION: f32 = 0.36;
 const GLYPH_SHAFT_WIDTH_FRACTION: f32 = 0.32;
 
-/// The glyphs' ink: the ribbons' white, at reduced opacity so a lattice of them
-/// reads as a field rather than as a wall of marks. They are drawn under the
-/// ribbons and over the fill.
+/// The glyphs' ink: white, at reduced opacity so a lattice of them reads as a
+/// field rather than as a wall of marks. Drawn over the fill.
 const GLYPH_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.75];
 
-/// The opacity the ribbons of an eigenmode fade to at the standing wave's node,
-/// where the field vanishes and the curves are meaningless -- never fully, since
-/// the integral curves of a standing mode are the same set at every phase, and
-/// blinking them out entirely would read as the geometry changing.
-const STREAMLINE_NODE_OPACITY: f32 = 0.25;
+/// The outline's world-space rim width. Converted to a fraction of
+/// [`GLYPH_WIDTH_FRACTION`] where it is used, so the two stay this many world
+/// units apart wherever the taper has already scaled the local half-width
+/// down -- a constant rim, not one that thins toward the tip along with the
+/// arrow it traces. The color is fixed black in `segments.wgsl`: the one color
+/// that separates from every sample of either colormap, the same reasoning the
+/// shader's own doc gives for not colormapping the ink itself.
+const GLYPH_OUTLINE_WIDTH_FRACTION: f32 = 0.0032;
+
+/// The opacity the glyphs of an eigenmode fade to at the standing wave's node,
+/// where the field vanishes and an arrow is meaningless -- never fully, since
+/// the glyph lattice of a standing mode is the same set at every phase, and
+/// blinking it out entirely would read as the geometry changing.
+const GLYPH_NODE_OPACITY: f32 = 0.25;
 
 /// The advected particles' radius, on the same object-intrinsic scale as every
 /// other mark's width.
@@ -129,7 +131,7 @@ const PARTICLE_INK: [f32; 4] = [1.0, 0.86, 0.62, 0.10];
 /// How fast the fastest particle crosses the object: scene radii per second, at
 /// the field's peak magnitude.
 ///
-/// Object-intrinsic, exactly as the streamline separation is, so the flow reads
+/// Object-intrinsic, exactly as the glyph spacing is, so the flow reads
 /// at the same pace whether the mesh is a unit sphere or an OBJ at arbitrary
 /// scale, and regardless of the cochain's own units. Slow on purpose: a speck
 /// that moves a few pixels per frame reads as motion, and one that jumps across
@@ -181,12 +183,6 @@ const PARTICLE_SEEDS: usize = 16_384;
 pub(crate) fn steps_at(time: f32) -> u32 {
   (time.max(0.0) * STEPS_PER_SECOND) as u32
 }
-
-/// Streamline separation, as a fraction of the scene extent (its radius) --
-/// object-intrinsic, like the wave amplitude, so the line density is a property
-/// of the object and not of the triangulation. The one knob that sets how dense
-/// the evenly spaced curves are.
-const STREAMLINE_SEPARATION_FRACTION: f32 = 0.09;
 
 /// The scene's coordinate extent: the largest distance of any vertex from the
 /// mesh's own centroid -- its intrinsic radius, independent of where the mesh
@@ -328,27 +324,20 @@ impl MeshDisplay {
 /// which of them does the writing is the caller's to see rather than a
 /// constructor's to hide.
 pub(crate) struct FieldDisplay {
-  /// The traced streamlines of a line field, `None` for a scalar field. Their
-  /// presence *is* the line-field mark: there is no branch to pick.
-  streamlines: Option<SegmentBatch>,
-  /// The arrow glyphs of a line field, `None` for a scalar field: the same
-  /// reduction read a third way. The ribbons integrate the field, the particles
-  /// flow it, and the glyphs simply evaluate it -- at points the atlas places
-  /// (the interior barycentric lattice of each cell) rather than a tracer's
-  /// seeding or a population's respawn.
+  /// The arrow glyphs of a line field, `None` for a scalar field: the field
+  /// evaluated -- at points the atlas places (the interior barycentric lattice
+  /// of each cell) rather than a tracer's seeding or a population's respawn.
   glyphs: Option<SegmentBatch>,
   /// The advected particles of a line field, absent for a scalar field and for
   /// a field that vanishes everywhere (which seeds nowhere).
   ///
-  /// The same reduced grade-1 field the streamlines trace, read the other way:
-  /// the curves are the field's geometry, standing still, and the particles are
-  /// its dynamics. Both are intrinsic -- one integrated on the CPU through the
-  /// atlas, one on the GPU through the same charts and transitions -- so they
-  /// are two marks on one reduction, not a mark and its screen-space twin.
+  /// The same reduced grade-1 field the glyphs evaluate, read the other way:
+  /// the glyphs are the field's value, standing still, and the particles are
+  /// its dynamics, integrated on the GPU through the same charts and
+  /// transitions.
   particles: Option<ParticleBatch>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
-  streamline: SegmentMaterial,
   glyph: SegmentMaterial,
   particle: ParticleMaterial,
 }
@@ -364,7 +353,7 @@ impl FieldDisplay {
     selection: Selection,
     amplitude_scale: f32,
   ) -> (Self, Vec<f32>) {
-    let (streamlines, glyphs, particles, attributes, surface) = match selection {
+    let (glyphs, particles, attributes, surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
         let (raw_min, raw_max) = field.bounds();
@@ -396,7 +385,6 @@ impl FieldDisplay {
         (
           None,
           None,
-          None,
           bake::attributes(field.values()),
           SurfaceMaterial {
             min_val,
@@ -411,14 +399,6 @@ impl FieldDisplay {
       }
       Selection::Line(index) => {
         let field = &scene.line_fields[index];
-        // The integral curves of the true Whitney field, traced on the manifold
-        // at a separation fixed to the object's own extent (not its mesh width).
-        let d_sep = f64::from(STREAMLINE_SEPARATION_FRACTION * amplitude_scale);
-        let traced =
-          crate::streamline::trace(&scene.topology, &scene.coords, &field.cochain, d_sep);
-        let (vertices, values, segments) = bake::bake_streamlines(&traced);
-        let streamlines = SegmentBatch::new(&ctx.device, &vertices, &values, &segments);
-
         let (raw_min, raw_max) = field.bounds();
         // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
         // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
@@ -426,7 +406,7 @@ impl FieldDisplay {
         // field has no such pulse (wave_omega below is 0, cos(0) = 1), so its
         // tint is the unsigned $|V|_g$ itself: using its true range instead of
         // widening to symmetric keeps the colormap from spending half its
-        // span on negative values the field never takes. The curves are static
+        // span on negative values the field never takes. The glyphs are static
         // either way, so there is no geometric displacement --
         // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
         // the mode's frequency.
@@ -475,11 +455,10 @@ impl FieldDisplay {
           .flatten();
 
         (
-          Some(streamlines),
           Some(glyphs),
           particles,
           // The surface is the same fill a scalar field gets, tinted by the
-          // field's nodal magnitude: the curves carry the direction, so the
+          // field's nodal magnitude: the glyphs carry the direction, so the
           // surface has only the magnitude left to say.
           bake::attributes(&field.magnitude),
           SurfaceMaterial {
@@ -494,7 +473,6 @@ impl FieldDisplay {
     };
 
     let display = Self {
-      streamlines,
       glyphs,
       particles,
       surface,
@@ -508,28 +486,22 @@ impl FieldDisplay {
         wave_omega: surface.wave_omega,
         ..SegmentMaterial::PLAIN
       },
-      // The ribbons share the wave's clock but not its displacement: the samples
-      // sit on the undisplaced surface, so only the node fade reads the mode.
-      streamline: SegmentMaterial {
-        color: STREAMLINE_INK,
-        half_width_world: STREAMLINE_WIDTH_FRACTION * amplitude_scale,
-        fade_floor: STREAMLINE_NODE_OPACITY,
-        wave_amplitude: 0.0,
-        wave_omega: surface.wave_omega,
-        ..SegmentMaterial::PLAIN
-      },
-      // The glyphs share the ribbons' clock and node fade -- they are the same
-      // field, so they vanish where it does -- and differ only in the taper that
-      // makes a segment an arrow.
+      // The glyphs share the surface's clock but not its displacement: the
+      // samples sit on the undisplaced surface, so only the node fade reads the
+      // mode. The outline rides the same material -- `segments.wgsl` composites
+      // the rim under the ink in one pass -- as a fraction of this glyph's own
+      // half-width, so it stays `GLYPH_OUTLINE_WIDTH_FRACTION` world units out
+      // however the taper has already scaled the local width down.
       glyph: SegmentMaterial {
         color: GLYPH_INK,
         half_width_world: GLYPH_WIDTH_FRACTION * amplitude_scale,
-        fade_floor: STREAMLINE_NODE_OPACITY,
+        fade_floor: GLYPH_NODE_OPACITY,
         wave_amplitude: 0.0,
         wave_omega: surface.wave_omega,
         head_length_fraction: GLYPH_HEAD_LENGTH_FRACTION,
         shaft_width_fraction: GLYPH_SHAFT_WIDTH_FRACTION,
-        _pad0: [0.0; 2],
+        outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION / GLYPH_WIDTH_FRACTION,
+        _pad0: 0.0,
       },
       // The speed normalization is the display's, not the bake's: the bake was
       // handed a step chosen so the *peak* covers
@@ -548,7 +520,7 @@ impl FieldDisplay {
   }
 
   /// The frame's items, in submission order: the surface writes depth, and the
-  /// marks over it -- a line field's ribbons, its particles, then the wireframe
+  /// marks over it -- a line field's glyphs, its particles, then the wireframe
   /// -- only test against it, so they blend in the order given.
   ///
   /// The two views enter the way the two objects do. A setting that is off drops
@@ -566,8 +538,8 @@ impl FieldDisplay {
     field_view: FieldView,
   ) -> DrawList<'a> {
     // The wireframe rides the surface's wave, so the two amplitudes are one
-    // setting; the ribbons, glyphs and particles sample the undisplaced surface
-    // and carry a zero amplitude already.
+    // setting; the glyphs and particles sample the undisplaced surface and
+    // carry a zero amplitude already.
     let (mut surface, mut wireframe) = (self.surface, self.wireframe);
     if !field_view.displacement {
       surface.wave_amplitude = 0.0;
@@ -580,13 +552,6 @@ impl FieldDisplay {
     }
     if let Some(glyphs) = self.glyphs.as_ref().filter(|_| field_view.marks.glyphs) {
       items.push(RenderItem::Segments(glyphs, self.glyph));
-    }
-    if let Some(streamlines) = self
-      .streamlines
-      .as_ref()
-      .filter(|_| field_view.marks.streamlines)
-    {
-      items.push(RenderItem::Segments(streamlines, self.streamline));
     }
     if let Some(particles) = self
       .particles

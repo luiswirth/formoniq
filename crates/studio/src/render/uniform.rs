@@ -269,7 +269,13 @@ pub struct SegmentMaterial {
   /// The shaft's half-width as a fraction of [`Self::half_width_world`], which
   /// the head's base spans in full. One is a plain segment of uniform width.
   pub shaft_width_fraction: f32,
-  pub _pad0: [f32; 2],
+  /// The outline's rim width, as a fraction of [`Self::half_width_world`] --
+  /// a fraction rather than a world length so the two stay a fixed world-space
+  /// distance apart wherever the taper has already scaled the local half-width
+  /// down. Zero draws no rim: a plain segment or the wireframe, which already
+  /// separates from the fill by being black.
+  pub outline_width_fraction: f32,
+  pub _pad0: f32,
 }
 
 impl SegmentMaterial {
@@ -285,6 +291,7 @@ impl SegmentMaterial {
     wave_omega: 0.0,
     head_length_fraction: 0.0,
     shaft_width_fraction: 1.0,
-    _pad0: [0.0; 2],
+    outline_width_fraction: 0.0,
+    _pad0: 0.0,
   };
 }

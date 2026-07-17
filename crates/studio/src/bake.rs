@@ -30,8 +30,6 @@ use manifold::{
   Dim,
 };
 
-use crate::streamline::Streamlines;
-
 /// Fraction of the local curvature radius (see [`vertex_curvature_radius`])
 /// allowed as peak normal displacement, mirroring `WAVE_AMPLITUDE_FRACTION`'s
 /// role against the scene extent in `app.rs`: kept below 1 so a vertex never
@@ -251,49 +249,10 @@ fn ray_triangle(
 
 /// The per-field half of the vertex table: the colormap scalar, one per entry of
 /// [`BakedMesh::positions`] -- a scalar field's 0-form value, or a line field's
-/// nodal magnitude tinting the surface its streamlines are drawn on. The one
-/// stream a field change rewrites.
+/// nodal magnitude tinting the surface its glyphs are drawn on. The one stream a
+/// field change rewrites.
 pub fn attributes(values: &[f64]) -> Vec<f32> {
   values.iter().map(|&v| v as f32).collect()
-}
-
-/// The traced integral curves of a line field, baked as segments: one vertex per
-/// sample, one segment per consecutive pair, and a zero attribute stream (the
-/// curves carry the direction; the fill beneath them carries the magnitude).
-///
-/// The samples sit on the undisplaced surface and carry no field value, so the
-/// zero normal makes the standing-wave displacement the identity on them --
-/// the same code, not a branch around it.
-pub fn bake_streamlines(
-  streamlines: &Streamlines,
-) -> (Vec<SegmentVertex>, Vec<f32>, Vec<[u32; 2]>) {
-  let mut vertices = Vec::new();
-  let mut segments = Vec::new();
-  for line in &streamlines.lines {
-    let base = vertices.len() as u32;
-    let len = line.len();
-    for sample in line {
-      vertices.push(SegmentVertex {
-        vertex: BakedVertex {
-          position: [
-            sample.pos.x as f32,
-            sample.pos.y as f32,
-            sample.pos.z as f32,
-          ],
-          normal: [0.0; 3],
-          max_displacement: 0.0,
-        },
-        // A traced curve is cut where the tracer stops, not where the field
-        // itself fades -- there is nothing physically meaningful at its ends
-        // to signal by dimming, so it carries full opacity like any other
-        // mark.
-        opacity: 1.0,
-      });
-    }
-    segments.extend((1..len as u32).map(|i| [base + i - 1, base + i]));
-  }
-  let attributes = vec![0.0; vertices.len()];
-  (vertices, attributes, segments)
 }
 
 /// An ambient vector in the viewer's one ambient space: $RR^3$, so a mesh

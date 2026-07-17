@@ -1,14 +1,13 @@
 //! The arrow glyphs of a reduced grade-1 field: the field read pointwise, on
 //! the barycentric lattice of each cell.
 //!
-//! The third reading of the same reduction the streamlines and the particles
-//! already carry. The curves are the field's geometry integrated, the particles
-//! are its dynamics, and the glyphs are neither -- they are the field
-//! *evaluated*, at points chosen by the atlas rather than by a tracer's seeding
-//! or a population's respawn. That is the one thing the other two cannot show:
-//! where a curve tells you what the field does over a distance, a glyph tells
-//! you what it is at a point, and a lattice of them tells you so at points that
-//! are placed by the chart alone.
+//! The second reading of the same reduction the particles already carry. The
+//! particles are the field's dynamics, and the glyphs are the field
+//! *evaluated*, at points chosen by the atlas rather than by a population's
+//! respawn. That is the one thing the particles cannot show: where a particle
+//! tells you what the field does over time, a glyph tells you what it is at a
+//! point, and a lattice of them tells you so at points that are placed by the
+//! chart alone.
 //!
 //! **The sample set is the interior lattice**
 //! ([`manifold::atlas::ref_lattice_interior`]) and not the full one. A section

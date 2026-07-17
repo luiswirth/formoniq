@@ -46,7 +46,7 @@ pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// The format of the unbounded-coverage mask the scene pass writes alongside
 /// [`SCENE_FORMAT`]: how much of a texel's radiance came from a mark that can
 /// actually exceed 1, as opposed to one that is clamped to `[0, 1]` by
-/// construction (a colormapped fill, a wireframe or streamline ribbon).
+/// construction (a colormapped fill, a wireframe or glyph ribbon).
 ///
 /// Only the additively blended particles overflow -- see the invariant in
 /// `bloom.wgsl` -- so this is the material-specific fact the resolve needs to
