@@ -8,9 +8,11 @@
 
 use common::linalg::nalgebra::VectorView;
 use manifold::{
-  geometry::coord::{mesh::MeshCoords, simplex::SimplexCoords},
+  geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
+
+use crate::bake::orient_triangles;
 
 pub type TriangleTopology = Vec<[usize; 3]>;
 
@@ -44,17 +46,18 @@ impl TriangleSurface3D {
     assert!(coords.dim() <= 3, "Skeleton is not embeddable in 3D.");
     let coords = coords.embed_euclidean(3);
 
-    let triangles = skeleton
+    let triangles: Vec<[u32; 3]> = skeleton
       .into_index_set()
       .into_iter()
       .map(|simp| {
-        let mut vertices: [usize; 3] = simp.clone().try_into().unwrap();
-        let coord_simp = SimplexCoords::from_simplex_and_coords(&simp, &coords);
-        if coord_simp.orientation().is_neg() {
-          vertices.swap(1, 2);
-        }
-        vertices
+        let vertices: [usize; 3] = simp.try_into().unwrap();
+        vertices.map(|v| v as u32)
       })
+      .collect();
+    let triangles = orient_triangles(&triangles);
+    let triangles = triangles
+      .into_iter()
+      .map(|t| t.map(|v| v as usize))
       .collect();
 
     Self::new(triangles, coords)

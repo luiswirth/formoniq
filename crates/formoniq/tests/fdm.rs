@@ -144,8 +144,7 @@ fn laplace_matrix_1d_interior(nvertices: usize) -> Matrix<i32> {
 
 #[test]
 fn feec_vs_fdm_interior() {
-  // TODO: increase numbers, once performance allows
-  for nboxes_per_dim in 1..=2 {
+  for nboxes_per_dim in 1..=3 {
     for dim in 1..=4 {
       let nvertices_per_dim = nboxes_per_dim + 1;
       let feec = feec_galmat_interior(dim, nboxes_per_dim);
@@ -173,7 +172,6 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> Matrix<i32> {
 
   let full_galmat = feec_galmat_full(dim, nboxes_per_dim);
 
-  // TODO: optimize!
   let boundary_vertices =
     CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64)
       .boundary_vertices();

@@ -26,7 +26,6 @@ use crate::{
 
 use common::{
   affine::AffineTransform,
-  combo::Sign,
   gramian::Gramian,
   linalg::nalgebra::{Matrix, Vector},
 };
@@ -110,11 +109,6 @@ impl SimplexCoords {
   }
   pub fn is_degenerate(&self) -> bool {
     self.vol() <= 1e-12
-  }
-
-  // TODO: makes only sense for coinciding ambient and intrinsic dim
-  pub fn orientation(&self) -> Sign {
-    Sign::from_f64(self.det()).unwrap()
   }
 
   /// The linear part $A$ of the parametrization: the differential
