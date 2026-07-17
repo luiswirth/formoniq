@@ -45,12 +45,17 @@
 //! ([`Medium`]); inhomogeneous or anisotropic media would weight the mass
 //! matrices per cell.
 
-use crate::whitney_complex::WhitneyComplex;
+use crate::{
+  time::{LinearIrk, Tableau},
+  whitney_complex::WhitneyComplex,
+};
 
 use common::linalg::{
   eigen::{sparse_shift_invert_eigen, EigenError},
   faer::FaerCholesky,
-  nalgebra::{bilinear_form_sparse, quadratic_form_sparse, CsrMatrix, Vector},
+  nalgebra::{
+    bilinear_form_sparse, quadratic_form_sparse, CooMatrix, CooMatrixExt, CsrMatrix, Vector,
+  },
 };
 use ddf::cochain::Cochain;
 
@@ -325,10 +330,12 @@ impl CurlCurlState {
 /// [`crate::problems::wave`]; the stiffness $K$ is the up-Laplacian
 /// [`WhitneyComplex::codif_dif`] weighted by $mu^(-1)$.
 ///
-/// Explicit (symplectic Euler) time stepping, with the same PEC treatment as
-/// [`solve_maxwell_leapfrog`]: $dot(e)$ is constrained to the relative complex.
-/// `forcing` is the constant load $-dot(j)$; pass a zero vector for the
-/// source-free case.
+/// Gauss-Legendre time stepping (see [`crate::problems::wave::solve_wave`]
+/// for the block-system construction, identical here with $M_epsilon$ for
+/// $M$ and $K$ for the stiffness), with the same PEC treatment as
+/// [`solve_maxwell_leapfrog`]: $dot(e)$ is constrained to the relative
+/// complex. `forcing` is the constant load $-dot(j)$; pass a zero vector for
+/// the source-free case.
 pub fn solve_maxwell_curl_curl(
   fes: WhitneyComplex,
   medium: Medium,
@@ -338,53 +345,72 @@ pub fn solve_maxwell_curl_curl(
 ) -> Vec<CurlCurlState> {
   let ops = MaxwellOperators::new(&fes, medium);
   let stiffness = ops.stiffness();
+  let d = ops.mass_e.nrows();
 
-  let inclusion = fes
-    .boundary()
-    .is_some()
-    .then(|| fes.relative().inclusion(1));
-  let velocity_mass = match &inclusion {
-    Some(incl) => incl.transpose() * &ops.mass_e * incl,
-    None => ops.mass_e.clone(),
+  let inclusion = if fes.boundary().is_some() {
+    fes.relative().inclusion(1)
+  } else {
+    identity(d)
   };
-  let mass_cholesky = FaerCholesky::new(velocity_mass);
+  let d_rel = inclusion.ncols();
+
+  let mass_rel = inclusion.transpose() * &ops.mass_e * &inclusion;
+  let neg_stiff_rel = inclusion.transpose() * (-&stiffness);
+
+  let sys_mass = CsrMatrix::from(&CooMatrix::block(&[
+    &[&CooMatrix::from(&identity(d)), &CooMatrix::new(d, d_rel)],
+    &[&CooMatrix::new(d_rel, d), &CooMatrix::from(&mass_rel)],
+  ]));
+  let sys_op = CsrMatrix::from(&CooMatrix::block(&[
+    &[&CooMatrix::new(d, d), &CooMatrix::from(&inclusion)],
+    &[
+      &CooMatrix::from(&neg_stiff_rel),
+      &CooMatrix::new(d_rel, d_rel),
+    ],
+  ]));
+
+  let dt = times.windows(2).next().map_or(0.0, |w| w[1] - w[0]);
+  let irk = LinearIrk::new(Tableau::gauss_legendre(2), &sys_mass, sys_op, dt);
+  let forcing_rel = inclusion.transpose() * forcing;
 
   // Project the initial data onto the relative complex (PEC).
-  let project = |v: &Vector| match &inclusion {
-    Some(incl) => incl * (incl.transpose() * v),
-    None => v.clone(),
-  };
-  let mut e = project(initial.e.coeffs());
-  let mut e_dot = project(initial.e_dot.coeffs());
+  let mut y = Vector::zeros(d + d_rel);
+  y.rows_mut(0, d).copy_from(initial.e.coeffs());
+  y.rows_mut(d, d_rel)
+    .copy_from(&(inclusion.transpose() * initial.e_dot.coeffs()));
 
   let mut solution = Vec::with_capacity(times.len());
   solution.push(CurlCurlState::new(
-    Cochain::new(1, e.clone()),
-    Cochain::new(1, e_dot.clone()),
+    Cochain::new(1, y.rows(0, d).into_owned()),
+    Cochain::new(1, &inclusion * y.rows(d, d_rel)),
   ));
 
   let last_step = times.len().saturating_sub(2);
   for (istep, t01) in times.windows(2).enumerate() {
     println!("Solving Maxwell (curl-curl) at step={istep}/{last_step}...");
-    let [t0, t1] = t01 else { unreachable!() };
-    let dt = t1 - t0;
+    let [t0, _t1] = t01 else { unreachable!() };
 
-    // Symplectic Euler: update the velocity with the current stiffness force,
-    // then advance the field with the new velocity.
-    let rhs = &ops.mass_e * &e_dot + dt * (forcing - &stiffness * &e);
-    e_dot = match &inclusion {
-      Some(incl) => incl * mass_cholesky.solve(&(incl.transpose() * rhs)),
-      None => mass_cholesky.solve(&rhs),
-    };
-    e += dt * &e_dot;
+    y = irk.step(&y, *t0, |_| {
+      let mut f = Vector::zeros(d + d_rel);
+      f.rows_mut(d, d_rel).copy_from(&forcing_rel);
+      f
+    });
 
     solution.push(CurlCurlState::new(
-      Cochain::new(1, e.clone()),
-      Cochain::new(1, e_dot.clone()),
+      Cochain::new(1, y.rows(0, d).into_owned()),
+      Cochain::new(1, &inclusion * y.rows(d, d_rel)),
     ));
   }
 
   solution
+}
+
+fn identity(n: usize) -> CsrMatrix {
+  let mut coo = CooMatrix::new(n, n);
+  for i in 0..n {
+    coo.push(i, i, 1.0);
+  }
+  CsrMatrix::from(&coo)
 }
 
 /// Resonant modes of a perfect-electric-conductor cavity: the generalized
