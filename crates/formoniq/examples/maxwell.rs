@@ -131,8 +131,8 @@ fn main() {
 
   // The curl-curl (wave) energy 1/2 (eps ||e_dot||^2 + e^T K e) is a different
   // conserved quantity than the first-order field energy: the wave energy of
-  // M e_double_dot + K e = 0. Under explicit stepping it oscillates within a
-  // bounded band (symplectic stability), rather than drifting.
+  // M e_double_dot + K e = 0. Gauss-Legendre exactly conserves this quadratic
+  // invariant on the linear system -- to roundoff, not merely a bounded band.
   let energies: Vec<f64> = solution
     .iter()
     .map(|s| s.energy(&ops, &stiffness))
@@ -143,7 +143,7 @@ fn main() {
   let band = (energy_max - energy_min) / energy_mean;
   println!(
     "curl-curl wave energy over {nsteps} steps: mean {energy_mean:.4}, \
-     band [{energy_min:.4}, {energy_max:.4}] = {:.1}% (bounded, no drift)",
+     band [{energy_min:.4}, {energy_max:.4}] = {:.1}% (roundoff, no drift)",
     100.0 * band
   );
 }

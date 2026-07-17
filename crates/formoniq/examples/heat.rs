@@ -1,6 +1,6 @@
 //! Heat equation on the flat box $[0, pi]^n$: a parabolic flow *dissipates*.
 //!
-//! The method of lines --- implicit Euler in time over the Whitney space of
+//! The method of lines --- Radau IIA in time over the Whitney space of
 //! $k$-forms --- run at every dimension $1 <= n <= 3$ and grade $0 <= k <= n$
 //! from one loop: the scalar heat equation at $k = 0$, the vector one at
 //! $k = 1$, the top-form flow at $k = n$, all the same code.
@@ -10,9 +10,11 @@
 //! higher grade. It is symmetric positive semidefinite, so the energy
 //! $ E(t) = 1/2 norm(u)_(L^2)^2 $
 //! is a Lyapunov functional: $dot(E) = -(u, delta dif u) = -norm(dif u)^2 <= 0$
-//! for any initial state, and implicit Euler inherits the monotone decay
-//! unconditionally. The table shows $E$ falling monotonically from any starting
-//! bump (here a boundary-compatible eigenform, held at zero on $diff K$).
+//! for any initial state, and Radau IIA -- L-stable, not merely A-stable --
+//! inherits the monotone decay unconditionally, damping the stiffest modes
+//! correctly rather than letting them ring. The table shows $E$ falling
+//! monotonically from any starting bump (here a boundary-compatible
+//! eigenform, held at zero on $diff K$).
 //!
 //! At top grade $dif u = 0$, so $delta dif = 0$ and the flow is static --- the
 //! trivial total case, and why that row holds its energy rather than being
@@ -38,7 +40,7 @@ fn main() {
   const NSTEPS: usize = 40;
   const FINAL_TIME: f64 = 1.0;
 
-  println!("Heat u_t = -δd u on [0,π]^n, relative (Dirichlet) BC — implicit Euler.");
+  println!("Heat u_t = -δd u on [0,π]^n, relative (Dirichlet) BC — Radau IIA.");
   println!("Energy E = ½‖u‖²_L² dissipates monotonically.\n");
   println!(
     "| {:>3} | {:>5} | {:>10} | {:>10} | {:>10} | {:>7} |",
