@@ -74,12 +74,15 @@ const STREAMLINE_WIDTH_FRACTION: f32 = 0.005;
 /// The streamline ribbons' ink: pure white, single pass, no outline.
 const STREAMLINE_INK: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 
-/// The arrow glyph's length, on the same object-intrinsic scale as every other
-/// mark's: uniform across the mark, since the glyph carries the direction and
-/// the fill beneath it carries the magnitude (see `glyph.rs`). Longer than the
-/// ribbons are wide by an order of magnitude, because a glyph has to read as an
-/// arrow -- a shaft and a head, both legible -- and not as a thick dot.
-const GLYPH_LENGTH_FRACTION: f32 = 0.06;
+/// The world-space spacing the glyph lattice aims for within a cell, on the
+/// same object-intrinsic scale as every other mark's: not a fixed sample
+/// count, but a target density, so a coarse mesh's large cells earn several
+/// glyphs (see [`crate::glyph::glyph_refinement`]) and a fine mesh's small
+/// ones collapse back to one without either being tuned by hand. Also the
+/// glyph's own length -- each arrow is centered on its sample and sized to its
+/// lattice's realized spacing, so neighbouring arrows meet rather than
+/// overshooting past each other or leaving gaps (see `glyph.rs`).
+const GLYPH_SPACING_FRACTION: f32 = 0.06;
 
 /// The glyph's half-width: the arrowhead's, which its base spans in full, and
 /// which [`GLYPH_SHAFT_WIDTH_FRACTION`] narrows the shaft down from.
@@ -449,7 +452,7 @@ impl FieldDisplay {
           &scene.topology,
           &scene.coords,
           &field.cochain,
-          f64::from(GLYPH_LENGTH_FRACTION * amplitude_scale),
+          f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
           peak,
         );
         let glyphs = SegmentBatch::new(&ctx.device, &vertices, &values, &segments);
