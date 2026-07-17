@@ -66,6 +66,18 @@ impl DownsamplePass {
           ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
           count: None,
         },
+        wgpu::BindGroupLayoutEntry {
+          binding: 3,
+          visibility: wgpu::ShaderStages::FRAGMENT,
+          // Unfiltered, like the scene texture it sits beside: the box filter
+          // loads and means it itself.
+          ty: wgpu::BindingType::Texture {
+            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+            view_dimension: wgpu::TextureViewDimension::D2,
+            multisampled: false,
+          },
+          count: None,
+        },
       ],
     });
     let shader = shader_module(device, "Downsample Shader", include_str!("downsample.wgsl"));
@@ -110,12 +122,13 @@ impl DownsamplePass {
     }
   }
 
-  /// The binding of freshly (re)created scene color and glow views.
+  /// The binding of freshly (re)created scene color, glow and mask views.
   pub fn bind(
     &self,
     device: &wgpu::Device,
     scene_color: &wgpu::TextureView,
     glow: &wgpu::TextureView,
+    mask: &wgpu::TextureView,
   ) -> SceneColorBinding {
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
       label: Some("scene_color_bind_group"),
@@ -132,6 +145,10 @@ impl DownsamplePass {
         wgpu::BindGroupEntry {
           binding: 2,
           resource: wgpu::BindingResource::Sampler(&self.sampler),
+        },
+        wgpu::BindGroupEntry {
+          binding: 3,
+          resource: wgpu::BindingResource::TextureView(mask),
         },
       ],
     });

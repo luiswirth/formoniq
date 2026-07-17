@@ -90,8 +90,16 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     return out;
 }
 
+struct FsOut {
+    @location(0) color: vec4<f32>,
+    // A ribbon's ink is a fixed material color, alpha-blended -- never above 1,
+    // so it never asks the tone curve for anything. See `display_transform`'s
+    // note on `unbounded_mask`.
+    @location(1) unbounded: f32,
+};
+
 @fragment
-fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+fn fs_main(in: VertexOutput) -> FsOut {
     // Fade toward the standing-wave node, where the field vanishes and the
     // curves are meaningless -- but never fully, since the integral curves of a
     // standing mode are the same set at every phase and blinking them out
@@ -110,5 +118,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let ink = 1.0 - smoothstep(-edge, edge, abs(in.across) - profile);
 
     let alpha = material.color.a * in.opacity * mix(material.fade_floor, 1.0, env) * ink;
-    return vec4<f32>(material.color.rgb, alpha);
+    var out: FsOut;
+    out.color = vec4<f32>(material.color.rgb, alpha);
+    out.unbounded = 0.0;
+    return out;
 }

@@ -146,8 +146,24 @@ const FALLOFF: f32 = 3.5;
 // business; the particles carry motion.
 const SLOW_INK: vec3<f32> = vec3<f32>(0.22, 0.35, 0.72);
 
+struct FsOut {
+    @location(0) color: vec4<f32>,
+    // The one mark that overflows: additive blending is what lets a filament
+    // of a hundred overlapping specks carry a hundred times one speck's light,
+    // so this is where the tone curve's question -- is there anything above 1
+    // to reconcile -- is actually live. See `display_transform`'s note on
+    // `unbounded_mask`.
+    //
+    // Written as this speck's own coverage, not a flat 1: the mask target
+    // blends with `Max`, so a texel a hundred specks pile onto still reads as
+    // exactly the coverage of the one that covers it most, and the speck's own
+    // antialiased edge crosses into the surface beneath it smoothly rather
+    // than at a hard ring.
+    @location(1) unbounded: f32,
+};
+
 @fragment
-fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
+fn fs_main(in: VsOut) -> FsOut {
     let r2 = dot(in.offset, in.offset);
     let gaussian = exp(-FALLOFF * r2);
     let ink = mix(SLOW_INK, material.color.rgb, in.speed);
@@ -158,5 +174,9 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     // Additive: the blend state multiplies by alpha and sums, so overlapping
     // specks accumulate into density rather than occluding one another, and no
     // depth sort is needed over the whole population.
-    return vec4<f32>(ink, gaussian * intensity);
+    let alpha = gaussian * intensity;
+    var out: FsOut;
+    out.color = vec4<f32>(ink, alpha);
+    out.unbounded = alpha;
+    return out;
 }

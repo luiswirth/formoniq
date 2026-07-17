@@ -15,7 +15,7 @@ use super::{
     FrameUniform, ParticleMaterial, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding,
     UniformPool,
   },
-  DEPTH_FORMAT, SCENE_FORMAT,
+  DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
 };
 
 /// The background the scene is cleared to: a near-black the lit surface and the
@@ -71,6 +71,7 @@ struct Targets {
   size: (u32, u32),
   depth_view: wgpu::TextureView,
   scene_color_view: wgpu::TextureView,
+  mask_view: wgpu::TextureView,
   bloom: BloomChain,
   scene_color: SceneColorBinding,
 }
@@ -111,12 +112,14 @@ impl Targets {
     };
     let depth_view = target("Depth Texture", DEPTH_FORMAT);
     let scene_color_view = target("Scene Color Texture (supersampled HDR)", SCENE_FORMAT);
+    let mask_view = target("Scene Unbounded Mask Texture (supersampled)", MASK_FORMAT);
     let bloom = bloom_pass.chain(device, &scene_color_view, (width, height));
-    let scene_color = downsample.bind(device, &scene_color_view, bloom.glow());
+    let scene_color = downsample.bind(device, &scene_color_view, bloom.glow(), &mask_view);
     Self {
       size,
       depth_view,
       scene_color_view,
+      mask_view,
       bloom,
       scene_color,
     }
@@ -280,15 +283,28 @@ impl Renderer {
     {
       let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
         label: Some("Scene Pass"),
-        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-          view: &targets.scene_color_view,
-          resolve_target: None,
-          ops: wgpu::Operations {
-            load: wgpu::LoadOp::Clear(CLEAR_COLOR),
-            store: wgpu::StoreOp::Store,
-          },
-          depth_slice: None,
-        })],
+        color_attachments: &[
+          Some(wgpu::RenderPassColorAttachment {
+            view: &targets.scene_color_view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+              load: wgpu::LoadOp::Clear(CLEAR_COLOR),
+              store: wgpu::StoreOp::Store,
+            },
+            depth_slice: None,
+          }),
+          // Cleared to zero: nothing drawn this frame is unbounded until a
+          // particle says otherwise.
+          Some(wgpu::RenderPassColorAttachment {
+            view: &targets.mask_view,
+            resolve_target: None,
+            ops: wgpu::Operations {
+              load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+              store: wgpu::StoreOp::Store,
+            },
+            depth_slice: None,
+          }),
+        ],
         depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
           view: &targets.depth_view,
           depth_ops: Some(wgpu::Operations {
