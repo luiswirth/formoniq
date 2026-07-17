@@ -1,11 +1,36 @@
 use nalgebra::{Matrix3, Matrix4, Orthographic3, Perspective3, Point3, Vector3};
 use std::f32::consts::FRAC_PI_2;
 
+/// Sends nalgebra's OpenGL-style clip space to wgpu's, *reversed*: $z in [-1, 1]$
+/// with the near plane at $-1$ becomes $z in [0, 1]$ with the near plane at $1$
+/// and the far plane at $0$.
+///
+/// The reversal is what makes the depth buffer usable at range, and it is not a
+/// bias or a tolerance -- it is the observation that the two sources of error
+/// cancel. Perspective depth is a hyperbola, $d(z) approx 1 - z_"near" \/ z$, so
+/// its resolution decays like $z^2 \/ z_"near"$; float32's resolution decays in
+/// the opposite direction, being densest at $0$. Unreversed the two compound,
+/// concentrating precision where the hyperbola already had it and starving the
+/// far field, where a wireframe's depth bias then loses to roundoff. Reversed
+/// they very nearly cancel, and the relative precision is roughly uniform in $z$
+/// -- which is why $z_"near"$ may stay aggressively small, as the framing
+/// deliberately sets it, at almost no cost.
+///
+/// The flip must live in the matrix and not in the shader. As a row operation it
+/// is $"row"_3 |-> "row"_4 - "row"_3$, acting on the clip-space coefficients
+/// *before* the perspective divide; the same $1 - d$ applied afterwards, to the
+/// already-quantized depth, would flip the picture and recover none of the
+/// precision.
+///
+/// The orthographic branch inherits the reversal unchanged. Its depth is affine
+/// in $z$, so reversing neither gains nor loses precision there -- but the sense
+/// of the depth test is a property of the target, not of the projection, so
+/// there is one constant and no case distinction.
 #[rustfmt::skip]
-pub const OPENGL_TO_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
+pub const OPENGL_TO_REVERSED_WGPU_MATRIX: Matrix4<f32> = Matrix4::new(
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 0.5, 0.5,
+    0.0, 0.0, -0.5, 0.5,
     0.0, 0.0, 0.0, 1.0,
 );
 
@@ -221,7 +246,7 @@ impl Camera {
       Perspective3::new(self.aspect, self.fovy, self.znear, self.zfar).into_inner()
     };
 
-    OPENGL_TO_WGPU_MATRIX * proj * view
+    OPENGL_TO_REVERSED_WGPU_MATRIX * proj * view
   }
 }
 
@@ -423,6 +448,71 @@ mod tests {
       let (origin, dir) = c.ray(0.0, 0.0);
       assert!((dir - c.forward()).norm() < 1e-5);
       assert!((origin - c.eye).norm() < 1e-5);
+    }
+  }
+
+  /// The depth a point at `dist` along the view direction lands on, after the
+  /// divide -- what the depth test actually compares.
+  fn depth_at(c: &Camera, dist: f32) -> f32 {
+    let p = c.eye + c.forward() * dist;
+    let clip = c.build_view_projection_matrix() * p.to_homogeneous();
+    clip.z / clip.w
+  }
+
+  /// Reversed-Z, stated as the boundary condition it is: the near plane is $1$
+  /// and the far plane is $0$, under both projections.
+  #[test]
+  fn depth_is_reversed_at_the_planes() {
+    for orthographic in [false, true] {
+      let mut c = at(0.4, -0.3);
+      c.orthographic = orthographic;
+      assert!((depth_at(&c, c.znear) - 1.0).abs() < 1e-5, "near plane");
+      assert!(depth_at(&c, c.zfar).abs() < 1e-5, "far plane");
+    }
+  }
+
+  /// Nearer is larger, everywhere in the frustum -- the law `CompareFunction::
+  /// Greater` and the clear to `DEPTH_CLEAR` are the two halves of.
+  #[test]
+  fn depth_decreases_with_distance() {
+    for orthographic in [false, true] {
+      let mut c = at(0.4, -0.3);
+      c.orthographic = orthographic;
+      let depths: Vec<f32> = (0..=64)
+        .map(|i| c.znear + (c.zfar - c.znear) * i as f32 / 64.0)
+        .map(|d| depth_at(&c, d))
+        .collect();
+      for w in depths.windows(2) {
+        assert!(w[0] > w[1], "depth must decrease: {} then {}", w[0], w[1]);
+      }
+    }
+  }
+
+  /// The theorem the reversal exists for: a fixed *world* separation stays
+  /// resolvable in float32 depth however far out it is viewed.
+  ///
+  /// This is what an unreversed buffer fails. Sweeping the eye out to the far
+  /// field, two points a wireframe's bias apart must still differ by many
+  /// float32 ulps -- the quantity that decayed like $z^2$ before, and is the
+  /// z-fighting when it reaches zero.
+  #[test]
+  fn a_world_scale_bias_survives_depth_quantization() {
+    let extent = 1.0_f32;
+    // The wireframe's nudge: `4 * WIREFRAME_WIDTH_FRACTION * extent`.
+    let bias = 4.0 * 0.004 * extent;
+
+    let mut c = at(0.4, -0.3);
+    c.znear = 1e-3 * extent;
+    c.zfar = 1e3 * extent;
+
+    for k in 1..=100 {
+      let dist = k as f32 * extent;
+      let (near, far) = (depth_at(&c, dist), depth_at(&c, dist + bias));
+      let ulps = (near - far).abs() / (near.abs().max(far.abs()) * f32::EPSILON);
+      assert!(
+        ulps > 16.0,
+        "bias unresolvable at {dist} extents: {ulps} ulps of separation"
+      );
     }
   }
 }

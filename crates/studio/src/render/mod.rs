@@ -20,7 +20,14 @@ pub mod uniform;
 pub use context::GpuContext;
 pub use renderer::{FrameView, Renderer};
 
+/// Float depth, which reversed-Z requires: the precision argument for reversing
+/// is an argument about where floats are dense, and a unorm target, being
+/// uniform, gains nothing from it.
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
+/// The far plane, since depth is reversed. Exactly representable, so an
+/// unoccluded fragment at any depth strictly beats the cleared value.
+const DEPTH_CLEAR: f32 = 0.0;
 
 /// The format every scene pass draws into, and the bloom chain with it.
 ///
@@ -101,11 +108,18 @@ fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::Shader
 
 /// The depth state the scene passes share: the fill writes it; the
 /// alpha-blended segment marks only test against it.
+///
+/// `Greater`, and the pass clears to [`DEPTH_CLEAR`], because depth is reversed:
+/// nearer is *larger*. See [`OPENGL_TO_REVERSED_WGPU_MATRIX`] for why. The three
+/// -- the projection's sign, the comparison, the clear -- are one decision, and
+/// any two of them agreeing without the third is a scene drawn inside out.
+///
+/// [`OPENGL_TO_REVERSED_WGPU_MATRIX`]: camera::OPENGL_TO_REVERSED_WGPU_MATRIX
 fn depth_stencil(write: bool) -> wgpu::DepthStencilState {
   wgpu::DepthStencilState {
     format: DEPTH_FORMAT,
     depth_write_enabled: Some(write),
-    depth_compare: Some(wgpu::CompareFunction::Less),
+    depth_compare: Some(wgpu::CompareFunction::Greater),
     stencil: wgpu::StencilState::default(),
     bias: wgpu::DepthBiasState::default(),
   }
