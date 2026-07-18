@@ -11,13 +11,15 @@ use {
   },
 };
 
+#[cfg(feature = "serde")]
 use std::{io, path::Path};
 
 /// A $k$-cochain: one real coefficient per $k$-simplex of the skeleton.
 ///
 /// An element of the cochain space $C^k$, hence a vector space over the
 /// simplices of a fixed grade.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Cochain {
   coeffs: Vector,
   grade: ExteriorGrade,
@@ -74,9 +76,11 @@ impl Cochain {
     self.grade <= topology.dim() && self.len() == topology.skeleton(self.grade).len()
   }
 
+  #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
     simplicial::io::cbor::save_cbor(self, path)
   }
+  #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     simplicial::io::cbor::load_cbor(path)
   }
@@ -173,6 +177,7 @@ mod test {
   use super::*;
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
+  #[cfg(feature = "serde")]
   #[test]
   fn save_load_roundtrip_and_compatibility() {
     let (topology, _) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();

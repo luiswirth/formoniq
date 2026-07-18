@@ -2,6 +2,7 @@
 name = "chartan"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "The smooth continuum manifold a simplicial mesh approximates: parametrizations and analytic differential-form data on it."
 repository = "https://github.com/luiswirth/formoniq"

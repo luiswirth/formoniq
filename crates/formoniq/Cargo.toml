@@ -2,6 +2,7 @@
 name = "formoniq"
 version = "0.2.0"
 edition = "2021"
+rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "Finite Element Exterior Calculus (FEEC): PDEs formulated with differential forms and solved on simplicial Riemannian manifolds of arbitrary dimension, intrinsically and coordinate-free."
 repository = "https://github.com/luiswirth/formoniq"
@@ -26,8 +27,6 @@ itertools = "0.15.0"
 rayon = "1.12.0"
 approx = "0.5.1"
 
-
 [dev-dependencies]
 tracing-subscriber = "0.3.23"
 num-traits = "0.2.19"
-#reqwest = { version = "0.12.9", features = ["blocking"] }

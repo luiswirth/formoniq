@@ -13,10 +13,12 @@ use crate::linalg::Vector;
 use itertools::Itertools;
 use rayon::iter::ParallelIterator;
 
+#[cfg(feature = "serde")]
 use std::{io, path::Path};
 
 /// The lengths of the edges of the mesh.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MeshLengths {
   vector: Vector,
 }
@@ -136,9 +138,11 @@ impl MeshLengths {
     self.nedges() == topology.edges().len()
   }
 
+  #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
     crate::io::cbor::save_cbor(self, path)
   }
+  #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     crate::io::cbor::load_cbor(path)
   }

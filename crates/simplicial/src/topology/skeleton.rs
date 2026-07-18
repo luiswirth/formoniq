@@ -3,6 +3,7 @@ use crate::Dim;
 
 use indexmap::IndexSet;
 
+#[cfg(feature = "serde")]
 use std::{io, path::Path};
 
 /// A container for simplices of the same dimension.
@@ -15,6 +16,7 @@ pub struct Skeleton {
 /// Serializes as the plain simplex list; deserialization runs it back through
 /// [`Skeleton::new`], so the derived fields (`nvertices`, canonical order) are
 /// always recomputed from the simplices, never trusted from the file.
+#[cfg(feature = "serde")]
 impl serde::Serialize for Skeleton {
   fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
     self
@@ -25,6 +27,7 @@ impl serde::Serialize for Skeleton {
       .serialize(serializer)
   }
 }
+#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for Skeleton {
   fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
     Ok(Self::new(Vec::<Simplex>::deserialize(deserializer)?))
@@ -108,9 +111,11 @@ impl Skeleton {
     self.simplices.get_index_of(simp).unwrap()
   }
 
+  #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
     crate::io::cbor::save_cbor(self, path)
   }
+  #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     crate::io::cbor::load_cbor(path)
   }

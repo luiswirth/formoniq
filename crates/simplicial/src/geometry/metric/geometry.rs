@@ -28,6 +28,7 @@ use crate::{
 
 use gramian::RiemannianMetric;
 
+#[cfg(feature = "serde")]
 use std::{io, path::Path};
 
 /// The intrinsic geometry of a mesh: the Riemannian metric of each cell, which
@@ -46,7 +47,8 @@ impl Geometry for MeshLengths {
 /// The per-cell metric tensors as grade-n data on the mesh: the most local,
 /// coordinate-free geometry. Each cell independently carries its flat metric,
 /// so this is defined on the cell skeleton alone.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CellGramians {
   metrics: SkeletonVec<RiemannianMetric>,
 }
@@ -77,9 +79,11 @@ impl CellGramians {
     self.metrics.len() == topology.skeleton(self.metrics.grade()).len()
   }
 
+  #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
     crate::io::cbor::save_cbor(self, path)
   }
+  #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     crate::io::cbor::load_cbor(path)
   }
