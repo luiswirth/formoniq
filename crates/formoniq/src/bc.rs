@@ -1,5 +1,21 @@
 //! Boundary conditions for the Whitney complex.
 //!
+//! Both kinds descend from the one integration-by-parts identity for the
+//! codifferential $delta = dif^*$:
+//! $
+//!   inner(dif omega, eta)_(L^2 Lambda^k)
+//!   = inner(omega, delta eta)_(L^2 Lambda^(k-1))
+//!   + integral_(diff M) "tr" omega wedge "tr" (hodge eta).
+//! $
+//! The boundary term is what a boundary condition disposes of. An *essential*
+//! condition constrains $"tr" omega$ and so is imposed on the trial/test space
+//! (homogeneously: $"tr" omega = 0$ kills the integrand from the left).
+//! A *natural* condition constrains $"tr" (hodge eta)$ and so appears as data
+//! on the right-hand side (homogeneously: $"tr" (hodge eta) = 0$ drops the term,
+//! the "do nothing" case). The two conditions are dual across this pairing and
+//! partition the boundary between them: the same term, cleared from opposite
+//! factors.
+//!
 //! Essential (Dirichlet) conditions constrain the trace $"tr" u = g$:
 //! homogeneous ones restrict to the relative complex (the kernel of the
 //! trace), inhomogeneous ones are reduced to homogeneous by the affine
