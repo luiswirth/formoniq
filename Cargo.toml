@@ -13,6 +13,22 @@ members = [
   "crates/studio",
 ]
 
+# `studio` pulls in the wgpu/winit/egui graphics stack -- deps the numerics core
+# never touches, compiled optimized here (see the profile below). Excluding it
+# from the default set keeps the inner loop (`cargo test`, `cargo clippy`, bare
+# of `--workspace`) on the core crates alone; `--workspace` still reaches studio,
+# and so does CI.
+default-members = [
+  "crates/formoniq",
+  "crates/derham",
+  "crates/exterior",
+  "crates/chartan",
+  "crates/simplicial",
+  "crates/multiindex",
+  "crates/gramian",
+  "crates/coorder",
+]
+
 # Dependencies are compiled optimized even in a debug build. The workspace's own
 # crates are not: they stay at `opt-level = 0`, where a backtrace and a debugger
 # still mean something.
