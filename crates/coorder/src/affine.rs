@@ -1,4 +1,4 @@
-use formoniq_linalg::nalgebra::{Matrix, Vector, VectorView};
+use crate::{Matrix, Vector, VectorView};
 
 pub struct AffineTransform {
   pub translation: Vector,

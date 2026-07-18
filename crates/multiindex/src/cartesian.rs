@@ -8,14 +8,13 @@
 //! lattice, one for each permutation of the axes.
 
 use super::Combination;
-use formoniq_linalg::nalgebra::Vector;
 
 /// Converts a linear index in `0..radix^dim` to a cartesian multi-index in
 /// ${0, dots, "radix"-1}^"dim"$ (least significant axis first).
-pub fn linear_index2cartesian_index(mut lin_idx: usize, radix: usize, dim: usize) -> Vector<usize> {
-  let mut cart_idx = Vector::zeros(dim);
-  for icomp in 0..dim {
-    cart_idx[icomp] = lin_idx % radix;
+pub fn linear_index2cartesian_index(mut lin_idx: usize, radix: usize, dim: usize) -> Vec<usize> {
+  let mut cart_idx = vec![0; dim];
+  for icomp in cart_idx.iter_mut() {
+    *icomp = lin_idx % radix;
     lin_idx /= radix;
   }
   cart_idx
@@ -23,12 +22,11 @@ pub fn linear_index2cartesian_index(mut lin_idx: usize, radix: usize, dim: usize
 
 /// Converts a cartesian multi-index in ${0, dots, "radix"-1}^"dim"$ to a
 /// linear index in `0..radix^dim`.
-pub fn cartesian_index2linear_index(cart_idx: Vector<usize>, radix: usize) -> usize {
-  let dim = cart_idx.len();
+pub fn cartesian_index2linear_index(cart_idx: &[usize], radix: usize) -> usize {
   let mut lin_idx = 0;
-  for icomp in (0..dim).rev() {
+  for &icomp in cart_idx.iter().rev() {
     lin_idx *= radix;
-    lin_idx += cart_idx[icomp];
+    lin_idx += icomp;
   }
   lin_idx
 }

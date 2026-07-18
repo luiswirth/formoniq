@@ -1,6 +1,5 @@
 extern crate nalgebra as na;
 
-use formoniq_linalg::nalgebra::{Matrix, Vector};
 use gramian::{Gramian, RiemannianMetric};
 use multiindex::{binomial, combinations, Combination, Sign};
 
@@ -8,6 +7,9 @@ use std::marker::PhantomData;
 
 pub use multiindex::Dim;
 pub type ExteriorGrade = usize;
+
+pub type Vector<T = f64> = na::DVector<T>;
+pub type Matrix<T = f64> = na::DMatrix<T>;
 
 /// A basis blade $e_(i_1) wedge dots.c wedge e_(i_k)$ of the exterior
 /// algebra: a strictly increasing multi-index.
