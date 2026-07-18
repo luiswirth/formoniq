@@ -31,6 +31,10 @@ pub struct WhitneyInterpolant<'a> {
 
 impl<'a> WhitneyInterpolant<'a> {
   pub fn new(cochain: Cochain, complex: &'a Complex) -> Self {
+    assert!(
+      cochain.is_compatible_with(complex),
+      "Cochain is not a cochain on this complex."
+    );
     let forms = standard_subsimps(complex.dim(), cochain.grade())
       .map(|dof_simp| WhitneyForm::standard(complex.dim(), dof_simp))
       .collect();
