@@ -1,12 +1,12 @@
 use {
   derham::{interpolate::form::WhitneyForm, section::Section},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
-  formoniq_linalg::nalgebra::{Matrix, Vector},
   gramian::RiemannianMetric,
   multiindex::{factorial, Combination},
   simplicial::{
     atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
     geometry::cell_volume,
+    linalg::{Matrix, Vector},
     topology::{
       handle::SimplexRef,
       simplex::{standard_boundary_operator, standard_subsimps},

@@ -9,7 +9,6 @@ exterior = { path = "../exterior" }
 chartan = { path = "../chartan" }
 simplicial = { path = "../simplicial" }
 coorder = { path = "../coorder" }
-formoniq-linalg = { path = "../linalg" }
 gramian = { path = "../gramian" }
 multiindex = { path = "../multiindex" }
 

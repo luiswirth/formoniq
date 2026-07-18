@@ -17,7 +17,7 @@ pub mod simplex;
 
 pub use coorder::{Ambient, Coord, CoordRef};
 
-use formoniq_linalg::nalgebra::{RowVector, RowVectorView, Vector, VectorView};
+use crate::linalg::{RowVector, RowVectorView, Vector, VectorView};
 
 use self::mesh::MeshCoords;
 use super::{cell_volume, metric::Geometry};

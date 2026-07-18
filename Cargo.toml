@@ -10,7 +10,6 @@ members = [
   "crates/multiindex",
   "crates/gramian",
   "crates/coorder",
-  "crates/linalg",
   "crates/studio",
 ]
 

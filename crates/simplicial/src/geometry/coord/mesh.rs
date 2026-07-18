@@ -12,7 +12,7 @@ use crate::{
   Dim,
 };
 
-use formoniq_linalg::nalgebra::{Matrix, Vector};
+use crate::linalg::{Matrix, Vector};
 use gramian::RiemannianMetric;
 
 use itertools::Itertools;

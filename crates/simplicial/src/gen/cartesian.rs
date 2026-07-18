@@ -1,4 +1,4 @@
-use formoniq_linalg::nalgebra::{Matrix, Vector};
+use crate::linalg::{Matrix, Vector};
 use itertools::Itertools;
 use multiindex::{
   cartesian::{corner_offset, strides},
@@ -187,7 +187,7 @@ impl CartesianMeshInfo {
 #[cfg(test)]
 mod test {
   use super::CartesianMeshInfo;
-  use formoniq_linalg::nalgebra::Matrix;
+  use crate::linalg::Matrix;
 
   #[test]
   fn unit_cube_mesh() {

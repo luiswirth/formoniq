@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use chartan::field::DiffFormClosure;
-use formoniq_linalg::nalgebra::Vector;
 use gramian::RiemannianMetric;
+use simplicial::linalg::Vector;
 
 use crate::bake::CellCorner;
 use crate::ui::Selection;
@@ -934,12 +934,12 @@ pub(crate) fn hodge_decompose(
   topology: &Complex,
   coords: &MeshCoords,
   input: &Cochain,
-) -> Result<HodgeParts, formoniq_linalg::eigen::EigenError> {
+) -> Result<HodgeParts, formoniq::linalg::eigen::EigenError> {
   use formoniq::{
     problems::elliptic::{solve_harmonics, solve_source},
     whitney_complex::WhitneyComplex,
   };
-  use formoniq_linalg::nalgebra::CsrMatrix;
+  use simplicial::linalg::CsrMatrix;
 
   let grade = input.grade();
   let metric = coords.to_edge_lengths(topology);
@@ -1002,7 +1002,7 @@ pub(crate) fn hodge_decompose(
 /// added.
 pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Cochain {
   use formoniq::{problems::elliptic::solve_harmonics, whitney_complex::WhitneyComplex};
-  use formoniq_linalg::nalgebra::CsrMatrix;
+  use simplicial::linalg::CsrMatrix;
 
   let swirl = hodge_probe_form(topology, coords);
   let metric = coords.to_edge_lengths(topology);
@@ -1314,8 +1314,8 @@ mod tests {
   fn hodge_decomposition_splits_orthogonally() {
     use crate::gallery::MeshSource;
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
-    use formoniq_linalg::nalgebra::CsrMatrix;
     use simplicial::io::gmsh::gmsh2coord_complex;
+    use simplicial::linalg::CsrMatrix;
 
     let torus = || gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));
 

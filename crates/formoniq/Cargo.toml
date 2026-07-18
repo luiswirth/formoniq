@@ -10,12 +10,12 @@ exterior = { path = "../exterior" }
 chartan = { path = "../chartan" }
 simplicial = { path = "../simplicial" }
 coorder = { path = "../coorder" }
-formoniq-linalg = { path = "../linalg" }
 gramian = { path = "../gramian" }
 multiindex = { path = "../multiindex" }
 
 nalgebra = "0.35.0"
 nalgebra-sparse = "0.12.0"
+faer = "0.24.4"
 
 tracing = "0.1.44"
 itertools = "0.15.0"
@@ -25,4 +25,5 @@ approx = "0.5.1"
 
 [dev-dependencies]
 tracing-subscriber = "0.3.23"
+num-traits = "0.2.19"
 #reqwest = { version = "0.12.9", features = ["blocking"] }

@@ -1,4 +1,4 @@
-use formoniq_linalg::nalgebra::Matrix;
+use crate::linalg::Matrix;
 use multiindex::{binomial, combinations, Combination, Sign};
 
 use super::VertexIdx;

@@ -35,23 +35,33 @@ commentary on them. Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing —
-`{ multiindex, formoniq-linalg, gramian, coorder } → exterior → { simplicial,
-chartan } → derham → formoniq → studio`, where `multiindex`/`formoniq-linalg`/
-`gramian`/`coorder` are foundational siblings and `simplicial`/`chartan` are
-siblings one level up:
+`{ multiindex, gramian, coorder } → exterior → { simplicial, chartan } →
+derham → formoniq → studio`, where `multiindex`/`gramian`/`coorder` are
+foundational siblings and `simplicial`/`chartan` are siblings one level up:
 
-| crate            | is                                  | key contents |
-| ---------------- | ----------------------------------- | ------------ |
-| `multiindex`     | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets), `cartesian::` (radix multi-indices), `Dim` |
-| `formoniq-linalg`| linear-algebra backends             | dense/sparse nalgebra type aliases (`Vector`, `Matrix`, `CsrMatrix`, ...), the faer bridge, shift-invert eigensolving |
-| `gramian`        | inner-product / metric structure    | `Gramian`, `RiemannianMetric` |
-| `coorder`        | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
-| `exterior`       | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial`     | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
-| `chartan`        | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
-| `derham`         | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
-| `formoniq`       | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk`: structure-preserving time integration), `problems::` (elliptic, maxwell, heat, wave, ...) |
-| `studio`         | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
+| crate        | is                                  | key contents |
+| ------------ | ----------------------------------- | ------------ |
+| `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets), `cartesian::` (radix multi-indices) |
+| `gramian`    | inner-product / metric structure    | `Gramian`, `RiemannianMetric` |
+| `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
+| `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `chartan`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
+| `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
+| `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, maxwell, heat, wave, ...) |
+| `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
+
+No crate exists solely to hold a shared type alias. `Vector`/`Matrix` (dense
+nalgebra) are trivial aliases with no nominal identity to share, so `gramian`,
+`coorder`, `exterior` and `chartan` each declare their own directly from
+`nalgebra` rather than depending on anything for them; `simplicial` is the
+lowest crate that needs *sparse* matrices (its boundary operators), so that is
+where `CsrMatrix`/`CooMatrix` and the extension traits built on them
+(`CooMatrixExt`) live, reused downward by `derham`, `formoniq` and `studio`
+because they already depend on `simplicial` for real reasons. `faer` and the
+eigensolver go one further: they are needed only in `formoniq`, the one crate
+that solves a linear system, so they live there rather than in a shared base
+every leaf would then compile for nothing.
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `simplicial` never about forms.
@@ -218,10 +228,11 @@ just as well and silently means something else. A new ordered structure is colex
 
 **Linalg backends by role.** nalgebra dense (`Matrix`/`Vector`) for element-local
 math (Gramians, element matrices, exterior powers); `nalgebra-sparse` (`CooMatrix`)
-for globally assembled operators; faer for solves and eigenproblems (sparse LU
-and Cholesky, and a dense QZ for the generalized eigenproblem). The workspace is
-pure Rust, with no external solver toolchain. Go through `formoniq-linalg` rather
-than reaching for a backend directly.
+for globally assembled operators, aliased in `simplicial::linalg`; faer for
+solves and eigenproblems (sparse LU and Cholesky, and a self-adjoint dense
+eigensolve for the projected subspace), confined to `formoniq::linalg` since
+`formoniq` is the only crate that solves anything. The workspace is pure Rust,
+with no external solver toolchain.
 
 **Naming reflects the mathematics.** `SimplexRef`, `Cochain`, `MultiForm`,
 `CellGramians` — a reader who knows the math should recognize every type

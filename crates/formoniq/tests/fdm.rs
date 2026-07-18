@@ -23,10 +23,78 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::whitney_complex::WhitneyComplex;
-use formoniq_linalg::nalgebra::{kronecker_sum, matrix_from_const_diagonals, Matrix, Vector};
-use simplicial::{gen::cartesian::CartesianMeshInfo, Dim};
+use simplicial::{
+  gen::cartesian::CartesianMeshInfo,
+  linalg::{Matrix, Vector},
+  Dim,
+};
 
 use std::sync::LazyLock;
+
+/// The Kronecker sum $A_1 oplus dots.c oplus A_d = sum_i I ox dots.c ox A_i ox dots.c ox I$
+/// of square matrices: the generator of the tensor-product operator each
+/// factor generates alone. Test-local: the one caller here builds the
+/// separable FDM Laplacian from its 1D stencil, this way.
+fn kronecker_sum<T>(mats: &[Matrix<T>]) -> Matrix<T>
+where
+  T: na::Scalar + num_traits::Zero + num_traits::One + na::ClosedMulAssign + na::ClosedAddAssign,
+{
+  assert!(!mats.is_empty());
+  assert!(mats.iter().all(|m| m.nrows() == m.ncols()));
+
+  let eyes: Vec<_> = mats
+    .iter()
+    .map(|m| Matrix::identity(m.nrows(), m.nrows()))
+    .collect();
+
+  let kron_size = mats.iter().map(na::Matrix::nrows).product::<usize>();
+  let mut kron_sum = Matrix::zeros(kron_size, kron_size);
+  for (dim, mat) in mats.iter().enumerate() {
+    let eyes_before = eyes[..dim]
+      .iter()
+      .fold(Matrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
+    let eyes_after = eyes[dim + 1..]
+      .iter()
+      .fold(Matrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
+
+    let kron_prod = eyes_before.kronecker(mat).kronecker(&eyes_after);
+    kron_sum += kron_prod;
+  }
+
+  kron_sum
+}
+
+/// A banded matrix with `values[i]` on the constant diagonal at `offsets[i]`.
+/// Test-local: the one caller here builds the 1D FDM stencil matrix this way.
+fn matrix_from_const_diagonals<T>(
+  values: &[T],
+  offsets: &[isize],
+  nrows: usize,
+  ncols: usize,
+) -> Matrix<T>
+where
+  T: num_traits::Zero + na::Scalar + Copy,
+{
+  let mut matrix = Matrix::zeros(nrows, ncols);
+
+  for (idiag, &offset) in offsets.iter().enumerate() {
+    let [start_row, start_col] = if offset >= 0 {
+      [0, offset as usize]
+    } else {
+      [(-offset) as usize, 0]
+    };
+
+    let mut r = start_row;
+    let mut c = start_col;
+    while r < nrows && c < ncols {
+      matrix[(r, c)] = values[idiag];
+      r += 1;
+      c += 1;
+    }
+  }
+
+  matrix
+}
 
 /// Handchecked integer (graph) Laplacian matrices on interior of mesh.
 ///

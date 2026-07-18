@@ -43,7 +43,7 @@
 
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use formoniq_linalg::nalgebra::Vector;
+use simplicial::linalg::Vector;
 use simplicial::{
   atlas::{ref_lattice_bary, MeshPoint},
   geometry::{

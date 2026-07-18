@@ -1,7 +1,7 @@
 use super::EdgeIdx;
 use crate::{topology::simplex::nedges, Dim};
 
-use formoniq_linalg::nalgebra::{Matrix, Vector};
+use crate::linalg::{Matrix, Vector};
 use gramian::{Gramian, RiemannianMetric};
 use multiindex::{combinations, factorial, Combination};
 

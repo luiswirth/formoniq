@@ -41,8 +41,8 @@
 //! life.
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use formoniq_linalg::nalgebra::Matrix;
 use gramian::RiemannianMetric;
+use simplicial::linalg::Matrix;
 use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},

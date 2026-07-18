@@ -17,7 +17,7 @@
 use std::collections::HashMap;
 use std::fmt;
 
-use formoniq_linalg::nalgebra::Matrix;
+use simplicial::linalg::Matrix;
 use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 
 use crate::io::surface::TriangleSurface3D;
