@@ -18,9 +18,10 @@
 //! differentials, the volume -- depends on the dimension alone and not on the
 //! cell: every chart of the atlas is the *same* chart up to the labelling of its
 //! vertices. That is why the `ref_*` functions below take a [`Dim`] and no cell,
-//! and it is why the element matrices of FEEC are computed once on the reference
-//! cell and reused on every cell of the mesh. What differs between charts is the
-//! labelling, and the labelling is exactly what a [`Transition`] is made of.
+//! and it is why any per-cell quantity fixed by the reference chart is computed
+//! once on the reference cell and reused on every cell of the mesh. What differs
+//! between charts is the labelling, and the labelling is exactly what a
+//! [`Transition`] is made of.
 //!
 //! Barycentric is the right chart: it is symmetric in the vertices, affine, and
 //! needs neither a metric nor an embedding. Everything in this module is pure
@@ -154,8 +155,9 @@ pub fn ref_difbary(dim: Dim, ivertex: usize) -> RowVector {
 /// $lambda: RR^n -> RR^(n+1)$ of the reference simplex: the rows are the
 /// constant covectors $dif lambda_i$.
 ///
-/// Metric-free, and the same for every cell -- this is the whole reason the
-/// Whitney forms can be evaluated intrinsically, with no geometry at all.
+/// Metric-free, and the same for every cell -- any form built from the
+/// barycentric differentials is therefore constant on the cell and evaluable
+/// intrinsically, with no geometry at all.
 pub fn ref_difbarys(dim: Dim) -> Matrix {
   let mut difbarys = Matrix::zeros(dim + 1, dim);
   difbarys.row_mut(0).fill(-1.0);

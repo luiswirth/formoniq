@@ -1,5 +1,5 @@
 //! Dense and sparse nalgebra type aliases, and the block-matrix builder that
-//! assembly needs on top of them.
+//! the boundary operators need on top of them.
 //!
 //! Not a shared base crate on purpose: `simplicial` is the lowest crate that
 //! genuinely needs sparse matrices (the boundary operators), so this is where

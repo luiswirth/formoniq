@@ -6,8 +6,8 @@
 //! generator is fixed at the one case that is both simple and useful: the
 //! 2-sphere, embedded in $RR^3$. It exists as real mesh input (a closed,
 //! non-contractible manifold with known Betti numbers $(1, 0, 1)$, used
-//! throughout the test suite and by `formoniq-studio`'s spherical-harmonics
-//! scene) -- not as a rendering utility.
+//! throughout the test suite and as input for visualization) -- not as a
+//! rendering utility.
 
 use std::collections::HashMap;
 

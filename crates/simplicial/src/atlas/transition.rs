@@ -146,7 +146,7 @@ impl Transition {
   /// the matrix is whatever the affine formula extends to, and means nothing.
   /// This is why only the *tangential* part of a section is chart-independent,
   /// and it is the precise reason the de Rham map is well defined while a
-  /// pointwise value of a Whitney form is not.
+  /// pointwise form value is not.
   pub fn differential(&self) -> Matrix {
     let dim = self.dim();
     let drop_zeroth = self.bary_map.view_range(1.., ..);

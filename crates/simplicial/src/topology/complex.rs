@@ -258,7 +258,7 @@ mod test {
 
     let (topology, _) = CartesianMeshInfo::new_unit(3, 2).compute_coord_complex();
 
-    let path = std::env::temp_dir().join(format!("formoniq_test_{}.cbor", std::process::id()));
+    let path = std::env::temp_dir().join(format!("simplicial_test_{}.cbor", std::process::id()));
     topology.save(&path).unwrap();
     let loaded = Complex::load(&path).unwrap();
     std::fs::remove_file(&path).unwrap();
