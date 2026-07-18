@@ -211,8 +211,16 @@ impl<'a> State<'a> {
       .await
       .unwrap();
 
+    // Grant the adapter's real limits, not the WebGPU baseline
+    // `DeviceDescriptor::default()` pins: that baseline caps
+    // `max_texture_dimension_2d` at 8192, below the supersampled depth target a
+    // Retina fullscreen window needs (window width times `DEFAULT_SSAA_SCALE`),
+    // while Metal itself allows 16384.
     let (device, queue) = adapter
-      .request_device(&wgpu::DeviceDescriptor::default())
+      .request_device(&wgpu::DeviceDescriptor {
+        required_limits: adapter.limits(),
+        ..Default::default()
+      })
       .await
       .unwrap();
     let ctx = GpuContext { device, queue };

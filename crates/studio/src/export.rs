@@ -101,8 +101,14 @@ pub fn headless_context() -> Option<GpuContext> {
     force_fallback_adapter: false,
   }))
   .ok()?;
-  let (device, queue) =
-    pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor::default())).ok()?;
+  // Grant the adapter's real limits, not the WebGPU baseline: an export
+  // supersamples up to `EXPORT_SSAA_SCALE_MAX`, so its targets can exceed the
+  // baseline `max_texture_dimension_2d` of 8192 the same way the window's do.
+  let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
+    required_limits: adapter.limits(),
+    ..Default::default()
+  }))
+  .ok()?;
   Some(GpuContext { device, queue })
 }
 
