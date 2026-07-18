@@ -1,0 +1,557 @@
+//! Maxwell's equations as the Hodge–Dirac evolution on the *whole* de Rham
+//! complex --- the Clifford-algebra formulation, in the 3+1 split.
+//!
+//! Geometric algebra collapses the two Maxwell field equations into one. The
+//! Hodge–Dirac operator
+//!
+//! $ sans(D) = dif - delta: Lambda^bullet -> Lambda^bullet, quad
+//!   Lambda^bullet = plus.circle.big_(k=0)^n Lambda^k, $
+//!
+//! is the Dirac operator of the de Rham complex: metric-free $dif$ raising grade,
+//! its formal adjoint $delta$ lowering it, acting on the *full* mixed-grade
+//! field at once. It is the square root of the Hodge–Laplacian,
+//!
+//! $ sans(D)^2 = (dif - delta)^2 = -(dif delta + delta dif) = -Delta, $
+//!
+//! the two cross terms $dif^2 = delta^2 = 0$ vanishing by nilpotency; and it is
+//! skew-adjoint, $sans(D)^* = delta - dif = -sans(D)$, so the first-order flow
+//!
+//! $ diff_t u = sans(D) u = (dif - delta) u $
+//!
+//! is norm-preserving and its solutions solve the wave equation
+//! $diff_(t t) u = -Delta u$ grade by grade. This is Maxwell. Writing the field
+//! as $u = E + B$ with the electric $E in Lambda^1$ and the magnetic
+//! $B in Lambda^2$, the middle two grades of $diff_t u = sans(D) u$ are exactly
+//!
+//! $ diff_t E = -delta B quad & "(Ampère, source-free)" \
+//!   diff_t B = dif E     quad & "(Faraday)", $
+//!
+//! while the extremal grades are the two Gauss laws: the grade-0 component
+//! $diff_t u_0 = -delta E$ is the electric constraint $delta E = 0$ (no charge),
+//! the grade-$n$ component $diff_t u_n = dif B$ the magnetic constraint
+//! $dif B = 0$ (no monopoles). The four classical equations are the four grades
+//! of one Dirac evolution. The *field* itself is not mixed-grade --- it is
+//! $E + B$, living in grades 1 and 2 (a single Faraday 2-form before the split);
+//! the whole graded space is carried because $sans(D)$ is grade-mixing (the
+//! Clifford structure), so it maps the field out into the neighbouring grades,
+//! where the divergence/Gauss parts land.
+//!
+//! # The sign, and the canonical Hodge–Dirac operator
+//!
+//! The textbook Hodge–Dirac operator is $dif + delta$, which is *self*-adjoint
+//! with $(dif + delta)^2 = +Delta$. A first-order energy-conserving flow on a
+//! Riemannian (positive-definite) slice needs a *skew*-adjoint generator, so the
+//! evolution operator is the skew $dif - delta$, with $sans(D)^2 = -Delta$. This
+//! is not a lesser cousin of $dif + delta$: the two are the same operator,
+//! conjugate by the diagonal unitary $Q = i^"deg"$ (grade $k |-> i^k$), since
+//! $Q dif Q^(-1) = i dif$ and $Q delta Q^(-1) = -i delta$ give
+//! $Q (dif - delta) Q^(-1) = i (dif + delta)$. Under $psi = i^"deg" u$ the real
+//! flow $diff_t u = (dif - delta) u$ becomes the complex Schrödinger form
+//! $diff_t psi = i (dif + delta) psi$ --- the dimension-general Riemann–Silberstein
+//! ($E + i B$) picture. The real form is used here because it keeps the fields
+//! real and grade $1 = E$, grade $2 = B$ direct, in any dimension. The genuinely
+//! self-adjoint $dif + delta$ with $+Delta$ and no $i$ exists only *without* a
+//! split: the 4D Lorentzian $sans(D) F = J$, where the signature makes it
+//! hyperbolic on its own.
+//!
+//! # Discretization
+//!
+//! In FEEC $dif$ is the exact coboundary $D_k$ on Whitney cochains, but $delta$
+//! is metric and lives only weakly, through the Galerkin Hodge masses $M_k$. The
+//! weak form of $diff_t u = (dif - delta) u$, tested grade by grade with
+//! $angle.l delta u, v angle.r = angle.l u, dif v angle.r$, is the linear system
+//!
+//! $ M dot(u) = A u, quad M = plus.circle.big_k M_k, quad
+//!   A = mat(
+//!     0, -D_0^T M_1, , ;
+//!     M_1 D_0, 0, -D_1^T M_2, ;
+//!     , M_2 D_1, 0, dots.down;
+//!     , , dots.down, ), $
+//!
+//! with $M$ the SPD block-diagonal mass and $A$ *skew-symmetric by construction*:
+//! the super-diagonal blocks are minus the transposes of the sub-diagonal ones,
+//! $(D_(k-1)^T M_k) = (M_k D_(k-1))^T$. The strong operator $M^(-1) A = dif -
+//! delta_h$ with the weak codifferential $delta_h = M_k^(-1) D_k^T M_(k+1)$ is
+//! the discrete Hodge–Dirac operator, and $dif compose dif = 0$ makes it square
+//! to the discrete Hodge–Laplacian exactly: $(M^(-1) A)^2 = -Delta_h$, the
+//! grade-shifting-by-two terms cancelling by nilpotency.
+//!
+//! Because $A + A^T = 0$, the quadratic energy $H = 1/2 thin u^T M u = 1/2
+//! norm(u)_(L^2)^2$ is a conserved invariant of the semi-discrete flow, and the
+//! Gauss–Legendre integrator [`solve_dirac`] conserves it *to roundoff* --- no
+//! drift, only the physical sloshing of energy between the electric grade 1 and
+//! magnetic grade 2. The boundary condition is the choice of complex: essential
+//! (perfect electric conductor, $"tr" u = 0$ on every grade) on the
+//! [`RelativeWhitneyComplex`], natural on the full [`WhitneyComplex`] --- the
+//! same code either way, since the skew structure is algebraic and survives
+//! both.
+//!
+//! [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
+//! [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
+
+use crate::{
+  linalg::quadratic_form_sparse,
+  time::{Leapfrog, LinearIrk, Tableau},
+  whitney_complex::HilbertComplex,
+};
+
+use derham::cochain::Cochain;
+use exterior::ExteriorGrade;
+use simplicial::{
+  linalg::{CooMatrix, CsrMatrix, Vector},
+  Dim,
+};
+
+/// A field on the full de Rham complex: one cochain per grade,
+/// $u = (u_0, dots, u_n) in plus.circle.big_k C^k$.
+///
+/// The state the Hodge–Dirac operator evolves. In the Maxwell reading the
+/// electric field is `grade(1)`, the magnetic flux `grade(2)`; the extremal
+/// grades carry the two Gauss constraints ($delta E$ in grade 0, $dif B$ in
+/// grade $n$), which stay negligible for a physical field.
+#[derive(Clone)]
+pub struct MixedField {
+  /// Slot $k$ holds the $k$-cochain, for $k = 0, dots, n$.
+  grades: Vec<Cochain>,
+}
+impl MixedField {
+  /// Assemble from one cochain per grade, `grades[k]` a $k$-cochain.
+  pub fn new(grades: Vec<Cochain>) -> Self {
+    for (k, c) in grades.iter().enumerate() {
+      assert_eq!(c.grade(), k, "slot k must hold a k-cochain");
+    }
+    Self { grades }
+  }
+
+  /// The zero field with the DOF layout of `complex`.
+  pub fn zeros<C: HilbertComplex>(complex: &C) -> Self {
+    let grades = (0..=complex.dim())
+      .map(|k| Cochain::new(k, Vector::zeros(complex.ndofs(k))))
+      .collect();
+    Self { grades }
+  }
+
+  /// A field with a single grade populated, the others zero --- e.g. an electric
+  /// field at `grade = 1` or a magnetic flux at `grade = 2` in the Maxwell
+  /// reading.
+  pub fn from_grade<C: HilbertComplex>(complex: &C, u: Cochain) -> Self {
+    let mut field = Self::zeros(complex);
+    let k = u.grade();
+    field.grades[k] = u;
+    field
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.grades.len() - 1
+  }
+  pub fn grade(&self, k: ExteriorGrade) -> &Cochain {
+    &self.grades[k]
+  }
+  pub fn into_grades(self) -> Vec<Cochain> {
+    self.grades
+  }
+}
+
+/// The discrete Hodge–Dirac operator $sans(D) = dif - delta$ on a Hilbert
+/// complex, assembled as the two flat global matrices the time integrator
+/// consumes: the SPD block-diagonal mass $M = plus.circle.big_k M_k$ and the
+/// skew-symmetric $A$ of the semi-discrete system $M dot(u) = A u$.
+///
+/// Total at the degenerate grades without a special case: grade $0$ has no
+/// sub-diagonal coupling (no $Lambda^(-1)$), grade $n$ no super-diagonal one
+/// (no $Lambda^(n+1)$), and the tridiagonal loop simply never emits those
+/// blocks. Works on both the full and the relative complex through the
+/// [`HilbertComplex`] trait --- the boundary condition is the choice of complex.
+pub struct HodgeDirac {
+  /// Per-grade DOF offsets into the flat field vector; length $n + 2$, the last
+  /// entry the total DOF count.
+  offsets: Vec<usize>,
+  /// The per-grade Galerkin masses $M_k$, kept for per-grade energies.
+  masses: Vec<CsrMatrix>,
+  /// $M = plus.circle.big_k M_k$: SPD, block-diagonal.
+  mass_block: CsrMatrix,
+  /// $A$: skew-symmetric, block-tridiagonal, $M dot(u) = A u$.
+  op: CsrMatrix,
+}
+impl HodgeDirac {
+  pub fn assemble<C: HilbertComplex>(complex: &C) -> Self {
+    let dim = complex.dim();
+
+    let masses: Vec<CsrMatrix> = (0..=dim)
+      .map(|k| CsrMatrix::from(&complex.mass(k)))
+      .collect();
+    // The coboundaries $D_k: C^k -> C^(k+1)$, one per interior coupling.
+    let difs: Vec<CsrMatrix> = (0..dim).map(|k| complex.dif(k)).collect();
+
+    let mut offsets = Vec::with_capacity(dim + 2);
+    let mut acc = 0;
+    for mass in &masses {
+      offsets.push(acc);
+      acc += mass.nrows();
+    }
+    offsets.push(acc);
+    let total = acc;
+
+    // $M$: the masses on the block diagonal.
+    let mut mass_block = CooMatrix::new(total, total);
+    for (k, mass) in masses.iter().enumerate() {
+      let off = offsets[k];
+      for (r, c, &v) in mass.triplet_iter() {
+        mass_block.push(off + r, off + c, v);
+      }
+    }
+
+    // $A$: the sub-diagonal block $(k, k-1)$ is $U_k = M_k D_(k-1)$ (weak $dif$),
+    // the super-diagonal block $(k-1, k)$ its negated transpose $-U_k^T = -D_(k-1)^T M_k$
+    // (weak $delta$). Emitting both from the same triplet makes $A + A^T = 0$
+    // exact.
+    let mut op = CooMatrix::new(total, total);
+    for k in 1..=dim {
+      let u_k = &masses[k] * &difs[k - 1];
+      let (row, col) = (offsets[k], offsets[k - 1]);
+      for (r, c, &v) in u_k.triplet_iter() {
+        op.push(row + r, col + c, v);
+        op.push(col + c, row + r, -v);
+      }
+    }
+
+    Self {
+      offsets,
+      masses,
+      mass_block: CsrMatrix::from(&mass_block),
+      op: CsrMatrix::from(&op),
+    }
+  }
+
+  pub fn dim(&self) -> Dim {
+    self.offsets.len() - 2
+  }
+  pub fn ndofs_total(&self) -> usize {
+    *self.offsets.last().unwrap()
+  }
+
+  /// Pack a field's per-grade coefficients into the flat vector, in grade order.
+  /// The field must already live in this complex's DOFs.
+  pub fn flatten(&self, field: &MixedField) -> Vector {
+    let mut y = Vector::zeros(self.ndofs_total());
+    for k in 0..=self.dim() {
+      let (off, n) = (self.offsets[k], self.offsets[k + 1] - self.offsets[k]);
+      y.rows_mut(off, n).copy_from(field.grade(k).coeffs());
+    }
+    y
+  }
+
+  /// Unpack the flat vector back into a per-grade field.
+  pub fn unflatten(&self, y: &Vector) -> MixedField {
+    let grades = (0..=self.dim())
+      .map(|k| {
+        let (off, n) = (self.offsets[k], self.offsets[k + 1] - self.offsets[k]);
+        Cochain::new(k, y.rows(off, n).into_owned())
+      })
+      .collect();
+    MixedField::new(grades)
+  }
+
+  /// The total energy $1/2 thin u^T M u = 1/2 norm(u)_(L^2)^2$, the conserved
+  /// invariant of the Hodge–Dirac flow (the electromagnetic energy in the
+  /// Maxwell reading).
+  pub fn energy(&self, field: &MixedField) -> f64 {
+    0.5 * quadratic_form_sparse(&self.mass_block, &self.flatten(field))
+  }
+
+  /// The energy $1/2 norm(u_k)_(L^2)^2 = 1/2 thin u_k^T M_k u_k$ carried by a
+  /// single grade. In the Maxwell reading this is the electric energy at
+  /// $k = 1$, the magnetic at $k = 2$, and the Gauss-constraint residuals at the
+  /// extremal grades.
+  pub fn grade_energy(&self, field: &MixedField, grade: ExteriorGrade) -> f64 {
+    0.5 * quadratic_form_sparse(&self.masses[grade], field.grade(grade).coeffs())
+  }
+
+  /// The grade-parity 2-coloring of the DOFs (`true` on odd grades): the
+  /// partition under which $A$ is block-antidiagonal, since $dif$ and $delta$
+  /// shift grade by one and so never couple two grades of the same parity. This
+  /// is the coloring [`Leapfrog`] consumes to run the explicit Yee-style split.
+  pub fn grade_parity_coloring(&self) -> Vec<bool> {
+    let mut color = vec![false; self.ndofs_total()];
+    for k in (1..=self.dim()).step_by(2) {
+      color[self.offsets[k]..self.offsets[k + 1]].fill(true);
+    }
+    color
+  }
+}
+
+/// Restrict an ambient field to `complex`'s DOFs, grade by grade ($E_k^T$): the
+/// identity on the full complex, a restriction to interior DOFs on the relative
+/// one.
+fn restrict_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField {
+  MixedField::new(
+    (0..=complex.dim())
+      .map(|k| Cochain::new(k, complex.inclusion(k).transpose() * f.grade(k).coeffs()))
+      .collect(),
+  )
+}
+
+/// Extend a field on `complex`'s DOFs back to the ambient Whitney space grade by
+/// grade ($E_k$), by zero on the constrained boundary.
+fn extend_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField {
+  MixedField::new(
+    (0..=complex.dim())
+      .map(|k| Cochain::new(k, &complex.inclusion(k) * f.grade(k).coeffs()))
+      .collect(),
+  )
+}
+
+/// Evolve Maxwell's equations as the Hodge–Dirac flow $diff_t u = (dif - delta)
+/// u$ on the full de Rham complex, by Gauss–Legendre collocation.
+///
+/// The semi-discrete system $M dot(u) = A u$ has SPD $M$ and skew $A$, a linear
+/// Hamiltonian system whose quadratic energy $1/2 thin u^T M u$ Gauss–Legendre
+/// conserves *exactly* --- to roundoff, not merely bounded. `times` is assumed
+/// evenly spaced (the stage system is factored once). The boundary condition is
+/// the `complex`: essential (PEC) on the [`RelativeWhitneyComplex`], natural on
+/// the full [`WhitneyComplex`]. `initial` is given in the ambient Whitney space
+/// per grade, restricted to this complex's DOFs internally and the returned
+/// states extended back, so the caller is oblivious to the boundary condition.
+///
+/// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
+/// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
+pub fn solve_dirac<C: HilbertComplex>(
+  complex: &C,
+  times: &[f64],
+  initial: MixedField,
+) -> Vec<MixedField> {
+  let dirac = HodgeDirac::assemble(complex);
+
+  let dt = times.windows(2).next().map_or(0.0, |w| w[1] - w[0]);
+  let irk = LinearIrk::new(
+    Tableau::gauss_legendre(2),
+    &dirac.mass_block,
+    dirac.op.clone(),
+    dt,
+  );
+
+  let mut y = dirac.flatten(&restrict_field(complex, &initial));
+  let mut solution = Vec::with_capacity(times.len());
+  solution.push(extend_field(complex, &dirac.unflatten(&y)));
+  for t01 in times.windows(2) {
+    let [t0, _t1] = t01 else { unreachable!() };
+    y = irk.step(&y, *t0, |_| Vector::zeros(dirac.ndofs_total()));
+    solution.push(extend_field(complex, &dirac.unflatten(&y)));
+  }
+  solution
+}
+
+/// Evolve the Hodge–Dirac Maxwell flow by the explicit Yee-style leapfrog
+/// instead of [`solve_dirac`]'s implicit Gauss–Legendre: the grades are
+/// 2-colored by parity (the split under which $A$ is block-antidiagonal) and
+/// stepped by the symplectic [`Leapfrog`].
+///
+/// Cheaper per step --- only the two color-block masses are factored, never the
+/// coupled operator --- but only *conditionally* stable: `times` must resolve the
+/// CFL limit, $dif t lt.eq h_min \/ c$, or the staggered energy loses positive
+/// definiteness and the scheme blows up. Boundary conditions and the ambient
+/// restrict/extend are exactly as in [`solve_dirac`].
+pub fn solve_dirac_leapfrog<C: HilbertComplex>(
+  complex: &C,
+  times: &[f64],
+  initial: MixedField,
+) -> Vec<MixedField> {
+  let dirac = HodgeDirac::assemble(complex);
+  let color = dirac.grade_parity_coloring();
+
+  let dt = times.windows(2).next().map_or(0.0, |w| w[1] - w[0]);
+  let leapfrog = Leapfrog::new(&dirac.mass_block, &dirac.op, &color, dt);
+
+  let mut y = dirac.flatten(&restrict_field(complex, &initial));
+  let mut solution = Vec::with_capacity(times.len());
+  solution.push(extend_field(complex, &dirac.unflatten(&y)));
+  for _ in times.windows(2) {
+    y = leapfrog.step(&y);
+    solution.push(extend_field(complex, &dirac.unflatten(&y)));
+  }
+  solution
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::{
+    linalg::faer::FaerCholesky, problems::elliptic::HodgeBlocks, whitney_complex::WhitneyComplex,
+  };
+  use simplicial::gen::cartesian::CartesianMeshInfo;
+
+  use approx::assert_relative_eq;
+
+  /// A deterministic full field: every grade populated with a reproducible
+  /// pattern, enough to couple all rungs of the complex.
+  fn seed_field(dirac: &HodgeDirac) -> MixedField {
+    let grades = (0..=dirac.dim())
+      .map(|k| {
+        let n = dirac.offsets[k + 1] - dirac.offsets[k];
+        Cochain::new(
+          k,
+          Vector::from_fn(n, |i, _| ((7 * i + 3 * k + 1) % 11) as f64 - 5.0),
+        )
+      })
+      .collect();
+    MixedField::new(grades)
+  }
+
+  /// The discrete codifferential is the adjoint of the exterior derivative:
+  /// the assembled Hodge–Dirac operator is skew-symmetric, $A + A^T = 0$, to
+  /// roundoff and at every dimension. This is integration by parts made
+  /// structural --- the super-diagonal blocks are the negated transposes of the
+  /// sub-diagonal ones by construction --- and it is what conserves energy.
+  #[test]
+  fn operator_is_skew_symmetric() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let metric = coords.to_edge_lengths(&topology);
+      let whitney = WhitneyComplex::new(&topology, &metric);
+      let dirac = HodgeDirac::assemble(&whitney);
+
+      let a = &dirac.op;
+      let skew = a + &a.transpose();
+      assert_relative_eq!(
+        skew.values().iter().fold(0.0, |m: f64, &v| m.max(v.abs())),
+        0.0
+      );
+    }
+  }
+
+  /// The defining Dirac law: $sans(D)^2 = -Delta$. The discrete Hodge–Dirac
+  /// operator $M^(-1) A = dif - delta_h$ squared equals the negative discrete
+  /// Hodge–Laplacian, grade by grade --- the grade-shifting-by-two terms
+  /// cancelling by $dif compose dif = 0$. Checked against the independently
+  /// assembled up/down Laplacian blocks of [`HodgeBlocks`], at every grade.
+  #[test]
+  fn dirac_squared_is_negative_hodge_laplacian() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let metric = coords.to_edge_lengths(&topology);
+      let whitney = WhitneyComplex::new(&topology, &metric);
+      let dirac = HodgeDirac::assemble(&whitney);
+
+      // Mass solves for $M^(-1)$, one factorization per grade.
+      let chol: Vec<_> = (0..=dim)
+        .map(|k| FaerCholesky::new(dirac.masses[k].clone()))
+        .collect();
+      // The strong Hodge–Dirac action $v = (dif - delta_h) u$, from $M v = A u$.
+      let apply_dirac = |u: &MixedField| {
+        let mv = &dirac.op * dirac.flatten(u);
+        let grades = (0..=dim)
+          .map(|k| {
+            let (off, n) = (dirac.offsets[k], dirac.offsets[k + 1] - dirac.offsets[k]);
+            Cochain::new(k, chol[k].solve(&mv.rows(off, n).into_owned()))
+          })
+          .collect();
+        MixedField::new(grades)
+      };
+
+      let u = seed_field(&dirac);
+      let d2u = apply_dirac(&apply_dirac(&u));
+
+      #[allow(clippy::needless_range_loop)] // grade is the mathematical index
+      for grade in 0..=dim {
+        // The Hodge–Laplacian $Delta_h u|_k = M_k^(-1)(K^"up" + K^"dn") u_k$.
+        let hb = HodgeBlocks::compute(&whitney, grade);
+        let uk = u.grade(grade).coeffs();
+        let up = hb.stiff() * uk;
+        let dn = if hb.n_sigma > 0 {
+          let s = FaerCholesky::new(hb.mass_sigma.clone()).solve(&(&hb.codif_dn() * uk));
+          &hb.dif_sigma() * s
+        } else {
+          Vector::zeros(hb.n_u)
+        };
+        let lap = chol[grade].solve(&(up + dn));
+
+        let lhs = d2u.grade(grade).coeffs();
+        assert_relative_eq!(
+          (lhs + &lap).norm(),
+          0.0,
+          epsilon = 1e-9 * lap.norm().max(1.0)
+        );
+      }
+    }
+  }
+
+  /// The structure-preserving law, at every dimension: the total Hodge–Dirac
+  /// energy $1/2 norm(u)_(L^2)^2 = 1/2 thin u^T M u$ is conserved to roundoff.
+  /// Gauss–Legendre is symplectic and, on this linear skew system, conserves the
+  /// quadratic invariant exactly --- across all grades of the coupled complex
+  /// at once.
+  #[test]
+  fn energy_conserved_at_every_dimension() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let metric = coords.to_edge_lengths(&topology);
+      let whitney = WhitneyComplex::new(&topology, &metric);
+      let dirac = HodgeDirac::assemble(&whitney);
+
+      let initial = seed_field(&dirac);
+      let times: Vec<f64> = (0..=100).map(|i| 0.05 * i as f64).collect();
+      let solution = solve_dirac(&whitney, &times, initial);
+
+      let energy0 = dirac.energy(&solution[0]);
+      assert!(energy0 > 0.0);
+      for state in &solution {
+        let energy = dirac.energy(state);
+        assert_relative_eq!(energy, energy0, epsilon = 1e-9 * energy0);
+      }
+    }
+  }
+
+  /// The explicit leapfrog is structure-preserving too. Built from the same
+  /// Hodge–Dirac $M$ and skew $A$, 2-colored by grade parity, it conserves its
+  /// staggered invariant to roundoff at every dimension --- within CFL. The same
+  /// symplectic guarantee as Gauss–Legendre, for the cheap explicit scheme. This
+  /// also exercises the coloring: [`Leapfrog::new`] asserts $A$ is
+  /// block-antidiagonal under it, which holds iff $dif, delta$ never couple two
+  /// grades of the same parity.
+  #[test]
+  fn leapfrog_conserves_staggered_energy_at_every_dimension() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let metric = coords.to_edge_lengths(&topology);
+      let whitney = WhitneyComplex::new(&topology, &metric);
+      let dirac = HodgeDirac::assemble(&whitney);
+      let color = dirac.grade_parity_coloring();
+
+      // Within the CFL limit (wave speed c = 1 in vacuum).
+      let dt = 0.1 * metric.mesh_width_min();
+      let leapfrog = Leapfrog::new(&dirac.mass_block, &dirac.op, &color, dt);
+
+      let mut y = dirac.flatten(&seed_field(&dirac));
+      let e0 = leapfrog.conserved_energy(&y);
+      assert!(e0 > 0.0);
+      for _ in 0..200 {
+        y = leapfrog.step(&y);
+        assert_relative_eq!(leapfrog.conserved_energy(&y), e0, epsilon = 1e-9 * e0);
+      }
+    }
+  }
+
+  /// The explicit and implicit solvers integrate the *same* equation: over a
+  /// short run at small $dif t$ they agree to the leapfrog's second order. This
+  /// validates the [`solve_dirac_leapfrog`] wiring (restrict/extend, flatten,
+  /// grade-parity coloring) against the trusted Gauss–Legendre [`solve_dirac`].
+  #[test]
+  fn leapfrog_agrees_with_gauss_legendre() {
+    let (topology, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_complex();
+    let metric = coords.to_edge_lengths(&topology);
+    let whitney = WhitneyComplex::new(&topology, &metric);
+    let dirac = HodgeDirac::assemble(&whitney);
+
+    let dt = 0.02 * metric.mesh_width_min();
+    let times: Vec<f64> = (0..=50).map(|i| dt * i as f64).collect();
+    let initial = seed_field(&dirac);
+
+    let implicit = solve_dirac(&whitney, &times, initial.clone());
+    let explicit = solve_dirac_leapfrog(&whitney, &times, initial);
+
+    let last_implicit = dirac.flatten(implicit.last().unwrap());
+    let last_explicit = dirac.flatten(explicit.last().unwrap());
+    let rel_err = (&last_implicit - &last_explicit).norm() / last_implicit.norm();
+    assert!(rel_err < 1e-2, "solvers disagree by {rel_err}");
+  }
+}
