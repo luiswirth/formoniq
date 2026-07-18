@@ -1385,8 +1385,8 @@ mod tests {
 
   /// The three worked examples are all grade-1 line fields (no scalar
   /// density), named for the picker -- and the edge-by-vertex-pair lookup in
-  /// [`crate::gallery::CochainSpec::resolve`] found every edge of
-  /// `plot/in/triforce`'s coefficient table without panicking, which is the
+  /// [`crate::gallery::CochainSpec::resolve`] found every edge of the
+  /// triforce's coefficient table without panicking, which is the
   /// actual thing under test.
   #[test]
   fn triforce_cochains_are_three_named_line_fields() {
