@@ -40,6 +40,17 @@ preserves the topological and structural features of the continuous problem in
 the discretization — which is what makes it well suited to the Hodge-Laplace
 equation and to Maxwell's equations.
 
+The unification is concrete: the first-order Whitney forms, indexed only by form
+degree k, recover the classical finite element families as special cases —
+
+- k = 0: Lagrange (nodal) elements,
+- k = 1: Nédélec edge elements,
+- k = n−1: Raviart–Thomas elements,
+- k = n: piecewise-constant discontinuous elements.
+
+Scalar and vector FEM, edge and face elements are one construction read off at
+different degrees, rather than four separately implemented families.
+
 Conventional finite element methods rely on explicit coordinates for the
 computational domain. A coordinate-free formulation is closer to the intrinsic
 nature of differential geometry: representing the domain as a simplicial
