@@ -8,7 +8,10 @@ use crate::linalg::{CooMatrix, CooMatrixExt};
 
 use itertools::Itertools;
 
-use std::{io, path::Path, sync::OnceLock};
+use std::sync::OnceLock;
+
+#[cfg(feature = "serde")]
+use std::{io, path::Path};
 
 /// A simplicial manifold complex.
 ///
@@ -64,6 +67,7 @@ impl Complex {
 /// Serialization is just the top-dimensional [`Skeleton`] (its cells): every
 /// other skeleton, and every cached operator, is [`Complex::from_cells`]'s
 /// job to rederive, not data to store.
+#[cfg(feature = "serde")]
 impl Complex {
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
     self.skeleton_raw(self.dim()).save(path)
@@ -254,6 +258,7 @@ mod test {
   /// Round-tripping through CBOR reproduces the same topology: the boundary
   /// (an $O(n^3)$ derived quantity, not stored data) matches, so the save/load
   /// pair is exercised through `Complex::from_cells`, not just through serde.
+  #[cfg(feature = "serde")]
   #[test]
   fn save_load_roundtrip() {
     use crate::gen::cartesian::CartesianMeshInfo;

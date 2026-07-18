@@ -14,7 +14,8 @@ use crate::Dim;
 /// positions ${0, dots, k}$ into the vertex alphabet: all sign combinatorics
 /// (boundary, subsimplices) happens positionally in [`Combination`] and is
 /// mapped through the vertex list by [`Self::select`].
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Simplex {
   pub vertices: Vec<VertexIdx>,
 }

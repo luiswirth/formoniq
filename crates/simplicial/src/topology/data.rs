@@ -78,7 +78,8 @@ pub trait ComplexData {
 
 /// The `Vec`-backed [`SkeletonData`]: dense owned data, one `T` per simplex of
 /// a grade. Supports `array[id]` / `array[kidx]` indexing.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SkeletonVec<T> {
   grade: Dim,
   values: Vec<T>,

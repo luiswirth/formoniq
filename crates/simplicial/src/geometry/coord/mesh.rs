@@ -17,10 +17,12 @@ use gramian::RiemannianMetric;
 
 use itertools::Itertools;
 
+#[cfg(feature = "serde")]
 use std::{io, path::Path};
 
 /// The coordinates of the vertices of the mesh.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MeshCoords {
   matrix: Matrix,
 }
@@ -66,9 +68,11 @@ impl MeshCoords {
     self.nvertices() == topology.vertices().len()
   }
 
+  #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
     crate::io::cbor::save_cbor(self, path)
   }
+  #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     crate::io::cbor::load_cbor(path)
   }
