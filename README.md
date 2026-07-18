@@ -11,6 +11,100 @@ An interactive build of the viewer runs in the browser, with no installation, at
 [lwirth.com/formoniq](https://lwirth.com/formoniq): meshes, cochains and the PDE
 solutions computed on them, solved client-side via WebAssembly and WebGPU.
 
+## What it does
+
+- **Arbitrary dimension and form degree.** Both are runtime values, and nothing
+  is specialized to 2D or 3D. The degenerate cases (the base dimension, the
+  extremal grades, a one-element mesh) run on the same code paths as the interior
+  ones and return the trivial answer rather than being excluded.
+- **Three interchangeable geometry inputs.** Assembly consumes only the per-cell
+  Riemannian metric, provided as Regge edge lengths, raw metric tensors, or
+  vertex coordinates. Nothing in the core path needs coordinates.
+- **Problems.** The Hodge-Laplace source and eigenvalue problems in the mixed
+  Arnold, Falk and Winther formulation, with the harmonic space and gauge
+  constraint handled explicitly. Maxwell's equations as the Hodge-Dirac evolution
+  on the full de Rham complex. The heat and wave equations.
+- **Structure-preserving time integration.** Symplectic Gauss-Legendre and an
+  explicit Yee-style leapfrog conserving the discrete energy, and L-stable Radau
+  IIA for the dissipative problems, on the singular-mass systems the mixed
+  formulation produces.
+- **Native, pure-Rust numerics.** Parallel assembly with rayon, and faer for the
+  solves: a sparse LU for the indefinite saddle-point system, Cholesky for the
+  constrained positive-definite systems, and a shift-invert Lanczos for the
+  generalized eigenproblems. No external solver toolchain.
+
+## Core crates
+
+The workspace is a ladder of crates, each adding one thing to the ones below it.
+Dependencies flow strictly downward, and the separation of topology from
+geometry, and of intrinsic geometry from any embedding, is enforced by the crate
+boundaries rather than by convention.
+
+- **`multiindex`**: colexicographic combinatorics of finite index sets, with
+  ranked combinations, signed index algebra and radix multi-indices.
+- **`gramian`**: inner-product and metric structure in a basis, with Gram
+  matrices, Riemannian metrics and the induced distance geometry.
+- **`coorder`**: affine coordinates tagged by the space they live in, so the maps
+  between coordinate spaces are explicit and their confusion does not compile.
+- **`exterior`**: the exterior algebra, with variance (forms versus vectors)
+  tracked at the type level, so pullback, the musical isomorphisms and the Hodge
+  star take their direction and metric from the type rather than from a
+  convention.
+- **`simplicial`**: the simplicial manifold, with pure-combinatorial topology on
+  one side and geometry entering only through a `Geometry` trait on the other.
+- **`glatt`**: the continuum manifold that the simplicial one approximates, with
+  parametrizations and analytic differential-form data on them.
+- **`derham`**: discrete differential forms, where the exterior algebra, the mesh
+  and the continuum meet. The home of cochains, Whitney interpolation and the de
+  Rham map.
+- **`formoniq`**: the FEM engine, holding assembly, boundary conditions, time
+  integration, the solvers and the problem formulations.
+
+Because each concept lives in the lowest crate that can express it, the lower
+crates are self-contained mathematical objects rather than FEEC-internal
+plumbing, and are usable on their own. `exterior` is an exterior-algebra library
+that knows nothing of meshes or PDEs. `simplicial` carries combinatorial topology
+(boundary operators, homology, Betti numbers) alongside intrinsic Regge geometry,
+none of which needs a differential form. `multiindex` is colex-ranked
+combinatorics, `gramian` is metric linear algebra, and `glatt` is continuum
+differential geometry. FEEC is what `derham` and `formoniq` build on top, not
+something the layers below are entangled with. Each core crate carries its own
+README and is published on its own.
+
+## Visualization
+
+`studio` is the interactive viewer for the engine: a wgpu/winit/egui application
+for inspecting meshes, simplicial manifolds, cochains and the PDE solutions
+computed on them. It runs natively, and in the browser via WebAssembly and
+WebGPU with the solve running client-side, so the same viewer is reachable
+without a toolchain at [lwirth.com/formoniq](https://lwirth.com/formoniq). It
+sits at the top of the stack, depends downward on `formoniq` and below, and is
+kept off the core build's critical path (excluded from the workspace's default
+members), so a core change is never gated on the graphics stack.
+
+The engine is intrinsic-first and needs no embedding; a viewer needs one, because
+nothing reaches the screen until a point has a position. `studio` is therefore
+the deliberate consumer of that extrinsic carve-out. It is kept intrinsic as far
+as it can be: a curve integrator, for instance, works in the barycentric charts
+of the atlas and crosses between cells through their affine transition maps,
+committing to an ambient position only at the last step. The embedding enters at
+two named seams. The `Scene` carries the engine's own types (`Complex`,
+`MeshCoords`, `Cochain`) rather than a lossy export, so coloring, displacement
+and the choice of render mark stay decisions made on the real object. The bake
+then reduces a complex to what a rasterizer draws: simplices of dimension ≤ 2
+embedded in R³, with winding and position made explicit. Downstream of the bake
+there are no FEEC types, only ambient geometry.
+
+Ambient dimension is fixed at 3, the native space of the GPU, while intrinsic
+dimension and form grade stay general within it. Two reductions carry this. Form
+grade reduces to a render mark through the reduced grade min(k, n−k): a scalar
+density coloring, a glyph or particle line field, a standing-wave displacement
+height. Intrinsic dimension reduces to a render primitive min(n, 2): a surface to
+wound triangles, a curve to segments, a point set to points, and a solid to the
+2-simplices of its boundary. One segment pipeline then serves the wireframe
+overlay, a line field's traced ribbons and a 1-manifold's own cells, distinguished
+only by material data. `crates/studio/CLAUDE.md` documents the design in full.
+
 ## Motivation
 
 Classical finite element methods are usually written for a fixed dimension, in
@@ -107,100 +201,6 @@ functoriality of the exterior power and the involution of the Hodge star are
 stated as theorems and swept over all dimensions and grades. The suite is a
 machine-checked statement of the mathematics rather than a table of golden
 numbers.
-
-## What it does
-
-- **Arbitrary dimension and form degree.** Both are runtime values, and nothing
-  is specialized to 2D or 3D. The degenerate cases (the base dimension, the
-  extremal grades, a one-element mesh) run on the same code paths as the interior
-  ones and return the trivial answer rather than being excluded.
-- **Three interchangeable geometry inputs.** Assembly consumes only the per-cell
-  Riemannian metric, provided as Regge edge lengths, raw metric tensors, or
-  vertex coordinates. Nothing in the core path needs coordinates.
-- **Problems.** The Hodge-Laplace source and eigenvalue problems in the mixed
-  Arnold, Falk and Winther formulation, with the harmonic space and gauge
-  constraint handled explicitly. Maxwell's equations as the Hodge-Dirac evolution
-  on the full de Rham complex. The heat and wave equations.
-- **Structure-preserving time integration.** Symplectic Gauss-Legendre and an
-  explicit Yee-style leapfrog conserving the discrete energy, and L-stable Radau
-  IIA for the dissipative problems, on the singular-mass systems the mixed
-  formulation produces.
-- **Native, pure-Rust numerics.** Parallel assembly with rayon, and faer for the
-  solves: a sparse LU for the indefinite saddle-point system, Cholesky for the
-  constrained positive-definite systems, and a shift-invert Lanczos for the
-  generalized eigenproblems. No external solver toolchain.
-
-## Core crates
-
-The workspace is a ladder of crates, each adding one thing to the ones below it.
-Dependencies flow strictly downward, and the separation of topology from
-geometry, and of intrinsic geometry from any embedding, is enforced by the crate
-boundaries rather than by convention.
-
-- **`multiindex`**: colexicographic combinatorics of finite index sets, with
-  ranked combinations, signed index algebra and radix multi-indices.
-- **`gramian`**: inner-product and metric structure in a basis, with Gram
-  matrices, Riemannian metrics and the induced distance geometry.
-- **`coorder`**: affine coordinates tagged by the space they live in, so the maps
-  between coordinate spaces are explicit and their confusion does not compile.
-- **`exterior`**: the exterior algebra, with variance (forms versus vectors)
-  tracked at the type level, so pullback, the musical isomorphisms and the Hodge
-  star take their direction and metric from the type rather than from a
-  convention.
-- **`simplicial`**: the simplicial manifold, with pure-combinatorial topology on
-  one side and geometry entering only through a `Geometry` trait on the other.
-- **`glatt`**: the continuum manifold that the simplicial one approximates, with
-  parametrizations and analytic differential-form data on them.
-- **`derham`**: discrete differential forms, where the exterior algebra, the mesh
-  and the continuum meet. The home of cochains, Whitney interpolation and the de
-  Rham map.
-- **`formoniq`**: the FEM engine, holding assembly, boundary conditions, time
-  integration, the solvers and the problem formulations.
-
-Because each concept lives in the lowest crate that can express it, the lower
-crates are self-contained mathematical objects rather than FEEC-internal
-plumbing, and are usable on their own. `exterior` is an exterior-algebra library
-that knows nothing of meshes or PDEs. `simplicial` carries combinatorial topology
-(boundary operators, homology, Betti numbers) alongside intrinsic Regge geometry,
-none of which needs a differential form. `multiindex` is colex-ranked
-combinatorics, `gramian` is metric linear algebra, and `glatt` is continuum
-differential geometry. FEEC is what `derham` and `formoniq` build on top, not
-something the layers below are entangled with. Each core crate carries its own
-README and is published on its own.
-
-## Visualization
-
-`studio` is the interactive viewer for the engine: a wgpu/winit/egui application
-for inspecting meshes, simplicial manifolds, cochains and the PDE solutions
-computed on them. It runs natively, and in the browser via WebAssembly and
-WebGPU with the solve running client-side, so the same viewer is reachable
-without a toolchain at [lwirth.com/formoniq](https://lwirth.com/formoniq). It
-sits at the top of the stack, depends downward on `formoniq` and below, and is
-kept off the core build's critical path (excluded from the workspace's default
-members), so a core change is never gated on the graphics stack.
-
-The engine is intrinsic-first and needs no embedding; a viewer needs one, because
-nothing reaches the screen until a point has a position. `studio` is therefore
-the deliberate consumer of that extrinsic carve-out. It is kept intrinsic as far
-as it can be: a curve integrator, for instance, works in the barycentric charts
-of the atlas and crosses between cells through their affine transition maps,
-committing to an ambient position only at the last step. The embedding enters at
-two named seams. The `Scene` carries the engine's own types (`Complex`,
-`MeshCoords`, `Cochain`) rather than a lossy export, so coloring, displacement
-and the choice of render mark stay decisions made on the real object. The bake
-then reduces a complex to what a rasterizer draws: simplices of dimension ≤ 2
-embedded in R³, with winding and position made explicit. Downstream of the bake
-there are no FEEC types, only ambient geometry.
-
-Ambient dimension is fixed at 3, the native space of the GPU, while intrinsic
-dimension and form grade stay general within it. Two reductions carry this. Form
-grade reduces to a render mark through the reduced grade min(k, n−k): a scalar
-density coloring, a glyph or particle line field, a standing-wave displacement
-height. Intrinsic dimension reduces to a render primitive min(n, 2): a surface to
-wound triangles, a curve to segments, a point set to points, and a solid to the
-2-simplices of its boundary. One segment pipeline then serves the wireframe
-overlay, a line field's traced ribbons and a 1-manifold's own cells, distinguished
-only by material data. `crates/studio/CLAUDE.md` documents the design in full.
 
 ## Getting started
 
