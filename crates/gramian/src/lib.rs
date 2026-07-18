@@ -65,6 +65,17 @@ impl Gramian {
       .expect("Symmetric Positive Definite is always invertible.");
     Self::new_unchecked(matrix)
   }
+
+  /// The pullback $J^top G J$ of the metric along a linear map $J$.
+  ///
+  /// $G$ is a covariant 2-tensor, and this is its pullback: if $J: U -> V$
+  /// sends a basis of $U$ to vectors of $V$, the result is the Gramian $U$
+  /// inherits by measuring those images with $G$. Injective $J$ (full column
+  /// rank) keeps the result s.p.d.; the affine child-cell Jacobians of a
+  /// simplex subdivision are square and invertible, so it stays a metric.
+  pub fn pullback(&self, jacobian: &Matrix) -> Self {
+    Self::new_unchecked(self.inner_mat(jacobian, jacobian))
+  }
 }
 
 /// Inner product functionality expressed directly in terms of the basis.
@@ -168,6 +179,16 @@ impl RiemannianMetric {
   /// $sqrt(det g)$: the volume scaling factor of the metric.
   pub fn det_sqrt(&self) -> f64 {
     self.vector_gramian.det_sqrt()
+  }
+
+  /// The pullback of the metric along a linear map $J$ of tangent spaces:
+  /// the metric $J^top g J$ that a domain inherits by pushing its vectors
+  /// through $J$ and measuring them with $g$. The covector Gramian is the
+  /// inverse, recomputed rather than pushed forward. For an affine subcell of
+  /// a flat cell, $J$ is the cell's constant Jacobian and this is the subcell's
+  /// exact metric.
+  pub fn pullback(&self, jacobian: &Matrix) -> Self {
+    Self::new(self.vector_gramian.pullback(jacobian))
   }
 }
 
