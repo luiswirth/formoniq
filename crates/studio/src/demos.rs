@@ -27,9 +27,9 @@ pub(crate) fn default_selection(scene: &Scene) -> Selection {
 
 /// The "triforce" teaching mesh: a central equilateral triangle with one
 /// congruent triangle mirrored outward across each of its three edges, four
-/// cells in all. The same layout as `plot/in/triforce`, the thesis figures'
-/// worked example of a global shape function -- reused here rather than
-/// invented anew, so the Whitney-basis study on it reproduces those figures.
+/// cells in all. The layout of the thesis figures' worked example of a global
+/// shape function -- reused here rather than invented anew, so the
+/// Whitney-basis study on it reproduces those figures.
 /// Every interior edge is shared by exactly two cells and the one interior
 /// vertex by three, enough to show a global shape function's multi-cell support
 /// without the mesh itself being interesting.
@@ -60,14 +60,13 @@ pub fn triforce() -> (Complex, MeshCoords) {
 
 /// The constant / pure-curl / pure-divergence worked grade-1 fields on the
 /// triforce mesh, as data: each a [`CochainSpec::ByEdges`] whose coefficients
-/// reproduce `plot/in/triforce`'s `constant`/`rot`/`div` cochains. Addressed by
+/// reproduce the thesis figures' `constant`/`rot`/`div` cochains. Addressed by
 /// vertex pair rather than by the exporter's file order, since a mesh's own
 /// edge indexing need not agree with it -- resolving against the mesh is
 /// [`CochainSpec`]'s own, at build time.
 pub fn triforce_examples() -> Vec<NamedCochain> {
   // (v0, v1, constant, curl, div), v0 < v1 matching the canonical (positively
-  // oriented) edge orientation both `plot/in/triforce` and the triforce
-  // topology agree on.
+  // oriented) edge orientation the triforce topology agrees on.
   #[rustfmt::skip]
   let edges: [(usize, usize, f64, f64, f64); 9] = [
     (0, 1,  1.0,  1.0, 0.0),

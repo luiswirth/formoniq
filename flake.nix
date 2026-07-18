@@ -36,14 +36,6 @@
               cargo-edit
               cargo-flamegraph
               linuxPackages_latest.perf
-
-              (python3.withPackages (ps: with ps; [
-                python-lsp-server
-
-                numpy
-                scipy
-                matplotlib
-              ]))
             ];
           };
         }
