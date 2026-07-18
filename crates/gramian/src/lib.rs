@@ -285,6 +285,86 @@ mod tests {
     assert!((g.angle_cos(&v, &w) - 1.0 / 5.0_f64.sqrt()).abs() < 1e-12);
   }
 
+  // 2 on the diagonal, 1 off it: SPD with eigenvalues `dim+1` (once) and 1.
+  fn spd(dim: Dim) -> Gramian {
+    let mut m = Matrix::from_element(dim, dim, 1.0);
+    for i in 0..dim {
+      m[(i, i)] = 2.0;
+    }
+    Gramian::new_unchecked(m)
+  }
+
+  // A deterministic full-column-rank `nrows x ncols` matrix (ncols <= nrows):
+  // unit lower-triangular columns, injective, so the pullback stays s.p.d.
+  fn full_col_rank(nrows: usize, ncols: usize) -> Matrix {
+    Matrix::from_fn(nrows, ncols, |i, j| {
+      if i == j {
+        1.0
+      } else if i > j {
+        0.5
+      } else {
+        0.0
+      }
+    })
+  }
+
+  fn close(a: &Matrix, b: &Matrix) {
+    assert_eq!(a.shape(), b.shape());
+    assert!((a - b).amax() < 1e-9, "{a} != {b}");
+  }
+
+  /// The pullback is functorial: pulling $g$ back along a composite $A B$
+  /// equals pulling first along $A$, then along $B$,
+  /// $(A B)^* g = B^* (A^* g)$, i.e. $(A B)^top g (A B) = B^top (A^top g A) B$.
+  /// Swept over the full grade/dimension range including the degenerate
+  /// zero-column maps, where the pulled-back metric is the empty $0 times 0$
+  /// Gramian.
+  #[test]
+  fn pullback_is_functorial() {
+    for n in 0..=4 {
+      let g = spd(n);
+      for k in 0..=n {
+        let a = full_col_rank(n, k);
+        for m in 0..=k {
+          let b = full_col_rank(k, m);
+          let composite = &a * &b;
+          let lhs = g.pullback(&composite);
+          let rhs = g.pullback(&a).pullback(&b);
+          close(lhs.matrix(), rhs.matrix());
+        }
+      }
+    }
+  }
+
+  /// The pullback is literally $J^top G J$, and pulling back along the identity
+  /// changes nothing.
+  #[test]
+  fn pullback_matches_definition_and_fixes_identity() {
+    for n in 1..=4 {
+      let g = spd(n);
+      let j = full_col_rank(n, n);
+      close(g.pullback(&j).matrix(), &(j.transpose() * g.matrix() * &j));
+      close(g.pullback(&Matrix::identity(n, n)).matrix(), g.matrix());
+    }
+  }
+
+  /// A pulled-back Riemannian metric recomputes its covector Gramian as the
+  /// inverse of the pulled-back vector Gramian, rather than pushing the old
+  /// inverse forward.
+  #[test]
+  fn riemannian_pullback_inverts_the_pulled_back_metric() {
+    for n in 1..=4 {
+      let metric = RiemannianMetric::new(spd(n));
+      let j = full_col_rank(n, n);
+      let pulled = metric.pullback(&j);
+      let expected_covector = pulled.vector_gramian().clone().inverse();
+      close(
+        pulled.covector_gramian().matrix(),
+        expected_covector.matrix(),
+      );
+    }
+  }
+
   #[test]
   fn riemannian_metric_measures_tangent_vectors_with_g() {
     let g = Gramian::new(Matrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 3.0]));
