@@ -35,9 +35,9 @@ commentary on them. Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing —
-`{ multiindex, gramian, coorder } → exterior → { simplicial, chartan } →
+`{ multiindex, gramian, coorder } → exterior → { simplicial, glatt } →
 derham → formoniq → studio`, where `multiindex`/`gramian`/`coorder` are
-foundational siblings and `simplicial`/`chartan` are siblings one level up:
+foundational siblings and `simplicial`/`glatt` are siblings one level up:
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
@@ -46,14 +46,14 @@ foundational siblings and `simplicial`/`chartan` are siblings one level up:
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
 | `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
-| `chartan`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
+| `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
 | `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
 
 No crate exists solely to hold a shared type alias. `Vector`/`Matrix` (dense
 nalgebra) are trivial aliases with no nominal identity to share, so `gramian`,
-`coorder`, `exterior` and `chartan` each declare their own directly from
+`coorder`, `exterior` and `glatt` each declare their own directly from
 `nalgebra` rather than depending on anything for them; `simplicial` is the
 lowest crate that needs *sparse* matrices (its boundary operators), so that is
 where `CsrMatrix`/`CooMatrix` and the extension traits built on them
@@ -65,7 +65,7 @@ every leaf would then compile for nothing.
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `simplicial` never about forms.
-`simplicial` (the simplicial $M_h$) and `chartan` (the smooth $M$ it
+`simplicial` (the simplicial $M_h$) and `glatt` (the smooth $M$ it
 approximates) are independent objects, so neither depends on the other; their
 one relation — pulling continuum data onto the mesh, and the error that costs —
 is the join, and it lives in `derham`, the crate above both.
@@ -82,14 +82,14 @@ the extrinsic side.
 express it with the dependencies it already has. If expressing it there would
 need a new downward dependency, it belongs one level up instead, in the crate
 that joins the two — which is why `derham` exists, where `exterior`, `simplicial`
-and `chartan` all meet. Never widen a lower crate's dependencies to make a method
+and `glatt` all meet. Never widen a lower crate's dependencies to make a method
 fit.
 
 **The building-block crates are standalone, and published as such.** Concepts
 floating up leaves each lower crate a self-contained mathematical object, not
 FEEC-internal plumbing: `exterior` is an exterior-algebra library, `simplicial`
 a simplicial-topology-and-Regge-geometry one, `multiindex` colex combinatorics,
-`chartan` continuum differential geometry — each usable, and released, on its own,
+`glatt` continuum differential geometry — each usable, and released, on its own,
 with FEEC only the thing `derham` and `formoniq` build on top. This is a goal to
 uphold, not just an emergent property: a lower crate must earn its keep for a
 reader who has never heard of FEEC. So its public docs explain it in its own
@@ -102,7 +102,7 @@ cross-crate relation *is* the content, and naming it is right.
 Composition therefore reaches down from above: a free function in the joining
 crate by default, or a thin `...Ext` trait where method syntax carries the math
 better — `CoordFieldExt::pullback_through` (and its identity special case
-`pullback_on`) and `SectionExt::sampled_on` (a `chartan` field meeting a
+`pullback_on`) and `SectionExt::sampled_on` (a `glatt` field meeting a
 `simplicial` mesh, in `derham`), `SimplexRefExt` (geometry methods on a topology
 handle, which is how invariant 1 is upheld inside `simplicial`, below crate
 granularity).
@@ -136,7 +136,7 @@ and passes tests.
    manifold does not exist. A **field** is a `Section<V>`: a section of the
    exterior bundle, evaluated at a `MeshPoint`, valued in the reference frame of
    that chart. The `CoordField<V, S>` of analytic data on the *continuum* (exact
-   solutions, sources) is a *different* concept, living in `chartan`, and
+   solutions, sources) is a *different* concept, living in `glatt`, and
    reaches the mesh only through the `Pullback` bridge — pulled through a cell's
    parametrization and the continuum chart, the flat domain being the identity
    special case. Sampling back into ambient coordinates (`Sampler`) is not

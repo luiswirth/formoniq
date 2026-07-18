@@ -99,8 +99,8 @@ pub fn l2_projection<F: Sync + Section<Covariant>>(
 mod test {
   use super::*;
 
-  use chartan::field::DiffFormClosure;
   use derham::section::CoordFieldExt;
+  use glatt::field::DiffFormClosure;
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;

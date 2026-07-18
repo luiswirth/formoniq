@@ -8,7 +8,7 @@ publish = false
 # Internal workspace dependencies
 formoniq = { path = "../formoniq" }
 derham = { path = "../derham", features = ["serde"] }
-chartan = { path = "../chartan" }
+glatt = { path = "../glatt" }
 simplicial = { path = "../simplicial", features = ["serde"] }
 coorder = { path = "../coorder" }
 gramian = { path = "../gramian" }

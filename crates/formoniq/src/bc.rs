@@ -5,7 +5,7 @@
 //! $
 //!   inner(dif omega, eta)_(L^2 Lambda^k)
 //!   = inner(omega, delta eta)_(L^2 Lambda^(k-1))
-//!   + integral_(diff M) "tr" omega wedge "tr" (hodge eta).
+//!   \+ integral_(diff M) "tr" omega wedge "tr" (hodge eta).
 //! $
 //! The boundary term is what a boundary condition disposes of. An *essential*
 //! condition constrains $"tr" omega$ and so is imposed on the trial/test space

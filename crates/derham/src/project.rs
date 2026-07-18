@@ -119,7 +119,7 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
-    chartan::field::DiffFormClosure, coorder::Coord, exterior::ExteriorElement,
+    coorder::Coord, exterior::ExteriorElement, glatt::field::DiffFormClosure,
     simplicial::gen::cartesian::CartesianMeshInfo, simplicial::linalg::Vector,
   };
 
@@ -171,7 +171,7 @@ mod test {
     ];
 
     for (form, dif_form) in cases {
-      let dim = chartan::field::CoordField::dim(&form);
+      let dim = glatt::field::CoordField::dim(&form);
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
 
       let dif_of_projected =

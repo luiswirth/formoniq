@@ -10,7 +10,7 @@
 //! no global coordinate system. Sections therefore work verbatim on a purely
 //! metric (Regge) manifold, where no global coordinate exists at all.
 //!
-//! The mesh-independent [`CoordField`]s of the `chartan` crate -- analytic
+//! The mesh-independent [`CoordField`]s of the `glatt` crate -- analytic
 //! data on the smooth manifold $M$ -- connect to this world through the functor
 //! whose direction the [`Variance`] fixes:
 //!
@@ -29,11 +29,11 @@
 use crate::interpolate::interpolant::WhitneyInterpolant;
 
 use {
-  chartan::{field::CoordField, parametrization::Parametrization},
   coorder::{Ambient, CoordSpace, Coords},
   exterior::{
     Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
   },
+  glatt::{field::CoordField, parametrization::Parametrization},
   gramian::RiemannianMetric,
   simplicial::linalg::Vector,
   simplicial::{
@@ -467,7 +467,7 @@ mod test {
   use crate::project::derham_map;
 
   use {
-    chartan::field::DiffFormClosure,
+    glatt::field::DiffFormClosure,
     simplicial::linalg::Vector,
     simplicial::{
       gen::cartesian::CartesianMeshInfo,
@@ -551,7 +551,7 @@ mod test {
   /// is a continuum whose chart is the identity" claim, made a theorem.
   #[test]
   fn flat_pullback_is_identity_chart() {
-    use chartan::parametrization::Parametrization;
+    use glatt::parametrization::Parametrization;
     use simplicial::atlas::MeshPoint;
 
     for dim in 1..=3 {
@@ -587,7 +587,7 @@ mod test {
   /// same finite-difference Jacobian, so the check is deterministic.
   #[test]
   fn composite_pullback_is_functorial() {
-    use chartan::parametrization::Parametrization;
+    use glatt::parametrization::Parametrization;
     use simplicial::{
       atlas::MeshPoint, gen::sphere::mesh_sphere_surface, geometry::coord::simplex::SimplexRefExt,
     };
