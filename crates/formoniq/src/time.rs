@@ -5,14 +5,14 @@
 //!
 //! with $M$ the (constrained) mass matrix, $A$ a constant sparse operator, and
 //! $f$ a possibly time-dependent forcing. This is the shape shared by
-//! [`crate::problems::wave`] (position-velocity block system), the curl-curl
-//! form of [`crate::problems::maxwell`], and [`crate::problems::heat`] after
-//! its affine boundary lifting.
+//! [`crate::problems::wave`] (position-velocity block system), the skew
+//! Hodge–Dirac system of [`crate::problems::dirac`], and
+//! [`crate::problems::heat`] after its affine boundary lifting.
 //!
 //! Two [`Tableau`] families serve the two structural regimes: Gauss-Legendre
 //! collocation is symplectic and conserves every quadratic invariant of a
 //! linear system exactly -- the correct choice for the Hamiltonian systems
-//! (wave, Maxwell curl-curl), where energy conservation, not just bounded
+//! (wave, Hodge–Dirac Maxwell), where energy conservation, not just bounded
 //! drift, is available. Radau IIA is L-stable and algebraically stable -- the
 //! correct choice for the dissipative heat equation, where the structure to
 //! preserve is monotone decay under arbitrarily stiff eigenmodes, not
@@ -23,7 +23,10 @@
 //! solve is exact), assembled as a genuinely sparse block Kronecker system and
 //! factored once for repeated stepping at a fixed $dt$.
 
-use crate::linalg::faer::FaerLu;
+use crate::linalg::{
+  faer::{FaerCholesky, FaerLu},
+  quadratic_form_sparse,
+};
 use simplicial::linalg::{CooMatrix, CsrMatrix, Matrix, Vector};
 
 /// A Butcher tableau $(A, b, c)$ for an $s$-stage Runge-Kutta method.
@@ -182,6 +185,157 @@ fn stage_matrix(a_tab: &Matrix, mass: &CsrMatrix, op: &CsrMatrix, dt: f64) -> Cs
     }
   }
   CsrMatrix::from(&coo)
+}
+
+/// Explicit symplectic splitting integrator (Störmer–Verlet / velocity Verlet)
+/// for the skew system $M dot(u) = A u$ with $M$ SPD and $A$ skew: the
+/// dimension- and grade-general form of the Yee (FDTD) leapfrog.
+///
+/// The DOFs are 2-colored (`color[i]` the color of DOF $i$) so that $A$ couples
+/// only *across* colors and $M$ only *within* them --- a partition into which
+/// the system splits as
+///
+/// $ M_0 dot(q) = A_(0 1) p, quad M_1 dot(p) = A_(1 0) q, quad A_(1 0) = -A_(0 1)^T, $
+///
+/// a linear Hamiltonian system with the two color blocks as canonical
+/// position and momentum. On the Hodge–Dirac complex the coloring is grade
+/// parity: $dif$ and $delta$ shift grade by one, so even and odd grades never
+/// couple among themselves and $A$ is exactly this block-antidiagonal form ---
+/// leapfrog is then the discrete-time completion of the spatial staggering
+/// (E on edges, B on faces) that FEEC already does.
+///
+/// One [`Self::step`] is a half-kick / drift / half-kick, co-located in time and
+/// cheap: no solve ever involves $A$, only the two color-block masses $M_0, M_1$,
+/// each Cholesky-factored once. Symplectic, so there is no energy drift; the
+/// staggered invariant [`Self::conserved_energy`] is preserved to roundoff, and
+/// is positive definite (a genuine norm, so the scheme is stable) precisely under
+/// the CFL condition. Unlike [`LinearIrk`] this is only conditionally stable ---
+/// the price of being explicit.
+pub struct Leapfrog {
+  /// Global DOF indices of color 0 (the drifted "position" block $q$).
+  idx0: Vec<usize>,
+  /// Global DOF indices of color 1 (the half-kicked "momentum" block $p$).
+  idx1: Vec<usize>,
+  mass0: CsrMatrix,
+  mass1: CsrMatrix,
+  chol0: FaerCholesky,
+  chol1: FaerCholesky,
+  /// $A_(0 1)$: the color-0 $<-$ color-1 coupling, shape $n_0 times n_1$.
+  a01: CsrMatrix,
+  /// $A_(1 0) = -A_(0 1)^T$: the color-1 $<-$ color-0 coupling.
+  a10: CsrMatrix,
+  dt: f64,
+  ndofs: usize,
+}
+
+impl Leapfrog {
+  pub fn new(mass: &CsrMatrix, op: &CsrMatrix, color: &[bool], dt: f64) -> Self {
+    let ndofs = mass.nrows();
+    assert_eq!(mass.ncols(), ndofs);
+    assert_eq!(op.nrows(), ndofs);
+    assert_eq!(op.ncols(), ndofs);
+    assert_eq!(color.len(), ndofs);
+
+    let idx0: Vec<usize> = (0..ndofs).filter(|&i| !color[i]).collect();
+    let idx1: Vec<usize> = (0..ndofs).filter(|&i| color[i]).collect();
+    let (n0, n1) = (idx0.len(), idx1.len());
+
+    // Global -> local index within a DOF's own color block.
+    let mut local = vec![0usize; ndofs];
+    for (l, &g) in idx0.iter().enumerate() {
+      local[g] = l;
+    }
+    for (l, &g) in idx1.iter().enumerate() {
+      local[g] = l;
+    }
+
+    // The coloring is only valid if $M$ does not couple the two colors and $A$
+    // does not couple within a color; otherwise the split is not the required
+    // block-antidiagonal form and the method is neither explicit nor correct.
+    for (r, c, &v) in mass.triplet_iter() {
+      assert!(
+        v == 0.0 || color[r] == color[c],
+        "mass couples the two colors"
+      );
+    }
+    for (r, c, &v) in op.triplet_iter() {
+      assert!(
+        v == 0.0 || color[r] != color[c],
+        "operator couples within a color"
+      );
+    }
+
+    let block = |src: &CsrMatrix, want_r: bool, want_c: bool, nr: usize, nc: usize| {
+      let mut coo = CooMatrix::new(nr, nc);
+      for (r, c, &v) in src.triplet_iter() {
+        if color[r] == want_r && color[c] == want_c {
+          coo.push(local[r], local[c], v);
+        }
+      }
+      CsrMatrix::from(&coo)
+    };
+
+    let mass0 = block(mass, false, false, n0, n0);
+    let mass1 = block(mass, true, true, n1, n1);
+    let a01 = block(op, false, true, n0, n1);
+    let a10 = block(op, true, false, n1, n0);
+
+    Self {
+      idx0,
+      idx1,
+      chol0: FaerCholesky::new(mass0.clone()),
+      chol1: FaerCholesky::new(mass1.clone()),
+      mass0,
+      mass1,
+      a01,
+      a10,
+      dt,
+      ndofs,
+    }
+  }
+
+  fn gather(&self, y: &Vector, idx: &[usize]) -> Vector {
+    Vector::from_iterator(idx.len(), idx.iter().map(|&g| y[g]))
+  }
+  fn scatter(&self, y: &mut Vector, idx: &[usize], v: &Vector) {
+    for (l, &g) in idx.iter().enumerate() {
+      y[g] = v[l];
+    }
+  }
+
+  /// Advance `y0` by one step of the fixed `dt`, co-located in time: a half-kick
+  /// of $p$, a full drift of $q$, and a closing half-kick of $p$.
+  pub fn step(&self, y0: &Vector) -> Vector {
+    let mut q = self.gather(y0, &self.idx0);
+    let mut p = self.gather(y0, &self.idx1);
+
+    p += 0.5 * self.dt * self.chol1.solve(&(&self.a10 * &q));
+    q += self.dt * self.chol0.solve(&(&self.a01 * &p));
+    p += 0.5 * self.dt * self.chol1.solve(&(&self.a10 * &q));
+
+    let mut y1 = Vector::zeros(self.ndofs);
+    self.scatter(&mut y1, &self.idx0, &q);
+    self.scatter(&mut y1, &self.idx1, &p);
+    y1
+  }
+
+  /// The exactly conserved staggered invariant
+  ///
+  /// $ E = 1/2 q^T M_0 q + 1/2 p^T M_1 p
+  ///     - dif t^2/8 (A_(1 0) q)^T M_1^(-1) (A_(1 0) q), $
+  ///
+  /// the co-located energy $1/2 u^T M u$ minus the leapfrog defect. Preserved to
+  /// roundoff by [`Self::step`] (unlike the co-located energy, which oscillates
+  /// at $O(dif t^2)$), and positive definite --- a norm, whence stability ---
+  /// precisely under the CFL condition.
+  pub fn conserved_energy(&self, y: &Vector) -> f64 {
+    let q = self.gather(y, &self.idx0);
+    let p = self.gather(y, &self.idx1);
+    let a10q = &self.a10 * &q;
+    let defect = a10q.dot(&self.chol1.solve(&a10q));
+    0.5 * quadratic_form_sparse(&self.mass0, &q) + 0.5 * quadratic_form_sparse(&self.mass1, &p)
+      - self.dt * self.dt / 8.0 * defect
+  }
 }
 
 #[cfg(test)]
@@ -356,5 +510,35 @@ mod test {
       t += dt;
     }
     assert_relative_eq!(y[0], force / lambda, epsilon = 1e-6);
+  }
+
+  /// The explicit leapfrog is symplectic on the skew system $M dot(u) = A u$ it
+  /// targets: its staggered invariant is preserved to roundoff (no drift) across
+  /// many periods within the CFL limit. A 2-dof skew system with distinct block
+  /// masses, 2-colored into position (dof 0) and momentum (dof 1) --- the minimal
+  /// model of the grade-parity split.
+  #[test]
+  fn leapfrog_conserves_staggered_energy_exactly() {
+    // 2 q' = p, 3 p' = -q: M = diag(2, 3), A = [[0, 1], [-1, 0]] (skew).
+    let mut m = CooMatrix::new(2, 2);
+    m.push(0, 0, 2.0);
+    m.push(1, 1, 3.0);
+    let mass = CsrMatrix::from(&m);
+    let mut a = CooMatrix::new(2, 2);
+    a.push(0, 1, 1.0);
+    a.push(1, 0, -1.0);
+    let op = CsrMatrix::from(&a);
+    let color = [false, true];
+
+    let dt = 0.2;
+    let lf = Leapfrog::new(&mass, &op, &color, dt);
+
+    let mut y = Vector::from_row_slice(&[1.0, 0.5]);
+    let e0 = lf.conserved_energy(&y);
+    assert!(e0 > 0.0);
+    for _ in 0..1000 {
+      y = lf.step(&y);
+      assert_relative_eq!(lf.conserved_energy(&y), e0, epsilon = 1e-10 * e0.max(1.0));
+    }
   }
 }
