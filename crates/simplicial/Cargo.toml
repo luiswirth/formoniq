@@ -5,10 +5,15 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-common = { path = "../common" }
+coorder = { path = "../coorder" }
+formoniq-linalg = { path = "../linalg" }
+gramian = { path = "../gramian" }
+multiindex = { path = "../multiindex" }
 
 nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 nalgebra-sparse = "0.12.0"
+
+ciborium = "0.2.2"
 
 num-bigint = "0.4.6"
 num-rational = "0.4.2"

@@ -11,7 +11,7 @@
 
 use std::collections::HashMap;
 
-use common::linalg::nalgebra::{Matrix, Vector};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
 
 use crate::{
   geometry::coord::mesh::MeshCoords,

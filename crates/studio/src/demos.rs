@@ -1,7 +1,7 @@
 //! Scene data shared across studies: the triforce teaching mesh and its worked
 //! example cochains, plus the default opening field of a freshly shown scene.
 
-use common::linalg::nalgebra::Matrix;
+use formoniq_linalg::nalgebra::Matrix;
 use simplicial::{
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},

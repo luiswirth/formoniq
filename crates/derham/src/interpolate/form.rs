@@ -1,9 +1,7 @@
 use {
-  common::{
-    combo::{factorial_f64, Combination, Sign},
-    linalg::nalgebra::Matrix,
-  },
   exterior::{ExteriorGrade, MultiForm, MultiVector},
+  formoniq_linalg::nalgebra::Matrix,
+  multiindex::{factorial_f64, Combination, Sign},
   simplicial::{
     atlas::{ref_difbarys, BaryRef},
     Dim,

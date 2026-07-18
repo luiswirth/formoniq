@@ -19,12 +19,12 @@ use crate::{
 };
 
 use {
-  common::linalg::{
+  derham::{cochain::Cochain, section::Section},
+  exterior::{Covariant, ExteriorGrade},
+  formoniq_linalg::{
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  derham::{cochain::Cochain, section::Section},
-  exterior::{Covariant, ExteriorGrade},
   simplicial::atlas::SimplexQuadRule,
 };
 

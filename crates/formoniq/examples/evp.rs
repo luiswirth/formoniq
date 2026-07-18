@@ -19,10 +19,9 @@
 mod util;
 
 use {
-  common::util::algebraic_convergence_rate,
   formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
   simplicial::gen::cartesian::CartesianMeshInfo,
-  util::{report, BoundaryCondition},
+  util::{algebraic_convergence_rate, report, BoundaryCondition},
 };
 
 use std::f64::consts::PI;

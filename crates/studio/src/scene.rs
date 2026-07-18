@@ -1,13 +1,14 @@
 use std::borrow::Cow;
 
 use chartan::field::DiffFormClosure;
-use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
+use formoniq_linalg::nalgebra::Vector;
+use gramian::RiemannianMetric;
 
 use crate::bake::CellCorner;
 use crate::ui::Selection;
 use derham::{
-  cochain::Cochain, reduction::derham_map, section::CoordFieldExt,
-  whitney::interpolant::WhitneyInterpolant,
+  cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, project::derham_map,
+  section::CoordFieldExt,
 };
 use exterior::{ExteriorGrade, MultiForm};
 use simplicial::{
@@ -933,12 +934,12 @@ pub(crate) fn hodge_decompose(
   topology: &Complex,
   coords: &MeshCoords,
   input: &Cochain,
-) -> Result<HodgeParts, common::linalg::eigen::EigenError> {
-  use common::linalg::nalgebra::CsrMatrix;
+) -> Result<HodgeParts, formoniq_linalg::eigen::EigenError> {
   use formoniq::{
     problems::elliptic::{solve_harmonics, solve_source},
     whitney_complex::WhitneyComplex,
   };
+  use formoniq_linalg::nalgebra::CsrMatrix;
 
   let grade = input.grade();
   let metric = coords.to_edge_lengths(topology);
@@ -1000,8 +1001,8 @@ pub(crate) fn hodge_decompose(
 /// there. On a contractible mesh the harmonic space is empty and nothing is
 /// added.
 pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Cochain {
-  use common::linalg::nalgebra::CsrMatrix;
   use formoniq::{problems::elliptic::solve_harmonics, whitney_complex::WhitneyComplex};
+  use formoniq_linalg::nalgebra::CsrMatrix;
 
   let swirl = hodge_probe_form(topology, coords);
   let metric = coords.to_edge_lengths(topology);
@@ -1312,8 +1313,8 @@ mod tests {
   #[test]
   fn hodge_decomposition_splits_orthogonally() {
     use crate::gallery::MeshSource;
-    use common::linalg::nalgebra::CsrMatrix;
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
+    use formoniq_linalg::nalgebra::CsrMatrix;
     use simplicial::io::gmsh::gmsh2coord_complex;
 
     let torus = || gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));

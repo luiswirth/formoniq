@@ -6,23 +6,25 @@
 //! the discrete form; a [`Section`](section::Section) is the continuous field it
 //! reconstructs to, evaluated at a [`MeshPoint`](simplicial::atlas::MeshPoint) and
 //! valued in the reference frame of that point's chart. The two are related by
-//! the [`reduction`] map and the [`whitney`] interpolation, which are inverse in
+//! the [`project`] map and the [`interpolate`] interpolation, which are inverse in
 //! the one direction that matters ($R compose W = id$) and cochain maps in both.
 
 extern crate nalgebra as na;
 
 pub mod cochain;
+pub mod interpolate;
 pub mod io;
-pub mod reduction;
+pub mod project;
 pub mod section;
-pub mod whitney;
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::Cochain, reduction::derham_map, whitney::interpolant::WhitneyInterpolant};
+  use crate::{
+    cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, project::derham_map,
+  };
 
   use {
-    common::linalg::nalgebra::Vector,
+    formoniq_linalg::nalgebra::Vector,
     simplicial::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex},
   };
 

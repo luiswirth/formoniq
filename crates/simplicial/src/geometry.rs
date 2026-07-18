@@ -11,7 +11,7 @@ pub mod metric;
 
 use crate::{atlas::refsimp_vol, topology::complex::Complex};
 
-use common::gramian::RiemannianMetric;
+use gramian::RiemannianMetric;
 
 use self::metric::Geometry;
 
@@ -34,7 +34,7 @@ pub fn cell_volume(metric: &RiemannianMetric) -> f64 {
 /// elsewhere.
 ///
 /// Metric-only: works off any [`Geometry`], not just an embedding, since
-/// [`Gramian::vertex_angle`](common::gramian::Gramian::vertex_angle) needs no
+/// [`Gramian::vertex_angle`](gramian::Gramian::vertex_angle) needs no
 /// coordinates -- a Regge manifold given only as [`metric::mesh::MeshLengths`]
 /// has a Gaussian curvature exactly as well as an embedded one. This is
 /// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the

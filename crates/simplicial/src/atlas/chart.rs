@@ -9,7 +9,7 @@ use crate::{
   Dim,
 };
 
-use common::combo::Combination;
+use multiindex::Combination;
 
 /// A chart of the piecewise-affine atlas: a cell of the complex, together with
 /// the barycentric coordinates it carries.

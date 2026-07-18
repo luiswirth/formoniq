@@ -72,8 +72,8 @@ mod test {
   use crate::{cochain::Cochain, section::Section};
 
   use {
-    common::linalg::nalgebra::Vector,
     exterior::MultiForm,
+    formoniq_linalg::nalgebra::Vector,
     simplicial::{atlas::MeshPoint, topology::complex::Complex},
   };
 

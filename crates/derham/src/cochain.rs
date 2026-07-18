@@ -1,4 +1,4 @@
-use common::linalg::nalgebra::{CsrMatrix, Vector};
+use formoniq_linalg::nalgebra::{CsrMatrix, Vector};
 
 use {
   exterior::ExteriorGrade,
@@ -75,10 +75,10 @@ impl Cochain {
   }
 
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-    common::io::save_cbor(self, path)
+    simplicial::io::cbor::save_cbor(self, path)
   }
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-    common::io::load_cbor(path)
+    simplicial::io::cbor::load_cbor(path)
   }
 }
 

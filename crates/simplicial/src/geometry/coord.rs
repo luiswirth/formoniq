@@ -15,9 +15,9 @@ pub mod locate;
 pub mod mesh;
 pub mod simplex;
 
-pub use common::coord::{Ambient, Coord, CoordRef};
+pub use coorder::{Ambient, Coord, CoordRef};
 
-use common::linalg::nalgebra::{RowVector, RowVectorView, Vector, VectorView};
+use formoniq_linalg::nalgebra::{RowVector, RowVectorView, Vector, VectorView};
 
 use self::mesh::MeshCoords;
 use super::{cell_volume, metric::Geometry};

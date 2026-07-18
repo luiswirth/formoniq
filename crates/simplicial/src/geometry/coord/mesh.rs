@@ -12,10 +12,8 @@ use crate::{
   Dim,
 };
 
-use common::{
-  gramian::RiemannianMetric,
-  linalg::nalgebra::{Matrix, Vector},
-};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
+use gramian::RiemannianMetric;
 
 use itertools::Itertools;
 
@@ -69,10 +67,10 @@ impl MeshCoords {
   }
 
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-    common::io::save_cbor(self, path)
+    crate::io::cbor::save_cbor(self, path)
   }
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-    common::io::load_cbor(path)
+    crate::io::cbor::load_cbor(path)
   }
 }
 

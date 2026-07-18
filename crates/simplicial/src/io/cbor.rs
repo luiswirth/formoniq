@@ -3,10 +3,10 @@
 //!
 //! Self-describing (field-tagged, not positional like `bincode`) and
 //! schema-evolvable, which matters while the types it serializes are still
-//! being reshaped. Generic and type-agnostic on purpose -- it knows nothing of
-//! meshes, geometry or cochains, so it lives here rather than in any crate
-//! that does; each type's own (de)serialization support lives next to its
-//! definition and calls through to this.
+//! being reshaped. Generic and type-agnostic on its own -- it knows nothing of
+//! meshes or cochains -- but persistence for both the mesh types here and the
+//! cochains in `derham` (which already depends on `simplicial`) is exactly two
+//! call sites, not a third crate's worth of concept.
 
 use serde::{de::DeserializeOwned, Serialize};
 use std::{fs::File, io, path::Path};

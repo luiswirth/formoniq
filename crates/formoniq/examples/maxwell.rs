@@ -22,12 +22,12 @@
 extern crate nalgebra as na;
 
 use chartan::field::DiffFormClosure;
-use common::linalg::nalgebra::Vector;
-use derham::{cochain::Cochain, reduction::derham_map, section::CoordFieldExt};
+use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::{
   problems::maxwell::{leapfrog_energy, solve_mixed, MaxwellOperators, MaxwellState, Medium},
   whitney_complex::WhitneyComplex,
 };
+use formoniq_linalg::nalgebra::Vector;
 use simplicial::gen::cartesian::CartesianMeshInfo;
 
 use std::f64::consts::PI;

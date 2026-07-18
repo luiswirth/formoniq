@@ -20,7 +20,7 @@ use crate::{
   Dim,
 };
 
-use common::linalg::nalgebra::{CooMatrix, Matrix};
+use formoniq_linalg::nalgebra::{CooMatrix, Matrix};
 
 /// A codimension-1 subcomplex of $K$ as a complex in its own right, with
 /// its own (monotone) vertex numbering and the simplex-wise inclusion into
@@ -172,7 +172,7 @@ mod test {
   use super::*;
   use crate::gen::cartesian::CartesianMeshInfo;
 
-  use common::linalg::nalgebra::CsrMatrix;
+  use formoniq_linalg::nalgebra::CsrMatrix;
 
   /// The boundary of the n-cube is a closed manifold with the homology of
   /// the (n-1)-sphere.

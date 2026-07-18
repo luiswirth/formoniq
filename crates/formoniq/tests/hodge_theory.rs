@@ -10,9 +10,9 @@
 
 extern crate nalgebra as na;
 
-use common::linalg::nalgebra::{CooMatrix, CsrMatrix, Matrix};
 use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
+use formoniq_linalg::nalgebra::{CooMatrix, CsrMatrix, Matrix};
 use simplicial::gen::cartesian::CartesianMeshInfo;
 
 use approx::assert_relative_eq;
@@ -170,10 +170,10 @@ fn relative_inclusion_is_cochain_map() {
 #[test]
 fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use chartan::field::DiffFormClosure;
-  use common::linalg::faer::FaerCholesky;
-  use common::linalg::nalgebra::Vector;
   use derham::section::CoordFieldExt;
   use formoniq::{assemble, bc, operators::SourceElVec};
+  use formoniq_linalg::faer::FaerCholesky;
+  use formoniq_linalg::nalgebra::Vector;
 
   let dim = 2;
   let (topology, coords) = CartesianMeshInfo::new_unit(dim, 4).compute_coord_complex();

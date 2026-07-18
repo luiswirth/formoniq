@@ -398,8 +398,11 @@ name = "chartan"
 version = "0.1.0"
 dependencies = [
  "approx",
- "common",
+ "coorder",
  "exterior",
+ "formoniq-linalg",
+ "gramian",
+ "multiindex",
  "nalgebra",
 ]
 
@@ -516,27 +519,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "common"
-version = "0.2.0"
-dependencies = [
- "approx",
- "ciborium",
- "faer",
- "itertools 0.15.0",
- "nalgebra",
- "nalgebra-sparse",
- "num-integer",
- "num-traits",
- "serde",
-]
-
-[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
+]
+
+[[package]]
+name = "coorder"
+version = "0.2.0"
+dependencies = [
+ "formoniq-linalg",
+ "multiindex",
 ]
 
 [[package]]
@@ -709,8 +705,11 @@ version = "0.2.0"
 dependencies = [
  "approx",
  "chartan",
- "common",
+ "coorder",
  "exterior",
+ "formoniq-linalg",
+ "gramian",
+ "multiindex",
  "nalgebra",
  "nalgebra-sparse",
  "serde",
@@ -1070,8 +1069,9 @@ name = "exterior"
 version = "0.2.0"
 dependencies = [
  "approx",
- "common",
- "itertools 0.15.0",
+ "formoniq-linalg",
+ "gramian",
+ "multiindex",
  "nalgebra",
 ]
 
@@ -1218,10 +1218,13 @@ version = "0.2.0"
 dependencies = [
  "approx",
  "chartan",
- "common",
+ "coorder",
  "derham",
  "exterior",
+ "formoniq-linalg",
+ "gramian",
  "itertools 0.15.0",
+ "multiindex",
  "nalgebra",
  "nalgebra-sparse",
  "rayon",
@@ -1231,13 +1234,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "formoniq-linalg"
+version = "0.2.0"
+dependencies = [
+ "faer",
+ "nalgebra",
+ "nalgebra-sparse",
+ "num-traits",
+]
+
+[[package]]
 name = "formoniq-studio"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
  "chartan",
  "clap",
- "common",
+ "coorder",
  "derham",
  "egui",
  "egui-file-dialog",
@@ -1246,6 +1259,8 @@ dependencies = [
  "env_logger",
  "exterior",
  "formoniq",
+ "formoniq-linalg",
+ "gramian",
  "image",
  "log",
  "naga",
@@ -1568,6 +1583,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
 dependencies = [
  "bitflags 2.13.0",
+]
+
+[[package]]
+name = "gramian"
+version = "0.2.0"
+dependencies = [
+ "formoniq-linalg",
+ "multiindex",
+ "serde",
 ]
 
 [[package]]
@@ -2124,6 +2148,15 @@ dependencies = [
  "num-derive",
  "num-traits",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "multiindex"
+version = "0.2.0"
+dependencies = [
+ "formoniq-linalg",
+ "itertools 0.15.0",
+ "num-integer",
 ]
 
 [[package]]
@@ -3590,10 +3623,14 @@ name = "simplicial"
 version = "0.2.0"
 dependencies = [
  "approx",
- "common",
+ "ciborium",
+ "coorder",
+ "formoniq-linalg",
+ "gramian",
  "indexmap",
  "itertools 0.15.0",
  "mshio",
+ "multiindex",
  "nalgebra",
  "nalgebra-sparse",
  "num-bigint 0.4.8",

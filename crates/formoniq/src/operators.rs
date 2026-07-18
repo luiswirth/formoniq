@@ -1,11 +1,9 @@
 use {
-  common::gramian::RiemannianMetric,
-  common::{
-    combo::{factorial, Combination},
-    linalg::nalgebra::{Matrix, Vector},
-  },
-  derham::{section::Section, whitney::form::WhitneyForm},
+  derham::{interpolate::form::WhitneyForm, section::Section},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
+  formoniq_linalg::nalgebra::{Matrix, Vector},
+  gramian::RiemannianMetric,
+  multiindex::{factorial, Combination},
   simplicial::{
     atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
     geometry::cell_volume,
@@ -262,7 +260,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 mod test {
   use super::*;
 
-  use derham::whitney::form::WhitneyForm;
+  use derham::interpolate::form::WhitneyForm;
   use simplicial::{
     geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps,
   };

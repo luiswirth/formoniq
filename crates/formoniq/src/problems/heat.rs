@@ -1,6 +1,6 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
-use common::linalg::{
+use formoniq_linalg::{
   faer::FaerCholesky,
   nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Vector},
 };
@@ -100,7 +100,7 @@ mod test {
   use super::*;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
-  use common::linalg::nalgebra::quadratic_form_sparse;
+  use formoniq_linalg::nalgebra::quadratic_form_sparse;
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;

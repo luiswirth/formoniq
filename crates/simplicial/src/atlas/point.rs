@@ -12,7 +12,7 @@ use crate::{
   Dim,
 };
 
-use common::combo::Combination;
+use multiindex::Combination;
 
 /// The weight below which a barycentric coordinate counts as vanishing, and the
 /// point as lying on the opposite face.

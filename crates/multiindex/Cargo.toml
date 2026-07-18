@@ -1,15 +1,12 @@
 [package]
-name = "exterior"
+name = "multiindex"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
 formoniq-linalg = { path = "../linalg" }
-gramian = { path = "../gramian" }
-multiindex = { path = "../multiindex" }
-
-nalgebra = "0.35.0"
+num-integer = "0.1.46"
 
 [dev-dependencies]
-approx = "0.5.1"
+itertools = "0.15.0"

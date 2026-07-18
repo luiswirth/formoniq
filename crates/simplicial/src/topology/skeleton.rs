@@ -109,10 +109,10 @@ impl Skeleton {
   }
 
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-    common::io::save_cbor(self, path)
+    crate::io::cbor::save_cbor(self, path)
   }
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-    common::io::load_cbor(path)
+    crate::io::cbor::load_cbor(path)
   }
 }
 

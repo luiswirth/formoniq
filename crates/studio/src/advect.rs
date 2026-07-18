@@ -40,8 +40,9 @@
 //! exponentiate a zero block into a one, and an unused weight would spring to
 //! life.
 
-use common::{gramian::RiemannianMetric, linalg::nalgebra::Matrix};
-use derham::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
+use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use formoniq_linalg::nalgebra::Matrix;
+use gramian::RiemannianMetric;
 use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},

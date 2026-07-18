@@ -17,6 +17,9 @@
 
 pub mod cartesian;
 
+/// The dimension of a space or object.
+pub type Dim = usize;
+
 pub fn binomial(n: usize, k: usize) -> usize {
   num_integer::binomial(n, k)
 }
@@ -395,26 +398,6 @@ pub fn compositions(parts: usize, total: usize) -> impl Iterator<Item = Vec<usiz
   })
 }
 
-/// Matrix of the boundary operator
-/// $diff: "colex-ordered card-subsets of" {0,..,n-1} -> "(card-1)-subsets"$,
-/// built from the alternating deletions. Satisfies $diff compose diff = 0$.
-///
-/// Augmented: for card 1 this is the augmentation map onto the empty set
-/// (the single (-1)-simplex of the reduced chain complex).
-pub fn boundary_matrix(n: usize, card: usize) -> crate::linalg::nalgebra::Matrix {
-  use crate::linalg::nalgebra::Matrix;
-  if card == 0 {
-    return Matrix::zeros(0, binomial(n, 0));
-  }
-  let mut matrix = Matrix::zeros(binomial(n, card - 1), binomial(n, card));
-  for (isup, sup) in combinations(n, card).enumerate() {
-    for (sign, _, sub) in sup.deletions() {
-      matrix[(sub.rank(), isup)] = sign.as_f64();
-    }
-  }
-  matrix
-}
-
 impl FromIterator<usize> for Combination {
   /// From strictly increasing indices.
   fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
@@ -545,17 +528,6 @@ mod test {
           assert_eq!(union, Combination::full(n));
           assert_eq!(sign, union_sign);
         }
-      }
-    }
-  }
-
-  /// $diff compose diff = 0$ for the combinatorial boundary matrices.
-  #[test]
-  fn boundary_matrix_squares_to_zero() {
-    for n in 1..=6 {
-      for card in 2..=n {
-        let product = boundary_matrix(n, card - 1) * boundary_matrix(n, card);
-        assert!(product.iter().all(|&v| v == 0.0));
       }
     }
   }

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::Dim;
 
-use common::linalg::nalgebra::{CooMatrix, CooMatrixExt};
+use formoniq_linalg::nalgebra::{CooMatrix, CooMatrixExt};
 
 use itertools::Itertools;
 
@@ -249,7 +249,7 @@ mod test {
   use crate::topology::simplex::{nsubsimplices, standard_boundary_operator, Simplex};
 
   use super::*;
-  use common::linalg::nalgebra::Matrix;
+  use formoniq_linalg::nalgebra::Matrix;
 
   /// Round-tripping through CBOR reproduces the same topology: the boundary
   /// (an $O(n^3)$ derived quantity, not stored data) matches, so the save/load
@@ -304,7 +304,7 @@ mod test {
   #[test]
   fn coboundary_squares_to_zero() {
     use crate::gen::cartesian::CartesianMeshInfo;
-    use common::linalg::nalgebra::CsrMatrix;
+    use formoniq_linalg::nalgebra::CsrMatrix;
 
     for dim in 1..=3 {
       let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();

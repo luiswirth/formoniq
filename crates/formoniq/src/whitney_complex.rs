@@ -7,9 +7,9 @@ use crate::{
 };
 
 use {
-  common::linalg::nalgebra::{quadratic_form_sparse, CooMatrix, CsrMatrix},
   derham::cochain::Cochain,
   exterior::ExteriorGrade,
+  formoniq_linalg::nalgebra::{quadratic_form_sparse, CooMatrix, CsrMatrix},
   simplicial::{
     geometry::metric::mesh::MeshLengths,
     topology::{

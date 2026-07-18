@@ -24,10 +24,8 @@
 use super::{ref_difbarys, Bary, Chart, MeshPoint, BARY_EPS};
 use crate::{topology::handle::SimplexIdx, Dim};
 
-use common::{
-  combo::Combination,
-  linalg::nalgebra::{Matrix, Vector},
-};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
+use multiindex::Combination;
 
 /// The transition map between the charts of two cells, on their overlap.
 ///

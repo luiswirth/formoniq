@@ -10,7 +10,9 @@ formoniq = { path = "../formoniq" }
 derham = { path = "../derham" }
 chartan = { path = "../chartan" }
 simplicial = { path = "../simplicial" }
-common = { path = "../common" }
+coorder = { path = "../coorder" }
+formoniq-linalg = { path = "../linalg" }
+gramian = { path = "../gramian" }
 exterior = { path = "../exterior" }
 # Pinned to match egui-wgpu 0.35's own wgpu dependency: the render pass and
 # command-buffer types crossing the egui/native boundary must be the same

@@ -24,11 +24,9 @@ use crate::{
   Dim,
 };
 
-use common::{
-  affine::AffineTransform,
-  gramian::Gramian,
-  linalg::nalgebra::{Matrix, Vector},
-};
+use coorder::affine::AffineTransform;
+use formoniq_linalg::nalgebra::{Matrix, Vector};
+use gramian::Gramian;
 use tracing::warn;
 
 #[derive(Debug, Clone)]

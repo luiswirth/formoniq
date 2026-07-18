@@ -8,7 +8,7 @@
 //! lattice, one for each permutation of the axes.
 
 use super::Combination;
-use crate::linalg::nalgebra::Vector;
+use formoniq_linalg::nalgebra::Vector;
 
 /// Converts a linear index in `0..radix^dim` to a cartesian multi-index in
 /// ${0, dots, "radix"-1}^"dim"$ (least significant axis first).

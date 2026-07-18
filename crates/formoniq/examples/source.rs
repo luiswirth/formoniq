@@ -26,14 +26,13 @@
 mod util;
 
 use {
-  common::util::algebraic_convergence_rate,
   derham::section::CoordFieldExt,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::elliptic,
     whitney_complex::WhitneyComplex,
   },
   simplicial::gen::cartesian::CartesianMeshInfo,
-  util::{report, BoundaryCondition, BoxEigenform},
+  util::{algebraic_convergence_rate, report, BoundaryCondition, BoxEigenform},
 };
 
 use std::f64::consts::PI;

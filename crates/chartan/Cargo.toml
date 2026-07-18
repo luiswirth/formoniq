@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-common = { path = "../common" }
+coorder = { path = "../coorder" }
 exterior = { path = "../exterior" }
+formoniq-linalg = { path = "../linalg" }
+gramian = { path = "../gramian" }
+multiindex = { path = "../multiindex" }
 
 nalgebra = "0.35.0"
 

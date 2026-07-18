@@ -23,7 +23,7 @@
 use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
-use common::linalg::nalgebra::Vector;
+use formoniq_linalg::nalgebra::Vector;
 use simplicial::{
   geometry::coord::{mesh::MeshCoords, vertex_curvature_radius},
   topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex},
