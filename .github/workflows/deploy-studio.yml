@@ -1,0 +1,92 @@
+name: Deploy studio
+
+# Builds the studio viewer to WebAssembly and publishes it to GitHub Pages.
+# Off the core's critical path, exactly as the crate is off the workspace's
+# default members: a failure here never blocks a core change.
+
+on:
+  push:
+    branches: [main]
+    # Only when something the web build depends on actually moves.
+    paths:
+      - "crates/**"
+      - ".cargo/config.toml"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/deploy-studio.yml"
+  workflow_dispatch:
+
+# The Pages deployment needs to write Pages and mint the OIDC token; nothing
+# else. Source is read-only.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One live deployment at a time; a newer push supersedes an in-flight one, but
+# lets it finish rather than cancelling a half-published site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: build wasm
+    runs-on: ubuntu-latest
+    steps:
+      # The built-in meshes are `include_str!`-embedded at compile time and
+      # tracked in git LFS, so the real bytes must be checked out, not pointers.
+      - uses: actions/checkout@v7
+        with:
+          lfs: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+
+      # The `wasm-bindgen` CLI must match the `wasm-bindgen` crate exactly; read
+      # the resolved version from the lockfile so the two never drift.
+      - name: Resolve wasm-bindgen version
+        id: wb
+        run: |
+          version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock \
+            | grep '^version' | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@${{ steps.wb.outputs.version }}
+
+      # `.cargo/config.toml` supplies the `getrandom` wasm backend cfg; no
+      # `RUSTFLAGS` env here, which would override it.
+      - name: Build
+        run: cargo build --release --lib -p formoniq-studio --target wasm32-unknown-unknown
+
+      - name: Bindgen
+        run: |
+          wasm-bindgen \
+            --target web \
+            --no-typescript \
+            --out-dir dist \
+            --out-name formoniq_studio \
+            target/wasm32-unknown-unknown/release/formoniq_studio.wasm
+          cp crates/studio/web/index.html dist/
+
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

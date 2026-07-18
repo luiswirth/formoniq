@@ -78,9 +78,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
+          targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
       - run: cargo clippy -p formoniq-studio --all-targets --all-features
       - run: cargo test -p formoniq-studio --all-features
       - run: cargo doc -p formoniq-studio --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+      # The web target: guards against a wasm-only regression in the viewer's
+      # platform split. The workflow's `RUSTFLAGS: -D warnings` overrides
+      # `.cargo/config.toml`, so the `getrandom` web backend cfg is restated
+      # here alongside it.
+      - run: cargo clippy -p formoniq-studio --lib --target wasm32-unknown-unknown
+        env:
+          RUSTFLAGS: -D warnings --cfg getrandom_backend="wasm_js"
