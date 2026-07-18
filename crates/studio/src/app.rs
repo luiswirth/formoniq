@@ -38,7 +38,7 @@ use egui_winit::State as EguiWinitState;
 /// content-sized sidebars so they leave the viewport most of the frame. Below 1
 /// because the default egui metrics are tuned for a full-window tool, not a
 /// pair of sidebars flanking a 3D scene.
-const UI_ZOOM: f32 = 0.75;
+const UI_ZOOM: f32 = 1.25;
 
 /// The most advection steps one frame will catch up on. At the advection's own
 /// rate this is a few frames' worth, so ordinary jitter is absorbed and a long
