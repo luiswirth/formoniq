@@ -31,6 +31,9 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
 
+  # The core jobs run on the workspace's default members -- every crate but
+  # `studio`. Bare cargo commands (no `--workspace`) act on that set, so a core
+  # PR is never gated on the wgpu/winit/egui stack. `studio` gets its own job.
   clippy:
     name: clippy
     runs-on: ubuntu-latest
@@ -40,8 +43,8 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --workspace --all-targets
-      - run: cargo clippy --workspace --all-targets --all-features
+      - run: cargo clippy --all-targets
+      - run: cargo clippy --all-targets --all-features
 
   test:
     name: test
@@ -50,8 +53,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --workspace
-      - run: cargo test --workspace --all-features
+      - run: cargo test
+      - run: cargo test --all-features
 
   doc:
     name: doc
@@ -61,6 +64,23 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       # The doc comments carry the mathematics: broken intra-doc links are errors.
-      - run: cargo doc --workspace --no-deps
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  # `studio` and everything it pulls in, isolated so the graphics stack compiles
+  # off the core's critical path. Same four checks, scoped to the one package.
+  studio:
+    name: studio
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy -p formoniq-studio --all-targets --all-features
+      - run: cargo test -p formoniq-studio --all-features
+      - run: cargo doc -p formoniq-studio --no-deps
         env:
           RUSTDOCFLAGS: -D warnings

@@ -359,6 +359,13 @@ cargo doc --workspace --no-deps        # doc comments carry the math: no warning
 CI runs the same four on every push and pull request; a red build is a broken
 commit, not a flaky one.
 
+`studio` is excluded from the workspace's `default-members`, so a bare `cargo
+test`/`clippy`/`doc` (no `--workspace`) skips the wgpu/winit/egui stack and
+covers the core crates alone — the fast inner loop. The `--workspace` forms
+above are the full bar and are what a cross-cutting commit must pass; CI splits
+the core checks (default members) from a separate `studio` job so a core change
+is not gated on the graphics stack.
+
 The examples are the end-to-end check and are run by hand:
 
 ```sh
