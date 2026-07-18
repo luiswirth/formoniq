@@ -3,11 +3,15 @@ name = "simplicial"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "A simplicial manifold of arbitrary dimension, with geometry as a pluggable input: topology, atlas, and Regge or embedded metrics."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["simplicial", "mesh", "fem", "geometry"]
+categories = ["mathematics", "science"]
 
 [dependencies]
-coorder = { path = "../coorder" }
-gramian = { path = "../gramian" }
-multiindex = { path = "../multiindex" }
+coorder = { path = "../coorder", version = "0.2.0" }
+gramian = { path = "../gramian", version = "0.2.0" }
+multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 nalgebra-sparse = "0.12.0"

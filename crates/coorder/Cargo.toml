@@ -3,6 +3,10 @@ name = "coorder"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Typed affine coordinates: points tagged by the space they live in, and the affine maps between them."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["coordinates", "affine", "linear-algebra"]
+categories = ["mathematics"]
 
 [dependencies]
 nalgebra = "0.35.0"

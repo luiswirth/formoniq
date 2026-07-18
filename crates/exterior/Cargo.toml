@@ -3,10 +3,14 @@ name = "exterior"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "The exterior algebra of a vector space, with the Hodge star and musical isomorphisms."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["exterior-algebra", "differential-forms", "hodge-star"]
+categories = ["mathematics"]
 
 [dependencies]
-gramian = { path = "../gramian" }
-multiindex = { path = "../multiindex" }
+gramian = { path = "../gramian", version = "0.2.0" }
+multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = "0.35.0"
 
