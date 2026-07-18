@@ -105,6 +105,26 @@ wound triangles, a curve to segments, a point set to points, and a solid to the
 overlay, a line field's traced ribbons and a 1-manifold's own cells, distinguished
 only by material data. `crates/studio/CLAUDE.md` documents the design in full.
 
+## Origin
+
+The first version was developed as the
+[BSc thesis](https://github.com/luiswirth/bsc-thesis) of Luis Wirth at ETH
+Zürich, supervised by Prof. Dr. Ralf Hiptmair. It focused on the elliptic
+Hodge-Laplace problem with the first-order Whitney basis
+([arXiv:2506.02429](https://arxiv.org/abs/2506.02429)). The current version is a
+rebuild toward the more general library described above.
+
+## Getting started
+
+```sh
+cargo test --workspace
+cargo run --release --example source
+```
+
+The examples under `crates/formoniq/examples/` are the end-to-end
+demonstrations. They report convergence rates and computed spectra, and are read
+by hand rather than asserted.
+
 ## Motivation
 
 Classical finite element methods are usually written for a fixed dimension, in
@@ -201,26 +221,6 @@ functoriality of the exterior power and the involution of the Hodge star are
 stated as theorems and swept over all dimensions and grades. The suite is a
 machine-checked statement of the mathematics rather than a table of golden
 numbers.
-
-## Getting started
-
-```sh
-cargo test --workspace
-cargo run --release --example source
-```
-
-The examples under `crates/formoniq/examples/` are the end-to-end
-demonstrations. They report convergence rates and computed spectra, and are read
-by hand rather than asserted.
-
-## Origin
-
-The first version was developed as the
-[BSc thesis](https://github.com/luiswirth/bsc-thesis) of Luis Wirth at ETH
-Zürich, supervised by Prof. Dr. Ralf Hiptmair. It focused on the elliptic
-Hodge-Laplace problem with the first-order Whitney basis
-([arXiv:2506.02429](https://arxiv.org/abs/2506.02429)). The current version is a
-rebuild toward the more general library described above.
 
 ## License
 
