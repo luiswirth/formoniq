@@ -74,6 +74,27 @@ impl CellGramians {
     &self.metrics
   }
 
+  /// The Regge edge lengths this geometry induces: the missing metric $->$
+  /// lengths leg of the derivation chain, read at mesh scope. Each cell's
+  /// metric gives the lengths of its own edges ([`simplex_lengths_of`]), scattered
+  /// to the global edges; an edge shared between cells receives the same length
+  /// from each (the metrics agree on a shared face), so the result is
+  /// well defined. A 0-manifold has an empty edge skeleton and yields the empty
+  /// vector.
+  pub fn to_edge_lengths(&self, topology: &Complex) -> MeshLengths {
+    if topology.dim() == 0 {
+      return MeshLengths::new_unchecked(crate::linalg::Vector::zeros(0));
+    }
+    let mut edge_lengths = crate::linalg::Vector::zeros(topology.edges().len());
+    for cell in topology.cells().handle_iter() {
+      let lengths = simplex_lengths_of(&self.metrics[cell.get()]);
+      for (local, edge) in cell.get().edges().enumerate() {
+        edge_lengths[edge.kidx()] = lengths.length(local);
+      }
+    }
+    MeshLengths::new_unchecked(edge_lengths)
+  }
+
   /// Whether this could be the per-cell geometry of `topology`: one metric per
   /// simplex of the grade it was built for.
   pub fn is_compatible_with(&self, topology: &Complex) -> bool {

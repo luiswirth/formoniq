@@ -8,6 +8,7 @@
 
 pub mod coord;
 pub mod metric;
+pub mod refine;
 
 use crate::{atlas::refsimp_vol, topology::complex::Complex};
 
