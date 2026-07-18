@@ -35,7 +35,6 @@
               bacon
               cargo-edit
               cargo-flamegraph
-              linuxPackages_latest.perf
             ];
           };
         }
