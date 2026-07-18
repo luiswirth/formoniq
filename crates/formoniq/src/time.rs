@@ -49,53 +49,132 @@ impl Tableau {
     Self { a, b, c, s }
   }
 
-  /// Gauss-Legendre collocation, order $2s$: symplectic for any $s$, and --
+  /// Gauss-Legendre collocation, order $2s$ for any $s$: symplectic, and --
   /// the stronger fact that matters for a *linear* Hamiltonian system --
   /// exactly conserving every quadratic invariant, not merely a bounded
-  /// shadow Hamiltonian. Supports $s in {1, 2}$.
+  /// shadow Hamiltonian.
   ///
-  /// $s = 1$ is the implicit midpoint rule. Coefficients: Hairer & Wanner,
-  /// *Solving ODEs II*, Table 5.2.
+  /// The nodes are the Gauss-Legendre quadrature points on $[0, 1]$ (roots of
+  /// the shifted Legendre polynomial $P_s$); $A$ and $b$ then follow from the
+  /// collocation conditions. $s = 1$ is the implicit midpoint rule.
   pub fn gauss_legendre(s: usize) -> Self {
-    match s {
-      1 => Self::new(
-        Matrix::from_row_slice(1, 1, &[0.5]),
-        Vector::from_row_slice(&[1.0]),
-        Vector::from_row_slice(&[0.5]),
-      ),
-      2 => {
-        let sqrt3 = 3f64.sqrt();
-        Self::new(
-          Matrix::from_row_slice(2, 2, &[0.25, 0.25 - sqrt3 / 6.0, 0.25 + sqrt3 / 6.0, 0.25]),
-          Vector::from_row_slice(&[0.5, 0.5]),
-          Vector::from_row_slice(&[0.5 - sqrt3 / 6.0, 0.5 + sqrt3 / 6.0]),
-        )
-      }
-      _ => unimplemented!("Gauss-Legendre tableau only implemented for s in {{1, 2}}"),
-    }
+    collocation_tableau(gauss_legendre_nodes(s))
   }
 
-  /// Radau IIA collocation, order $2s - 1$: L-stable and algebraically
-  /// stable, the dissipative counterpart to [`Self::gauss_legendre`].
-  /// Supports $s in {1, 2}$.
+  /// Radau IIA collocation, order $2s - 1$ for any $s$: L-stable and
+  /// algebraically stable, the dissipative counterpart to
+  /// [`Self::gauss_legendre`].
   ///
-  /// $s = 1$ is implicit (backward) Euler. Coefficients: Hairer & Wanner,
-  /// *Solving ODEs II*, Table 5.6.
+  /// The nodes are the right Radau quadrature points on $[0, 1]$ (the last
+  /// pinned at $c_s = 1$, which is what makes the method stiffly accurate);
+  /// $A$ and $b$ follow from the collocation conditions. $s = 1$ is implicit
+  /// (backward) Euler.
   pub fn radau_iia(s: usize) -> Self {
-    match s {
-      1 => Self::new(
-        Matrix::from_row_slice(1, 1, &[1.0]),
-        Vector::from_row_slice(&[1.0]),
-        Vector::from_row_slice(&[1.0]),
-      ),
-      2 => Self::new(
-        Matrix::from_row_slice(2, 2, &[5.0 / 12.0, -1.0 / 12.0, 3.0 / 4.0, 1.0 / 4.0]),
-        Vector::from_row_slice(&[3.0 / 4.0, 1.0 / 4.0]),
-        Vector::from_row_slice(&[1.0 / 3.0, 1.0]),
-      ),
-      _ => unimplemented!("Radau IIA tableau only implemented for s in {{1, 2}}"),
+    collocation_tableau(radau_iia_nodes(s))
+  }
+}
+
+/// The Butcher tableau of the collocation method on nodes $c in [0, 1]^s$: the
+/// unique $(A, b)$ satisfying the simplified order conditions
+///
+/// $ sum_j a_(i j) c_j^(k-1) = c_i^k / k, quad
+///   sum_i b_i c_i^(k-1) = 1 / k, quad k = 1, ..., s, $
+///
+/// i.e. $a_(i j) = integral_0^(c_i) ell_j$ and $b_i = integral_0^1 ell_i$ for
+/// the Lagrange basis $ell_j$ on the nodes. Both are solves against the shared
+/// node Vandermonde $V_(k j) = c_j^(k-1)$, so the whole tableau is fixed by the
+/// nodes alone -- the one construction of which Gauss-Legendre and Radau IIA
+/// are the two node choices. The row-sum consistency $c_i = sum_j a_(i j)$ is
+/// the $k = 1$ condition, so it holds by construction.
+fn collocation_tableau(c: Vector) -> Tableau {
+  let s = c.len();
+
+  // Shared Vandermonde V_{kj} = c_j^k (row k is the order-k moment), factored
+  // once for the b solve and all s rows of A.
+  let mut vander = Matrix::zeros(s, s);
+  for k in 0..s {
+    for j in 0..s {
+      vander[(k, j)] = c[j].powi(k as i32);
     }
   }
+  let lu = vander.lu();
+
+  let b_rhs = Vector::from_fn(s, |k, _| 1.0 / f64::from(k as u32 + 1));
+  let b = lu
+    .solve(&b_rhs)
+    .expect("node Vandermonde is nonsingular for distinct collocation nodes");
+
+  let mut a = Matrix::zeros(s, s);
+  for i in 0..s {
+    let a_rhs = Vector::from_fn(s, |k, _| c[i].powi(k as i32 + 1) / f64::from(k as u32 + 1));
+    let a_row = lu
+      .solve(&a_rhs)
+      .expect("node Vandermonde is nonsingular for distinct collocation nodes");
+    a.row_mut(i).copy_from(&a_row.transpose());
+  }
+
+  Tableau::new(a, b, c)
+}
+
+/// Gauss-Legendre quadrature nodes on $[0, 1]$: the $s$ eigenvalues of the
+/// Legendre Golub-Welsch matrix (symmetric tridiagonal, zero diagonal,
+/// off-diagonal $beta_j = j slash sqrt(4 j^2 - 1)$), mapped from $[-1, 1]$.
+fn gauss_legendre_nodes(s: usize) -> Vector {
+  map_unit(sorted_eigenvalues(legendre_jacobi(s)))
+}
+
+/// Right Radau quadrature nodes on $[0, 1]$: the Legendre Golub-Welsch matrix
+/// with Golub's endpoint modification of the final diagonal entry, which pins
+/// one eigenvalue at $x = 1$ (i.e. $c_s = 1$) while leaving the rest the Radau
+/// points. Mapped from $[-1, 1]$.
+fn radau_iia_nodes(s: usize) -> Vector {
+  let mut jacobi = legendre_jacobi(s);
+  if s >= 1 {
+    // Golub (1973): to force the node a = 1, solve (T_{s-1} - a I) δ = β²_{s-1}
+    // e_{s-1} on the leading block and set the last diagonal to a + δ_{s-1}.
+    let a = 1.0;
+    let last = s - 1;
+    if s >= 2 {
+      let beta = jacobi[(last, last - 1)];
+      let block: Matrix =
+        jacobi.view((0, 0), (last, last)).into_owned() - a * Matrix::identity(last, last);
+      let mut e = Vector::zeros(last);
+      e[last - 1] = beta * beta;
+      let delta = block
+        .lu()
+        .solve(&e)
+        .expect("Radau endpoint block is nonsingular (a is not an interior node)");
+      jacobi[(last, last)] = a + delta[last - 1];
+    } else {
+      jacobi[(last, last)] = a;
+    }
+  }
+  map_unit(sorted_eigenvalues(jacobi))
+}
+
+/// The Legendre Golub-Welsch (Jacobi) matrix of order $s$: symmetric
+/// tridiagonal, zero diagonal, off-diagonal $beta_j = j slash sqrt(4 j^2 - 1)$.
+/// Its eigenvalues are the Gauss-Legendre nodes on $[-1, 1]$.
+fn legendre_jacobi(s: usize) -> Matrix {
+  let mut t = Matrix::zeros(s, s);
+  for j in 1..s {
+    let beta = j as f64 / (4.0 * (j * j) as f64 - 1.0).sqrt();
+    t[(j - 1, j)] = beta;
+    t[(j, j - 1)] = beta;
+  }
+  t
+}
+
+/// Eigenvalues of a symmetric matrix, ascending.
+fn sorted_eigenvalues(m: Matrix) -> Vector {
+  let mut vals = m.symmetric_eigenvalues();
+  vals.as_mut_slice().sort_by(f64::total_cmp);
+  vals
+}
+
+/// Map quadrature nodes from $[-1, 1]$ to $[0, 1]$.
+fn map_unit(x: Vector) -> Vector {
+  x.map(|xi| 0.5 * (xi + 1.0))
 }
 
 /// Implicit Runge-Kutta time-stepper for the linear constant-coefficient
@@ -361,6 +440,82 @@ mod test {
     CsrMatrix::from(&coo)
   }
 
+  /// The $s = 1, 2$ Gauss-Legendre and Radau IIA tableaus produced by the
+  /// general collocation construction reproduce the classical hardcoded
+  /// coefficients (Hairer & Wanner, *Solving ODEs II*, Tables 5.2, 5.6) to
+  /// roundoff: implicit midpoint and the fourth-order Gauss block; backward
+  /// Euler and the third-order Radau block.
+  #[test]
+  fn low_stage_tableaus_match_classical_coefficients() {
+    let sqrt3 = 3f64.sqrt();
+
+    let gl1 = Tableau::gauss_legendre(1);
+    assert_relative_eq!(gl1.a, Matrix::from_row_slice(1, 1, &[0.5]));
+    assert_relative_eq!(gl1.b, Vector::from_row_slice(&[1.0]));
+    assert_relative_eq!(gl1.c, Vector::from_row_slice(&[0.5]));
+
+    let gl2 = Tableau::gauss_legendre(2);
+    assert_relative_eq!(
+      gl2.a,
+      Matrix::from_row_slice(2, 2, &[0.25, 0.25 - sqrt3 / 6.0, 0.25 + sqrt3 / 6.0, 0.25])
+    );
+    assert_relative_eq!(gl2.b, Vector::from_row_slice(&[0.5, 0.5]));
+    assert_relative_eq!(
+      gl2.c,
+      Vector::from_row_slice(&[0.5 - sqrt3 / 6.0, 0.5 + sqrt3 / 6.0])
+    );
+
+    let r1 = Tableau::radau_iia(1);
+    assert_relative_eq!(r1.a, Matrix::from_row_slice(1, 1, &[1.0]));
+    assert_relative_eq!(r1.b, Vector::from_row_slice(&[1.0]));
+    assert_relative_eq!(r1.c, Vector::from_row_slice(&[1.0]));
+
+    let r2 = Tableau::radau_iia(2);
+    assert_relative_eq!(
+      r2.a,
+      Matrix::from_row_slice(2, 2, &[5.0 / 12.0, -1.0 / 12.0, 3.0 / 4.0, 1.0 / 4.0])
+    );
+    assert_relative_eq!(r2.b, Vector::from_row_slice(&[3.0 / 4.0, 1.0 / 4.0]));
+    assert_relative_eq!(r2.c, Vector::from_row_slice(&[1.0 / 3.0, 1.0]));
+  }
+
+  /// A collocation tableau satisfies the simplified conditions that define it,
+  /// at every stage count: row-sum consistency $c_i = sum_j a_(i j)$, the stage
+  /// conditions $C(s)$, and the quadrature conditions $B(s)$ -- so both families
+  /// have their claimed order $p$ ($2s$ for Gauss, $2s - 1$ for Radau) for all
+  /// $s$, not just the two that used to be hardcoded. Radau additionally pins
+  /// its last node at $c_s = 1$ (stiff accuracy).
+  #[test]
+  fn collocation_tableaus_satisfy_order_conditions() {
+    for s in 1..=6 {
+      for tab in [Tableau::gauss_legendre(s), Tableau::radau_iia(s)] {
+        assert_eq!(tab.s, s);
+
+        // Row-sum consistency c_i = sum_j a_ij.
+        for i in 0..s {
+          assert_relative_eq!(tab.c[i], tab.a.row(i).sum(), epsilon = 1e-12);
+        }
+
+        // C(s): sum_j a_ij c_j^{k-1} = c_i^k / k, and B(s): sum_i b_i c_i^{k-1} = 1/k.
+        for k in 1..=s {
+          let kf = k as f64;
+          for i in 0..s {
+            let lhs: f64 = (0..s)
+              .map(|j| tab.a[(i, j)] * tab.c[j].powi(k as i32 - 1))
+              .sum();
+            assert_relative_eq!(lhs, tab.c[i].powi(k as i32) / kf, epsilon = 1e-11);
+          }
+          let quad: f64 = (0..s).map(|i| tab.b[i] * tab.c[i].powi(k as i32 - 1)).sum();
+          assert_relative_eq!(quad, 1.0 / kf, epsilon = 1e-11);
+        }
+      }
+
+      // Radau IIA is stiffly accurate: its final node is pinned at 1.
+      let radau = Tableau::radau_iia(s);
+      assert_relative_eq!(radau.c[s - 1], 1.0, epsilon = 1e-12);
+    }
+  }
+
   /// Gauss-Legendre on a linear Hamiltonian system exactly conserves the
   /// quadratic invariant $H = 1/2 (v^2 + omega^2 x^2)$ -- to roundoff, not
   /// merely bounded, across many periods and stage counts.
@@ -370,7 +525,7 @@ mod test {
     let op = oscillator(omega);
     let mass = identity(2);
 
-    for s in [1, 2] {
+    for s in 1..=4 {
       let dt = 0.3;
       let irk = LinearIrk::new(Tableau::gauss_legendre(s), &mass, op.clone(), dt);
 
