@@ -23,15 +23,13 @@
 //! through $R$.
 
 use {
+  crate::linalg::faer::FaerCholesky,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
   exterior::{multiform_gramian, Covariant},
-  formoniq_linalg::{
-    faer::FaerCholesky,
-    nalgebra::{CsrMatrix, Vector},
-  },
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::Geometry},
+    linalg::{CsrMatrix, Vector},
     topology::complex::Complex,
   },
 };

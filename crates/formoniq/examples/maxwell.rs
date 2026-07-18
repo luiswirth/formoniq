@@ -27,8 +27,8 @@ use formoniq::{
   problems::maxwell::{leapfrog_energy, solve_mixed, MaxwellOperators, MaxwellState, Medium},
   whitney_complex::WhitneyComplex,
 };
-use formoniq_linalg::nalgebra::Vector;
 use simplicial::gen::cartesian::CartesianMeshInfo;
+use simplicial::linalg::Vector;
 
 use std::f64::consts::PI;
 

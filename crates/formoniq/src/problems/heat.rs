@@ -1,9 +1,7 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
-use formoniq_linalg::{
-  faer::FaerCholesky,
-  nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Vector},
-};
+use crate::linalg::faer::FaerCholesky;
+use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector};
 
 use crate::{
   problems::elliptic::HodgeBlocks,
@@ -98,9 +96,9 @@ pub fn solve_heat<C: HilbertComplex>(
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::linalg::quadratic_form_sparse;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
-  use formoniq_linalg::nalgebra::quadratic_form_sparse;
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;

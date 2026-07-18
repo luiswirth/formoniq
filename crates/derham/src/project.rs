@@ -120,7 +120,7 @@ mod test {
 
   use {
     chartan::field::DiffFormClosure, coorder::Coord, exterior::ExteriorElement,
-    formoniq_linalg::nalgebra::Vector, simplicial::gen::cartesian::CartesianMeshInfo,
+    simplicial::gen::cartesian::CartesianMeshInfo, simplicial::linalg::Vector,
   };
 
   use approx::assert_relative_eq;

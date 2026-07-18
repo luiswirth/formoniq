@@ -73,7 +73,7 @@ mod test {
 
   use {
     exterior::MultiForm,
-    formoniq_linalg::nalgebra::Vector,
+    simplicial::linalg::Vector,
     simplicial::{atlas::MeshPoint, topology::complex::Complex},
   };
 

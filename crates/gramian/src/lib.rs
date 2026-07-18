@@ -1,7 +1,20 @@
-use formoniq_linalg::nalgebra::{Matrix, MatrixExt, Vector};
+extern crate nalgebra as na;
 
 /// The dimension of a space or object.
 pub type Dim = usize;
+
+type Matrix = na::DMatrix<f64>;
+type Vector = na::DVector<f64>;
+
+fn is_full_rank(matrix: &Matrix, eps: f64) -> bool {
+  if matrix.is_empty() {
+    return true;
+  }
+  matrix.rank(eps) == matrix.nrows().min(matrix.ncols())
+}
+fn is_spd(matrix: &Matrix) -> bool {
+  na::Cholesky::new(matrix.clone()).is_some()
+}
 
 /// A Gram Matrix represent an inner product expressed in a basis.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -11,7 +24,7 @@ pub struct Gramian {
 }
 impl Gramian {
   pub fn new(matrix: Matrix) -> Self {
-    assert!(matrix.is_spd(), "Matrix must be s.p.d.");
+    assert!(is_spd(&matrix), "Matrix must be s.p.d.");
     Self { matrix }
   }
   pub fn new_unchecked(matrix: Matrix) -> Self {
@@ -22,7 +35,7 @@ impl Gramian {
     }
   }
   pub fn from_euclidean_vectors(vectors: Matrix) -> Self {
-    assert!(vectors.is_full_rank(1e-9), "Matrix must be full rank.");
+    assert!(is_full_rank(&vectors, 1e-9), "Matrix must be full rank.");
     let matrix = vectors.transpose() * vectors;
     Self::new_unchecked(matrix)
   }
@@ -219,7 +232,6 @@ impl Gramian {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use formoniq_linalg::nalgebra::Vector;
   use std::f64::consts::FRAC_PI_2;
 
   #[test]

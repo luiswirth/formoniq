@@ -34,8 +34,8 @@ use {
   exterior::{
     Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
   },
-  formoniq_linalg::nalgebra::Vector,
   gramian::RiemannianMetric,
+  simplicial::linalg::Vector,
   simplicial::{
     atlas::MeshPoint,
     geometry::{
@@ -468,7 +468,7 @@ mod test {
 
   use {
     chartan::field::DiffFormClosure,
-    formoniq_linalg::nalgebra::Vector,
+    simplicial::linalg::Vector,
     simplicial::{
       gen::cartesian::CartesianMeshInfo,
       geometry::coord::{locate::PointLocator, Coord},

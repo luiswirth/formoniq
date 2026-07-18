@@ -1,7 +1,7 @@
 use {
   exterior::{ExteriorGrade, MultiForm, MultiVector},
-  formoniq_linalg::nalgebra::Matrix,
   multiindex::{factorial_f64, Combination, Sign},
+  simplicial::linalg::Matrix,
   simplicial::{
     atlas::{ref_difbarys, BaryRef},
     Dim,

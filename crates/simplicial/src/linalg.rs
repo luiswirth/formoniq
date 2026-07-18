@@ -1,3 +1,12 @@
+//! Dense and sparse nalgebra type aliases, and the block-matrix builder that
+//! assembly needs on top of them.
+//!
+//! Not a shared base crate on purpose: `simplicial` is the lowest crate that
+//! genuinely needs sparse matrices (the boundary operators), so this is where
+//! the aliases live; `derham` and `formoniq` reuse them because they already
+//! depend on `simplicial` for real reasons, not because a `Vector`/`Matrix`
+//! alias is worth a crate of its own.
+
 use std::mem;
 
 trait CumsumExt {
@@ -29,107 +38,9 @@ pub type Matrix<T = f64> = na::DMatrix<T>;
 
 pub type VectorView<'a, T = f64> = na::DVectorView<'a, T>;
 pub type RowVectorView<'a, T = f64> = na::MatrixView<'a, T, na::U1, na::Dyn>;
-pub type MatrixView<'a, T = f64> = na::DMatrixView<'a, T>;
 
 pub type CooMatrix<T = f64> = nas::CooMatrix<T>;
 pub type CsrMatrix<T = f64> = nas::CsrMatrix<T>;
-pub type CscMatrix<T = f64> = nas::CscMatrix<T>;
-
-pub trait MatrixExt {
-  fn is_full_rank(&self, eps: f64) -> bool;
-  fn is_spd(&self) -> bool;
-  fn condition_number(self) -> f64;
-}
-impl MatrixExt for Matrix {
-  fn is_full_rank(&self, eps: f64) -> bool {
-    if self.is_empty() {
-      return true;
-    }
-    self.rank(eps) == self.nrows().min(self.ncols())
-  }
-  fn is_spd(&self) -> bool {
-    na::Cholesky::new(self.clone()).is_some()
-  }
-  fn condition_number(self) -> f64 {
-    self.norm() * self.try_inverse().unwrap().norm()
-  }
-}
-
-pub fn bilinear_form_sparse(mat: &CsrMatrix, u: &Vector, v: &Vector) -> f64 {
-  //u.transpose() * mass * u
-  ((mat.transpose() * u).transpose() * v).x
-}
-pub fn quadratic_form_sparse(mat: &CsrMatrix, u: &Vector) -> f64 {
-  bilinear_form_sparse(mat, u, u)
-}
-
-pub fn kronecker_sum<T>(mats: &[Matrix<T>]) -> Matrix<T>
-where
-  T: na::Scalar + num_traits::Zero + num_traits::One + na::ClosedMulAssign + na::ClosedAddAssign,
-{
-  assert!(!mats.is_empty());
-  assert!(mats.iter().all(|m| m.nrows() == m.ncols()));
-
-  let eyes: Vec<_> = mats
-    .iter()
-    .map(|m| Matrix::identity(m.nrows(), m.nrows()))
-    .collect();
-
-  let kron_size = mats.iter().map(na::Matrix::nrows).product::<usize>();
-  let mut kron_sum = Matrix::zeros(kron_size, kron_size);
-  for (dim, mat) in mats.iter().enumerate() {
-    let eyes_before = eyes[..dim]
-      .iter()
-      .fold(Matrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
-    let eyes_after = eyes[dim + 1..]
-      .iter()
-      .fold(Matrix::identity(1, 1), |prod, eye| prod.kronecker(eye));
-
-    let kron_prod = eyes_before.kronecker(mat).kronecker(&eyes_after);
-    kron_sum += kron_prod;
-  }
-
-  kron_sum
-}
-
-pub fn matrix_from_const_diagonals<T>(
-  values: &[T],
-  offsets: &[isize],
-  nrows: usize,
-  ncols: usize,
-) -> Matrix<T>
-where
-  T: num_traits::Zero + na::Scalar + Copy,
-{
-  let mut matrix = Matrix::zeros(nrows, ncols);
-
-  for (idiag, &offset) in offsets.iter().enumerate() {
-    let [start_row, start_col] = if offset >= 0 {
-      [0, offset as usize]
-    } else {
-      [(-offset) as usize, 0]
-    };
-
-    let mut r = start_row;
-    let mut c = start_col;
-    while r < nrows && c < ncols {
-      matrix[(r, c)] = values[idiag];
-      r += 1;
-      c += 1;
-    }
-  }
-
-  matrix
-}
-
-pub fn save_vector(mu: &Vector, path: impl AsRef<std::path::Path>) -> std::io::Result<()> {
-  use std::io::Write;
-  let mut file = std::fs::File::create(path).unwrap();
-  for v in mu.iter() {
-    writeln!(file, "{v}")?;
-  }
-  Ok(())
-}
 
 pub trait CooMatrixExt {
   fn neg(self) -> Self;

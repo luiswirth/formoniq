@@ -1,8 +1,11 @@
 use crate::operators::{ElMatProvider, ElVecProvider};
 
-use formoniq_linalg::nalgebra::{CooMatrix, Vector};
 use itertools::Itertools;
-use simplicial::{geometry::metric::Geometry, topology::complex::Complex};
+use simplicial::{
+  geometry::metric::Geometry,
+  linalg::{CooMatrix, Vector},
+  topology::complex::Complex,
+};
 
 use rayon::prelude::*;
 
@@ -89,8 +92,9 @@ mod test {
   use super::*;
   use crate::operators::HodgeMassElmat;
 
-  use formoniq_linalg::nalgebra::Matrix;
-  use simplicial::{gen::cartesian::CartesianMeshInfo, geometry::metric::CellGramians};
+  use simplicial::{
+    gen::cartesian::CartesianMeshInfo, geometry::metric::CellGramians, linalg::Matrix,
+  };
 
   /// Cell Gramians are a first-class geometry: assembling against the per-cell
   /// metric tensors gives exactly the same Galerkin matrix as the edge-length

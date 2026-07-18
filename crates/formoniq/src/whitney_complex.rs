@@ -7,11 +7,12 @@ use crate::{
 };
 
 use {
+  crate::linalg::quadratic_form_sparse,
   derham::cochain::Cochain,
   exterior::ExteriorGrade,
-  formoniq_linalg::nalgebra::{quadratic_form_sparse, CooMatrix, CsrMatrix},
   simplicial::{
     geometry::metric::mesh::MeshLengths,
+    linalg::{CooMatrix, CsrMatrix},
     topology::{
       boundary::BoundaryComplex,
       complex::Complex,

@@ -6,7 +6,6 @@ license = "MIT OR Apache-2.0"
 
 [dependencies]
 coorder = { path = "../coorder" }
-formoniq-linalg = { path = "../linalg" }
 gramian = { path = "../gramian" }
 multiindex = { path = "../multiindex" }
 

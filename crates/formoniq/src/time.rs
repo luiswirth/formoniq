@@ -23,10 +23,8 @@
 //! solve is exact), assembled as a genuinely sparse block Kronecker system and
 //! factored once for repeated stepping at a fixed $dt$.
 
-use formoniq_linalg::{
-  faer::FaerLu,
-  nalgebra::{CooMatrix, CsrMatrix, Matrix, Vector},
-};
+use crate::linalg::faer::FaerLu;
+use simplicial::linalg::{CooMatrix, CsrMatrix, Matrix, Vector};
 
 /// A Butcher tableau $(A, b, c)$ for an $s$-stage Runge-Kutta method.
 pub struct Tableau {

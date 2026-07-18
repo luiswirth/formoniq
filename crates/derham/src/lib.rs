@@ -24,7 +24,7 @@ mod test {
   };
 
   use {
-    formoniq_linalg::nalgebra::Vector,
+    simplicial::linalg::Vector,
     simplicial::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex},
   };
 

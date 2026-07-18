@@ -54,8 +54,8 @@ pub use transition::Transition;
 
 use crate::Dim;
 
+use crate::linalg::{Matrix, RowVector, Vector};
 use coorder::{CoordSpace, Coords, CoordsRef};
-use formoniq_linalg::nalgebra::{Matrix, RowVector, Vector};
 use multiindex::{compositions, factorial_f64, Combination};
 
 /// The barycentric coordinate space of a chart: the affine weights

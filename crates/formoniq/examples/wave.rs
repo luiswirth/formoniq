@@ -26,8 +26,8 @@ use {
     problems::wave::{cfl_dt, solve_wave, WaveState},
     whitney_complex::WhitneyComplex,
   },
-  formoniq_linalg::nalgebra::Vector,
   simplicial::gen::cartesian::CartesianMeshInfo,
+  simplicial::linalg::Vector,
   util::{BoundaryCondition, BoxEigenform},
 };
 

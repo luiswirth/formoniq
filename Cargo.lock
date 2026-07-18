@@ -704,7 +704,6 @@ dependencies = [
  "chartan",
  "coorder",
  "exterior",
- "formoniq-linalg",
  "gramian",
  "multiindex",
  "nalgebra",
@@ -1217,26 +1216,17 @@ dependencies = [
  "coorder",
  "derham",
  "exterior",
- "formoniq-linalg",
+ "faer",
  "gramian",
  "itertools 0.15.0",
  "multiindex",
  "nalgebra",
  "nalgebra-sparse",
+ "num-traits",
  "rayon",
  "simplicial",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "formoniq-linalg"
-version = "0.2.0"
-dependencies = [
- "faer",
- "nalgebra",
- "nalgebra-sparse",
- "num-traits",
 ]
 
 [[package]]
@@ -1255,7 +1245,6 @@ dependencies = [
  "env_logger",
  "exterior",
  "formoniq",
- "formoniq-linalg",
  "gramian",
  "image",
  "log",
@@ -1585,7 +1574,7 @@ dependencies = [
 name = "gramian"
 version = "0.2.0"
 dependencies = [
- "formoniq-linalg",
+ "nalgebra",
  "serde",
 ]
 
@@ -3619,7 +3608,6 @@ dependencies = [
  "approx",
  "ciborium",
  "coorder",
- "formoniq-linalg",
  "gramian",
  "indexmap",
  "itertools 0.15.0",

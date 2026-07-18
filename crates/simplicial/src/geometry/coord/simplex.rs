@@ -24,8 +24,8 @@ use crate::{
   Dim,
 };
 
+use crate::linalg::{Matrix, Vector};
 use coorder::affine::AffineTransform;
-use formoniq_linalg::nalgebra::{Matrix, Vector};
 use gramian::Gramian;
 use tracing::warn;
 

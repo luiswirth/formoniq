@@ -1,4 +1,4 @@
-use formoniq_linalg::nalgebra::{CsrMatrix, Vector};
+use simplicial::linalg::{CsrMatrix, Vector};
 
 use {
   exterior::ExteriorGrade,

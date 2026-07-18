@@ -4,16 +4,16 @@ use crate::{
 };
 
 use {
-  derham::cochain::Cochain,
-  exterior::ExteriorGrade,
-  formoniq_linalg::{
+  crate::linalg::{
     eigen::{sparse_shift_invert_eigen, EigenError},
     faer::FaerLu,
   },
+  derham::cochain::Cochain,
+  exterior::ExteriorGrade,
 };
 
-use formoniq_linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
 use itertools::Itertools;
+use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
 use std::mem;
 
 /// The mixed Hodge-Laplace source problem $Delta u = f$ on any discrete Hilbert

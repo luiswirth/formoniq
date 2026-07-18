@@ -5,6 +5,6 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-formoniq-linalg = { path = "../linalg" }
+nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 
 serde = { version = "1.0.228", features = ["derive"] }

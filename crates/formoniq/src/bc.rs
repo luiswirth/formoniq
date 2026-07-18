@@ -19,13 +19,13 @@ use crate::{
 };
 
 use {
+  crate::linalg::faer::FaerCholesky,
   derham::{cochain::Cochain, section::Section},
   exterior::{Covariant, ExteriorGrade},
-  formoniq_linalg::{
-    faer::FaerCholesky,
-    nalgebra::{CsrMatrix, Vector},
+  simplicial::{
+    atlas::SimplexQuadRule,
+    linalg::{CsrMatrix, Vector},
   },
-  simplicial::atlas::SimplexQuadRule,
 };
 
 /// A Galerkin system with essential boundary conditions imposed by affine

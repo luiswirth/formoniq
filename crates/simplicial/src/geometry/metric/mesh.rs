@@ -8,7 +8,7 @@ use crate::{
   Dim,
 };
 
-use formoniq_linalg::nalgebra::Vector;
+use crate::linalg::Vector;
 
 use itertools::Itertools;
 use rayon::iter::ParallelIterator;
