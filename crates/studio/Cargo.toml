@@ -4,6 +4,12 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+# `cdylib` is the wasm-bindgen output; `rlib` keeps the native binary and the
+# tests able to depend on the crate as a library. Native builds ignore the
+# `cdylib` and link the `rlib` as before.
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 # Internal workspace dependencies
 formoniq = { path = "../formoniq" }
@@ -18,20 +24,65 @@ exterior = { path = "../exterior" }
 # `wgpu` crate, not just semver-compatible. Bump together with egui-wgpu.
 wgpu = "29.0.4"
 winit = "0.30.13"
-pollster = "1.0.1"
 nalgebra = "0.35.0"
 log = "0.4.33"
-env_logger = "0.11.11"
 egui = "0.35.0"
 egui-wgpu = "0.35.0"
-egui-winit = "0.35.0"
+# Default features off so the web target can drop `clipboard`, whose `arboard`
+# backend does not build for `wasm32`. The per-target blocks below restore the
+# native default set and pick the web-safe subset.
+egui-winit = { version = "0.35.0", default-features = false }
 bytemuck = { version = "1.25.1", features = ["derive"] }
+# `std::time::Instant` panics on wasm (there is no monotonic clock in the plain
+# `unknown` target); `web-time` is a drop-in that maps to `performance.now()`
+# there and re-exports `std::time` verbatim on native. Used everywhere the
+# viewer reads a wall clock.
+web-time = "1.1.0"
+
+# Native-only: the CLI, the blocking executor, the terminal logger, the in-egui
+# file browser and the PNG encoder are all things a browser either forbids or
+# supplies itself. The web build carries none of them.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# egui-winit's native default set (clipboard, link-opening, and the Linux
+# windowing backends). Matches the crate's own `default`.
+egui-winit = { version = "0.35.0", default-features = false, features = [
+  "clipboard",
+  "links",
+  "wayland",
+  "x11",
+] }
+pollster = "1.0.1"
+env_logger = "0.11.11"
 # An in-egui file browser for loading a custom mesh. Pure Rust (its only extra
 # deps are `directories` and `sysinfo`), so it pulls in no GTK, no D-Bus portal
 # and no platform toolkit -- unlike a native-dialog crate.
 egui-file-dialog = "0.14.1"
 clap = { version = "4.6.2", features = ["derive"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+
+# Web-only: the wasm entry point, the async bridge for surface creation, the DOM
+# handles for mounting the canvas, and the panic/log plumbing that routes into
+# the browser console.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Link-opening only; the clipboard backend is native. egui-winit routes web
+# clipboard through the browser itself.
+egui-winit = { version = "0.35.0", default-features = false, features = ["links"] }
+wasm-bindgen = "0.2.100"
+wasm-bindgen-futures = "0.4.50"
+console_error_panic_hook = "0.1.7"
+console_log = "1.0"
+web-sys = { version = "0.3.77", features = [
+  "Document",
+  "Window",
+  "Element",
+  "HtmlCanvasElement",
+] }
+# Not used directly: the eigensolver's `faer` pulls `rand`, which pulls
+# `getrandom`, and on the `unknown` web target that has no OS entropy source to
+# bind to. Enabling the `wasm_js` backend feature routes it at the browser's
+# `crypto.getRandomValues`; the matching `--cfg getrandom_backend="wasm_js"`
+# lives in `.cargo/config.toml`, scoped to this target alone.
+getrandom = { version = "0.3", features = ["wasm_js"] }
 
 [dev-dependencies]
 # Pinned to the same version wgpu resolves internally (see the `wgpu` pin

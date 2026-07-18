@@ -225,11 +225,47 @@ Two durable conventions, kept general on purpose:
   crate, not merely semver-compatible versions; bump them together, and let the
   build enforce it.
 
+## Two platforms, one viewer
+
+The viewer runs native and on the web (`wasm32`, WebGPU), from the same code.
+The split is a discipline, not a fork: **everything browser-specific is confined
+to `web.rs`** -- the `wasm-bindgen` entry point, mounting winit's canvas into the
+document, and bridging the *async* GPU bootstrap back into the event loop (device
+and surface creation cannot block the browser, so the finished `State` is parked
+in a slot the loop drains). Nothing web-flavored is allowed to leak into the
+shared viewer code; what remains there are thin `#[cfg]` gates at genuine
+platform seams, never web logic interleaved with native.
+
+The web is the constrained side, and the constraints are honest, not worked
+around:
+
+- **No filesystem, no subprocess.** OBJ loading, PNG/MP4 export and the CLI are
+  native features, gated off the web build -- which has nowhere to read or write.
+  A feature that needs local files is native by nature, not a web regression to
+  fix.
+- **Single-threaded.** The plain `wasm32` target has no background thread, so a
+  scene's solve runs synchronously where native offloads it (`PendingLoad`), and
+  `faer` builds without its `rayon` thread pool. A heavy eigensolve therefore
+  blocks the tab briefly; restoring an off-thread build there is a web-worker
+  concern, kept out of the shared path.
+- **WebGPU only, by choice.** No WebGL2 fallback -- the viewer targets the modern
+  backend and fails legibly where it is absent, rather than constraining the
+  render features to the WebGL2 subset.
+
+The native build is untouched by any of this: the per-target dependency and
+feature splits (the `faer` thread pool, the clipboard backend, the `getrandom`
+web entropy source) restore the exact native set, so a native change never pays
+for the web target's existence -- the same way `studio` itself stays off the
+core's critical path.
+
 ## Anti-goals
 
 - No renderer specialized to a fixed intrinsic dimension or grade where the two
   reductions cover it. Marks chosen by the grade's reduction, primitives by the
   dimension's; no second pipeline for what is one technique at a different ink.
+- No web-specific logic outside `web.rs`. The shared viewer stays
+  platform-neutral; a `wasm`/native divergence is a thin `#[cfg]` at a real seam,
+  never a browser concern smeared through the render or model code.
 - No dimension dispatch outside the bake, and no grade dispatch outside the mark.
   A `match` on either anywhere else is the case distinction escaping its
   reduction.

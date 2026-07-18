@@ -1,0 +1,9 @@
+# Scoped to the web target only: native builds (the whole workspace's default)
+# never see these flags.
+#
+# `getrandom` (pulled transitively through faer -> rand) has no entropy source
+# on `wasm32-unknown-unknown` unless told to use the browser's Web Crypto API.
+# This cfg selects that backend; the companion `wasm_js` feature is enabled on
+# `getrandom` in `crates/studio/Cargo.toml`. Both are required.
+[target.wasm32-unknown-unknown]
+rustflags = ['--cfg', 'getrandom_backend="wasm_js"']

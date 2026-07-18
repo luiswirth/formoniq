@@ -472,12 +472,14 @@ pub(crate) struct PanelResponse {
   /// Whether "Load OBJ…" was clicked -- the one request the panel cannot
   /// resolve itself, since opening the native file browser is the caller's
   /// (`app.rs`'s) stateful `egui_file_dialog`, not something a pure function
-  /// of a snapshot can own.
+  /// of a snapshot can own. Native only, with the button that raises it.
+  #[cfg(not(target_arch = "wasm32"))]
   pub(crate) load_obj_clicked: bool,
   /// Whether "Export PNG…" was clicked -- opens the save dialog the caller
   /// owns, and on a pick the current frame (this field, this camera, this
   /// instant) is written as a still. Same reason as `load_obj_clicked`: the
-  /// dialog is stateful, so it cannot live in this pure function.
+  /// dialog is stateful, so it cannot live in this pure function. Native only.
+  #[cfg(not(target_arch = "wasm32"))]
   pub(crate) export_png_clicked: bool,
 }
 
@@ -502,7 +504,9 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut post = model.post;
   let mut orthographic = model.orthographic;
   let mut playing = model.playing;
+  #[cfg(not(target_arch = "wasm32"))]
   let mut load_obj_clicked = false;
+  #[cfg(not(target_arch = "wasm32"))]
   let mut export_png_clicked = false;
 
   // Left sidebar: the browser. The curated presets on top -- each a point in
@@ -623,7 +627,9 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         | MeshSource::File(_) => {}
       }
       // Opens the in-egui file browser; the pick itself is retrieved by the
-      // caller, which owns the (native-only) `egui_file_dialog` state.
+      // caller, which owns the (native-only) `egui_file_dialog` state. Absent on
+      // the web, which has no local filesystem to browse.
+      #[cfg(not(target_arch = "wasm32"))]
       if ui.button("Load OBJ…").clicked() {
         load_obj_clicked = true;
       }
@@ -738,7 +744,9 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // Writes exactly what is on screen -- the current field, camera and wave
       // phase -- as a PNG still, at the window's own resolution and the export
       // supersampling. The clip export the transport bar would host is a
-      // separate, later concern; this is the plain screenshot.
+      // separate, later concern; this is the plain screenshot. Native only:
+      // there is no local filesystem to save to on the web.
+      #[cfg(not(target_arch = "wasm32"))]
       if ui
         .button("Export PNG…")
         .on_hover_text("Save the current view as a still")
@@ -806,7 +814,9 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     post,
     orthographic,
     playing,
+    #[cfg(not(target_arch = "wasm32"))]
     load_obj_clicked,
+    #[cfg(not(target_arch = "wasm32"))]
     export_png_clicked,
   }
 }
