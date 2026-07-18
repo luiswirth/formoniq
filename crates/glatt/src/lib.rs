@@ -21,11 +21,11 @@
 //!   $phi: Omega -> RR^N$ of $M$, and the chart $chi = phi^(-1) compose r$ it
 //!   induces by orthogonal (nearest-point) projection.
 //!
-//! `chartan` depends on `exterior` (the flat algebra its fields are valued in)
+//! `glatt` depends on `exterior` (the flat algebra its fields are valued in)
 //! and on nothing meshy: it is a *sibling* of `simplicial`, not a layer above or
 //! below it. Their one relation -- pulling continuum data onto the simplicial
 //! mesh, and the approximation error that costs -- is the join, and it lives one
-//! crate up in `derham`, where `exterior`, `simplicial` and `chartan` meet.
+//! crate up in `derham`, where `exterior`, `simplicial` and `glatt` meet.
 
 extern crate nalgebra as na;
 

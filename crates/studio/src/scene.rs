@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use chartan::field::DiffFormClosure;
+use glatt::field::DiffFormClosure;
 use gramian::RiemannianMetric;
 use simplicial::linalg::Vector;
 

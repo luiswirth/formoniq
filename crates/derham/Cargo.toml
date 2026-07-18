@@ -11,7 +11,7 @@ categories = ["mathematics", "science"]
 
 [dependencies]
 exterior = { path = "../exterior", version = "0.2.0" }
-chartan = { path = "../chartan", version = "0.2.0" }
+glatt = { path = "../glatt", version = "0.2.0" }
 simplicial = { path = "../simplicial", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }
 gramian = { path = "../gramian", version = "0.2.0" }

@@ -171,9 +171,9 @@ fn relative_inclusion_is_cochain_map() {
 /// the direct solve on the relative complex.
 #[test]
 fn lifted_homogeneous_dirichlet_is_relative_solve() {
-  use chartan::field::DiffFormClosure;
   use derham::section::CoordFieldExt;
   use formoniq::{assemble, bc, linalg::faer::FaerCholesky, operators::SourceElVec};
+  use glatt::field::DiffFormClosure;
   use simplicial::linalg::Vector;
 
   let dim = 2;
