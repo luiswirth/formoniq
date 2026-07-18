@@ -21,14 +21,14 @@
 
 extern crate nalgebra as na;
 
+use chartan::field::DiffFormClosure;
 use common::linalg::nalgebra::Vector;
-use continuum::field::DiffFormClosure;
-use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
+use derham::{cochain::Cochain, reduction::derham_map, section::CoordFieldExt};
 use formoniq::{
   problems::maxwell::{leapfrog_energy, solve_mixed, MaxwellOperators, MaxwellState, Medium},
   whitney_complex::WhitneyComplex,
 };
-use manifold::gen::cartesian::CartesianMeshInfo;
+use simplicial::gen::cartesian::CartesianMeshInfo;
 
 use std::f64::consts::PI;
 

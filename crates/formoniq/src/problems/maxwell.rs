@@ -51,7 +51,7 @@ use common::linalg::{
   faer::FaerCholesky,
   nalgebra::{bilinear_form_sparse, quadratic_form_sparse, CsrMatrix, Vector},
 };
-use ddf::cochain::Cochain;
+use derham::cochain::Cochain;
 
 /// The constitutive parameters of a homogeneous isotropic linear medium: the
 /// electric permittivity $epsilon$ and the magnetic permeability $mu$.
@@ -296,7 +296,7 @@ mod test {
   use super::*;
 
   use common::linalg::nalgebra::Vector;
-  use manifold::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;
 

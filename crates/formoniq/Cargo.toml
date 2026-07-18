@@ -5,10 +5,10 @@ edition = "2021"
 license = "MIT OR Apache-2.0"
 
 [dependencies]
-ddf = { path = "../ddf" }
+derham = { path = "../derham" }
 exterior = { path = "../exterior" }
-continuum = { path = "../continuum" }
-manifold = { path = "../manifold" }
+chartan = { path = "../chartan" }
+simplicial = { path = "../simplicial" }
 common = { path = "../common" }
 
 nalgebra = "0.35.0"

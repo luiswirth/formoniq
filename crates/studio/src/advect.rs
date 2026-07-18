@@ -41,8 +41,8 @@
 //! life.
 
 use common::{gramian::RiemannianMetric, linalg::nalgebra::Matrix};
-use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
-use manifold::{
+use derham::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
+use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
@@ -225,7 +225,7 @@ fn facet_neighbour<'a>(
   topology: &'a Complex,
   cell: SimplexIdx,
   opposite: usize,
-) -> Option<manifold::topology::handle::SimplexRef<'a>> {
+) -> Option<simplicial::topology::handle::SimplexRef<'a>> {
   let dim = cell.dim();
   if dim == 0 {
     // A point has no facet to cross, so every direction is boundary. The
@@ -334,7 +334,7 @@ fn pad_mat4(matrix: &Matrix) -> Mat4 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use manifold::geometry::coord::mesh::MeshCoords;
+  use simplicial::geometry::coord::mesh::MeshCoords;
 
   /// The generator preserves $sum_i lambda_i = 1$: its columns sum to zero, so
   /// $bb(1)^T dot(lambda) = 0$ and a particle never leaves the affine hull its

@@ -13,9 +13,9 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use ddf::cochain::Cochain;
+use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
-use manifold::{
+use simplicial::{
   geometry::coord::mesh::{standard_coord_complex, MeshCoords},
   topology::{complex::Complex, simplex::Simplex},
   Dim,
@@ -202,11 +202,11 @@ impl MeshSource {
   pub(crate) fn build(&self) -> Result<Mesh, String> {
     match self {
       MeshSource::Sphere { subdivisions } => {
-        Ok(manifold::gen::sphere::mesh_sphere_surface(*subdivisions))
+        Ok(simplicial::gen::sphere::mesh_sphere_surface(*subdivisions))
       }
       MeshSource::Grid { cells_axis } => {
         let (topology, coords) =
-          manifold::gen::cartesian::CartesianMeshInfo::new_unit(2, *cells_axis)
+          simplicial::gen::cartesian::CartesianMeshInfo::new_unit(2, *cells_axis)
             .compute_coord_complex();
         // The renderer draws in 3D and reads the surface normal off the
         // embedding; the grid is planar in $RR^2$, so lift it into the $z = 0$

@@ -33,7 +33,7 @@ use common::{
 /// derived Jacobian and chart.
 ///
 /// Mesh-independent: it knows the continuum, not the simplicial manifold that
-/// approximates it. The bridge onto a mesh is `pullback_through` in `ddf`, which
+/// approximates it. The bridge onto a mesh is `pullback_through` in `derham`, which
 /// is where the two manifolds meet.
 pub struct Parametrization<S: CoordSpace = Ambient> {
   forward: Box<ForwardFn<S>>,

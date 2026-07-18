@@ -2,7 +2,7 @@ use crate::operators::{ElMatProvider, ElVecProvider};
 
 use common::linalg::nalgebra::{CooMatrix, Vector};
 use itertools::Itertools;
-use manifold::{geometry::metric::Geometry, topology::complex::Complex};
+use simplicial::{geometry::metric::Geometry, topology::complex::Complex};
 
 use rayon::prelude::*;
 
@@ -90,7 +90,7 @@ mod test {
   use crate::operators::HodgeMassElmat;
 
   use common::linalg::nalgebra::Matrix;
-  use manifold::{gen::cartesian::CartesianMeshInfo, geometry::metric::CellGramians};
+  use simplicial::{gen::cartesian::CartesianMeshInfo, geometry::metric::CellGramians};
 
   /// Cell Gramians are a first-class geometry: assembling against the per-cell
   /// metric tensors gives exactly the same Galerkin matrix as the edge-length

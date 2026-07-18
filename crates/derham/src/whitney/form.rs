@@ -4,7 +4,7 @@ use {
     linalg::nalgebra::Matrix,
   },
   exterior::{ExteriorGrade, MultiForm, MultiVector},
-  manifold::{
+  simplicial::{
     atlas::{ref_difbarys, BaryRef},
     Dim,
   },

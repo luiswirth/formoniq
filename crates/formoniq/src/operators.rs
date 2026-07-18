@@ -4,9 +4,9 @@ use {
     combo::{factorial, Combination},
     linalg::nalgebra::{Matrix, Vector},
   },
-  ddf::{section::Section, whitney::form::WhitneyForm},
+  derham::{section::Section, whitney::form::WhitneyForm},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
-  manifold::{
+  simplicial::{
     atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
     geometry::cell_volume,
     topology::{
@@ -262,8 +262,10 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 mod test {
   use super::*;
 
-  use ddf::whitney::form::WhitneyForm;
-  use manifold::{geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps};
+  use derham::whitney::form::WhitneyForm;
+  use simplicial::{
+    geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps,
+  };
 
   use approx::assert_relative_eq;
 

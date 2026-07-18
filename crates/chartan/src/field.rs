@@ -4,8 +4,8 @@
 //! exact solution, a source term, a boundary flux, given as a function of a
 //! point of a coordinate domain $Omega subset RR^m$. It is *not* the
 //! discrete-differential-form notion of a field -- a `Section` of the exterior
-//! bundle over the simplicial manifold, which lives in `ddf` and has no global
-//! coordinate to be a function of. The two are connected in `ddf` by the
+//! bundle over the simplicial manifold, which lives in `derham` and has no global
+//! coordinate to be a function of. The two are connected in `derham` by the
 //! variance-directed functor: covariant coordinate fields pull back onto the
 //! mesh along the composite of the cell parametrization and the continuum chart,
 //! contravariant ones are pushed forward off it.

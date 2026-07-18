@@ -21,7 +21,7 @@ mod util;
 use {
   common::util::algebraic_convergence_rate,
   formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
-  manifold::gen::cartesian::CartesianMeshInfo,
+  simplicial::gen::cartesian::CartesianMeshInfo,
   util::{report, BoundaryCondition},
 };
 
@@ -174,7 +174,7 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
 
   let path = std::path::PathBuf::from(prompt("Enter mesh file path (.msh).")?);
   let (topology, coords) = match path.extension().and_then(|e| e.to_str()) {
-    Some("msh") => manifold::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
+    Some("msh") => simplicial::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
     _ => return Err("Unknown or missing file extension.".into()),
   };
   let metric = coords.to_edge_lengths(&topology);

@@ -147,7 +147,7 @@ impl Complex {
 /// the k-simplices, coefficients in colex order (indexed by [`KSimplexIdx`]).
 ///
 /// The element of $C_k$ dual to a cochain; chains carry no metric, so they live
-/// here in `topology` rather than up in `ddf` with the cochains.
+/// here in `topology` rather than up in `derham` with the cochains.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chain {
   grade: Dim,

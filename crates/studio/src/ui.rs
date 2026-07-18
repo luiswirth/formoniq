@@ -5,7 +5,7 @@
 //! panel itself never touches.
 
 use exterior::ExteriorGrade;
-use manifold::{topology::simplex::Simplex, Dim};
+use simplicial::{topology::simplex::Simplex, Dim};
 
 use crate::gallery::{
   BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,

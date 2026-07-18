@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use std::fmt;
 
 use common::linalg::nalgebra::Matrix;
-use manifold::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 
 use crate::io::surface::TriangleSurface3D;
 

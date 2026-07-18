@@ -1,16 +1,16 @@
 use std::borrow::Cow;
 
+use chartan::field::DiffFormClosure;
 use common::{gramian::RiemannianMetric, linalg::nalgebra::Vector};
-use continuum::field::DiffFormClosure;
 
 use crate::bake::CellCorner;
 use crate::ui::Selection;
-use ddf::{
-  cochain::Cochain, derham::derham_map, section::CoordFieldExt,
+use derham::{
+  cochain::Cochain, reduction::derham_map, section::CoordFieldExt,
   whitney::interpolant::WhitneyInterpolant,
 };
 use exterior::{ExteriorGrade, MultiForm};
-use manifold::{
+use simplicial::{
   atlas::MeshPoint,
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
   topology::{
@@ -379,7 +379,7 @@ impl Scene {
   /// the same code as grade 0, which is the point of the $min(k, n-k)$ dispatch
   /// (discussion #101).
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
-    use manifold::gen::sphere::mesh_sphere_surface;
+    use simplicial::gen::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     let mut fields = Vec::new();
@@ -430,7 +430,7 @@ impl Scene {
   /// actual modes in when it lands. The lone field has no eigenvalue, so it is
   /// drawn as a plain, undeformed surface.
   pub fn sphere_placeholder(nsubdivisions: usize) -> Self {
-    use manifold::gen::sphere::mesh_sphere_surface;
+    use simplicial::gen::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     Self::placeholder_on(topology, coords)
@@ -480,7 +480,7 @@ impl Scene {
   /// shared construction below, where every DOF simplex's support is the one
   /// cell itself.
   pub fn whitney_basis(cell_dim: Dim) -> Self {
-    use manifold::geometry::coord::mesh::standard_coord_complex;
+    use simplicial::geometry::coord::mesh::standard_coord_complex;
 
     let (topology, coords) = standard_coord_complex(cell_dim);
     // The renderer is 3D-only; a reference cell of `dim < 3` embeds as
@@ -976,7 +976,7 @@ pub(crate) fn hodge_decompose(
 
 /// A deterministic, mesh-independent probe form for the Hodge decomposition:
 /// the ambient 1-form $omega = -y dif x + x dif y + z dif z$ pulled onto the
-/// mesh through the `ddf` bridge, then de Rham mapped to a `grade`-cochain.
+/// mesh through the `derham` bridge, then de Rham mapped to a `grade`-cochain.
 ///
 /// The swirl $-y dif x + x dif y$ is not closed (a coexact part) and threads
 /// any handle enclosing the $z$-axis (a harmonic part); the $z dif z = dif(z^2\/2)$
@@ -1027,7 +1027,7 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
 }
 
 /// The smooth part of the decomposition probe: the ambient 1-form
-/// $omega = -y dif x + x dif y + z dif z$ pulled onto the mesh through the `ddf`
+/// $omega = -y dif x + x dif y + z dif z$ pulled onto the mesh through the `derham`
 /// bridge and de Rham mapped to a 1-cochain.
 ///
 /// The swirl $-y dif x + x dif y$ is not closed, so it carries both an exact and
@@ -1060,7 +1060,7 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// A localized grade-0 initial condition for a time-dependent solve, defined off
 /// the mesh's own coordinates: a Gaussian in ambient distance centered on the
 /// vertex *nearest* the centroid, of width a fixed fraction of the coordinate
-/// extent. Pulled onto the mesh through the `ddf` bridge and de Rham mapped to a
+/// extent. Pulled onto the mesh through the `derham` bridge and de Rham mapped to a
 /// 0-cochain, so it lands on any embedded surface without assuming a shape.
 ///
 /// The nearest-to-centroid vertex, not the farthest: on a mesh with boundary
@@ -1168,7 +1168,7 @@ mod tests {
   /// rather than decaying to zero -- the peak drops while the total does not.
   #[test]
   fn heat_flow_is_total_on_a_closed_mesh() {
-    use manifold::gen::sphere::mesh_sphere_surface;
+    use simplicial::gen::sphere::mesh_sphere_surface;
     let (topology, coords) = mesh_sphere_surface(2);
     let scene = Scene::heat(topology, coords, 10, 0.2);
 
@@ -1314,7 +1314,7 @@ mod tests {
     use crate::gallery::MeshSource;
     use common::linalg::nalgebra::CsrMatrix;
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
-    use manifold::io::gmsh::gmsh2coord_complex;
+    use simplicial::io::gmsh::gmsh2coord_complex;
 
     let torus = || gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));
 

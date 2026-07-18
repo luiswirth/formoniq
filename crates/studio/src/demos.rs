@@ -2,7 +2,7 @@
 //! example cochains, plus the default opening field of a freshly shown scene.
 
 use common::linalg::nalgebra::Matrix;
-use manifold::{
+use simplicial::{
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };

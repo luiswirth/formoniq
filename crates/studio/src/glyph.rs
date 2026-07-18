@@ -10,7 +10,7 @@
 //! chart alone.
 //!
 //! **The sample set is the full lattice**
-//! ([`manifold::atlas::ref_lattice_bary`]), boundary included. The lattice
+//! ([`simplicial::atlas::ref_lattice_bary`]), boundary included. The lattice
 //! closes on the faces: a point on a shared facet has the same ambient position
 //! from either incident cell (the two agree combinatorially, up to the
 //! [`Transition`]'s vertex relabelling), so a glyph there is drawn twice at one
@@ -19,7 +19,7 @@
 //! boundary as naturally as into the interior, and the field is glyphed on all
 //! of it.
 //!
-//! [`Transition`]: manifold::atlas::Transition
+//! [`Transition`]: simplicial::atlas::Transition
 //!
 //! **The glyphs never encode magnitude in their length.** The mark carries the
 //! direction and the fill beneath it carries the magnitude -- the same
@@ -42,8 +42,8 @@
 //! it without a field of arrows fused into continuous lines.
 
 use common::{coord::Coord, linalg::nalgebra::Vector};
-use ddf::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
-use manifold::{
+use derham::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
+use simplicial::{
   atlas::{ref_lattice_bary, MeshPoint},
   geometry::{
     coord::{mesh::MeshCoords, simplex::SimplexRefExt},
@@ -87,7 +87,7 @@ const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
 ///
 /// A `dim == 0` cell has no edge, so the shortest is `0.0` -- no lattice to
 /// space and no arrow to draw.
-fn cell_extent(coord_simplex: &manifold::geometry::coord::simplex::SimplexCoords) -> (f64, f64) {
+fn cell_extent(coord_simplex: &simplicial::geometry::coord::simplex::SimplexCoords) -> (f64, f64) {
   let vertices: Vec<_> = coord_simplex.coord_iter().collect();
   let (min, max) = vertices
     .iter()
@@ -127,7 +127,7 @@ fn bary_clip4(bary: &Vector) -> [f32; 4] {
 /// every other mark uses, so it tracks the mesh's own detail (a coarse mesh's
 /// big cells get many glyphs, a fine mesh's small cells collapse back to the
 /// $n+1$ floor) without depending on the camera at all.
-fn glyph_refinement(dim: manifold::Dim, diameter: f64, target_spacing: f64) -> usize {
+fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) -> usize {
   let raw = if target_spacing > 0.0 {
     (diameter / target_spacing).round() as usize
   } else {
