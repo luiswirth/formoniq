@@ -36,7 +36,7 @@
 //! they are supported on: the key is what a shared point agrees on across
 //! charts.
 
-use super::{bary2local, Bary};
+use super::{bary2local, Bary, LocalCartesian, SimplexCoords};
 use crate::linalg::{Matrix, Vector};
 use crate::Dim;
 
@@ -170,25 +170,23 @@ impl ReferenceRefinement {
     ))
   }
 
-  /// The Jacobian of the `ichild`-th child's affine embedding into the parent
-  /// chart's local frame: the columns are the child's edge vectors $x_j - x_0$
-  /// in parent-local coordinates. The same for every cell -- pure reference
-  /// data -- and the map a cell's metric is pulled back along to get the
-  /// child's.
-  pub fn child_local_jacobian(&self, ichild: usize) -> Matrix {
-    let corners = &self.children[ichild];
-    let base = bary2local(&self.vertex_bary(corners[0]));
-    let cols: Vec<Vector> = corners[1..]
+  /// The `ichild`-th child realized in the parent chart's local frame, its
+  /// corners in reference order. Pure reference data -- a function of
+  /// `(dim, refinement)` alone. Its [`linear_transform`] is the reference-order
+  /// child Jacobian and its [`vol`] the child's share of the reference volume;
+  /// the per-cell refinement path ([`Complex::refine`]) rebuilds this same
+  /// realization in the *sorted* global vertex order, the only ordering a stored
+  /// cell's metric reads (see there).
+  ///
+  /// [`linear_transform`]: SimplexCoords::linear_transform
+  /// [`vol`]: SimplexCoords::vol
+  /// [`Complex::refine`]: crate::topology::complex::Complex::refine
+  pub fn child_local_simplex(&self, ichild: usize) -> SimplexCoords<LocalCartesian> {
+    let cols: Vec<Vector> = self.children[ichild]
       .iter()
-      .map(|&c| bary2local(&self.vertex_bary(c)).into_vector() - base.vector())
+      .map(|&c| self.vertex_local(c))
       .collect();
-    // A 0-cell's chart is a point: the Jacobian is the empty $0 times 0$ map,
-    // whose determinant is the empty product $1$. `from_columns` rejects an
-    // empty column list, so build it directly.
-    if cols.is_empty() {
-      return Matrix::zeros(self.dim, self.dim);
-    }
-    Matrix::from_columns(&cols)
+    SimplexCoords::new(Matrix::from_columns(&cols))
   }
 }
 
@@ -218,22 +216,23 @@ mod test {
   }
 
   /// The child volumes partition the reference cell: in the affine (metric-free)
-  /// reference frame each child has volume $|det J| \/ n!$, and they sum to the
+  /// reference frame each child has volume $1 \/ (R^n n!)$, and they sum to the
   /// reference volume $1 \/ n!$. Equivalently every child is congruent to the
-  /// $R^(-n)$-scaled reference cell.
+  /// $R^(-n)$-scaled reference cell. Read through the child's realization in the
+  /// parent frame -- vertex order is immaterial here, the volume being
+  /// order-invariant.
   #[test]
   fn volume_partition() {
     for dim in 0..=4 {
       for r in 1..=3 {
         let sub = ref_refinement(dim, r);
         let total: f64 = (0..sub.nchildren())
-          .map(|c| sub.child_local_jacobian(c).determinant().abs() * refsimp_vol(dim))
+          .map(|c| sub.child_local_simplex(c).vol())
           .sum();
         approx::assert_relative_eq!(total, refsimp_vol(dim), epsilon = 1e-12);
         for c in 0..sub.nchildren() {
-          let vol = sub.child_local_jacobian(c).determinant().abs() * refsimp_vol(dim);
           approx::assert_relative_eq!(
-            vol,
+            sub.child_local_simplex(c).vol(),
             refsimp_vol(dim) / (r.pow(dim as u32) as f64),
             epsilon = 1e-12
           );

@@ -1,7 +1,4 @@
-use super::{
-  simplex::{SimplexCoords, SimplexRefExt},
-  Coord, CoordRef,
-};
+use super::{simplex::SimplexRefExt, Coord, CoordRef};
 use crate::{
   geometry::metric::{mesh::MeshLengths, Geometry},
   topology::{
@@ -41,7 +38,7 @@ impl Geometry for MeshCoords {
 
 impl MeshCoords {
   pub fn standard(ndim: Dim) -> Self {
-    SimplexCoords::standard(ndim).vertices
+    Self::new(crate::atlas::ref_vertices(ndim))
   }
   pub fn new(matrix: Matrix) -> Self {
     Self { matrix }
