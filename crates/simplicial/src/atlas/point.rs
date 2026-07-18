@@ -35,8 +35,8 @@ pub const BARY_EPS: f64 = 1e-12;
 /// The cell must be a **cell** of the complex the point is used with, because
 /// the charts of the atlas are the cells and nothing else. A point of a face is
 /// represented by a supporting cell and the barycentric coordinates it has *in
-/// that cell*, which is exactly what `derham_map` does when it integrates over a
-/// face. A [`SimplexIdx`] of lower dimension is not a stricter case to be
+/// that cell*, exactly as when a form is integrated over a face. A
+/// [`SimplexIdx`] of lower dimension is not a stricter case to be
 /// supported: a face carries no chart, so there is no frame in which to express a
 /// value there. Since a `MeshPoint` stores an index and not a handle, it cannot
 /// know its [`Complex`] and cannot check that itself; the contract is a type at

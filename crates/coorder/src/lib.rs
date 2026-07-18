@@ -44,8 +44,8 @@ pub trait CoordSpace: 'static {
 /// The ambient space $RR^N$ of an embedding: where a mesh's vertex coordinates
 /// live, and where mesh-independent analytic data is stated.
 ///
-/// Extrinsic. Nothing in the core FEEC path may require it (invariant 2); a
-/// manifold given by Regge edge lengths has no ambient space at all.
+/// Extrinsic: it exists only when an embedding is given. An intrinsic manifold,
+/// such as one presented by Regge edge lengths, has no ambient space at all.
 pub enum Ambient {}
 impl CoordSpace for Ambient {
   const NAME: &'static str = "ambient";

@@ -1,8 +1,9 @@
 //! Geometry: the metric a mesh carries, in any of its equivalent forms.
 //!
-//! Finite element exterior calculus is intrinsic -- assembly consumes only the
-//! Riemannian metric of each cell, never coordinates. The [`Geometry`] trait
-//! captures exactly that: `cell_metric` gives a cell its flat metric tensor.
+//! The geometry of a simplicial manifold is intrinsic -- it is fully carried by
+//! the Riemannian metric of each cell, with no reference to coordinates. The
+//! [`Geometry`] trait captures exactly that: `cell_metric` gives a cell its flat
+//! metric tensor.
 //! It is implemented by every geometry representation, related by the
 //! derivation chain coords $->$ edge lengths $->$ per-cell metric:
 //!
@@ -32,7 +33,7 @@ use gramian::RiemannianMetric;
 use std::{io, path::Path};
 
 /// The intrinsic geometry of a mesh: the Riemannian metric of each cell, which
-/// is all that FEEC assembly needs.
+/// is all the metric information the manifold carries.
 pub trait Geometry {
   /// The flat metric tensor of a cell. The [`Cell`] witness is the
   /// precondition: only a top-dimensional simplex has a metric here.

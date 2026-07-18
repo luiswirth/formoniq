@@ -107,9 +107,8 @@ impl Complex {
   /// $diff_k$ with the boundary rows and columns struck out. On a closed manifold
   /// ($diff K = nothing$) it coincides with [`Self::betti_number`].
   ///
-  /// This is the harmonic dimension of the *relative* (essential / Dirichlet)
-  /// Whitney complex by the discrete Hodge theorem, dual to the *absolute*
-  /// (natural / Neumann) [`Self::betti_number`]. Computed exactly from the
+  /// This is the rank of the *relative* homology $H_k (K, diff K)$, dual to the
+  /// *absolute* [`Self::betti_number`]. Computed exactly from the
   /// incidence, so it needs no orientability assumption (unlike the
   /// Poincaré--Lefschetz shortcut $b_k (K, diff K) = b_(n - k) (K)$). Metric-free.
   pub fn relative_betti_number(&self, grade: Dim) -> usize {
@@ -146,8 +145,9 @@ impl Complex {
 /// An integer $k$-chain: a formal $ZZ$-combination $sum_sigma c_sigma sigma$ of
 /// the k-simplices, coefficients in colex order (indexed by [`KSimplexIdx`]).
 ///
-/// The element of $C_k$ dual to a cochain; chains carry no metric, so they live
-/// here in `topology` rather than up in `derham` with the cochains.
+/// An element of the chain group $C_k$: a formal $ZZ$-combination of oriented
+/// k-simplices. Pure combinatorics, carrying no metric and no geometry, so it
+/// lives here with the rest of the topological structure.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chain {
   grade: Dim,

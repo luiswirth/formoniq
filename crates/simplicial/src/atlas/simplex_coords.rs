@@ -273,7 +273,7 @@ mod test {
   }
 
   /// The barycentric differentials of the standard simplex are the metric-free
-  /// reference ones -- which is what lets the intrinsic Whitney forms use
+  /// reference ones -- which is what lets any form built from them use
   /// [`ref_difbarys`] and never touch coordinates.
   #[test]
   fn standard_difbarys() {

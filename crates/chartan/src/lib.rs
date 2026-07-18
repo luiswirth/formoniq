@@ -14,9 +14,9 @@
 //! - [`field`]: the mesh-independent analytic data *on* $M$ -- an exact
 //!   solution, a source, a boundary flux -- as a [`CoordField`](field::CoordField)
 //!   of exterior elements over a coordinate domain. This is *not* the
-//!   discrete-differential-form notion of a field ([`Section`] lives in `derham`,
-//!   over the simplicial manifold); it is a function of a point of the
-//!   continuum's chart domain, valued in the flat exterior algebra.
+//!   discrete-differential-form notion of a field -- a section over the
+//!   simplicial manifold; it is a function of a point of the continuum's chart
+//!   domain, valued in the flat exterior algebra.
 //! - [`parametrization`]: the smooth [`Parametrization`](parametrization::Parametrization)
 //!   $phi: Omega -> RR^N$ of $M$, and the chart $chi = phi^(-1) compose r$ it
 //!   induces by orthogonal (nearest-point) projection.
@@ -26,8 +26,6 @@
 //! below it. Their one relation -- pulling continuum data onto the simplicial
 //! mesh, and the approximation error that costs -- is the join, and it lives one
 //! crate up in `derham`, where `exterior`, `simplicial` and `chartan` meet.
-//!
-//! [`Section`]: https://docs.rs/derham
 
 extern crate nalgebra as na;
 

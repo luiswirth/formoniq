@@ -1,8 +1,8 @@
 //! The geometry a mesh carries: the metric layer, and the extrinsic coordinate
 //! layer downstream of it.
 //!
-//! [`metric`] is the intrinsic one and the only one FEEC assembly consumes;
-//! [`coord`] is an embedding, one [`Geometry`] implementor
+//! [`metric`] is the intrinsic one and the only one the manifold's geometry
+//! actually rests on; [`coord`] is an embedding, one [`Geometry`] implementor
 //! among several. The dependency runs that way and not the other: an embedding
 //! induces a metric, a metric induces no embedding.
 
@@ -30,9 +30,8 @@ pub fn cell_volume(metric: &RiemannianMetric) -> f64 {
 /// A(v)$ at an interior vertex, or $(pi - sum_f theta_f (v)) \/ A(v)$ at a
 /// boundary one -- the standard convention when a mesh has a rim, folding the
 /// boundary's own geodesic curvature into $K$ rather than tracking it apart.
-/// $A(v)$ is the barycentric lumped area $sum_(K ni v) "vol"(K) \/ 3$,
-/// matching the mass-lumping convention `formoniq`'s own assembly uses
-/// elsewhere.
+/// $A(v)$ is the barycentric lumped area $sum_(K ni v) "vol"(K) \/ 3$, the
+/// standard mass-lumping convention.
 ///
 /// Metric-only: works off any [`Geometry`], not just an embedding, since
 /// [`Gramian::vertex_angle`](gramian::Gramian::vertex_angle) needs no

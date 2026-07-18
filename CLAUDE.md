@@ -85,6 +85,20 @@ that joins the two — which is why `derham` exists, where `exterior`, `simplici
 and `chartan` all meet. Never widen a lower crate's dependencies to make a method
 fit.
 
+**The building-block crates are standalone, and published as such.** Concepts
+floating up leaves each lower crate a self-contained mathematical object, not
+FEEC-internal plumbing: `exterior` is an exterior-algebra library, `simplicial`
+a simplicial-topology-and-Regge-geometry one, `multiindex` colex combinatorics,
+`chartan` continuum differential geometry — each usable, and released, on its own,
+with FEEC only the thing `derham` and `formoniq` build on top. This is a goal to
+uphold, not just an emergent property: a lower crate must earn its keep for a
+reader who has never heard of FEEC. So its public docs explain it in its own
+terms — the FEEC application is never a crate's stated reason for existing, and a
+higher concept (assembly, Whitney forms, cochains as discrete forms) never
+stands in for what the code means intrinsically. The one exception is a
+crate-level architecture doc naming its neighbors to place itself: there the
+cross-crate relation *is* the content, and naming it is right.
+
 Composition therefore reaches down from above: a free function in the joining
 crate by default, or a thin `...Ext` trait where method syntax carries the math
 better — `CoordFieldExt::pullback_through` (and its identity special case

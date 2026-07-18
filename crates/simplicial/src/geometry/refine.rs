@@ -8,8 +8,8 @@
 //!
 //! - **Intrinsic** ([`Subdivision::refine_gramians`]): each child's metric is
 //!   the parent metric pulled back along the child's Jacobian. This is the
-//!   coordinate-free refinement, the one FEEC assembly consumes, and the
-//!   primitive the extrinsic case must agree with.
+//!   coordinate-free refinement, and the primitive the extrinsic case must
+//!   agree with.
 //! - **Extrinsic** ([`MeshCoords::refine`]): each new vertex is placed by the
 //!   affine combination of coarse vertices recorded in its
 //!   [`VertexBirth`](crate::topology::refine::VertexBirth). An embedding is not

@@ -1,10 +1,9 @@
 //! Point location in a coordinate mesh.
 //!
-//! To evaluate a reconstructed field (a Whitney interpolation of a cochain) at
-//! an arbitrary point $x$, one must first find the cell containing $x$ and the
-//! barycentric coordinates of $x$ within it -- the geometric half of the FEEC
-//! "representation formula". A linear scan over all cells is $O(N)$ per query,
-//! which is fatal when sampling a field on a grid.
+//! To evaluate a piecewise field at an arbitrary point $x$, one must first find
+//! the cell containing $x$ and the barycentric coordinates of $x$ within it: the
+//! chart the point lives in and its position there. A linear scan over all cells
+//! is $O(N)$ per query, which is fatal when sampling a field on a grid.
 //!
 //! [`PointLocator`] builds a **bounding-volume hierarchy** (BVH) once and then
 //! answers containment queries in $O(log N)$: a binary tree of axis-aligned

@@ -3,12 +3,12 @@
 //! A [`CoordField`] is mesh-independent analytic data on the continuum $M$: an
 //! exact solution, a source term, a boundary flux, given as a function of a
 //! point of a coordinate domain $Omega subset RR^m$. It is *not* the
-//! discrete-differential-form notion of a field -- a `Section` of the exterior
-//! bundle over the simplicial manifold, which lives in `derham` and has no global
-//! coordinate to be a function of. The two are connected in `derham` by the
-//! variance-directed functor: covariant coordinate fields pull back onto the
-//! mesh along the composite of the cell parametrization and the continuum chart,
-//! contravariant ones are pushed forward off it.
+//! discrete-differential-form notion of a field -- a section of the exterior
+//! bundle over a simplicial manifold, which has no global coordinate to be a
+//! function of. The two are connected by a variance-directed functor: covariant
+//! coordinate fields pull back onto the mesh along the composite of the cell
+//! parametrization and the continuum chart, contravariant ones are pushed
+//! forward off it.
 //!
 //! The domain is the coordinate space `S`. Its default,
 //! [`Ambient`], is the flat case $Omega = RR^N$ with
@@ -39,9 +39,8 @@ pub trait CoordField<V: Variance, S: CoordSpace = Ambient> {
 /// The closure is boxed so that fields of the same variance and grade share a
 /// type: manufactured solutions come in heterogeneous families
 /// $(omega, dif omega, Delta omega)$ that want to sit in one collection. The
-/// dynamic call is one indirection per quadrature point, off the assembly hot
-/// path -- the element loops themselves stay monomorphized over
-/// [`CoordField`].
+/// dynamic call is one indirection per evaluation, off any hot inner loop -- a
+/// consumer that needs the speed monomorphizes over [`CoordField`] instead.
 pub struct FieldClosure<V: Variance, S: CoordSpace = Ambient> {
   closure: Box<PointwiseFn<V, S>>,
   dim: Dim,

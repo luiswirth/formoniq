@@ -30,8 +30,8 @@ use gramian::{Gramian, RiemannianMetric};
 /// derived Jacobian and chart.
 ///
 /// Mesh-independent: it knows the continuum, not the simplicial manifold that
-/// approximates it. The bridge onto a mesh is `pullback_through` in `derham`, which
-/// is where the two manifolds meet.
+/// approximates it. Pulling continuum data onto a mesh through this
+/// parametrization is a separate step, belonging to whatever joins the two.
 pub struct Parametrization<S: CoordSpace = Ambient> {
   forward: Box<ForwardFn<S>>,
   jacobian: Option<Box<JacobianFn<S>>>,

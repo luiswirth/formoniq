@@ -3,7 +3,7 @@
 //! An embedding is *one* geometry among several (invariant 2), and everything
 //! here is downstream of it: vertex coordinates, the affine parametrization of a
 //! cell, point location. A manifold given by Regge edge lengths has none of it,
-//! and the core FEEC path must never ask for it.
+//! and the intrinsic geometry (invariant 2) must never ask for it.
 //!
 //! Ambient coordinates are therefore kept apart, by type, from the
 //! [`Bary`](crate::atlas::Bary) and [`Local`](crate::atlas::Local) coordinates

@@ -16,9 +16,10 @@ use multiindex::Combination;
 /// reference vertices, the barycentric differentials, the volume -- since it
 /// depends on the dimension alone and not on the cell. That is the fact that
 /// every chart of the atlas is the *same* chart up to the labelling of its
-/// vertices, and it is why the element matrices are computed once on the
-/// reference cell and reused on every cell of the mesh. The labelling is what
-/// differs, and the labelling is precisely what a [`Transition`] is made of.
+/// vertices, and it is why any per-cell quantity fixed by the reference chart is
+/// computed once on the reference cell and reused on every cell of the mesh. The
+/// labelling is what differs, and the labelling is precisely what a
+/// [`Transition`] is made of.
 pub type Chart<'m> = Cell<'m>;
 
 /// What makes a cell a chart: the atlas operations, on the [`Cell`] witness.
