@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "A simplicial manifold of arbitrary dimension, with geometry as a pluggable input: topology, atlas, and Regge or embedded metrics."
 repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
 keywords = ["simplicial", "mesh", "fem", "geometry"]
 categories = ["mathematics", "science"]
 

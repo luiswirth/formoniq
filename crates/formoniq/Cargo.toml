@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "Finite Element Exterior Calculus (FEEC): PDEs formulated with differential forms and solved on simplicial Riemannian manifolds of arbitrary dimension, intrinsically and coordinate-free."
 repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
 keywords = ["feec", "finite-element", "differential-forms", "pde"]
 categories = ["mathematics", "science"]
 

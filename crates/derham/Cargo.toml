@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "The discrete de Rham complex: cochains, Whitney interpolation, and the de Rham map, bridging a simplicial mesh and the continuum it approximates."
 repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
 keywords = ["de-rham", "cochain", "whitney", "fem"]
 categories = ["mathematics", "science"]
 
