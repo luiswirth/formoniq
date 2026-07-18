@@ -174,7 +174,9 @@ impl std::ops::Sub for Cochain {
 
 #[cfg(test)]
 mod test {
+  #[cfg(feature = "serde")]
   use super::*;
+  #[cfg(feature = "serde")]
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
   #[cfg(feature = "serde")]

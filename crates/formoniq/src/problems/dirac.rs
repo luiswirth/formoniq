@@ -135,8 +135,9 @@ impl MixedField {
   /// field at `grade = 1` or a magnetic flux at `grade = 2` in the Maxwell
   /// reading.
   pub fn from_grade<C: HilbertComplex>(complex: &C, u: Cochain) -> Self {
-    let mut field = Self::zeros(complex);
     let k = u.grade();
+    assert_eq!(u.len(), complex.ndofs(k), "grade k cochain has wrong ndofs");
+    let mut field = Self::zeros(complex);
     field.grades[k] = u;
     field
   }

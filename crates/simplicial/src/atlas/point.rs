@@ -48,8 +48,18 @@ pub struct MeshPoint {
 }
 
 impl MeshPoint {
+  /// The barycentric weights must be affine, $sum_i lambda_i = 1$: this is the
+  /// one boundary where raw weights enter a point, and it is the contract that
+  /// keeps a `MeshPoint` on the affine hull of its cell. A weight vector off the
+  /// hull is not a point of the manifold. The check is a `debug_assert` with
+  /// tolerance rather than a hard type gate, because the weights are only ever
+  /// floating-point affine and legitimate drift must not be rejected.
   pub fn new(cell: SimplexIdx, bary: Bary) -> Self {
     assert_eq!(bary.dim(), cell.dim() + 1, "Wrong number of barycentrics.");
+    debug_assert!(
+      approx::relative_eq!(bary.view().sum(), 1.0, epsilon = 1e-9),
+      "Barycentric weights must sum to one."
+    );
     Self { cell, bary }
   }
   /// From the local (cartesian) coordinates of the cell chart.
