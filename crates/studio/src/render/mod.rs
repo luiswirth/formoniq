@@ -67,10 +67,10 @@ pub const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
 /// and the segment marks uniformly, at the cost of the extra fill rate.
 pub const DEFAULT_SSAA_SCALE: u32 = 2;
 
-/// The WGSL source of one pass: the shared preamble (types, pure functions, the
-/// `SSAA_SCALE` override) followed by the body. Concatenated because WGSL has
-/// no `#include`; the shader test validates this same concatenation, so a
-/// preamble/body mismatch fails `cargo test` rather than pipeline creation.
+/// The WGSL source of one pass: the shared preamble (types, pure functions)
+/// followed by the body. Concatenated because WGSL has no `#include`; the shader
+/// test validates this same concatenation, so a preamble/body mismatch fails
+/// `cargo test` rather than pipeline creation.
 fn shader_source(body: &str) -> String {
   format!("{PREAMBLE}\n{body}")
 }
@@ -80,25 +80,15 @@ fn shader_source(body: &str) -> String {
 /// checked against their Rust mirrors without a pass around them.
 const PREAMBLE: &str = include_str!("preamble.wgsl");
 
-/// The pipeline-constant assignment every pipeline here is built with.
-///
-/// `constants` is borrowed, so a caller builds it with [`ssaa_constants`] and
-/// keeps it alive across its pipeline creation. That indirection is the price
-/// of the factor being a value rather than a literal, and it is what makes the
-/// box filter's divisor and the target allocation one number: the WGSL
-/// `SSAA_SCALE` override and `Targets::supersampled` read the same `u32`.
-fn compilation_options<'a>(
-  constants: &'a [(&'a str, f64)],
-) -> wgpu::PipelineCompilationOptions<'a> {
-  wgpu::PipelineCompilationOptions {
-    constants,
-    ..Default::default()
-  }
-}
-
-/// The `SSAA_SCALE` override assignment for a supersampling factor.
-fn ssaa_constants(ssaa: u32) -> [(&'static str, f64); 1] {
-  [("SSAA_SCALE", f64::from(ssaa))]
+/// The `SSAA_SCALE` declaration prepended to the one shader that reads it (the
+/// downsample resolve, whose box filter divides by it). Baked as a plain `const`
+/// from the same `ssaa` that sizes the targets, so the filter's divisor and the
+/// target allocation are one number -- NOT a pipeline-overridable `override`,
+/// which WebGPU on WebKit fails to specialize ("Vertex library failed
+/// creation"). The factor is fixed for a pipeline's life anyway, so nothing is
+/// lost by baking it at shader-build instead of pipeline-build.
+fn ssaa_prelude(ssaa: u32) -> String {
+  format!("const SSAA_SCALE: i32 = {ssaa};\n")
 }
 
 fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::ShaderModule {
@@ -169,7 +159,14 @@ mod tests {
       ("deposit.wgsl", include_str!("deposit.wgsl")),
     ];
     for (name, body) in bodies {
-      let source = super::shader_source(body);
+      // The downsample body reads `SSAA_SCALE`, which the pipeline bakes in as a
+      // `const` (see `ssaa_prelude`); validate the same composed source.
+      let composed = if *name == "downsample.wgsl" {
+        format!("{}{body}", super::ssaa_prelude(super::DEFAULT_SSAA_SCALE))
+      } else {
+        (*body).to_string()
+      };
+      let source = super::shader_source(&composed);
       let module = naga::front::wgsl::parse_str(&source)
         .unwrap_or_else(|e| panic!("{name} failed to parse: {e}"));
       naga::valid::Validator::new(

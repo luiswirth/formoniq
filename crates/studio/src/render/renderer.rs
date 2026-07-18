@@ -184,9 +184,9 @@ impl Renderer {
       // The scene passes draw into `SCENE_FORMAT`, never the caller's: the
       // resolve is the one pass that touches the render target, and therefore
       // the one that has to know what it is.
-      fill: FillPass::new(device, SCENE_FORMAT, &frame, &surface_materials, ssaa),
-      segments: SegmentPass::new(device, SCENE_FORMAT, &frame, &segment_materials, ssaa),
-      glyphs: GlyphPass::new(device, SCENE_FORMAT, &frame, &glyph_materials, ssaa),
+      fill: FillPass::new(device, SCENE_FORMAT, &frame, &surface_materials),
+      segments: SegmentPass::new(device, SCENE_FORMAT, &frame, &segment_materials),
+      glyphs: GlyphPass::new(device, SCENE_FORMAT, &frame, &glyph_materials),
       advect: AdvectPass::new(device),
       deposit: DepositPass::new(device),
       dummy_deposit: dummy_read_bind_group(device),

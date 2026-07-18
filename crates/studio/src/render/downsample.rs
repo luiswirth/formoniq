@@ -8,7 +8,7 @@
 //! is the crossing itself.
 
 use super::{
-  color_target, compilation_options, primitive, shader_module, ssaa_constants,
+  color_target, primitive, shader_module, ssaa_prelude,
   uniform::{PostUniform, UniformBinding},
 };
 
@@ -31,7 +31,6 @@ impl DownsamplePass {
     post: &UniformBinding<PostUniform>,
     ssaa: u32,
   ) -> Self {
-    let constants = ssaa_constants(ssaa);
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
       label: Some("scene_color_bind_group_layout"),
       entries: &[
@@ -80,7 +79,8 @@ impl DownsamplePass {
         },
       ],
     });
-    let shader = shader_module(device, "Downsample Shader", include_str!("downsample.wgsl"));
+    let source = format!("{}{}", ssaa_prelude(ssaa), include_str!("downsample.wgsl"));
+    let shader = shader_module(device, "Downsample Shader", &source);
     let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
       label: Some("Downsample Pipeline Layout"),
       bind_group_layouts: &[Some(&layout), Some(post.layout())],
@@ -92,13 +92,13 @@ impl DownsamplePass {
       vertex: wgpu::VertexState {
         module: &shader,
         entry_point: Some("vs_main"),
-        compilation_options: compilation_options(&constants),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
         buffers: &[],
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
         entry_point: Some("fs_main"),
-        compilation_options: compilation_options(&constants),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
         targets: &[color_target(format, wgpu::BlendState::REPLACE)],
       }),
       primitive: primitive(),

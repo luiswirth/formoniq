@@ -7,11 +7,12 @@
 // name -- a uniform in `uniform.rs`, or a storage element declared beside the
 // pass that owns it; the two must stay byte-identical.
 
-// The supersampling factor per axis every scene pass renders at, set from Rust
-// (`render::SSAA_SCALE`) as a pipeline constant rather than duplicated as a
-// literal: the downsample's box filter has to be exactly the factor the targets
-// were allocated at, and an `override` is what makes the two one number.
-override SSAA_SCALE: i32 = 2;
+// `SSAA_SCALE`, the supersampling factor per axis the downsample's box filter
+// divides by, is NOT declared here. It is baked into the downsample shader as a
+// plain `const` from the same Rust `ssaa` that sizes the targets (see
+// `render::ssaa_prelude`): WebGPU on WebKit fails to specialize a
+// pipeline-overridable `override` constant ("Vertex library failed creation"),
+// and the factor is fixed for a pipeline's life regardless.
 
 // Where and when the scene is seen from: bound at group 0 by every pipeline.
 // Time is the frame's; the frequency it is multiplied by belongs to the field on
