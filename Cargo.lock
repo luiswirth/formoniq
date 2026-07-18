@@ -400,9 +400,7 @@ dependencies = [
  "approx",
  "coorder",
  "exterior",
- "formoniq-linalg",
  "gramian",
- "multiindex",
  "nalgebra",
 ]
 
@@ -531,8 +529,7 @@ dependencies = [
 name = "coorder"
 version = "0.2.0"
 dependencies = [
- "formoniq-linalg",
- "multiindex",
+ "nalgebra",
 ]
 
 [[package]]
@@ -1069,7 +1066,6 @@ name = "exterior"
 version = "0.2.0"
 dependencies = [
  "approx",
- "formoniq-linalg",
  "gramian",
  "multiindex",
  "nalgebra",
@@ -1590,7 +1586,6 @@ name = "gramian"
 version = "0.2.0"
 dependencies = [
  "formoniq-linalg",
- "multiindex",
  "serde",
 ]
 
@@ -2154,7 +2149,6 @@ dependencies = [
 name = "multiindex"
 version = "0.2.0"
 dependencies = [
- "formoniq-linalg",
  "itertools 0.15.0",
  "num-integer",
 ]

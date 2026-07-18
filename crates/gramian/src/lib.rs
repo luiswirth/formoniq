@@ -1,5 +1,7 @@
 use formoniq_linalg::nalgebra::{Matrix, MatrixExt, Vector};
-use multiindex::Dim;
+
+/// The dimension of a space or object.
+pub type Dim = usize;
 
 /// A Gram Matrix represent an inner product expressed in a basis.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

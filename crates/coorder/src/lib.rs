@@ -23,10 +23,16 @@
 
 pub mod affine;
 
-use formoniq_linalg::nalgebra::{Vector, VectorView};
-use multiindex::Dim;
+extern crate nalgebra as na;
 
 use std::marker::PhantomData;
+
+/// The dimension of a space or object.
+pub type Dim = usize;
+
+pub type Vector<T = f64> = na::DVector<T>;
+pub type Matrix<T = f64> = na::DMatrix<T>;
+pub type VectorView<'a, T = f64> = na::DVectorView<'a, T>;
 
 /// A flat coordinate space: the tag that distinguishes coordinate systems at
 /// compile time. Uninhabited -- it is a name, never a value.

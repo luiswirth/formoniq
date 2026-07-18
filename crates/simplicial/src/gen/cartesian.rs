@@ -96,13 +96,13 @@ impl CartesianMeshInfo {
   pub fn nvertices(&self) -> usize {
     self.nvertices_axis().pow(self.dim() as u32)
   }
-  pub fn vertex_cart_idx(&self, ivertex: usize) -> Vector<usize> {
+  pub fn vertex_cart_idx(&self, ivertex: usize) -> Vec<usize> {
     linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim())
   }
   pub fn vertex_pos(&self, ivertex: usize) -> Vector {
-    (self.vertex_cart_idx(ivertex).cast::<f64>() / (self.nvertices_axis() - 1) as f64)
-      .component_mul(&self.side_lengths())
-      + self.min()
+    let cart_idx = self.vertex_cart_idx(ivertex);
+    let cart_idx = Vector::from_iterator(cart_idx.len(), cart_idx.iter().map(|&c| c as f64));
+    (cart_idx / (self.nvertices_axis() - 1) as f64).component_mul(&self.side_lengths()) + self.min()
   }
 
   pub fn is_vertex_on_boundary(&self, vertex: usize) -> bool {
@@ -119,10 +119,12 @@ impl CartesianMeshInfo {
       for ivertex in 0..nvertices_boundary_facet {
         let vertex_icart =
           linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim() - 1);
-        let low_boundary = vertex_icart.clone().insert_row(d, 0);
-        let high_boundary = vertex_icart.insert_row(d, self.nvertices_axis() - 1);
-        let low_boundary = cartesian_index2linear_index(low_boundary, self.nvertices_axis());
-        let high_boundary = cartesian_index2linear_index(high_boundary, self.nvertices_axis());
+        let mut low_boundary = vertex_icart.clone();
+        low_boundary.insert(d, 0);
+        let mut high_boundary = vertex_icart;
+        high_boundary.insert(d, self.nvertices_axis() - 1);
+        let low_boundary = cartesian_index2linear_index(&low_boundary, self.nvertices_axis());
+        let high_boundary = cartesian_index2linear_index(&high_boundary, self.nvertices_axis());
         r.push(low_boundary);
         r.push(high_boundary);
       }
@@ -164,7 +166,7 @@ impl CartesianMeshInfo {
     let mut simplices: Vec<Simplex> = Vec::with_capacity(factorial(dim) * self.ncells());
     for ibox in 0..self.ncells() {
       let box_cart = linear_index2cartesian_index(ibox, self.ncells_axis(), dim);
-      let origin = cartesian_index2linear_index(box_cart, self.nvertices_axis());
+      let origin = cartesian_index2linear_index(&box_cart, self.nvertices_axis());
 
       for axes in (0..dim).permutations(dim) {
         let chain = axes.iter().scan(Combination::empty(), |corner, &axis| {

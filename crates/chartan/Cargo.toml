@@ -6,9 +6,7 @@ edition = "2021"
 [dependencies]
 coorder = { path = "../coorder" }
 exterior = { path = "../exterior" }
-formoniq-linalg = { path = "../linalg" }
 gramian = { path = "../gramian" }
-multiindex = { path = "../multiindex" }
 
 nalgebra = "0.35.0"
 

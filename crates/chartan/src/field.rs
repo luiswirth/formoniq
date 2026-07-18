@@ -21,8 +21,7 @@
 //! a manufactured-solution script. The type stays generic so a power user *can*
 //! bring markers; the default pays nothing.
 
-use coorder::{Ambient, CoordSpace, Coords};
-use formoniq_linalg::nalgebra::Vector;
+use coorder::{Ambient, CoordSpace, Coords, Vector};
 
 use exterior::{Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, Variance};
 
