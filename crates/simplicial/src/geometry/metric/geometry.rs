@@ -21,7 +21,7 @@ use crate::{
   topology::{
     complex::Complex,
     data::{SkeletonData, SkeletonVec},
-    handle::SimplexRef,
+    role::Cell,
   },
   Dim,
 };
@@ -34,13 +34,14 @@ use std::{io, path::Path};
 /// The intrinsic geometry of a mesh: the Riemannian metric of each cell, which
 /// is all that FEEC assembly needs.
 pub trait Geometry {
-  /// The flat metric tensor of a cell.
-  fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric;
+  /// The flat metric tensor of a cell. The [`Cell`] witness is the
+  /// precondition: only a top-dimensional simplex has a metric here.
+  fn cell_metric(&self, cell: Cell) -> RiemannianMetric;
 }
 
 impl Geometry for MeshLengths {
-  fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric {
-    self.simplex_lengths(cell).riemannian_metric()
+  fn cell_metric(&self, cell: Cell) -> RiemannianMetric {
+    self.simplex_lengths(cell.get()).riemannian_metric()
   }
 }
 
@@ -90,8 +91,8 @@ impl CellGramians {
 }
 
 impl Geometry for CellGramians {
-  fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric {
-    self.metrics[cell].clone()
+  fn cell_metric(&self, cell: Cell) -> RiemannianMetric {
+    self.metrics[cell.get()].clone()
   }
 }
 

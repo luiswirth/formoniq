@@ -8,7 +8,7 @@ use {
     geometry::cell_volume,
     linalg::{Matrix, Vector},
     topology::{
-      handle::SimplexRef,
+      role::Cell,
       simplex::{standard_boundary_operator, standard_subsimps},
     },
   },
@@ -203,7 +203,7 @@ impl ElMatProvider for CodifDifElmat {
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &RiemannianMetric, cell: SimplexRef) -> ElVec;
+  fn eval(&self, metric: &RiemannianMetric, cell: Cell) -> ElVec;
 }
 
 /// Element vector of the source load
@@ -237,7 +237,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, metric: &RiemannianMetric, cell: SimplexRef) -> ElVec {
+  fn eval(&self, metric: &RiemannianMetric, cell: Cell) -> ElVec {
     let inner = multiform_gramian(metric, self.grade());
 
     let mut elvec = ElVec::zeros(self.whitneys.len());

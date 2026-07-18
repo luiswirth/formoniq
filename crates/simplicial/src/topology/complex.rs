@@ -1,5 +1,6 @@
 use super::{
   handle::{KSimplexIdx, SimplexIdx, SkeletonRef},
+  role::{roles, Facet, RoledSkeleton, SimplexRole},
   skeleton::Skeleton,
 };
 use crate::Dim;
@@ -50,17 +51,30 @@ impl Complex {
   pub fn nsimplices(&self, dim: Dim) -> usize {
     self.skeleton(dim).len()
   }
-  pub fn vertices(&self) -> SkeletonRef<'_> {
-    self.skeleton(0)
+  /// The skeleton carrying role `R`, with the proofs: `None` where the
+  /// complex has no simplices of that dimension (the facets of a point, the
+  /// ridges of a 1-complex). The total form the named accessors specialize.
+  pub fn role_skeleton<R: SimplexRole>(&self) -> Option<RoledSkeleton<'_, R>> {
+    R::DIM
+      .dim_in(self.dim())
+      .map(|dim| RoledSkeleton::trusted(self.skeleton(dim)))
   }
-  pub fn edges(&self) -> SkeletonRef<'_> {
-    self.skeleton(1)
+
+  pub fn vertices(&self) -> RoledSkeleton<'_, roles::Vertex> {
+    RoledSkeleton::trusted(self.skeleton(0))
   }
-  pub fn facets(&self) -> SkeletonRef<'_> {
-    self.skeleton(self.dim() - 1)
+  /// Panics on a 0-complex, which has no edges; [`Self::role_skeleton`] is
+  /// the total form.
+  pub fn edges(&self) -> RoledSkeleton<'_, roles::Edge> {
+    self.role_skeleton().expect("a 0-complex has no edges")
   }
-  pub fn cells(&self) -> SkeletonRef<'_> {
-    self.skeleton(self.dim())
+  /// Panics on a 0-complex, which has no facets; [`Self::role_skeleton`] is
+  /// the total form.
+  pub fn facets(&self) -> RoledSkeleton<'_, roles::Facet> {
+    self.role_skeleton().expect("a 0-complex has no facets")
+  }
+  pub fn cells(&self) -> RoledSkeleton<'_, roles::Cell> {
+    RoledSkeleton::trusted(self.skeleton(self.dim()))
   }
 }
 
@@ -89,36 +103,21 @@ impl Complex {
     !self.boundary_facets().is_empty()
   }
 
-  /// For a d-mesh computes the boundary, which consists of facets ((d-1)-subs).
-  ///
-  /// The boundary facets are characterized by the fact that they
-  /// only have 1 cell as super entity.
-  pub fn boundary_facets(&self) -> Vec<SimplexIdx> {
-    // A 0-dimensional complex is closed.
-    if self.dim() == 0 {
+  /// The boundary $diff K$ of a d-mesh: the facets bounding a single cell,
+  /// with their [`Facet`] proofs. On a 0-complex, which has no facets and is
+  /// closed, the empty answer falls out of the total accessor, not a guard.
+  pub fn boundary_facets(&self) -> Vec<Facet<'_>> {
+    let Some(facets) = self.role_skeleton::<roles::Facet>() else {
       return Vec::new();
-    }
-    self
-      .facets()
-      .handle_iter()
-      .filter(|f| f.cells().count() == 1)
-      .map(|f| f.idx())
-      .collect()
+    };
+    facets.handle_iter().filter(|f| f.is_boundary()).collect()
   }
 
   pub fn boundary_cells(&self) -> Vec<SimplexIdx> {
     self
       .boundary_facets()
       .into_iter()
-      // the boundary has only one parent cell by definition
-      .map(|facet| {
-        facet
-          .handle(self)
-          .cells()
-          .next()
-          .expect("Boundary facets have exactly one cell.")
-          .idx()
-      })
+      .map(|facet| facet.adjacent_cells().0.idx())
       .unique()
       .collect()
   }
@@ -132,13 +131,7 @@ impl Complex {
     self
       .boundary_facets()
       .into_iter()
-      .flat_map(|facet| {
-        facet
-          .handle(self)
-          .faces(dim)
-          .map(|sub| sub.idx())
-          .collect::<Vec<_>>()
-      })
+      .flat_map(|facet| facet.faces(dim).map(|sub| sub.idx()).collect::<Vec<_>>())
       .unique()
       .sorted_by_key(|idx| idx.kidx)
       .collect()
@@ -328,7 +321,11 @@ mod test {
       let (topology, _) =
         crate::gen::cartesian::CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
       assert_eq!(topology.boundary_simplices(dim - 1), {
-        let mut facets = topology.boundary_facets();
+        let mut facets: Vec<_> = topology
+          .boundary_facets()
+          .into_iter()
+          .map(|facet| facet.idx())
+          .collect();
         facets.sort_by_key(|idx| idx.kidx);
         facets
       });
@@ -405,10 +402,13 @@ mod test {
       assert_eq!(cell.star().count(), 1);
     }
 
-    // Boundary edges have a single cell; interior edges two.
-    assert!(topology.edges().handle_iter().any(|e| e.is_boundary()));
-    for edge in topology.edges().handle_iter() {
-      assert_eq!(edge.cells().count(), if edge.is_boundary() { 1 } else { 2 });
+    // Boundary facets have a single cell; interior facets two.
+    assert!(topology.facets().handle_iter().any(|f| f.is_boundary()));
+    for facet in topology.facets().handle_iter() {
+      assert_eq!(
+        facet.cells().count(),
+        if facet.is_boundary() { 1 } else { 2 }
+      );
     }
 
     // The link of a vertex never touches the vertex itself; its star does.

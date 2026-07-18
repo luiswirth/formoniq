@@ -45,7 +45,7 @@ foundational siblings and `simplicial`/`chartan` are siblings one level up:
 | `gramian`    | inner-product / metric structure    | `Gramian`, `RiemannianMetric` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `chartan`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
@@ -130,8 +130,9 @@ and passes tests.
    parametrization — and is confined to I/O.
 
    **The cells are an atlas** (`simplicial::atlas`), and it is a real one. A
-   `Chart` *is* a cell, top-dimensional by construction — a face carries no
-   chart, so there is no frame on one in which to express a value. Two charts
+   `Chart` *is* a cell — literally: the name is a type alias of the `Cell`
+   role witness, so top-dimensionality holds by construction — a face carries
+   no chart, so there is no frame on one in which to express a value. Two charts
    overlap in the face they share, and the `Transition` between them is the
    affine relabelling of barycentric weights: metric-free, exact, and obeying the
    cocycle law. Its differential is the change of frame on the tangent space of
@@ -181,7 +182,21 @@ precondition that is a property of a value (the space a coordinate lives in, the
 variance of a form) becomes a type-level witness, not an assertion repeated at
 each call. The type demands the property, the check happens once where the
 witness is built, and the wrong composition fails to compile. Reach for this
-wherever a "trust me, this is an *X*" comment sits in a signature.
+wherever a "trust me, this is an *X*" comment sits in a signature. The simplex
+roles of `topology::role` are the same pattern on a runtime dimension: a
+`Roled<R>` (`Cell`, `Facet`, ...) is a `SimplexRef` plus the proof of its
+dimension proposition, produced for free by navigation (`cells()`,
+`facets()`, `vertices()`, `edges()`) and checked once at the index boundary
+(`role()`); `Chart` is a type *alias* of the `Cell` witness — the atlas
+operations live in `ChartExt` — and `Geometry::cell_metric` consumes it, so
+"this simplex is a cell" is a type, never a repeated assertion. A role's one datum is its `RoleDim` — a dimension
+pinned absolutely or by codimension — and `Complex::role_skeleton::<R>()` is
+the total accessor derived from it: `None` where the complex has no such
+dimension, which is how the degenerate boundary stays total (a point has no
+facets, not an underflow). Roles are propositions, not a partition — the edge
+of a 1-complex is an `Edge` *and* a `Cell`. A proof speaks only for the
+complex object it was built from; `SimplexRef::belongs_to` is the identity
+check consumed where handles cross between complexes.
 
 ## Conventions
 

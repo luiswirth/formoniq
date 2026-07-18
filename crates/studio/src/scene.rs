@@ -14,11 +14,7 @@ use exterior::{ExteriorGrade, MultiForm};
 use simplicial::{
   atlas::MeshPoint,
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
-  topology::{
-    complex::Complex,
-    handle::{SimplexIdx, SimplexRef},
-    simplex::Simplex,
-  },
+  topology::{complex::Complex, handle::SimplexIdx, role::Cell, simplex::Simplex},
   Dim,
 };
 
@@ -835,7 +831,7 @@ pub(crate) fn surface_corner_values(
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   let mut values = Vec::with_capacity(3 * cell_corners.len());
   for cc in cell_corners {
-    let cell = SimplexIdx::new(n, cc.cell).handle(topology);
+    let cell = SimplexIdx::new(n, cc.cell).handle(topology).role();
     let metric = coords.cell_metric(cell);
     for &ilocal in &cc.local {
       values.push(reduced_value(&interpolant, cell, &metric, ilocal));
@@ -885,7 +881,7 @@ pub(crate) fn nodal_heights(
 /// and the per-vertex height so the two cannot drift.
 fn reduced_value(
   interpolant: &WhitneyInterpolant,
-  cell: SimplexRef,
+  cell: Cell,
   metric: &RiemannianMetric,
   ilocal: usize,
 ) -> f64 {

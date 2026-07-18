@@ -4,6 +4,7 @@ use crate::{
     complex::Complex,
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef, SkeletonRef},
+    role::Edge,
   },
   Dim,
 };
@@ -40,7 +41,7 @@ impl MeshLengths {
   pub fn new(vector: Vector, complex: &Complex) -> Self {
     let this = Self { vector };
     assert!(
-      this.is_coordinate_realizable(complex.cells()),
+      this.is_coordinate_realizable(complex.cells().get()),
       "Edge lengths are not coordinate realizable."
     );
     this
@@ -48,7 +49,7 @@ impl MeshLengths {
   pub fn try_new(vector: Vector, complex: &Complex) -> Option<Self> {
     let this = Self { vector };
     this
-      .is_coordinate_realizable(complex.cells())
+      .is_coordinate_realizable(complex.cells().get())
       .then_some(this)
   }
   pub fn new_unchecked(vector: Vector) -> Self {
@@ -111,7 +112,7 @@ impl MeshLengths {
     topology
       .cells()
       .handle_iter()
-      .map(|cell| self.simplex_lengths(cell).shape_regularity_measure())
+      .map(|cell| self.simplex_lengths(cell.get()).shape_regularity_measure())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -119,7 +120,7 @@ impl MeshLengths {
   pub fn simplex_lengths(&self, simplex: SimplexRef) -> SimplexLengths {
     let lengths = simplex
       .edges()
-      .map(|edge| self.length(edge.kidx()))
+      .map(|edge| edge.length(self))
       .collect_vec()
       .into();
     // SAFETY: Already checked realizability.
@@ -154,6 +155,18 @@ impl std::ops::Index<EdgeIdx> for MeshLengths {
   }
 }
 
+/// Geometry read on a topology witness: the length an [`Edge`] proof keys in
+/// the grade-1 Regge data, `edge.length(&lengths)`. Reaches down from the
+/// metric side -- the topology never learns of metrics.
+pub trait EdgeRefExt {
+  fn length(self, lengths: &MeshLengths) -> f64;
+}
+impl EdgeRefExt for Edge<'_> {
+  fn length(self, lengths: &MeshLengths) -> f64 {
+    lengths.length(self.kidx())
+  }
+}
+
 pub type MetricComplex = (Complex, MeshLengths);
 pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
   let topology = Complex::standard(dim);
@@ -177,12 +190,12 @@ mod test {
     assert_eq!(SkeletonData::grade(&lengths), 1);
 
     for vertex in topology.vertices().handle_iter() {
-      assert_eq!(coords.at_ref(vertex), coords.coord(vertex.kidx()));
+      assert_eq!(coords.at_ref(vertex.get()), coords.coord(vertex.kidx()));
     }
     for edge in topology.edges().handle_iter() {
       let [vi, vj] = edge.simplex().clone().try_into().unwrap();
       let expected = (coords.coord(vj) - coords.coord(vi)).norm();
-      assert_eq!(*lengths.at_ref(edge), expected);
+      assert_eq!(*lengths.at_ref(edge.get()), expected);
     }
   }
 }

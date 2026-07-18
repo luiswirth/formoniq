@@ -11,6 +11,7 @@
 use super::{
   complex::Complex,
   handle::{KSimplexIdx, SimplexIdx},
+  role::Facet,
   simplex::Simplex,
   skeleton::Skeleton,
 };
@@ -52,14 +53,21 @@ impl Complex {
   /// The subcomplex spanned by the given facets: for a subset
   /// $Gamma subset.eq diff K$ of the boundary facets this is the boundary
   /// part carrying mixed (Dirichlet/Neumann/Robin) boundary conditions.
-  pub fn facet_subcomplex(&self, facets: Vec<SimplexIdx>) -> BoundaryComplex {
+  ///
+  /// The [`Facet`] witness carries the codimension-1 precondition; what it
+  /// cannot carry is *which* complex it proves it for, hence the ownership
+  /// check.
+  pub fn facet_subcomplex(&self, facets: Vec<Facet>) -> BoundaryComplex {
     assert!(!facets.is_empty(), "Facet subcomplex must not be empty.");
-    assert!(facets.iter().all(|f| f.dim == self.dim() - 1));
+    assert!(
+      facets.iter().all(|f| f.belongs_to(self)),
+      "Facets must belong to this complex."
+    );
 
     // Monotone vertex renumbering: sorted parent vertices -> 0..m.
     let mut parent_vertices: Vec<VertexIdx> = facets
       .iter()
-      .flat_map(|facet| facet.handle(self).simplex().vertices.clone())
+      .flat_map(|facet| facet.simplex().vertices.clone())
       .collect();
     parent_vertices.sort_unstable();
     parent_vertices.dedup();
@@ -71,10 +79,7 @@ impl Complex {
 
     let cells: Vec<Simplex> = facets
       .into_iter()
-      .map(|facet| {
-        let facet = facet.handle(self);
-        Simplex::new(facet.simplex().iter().map(to_local).collect())
-      })
+      .map(|facet| Simplex::new(facet.simplex().iter().map(to_local).collect()))
       .collect();
     let complex = Complex::from_cells(Skeleton::new(cells));
 

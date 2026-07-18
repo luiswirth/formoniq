@@ -6,7 +6,8 @@ use crate::{
   geometry::metric::{mesh::MeshLengths, Geometry},
   topology::{
     data::SkeletonData,
-    handle::{KSimplexIdx, SimplexRef},
+    handle::KSimplexIdx,
+    role::{Cell, Vertex},
     {complex::Complex, simplex::Simplex, VertexIdx},
   },
   Dim,
@@ -33,7 +34,7 @@ pub struct MeshCoords {
 /// coordinates know about the metric they induce, the metric knows nothing of
 /// coordinates (invariant 2).
 impl Geometry for MeshCoords {
-  fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric {
+  fn cell_metric(&self, cell: Cell) -> RiemannianMetric {
     RiemannianMetric::new(cell.coord_simplex(self).metric_tensor())
   }
 }
@@ -138,9 +139,8 @@ impl MeshCoords {
     let edges = topology.edges();
     let mut edge_lengths = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {
-      let [vi, vj] = edge.simplex().clone().try_into().unwrap();
-      let length = (self.coord(vj) - self.coord(vi)).norm();
-      edge_lengths[iedge] = length;
+      let (vi, vj) = edge.endpoints();
+      edge_lengths[iedge] = (vj.coord(self) - vi.coord(self)).norm();
     }
     // SAFETY: Edge Lengths come from a coordinate realizations.
     MeshLengths::new_unchecked(edge_lengths)
@@ -160,11 +160,23 @@ impl MeshCoords {
     &self,
     topology: &'a Complex,
     coord: CoordRef,
-  ) -> Option<SimplexRef<'a>> {
+  ) -> Option<Cell<'a>> {
     topology
       .cells()
       .handle_iter()
       .find(|cell| cell.coord_simplex(self).is_global_inside(coord))
+  }
+}
+
+/// Geometry read on a topology witness: the coordinate a [`Vertex`] proof
+/// names in an embedding, `vertex.coord(&coords)`. Reaches down from the
+/// coord side -- the topology never learns of embeddings.
+pub trait VertexRefExt {
+  fn coord<'c>(self, coords: &'c MeshCoords) -> CoordRef<'c>;
+}
+impl VertexRefExt for Vertex<'_> {
+  fn coord<'c>(self, coords: &'c MeshCoords) -> CoordRef<'c> {
+    coords.coord(self.kidx())
   }
 }
 
@@ -208,4 +220,25 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
   let coords = MeshCoords::new(coords);
 
   (topology, coords)
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::{gen::cartesian::CartesianMeshInfo, geometry::metric::mesh::EdgeRefExt};
+
+  /// The witness reads cohere across the layers: an edge's Regge length is
+  /// the distance of its endpoints' coordinates in the inducing embedding.
+  #[test]
+  fn edge_length_is_endpoint_distance() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let lengths = coords.to_edge_lengths(&topology);
+      for edge in topology.edges().handle_iter() {
+        let (vi, vj) = edge.endpoints();
+        let distance = (vj.coord(&coords) - vi.coord(&coords)).norm();
+        assert_eq!(edge.length(&lengths), distance);
+      }
+    }
+  }
 }
