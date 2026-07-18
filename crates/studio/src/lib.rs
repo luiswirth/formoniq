@@ -12,6 +12,9 @@ pub mod bake;
 pub mod demos;
 pub(crate) mod deposit;
 pub(crate) mod display;
+/// Headless PNG/MP4 rendering. Native only: it writes files and pipes to
+/// `ffmpeg`, neither of which the browser offers.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod export;
 pub mod gallery;
 pub(crate) mod glyph;
@@ -20,4 +23,11 @@ pub mod render;
 pub mod scene;
 pub mod ui;
 
+/// The web entry point and its platform glue (canvas mount, async device
+/// bootstrap, console logging). Isolated here so nothing web-specific leaks
+/// into the shared viewer code.
+#[cfg(target_arch = "wasm32")]
+mod web;
+
+#[cfg(not(target_arch = "wasm32"))]
 pub use app::run;

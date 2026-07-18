@@ -17,9 +17,13 @@ use wgpu::{Surface, SurfaceConfiguration};
 use winit::{
   application::ApplicationHandler,
   event::*,
-  event_loop::{ActiveEventLoop, EventLoop},
+  event_loop::ActiveEventLoop,
   window::{Window, WindowId},
 };
+// The event loop is constructed only by the native `run`; the web build enters
+// through `web::start`, which owns its own loop.
+#[cfg(not(target_arch = "wasm32"))]
+use winit::event_loop::EventLoop;
 
 use crate::demos::default_selection;
 use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
@@ -102,8 +106,8 @@ enum Drag {
   Pan,
 }
 
-struct State<'a> {
-  surface: Surface<'a>,
+pub(crate) struct State {
+  surface: Surface<'static>,
   ctx: GpuContext,
   config: SurfaceConfiguration,
   size: winit::dpi::PhysicalSize<u32>,
@@ -158,7 +162,7 @@ struct State<'a> {
   /// from [`WaveClock`]: that one is the pausable animation clock the
   /// renderer is handed, this is real elapsed time, which movement must
   /// always follow even while the wave is paused.
-  last_frame: std::time::Instant,
+  last_frame: web_time::Instant,
 
   // The lazy, memoized per-grade loader: which view is current, which is
   // building in the background, and the cache of already-solved scenes. The
@@ -188,16 +192,20 @@ struct State<'a> {
 
   // The in-egui file browser for loading a custom OBJ mesh. Persistent (it
   // holds the browser's own navigation state across frames), updated every
-  // frame inside the egui pass, and polled for a pick afterward.
+  // frame inside the egui pass, and polled for a pick afterward. Native only:
+  // the two file browsers back the desktop's local-file features, which the
+  // web build does not carry.
+  #[cfg(not(target_arch = "wasm32"))]
   file_dialog: egui_file_dialog::FileDialog,
   // A second, independent browser for the "Export PNG…" save dialog: separate
   // from the OBJ loader so each carries its own filter and default name, and so
   // a pick on one is never mistaken for the other.
+  #[cfg(not(target_arch = "wasm32"))]
   export_dialog: egui_file_dialog::FileDialog,
 }
 
-impl<'a> State<'a> {
-  async fn new(window: Arc<Window>) -> State<'a> {
+impl State {
+  pub(crate) async fn new(window: Arc<Window>) -> State {
     let size = window.inner_size();
     let instance = wgpu::Instance::default();
 
@@ -281,7 +289,7 @@ impl<'a> State<'a> {
       cursor: None,
       last_mouse_pos: None,
       keys_held: std::collections::HashSet::new(),
-      last_frame: std::time::Instant::now(),
+      last_frame: web_time::Instant::now(),
       gallery,
       scene,
       selection,
@@ -291,9 +299,11 @@ impl<'a> State<'a> {
       egui_ctx,
       egui_winit_state,
       egui_renderer,
+      #[cfg(not(target_arch = "wasm32"))]
       file_dialog: egui_file_dialog::FileDialog::new()
         .add_file_filter_extensions("Wavefront OBJ", vec!["obj"])
         .default_file_filter("Wavefront OBJ"),
+      #[cfg(not(target_arch = "wasm32"))]
       export_dialog: egui_file_dialog::FileDialog::new()
         .add_save_extension("PNG image", "png")
         .default_save_extension("PNG image")
@@ -427,6 +437,10 @@ impl<'a> State<'a> {
   /// the tolerant reader, and either installs it (re-solving the current grade)
   /// or records the parse/read error in the panel. Reading a file the user
   /// chose is not itself a side effect, so it needs no confirmation.
+  ///
+  /// Native only: the web build has no local filesystem and offers no OBJ
+  /// picker in the panel.
+  #[cfg(not(target_arch = "wasm32"))]
   fn load_obj_path(&mut self, path: std::path::PathBuf) {
     let name = path.file_name().map_or_else(
       || "mesh.obj".to_string(),
@@ -818,11 +832,14 @@ impl<'a> State<'a> {
       time: self.clock.time(),
     };
 
-    // Borrow only the file dialog into the closure: the rest of the panel is
-    // driven by `model`, so this disjoint field can be touched inside the
-    // closure without conflicting with the `&mut self` calls after it. Its own
-    // borrow ends with the closure, before those calls.
+    // Borrow only the file dialogs into the closure: the rest of the panel is
+    // driven by `model`, so these disjoint fields can be touched inside the
+    // closure without conflicting with the `&mut self` calls after it. Their own
+    // borrow ends with the closure, before those calls. Native only -- the web
+    // panel raises neither dialog.
+    #[cfg(not(target_arch = "wasm32"))]
     let file_dialog = &mut self.file_dialog;
+    #[cfg(not(target_arch = "wasm32"))]
     let export_dialog = &mut self.export_dialog;
 
     let mut response = None;
@@ -832,15 +849,18 @@ impl<'a> State<'a> {
       // Both browsers draw as their own windows and open on the panel's
       // request; each must be updated within the frame, after the panel. `Ui`
       // derefs to `Context`, which is what `FileDialog::update` takes.
-      let response = response.as_ref().unwrap();
-      if response.load_obj_clicked {
-        file_dialog.pick_file();
+      #[cfg(not(target_arch = "wasm32"))]
+      {
+        let response = response.as_ref().unwrap();
+        if response.load_obj_clicked {
+          file_dialog.pick_file();
+        }
+        file_dialog.update(ui);
+        if response.export_png_clicked {
+          export_dialog.save_file();
+        }
+        export_dialog.update(ui);
       }
-      file_dialog.update(ui);
-      if response.export_png_clicked {
-        export_dialog.save_file();
-      }
-      export_dialog.update(ui);
     });
     let response = response.expect("the closure always runs exactly once");
 
@@ -851,6 +871,7 @@ impl<'a> State<'a> {
     // choose both anew for what they land on. They are mutually exclusive in
     // priority (at most one such widget moves per frame anyway); a preset sets
     // both axes at once, so it precedes the individual axis switches.
+    #[cfg(not(target_arch = "wasm32"))]
     let loaded_file = match self.file_dialog.take_picked() {
       Some(path) => {
         self.load_obj_path(path);
@@ -858,6 +879,8 @@ impl<'a> State<'a> {
       }
       None => false,
     };
+    #[cfg(target_arch = "wasm32")]
+    let loaded_file = false;
 
     if !loaded_file {
       if let Some(index) = response.requested_preset {
@@ -887,6 +910,7 @@ impl<'a> State<'a> {
 
     // A finished export pick is likewise orthogonal to the shown pair: it reads
     // the current frame and writes it, changing nothing on screen.
+    #[cfg(not(target_arch = "wasm32"))]
     if let Some(path) = self.export_dialog.take_picked() {
       self.export_current_png(&path);
     }
@@ -907,6 +931,9 @@ impl<'a> State<'a> {
   /// and camera the window is rendering, handed to the headless path, so the
   /// still is exactly what is on screen (minus the egui panels). A write failure
   /// is surfaced in the panel rather than aborting the loop.
+  ///
+  /// Native only: there is no local filesystem to write to on the web.
+  #[cfg(not(target_arch = "wasm32"))]
   fn export_current_png(&mut self, path: &std::path::Path) {
     let items = self
       .display
@@ -932,7 +959,7 @@ impl<'a> State<'a> {
     // very frame it lands, rather than one frame late.
     self.poll_view_load();
 
-    let now = std::time::Instant::now();
+    let now = web_time::Instant::now();
     let dt = (now - self.last_frame).as_secs_f32();
     self.last_frame = now;
     self.apply_movement(dt);
@@ -966,6 +993,9 @@ impl<'a> State<'a> {
       | wgpu::CurrentSurfaceTexture::Occluded
       | wgpu::CurrentSurfaceTexture::Validation => {
         // A backstop against this turning into a full-throttle retry spin.
+        // Native only: the web loop is paced by the browser's animation frame,
+        // so there is no synchronous spin to throttle (and no thread to sleep).
+        #[cfg(not(target_arch = "wasm32"))]
         std::thread::sleep(std::time::Duration::from_millis(16));
         return Ok(());
       }
@@ -1066,7 +1096,7 @@ struct WaveClock {
   /// Animation seconds accumulated before the current play span.
   base: f32,
   /// Wall-clock start of the current play span; unread while paused.
-  anchor: std::time::Instant,
+  anchor: web_time::Instant,
 }
 
 impl WaveClock {
@@ -1074,7 +1104,7 @@ impl WaveClock {
     Self {
       playing: true,
       base: 0.0,
-      anchor: std::time::Instant::now(),
+      anchor: web_time::Instant::now(),
     }
   }
 
@@ -1094,7 +1124,7 @@ impl WaveClock {
       return;
     }
     self.base = self.time();
-    self.anchor = std::time::Instant::now();
+    self.anchor = web_time::Instant::now();
     self.playing = playing;
   }
 
@@ -1102,7 +1132,7 @@ impl WaveClock {
   /// current play/pause state.
   fn restart(&mut self) {
     self.base = 0.0;
-    self.anchor = std::time::Instant::now();
+    self.anchor = web_time::Instant::now();
   }
 }
 
@@ -1118,9 +1148,9 @@ fn selection_in_range(scene: &Scene, selection: Selection) -> bool {
 }
 
 #[derive(Default)]
-struct App<'a> {
+pub(crate) struct App {
   window: Option<Arc<Window>>,
-  state: Option<State<'a>>,
+  state: Option<State>,
   // Whether the window is currently fully covered/minimized/off-screen. While
   // occluded, `get_current_texture` can never succeed, so there is no vsync
   // to pace the render loop against -- unconditionally chasing another
@@ -1133,19 +1163,28 @@ struct App<'a> {
   occluded: bool,
 }
 
-impl<'a> ApplicationHandler for App<'a> {
+impl ApplicationHandler for App {
   fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-    if self.window.is_none() {
-      let window = Arc::new(
-        event_loop
-          .create_window(Window::default_attributes().with_title("formoniq-studio"))
-          .unwrap(),
-      );
-
-      let state = pollster::block_on(State::new(window.clone()));
-      self.window = Some(window);
-      self.state = Some(state);
+    if self.window.is_some() {
+      return;
     }
+    let window = Arc::new(
+      event_loop
+        .create_window(Window::default_attributes().with_title("formoniq-studio"))
+        .unwrap(),
+    );
+    self.window = Some(window.clone());
+
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+      self.state = Some(pollster::block_on(State::new(window)));
+    }
+    // On the web, adapter/device/surface creation is async and must yield to
+    // the browser rather than block. The web module mounts the canvas, drives
+    // `State::new` to completion off the event loop, and parks the result in a
+    // slot the loop drains in `about_to_wait`.
+    #[cfg(target_arch = "wasm32")]
+    crate::web::init_state(window);
   }
 
   fn window_event(
@@ -1188,6 +1227,12 @@ impl<'a> ApplicationHandler for App<'a> {
   }
 
   fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+    // The web `State::new` completes asynchronously; drain its slot once it
+    // lands so the first real frame can render. No-op once installed.
+    #[cfg(target_arch = "wasm32")]
+    if self.state.is_none() {
+      self.state = crate::web::take_ready_state();
+    }
     // Not while occluded: see the field doc on `occluded`. The loop resumes
     // on its own once `WindowEvent::Occluded(false)` fires the next redraw.
     if self.occluded {
@@ -1199,6 +1244,9 @@ impl<'a> ApplicationHandler for App<'a> {
   }
 }
 
+/// The native windowed entry point. The web build enters through
+/// `web::start` instead, which owns the browser's async event loop.
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn run() {
   env_logger::init();
 

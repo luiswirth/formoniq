@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <title>formoniq studio</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #0b0b0e;
+        color: #d8d8e0;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      /* The winit-created canvas is appended to <body> by the wasm module. */
+      canvas {
+        outline: none;
+        touch-action: none;
+      }
+      #message {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        padding: 2rem;
+        line-height: 1.6;
+      }
+      #message a {
+        color: #8ab4f8;
+      }
+      #message.hidden {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="message">loading formoniq studio…</div>
+
+    <script type="module">
+      const message = document.getElementById("message");
+
+      // WebGPU only, by choice: the viewer targets the modern backend and does
+      // not carry a WebGL2 fallback. Fail early and legibly where it is absent.
+      if (!("gpu" in navigator)) {
+        message.innerHTML =
+          "This viewer needs <strong>WebGPU</strong>, which this browser does not expose.<br />" +
+          "Try a recent Chrome, Edge, or a browser with WebGPU enabled.";
+      } else {
+        try {
+          const wasm = await import("./formoniq_studio.js");
+          await wasm.default();
+          message.classList.add("hidden");
+          wasm.start();
+        } catch (err) {
+          console.error(err);
+          message.innerHTML =
+            "Failed to start.<br /><small>" + String(err) + "</small>";
+        }
+      }
+    </script>
+  </body>
+</html>

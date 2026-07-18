@@ -460,10 +460,19 @@ pub(crate) struct Shown {
 /// A rebuild of `T` running off the render thread, so a solve that triggers an
 /// eigensolve never blocks the UI. `poll` is non-blocking and yields the
 /// result exactly once, the frame it arrives.
+///
+/// The web has no background thread to offload onto (the plain `wasm32` target
+/// is single-threaded), so there the build runs synchronously in `spawn` and
+/// `poll` simply hands back the finished result on the next frame -- the same
+/// contract, minus the concurrency. A heavy eigensolve therefore blocks the tab
+/// briefly on the web rather than running in the background; restoring the
+/// off-thread build there needs a web worker, tracked separately.
+#[cfg(not(target_arch = "wasm32"))]
 struct PendingLoad<T> {
   rx: std::sync::mpsc::Receiver<T>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<T: Send + 'static> PendingLoad<T> {
   fn spawn(build: impl FnOnce() -> T + Send + 'static) -> Self {
     let (tx, rx) = std::sync::mpsc::channel();
@@ -475,6 +484,24 @@ impl<T: Send + 'static> PendingLoad<T> {
 
   fn poll(&self) -> Option<T> {
     self.rx.try_recv().ok()
+  }
+}
+
+#[cfg(target_arch = "wasm32")]
+struct PendingLoad<T> {
+  result: std::cell::Cell<Option<T>>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl<T: 'static> PendingLoad<T> {
+  fn spawn(build: impl FnOnce() -> T + 'static) -> Self {
+    Self {
+      result: std::cell::Cell::new(Some(build())),
+    }
+  }
+
+  fn poll(&self) -> Option<T> {
+    self.result.take()
   }
 }
 
@@ -597,6 +624,9 @@ impl Gallery {
   /// Installs a mesh loaded from an OBJ file as the [`MeshSource::Custom`]
   /// source, named for the picker. Unlike a regenerable source there is nothing
   /// to build -- the mesh is already in hand -- so this always takes effect.
+  ///
+  /// Native only: the web build has no OBJ picker (see `app.rs`).
+  #[cfg(not(target_arch = "wasm32"))]
   pub(crate) fn load_custom(&mut self, name: String, mesh: Mesh) -> Option<Scene> {
     self.install_mesh(MeshSource::Custom { name }, mesh)
   }
