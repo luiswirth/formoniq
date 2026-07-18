@@ -128,7 +128,7 @@ impl AdvectBake {
           continue;
         };
         *slot = neighbour.kidx() as u32;
-        let transition = cell.chart().transition_to(neighbour.chart());
+        let transition = cell.transition_to(neighbour);
         transitions.push(pad_mat4(transition.bary_map()));
       }
       // A cell of sub-maximal dimension has fewer facets than the buffer has
@@ -226,7 +226,7 @@ fn facet_neighbour<'a>(
   topology: &'a Complex,
   cell: SimplexIdx,
   opposite: usize,
-) -> Option<simplicial::topology::handle::SimplexRef<'a>> {
+) -> Option<simplicial::topology::role::Cell<'a>> {
   let dim = cell.dim();
   if dim == 0 {
     // A point has no facet to cross, so every direction is boundary. The

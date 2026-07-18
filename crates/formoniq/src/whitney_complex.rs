@@ -13,11 +13,7 @@ use {
   simplicial::{
     geometry::metric::mesh::MeshLengths,
     linalg::{CooMatrix, CsrMatrix},
-    topology::{
-      boundary::BoundaryComplex,
-      complex::Complex,
-      handle::{KSimplexIdx, SimplexIdx},
-    },
+    topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
     Dim,
   },
 };
@@ -167,7 +163,7 @@ impl<'a> WhitneyComplex<'a> {
   /// The Whitney complex of a boundary part $Gamma subset.eq diff K$
   /// (a set of boundary facets): the carrier of one kind of mixed boundary
   /// condition.
-  pub fn boundary_part(&self, facets: Vec<SimplexIdx>) -> BoundaryWhitneyComplex {
+  pub fn boundary_part(&self, facets: Vec<Facet>) -> BoundaryWhitneyComplex {
     let boundary = self.topology.facet_subcomplex(facets);
     let geometry = boundary.trace_lengths(self.geometry);
     BoundaryWhitneyComplex { boundary, geometry }

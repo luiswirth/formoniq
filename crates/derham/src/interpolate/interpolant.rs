@@ -56,7 +56,7 @@ impl<'a> WhitneyInterpolant<'a> {
 
   /// The value at a point of the manifold, in the reference frame of its cell.
   pub fn eval(&self, point: &MeshPoint) -> MultiForm {
-    let cell = point.chart(self.complex).cell();
+    let cell = point.chart(self.complex);
     let mut value = MultiForm::zero(self.complex.dim(), self.cochain.grade());
     for (dof_simp, form) in cell.faces(self.cochain.grade()).zip(&self.forms) {
       value += self.cochain[dof_simp] * form.at_bary(point.bary());

@@ -85,10 +85,11 @@ impl MeshPoint {
   /// The [`Chart`] this point lives in.
   ///
   /// The single crossing from a point to the complex it belongs to, and hence
-  /// the one place the atlas contract can be enforced: [`Chart::new`] rejects
-  /// anything that is not a cell.
+  /// the one place the atlas contract is enforced: the stored index must
+  /// prove the [`Cell`](crate::topology::role::Cell) role here, since
+  /// index-level data carries no proof of its own.
   pub fn chart<'m>(&self, complex: &'m Complex) -> Chart<'m> {
-    Chart::new(self.cell.handle(complex))
+    self.cell.handle(complex).role()
   }
 
   /// The dimension of the manifold, which is that of the containing cell.
@@ -122,7 +123,7 @@ impl MeshPoint {
   /// simplex carrying it. A point in the interior of a cell supports the cell
   /// itself; a vertex of the mesh supports that vertex.
   pub fn support<'m>(&self, complex: &'m Complex) -> SimplexRef<'m> {
-    let cell = self.chart(complex).cell();
+    let cell = self.chart(complex);
     let face = cell.simplex().select(self.support_positions());
     complex.skeleton(face.dim()).handle_by_simplex(&face)
   }
@@ -148,7 +149,7 @@ mod test {
   /// There is no frame on a face in which to express a value -- which is why a
   /// point of a face is carried by a *supporting cell* instead.
   #[test]
-  #[should_panic(expected = "a face carries no chart")]
+  #[should_panic(expected = "is not a cell")]
   fn a_point_of_a_face_has_no_chart() {
     let complex = Complex::standard(2);
     let edge = complex.skeleton(1).handle_iter().next().unwrap();

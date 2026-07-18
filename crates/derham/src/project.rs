@@ -239,7 +239,7 @@ mod test {
           let cells: Vec<_> = face.cells().collect();
           for (i, &source) in cells.iter().enumerate() {
             for &target in &cells[i + 1..] {
-              let differential = source.chart().transition_to(target.chart()).differential();
+              let differential = source.transition_to(target).differential();
 
               let here = face_tangent_blade(dim, &face.simplex().relative_to(source.simplex()));
               let there = face_tangent_blade(dim, &face.simplex().relative_to(target.simplex()));

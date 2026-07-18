@@ -50,13 +50,13 @@ impl Transition {
   /// the *same* atlas.
   pub fn new(source: Chart, target: Chart) -> Self {
     assert!(
-      std::ptr::eq(source.complex(), target.complex()),
+      source.belongs_to(target.complex()),
       "Charts of two different atlases have no transition."
     );
     let dim = source.dim();
 
-    let source_vertices = &source.cell().simplex().vertices;
-    let target_vertices = &target.cell().simplex().vertices;
+    let source_vertices = &source.simplex().vertices;
+    let target_vertices = &target.simplex().vertices;
 
     let mut bary_map = Matrix::zeros(dim + 1, dim + 1);
     for (j, vertex) in target_vertices.iter().enumerate() {
@@ -173,7 +173,7 @@ mod test {
       let complex = Complex::standard(dim);
       let cell = complex.cells().handle_iter().next().unwrap();
 
-      let transition = cell.chart().transition_to(cell.chart());
+      let transition = cell.transition_to(cell);
       assert!(transition.is_identity());
       assert_relative_eq!(transition.bary_map(), &Matrix::identity(dim + 1, dim + 1));
       assert_relative_eq!(transition.differential(), Matrix::identity(dim, dim));
@@ -194,10 +194,8 @@ mod test {
       for (i, &source) in cells.iter().enumerate() {
         for &target in &cells[i + 1..] {
           let positions = facet.simplex().relative_to(source.simplex());
-          let point = source
-            .chart()
-            .point_on_face(&positions, &barycenter_bary(dim - 1));
-          pairs.push((source.chart(), target.chart(), point));
+          let point = source.point_on_face(&positions, &barycenter_bary(dim - 1));
+          pairs.push((source, target, point));
         }
       }
     }
@@ -253,20 +251,15 @@ mod test {
         let cells: Vec<_> = vertex.cells().collect();
         for &first in &cells {
           let positions = vertex.simplex().relative_to(first.simplex());
-          let point = first.chart().point_on_face(&positions, &barycenter_bary(0));
+          let point = first.point_on_face(&positions, &barycenter_bary(0));
 
           for &second in &cells {
             for &third in &cells {
-              let direct = first
-                .chart()
-                .transition_to(third.chart())
-                .apply(&point)
-                .unwrap();
+              let direct = first.transition_to(third).apply(&point).unwrap();
               let composed = first
-                .chart()
-                .transition_to(second.chart())
+                .transition_to(second)
                 .apply(&point)
-                .and_then(|mid| second.chart().transition_to(third.chart()).apply(&mid))
+                .and_then(|mid| second.transition_to(third).apply(&mid))
                 .unwrap();
               assert_eq!(direct, composed);
             }
@@ -291,7 +284,7 @@ mod test {
         let cells: Vec<_> = facet.cells().collect();
         for (i, &source) in cells.iter().enumerate() {
           for &target in &cells[i + 1..] {
-            let differential = source.chart().transition_to(target.chart()).differential();
+            let differential = source.transition_to(target).differential();
 
             // The tangent space of the shared facet, in the source chart.
             let positions = facet.simplex().relative_to(source.simplex());

@@ -1,6 +1,11 @@
 use super::complex::Complex;
 use crate::{
-  topology::{simplex::Simplex, skeleton::Skeleton, VertexIdx},
+  topology::{
+    role::{Cell, Edge, Roled, Vertex},
+    simplex::Simplex,
+    skeleton::Skeleton,
+    VertexIdx,
+  },
   Dim,
 };
 
@@ -75,6 +80,12 @@ impl<'m> SimplexRef<'m> {
   pub fn complex(&self) -> &'m Complex {
     self.complex
   }
+  /// Whether this handle borrows `complex` -- the object, by identity, never
+  /// a structural equal: a clone of a complex is a different complex, and
+  /// handles and role proofs do not transfer to it.
+  pub fn belongs_to(&self, complex: &Complex) -> bool {
+    std::ptr::eq(self.complex, complex)
+  }
 
   /// The underlying combinatorial simplex (its sorted vertex set): the escape
   /// hatch from ref-world down to the raw atom. Navigation lives on the ref;
@@ -107,17 +118,18 @@ impl<'m> SimplexRef<'m> {
 impl<'m> SimplexRef<'m> {
   // --- down-incidence ---
 
-  /// The vertices of this simplex, as 0-simplex refs.
-  pub fn vertices(self) -> impl Iterator<Item = SimplexRef<'m>> {
+  /// The vertices of this simplex, with their [`Vertex`] proofs by
+  /// construction.
+  pub fn vertices(self) -> impl Iterator<Item = Vertex<'m>> {
     let complex = self.complex;
     self
       .simplex()
       .iter()
-      .map(move |v| SimplexIdx::new(0, v).handle(complex))
+      .map(move |v| Roled::trusted(SimplexIdx::new(0, v).handle(complex)))
   }
-  /// The edges of this simplex.
-  pub fn edges(self) -> impl Iterator<Item = SimplexRef<'m>> {
-    self.faces(1)
+  /// The edges of this simplex, with their [`Edge`] proofs by construction.
+  pub fn edges(self) -> impl Iterator<Item = Edge<'m>> {
+    self.faces(1).map(Roled::trusted)
   }
   /// The `dim`-dimensional faces (subsimplices) of this simplex.
   pub fn faces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
@@ -151,9 +163,10 @@ impl<'m> SimplexRef<'m> {
 
   // --- up-incidence ---
 
-  /// The cells (top-dimensional cofaces) containing this simplex: the
-  /// intersection of the vertex-cell lists over its vertices.
-  pub fn cells(self) -> impl Iterator<Item = SimplexRef<'m>> {
+  /// The cells (top-dimensional cofaces) containing this simplex, with their
+  /// [`Cell`] proofs by construction: the intersection of the vertex-cell
+  /// lists over its vertices.
+  pub fn cells(self) -> impl Iterator<Item = Cell<'m>> {
     let complex = self.complex;
     let top = complex.dim();
     let mut vertices = self.simplex().iter();
@@ -170,7 +183,7 @@ impl<'m> SimplexRef<'m> {
     };
     cells
       .into_iter()
-      .map(move |kidx| SimplexIdx::new(top, kidx).handle(complex))
+      .map(move |kidx| Roled::trusted(SimplexIdx::new(top, kidx).handle(complex)))
   }
   /// The `dim`-dimensional cofaces (supersimplices) of this simplex.
   pub fn cofaces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
@@ -210,28 +223,6 @@ impl<'m> SimplexRef<'m> {
       }
     }
     result.into_iter().map(move |idx| idx.handle(complex))
-  }
-  /// The neighbors of a cell: the cells sharing a facet with it (the
-  /// dual-graph adjacency). Intended for top-dimensional simplices.
-  pub fn neighbors(self) -> impl Iterator<Item = SimplexRef<'m>> {
-    let complex = self.complex;
-    let this = self.idx;
-    let mut cells: BTreeSet<KSimplexIdx> = BTreeSet::new();
-    for facet in self.facets() {
-      for cell in facet.cells() {
-        if cell.idx() != this {
-          cells.insert(cell.kidx());
-        }
-      }
-    }
-    let top = self.complex.dim();
-    cells
-      .into_iter()
-      .map(move |kidx| SimplexIdx::new(top, kidx).handle(complex))
-  }
-  /// Whether this facet lies on the boundary (has a single cell).
-  pub fn is_boundary(&self) -> bool {
-    self.cells().count() == 1
   }
 }
 
