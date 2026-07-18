@@ -270,8 +270,16 @@ coordinates are the right chart.
 manifold **out to** coordinates; a *parametrization* maps coordinates **in to**
 the manifold. They are inverse, and the direction is the whole content of the
 words. The `Chart` of a cell is barycentric, intrinsic, and exists on every
-geometry. The `SimplexCoords` of a cell is its affine *parametrization*
-$hat(K) -> RR^N$, which presupposes an embedding — never call it a chart. A
+geometry. The `SimplexCoords<S>` of a cell is its affine *parametrization*
+$hat(K) -> S$ into a coordinate space — never call it a chart. It is generic
+over that space (invariant 3): `SimplexCoords<Ambient>` (the default, and the
+lowest module — `atlas::simplex_coords` — that defines it) is the extrinsic
+realization $hat(K) -> RR^N$, and only *it* presupposes an embedding; the metric
+and edge lengths it induces are the `geometry::coord` bridges bolted onto that
+instantiation. `SimplexCoords<LocalCartesian>` is the metric-free realization in
+a chart's own cartesian frame — the reference cell (`standard`) and a
+refinement child in its parent's frame — which is why the affine core lives in
+`atlas`, reachable by `topology`, not in `geometry::coord`. A
 curvilinear coordinate system on the manifold being approximated (spherical on
 $S^2$, polar on a disk) is likewise a parametrization: it is written
 $(theta, phi) |-> RR^3$, and the fact that it must carry its own inverse as

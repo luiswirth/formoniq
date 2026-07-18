@@ -22,7 +22,7 @@ use super::{
   VertexIdx,
 };
 use crate::{
-  atlas::ref_refinement,
+  atlas::{ref_refinement, LocalCartesian, SimplexCoords},
   linalg::{Matrix, Vector},
 };
 
@@ -125,10 +125,10 @@ impl Complex {
       for child in pattern.children() {
         // Each corner as (global vertex, its parent-local coordinate). The
         // stored cell sorts its vertices globally, and the induced metric reads
-        // that sorted order as its basis, so the Jacobian must too -- hence the
-        // sort. This is why the Jacobian is per-cell and not pure reference
-        // data: which permutation sorts a child's corners depends on the coarse
-        // cell's global vertex labels.
+        // that sorted order as its basis, so the child's realization in the
+        // parent frame must too -- hence the sort. This is why the Jacobian is
+        // per-cell and not pure reference data: which permutation sorts a
+        // child's corners depends on the coarse cell's global vertex labels.
         let mut corners: Vec<(VertexIdx, Vector)> = child
           .iter()
           .map(|&pv| {
@@ -138,13 +138,13 @@ impl Complex {
           .collect();
         corners.sort_by_key(|&(global, _)| global);
 
-        let base = &corners[0].1;
-        let cols: Vec<Vector> = corners[1..].iter().map(|(_, x)| x - base).collect();
-        let jacobian = if cols.is_empty() {
-          Matrix::zeros(dim, dim)
-        } else {
-          Matrix::from_columns(&cols)
-        };
+        // The child realized in the parent chart's local frame, in the stored
+        // (sorted) vertex order; its linear part is the affine map the parent's
+        // metric is pulled back along. The degenerate 0-cell is the empty map,
+        // handled by the realization itself -- no special case here.
+        let local: Vec<Vector> = corners.iter().map(|(_, x)| x.clone()).collect();
+        let jacobian =
+          SimplexCoords::<LocalCartesian>::new(Matrix::from_columns(&local)).linear_transform();
 
         let simplex = Simplex::new(corners.iter().map(|&(global, _)| global).collect());
         cells.push(simplex.clone());

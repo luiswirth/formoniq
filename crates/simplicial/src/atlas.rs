@@ -46,12 +46,14 @@ pub mod chart;
 pub mod point;
 pub mod quadrature;
 pub mod refine;
+pub mod simplex_coords;
 pub mod transition;
 
 pub use chart::{Chart, ChartExt};
 pub use point::{MeshPoint, BARY_EPS};
 pub use quadrature::SimplexQuadRule;
 pub use refine::{ref_refinement, ReferenceRefinement};
+pub use simplex_coords::SimplexCoords;
 pub use transition::Transition;
 
 use crate::Dim;
