@@ -1,13 +1,4 @@
-//! Discrete differential forms: the exterior algebra, over the simplicial
-//! manifold.
-//!
-//! `derham` is the crate that *joins* [`exterior`] and [`simplicial`], and it exists
-//! because neither may depend on the other. A [`Cochain`](cochain::Cochain) is
-//! the discrete form; a [`Section`](section::Section) is the continuous field it
-//! reconstructs to, evaluated at a [`MeshPoint`](simplicial::atlas::MeshPoint) and
-//! valued in the reference frame of that point's chart. The two are related by
-//! the [`project`] map and the [`interpolate`] interpolation, which are inverse in
-//! the one direction that matters ($R compose W = id$) and cochain maps in both.
+#![doc = include_str!("../README.md")]
 
 extern crate nalgebra as na;
 

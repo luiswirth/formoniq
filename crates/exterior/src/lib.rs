@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 extern crate nalgebra as na;
 
 use gramian::{Gramian, RiemannianMetric};

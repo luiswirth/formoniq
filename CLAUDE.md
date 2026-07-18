@@ -231,6 +231,16 @@ Not LaTeX, not unicode soup. State *what the object is* mathematically, the laws
 it obeys, and the invariants and contracts the code cannot show. Never narrate
 what the next line does.
 
+The one exception is the **crate-level overview**, which is the crate's
+`README.md` pulled in verbatim by `#![doc = include_str!("../README.md")]` — one
+source of truth for the docs.rs landing page and the GitHub/crates.io README,
+never two hand-synced copies. A README is rendered by GitHub and crates.io,
+which know neither Typst nor rustdoc's intra-doc links, so the shared text is
+plain **Unicode** markdown (the sole place Unicode stands in for Typst), prose,
+with no intra-doc links and only the little math notation that genuinely helps.
+Type- and module-level navigation stays on the item docs, where the links
+resolve and the Typst renders as house style.
+
 **Tests are theorems.** The test suite is a machine-checked statement of the
 mathematics, and it is how correctness is actually established here. New math
 ships with the law that characterizes it, not with a golden number:

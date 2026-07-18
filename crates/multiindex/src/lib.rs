@@ -1,19 +1,4 @@
-//! Combinatorics of finite index sets.
-//!
-//! The central type is [`Combination`]: a strictly increasing multi-index
-//! stored as a bitset. It is the canonical basis element of both simplicial
-//! chains (as a set of vertices) and exterior algebra blades (as a set of
-//! covector indices). Arbitrarily ordered index words exist only transiently:
-//! [`Combination::from_word`] canonicalizes them into a [`Sign`] and a
-//! [`Combination`].
-//!
-//! All ranks and enumerations are **colexicographic**: combinations are
-//! compared by their largest element first, which coincides with the numeric
-//! order of the bitsets. The rank is the combinatorial number system
-//! $"rank"{s_0 < dots.c < s_(k-1)} = sum_i binom(s_i, i+1)$,
-//! independent of any ambient dimension, and the first $binom(n,k)$
-//! combinations of the universal enumeration are exactly those inside
-//! ${0, dots, n-1}$.
+#![doc = include_str!("../README.md")]
 
 pub mod cartesian;
 

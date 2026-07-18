@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "A Gram matrix and Riemannian metric: an inner product expressed in a basis."
 repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
 keywords = ["gram-matrix", "riemannian-metric", "linear-algebra"]
 categories = ["mathematics"]
 

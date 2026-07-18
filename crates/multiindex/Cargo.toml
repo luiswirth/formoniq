@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "Combinatorics of finite index sets: colex-ranked subsets and cartesian multi-indices."
 repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
 keywords = ["combinatorics", "simplicial", "multi-index"]
 categories = ["mathematics"]
 

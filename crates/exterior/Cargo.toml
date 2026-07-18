@@ -6,6 +6,7 @@ rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "The exterior algebra of a vector space, with the Hodge star and musical isomorphisms."
 repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
 keywords = ["exterior-algebra", "differential-forms", "hodge-star"]
 categories = ["mathematics"]
 

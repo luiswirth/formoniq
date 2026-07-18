@@ -1,25 +1,4 @@
-//! Coordinates, tagged by the space they live in.
-//!
-//! A vector of numbers is not a point: it is a point *in a coordinate system*,
-//! and the same tuple means different things in different ones. Barycentric
-//! weights $lambda in RR^(n+1)$, the cartesian coordinates $x in RR^n$ of a
-//! chart, and the ambient coordinates of an embedding $RR^N$ are three distinct
-//! spaces, and every map between them is a real map with a real inverse.
-//!
-//! [`Coords`] carries the space as a type parameter, so those maps have to be
-//! written down and the wrong composition does not compile. The tag is a
-//! zero-sized [`CoordSpace`] marker: no runtime cost, no runtime check. Reading
-//! is unaffected -- `Coords` derefs to the underlying vector, so the whole
-//! nalgebra API is there.
-//!
-//! The tag is a discipline, not a proof. Building a `Coords<S>` out of a raw
-//! [`Vector`] -- through [`Coords::new`] or [`From`] -- is unchecked, and
-//! deliberately so: that is the boundary at which untagged linear algebra
-//! enters, and there is nothing at a boundary to check against. The space is
-//! whatever the caller says it is. What the tags buy is that *past* the
-//! boundary the claim is carried and enforced: a coordinate of one space cannot
-//! be passed where another is expected, and a map between two spaces has to
-//! exist and be named rather than be assumed.
+#![doc = include_str!("../README.md")]
 
 pub mod affine;
 
