@@ -7,6 +7,10 @@ reference to any coordinate embedding.
 
 Research code, under active development.
 
+An interactive build of the viewer runs in the browser, with no installation, at
+[lwirth.com/formoniq](https://lwirth.com/formoniq): meshes, cochains and the PDE
+solutions computed on them, solved client-side via WebAssembly and WebGPU.
+
 ## Motivation
 
 Classical finite element methods are usually written for a fixed dimension, in
@@ -166,12 +170,14 @@ README and is published on its own.
 
 ## Visualization
 
-`studio` is the interactive viewer for the engine: a wgpu/winit/egui application,
-running natively and in the browser via WebAssembly, for inspecting meshes,
-simplicial manifolds, cochains and the PDE solutions computed on them. It sits at
-the top of the stack, depends downward on `formoniq` and below, and is kept off
-the core build's critical path (excluded from the workspace's default members),
-so a core change is never gated on the graphics stack.
+`studio` is the interactive viewer for the engine: a wgpu/winit/egui application
+for inspecting meshes, simplicial manifolds, cochains and the PDE solutions
+computed on them. It runs natively, and in the browser via WebAssembly and
+WebGPU with the solve running client-side, so the same viewer is reachable
+without a toolchain at [lwirth.com/formoniq](https://lwirth.com/formoniq). It
+sits at the top of the stack, depends downward on `formoniq` and below, and is
+kept off the core build's critical path (excluded from the workspace's default
+members), so a core change is never gated on the graphics stack.
 
 The engine is intrinsic-first and needs no embedding; a viewer needs one, because
 nothing reaches the screen until a point has a position. `studio` is therefore
