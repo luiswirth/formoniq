@@ -21,10 +21,10 @@
 //! be passed where another is expected, and a map between two spaces has to
 //! exist and be named rather than be assumed.
 
-use crate::{
-  linalg::nalgebra::{Vector, VectorView},
-  Dim,
-};
+pub mod affine;
+
+use formoniq_linalg::nalgebra::{Vector, VectorView};
+use multiindex::Dim;
 
 use std::marker::PhantomData;
 

@@ -6,7 +6,7 @@
 //! the same two things a graphics API does and the core keeps out: an explicit
 //! winding, and an explicit embedding, fixed at 3.
 
-use common::linalg::nalgebra::VectorView;
+use formoniq_linalg::nalgebra::VectorView;
 use simplicial::{
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},

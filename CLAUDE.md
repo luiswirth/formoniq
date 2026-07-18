@@ -35,25 +35,30 @@ commentary on them. Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing —
-`common → exterior → { manifold, continuum } → ddf → formoniq → studio`, where
-`manifold` and `continuum` are *siblings*:
+`{ multiindex, formoniq-linalg, gramian, coorder } → exterior → { simplicial,
+chartan } → derham → formoniq → studio`, where `multiindex`/`formoniq-linalg`/
+`gramian`/`coorder` are foundational siblings and `simplicial`/`chartan` are
+siblings one level up:
 
-| crate       | is                                  | key contents |
-| ----------- | ----------------------------------- | ------------ |
-| `common`    | shared math substrate               | `Combination`/`Sign` (combinatorics), `Gramian`/`RiemannianMetric`, `coord::Coords<S>` (coordinates tagged by their space), linalg backends (nalgebra/faer), `Dim` |
-| `exterior`  | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `manifold`  | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
-| `continuum` | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
-| `ddf`       | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `whitney::` (`WhitneyForm`, `WhitneyInterpolant`), `derham::derham_map` |
-| `formoniq`  | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk`: structure-preserving time integration), `problems::` (elliptic, maxwell, heat, wave, ...) |
-| `studio`    | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
+| crate            | is                                  | key contents |
+| ---------------- | ----------------------------------- | ------------ |
+| `multiindex`     | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets), `cartesian::` (radix multi-indices), `Dim` |
+| `formoniq-linalg`| linear-algebra backends             | dense/sparse nalgebra type aliases (`Vector`, `Matrix`, `CsrMatrix`, ...), the faer bridge, shift-invert eigensolving |
+| `gramian`        | inner-product / metric structure    | `Gramian`, `RiemannianMetric` |
+| `coorder`        | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
+| `exterior`       | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
+| `simplicial`     | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`) and `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) |
+| `chartan`        | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
+| `derham`         | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
+| `formoniq`       | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk`: structure-preserving time integration), `problems::` (elliptic, maxwell, heat, wave, ...) |
+| `studio`         | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
-one: `exterior` must never hear about meshes, `manifold` never about forms.
-`manifold` (the simplicial $M_h$) and `continuum` (the smooth $M$ it
+one: `exterior` must never hear about meshes, `simplicial` never about forms.
+`simplicial` (the simplicial $M_h$) and `chartan` (the smooth $M$ it
 approximates) are independent objects, so neither depends on the other; their
 one relation — pulling continuum data onto the mesh, and the error that costs —
-is the join, and it lives in `ddf`, the crate above both.
+is the join, and it lives in `derham`, the crate above both.
 
 `studio` sits at the top as the visual counterpart to the engine — the one
 consumer of the I/O-and-visualization carve-out invariant 2 draws. Visualization
@@ -66,16 +71,16 @@ the extrinsic side.
 **Concepts float up.** A concept belongs in the lowest crate (or module) that can
 express it with the dependencies it already has. If expressing it there would
 need a new downward dependency, it belongs one level up instead, in the crate
-that joins the two — which is why `ddf` exists, where `exterior`, `manifold` and
-`continuum` all meet. Never widen a lower crate's dependencies to make a method
+that joins the two — which is why `derham` exists, where `exterior`, `simplicial`
+and `chartan` all meet. Never widen a lower crate's dependencies to make a method
 fit.
 
 Composition therefore reaches down from above: a free function in the joining
 crate by default, or a thin `...Ext` trait where method syntax carries the math
 better — `CoordFieldExt::pullback_through` (and its identity special case
-`pullback_on`) and `SectionExt::sampled_on` (a `continuum` field meeting a
-`manifold` mesh, in `ddf`), `SimplexRefExt` (geometry methods on a topology
-handle, which is how invariant 1 is upheld inside `manifold`, below crate
+`pullback_on`) and `SectionExt::sampled_on` (a `chartan` field meeting a
+`simplicial` mesh, in `derham`), `SimplexRefExt` (geometry methods on a topology
+handle, which is how invariant 1 is upheld inside `simplicial`, below crate
 granularity).
 
 The rule bites *within* a crate too, not just between crates. `metric` must not
@@ -107,14 +112,14 @@ and passes tests.
    manifold does not exist. A **field** is a `Section<V>`: a section of the
    exterior bundle, evaluated at a `MeshPoint`, valued in the reference frame of
    that chart. The `CoordField<V, S>` of analytic data on the *continuum* (exact
-   solutions, sources) is a *different* concept, living in `continuum`, and
+   solutions, sources) is a *different* concept, living in `chartan`, and
    reaches the mesh only through the `Pullback` bridge — pulled through a cell's
    parametrization and the continuum chart, the flat domain being the identity
    special case. Sampling back into ambient coordinates (`Sampler`) is not
    canonical — it extends the value along the pseudo-inverse of the cell
    parametrization — and is confined to I/O.
 
-   **The cells are an atlas** (`manifold::atlas`), and it is a real one. A
+   **The cells are an atlas** (`simplicial::atlas`), and it is a real one. A
    `Chart` *is* a cell, top-dimensional by construction — a face carries no
    chart, so there is no frame on one in which to express a value. Two charts
    overlap in the face they share, and the `Transition` between them is the
@@ -136,7 +141,7 @@ and passes tests.
 3. **Coordinate spaces are type-level.** Barycentric weights `Bary`
    ($lambda in RR^(n+1)$), the cartesian `Local` coordinates of a chart
    ($x in RR^n$) and the `Ambient` coordinates of an embedding ($RR^N$) are three
-   different spaces, and `common::coord::Coords<S>` tags each with the space it
+   different spaces, and `coorder::Coords<S>` tags each with the space it
    lives in. The maps between them therefore have to be written down, and the
    wrong composition does not compile. A bare `Vector` is a displacement or raw
    linear algebra, never a point.
@@ -215,7 +220,7 @@ just as well and silently means something else. A new ordered structure is colex
 math (Gramians, element matrices, exterior powers); `nalgebra-sparse` (`CooMatrix`)
 for globally assembled operators; faer for solves and eigenproblems (sparse LU
 and Cholesky, and a dense QZ for the generalized eigenproblem). The workspace is
-pure Rust, with no external solver toolchain. Go through `common::linalg` rather
+pure Rust, with no external solver toolchain. Go through `formoniq-linalg` rather
 than reaching for a backend directly.
 
 **Naming reflects the mathematics.** `SimplexRef`, `Cochain`, `MultiForm`,
@@ -326,7 +331,7 @@ The examples are the end-to-end check and are run by hand:
 cargo run --release --example source
 ```
 
-Commit messages: `scope: imperative summary`, e.g. `manifold: cache boundary
+Commit messages: `scope: imperative summary`, e.g. `simplicial: cache boundary
 operators lazily`. Keep commits structurally coherent — one idea each where
 that's easily reached from what's already staged or in progress; splitting
 unrelated changes is not worth contorting history over, so bundling a few into

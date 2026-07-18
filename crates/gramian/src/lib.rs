@@ -1,7 +1,5 @@
-use crate::{
-  linalg::nalgebra::{Matrix, MatrixExt, Vector},
-  Dim,
-};
+use formoniq_linalg::nalgebra::{Matrix, MatrixExt, Vector};
+use multiindex::Dim;
 
 /// A Gram Matrix represent an inner product expressed in a basis.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -219,7 +217,7 @@ impl Gramian {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::linalg::nalgebra::Vector;
+  use formoniq_linalg::nalgebra::Vector;
   use std::f64::consts::FRAC_PI_2;
 
   #[test]

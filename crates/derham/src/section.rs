@@ -26,18 +26,16 @@
 //! value by zero on the normal space through the chart pseudo-inverse -- and is
 //! confined to visualization and I/O.
 
-use crate::whitney::interpolant::WhitneyInterpolant;
+use crate::interpolate::interpolant::WhitneyInterpolant;
 
 use {
   chartan::{field::CoordField, parametrization::Parametrization},
-  common::{
-    coord::{Ambient, CoordSpace, Coords},
-    gramian::RiemannianMetric,
-    linalg::nalgebra::Vector,
-  },
+  coorder::{Ambient, CoordSpace, Coords},
   exterior::{
     Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
   },
+  formoniq_linalg::nalgebra::Vector,
+  gramian::RiemannianMetric,
   simplicial::{
     atlas::MeshPoint,
     geometry::{
@@ -466,11 +464,11 @@ impl Section<Covariant> for WhitneyInterpolant<'_> {
 mod test {
   use super::*;
 
-  use crate::reduction::derham_map;
+  use crate::project::derham_map;
 
   use {
     chartan::field::DiffFormClosure,
-    common::linalg::nalgebra::Vector,
+    formoniq_linalg::nalgebra::Vector,
     simplicial::{
       gen::cartesian::CartesianMeshInfo,
       geometry::coord::{locate::PointLocator, Coord},
@@ -622,7 +620,7 @@ mod test {
   /// cell metric supplied by the [`Geometry`].
   #[test]
   fn hodge_star_field_involution() {
-    use common::combo::Sign;
+    use multiindex::Sign;
     use simplicial::atlas::MeshPoint;
 
     for dim in 1..=3 {

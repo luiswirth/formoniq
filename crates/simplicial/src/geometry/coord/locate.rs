@@ -27,7 +27,7 @@ use crate::{
   Dim,
 };
 
-use common::linalg::nalgebra::{Matrix, Vector};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
 
 /// An axis-aligned bounding box in $RR^d$.
 #[derive(Debug, Clone)]

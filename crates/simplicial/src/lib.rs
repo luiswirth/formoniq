@@ -8,4 +8,4 @@ pub mod topology;
 pub mod gen;
 pub mod io;
 
-pub use common::Dim;
+pub use multiindex::Dim;

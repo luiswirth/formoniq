@@ -379,7 +379,7 @@ fn dense_self_adjoint_eigen(m: &Matrix) -> (Vector, Matrix) {
 #[cfg(test)]
 mod test {
   use super::sparse_shift_invert_eigen;
-  use crate::linalg::nalgebra::{CooMatrix, CsrMatrix, Matrix, Vector};
+  use crate::nalgebra::{CooMatrix, CsrMatrix, Matrix, Vector};
 
   fn symmetric(n: usize, f: impl Fn(usize, usize) -> f64) -> Matrix {
     Matrix::from_fn(n, n, |i, j| f(i.min(j), i.max(j)))

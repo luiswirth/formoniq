@@ -4,15 +4,15 @@ use crate::{
 };
 
 use {
-  common::linalg::{
+  derham::cochain::Cochain,
+  exterior::ExteriorGrade,
+  formoniq_linalg::{
     eigen::{sparse_shift_invert_eigen, EigenError},
     faer::FaerLu,
   },
-  derham::cochain::Cochain,
-  exterior::ExteriorGrade,
 };
 
-use common::linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
+use formoniq_linalg::nalgebra::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
 use itertools::Itertools;
 use std::mem;
 

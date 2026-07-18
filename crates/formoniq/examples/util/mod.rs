@@ -9,12 +9,17 @@
 
 use {
   chartan::field::DiffFormClosure,
-  common::{
-    combo::{Combination, Sign},
-    coord::Coord,
-  },
+  coorder::Coord,
   exterior::ExteriorElement,
+  multiindex::{Combination, Sign},
 };
+
+/// The algebraic (as opposed to asymptotic) convergence rate between two
+/// successive errors: $-log_2 ("next" \/ "prev")$.
+pub fn algebraic_convergence_rate(next: f64, prev: f64) -> f64 {
+  let quot: f64 = next / prev;
+  -quot.log2()
+}
 
 /// Uniform table formatting for the Hodge-Laplace examples, so the source, the
 /// spectrum and the sphere tables read as one.

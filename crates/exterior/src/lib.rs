@@ -1,14 +1,12 @@
 extern crate nalgebra as na;
 
-use common::{
-  combo::{binomial, combinations, Combination, Sign},
-  gramian::{Gramian, RiemannianMetric},
-  linalg::nalgebra::{Matrix, Vector},
-};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
+use gramian::{Gramian, RiemannianMetric};
+use multiindex::{binomial, combinations, Combination, Sign};
 
 use std::marker::PhantomData;
 
-pub use common::Dim;
+pub use multiindex::Dim;
 pub type ExteriorGrade = usize;
 
 /// A basis blade $e_(i_1) wedge dots.c wedge e_(i_k)$ of the exterior

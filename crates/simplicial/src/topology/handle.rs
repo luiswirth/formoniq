@@ -4,7 +4,7 @@ use crate::{
   Dim,
 };
 
-use common::combo::Sign;
+use multiindex::Sign;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use std::collections::BTreeSet;

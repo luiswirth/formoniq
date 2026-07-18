@@ -47,11 +47,11 @@
 
 use crate::whitney_complex::WhitneyComplex;
 
-use common::linalg::{
+use derham::cochain::Cochain;
+use formoniq_linalg::{
   faer::FaerCholesky,
   nalgebra::{bilinear_form_sparse, quadratic_form_sparse, CsrMatrix, Vector},
 };
-use derham::cochain::Cochain;
 
 /// The constitutive parameters of a homogeneous isotropic linear medium: the
 /// electric permittivity $epsilon$ and the magnetic permeability $mu$.
@@ -295,7 +295,7 @@ pub fn solve_mixed(
 mod test {
   use super::*;
 
-  use common::linalg::nalgebra::Vector;
+  use formoniq_linalg::nalgebra::Vector;
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;

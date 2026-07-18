@@ -22,8 +22,8 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use common::linalg::nalgebra::{kronecker_sum, matrix_from_const_diagonals, Matrix, Vector};
 use formoniq::whitney_complex::WhitneyComplex;
+use formoniq_linalg::nalgebra::{kronecker_sum, matrix_from_const_diagonals, Matrix, Vector};
 use simplicial::{gen::cartesian::CartesianMeshInfo, Dim};
 
 use std::sync::LazyLock;

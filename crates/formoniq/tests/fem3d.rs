@@ -1,6 +1,6 @@
 use approx::assert_relative_eq;
-use common::linalg::nalgebra::{Matrix, Vector};
 use formoniq::whitney_complex::WhitneyComplex;
+use formoniq_linalg::nalgebra::{Matrix, Vector};
 use simplicial::{gen::cartesian::CartesianMeshInfo, Dim};
 
 const DIM: Dim = 3;

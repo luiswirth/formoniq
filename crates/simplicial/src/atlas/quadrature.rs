@@ -15,10 +15,8 @@
 use super::{Bary, BaryRef, MeshPoint};
 use crate::{topology::handle::SimplexIdx, Dim};
 
-use common::{
-  combo::{binomial, factorial_f64, Combination},
-  linalg::nalgebra::{Vector, VectorView},
-};
+use formoniq_linalg::nalgebra::{Vector, VectorView};
+use multiindex::{binomial, factorial_f64, Combination};
 
 /// A quadrature rule on the reference simplex, with barycentric nodes.
 pub struct SimplexQuadRule {

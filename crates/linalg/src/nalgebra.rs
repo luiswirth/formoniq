@@ -1,6 +1,27 @@
-use crate::util::{CumsumExt, IterAllEqExt};
-
 use std::mem;
+
+trait CumsumExt {
+  fn cumsum(self) -> impl Iterator<Item = usize>;
+}
+impl<I: IntoIterator<Item = usize>> CumsumExt for I {
+  fn cumsum(self) -> impl Iterator<Item = usize> {
+    self.into_iter().scan(0, |acc, x| {
+      *acc += x;
+      Some(*acc)
+    })
+  }
+}
+
+trait IterAllEqExt<T> {
+  fn unique_eq(self) -> Option<T>;
+}
+impl<T: PartialEq, I: IntoIterator<Item = T>> IterAllEqExt<T> for I {
+  fn unique_eq(self) -> Option<T> {
+    let mut iter = self.into_iter();
+    let first = iter.next()?;
+    iter.all(|elem| elem == first).then_some(first)
+  }
+}
 
 pub type Vector<T = f64> = na::DVector<T>;
 pub type RowVector<T = f64> = na::RowDVector<T>;

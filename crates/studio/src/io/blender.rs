@@ -1,4 +1,4 @@
-use common::linalg::nalgebra::Vector;
+use formoniq_linalg::nalgebra::Vector;
 
 use crate::io::surface::TriangleSurface3D;
 use simplicial::geometry::coord::mesh::MeshCoords;

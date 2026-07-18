@@ -1,4 +1,4 @@
-use common::linalg::nalgebra::Matrix;
+use formoniq_linalg::nalgebra::Matrix;
 
 use crate::{
   geometry::coord::mesh::{close_vertex_gaps, MeshCoords},

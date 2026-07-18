@@ -8,7 +8,10 @@ license = "MIT OR Apache-2.0"
 exterior = { path = "../exterior" }
 chartan = { path = "../chartan" }
 simplicial = { path = "../simplicial" }
-common = { path = "../common" }
+coorder = { path = "../coorder" }
+formoniq-linalg = { path = "../linalg" }
+gramian = { path = "../gramian" }
+multiindex = { path = "../multiindex" }
 
 nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 nalgebra-sparse = "0.12.0"

@@ -23,7 +23,7 @@
 //! solve is exact), assembled as a genuinely sparse block Kronecker system and
 //! factored once for repeated stepping at a fixed $dt$.
 
-use common::linalg::{
+use formoniq_linalg::{
   faer::FaerLu,
   nalgebra::{CooMatrix, CsrMatrix, Matrix, Vector},
 };

@@ -2,7 +2,7 @@
 //!
 //! Discretization of differential forms into cochains by integration over
 //! the simplices of the mesh. Together with the Whitney interpolation
-//! $W: C^k -> L^2 Lambda^k$ (see [`crate::whitney`]) it forms the pair of
+//! $W: C^k -> L^2 Lambda^k$ (see [`crate::interpolate`]) it forms the pair of
 //! cochain maps at the heart of FEEC. The governing laws are executable:
 //!
 //! - $R compose W = id$: Whitney's theorem
@@ -11,7 +11,7 @@
 //!   (test `derham_map_is_cochain_map`, below).
 //! - $dif compose W = W compose dif$: Whitney forms are a subcomplex
 //!   (test `whitney_interpolation_is_cochain_map` in
-//!   [`crate::whitney::interpolant`]).
+//!   [`crate::interpolate::interpolant`]).
 //!
 //! The integral $integral_sigma omega$ of a $k$-form over a $k$-simplex is
 //! **metric-free** -- it pairs the form with the tangent blade of the simplex,
@@ -31,8 +31,8 @@
 use crate::{cochain::Cochain, section::Section};
 
 use {
-  common::combo::Combination,
   exterior::{exterior_power, Covariant, MultiVector},
+  multiindex::Combination,
   simplicial::{
     atlas::{ref_face_spanning_vectors, refsimp_vol, MeshPoint, SimplexQuadRule},
     topology::{complex::Complex, handle::SimplexIdx},
@@ -119,10 +119,8 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
-    chartan::field::DiffFormClosure,
-    common::{coord::Coord, linalg::nalgebra::Vector},
-    exterior::ExteriorElement,
-    simplicial::gen::cartesian::CartesianMeshInfo,
+    chartan::field::DiffFormClosure, coorder::Coord, exterior::ExteriorElement,
+    formoniq_linalg::nalgebra::Vector, simplicial::gen::cartesian::CartesianMeshInfo,
   };
 
   use approx::assert_relative_eq;

@@ -1,6 +1,6 @@
 use crate::operators::{ElMatProvider, ElVecProvider};
 
-use common::linalg::nalgebra::{CooMatrix, Vector};
+use formoniq_linalg::nalgebra::{CooMatrix, Vector};
 use itertools::Itertools;
 use simplicial::{geometry::metric::Geometry, topology::complex::Complex};
 
@@ -89,7 +89,7 @@ mod test {
   use super::*;
   use crate::operators::HodgeMassElmat;
 
-  use common::linalg::nalgebra::Matrix;
+  use formoniq_linalg::nalgebra::Matrix;
   use simplicial::{gen::cartesian::CartesianMeshInfo, geometry::metric::CellGramians};
 
   /// Cell Gramians are a first-class geometry: assembling against the per-cell

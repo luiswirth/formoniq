@@ -41,8 +41,9 @@
 //! each arrow reads as its own mark, filling most of the room the lattice gives
 //! it without a field of arrows fused into continuous lines.
 
-use common::{coord::Coord, linalg::nalgebra::Vector};
-use derham::{cochain::Cochain, whitney::interpolant::WhitneyInterpolant};
+use coorder::Coord;
+use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use formoniq_linalg::nalgebra::Vector;
 use simplicial::{
   atlas::{ref_lattice_bary, MeshPoint},
   geometry::{

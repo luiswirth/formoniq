@@ -38,8 +38,8 @@
 //!   $lambda_0 = 1 - sum_i x_i$, the one in which the reference frame -- and
 //!   hence the value of a section -- is expressed.
 //!
-//! Both are distinct from the [`Ambient`](common::coord::Ambient) coordinates of
-//! an embedding, and the [`common::coord::CoordSpace`] tags keep the
+//! Both are distinct from the [`Ambient`](coorder::Ambient) coordinates of
+//! an embedding, and the [`coorder::CoordSpace`] tags keep the
 //! three from being confused for one another.
 
 pub mod chart;
@@ -54,11 +54,9 @@ pub use transition::Transition;
 
 use crate::Dim;
 
-use common::{
-  combo::{compositions, factorial_f64, Combination},
-  coord::{CoordSpace, Coords, CoordsRef},
-  linalg::nalgebra::{Matrix, RowVector, Vector},
-};
+use coorder::{CoordSpace, Coords, CoordsRef};
+use formoniq_linalg::nalgebra::{Matrix, RowVector, Vector};
+use multiindex::{compositions, factorial_f64, Combination};
 
 /// The barycentric coordinate space of a chart: the affine weights
 /// $lambda in RR^(n+1)$, $sum_i lambda_i = 1$.
@@ -299,7 +297,7 @@ mod test {
   use super::*;
 
   use approx::assert_relative_eq;
-  use common::combo::binomial;
+  use multiindex::binomial;
 
   /// The lattice has $binom(R + n, n)$ points, each a composition of $R$.
   #[test]
@@ -449,7 +447,7 @@ mod test {
   fn face_bary_scatters_onto_the_face() {
     let cell_dim = 3;
     for face_dim in 0..=cell_dim {
-      for positions in common::combo::combinations(cell_dim + 1, face_dim + 1) {
+      for positions in multiindex::combinations(cell_dim + 1, face_dim + 1) {
         let face_bary = barycenter_bary(face_dim);
         let bary = face_bary_to_cell_bary(cell_dim, &positions, &face_bary);
 

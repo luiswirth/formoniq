@@ -22,12 +22,10 @@
 //! Moore-Penrose one for the ambient *Euclidean* metric, which is what "nearest
 //! point" means, and no `RiemannianMetric` of the continuum enters.
 
-use common::{
-  coord::{Ambient, Coord, CoordSpace, Coords},
-  gramian::{Gramian, RiemannianMetric},
-  linalg::nalgebra::{Matrix, Vector},
-  Dim,
-};
+use coorder::{Ambient, Coord, CoordSpace, Coords};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
+use gramian::{Gramian, RiemannianMetric};
+use multiindex::Dim;
 
 /// A smooth parametrization $phi: Omega -> RR^N$ of the continuum, with its
 /// derived Jacobian and chart.

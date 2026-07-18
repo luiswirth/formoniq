@@ -8,7 +8,7 @@
 //!   ([`WhitneyInterpolant`]): the reconstruction of a form from a cochain, the
 //!   right inverse of $R$.
 //! - $R: L^2 Lambda^k -> C^k$, the *de Rham map*
-//!   ([`derham_map`](derham::reduction::derham_map)): integration over the
+//!   ([`derham_map`](derham::project::derham_map)): integration over the
 //!   simplices. Canonical and metric-free, and a cochain map --
 //!   $R compose dif = dif compose R$ -- which is exactly why the discrete
 //!   complex inherits the cohomology of the continuous one. It needs the
@@ -23,12 +23,12 @@
 //! through $R$.
 
 use {
-  common::linalg::{
+  derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
+  exterior::{multiform_gramian, Covariant},
+  formoniq_linalg::{
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  derham::{cochain::Cochain, section::Section, whitney::interpolant::WhitneyInterpolant},
-  exterior::{multiform_gramian, Covariant},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::Geometry},

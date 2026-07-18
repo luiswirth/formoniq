@@ -1,13 +1,11 @@
-use common::{
-  combo::{
-    cartesian::{corner_offset, strides},
-    factorial, Combination,
-  },
-  linalg::nalgebra::{Matrix, Vector},
-};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
 use itertools::Itertools;
+use multiindex::{
+  cartesian::{corner_offset, strides},
+  factorial, Combination,
+};
 
-pub use common::combo::cartesian::{cartesian_index2linear_index, linear_index2cartesian_index};
+pub use multiindex::cartesian::{cartesian_index2linear_index, linear_index2cartesian_index};
 
 use crate::{
   geometry::coord::mesh::MeshCoords,
@@ -187,7 +185,7 @@ impl CartesianMeshInfo {
 #[cfg(test)]
 mod test {
   use super::CartesianMeshInfo;
-  use common::linalg::nalgebra::Matrix;
+  use formoniq_linalg::nalgebra::Matrix;
 
   #[test]
   fn unit_cube_mesh() {

@@ -6,12 +6,12 @@ use crate::{
   whitney_complex::HilbertComplex,
 };
 
-use common::linalg::{
+use derham::cochain::Cochain;
+use exterior::ExteriorGrade;
+use formoniq_linalg::{
   faer::FaerCholesky,
   nalgebra::{quadratic_form_sparse, CooMatrix, CooMatrixExt, CsrMatrix, Vector},
 };
-use derham::cochain::Cochain;
-use exterior::ExteriorGrade;
 use simplicial::geometry::metric::mesh::MeshLengths;
 
 pub struct WaveState {

@@ -9,9 +9,9 @@
 extern crate nalgebra as na;
 
 use chartan::field::DiffFormClosure;
-use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
-use derham::{cochain::Cochain, reduction::derham_map, section::CoordFieldExt};
+use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
+use formoniq_linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
 use simplicial::gen::cartesian::CartesianMeshInfo;
 
 use approx::assert_relative_eq;
@@ -32,7 +32,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
     let laplace = CsrMatrix::from(&whitney.codif_dif(0));
-    let rhs = common::linalg::nalgebra::Vector::zeros(whitney.ndofs(0));
+    let rhs = formoniq_linalg::nalgebra::Vector::zeros(whitney.ndofs(0));
 
     let solution = bc::solve_with_essential_bc(
       &whitney.relative(),
@@ -129,7 +129,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
     let laplace = CsrMatrix::from(&whitney.codif_dif(0));
-    let rhs = common::linalg::nalgebra::Vector::zeros(whitney.ndofs(0));
+    let rhs = formoniq_linalg::nalgebra::Vector::zeros(whitney.ndofs(0));
 
     let solution = bc::solve_with_essential_bc(
       &whitney.relative_to(&gamma_dirichlet),

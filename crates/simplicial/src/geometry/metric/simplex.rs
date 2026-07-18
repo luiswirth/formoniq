@@ -1,11 +1,9 @@
 use super::EdgeIdx;
 use crate::{topology::simplex::nedges, Dim};
 
-use common::{
-  combo::{combinations, factorial, Combination},
-  gramian::{Gramian, RiemannianMetric},
-  linalg::nalgebra::{Matrix, Vector},
-};
+use formoniq_linalg::nalgebra::{Matrix, Vector};
+use gramian::{Gramian, RiemannianMetric};
+use multiindex::{combinations, factorial, Combination};
 
 use std::f64::consts::SQRT_2;
 
