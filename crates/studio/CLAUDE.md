@@ -219,7 +219,17 @@ eigenvalue drives the standing wave — and the graphics craft decides *how well
 Two durable conventions, kept general on purpose:
 
 - **Shaders are checked by the test suite**, not only at pipeline creation, so a
-  broken shader fails `cargo test` rather than the running viewer.
+  broken shader fails `cargo test` rather than the running viewer. The check runs
+  naga's frontend — the one the *native* build uses — so it catches parse and
+  validation errors but *not* what a browser's own WGSL→backend compiler rejects.
+  The web target is WebKit/Metal, and it is stricter and buggier than naga and
+  Tint: a shader that validates and runs on Chrome can still fail there
+  ("Vertex library failed creation" is its generic symptom). The concrete rule
+  this cost us: **no pipeline-overridable `override` constants specialized through
+  the pipeline `constants` map** — WebKit fails to specialize them. Bake such a
+  value into the WGSL as a `const` from the Rust side instead (see
+  `render::ssaa_prelude`). WebKit is the strict oracle; when a shader change is
+  non-trivial, it is the browser, not `cargo test`, that has the last word.
 - **The graphics stack is pinned as a unit.** The types crossing the boundary
   between the UI layer and the renderer must come from the *same* underlying GPU
   crate, not merely semver-compatible versions; bump them together, and let the

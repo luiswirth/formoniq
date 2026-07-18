@@ -2,11 +2,11 @@
 //! value and normal-displaced as a standing wave. See `fill.wgsl`.
 
 use super::{
-  color_target, compilation_options,
+  color_target,
   deposit::deposit_read_layout,
   depth_stencil,
   item::SurfaceBatch,
-  primitive, shader_module, ssaa_constants,
+  primitive, shader_module,
   uniform::{FrameUniform, SurfaceMaterial, UniformBinding, UniformPool},
   MASK_FORMAT,
 };
@@ -21,9 +21,7 @@ impl FillPass {
     format: wgpu::TextureFormat,
     frame: &UniformBinding<FrameUniform>,
     materials: &UniformPool<SurfaceMaterial>,
-    ssaa: u32,
   ) -> Self {
-    let constants = ssaa_constants(ssaa);
     let shader = shader_module(device, "Fill Shader", include_str!("fill.wgsl"));
     let deposit = deposit_read_layout(device);
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -41,13 +39,13 @@ impl FillPass {
       vertex: wgpu::VertexState {
         module: &shader,
         entry_point: Some("vs_main"),
-        compilation_options: compilation_options(&constants),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
         buffers: &SurfaceBatch::layouts(),
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
         entry_point: Some("fs_main"),
-        compilation_options: compilation_options(&constants),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
         targets: &[
           color_target(format, wgpu::BlendState::REPLACE),
           color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),

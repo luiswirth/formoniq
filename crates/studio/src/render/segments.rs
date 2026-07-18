@@ -17,9 +17,9 @@
 //! read.
 
 use super::{
-  color_target, compilation_options, depth_stencil,
+  color_target, depth_stencil,
   item::SegmentBatch,
-  primitive, shader_module, ssaa_constants,
+  primitive, shader_module,
   uniform::{FrameUniform, SegmentMaterial, UniformPool},
   MASK_FORMAT,
 };
@@ -34,9 +34,7 @@ impl SegmentPass {
     format: wgpu::TextureFormat,
     frame: &super::uniform::UniformBinding<FrameUniform>,
     materials: &UniformPool<SegmentMaterial>,
-    ssaa: u32,
   ) -> Self {
-    let constants = ssaa_constants(ssaa);
     let shader = shader_module(device, "Segment Shader", include_str!("segments.wgsl"));
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
       label: Some("Segment Pipeline Layout"),
@@ -49,13 +47,13 @@ impl SegmentPass {
       vertex: wgpu::VertexState {
         module: &shader,
         entry_point: Some("vs_main"),
-        compilation_options: compilation_options(&constants),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
         buffers: &SegmentBatch::layouts(),
       },
       fragment: Some(wgpu::FragmentState {
         module: &shader,
         entry_point: Some("fs_main"),
-        compilation_options: compilation_options(&constants),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
         targets: &[
           color_target(format, wgpu::BlendState::ALPHA_BLENDING),
           color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),
