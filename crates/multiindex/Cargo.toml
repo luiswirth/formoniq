@@ -3,6 +3,10 @@ name = "multiindex"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Combinatorics of finite index sets: colex-ranked subsets and cartesian multi-indices."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["combinatorics", "simplicial", "multi-index"]
+categories = ["mathematics"]
 
 [dependencies]
 num-integer = "0.1.46"

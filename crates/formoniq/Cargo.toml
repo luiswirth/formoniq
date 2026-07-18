@@ -3,15 +3,19 @@ name = "formoniq"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "Finite Element Exterior Calculus (FEEC): PDEs formulated with differential forms and solved on simplicial Riemannian manifolds of arbitrary dimension, intrinsically and coordinate-free."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["feec", "finite-element", "differential-forms", "pde"]
+categories = ["mathematics", "science"]
 
 [dependencies]
-derham = { path = "../derham" }
-exterior = { path = "../exterior" }
-chartan = { path = "../chartan" }
-simplicial = { path = "../simplicial" }
-coorder = { path = "../coorder" }
-gramian = { path = "../gramian" }
-multiindex = { path = "../multiindex" }
+derham = { path = "../derham", version = "0.2.0" }
+exterior = { path = "../exterior", version = "0.2.0" }
+chartan = { path = "../chartan", version = "0.2.0" }
+simplicial = { path = "../simplicial", version = "0.2.0" }
+coorder = { path = "../coorder", version = "0.2.0" }
+gramian = { path = "../gramian", version = "0.2.0" }
+multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = "0.35.0"
 nalgebra-sparse = "0.12.0"

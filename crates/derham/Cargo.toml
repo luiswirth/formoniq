@@ -3,14 +3,18 @@ name = "derham"
 version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+description = "The discrete de Rham complex: cochains, Whitney interpolation, and the de Rham map, bridging a simplicial mesh and the continuum it approximates."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["de-rham", "cochain", "whitney", "fem"]
+categories = ["mathematics", "science"]
 
 [dependencies]
-exterior = { path = "../exterior" }
-chartan = { path = "../chartan" }
-simplicial = { path = "../simplicial" }
-coorder = { path = "../coorder" }
-gramian = { path = "../gramian" }
-multiindex = { path = "../multiindex" }
+exterior = { path = "../exterior", version = "0.2.0" }
+chartan = { path = "../chartan", version = "0.2.0" }
+simplicial = { path = "../simplicial", version = "0.2.0" }
+coorder = { path = "../coorder", version = "0.2.0" }
+gramian = { path = "../gramian", version = "0.2.0" }
+multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = { version = "0.35.0", features = ["serde-serialize"] }
 nalgebra-sparse = "0.12.0"

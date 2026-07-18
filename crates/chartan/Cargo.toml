@@ -1,12 +1,17 @@
 [package]
 name = "chartan"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "The smooth continuum manifold a simplicial mesh approximates: parametrizations and analytic differential-form data on it."
+repository = "https://github.com/luiswirth/formoniq"
+keywords = ["differential-geometry", "manifold", "parametrization"]
+categories = ["mathematics", "science"]
 
 [dependencies]
-coorder = { path = "../coorder" }
-exterior = { path = "../exterior" }
-gramian = { path = "../gramian" }
+coorder = { path = "../coorder", version = "0.2.0" }
+exterior = { path = "../exterior", version = "0.2.0" }
+gramian = { path = "../gramian", version = "0.2.0" }
 
 nalgebra = "0.35.0"
 
