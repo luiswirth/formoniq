@@ -22,7 +22,7 @@
 //! combinatorics.
 //!
 //! Which supporting cell is chosen does not matter. Two charts containing
-//! $sigma$ differ by a [`Transition`](manifold::atlas::Transition), whose
+//! $sigma$ differ by a [`Transition`](simplicial::atlas::Transition), whose
 //! differential carries the tangent blade of $sigma$ in one chart to the tangent
 //! blade in the other; the pairing sees only the part of $omega$ tangential to
 //! $sigma$, on which the two charts agree by exactly that map. The law is
@@ -33,7 +33,7 @@ use crate::{cochain::Cochain, section::Section};
 use {
   common::combo::Combination,
   exterior::{exterior_power, Covariant, MultiVector},
-  manifold::{
+  simplicial::{
     atlas::{ref_face_spanning_vectors, refsimp_vol, MeshPoint, SimplexQuadRule},
     topology::{complex::Complex, handle::SimplexIdx},
     Dim,
@@ -78,7 +78,7 @@ pub fn derham_map(
 /// $Lambda^k V in RR^(binom(n,k) times 1)$ of the $k$-minors of its spanning
 /// vectors.
 ///
-/// An `exterior` construction on `manifold` combinatorics, and so it lives here
+/// An `exterior` construction on `simplicial` combinatorics, and so it lives here
 /// in the crate that joins them. Metric-free and coordinate-free: a face of a
 /// cell has spanning vectors in the cell's chart whatever geometry the mesh
 /// carries, and none at all if it carries none.
@@ -119,10 +119,10 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
+    chartan::field::DiffFormClosure,
     common::{coord::Coord, linalg::nalgebra::Vector},
-    continuum::field::DiffFormClosure,
     exterior::ExteriorElement,
-    manifold::gen::cartesian::CartesianMeshInfo,
+    simplicial::gen::cartesian::CartesianMeshInfo,
   };
 
   use approx::assert_relative_eq;
@@ -173,7 +173,7 @@ mod test {
     ];
 
     for (form, dif_form) in cases {
-      let dim = continuum::field::CoordField::dim(&form);
+      let dim = chartan::field::CoordField::dim(&form);
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
 
       let dif_of_projected =
@@ -231,7 +231,7 @@ mod test {
   /// The well-definedness above is the consequence; this is the cause.
   #[test]
   fn tangent_blade_transforms_by_the_transition_differential() {
-    use manifold::atlas::ChartExt;
+    use simplicial::atlas::ChartExt;
 
     for dim in 2..=3 {
       let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();

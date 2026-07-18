@@ -2,7 +2,7 @@ use common::linalg::nalgebra::{CsrMatrix, Vector};
 
 use {
   exterior::ExteriorGrade,
-  manifold::{
+  simplicial::{
     topology::skeleton::Skeleton,
     topology::{
       complex::Complex,
@@ -171,7 +171,7 @@ impl std::ops::Sub for Cochain {
 #[cfg(test)]
 mod test {
   use super::*;
-  use manifold::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianMeshInfo;
 
   #[test]
   fn save_load_roundtrip_and_compatibility() {

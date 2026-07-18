@@ -10,7 +10,7 @@
 //! no global coordinate system. Sections therefore work verbatim on a purely
 //! metric (Regge) manifold, where no global coordinate exists at all.
 //!
-//! The mesh-independent [`CoordField`]s of the `continuum` crate -- analytic
+//! The mesh-independent [`CoordField`]s of the `chartan` crate -- analytic
 //! data on the smooth manifold $M$ -- connect to this world through the functor
 //! whose direction the [`Variance`] fixes:
 //!
@@ -29,16 +29,16 @@
 use crate::whitney::interpolant::WhitneyInterpolant;
 
 use {
+  chartan::{field::CoordField, parametrization::Parametrization},
   common::{
     coord::{Ambient, CoordSpace, Coords},
     gramian::RiemannianMetric,
     linalg::nalgebra::Vector,
   },
-  continuum::{field::CoordField, parametrization::Parametrization},
   exterior::{
     Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
   },
-  manifold::{
+  simplicial::{
     atlas::MeshPoint,
     geometry::{
       coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt, CoordRef},
@@ -466,12 +466,12 @@ impl Section<Covariant> for WhitneyInterpolant<'_> {
 mod test {
   use super::*;
 
-  use crate::derham::derham_map;
+  use crate::reduction::derham_map;
 
   use {
+    chartan::field::DiffFormClosure,
     common::linalg::nalgebra::Vector,
-    continuum::field::DiffFormClosure,
-    manifold::{
+    simplicial::{
       gen::cartesian::CartesianMeshInfo,
       geometry::coord::{locate::PointLocator, Coord},
     },
@@ -553,8 +553,8 @@ mod test {
   /// is a continuum whose chart is the identity" claim, made a theorem.
   #[test]
   fn flat_pullback_is_identity_chart() {
-    use continuum::parametrization::Parametrization;
-    use manifold::atlas::MeshPoint;
+    use chartan::parametrization::Parametrization;
+    use simplicial::atlas::MeshPoint;
 
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
@@ -589,8 +589,8 @@ mod test {
   /// same finite-difference Jacobian, so the check is deterministic.
   #[test]
   fn composite_pullback_is_functorial() {
-    use continuum::parametrization::Parametrization;
-    use manifold::{
+    use chartan::parametrization::Parametrization;
+    use simplicial::{
       atlas::MeshPoint, gen::sphere::mesh_sphere_surface, geometry::coord::simplex::SimplexRefExt,
     };
 
@@ -623,7 +623,7 @@ mod test {
   #[test]
   fn hodge_star_field_involution() {
     use common::combo::Sign;
-    use manifold::atlas::MeshPoint;
+    use simplicial::atlas::MeshPoint;
 
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();

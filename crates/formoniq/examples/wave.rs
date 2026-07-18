@@ -22,12 +22,12 @@ mod util;
 
 use {
   common::linalg::nalgebra::Vector,
-  ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt},
+  derham::{cochain::Cochain, reduction::derham_map, section::CoordFieldExt},
   formoniq::{
     problems::wave::{cfl_dt, solve_wave, WaveState},
     whitney_complex::WhitneyComplex,
   },
-  manifold::gen::cartesian::CartesianMeshInfo,
+  simplicial::gen::cartesian::CartesianMeshInfo,
   util::{BoundaryCondition, BoxEigenform},
 };
 

@@ -8,7 +8,7 @@ use {
     eigen::{sparse_shift_invert_eigen, EigenError},
     faer::FaerLu,
   },
-  ddf::cochain::Cochain,
+  derham::cochain::Cochain,
   exterior::ExteriorGrade,
 };
 

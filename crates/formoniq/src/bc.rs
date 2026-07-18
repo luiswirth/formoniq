@@ -23,9 +23,9 @@ use {
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  ddf::{cochain::Cochain, section::Section},
+  derham::{cochain::Cochain, section::Section},
   exterior::{Covariant, ExteriorGrade},
-  manifold::atlas::SimplexQuadRule,
+  simplicial::atlas::SimplexQuadRule,
 };
 
 /// A Galerkin system with essential boundary conditions imposed by affine

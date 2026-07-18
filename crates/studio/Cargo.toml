@@ -7,9 +7,9 @@ publish = false
 [dependencies]
 # Internal workspace dependencies
 formoniq = { path = "../formoniq" }
-ddf = { path = "../ddf" }
-continuum = { path = "../continuum" }
-manifold = { path = "../manifold" }
+derham = { path = "../derham" }
+chartan = { path = "../chartan" }
+simplicial = { path = "../simplicial" }
 common = { path = "../common" }
 exterior = { path = "../exterior" }
 # Pinned to match egui-wgpu 0.35's own wgpu dependency: the render pass and

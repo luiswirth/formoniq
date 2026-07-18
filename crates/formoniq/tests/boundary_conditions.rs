@@ -8,11 +8,11 @@
 
 extern crate nalgebra as na;
 
+use chartan::field::DiffFormClosure;
 use common::linalg::{faer::FaerCholesky, nalgebra::CsrMatrix};
-use continuum::field::DiffFormClosure;
-use ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt};
+use derham::{cochain::Cochain, reduction::derham_map, section::CoordFieldExt};
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
-use manifold::gen::cartesian::CartesianMeshInfo;
+use simplicial::gen::cartesian::CartesianMeshInfo;
 
 use approx::assert_relative_eq;
 
@@ -68,7 +68,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     // quadratic, so an order-3 quadrature keeps it exact.
     let source = DiffFormClosure::coordinate_component(0, dim);
     let source = source.pullback_on(&topology, &coords);
-    let qr = manifold::atlas::SimplexQuadRule::degree(dim, 3);
+    let qr = simplicial::atlas::SimplexQuadRule::degree(dim, 3);
     let mut rhs =
       assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, Some(qr)));
 
@@ -104,7 +104,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 /// The exact solution $u = x_1$ is reproduced.
 #[test]
 fn mixed_dirichlet_neumann_reproduces_linear_solution() {
-  use manifold::geometry::coord::simplex::SimplexCoords;
+  use simplicial::geometry::coord::simplex::SimplexCoords;
 
   for dim in 2..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
@@ -151,7 +151,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
 /// reproduced.
 #[test]
 fn robin_reproduces_linear_solution() {
-  use manifold::geometry::coord::simplex::SimplexCoords;
+  use simplicial::geometry::coord::simplex::SimplexCoords;
 
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
@@ -174,7 +174,7 @@ fn robin_reproduces_linear_solution() {
       dim,
     );
 
-    let is_x_facet = |facet: &manifold::topology::handle::SimplexIdx| {
+    let is_x_facet = |facet: &simplicial::topology::handle::SimplexIdx| {
       let facet_coords =
         SimplexCoords::from_simplex_and_coords(facet.handle(&topology).simplex(), &coords);
       let x = facet_coords.barycenter()[0];

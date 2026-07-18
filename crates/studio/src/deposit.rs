@@ -6,7 +6,7 @@
 //! the field's. So the accumulation texture is laid out in the atlas's own
 //! charts: each 2-cell owns a square block, and a texel of that block *is* a
 //! point of the cell's barycentric lattice, $lambda = (i, j, R - i - j) \/ R$
-//! (the `ref_lattice` of `manifold::atlas`, stored as texels so that splatting
+//! (the `ref_lattice` of `simplicial::atlas`, stored as texels so that splatting
 //! and filtered sampling are hardware). There is no UV unwrapping anywhere:
 //! the map $("cell", lambda) -> "texel"$ is the one formula
 //! $O_c + R_c (lambda_0, lambda_1)$, and because it is *affine*, the
@@ -24,7 +24,7 @@
 //! boundary, whose faces are not charts. Both give the empty layout, which
 //! every consumer treats as "no deposit" by arithmetic rather than by branch.
 
-use manifold::{
+use simplicial::{
   geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
   topology::complex::Complex,
 };
@@ -201,7 +201,7 @@ fn shelf_pack(resolutions: &[u32]) -> Option<Vec<Block>> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use manifold::geometry::coord::mesh::standard_coord_complex;
+  use simplicial::geometry::coord::mesh::standard_coord_complex;
 
   fn layout_of(dim: usize) -> (Complex, MeshCoords, DepositLayout) {
     let (topology, coords) = standard_coord_complex(dim);

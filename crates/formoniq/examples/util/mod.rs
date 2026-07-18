@@ -8,11 +8,11 @@
 #![allow(dead_code)]
 
 use {
+  chartan::field::DiffFormClosure,
   common::{
     combo::{Combination, Sign},
     coord::Coord,
   },
-  continuum::field::DiffFormClosure,
   exterior::ExteriorElement,
 };
 

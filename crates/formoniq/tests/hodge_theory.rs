@@ -11,9 +11,9 @@
 extern crate nalgebra as na;
 
 use common::linalg::nalgebra::{CooMatrix, CsrMatrix, Matrix};
-use ddf::cochain::Cochain;
+use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
-use manifold::gen::cartesian::CartesianMeshInfo;
+use simplicial::gen::cartesian::CartesianMeshInfo;
 
 use approx::assert_relative_eq;
 
@@ -90,7 +90,7 @@ fn harmonics_are_cohomology_cube() {
 /// The mesh is closed, so the relative complex coincides with the full one.
 #[test]
 fn harmonics_are_cohomology_sphere() {
-  let (topology, coords) = manifold::gen::sphere::mesh_sphere_surface(1);
+  let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(1);
   let metric = coords.to_edge_lengths(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let dim = topology.dim();
@@ -169,10 +169,10 @@ fn relative_inclusion_is_cochain_map() {
 /// the direct solve on the relative complex.
 #[test]
 fn lifted_homogeneous_dirichlet_is_relative_solve() {
+  use chartan::field::DiffFormClosure;
   use common::linalg::faer::FaerCholesky;
   use common::linalg::nalgebra::Vector;
-  use continuum::field::DiffFormClosure;
-  use ddf::section::CoordFieldExt;
+  use derham::section::CoordFieldExt;
   use formoniq::{assemble, bc, operators::SourceElVec};
 
   let dim = 2;
@@ -218,7 +218,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 /// genuinely nontrivial harmonic 1-form around the hole.
 #[test]
 fn long_exact_sequence_of_the_pair_annulus() {
-  use manifold::{
+  use simplicial::{
     geometry::coord::simplex::SimplexCoords,
     topology::{complex::Complex, skeleton::Skeleton},
   };

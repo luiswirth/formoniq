@@ -2,7 +2,7 @@
 //!
 //! The lowest-order finite element interpolation of cochains into the trimmed
 //! space $P^-_1 Lambda^k$ of differential forms affine on each cell. Together
-//! with the de Rham map $R: L^2 Lambda^k -> C^k$ (see [`crate::derham`]) it
+//! with the de Rham map $R: L^2 Lambda^k -> C^k$ (see [`crate::reduction`]) it
 //! forms the pair of cochain maps at the heart of FEEC, governed by the
 //! executable laws
 //!
@@ -12,7 +12,7 @@
 //!   the de Rham complex (test `whitney_interpolation_is_cochain_map` in
 //!   [`interpolant`]).
 //! - $R compose dif = dif compose R$: Stokes' theorem
-//!   (test `derham_map_is_cochain_map` in [`crate::derham`]).
+//!   (test `derham_map_is_cochain_map` in [`crate::reduction`]).
 
 pub mod form;
 pub mod interpolant;

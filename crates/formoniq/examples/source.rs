@@ -27,12 +27,12 @@ mod util;
 
 use {
   common::util::algebraic_convergence_rate,
-  ddf::section::CoordFieldExt,
+  derham::section::CoordFieldExt,
   formoniq::{
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::elliptic,
     whitney_complex::WhitneyComplex,
   },
-  manifold::gen::cartesian::CartesianMeshInfo,
+  simplicial::gen::cartesian::CartesianMeshInfo,
   util::{report, BoundaryCondition, BoxEigenform},
 };
 

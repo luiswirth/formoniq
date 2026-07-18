@@ -8,9 +8,9 @@ use crate::{
 
 use {
   common::linalg::nalgebra::{quadratic_form_sparse, CooMatrix, CsrMatrix},
-  ddf::cochain::Cochain,
+  derham::cochain::Cochain,
   exterior::ExteriorGrade,
-  manifold::{
+  simplicial::{
     geometry::metric::mesh::MeshLengths,
     topology::{
       boundary::BoundaryComplex,

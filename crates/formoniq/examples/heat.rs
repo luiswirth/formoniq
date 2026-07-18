@@ -25,9 +25,9 @@ mod util;
 
 use {
   common::linalg::nalgebra::{quadratic_form_sparse, CsrMatrix, Vector},
-  ddf::{cochain::Cochain, derham::derham_map, section::CoordFieldExt},
+  derham::{cochain::Cochain, reduction::derham_map, section::CoordFieldExt},
   formoniq::{problems::heat::solve_heat, whitney_complex::WhitneyComplex},
-  manifold::gen::cartesian::CartesianMeshInfo,
+  simplicial::gen::cartesian::CartesianMeshInfo,
   util::{BoundaryCondition, BoxEigenform},
 };
 

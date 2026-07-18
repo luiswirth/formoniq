@@ -14,7 +14,7 @@
 //! what one field decides -- its materials, its own geometry, its attribute
 //! stream. Switching modes rewrites the second alone.
 
-use manifold::geometry::metric::geometry::Geometry;
+use simplicial::geometry::metric::geometry::Geometry;
 
 use crate::bake::{self, BakedMesh};
 use crate::deposit::DepositLayout;
@@ -354,9 +354,9 @@ pub(crate) const TRAJECTORY_LOOP_SECONDS: f64 = 6.0;
 /// caller can recompute them per frame from an interpolated frame and rewrite
 /// them into the mesh, which is the whole of scrubbing a trajectory.
 pub(crate) fn field_attributes(
-  topology: &manifold::topology::complex::Complex,
-  coords: &manifold::geometry::coord::mesh::MeshCoords,
-  cochain: &ddf::cochain::Cochain,
+  topology: &simplicial::topology::complex::Complex,
+  coords: &simplicial::geometry::coord::mesh::MeshCoords,
+  cochain: &derham::cochain::Cochain,
   cell_corners: &[crate::bake::CellCorner],
 ) -> (FieldAttributes, (f32, f32)) {
   let colors = crate::scene::surface_corner_values(topology, coords, cochain, cell_corners);

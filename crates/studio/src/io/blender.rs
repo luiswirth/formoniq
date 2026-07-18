@@ -1,8 +1,8 @@
 use common::linalg::nalgebra::Vector;
 
 use crate::io::surface::TriangleSurface3D;
-use manifold::geometry::coord::mesh::MeshCoords;
-use manifold::topology::complex::Complex;
+use simplicial::geometry::coord::mesh::MeshCoords;
+use simplicial::topology::complex::Complex;
 
 use std::fmt::Write;
 use std::path::Path;

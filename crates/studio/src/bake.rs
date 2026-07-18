@@ -24,7 +24,7 @@ use std::collections::HashMap;
 
 use bytemuck::{Pod, Zeroable};
 use common::linalg::nalgebra::Vector;
-use manifold::{
+use simplicial::{
   geometry::coord::{mesh::MeshCoords, vertex_curvature_radius},
   topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex},
   Dim,
@@ -491,7 +491,7 @@ pub fn vertex_normals(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use manifold::geometry::coord::mesh::standard_coord_complex;
+  use simplicial::geometry::coord::mesh::standard_coord_complex;
 
   /// The standard cell of every dimension the ambient reaches bakes, and bakes
   /// to the primitive $min(n, 2)$ names: a segment, a triangle, and a

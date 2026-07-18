@@ -8,7 +8,7 @@
 //!   ([`WhitneyInterpolant`]): the reconstruction of a form from a cochain, the
 //!   right inverse of $R$.
 //! - $R: L^2 Lambda^k -> C^k$, the *de Rham map*
-//!   ([`derham_map`](ddf::derham::derham_map)): integration over the
+//!   ([`derham_map`](derham::reduction::derham_map)): integration over the
 //!   simplices. Canonical and metric-free, and a cochain map --
 //!   $R compose dif = dif compose R$ -- which is exactly why the discrete
 //!   complex inherits the cohomology of the continuous one. It needs the
@@ -27,9 +27,9 @@ use {
     faer::FaerCholesky,
     nalgebra::{CsrMatrix, Vector},
   },
-  ddf::{cochain::Cochain, section::Section, whitney::interpolant::WhitneyInterpolant},
+  derham::{cochain::Cochain, section::Section, whitney::interpolant::WhitneyInterpolant},
   exterior::{multiform_gramian, Covariant},
-  manifold::{
+  simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::Geometry},
     topology::complex::Complex,
@@ -101,9 +101,9 @@ pub fn l2_projection<F: Sync + Section<Covariant>>(
 mod test {
   use super::*;
 
-  use continuum::field::DiffFormClosure;
-  use ddf::section::CoordFieldExt;
-  use manifold::gen::cartesian::CartesianMeshInfo;
+  use chartan::field::DiffFormClosure;
+  use derham::section::CoordFieldExt;
+  use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;
 

@@ -10,9 +10,9 @@ use common::linalg::{
   faer::FaerCholesky,
   nalgebra::{quadratic_form_sparse, CooMatrix, CooMatrixExt, CsrMatrix, Vector},
 };
-use ddf::cochain::Cochain;
+use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
-use manifold::geometry::metric::mesh::MeshLengths;
+use simplicial::geometry::metric::mesh::MeshLengths;
 
 pub struct WaveState {
   pub pos: Vector,
@@ -155,7 +155,7 @@ pub fn cfl_dt(mesh_geo: &MeshLengths, vel: f64) -> f64 {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
-  use manifold::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;
 

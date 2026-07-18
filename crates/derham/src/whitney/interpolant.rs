@@ -3,7 +3,7 @@ use crate::cochain::Cochain;
 
 use {
   exterior::MultiForm,
-  manifold::{
+  simplicial::{
     atlas::MeshPoint,
     topology::{complex::Complex, simplex::standard_subsimps},
   },
@@ -74,7 +74,7 @@ mod test {
   use {
     common::linalg::nalgebra::Vector,
     exterior::MultiForm,
-    manifold::{atlas::MeshPoint, topology::complex::Complex},
+    simplicial::{atlas::MeshPoint, topology::complex::Complex},
   };
 
   /// $dif compose W = W compose dif$: Whitney interpolation is a cochain map.

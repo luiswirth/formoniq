@@ -7,7 +7,7 @@
 //! winding, and an explicit embedding, fixed at 3.
 
 use common::linalg::nalgebra::VectorView;
-use manifold::{
+use simplicial::{
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };

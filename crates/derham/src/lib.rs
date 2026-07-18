@@ -1,29 +1,29 @@
 //! Discrete differential forms: the exterior algebra, over the simplicial
 //! manifold.
 //!
-//! `ddf` is the crate that *joins* [`exterior`] and [`manifold`], and it exists
+//! `derham` is the crate that *joins* [`exterior`] and [`simplicial`], and it exists
 //! because neither may depend on the other. A [`Cochain`](cochain::Cochain) is
 //! the discrete form; a [`Section`](section::Section) is the continuous field it
-//! reconstructs to, evaluated at a [`MeshPoint`](manifold::atlas::MeshPoint) and
+//! reconstructs to, evaluated at a [`MeshPoint`](simplicial::atlas::MeshPoint) and
 //! valued in the reference frame of that point's chart. The two are related by
-//! the [`derham`] map and the [`whitney`] interpolation, which are inverse in
+//! the [`reduction`] map and the [`whitney`] interpolation, which are inverse in
 //! the one direction that matters ($R compose W = id$) and cochain maps in both.
 
 extern crate nalgebra as na;
 
 pub mod cochain;
-pub mod derham;
 pub mod io;
+pub mod reduction;
 pub mod section;
 pub mod whitney;
 
 #[cfg(test)]
 mod test {
-  use crate::{cochain::Cochain, derham::derham_map, whitney::interpolant::WhitneyInterpolant};
+  use crate::{cochain::Cochain, reduction::derham_map, whitney::interpolant::WhitneyInterpolant};
 
   use {
     common::linalg::nalgebra::Vector,
-    manifold::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex},
+    simplicial::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex},
   };
 
   use approx::assert_relative_eq;

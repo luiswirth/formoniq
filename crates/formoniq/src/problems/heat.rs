@@ -11,7 +11,7 @@ use crate::{
   whitney_complex::HilbertComplex,
 };
 
-use ddf::cochain::Cochain;
+use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 
 /// Radau IIA for the Hodge heat equation $diff_t u = -Delta u + f$ on Whitney
@@ -101,7 +101,7 @@ mod test {
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
   use common::linalg::nalgebra::quadratic_form_sparse;
-  use manifold::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;
 
