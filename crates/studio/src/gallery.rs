@@ -417,10 +417,10 @@ pub(crate) struct Preset {
 /// state what the field is at a point and the particles what it does over time,
 /// and a rotational field is where seeing the two at once says most.
 ///
-/// It can afford the particles where the default cannot. They are opted into
-/// rather than assumed ([`Marks`]) because a population advected every frame is
-/// a continuous cost on a weak GPU -- but this mesh is four triangles, so here
-/// that cost is nothing and the picture is the point.
+/// It opens on the default marks, which is the glyphs alone. The particles are
+/// not a thing a preset should switch on for a reader: their cost is the same
+/// on every mesh (see [`Marks`]), so no preset is in a position to decide the
+/// reader can afford them.
 pub(crate) fn start_preset() -> Preset {
   curl_on_triforce()
 }
@@ -433,10 +433,7 @@ fn curl_on_triforce() -> Preset {
     // The second of the three (constant, curl, div), all grade 1 and so all
     // line fields, in the order `triforce_examples` builds them.
     selection: Some(Selection::Line(1)),
-    marks: Some(Marks {
-      glyphs: true,
-      particles: true,
-    }),
+    marks: None,
   }
 }
 
@@ -727,6 +724,28 @@ impl Gallery {
 mod tests {
   use super::*;
 
+  /// The particles are opt-in, everywhere. Their cost does not scale with the
+  /// mesh -- the population is a fixed count -- so there is no mesh on which
+  /// assuming them is cheap, and a weak GPU should not spend it unasked. The
+  /// glyphs stay on, so a line field still has a mark.
+  #[test]
+  fn the_particles_are_opt_in() {
+    let marks = crate::ui::Marks::default();
+    assert!(!marks.particles);
+    assert!(marks.glyphs, "a line field must still carry a mark");
+    // No preset overrides that: a preset is in no position to decide the
+    // reader can afford them.
+    for preset in presets() {
+      if let Some(marks) = preset.marks {
+        assert!(
+          !marks.particles,
+          "{} switches the particles on",
+          preset.name
+        );
+      }
+    }
+  }
+
   /// The opening preset resolves to the field it means. Its selection is an
   /// *index* into the scene's line fields, so it is exactly the kind of thing
   /// that goes quietly wrong when the study's cochains are reordered -- this
@@ -741,9 +760,8 @@ mod tests {
       panic!("the start preset opens on a line field");
     };
     assert_eq!(scene.line_fields[index].name, "pure curl");
-    // Both marks, which is the whole reason this preset opens the viewer.
-    let marks = preset.marks.expect("the start preset sets its marks");
-    assert!(marks.glyphs && marks.particles);
+    // And it opens on the default marks rather than choosing for the reader.
+    assert!(preset.marks.is_none());
   }
 
   /// Every shipped asset loads. This is what the generated table buys and what
