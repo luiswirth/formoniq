@@ -480,8 +480,9 @@ pub(crate) fn field_attributes(
 /// constructor's to hide.
 pub(crate) struct FieldDisplay {
   /// The arrow glyphs of a line field, `None` for a scalar field: the field
-  /// evaluated -- at points the atlas places (the interior barycentric lattice
-  /// of each cell) rather than a tracer's seeding or a population's respawn.
+  /// evaluated -- at points the atlas places (the barycentric lattice of each
+  /// cell, boundary included: see [`crate::glyph`]) rather than a tracer's
+  /// seeding or a population's respawn.
   glyphs: Option<GlyphBatch>,
   /// The advected particles of a line field, absent for a scalar field and for
   /// a field that vanishes everywhere (which seeds nowhere).
