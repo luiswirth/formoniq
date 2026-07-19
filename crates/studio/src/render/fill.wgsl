@@ -57,6 +57,41 @@ struct FsOut {
     @location(1) unbounded: f32,
 };
 
+// Catmull-Rom bicubic reconstruction of the deposit atlas, as five
+// hardware-filtered taps rather than sixteen point reads: the trail is
+// magnified onto whatever screen area a cell covers, and a bilinear tap alone
+// makes that magnification read as blocks. The five-tap form folds each pair of
+// bicubic weights into one linear sample placed at their weighted centre, so the
+// filtering hardware does the inner interpolation and the shader only sums.
+// Reads stay inside the cell's own block because the atlas GUTTER separates
+// blocks by more than the kernel's one-texel reach.
+fn sample_deposit_bicubic(uv: vec2<f32>) -> f32 {
+    let size = vec2<f32>(textureDimensions(deposit_tex));
+    let coord = uv * size - 0.5;
+    let base = floor(coord);
+    let f = coord - base;
+
+    let w0 = f * (f * (-0.5 * f + 1.0) - 0.5);
+    let w1 = f * f * (1.5 * f - 2.5) + 1.0;
+    let w2 = f * (f * (-1.5 * f + 2.0) + 0.5);
+    let w3 = f * f * (0.5 * f - 0.5);
+
+    let s0 = w0 + w1;
+    let s1 = w2 + w3;
+    let o0 = w1 / s0 - 1.0;
+    let o1 = w3 / s1 + 1.0;
+
+    let t0 = (base + vec2<f32>(o0.x, o0.y) + 0.5) / size;
+    let t1 = (base + vec2<f32>(o1.x, o1.y) + 0.5) / size;
+
+    let a = textureSampleLevel(deposit_tex, deposit_samp, vec2<f32>(t0.x, t0.y), 0.0).r;
+    let b = textureSampleLevel(deposit_tex, deposit_samp, vec2<f32>(t1.x, t0.y), 0.0).r;
+    let c = textureSampleLevel(deposit_tex, deposit_samp, vec2<f32>(t0.x, t1.y), 0.0).r;
+    let d = textureSampleLevel(deposit_tex, deposit_samp, vec2<f32>(t1.x, t1.y), 0.0).r;
+
+    return (a * s0.x + b * s1.x) * s0.y + (c * s0.x + d * s1.x) * s1.y;
+}
+
 @fragment
 fn fs_main(in: VertexOutput) -> FsOut {
     // Pulse the color by the same standing-wave factor that displaces the
@@ -68,7 +103,7 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // radiance, before the tone map. Hue stays the colormap's -- the data --
     // and the deposit carries luminance only. Floor 1, gain 0 is the identity:
     // a field with no trails is the plain fill by arithmetic.
-    let trail = textureSample(deposit_tex, deposit_samp, in.deposit_uv).r;
+    let trail = sample_deposit_bicubic(in.deposit_uv);
     let lift = material.deposit_floor + material.deposit_gain * trail;
     var out: FsOut;
     out.color = vec4<f32>(ink * lift, 1.0);
