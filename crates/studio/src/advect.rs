@@ -41,7 +41,7 @@
 //! life.
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use gramian::RiemannianMetric;
+use gramian::PseudoRiemannianMetric;
 use simplicial::linalg::Matrix;
 use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
@@ -207,7 +207,7 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
 fn flow_generator(
   interpolant: &WhitneyInterpolant,
   cell: SimplexIdx,
-  metric: &RiemannianMetric,
+  metric: &PseudoRiemannianMetric,
 ) -> Matrix {
   let dim = cell.dim();
   let vertices = ref_vertices(dim);

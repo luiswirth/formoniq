@@ -2,7 +2,7 @@
 
 extern crate nalgebra as na;
 
-use gramian::{Gramian, RiemannianMetric};
+use gramian::{Gramian, PseudoRiemannianMetric};
 use multiindex::{binomial, combinations, Combination, Sign};
 
 use std::marker::PhantomData;
@@ -40,7 +40,7 @@ pub trait Variance: Copy + std::fmt::Debug + 'static {
   /// The Gramian measuring elements of this variance:
   /// the metric tensor $g$ for multivectors, its inverse $g^(-1)$ for
   /// multiforms.
-  fn gramian(metric: &RiemannianMetric) -> &Gramian;
+  fn gramian(metric: &PseudoRiemannianMetric) -> &Gramian;
 }
 
 /// The variance of multivectors: elements of $Lambda^k V$.
@@ -52,13 +52,13 @@ pub struct Covariant;
 
 impl Variance for Contravariant {
   type Dual = Covariant;
-  fn gramian(metric: &RiemannianMetric) -> &Gramian {
+  fn gramian(metric: &PseudoRiemannianMetric) -> &Gramian {
     metric.vector_gramian()
   }
 }
 impl Variance for Covariant {
   type Dual = Contravariant;
-  fn gramian(metric: &RiemannianMetric) -> &Gramian {
+  fn gramian(metric: &PseudoRiemannianMetric) -> &Gramian {
     metric.covector_gramian()
   }
 }
@@ -108,7 +108,7 @@ pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian 
 ///
 /// The variance-correct counterpart of [`multiform_gramian`]; the single
 /// source of truth for which metric Gramian measures multivectors.
-pub fn multivector_gramian(metric: &RiemannianMetric, grade: ExteriorGrade) -> Gramian {
+pub fn multivector_gramian(metric: &PseudoRiemannianMetric, grade: ExteriorGrade) -> Gramian {
   multi_gramian(metric.vector_gramian(), grade)
 }
 
@@ -116,7 +116,7 @@ pub fn multivector_gramian(metric: &RiemannianMetric, grade: ExteriorGrade) -> G
 ///
 /// The variance-correct counterpart of [`multivector_gramian`]; the single
 /// source of truth for which metric Gramian measures multiforms.
-pub fn multiform_gramian(metric: &RiemannianMetric, grade: ExteriorGrade) -> Gramian {
+pub fn multiform_gramian(metric: &PseudoRiemannianMetric, grade: ExteriorGrade) -> Gramian {
   multi_gramian(metric.covector_gramian(), grade)
 }
 
@@ -254,22 +254,32 @@ impl<V: Variance> ExteriorElement<V> {
 
   /// The inner product with the variance-appropriate metric Gramian:
   /// $Lambda^k g$ for multivectors, $Lambda^k g^(-1)$ for multiforms.
-  pub fn inner(&self, other: &Self, metric: &RiemannianMetric) -> f64 {
+  /// Indefinite whenever the metric is: the sign is information, not error.
+  pub fn inner(&self, other: &Self, metric: &PseudoRiemannianMetric) -> f64 {
     assert!(self.dim == other.dim && self.grade == other.grade);
     multi_gramian(V::gramian(metric), self.grade).inner(&self.coeffs, &other.coeffs)
   }
-  pub fn norm(&self, metric: &RiemannianMetric) -> f64 {
-    self.inner(self, metric).sqrt()
+  /// Magnitude $sqrt(abs(inner(v, v)))$. On an indefinite metric the sign of
+  /// [`Self::inner`] carries the causal character separately; this is never
+  /// NaN.
+  pub fn norm(&self, metric: &PseudoRiemannianMetric) -> f64 {
+    self.inner(self, metric).abs().sqrt()
   }
 
   /// The Hodge star $star: Lambda^k -> Lambda^(n-k)$, defined by
   /// $alpha wedge star beta = inner(alpha, beta) vol$ for all $alpha$,
-  /// where $vol$ is the unit-volume element of this variance.
+  /// where $vol$ is the unit-volume element of this variance, with density
+  /// $sqrt(abs(det g))$ on any signature.
+  ///
+  /// The involution is $star star = (-1)^(k(n-k)) (-1)^q$ with $q$ the number
+  /// of negative eigenvalues of the metric, $(-1)^q = sgn(det g)$: the one
+  /// fact separating Riemannian from Lorentzian Hodge theory, read off the
+  /// metric's own signature rather than assumed.
   ///
   /// Assumes the positively oriented standard basis. For the Euclidean metric
   /// the star is exactly the signed complement of each basis blade
   /// ([`Combination::complement_signed`]).
-  pub fn hodge_star(&self, metric: &RiemannianMetric) -> Self {
+  pub fn hodge_star(&self, metric: &PseudoRiemannianMetric) -> Self {
     let dim = self.dim;
     assert_eq!(metric.dim(), dim);
 
@@ -308,7 +318,7 @@ impl MultiVector {
 
   /// The musical isomorphism $flat: Lambda^k V -> Lambda^k V^*$,
   /// lowering indices with $Lambda^k g$.
-  pub fn flat(&self, metric: &RiemannianMetric) -> MultiForm {
+  pub fn flat(&self, metric: &PseudoRiemannianMetric) -> MultiForm {
     let coeffs = exterior_power(metric.vector_gramian().matrix(), self.grade) * &self.coeffs;
     MultiForm::new(coeffs, self.dim, self.grade)
   }
@@ -331,7 +341,7 @@ impl MultiForm {
   /// The musical isomorphism $sharp: Lambda^k V^* -> Lambda^k V$,
   /// raising indices with $Lambda^k g^(-1)$. Inverse of
   /// [`MultiVector::flat`].
-  pub fn sharp(&self, metric: &RiemannianMetric) -> MultiVector {
+  pub fn sharp(&self, metric: &PseudoRiemannianMetric) -> MultiVector {
     let coeffs = exterior_power(metric.covector_gramian().matrix(), self.grade) * &self.coeffs;
     MultiVector::new(coeffs, self.dim, self.grade)
   }
@@ -441,9 +451,24 @@ mod tests {
     )
   }
   /// A non-trivial Riemannian metric.
-  fn test_metric(dim: Dim) -> RiemannianMetric {
+  fn test_metric(dim: Dim) -> PseudoRiemannianMetric {
     let a = test_matrix(dim, dim, 5);
-    RiemannianMetric::new(Gramian::new(a.transpose() * a + Matrix::identity(dim, dim)))
+    PseudoRiemannianMetric::new(Gramian::new(a.transpose() * a + Matrix::identity(dim, dim)))
+  }
+  /// A non-diagonal metric of signature $(dim - q, q)$: the flat model pulled
+  /// back along an invertible map, which preserves the signature (Sylvester)
+  /// while filling in off-diagonal entries.
+  fn test_pseudo_metric(dim: Dim, q: usize) -> PseudoRiemannianMetric {
+    let j = Matrix::from_fn(dim, dim, |i, jj| {
+      if i == jj {
+        1.0
+      } else if i > jj {
+        ((3 * i + 5 * jj) % 4) as f64 / 8.0
+      } else {
+        0.0
+      }
+    });
+    PseudoRiemannianMetric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
   }
 
   /// Functoriality of the exterior power: the Cauchy-Binet formula
@@ -553,7 +578,7 @@ mod tests {
   #[test]
   fn hodge_star_euclidean_is_signed_complement() {
     for dim in 1..=4 {
-      let euclidean = RiemannianMetric::standard(dim);
+      let euclidean = PseudoRiemannianMetric::standard(dim);
       for grade in 0..=dim {
         for blade in exterior_bases(dim, grade) {
           let element = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
@@ -566,53 +591,89 @@ mod tests {
     }
   }
 
-  /// $star star = (-1)^(k(n-k))$ on any Riemannian metric,
-  /// for both variances.
+  /// $star star = (-1)^(k(n-k)) (-1)^q$ on any metric of signature
+  /// $(n - q, q)$, for both variances: swept over dimension, grade *and*
+  /// signature, the Riemannian $q = 0$ one case among all.
   #[test]
   fn hodge_star_involution() {
     for dim in 1..=4 {
-      for metric in [RiemannianMetric::standard(dim), test_metric(dim)] {
-        for grade in 0..=dim {
-          let sign = Sign::from_parity(grade * (dim - grade));
+      for q in 0..=dim {
+        for metric in [
+          PseudoRiemannianMetric::new(Gramian::pseudo_euclidean(dim - q, q)),
+          test_pseudo_metric(dim, q),
+        ] {
+          for grade in 0..=dim {
+            let sign = Sign::from_parity(grade * (dim - grade)) * Sign::from_parity(q);
 
-          let form: MultiForm = test_element(dim, grade, 2);
-          let star_star = form.hodge_star(&metric).hodge_star(&metric);
-          assert_relative_eq!(
-            star_star.coeffs(),
-            &(sign.as_f64() * form).coeffs(),
-            epsilon = 1e-12
-          );
+            let form: MultiForm = test_element(dim, grade, 2);
+            let star_star = form.hodge_star(&metric).hodge_star(&metric);
+            assert_relative_eq!(
+              star_star.coeffs(),
+              &(sign.as_f64() * form).coeffs(),
+              epsilon = 1e-12
+            );
 
-          let vector: MultiVector = test_element(dim, grade, 3);
-          let star_star = vector.hodge_star(&metric).hodge_star(&metric);
-          assert_relative_eq!(
-            star_star.coeffs(),
-            &(sign.as_f64() * vector).coeffs(),
-            epsilon = 1e-12
-          );
+            let vector: MultiVector = test_element(dim, grade, 3);
+            let star_star = vector.hodge_star(&metric).hodge_star(&metric);
+            assert_relative_eq!(
+              star_star.coeffs(),
+              &(sign.as_f64() * vector).coeffs(),
+              epsilon = 1e-12
+            );
+          }
         }
       }
     }
   }
 
   /// The defining property $alpha wedge star beta = inner(alpha, beta) vol$,
-  /// tying together wedge, inner and hodge_star.
+  /// tying together wedge, inner and hodge_star: on every signature, with the
+  /// indefinite inner product and the volume density $sqrt(abs(det g))$.
   #[test]
   fn wedge_with_star_is_inner_times_volume() {
     for dim in 1..=4 {
-      for metric in [RiemannianMetric::standard(dim), test_metric(dim)] {
-        for grade in 0..=dim {
-          let alpha: MultiForm = test_element(dim, grade, 3);
-          let beta: MultiForm = test_element(dim, grade, 4);
+      for q in 0..=dim {
+        for metric in [
+          PseudoRiemannianMetric::new(Gramian::pseudo_euclidean(dim - q, q)),
+          test_pseudo_metric(dim, q),
+        ] {
+          for grade in 0..=dim {
+            let alpha: MultiForm = test_element(dim, grade, 3);
+            let beta: MultiForm = test_element(dim, grade, 4);
 
-          let wedge = alpha.wedge(&beta.hodge_star(&metric));
+            let wedge = alpha.wedge(&beta.hodge_star(&metric));
 
-          let inner = alpha.inner(&beta, &metric);
-          // The volume form has coefficient sqrt(det g).
-          let volume = metric.det_sqrt();
+            let inner = alpha.inner(&beta, &metric);
+            // The volume form has coefficient sqrt(|det g|).
+            let volume = metric.det_sqrt();
 
-          assert_eq!(wedge.grade(), dim);
-          assert_relative_eq!(wedge[0], inner * volume, epsilon = 1e-12);
+            assert_eq!(wedge.grade(), dim);
+            assert_relative_eq!(wedge[0], inner * volume, epsilon = 1e-12);
+          }
+        }
+      }
+    }
+  }
+
+  /// The Lorentzian Hodge star on flat Minkowski space (mostly-plus,
+  /// $eta = "diag"(-1, +1, dots.c, +1)$), checked against the closed form on
+  /// basis blades: $star dif x^I = (product_(i in I) eta^(i i)) space
+  /// epsilon(I, I^c) space dif x^(I^c)$ -- each timelike factor in the blade
+  /// flips the sign of the Euclidean star, nothing else changes.
+  #[test]
+  fn hodge_star_minkowski_closed_form() {
+    for dim in 1..=4 {
+      let eta = PseudoRiemannianMetric::minkowski(dim);
+      for grade in 0..=dim {
+        for blade in exterior_bases(dim, grade) {
+          let element = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
+          let star = element.hodge_star(&eta);
+
+          // One sign flip per timelike ($eta^(0 0) = -1$) factor of the blade.
+          let eta_sign = Sign::from_parity(blade.contains(0) as usize);
+          let (complement_sign, complement) = blade.complement_signed(dim);
+          let expected = MultiForm::from_blade_signed(dim, eta_sign * complement_sign, complement);
+          assert_relative_eq!(star.coeffs(), expected.coeffs());
         }
       }
     }
@@ -658,7 +719,7 @@ mod tests {
   #[test]
   fn interior_product_adjoint_to_wedge() {
     for dim in 2..=4 {
-      let euclidean = RiemannianMetric::standard(dim);
+      let euclidean = PseudoRiemannianMetric::standard(dim);
       let vector = MultiVector::line(Vector::from_fn(dim, |i, _| (i + 2) as f64));
       let vector_flat = vector.flat(&euclidean);
       for grade in 1..=dim {

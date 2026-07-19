@@ -11,28 +11,41 @@ use crate::{
 };
 
 use crate::linalg::{Matrix, Vector};
-use gramian::RiemannianMetric;
+use gramian::{Gramian, PseudoRiemannianMetric};
 
 use itertools::Itertools;
 
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
 
-/// The coordinates of the vertices of the mesh.
+/// The coordinates of the vertices of the mesh: an embedding into the flat
+/// pseudo-Euclidean space $RR^(p, q)$, carried as the vertex columns together
+/// with the ambient inner product. The Euclidean ambient ($q = 0$,
+/// [`MeshCoords::new`]) is the default and one signature among all: a
+/// spacetime mesh embeds into Minkowski space through
+/// [`MeshCoords::with_ambient`], on the very same type.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MeshCoords {
   matrix: Matrix,
+  /// The inner product of the ambient space the vertices live in.
+  ambient: Gramian,
 }
 
-/// An embedding *induces* a metric: the Gramian of the cell's spanning vectors.
+/// An embedding *induces* a metric: the pullback $J^top eta J$ of the ambient
+/// inner product along the cell's spanning vectors -- the first fundamental
+/// form, of whatever signature the ambient carries.
 ///
 /// This impl lives here, not in the metric layer, and that is the whole point --
 /// coordinates know about the metric they induce, the metric knows nothing of
 /// coordinates (invariant 2).
 impl Geometry for MeshCoords {
-  fn cell_metric(&self, cell: Cell) -> RiemannianMetric {
-    RiemannianMetric::new(cell.coord_simplex(self).metric_tensor())
+  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
+    PseudoRiemannianMetric::new(
+      self
+        .ambient
+        .pullback(&cell.coord_simplex(self).spanning_vectors()),
+    )
   }
 }
 
@@ -40,12 +53,30 @@ impl MeshCoords {
   pub fn standard(ndim: Dim) -> Self {
     Self::new(crate::atlas::ref_vertices(ndim))
   }
+  /// Vertices of an embedding into Euclidean space: the ambient inner product
+  /// is the standard one.
   pub fn new(matrix: Matrix) -> Self {
-    Self { matrix }
+    let ambient = Gramian::standard(matrix.nrows());
+    Self::with_ambient(matrix, ambient)
+  }
+  /// Vertices of an embedding into the flat pseudo-Euclidean space the given
+  /// ambient Gramian describes -- e.g. [`Gramian::minkowski`] for a mesh of a
+  /// Lorentzian spacetime.
+  pub fn with_ambient(matrix: Matrix, ambient: Gramian) -> Self {
+    assert_eq!(
+      ambient.dim(),
+      matrix.nrows(),
+      "Ambient inner product must match the coordinate dimension."
+    );
+    Self { matrix, ambient }
   }
 
   pub fn matrix(&self) -> &Matrix {
     &self.matrix
+  }
+  /// The inner product of the ambient space.
+  pub fn ambient(&self) -> &Gramian {
+    &self.ambient
   }
   pub fn matrix_mut(&mut self) -> &mut Matrix {
     &mut self.matrix
@@ -127,6 +158,10 @@ impl MeshCoords {
   }
 
   pub fn to_edge_lengths(&self, topology: &Complex) -> MeshLengths {
+    assert!(
+      self.ambient.is_riemannian(),
+      "Edge lengths represent Riemannian (positive-definite) geometry only."
+    );
     // A 0-manifold is a discrete set of points: its 1-skeleton is empty, so the
     // edge-length representation of its (trivial, 0-dimensional) geometry is the
     // empty vector.
@@ -137,7 +172,7 @@ impl MeshCoords {
     let mut edge_lengths = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {
       let (vi, vj) = edge.endpoints();
-      edge_lengths[iedge] = (vj.coord(self) - vi.coord(self)).norm();
+      edge_lengths[iedge] = self.ambient.norm(&(vj.coord(self) - vi.coord(self)));
     }
     // SAFETY: Edge Lengths come from a coordinate realizations.
     MeshLengths::new_unchecked(edge_lengths)
@@ -145,9 +180,22 @@ impl MeshCoords {
 }
 
 impl MeshCoords {
+  /// Pad the ambient space with additional Euclidean axes: the vertices gain
+  /// zero coordinates, the ambient inner product an identity block.
   pub fn embed_euclidean(mut self, dim: Dim) -> MeshCoords {
     let old_dim = self.matrix.nrows();
-    self.matrix = self.matrix.insert_rows(old_dim, dim - old_dim, 0.0);
+    let extra = dim - old_dim;
+    self.matrix = self.matrix.insert_rows(old_dim, extra, 0.0);
+    let mut ambient = self
+      .ambient
+      .matrix()
+      .clone()
+      .insert_rows(old_dim, extra, 0.0)
+      .insert_columns(old_dim, extra, 0.0);
+    for i in old_dim..dim {
+      ambient[(i, i)] = 1.0;
+    }
+    self.ambient = Gramian::new_unchecked(ambient);
     self
   }
 }
@@ -194,7 +242,7 @@ pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simpl
     .collect();
 
   let columns: Vec<_> = used.iter().map(|&v| coords.coord(v).view()).collect();
-  let coords = MeshCoords::new(Matrix::from_columns(&columns));
+  let coords = MeshCoords::with_ambient(Matrix::from_columns(&columns), coords.ambient().clone());
   (cells, coords)
 }
 
@@ -237,5 +285,35 @@ mod test {
         assert_eq!(edge.length(&lengths), distance);
       }
     }
+  }
+
+  /// A mesh embedded in Minkowski ambient space induces Lorentzian cell
+  /// metrics: on a coordinate-aligned mesh the induced metric of every cell
+  /// is congruent to $eta$ itself, so its signature is $(n - 1, 1)$ by
+  /// Sylvester's law of inertia -- the same code path as the Euclidean
+  /// ambient, one signature among all.
+  #[test]
+  fn minkowski_ambient_induces_lorentzian_cell_metrics() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let spacetime =
+        MeshCoords::with_ambient(coords.matrix().clone(), gramian::Gramian::minkowski(dim));
+      for cell in topology.cells().handle_iter() {
+        let metric = spacetime.cell_metric(cell);
+        assert_eq!(metric.signature(), (dim - 1, 1));
+        assert!(!metric.is_riemannian());
+      }
+    }
+  }
+
+  /// Regge edge lengths represent Riemannian geometry only: a Lorentzian
+  /// embedding has timelike and null edges, which have no length.
+  #[test]
+  #[should_panic(expected = "Riemannian")]
+  fn lorentzian_ambient_has_no_edge_lengths() {
+    let (topology, coords) = CartesianMeshInfo::new_unit(2, 1).compute_coord_complex();
+    let spacetime =
+      MeshCoords::with_ambient(coords.matrix().clone(), gramian::Gramian::minkowski(2));
+    spacetime.to_edge_lengths(&topology);
   }
 }

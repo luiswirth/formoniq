@@ -23,13 +23,15 @@ barycentric weights), Grundmann-Möller quadrature exact to prescribed degree in
 every dimension, and uniform (Freudenthal) refinement recording the affine map
 of each child.
 
-**Geometry** is a pluggable input behind one trait: a per-cell Riemannian
-metric. Three interchangeable implementations are provided: Regge edge lengths,
-raw per-cell metric tensors, and vertex coordinates. An embedding induces a
-metric and is one implementation among these, not a prerequisite. Volumes, mesh
-widths, shape regularity and Gaussian curvature by angle defect are computed
-from edge lengths alone, on manifolds with no global coordinates (a flat torus,
-an abstract Riemannian manifold). Extrinsic quantities (mean curvature, a BVH point
+**Geometry** is a pluggable input behind one trait: a per-cell pseudo-Riemannian
+metric of any signature. Three interchangeable implementations are provided:
+Regge edge lengths (Riemannian by nature), raw per-cell metric tensors, and
+vertex coordinates in a flat ambient space of any signature (Euclidean by
+default, Minkowski for a spacetime mesh). An embedding induces a metric and is
+one implementation among these, not a prerequisite. Volumes, mesh widths, shape
+regularity and Gaussian curvature by angle defect are computed from edge lengths
+alone, on manifolds with no global coordinates (a flat torus, an abstract
+Riemannian manifold). Extrinsic quantities (mean curvature, a BVH point
 locator) sit downstream of the intrinsic layer.
 
 Distance geometry connects the metric representations: Cayley-Menger

@@ -168,7 +168,7 @@ impl BoundaryComplex {
       .iter()
       .map(|&ivertex| parent.matrix().column(ivertex))
       .collect();
-    MeshCoords::new(Matrix::from_columns(&columns))
+    MeshCoords::with_ambient(Matrix::from_columns(&columns), parent.ambient().clone())
   }
 }
 
