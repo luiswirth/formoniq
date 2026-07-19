@@ -416,6 +416,11 @@ pub(crate) struct Preset {
 /// The pure curl on the triforce, with both of a line field's marks: the glyphs
 /// state what the field is at a point and the particles what it does over time,
 /// and a rotational field is where seeing the two at once says most.
+///
+/// It can afford the particles where the default cannot. They are opted into
+/// rather than assumed ([`Marks`]) because a population advected every frame is
+/// a continuous cost on a weak GPU -- but this mesh is four triangles, so here
+/// that cost is nothing and the picture is the point.
 pub(crate) fn start_preset() -> Preset {
   curl_on_triforce()
 }

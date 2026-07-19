@@ -193,11 +193,17 @@ pub(crate) struct Marks {
 impl Default for Marks {
   fn default() -> Self {
     Self {
-      // Off by default: the particles already cover the field, and a lattice of
-      // arrows over them is a second reading of the same reduction rather than
-      // a first look at it.
-      glyphs: false,
-      particles: true,
+      // The glyphs are the cheap reading and the one that always says
+      // something: a lattice evaluated once per bake, then drawn.
+      glyphs: true,
+      // The particles are the expensive one -- a population advected every
+      // frame, with a deposit atlas stepped alongside it -- and it is a cost
+      // paid continuously rather than once. A weak GPU should not have to
+      // spend it to find out whether it wanted to, so it is opted into. The
+      // field is fully readable without them: the glyphs carry the direction
+      // and the fill carries the magnitude, and what the particles add is the
+      // dynamics, which is a second question about the same reduction.
+      particles: false,
     }
   }
 }
