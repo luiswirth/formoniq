@@ -52,7 +52,10 @@
 //! real and grade $1 = E$, grade $2 = B$ direct, in any dimension. The genuinely
 //! self-adjoint $dif + delta$ with $+Delta$ and no $i$ exists only *without* a
 //! split: the 4D Lorentzian $sans(D) F = J$, where the signature makes it
-//! hyperbolic on its own.
+//! hyperbolic on its own. That covariant operator is [`HodgeDirac::assemble_selfadjoint`],
+//! and [`solve_dirac_source`] solves its static source problem on a spacetime
+//! mesh -- the same blocks as the evolution form, differing in exactly the one
+//! sign the conjugation predicts.
 //!
 //! # Discretization
 //!
@@ -90,14 +93,15 @@
 //! [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
 
 use crate::{
-  linalg::quadratic_form_sparse,
+  linalg::{faer::FaerLu, quadratic_form_sparse},
   time::{Leapfrog, LinearIrk, Tableau},
-  whitney_complex::HilbertComplex,
+  whitney_complex::{HilbertComplex, RelativeWhitneyComplex},
 };
 
 use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 use simplicial::{
+  geometry::metric::Geometry,
   linalg::{CooMatrix, CsrMatrix, Vector},
   Dim,
 };
@@ -153,10 +157,20 @@ impl MixedField {
   }
 }
 
-/// The discrete Hodge–Dirac operator $sans(D) = dif - delta$ on a Hilbert
-/// complex, assembled as the two flat global matrices the time integrator
-/// consumes: the SPD block-diagonal mass $M = plus.circle.big_k M_k$ and the
-/// skew-symmetric $A$ of the semi-discrete system $M dot(u) = A u$.
+/// The discrete Hodge–Dirac operator on a Hilbert complex, assembled as the
+/// two flat global matrices its consumers share: the block-diagonal mass
+/// $M = plus.circle.big_k M_k$ and the grade-coupling $A$, weak $dif$ on the
+/// sub-diagonal, weak $delta$ on the super-diagonal.
+///
+/// The operator comes in its two signs, one assembly parameterized by the
+/// other ([`Self::assemble`] / [`Self::assemble_selfadjoint`]): the *skew*
+/// $dif - delta$ ($A + A^T = 0$), the energy-conserving generator of the 3+1
+/// evolution $M dot(u) = A u$ on a Riemannian slice, and the *self-adjoint*
+/// canonical $dif + delta$ ($A = A^T$), the covariant static operator of
+/// $sans(D) u = f$ -- on a Lorentzian spacetime mesh (indefinite $M$) this is
+/// the hyperbolic Dirac–Kähler / spacetime-Maxwell operator, no split and no
+/// time integrator involved. Same blocks, same code; the sign of the
+/// super-diagonal is the entire difference.
 ///
 /// Total at the degenerate grades without a special case: grade $0$ has no
 /// sub-diagonal coupling (no $Lambda^(-1)$), grade $n$ no super-diagonal one
@@ -169,13 +183,33 @@ pub struct HodgeDirac {
   offsets: Vec<usize>,
   /// The per-grade Galerkin masses $M_k$, kept for per-grade energies.
   masses: Vec<CsrMatrix>,
-  /// $M = plus.circle.big_k M_k$: SPD, block-diagonal.
+  /// $M = plus.circle.big_k M_k$: block-diagonal, symmetric; positive
+  /// definite exactly when the geometry is Riemannian.
   mass_block: CsrMatrix,
-  /// $A$: skew-symmetric, block-tridiagonal, $M dot(u) = A u$.
+  /// $A$: block-tridiagonal; skew-symmetric for $dif - delta$, symmetric for
+  /// $dif + delta$.
   op: CsrMatrix,
 }
 impl HodgeDirac {
+  /// The skew evolution generator $sans(D) = dif - delta$, $A + A^T = 0$:
+  /// the 3+1 form on a Riemannian slice, driving $M dot(u) = A u$.
   pub fn assemble<C: HilbertComplex>(complex: &C) -> Self {
+    Self::assemble_signed(complex, -1.0)
+  }
+
+  /// The canonical self-adjoint Hodge–Dirac operator
+  /// $sans(D) = dif + delta$, $A = A^T$: the covariant form, which on a
+  /// Lorentzian spacetime is hyperbolic through the signature alone
+  /// ($sans(D)^2 = Delta$ is the d'Alembertian there) and needs no 3+1 split.
+  /// Consumed by [`solve_dirac_source`].
+  pub fn assemble_selfadjoint<C: HilbertComplex>(complex: &C) -> Self {
+    Self::assemble_signed(complex, 1.0)
+  }
+
+  /// One assembly for both signs: the super-diagonal block is
+  /// `delta_sign` times the transpose of the sub-diagonal one, making
+  /// $A^T = "delta_sign" dot A$ exact by construction.
+  fn assemble_signed<C: HilbertComplex>(complex: &C, delta_sign: f64) -> Self {
     let dim = complex.dim();
 
     let masses: Vec<CsrMatrix> = (0..=dim)
@@ -203,16 +237,16 @@ impl HodgeDirac {
     }
 
     // $A$: the sub-diagonal block $(k, k-1)$ is $U_k = M_k D_(k-1)$ (weak $dif$),
-    // the super-diagonal block $(k-1, k)$ its negated transpose $-U_k^T = -D_(k-1)^T M_k$
-    // (weak $delta$). Emitting both from the same triplet makes $A + A^T = 0$
-    // exact.
+    // the super-diagonal block $(k-1, k)$ is `delta_sign` times its transpose
+    // $U_k^T = D_(k-1)^T M_k$ (weak $delta$). Emitting both from the same
+    // triplet makes the symmetry class exact by construction.
     let mut op = CooMatrix::new(total, total);
     for k in 1..=dim {
       let u_k = &masses[k] * &difs[k - 1];
       let (row, col) = (offsets[k], offsets[k - 1]);
       for (r, c, &v) in u_k.triplet_iter() {
         op.push(row + r, col + c, v);
-        op.push(col + c, row + r, -v);
+        op.push(col + c, row + r, delta_sign * v);
       }
     }
 
@@ -229,6 +263,16 @@ impl HodgeDirac {
   }
   pub fn ndofs_total(&self) -> usize {
     *self.offsets.last().unwrap()
+  }
+  /// $M = plus.circle.big_k M_k$: the block-diagonal mass carrying the
+  /// $L^2 Lambda^bullet$ pairing (indefinite on a Lorentzian geometry).
+  pub fn mass_block(&self) -> &CsrMatrix {
+    &self.mass_block
+  }
+  /// The grade-coupling operator $A$: skew for $dif - delta$, symmetric for
+  /// $dif + delta$.
+  pub fn op(&self) -> &CsrMatrix {
+    &self.op
   }
 
   /// Pack a field's per-grade coefficients into the flat vector, in grade order.
@@ -255,7 +299,8 @@ impl HodgeDirac {
 
   /// The total energy $1/2 thin u^T M u = 1/2 norm(u)_(L^2)^2$, the conserved
   /// invariant of the Hodge–Dirac flow (the electromagnetic energy in the
-  /// Maxwell reading).
+  /// Maxwell reading). On a Lorentzian geometry $M$ is indefinite and this is
+  /// the signed $L^2$ pairing, not a norm.
   pub fn energy(&self, field: &MixedField) -> f64 {
     0.5 * quadratic_form_sparse(&self.mass_block, &self.flatten(field))
   }
@@ -373,6 +418,75 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
   solution
 }
 
+/// Solve the static covariant Hodge–Dirac source problem
+///
+/// $ (sans(D) + m) u = f, quad sans(D) = dif + delta, $
+///
+/// on the full de Rham complex, with essential boundary values imposed by
+/// affine lifting. This is the spacetime form of the equation: on a Lorentzian
+/// mesh it is the Dirac–Kähler equation with mass $m$ (squaring to
+/// Klein–Gordon, $sans(D)^2 = Delta$ the d'Alembertian), Maxwell with sources
+/// the middle grades of the massless case. No time integrator appears -- on a
+/// spacetime mesh, time is one of the mesh directions and causality lives in
+/// the signature of the metric, not in a stepping loop.
+///
+/// The weak form is symmetric on any signature,
+/// $angle.l (dif + delta) u, v angle.r = angle.l u, (dif + delta) v angle.r$,
+/// so the assembled system $A + m M$ is symmetric (indefinite on a Lorentzian
+/// geometry, where $M$ itself is), and sparse LU solves it uniformly.
+///
+/// `load` holds the Galerkin load functionals per grade,
+/// $b_k \[sigma\] = integral_M inner(f_k, W_sigma) vol$, in the ambient
+/// (full-complex) DOF layout. `boundary_values` is an ambient field whose
+/// constrained DOFs carry the essential data $"tr" u = "tr" g$ (a full-mesh
+/// interpolant of a manufactured solution does); the lifting
+/// $u = hat(g) + E u_0$, $E^T (A + m M) E thin u_0 = E^T (b - (A + m M) hat(g))$
+/// reduces to the homogeneous problem on `relative`'s interior DOFs, and the
+/// returned field is the lifted ambient solution.
+pub fn solve_dirac_source<G: Geometry + Sync>(
+  relative: &RelativeWhitneyComplex<G>,
+  mass_term: f64,
+  load: &MixedField,
+  boundary_values: &MixedField,
+) -> MixedField {
+  let full = relative.full();
+  let dirac = HodgeDirac::assemble_selfadjoint(&full);
+  let n_full = dirac.ndofs_total();
+
+  // $S = A + m M$ on the full space.
+  let mut system = CooMatrix::new(n_full, n_full);
+  for (r, c, &v) in dirac.op.triplet_iter() {
+    system.push(r, c, v);
+  }
+  if mass_term != 0.0 {
+    for (r, c, &v) in dirac.mass_block.triplet_iter() {
+      system.push(r, c, mass_term * v);
+    }
+  }
+  let system = CsrMatrix::from(&system);
+
+  // The block inclusion $E = plus.circle.big_k E_k$ of the relative DOFs into
+  // the flat ambient layout.
+  let n_relative: usize = (0..=relative.dim()).map(|k| relative.ndofs(k)).sum();
+  let mut inclusion = CooMatrix::new(n_full, n_relative);
+  let mut col_offset = 0;
+  for k in 0..=relative.dim() {
+    let e_k = relative.inclusion(k);
+    for (r, c, &v) in e_k.triplet_iter() {
+      inclusion.push(dirac.offsets[k] + r, col_offset + c, v);
+    }
+    col_offset += relative.ndofs(k);
+  }
+  let inclusion = CsrMatrix::from(&inclusion);
+
+  let lift = dirac.flatten(boundary_values);
+  let rhs = inclusion.transpose() * (dirac.flatten(load) - &system * &lift);
+  let system_relative = inclusion.transpose() * &system * &inclusion;
+
+  let interior = FaerLu::new(system_relative).solve(&rhs);
+  dirac.unflatten(&(lift + inclusion * interior))
+}
+
 #[cfg(test)]
 mod test {
   use super::*;
@@ -382,6 +496,29 @@ mod test {
   use simplicial::gen::cartesian::CartesianMeshInfo;
 
   use approx::assert_relative_eq;
+
+  /// A causally generic Minkowski spacetime mesh of the unit box: the time
+  /// axis is scaled off the light cone, since a mesh with null edges or
+  /// diagonals (the unit cartesian mesh in 2D: its diagonals are exactly
+  /// lightlike) has an exactly singular indefinite $L^2$ pairing on 1-forms.
+  /// Causal genericity of the mesh is a well-posedness condition of spacetime
+  /// FEEC, not a numerical nicety.
+  fn minkowski_mesh(
+    dim: Dim,
+    nsub: usize,
+  ) -> (
+    simplicial::topology::complex::Complex,
+    simplicial::geometry::coord::mesh::MeshCoords,
+  ) {
+    let (topology, coords) = CartesianMeshInfo::new_unit(dim, nsub).compute_coord_complex();
+    let mut matrix = coords.into_matrix();
+    matrix.row_mut(0).scale_mut(0.7);
+    let spacetime = simplicial::geometry::coord::mesh::MeshCoords::with_ambient(
+      matrix,
+      gramian::Gramian::minkowski(dim),
+    );
+    (topology, spacetime)
+  }
 
   /// A deterministic full field: every grade populated with a reproducible
   /// pattern, enough to couple all rungs of the complex.
@@ -529,6 +666,152 @@ mod test {
         y = leapfrog.step(&y);
         assert_relative_eq!(leapfrog.conserved_energy(&y), e0, epsilon = 1e-9 * e0);
       }
+    }
+  }
+
+  /// The canonical Hodge–Dirac operator is self-adjoint: $A = A^T$ to
+  /// roundoff, on Riemannian and Lorentzian geometry alike -- the covariant
+  /// counterpart of [`operator_is_skew_symmetric`], the one sign flipped.
+  #[test]
+  fn selfadjoint_operator_is_symmetric() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (_, spacetime) = minkowski_mesh(dim, 2);
+      let riemannian = coords.to_edge_lengths(&topology);
+
+      let check = |dirac: &HodgeDirac| {
+        let a = &dirac.op;
+        let sym = a - &a.transpose();
+        assert_relative_eq!(
+          sym.values().iter().fold(0.0, |m: f64, &v| m.max(v.abs())),
+          0.0
+        );
+      };
+      check(&HodgeDirac::assemble_selfadjoint(&WhitneyComplex::new(
+        &topology,
+        &riemannian,
+      )));
+      check(&HodgeDirac::assemble_selfadjoint(&WhitneyComplex::new(
+        &topology, &spacetime,
+      )));
+    }
+  }
+
+  /// The defining Dirac law in its covariant form, on a Lorentzian spacetime
+  /// mesh: $sans(D)^2 = Delta$ -- the discrete $dif + delta$ squared equals
+  /// the discrete Hodge–Laplacian, which on Minkowski geometry *is* the
+  /// d'Alembertian, hyperbolic through the signature alone. Same
+  /// grade-by-grade check as [`dirac_squared_is_negative_hodge_laplacian`],
+  /// with the sign flipped and every solve LU, since the Lorentzian masses
+  /// are symmetric indefinite, not s.p.d.
+  #[test]
+  fn selfadjoint_dirac_squares_to_hodge_laplacian_on_minkowski() {
+    for dim in 1..=3 {
+      let (topology, spacetime) = minkowski_mesh(dim, 2);
+      let whitney = WhitneyComplex::new(&topology, &spacetime);
+      let dirac = HodgeDirac::assemble_selfadjoint(&whitney);
+
+      let lu: Vec<_> = (0..=dim)
+        .map(|k| crate::linalg::faer::FaerLu::new(dirac.masses[k].clone()))
+        .collect();
+      let apply_dirac = |u: &MixedField| {
+        let mv = &dirac.op * dirac.flatten(u);
+        let grades = (0..=dim)
+          .map(|k| {
+            let (off, n) = (dirac.offsets[k], dirac.offsets[k + 1] - dirac.offsets[k]);
+            Cochain::new(k, lu[k].solve(&mv.rows(off, n).into_owned()))
+          })
+          .collect();
+        MixedField::new(grades)
+      };
+
+      let u = seed_field(&dirac);
+      let d2u = apply_dirac(&apply_dirac(&u));
+
+      #[allow(clippy::needless_range_loop)] // grade is the mathematical index
+      for grade in 0..=dim {
+        let hb = HodgeBlocks::compute(&whitney, grade);
+        let uk = u.grade(grade).coeffs();
+        let up = hb.stiff() * uk;
+        let dn = if hb.n_sigma > 0 {
+          let s =
+            crate::linalg::faer::FaerLu::new(hb.mass_sigma.clone()).solve(&(&hb.codif_dn() * uk));
+          &hb.dif_sigma() * s
+        } else {
+          Vector::zeros(hb.n_u)
+        };
+        let lap = lu[grade].solve(&(up + dn));
+
+        let lhs = d2u.grade(grade).coeffs();
+        assert_relative_eq!(
+          (lhs - &lap).norm(),
+          0.0,
+          epsilon = 1e-9 * lap.norm().max(1.0)
+        );
+      }
+    }
+  }
+
+  /// [`solve_dirac_source`] reproduces a solution that lies in the Whitney
+  /// space exactly: a constant mixed-grade form $u$ has $dif u = delta u = 0$,
+  /// so $(sans(D) + m) u = m u$, and with load $m M u$ and essential data $u$
+  /// the discrete solution is $u$ itself to solver precision -- on Riemannian
+  /// and Lorentzian geometry alike.
+  #[test]
+  fn dirac_source_reproduces_constant_field() {
+    use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+
+    fn run<G: Geometry + Sync>(topology: &Complex, coords: &MeshCoords, geometry: &G) {
+      let dim = topology.dim();
+      let whitney = WhitneyComplex::new(topology, geometry);
+      let relative = whitney.relative();
+      let dirac = HodgeDirac::assemble_selfadjoint(&whitney);
+
+      // The de Rham coefficients of the constant form with every component
+      // 1 on every grade: integrals of $sum_I dif x^I$ over the simplices.
+      let exact = MixedField::new(
+        (0..=dim)
+          .map(|k| {
+            let form = glatt::field::DiffFormClosure::new(
+              move |_: &coorder::Coord| {
+                exterior::MultiForm::new(
+                  Vector::from_element(exterior::exterior_dim(dim, k), 1.0),
+                  dim,
+                  k,
+                )
+              },
+              dim,
+              k,
+            );
+            let field = derham::section::CoordFieldExt::pullback_on(&form, topology, coords);
+            derham::project::derham_map(&field, topology, 2)
+          })
+          .collect(),
+      );
+
+      let mass_term = 1.0;
+      let load = dirac.unflatten(&(&dirac.mass_block * dirac.flatten(&exact) * mass_term));
+      let solution = solve_dirac_source(&relative, mass_term, &load, &exact);
+
+      for k in 0..=dim {
+        assert_relative_eq!(
+          solution.grade(k).coeffs(),
+          exact.grade(k).coeffs(),
+          epsilon = 1e-9
+        );
+      }
+    }
+
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let riemannian = coords.to_edge_lengths(&topology);
+      run(&topology, &coords, &riemannian);
+
+      // On the Minkowski side the constant field is interpolated on the
+      // causally generic (time-scaled) coordinates themselves.
+      let (topology, spacetime) = minkowski_mesh(dim, 2);
+      let euclidean_view = MeshCoords::new(spacetime.matrix().clone());
+      run(&topology, &euclidean_view, &spacetime);
     }
   }
 

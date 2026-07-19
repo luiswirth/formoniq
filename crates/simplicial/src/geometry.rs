@@ -17,10 +17,11 @@ use gramian::PseudoRiemannianMetric;
 use self::metric::Geometry;
 
 /// The volume of a cell carrying the given metric tensor,
-/// $vol(K) = vol(hat(K)) sqrt(det g)$.
+/// $vol(K) = vol(hat(K)) sqrt(abs(det g))$.
 ///
 /// The chart contributes [`refsimp_vol`], the metric the factor
-/// $sqrt(det g)$ -- the whole of the geometry, in one scalar.
+/// $sqrt(abs(det g))$ -- the whole of the geometry, in one scalar: the same
+/// formula on any signature, the absolute value doing nothing Riemannian-side.
 pub fn cell_volume(metric: &PseudoRiemannianMetric) -> f64 {
   refsimp_vol(metric.dim()) * metric.det_sqrt()
 }

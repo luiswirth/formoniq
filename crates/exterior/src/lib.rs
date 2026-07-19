@@ -655,6 +655,48 @@ mod tests {
     }
   }
 
+  /// The Clifford relation: the Clifford action of a covector $a$ on forms,
+  /// $c_a = a wedge dot - iota_(a^sharp)$, squares to a scalar,
+  /// $c_a c_a = -inner(a, a)_(g^(-1))$ -- on every signature. This is the
+  /// algebraic identity behind the Hodge--Dirac operator: for a plane wave
+  /// $u = sin(a dot x) thin omega$ on flat space, $(dif + delta) u =
+  /// cos(a dot x) thin c_a omega$, so $c_a^2$ scalar is exactly
+  /// $sans(D)^2 = Delta$ acting as $inner(a, a)$ -- the dispersion relation,
+  /// null covectors giving massless waves.
+  #[test]
+  fn clifford_relation() {
+    for dim in 1..=4 {
+      for q in 0..=dim {
+        let metric = test_pseudo_metric(dim, q);
+        let a = MultiForm::line(Vector::from_fn(dim, |i, _| (i as f64) - 1.5));
+        let a_sharp = a.sharp(&metric);
+        let a_norm_sq = a.inner(&a, &metric);
+
+        for grade in 0..=dim {
+          let omega: MultiForm = test_element(dim, grade, 4);
+
+          // c_a c_a omega, collecting the four terms by their grades:
+          // (a wedge)^2 = 0 and iota^2 = 0, so only the two cross terms
+          // survive, both landing back at `grade`.
+          let wedge_then_contract = if grade < dim {
+            a.wedge(&omega).interior_product(&a_sharp)
+          } else {
+            MultiForm::zero(dim, grade)
+          };
+          let contract_then_wedge = if grade >= 1 {
+            a.wedge(&omega.interior_product(&a_sharp))
+          } else {
+            MultiForm::zero(dim, grade)
+          };
+          let squared = -1.0 * wedge_then_contract - contract_then_wedge;
+
+          let expected = -a_norm_sq * omega;
+          assert_relative_eq!(squared.coeffs(), expected.coeffs(), epsilon = 1e-9);
+        }
+      }
+    }
+  }
+
   /// The Lorentzian Hodge star on flat Minkowski space (mostly-plus,
   /// $eta = "diag"(-1, +1, dots.c, +1)$), checked against the closed form on
   /// basis blades: $star dif x^I = (product_(i in I) eta^(i i)) space
