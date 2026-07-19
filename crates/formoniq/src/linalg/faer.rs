@@ -14,6 +14,8 @@ fn nalgebra2faer(m: CsrMatrix) -> SparseMatrixFaer {
   faer::sparse::SparseRowMat::new(symbolic, values)
 }
 
+/// Sparse LU factorization (faer): the direct solver for the symmetric
+/// indefinite saddle-point systems of the mixed formulation.
 pub struct FaerLu {
   raw: faer::sparse::linalg::solvers::Lu<usize, f64>,
 }
@@ -34,6 +36,9 @@ impl FaerLu {
   }
 }
 
+/// Sparse Cholesky factorization (faer): the direct solver for symmetric
+/// positive-definite systems. Panics on an indefinite matrix; use [`FaerLu`]
+/// there.
 pub struct FaerCholesky {
   raw: faer::sparse::linalg::solvers::Llt<usize, f64>,
 }
