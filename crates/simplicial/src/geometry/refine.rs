@@ -78,7 +78,7 @@ impl MeshCoords {
       }
       matrix.set_column(sub.ncoarse_vertices() + i, &col);
     }
-    MeshCoords::new(matrix)
+    MeshCoords::with_ambient(matrix, self.ambient().clone())
   }
 }
 

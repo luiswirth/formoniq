@@ -2,7 +2,7 @@ use super::EdgeIdx;
 use crate::{topology::simplex::nedges, Dim};
 
 use crate::linalg::{Matrix, Vector};
-use gramian::{Gramian, RiemannianMetric};
+use gramian::{Gramian, PseudoRiemannianMetric};
 use multiindex::{combinations, factorial, Combination};
 
 use std::f64::consts::SQRT_2;
@@ -153,6 +153,10 @@ impl SimplexLengths {
   /// $i + 1$, so edges from the origin are basis norms and
   /// $|v_j - v_i|^2 = g_(i-1,i-1) + g_(j-1,j-1) - 2 g_(i-1,j-1)$ otherwise.
   pub fn from_metric_tensor(metric: &Gramian) -> Self {
+    assert!(
+      metric.is_riemannian(),
+      "Edge lengths represent Riemannian (positive-definite) geometry only."
+    );
     let dim = metric.dim();
 
     let mut lengths = Vector::zeros(nedges(dim));
@@ -170,10 +174,12 @@ impl SimplexLengths {
     Self::new(lengths, dim)
   }
 
-  /// The full Riemannian metric: the Gramian on tangent vectors together
-  /// with its inverse on covectors.
-  pub fn riemannian_metric(&self) -> RiemannianMetric {
-    RiemannianMetric::new(self.to_metric_tensor())
+  /// The full metric: the Gramian on tangent vectors together with its
+  /// inverse on covectors. Realizable edge lengths always induce a
+  /// Riemannian (positive-definite) metric -- the Regge representation is
+  /// the $q = 0$ corner of the pseudo-Riemannian generality.
+  pub fn metric(&self) -> PseudoRiemannianMetric {
+    PseudoRiemannianMetric::new(self.to_metric_tensor())
   }
 
   /// Regge Calculus

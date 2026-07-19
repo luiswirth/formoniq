@@ -19,7 +19,7 @@ where
     let elmat = elmat(dim);
 
     let refcell = SimplexLengths::standard(dim);
-    let computed_elmat = elmat.eval(&refcell.riemannian_metric());
+    let computed_elmat = elmat.eval(&refcell.metric());
 
     assert_relative_eq!(&computed_elmat, &expected_elmat);
   }

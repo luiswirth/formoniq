@@ -1,8 +1,8 @@
 # formoniq
 
 A Finite Element Exterior Calculus (FEEC) library in Rust: PDEs formulated with
-differential forms, solved on simplicial Riemannian manifolds of arbitrary
-dimension, intrinsically and coordinate-free.
+differential forms, solved on simplicial pseudo-Riemannian manifolds of
+arbitrary dimension, intrinsically and coordinate-free.
 
 The mathematics is the design. Differential geometry, algebraic topology,
 functional analysis and category theory enter as types, traits and laws, not as
@@ -13,7 +13,9 @@ commentary on them. Code should read the way a mathematician would write.
 - **Unification over special-casing.** One general principle covers the many
   classical special cases. Gradient/curl/divergence are one exterior derivative;
   Poisson/Maxwell/Hodge-Laplace are one Hodge-Laplace problem; scalar and vector
-  FEM are Whitney forms at grade 0 and 1. Never re-introduce the special cases.
+  FEM are Whitney forms at grade 0 and 1; Riemannian and Lorentzian geometry are
+  one pseudo-Riemannian metric of signature $(p, q)$, the Hodge star reading the
+  signature off the metric itself. Never re-introduce the special cases.
 - **Arbitrary dimension, always.** Nothing is hardcoded to 2D or 3D. Dimension
   is a runtime value `Dim`, grade a runtime value `ExteriorGrade`. If you find
   yourself writing `if dim == 3`, the abstraction is wrong.
@@ -42,7 +44,7 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets), `cartesian::` (radix multi-indices) |
-| `gramian`    | inner-product / metric structure    | `Gramian`, `RiemannianMetric` |
+| `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `PseudoRiemannianMetric` (Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
 | `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
@@ -121,7 +123,7 @@ and passes tests.
 1. **Topology ⊥ Geometry.** The `Complex` is pure combinatorics: it knows
    incidence, orientation, boundary — nothing metric. Geometry is a *separate*
    input, and enters only through the `Geometry` trait
-   (`fn cell_metric(&self, cell: SimplexRef) -> RiemannianMetric`).
+   (`fn cell_metric(&self, cell: SimplexRef) -> PseudoRiemannianMetric`).
 
 2. **Intrinsic first, extrinsic second.** Assembly consumes only per-cell metric
    tensors, never coordinates. `MeshCoords` (an embedding) is just one
@@ -184,7 +186,7 @@ and passes tests.
 5. **Metric-free stays metric-free.** The exterior derivative, the boundary
    operator, the wedge, the interior product, the duality pairing and the de Rham
    map involve *no* metric. Only the Hodge star, the musicals and inner products
-   do. Do not let a `RiemannianMetric` leak into a signature that does not
+   do. Do not let a `PseudoRiemannianMetric` leak into a signature that does not
    mathematically need one.
 
 6. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and

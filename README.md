@@ -2,8 +2,8 @@
 
 A Finite Element Exterior Calculus (FEEC) engine in Rust. Partial differential
 equations are formulated in the language of differential forms and solved on
-simplicial Riemannian manifolds of arbitrary dimension, intrinsically, without
-reference to any coordinate embedding.
+simplicial pseudo-Riemannian manifolds of arbitrary dimension, intrinsically,
+without reference to any coordinate embedding.
 
 Research code, under active development.
 
@@ -18,8 +18,13 @@ solutions computed on them, solved client-side via WebAssembly and WebGPU.
   extremal grades, a one-element mesh) run on the same code paths as the interior
   ones and return the trivial answer rather than being excluded.
 - **Three interchangeable geometry inputs.** Assembly consumes only the per-cell
-  Riemannian metric, provided as Regge edge lengths, raw metric tensors, or
-  vertex coordinates. Nothing in the core path needs coordinates.
+  metric, provided as Regge edge lengths, raw metric tensors, or vertex
+  coordinates. Nothing in the core path needs coordinates.
+- **Any metric signature.** The metric is pseudo-Riemannian: Riemannian and
+  Lorentzian geometry are one signature-parameterized type, the Hodge star
+  reading the signature off the metric itself, which makes spacetime FEEC on
+  Lorentzian (e.g. Minkowski) meshes the same machinery as elliptic problems on
+  Riemannian ones.
 - **Problems.** The Hodge-Laplace source and eigenvalue problems in the mixed
   Arnold, Falk and Winther formulation, with the harmonic space and gauge
   constraint handled explicitly. Maxwell's equations as the Hodge-Dirac evolution
@@ -43,7 +48,8 @@ boundaries rather than by convention.
 - **`multiindex`**: colexicographic combinatorics of finite index sets, with
   ranked combinations, signed index algebra and radix multi-indices.
 - **`gramian`**: inner-product and metric structure in a basis, with Gram
-  matrices, Riemannian metrics and the induced distance geometry.
+  matrices, pseudo-Riemannian metrics of arbitrary signature and the induced
+  distance geometry.
 - **`coorder`**: affine coordinates tagged by the space they live in, so the maps
   between coordinate spaces are explicit and their confusion does not compile.
 - **`exterior`**: the exterior algebra, with variance (forms versus vectors)
@@ -168,7 +174,7 @@ classification the Whitney space is the lowest-order trimmed polynomial space,
 
 Most finite element implementations assume an embedding: the domain lives in Rᴺ
 and geometry is read from vertex coordinates. formoniq does not. A domain is an
-abstract simplicial complex carrying a Riemannian metric supplied intrinsically,
+abstract simplicial complex carrying a pseudo-Riemannian metric supplied intrinsically,
 from Regge-style edge lengths, from per-cell metric tensors, or, where an
 embedding happens to be available, from vertex coordinates on equal footing with
 the other two.

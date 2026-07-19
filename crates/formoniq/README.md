@@ -2,8 +2,8 @@
 
 A Finite Element Exterior Calculus (FEEC) engine in Rust. Partial differential
 equations are formulated in the language of differential forms and solved on
-simplicial Riemannian manifolds of arbitrary dimension, intrinsically, without
-reference to any coordinate embedding.
+simplicial pseudo-Riemannian manifolds of arbitrary dimension, intrinsically,
+without reference to any coordinate embedding.
 
 Gradient, curl and divergence do not appear separately: they are one exterior
 derivative. The scalar and vector Laplacians are cases of one Hodge-Laplace

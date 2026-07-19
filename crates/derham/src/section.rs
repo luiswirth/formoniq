@@ -34,7 +34,7 @@ use {
     Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
   },
   glatt::{field::CoordField, parametrization::Parametrization},
-  gramian::RiemannianMetric,
+  gramian::PseudoRiemannianMetric,
   simplicial::linalg::Vector,
   simplicial::{
     atlas::MeshPoint,
@@ -350,7 +350,7 @@ pub struct MetricOp<'a, F, G> {
   geometry: &'a G,
 }
 impl<'a, F, G: Geometry> MetricOp<'a, F, G> {
-  fn cell_metric(&self, point: &MeshPoint) -> RiemannianMetric {
+  fn cell_metric(&self, point: &MeshPoint) -> PseudoRiemannianMetric {
     self.geometry.cell_metric(point.chart(self.topology))
   }
 }

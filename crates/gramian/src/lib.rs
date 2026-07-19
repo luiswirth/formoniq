@@ -5,6 +5,12 @@ extern crate nalgebra as na;
 /// The dimension of a space or object.
 pub type Dim = usize;
 
+/// The signature $(p, q)$ of a non-degenerate symmetric bilinear form: the
+/// number of positive and negative eigenvalues. By Sylvester's law of inertia
+/// it is a basis invariant. $q = 0$ is Riemannian (positive definite);
+/// $q = 1$ or $p = 1$ is Lorentzian.
+pub type Signature = (usize, usize);
+
 type Matrix = na::DMatrix<f64>;
 type Vector = na::DVector<f64>;
 
@@ -14,21 +20,64 @@ fn is_full_rank(matrix: &Matrix, eps: f64) -> bool {
   }
   matrix.rank(eps) == matrix.nrows().min(matrix.ncols())
 }
-fn is_spd(matrix: &Matrix) -> bool {
-  na::Cholesky::new(matrix.clone()).is_some()
+fn is_symmetric(matrix: &Matrix) -> bool {
+  if matrix.is_empty() {
+    return matrix.is_square();
+  }
+  (matrix - matrix.transpose()).amax() <= 1e-9 * matrix.amax().max(1.0)
 }
 
-/// A Gram Matrix represent an inner product expressed in a basis.
+/// The causal character of a vector under an indefinite metric, classified
+/// from the sign of $g(v, v)$ in the mostly-plus convention
+/// $(-, +, dots.c, +)$: negative is timelike, zero null, positive spacelike.
+///
+/// On a Riemannian metric every nonzero vector is spacelike; the trichotomy
+/// only becomes non-trivial on an indefinite signature. The signed squared
+/// norm is the primitive -- a norm $sqrt(g(v, v))$ alone cannot carry the
+/// causal character.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CausalType {
+  Timelike,
+  Null,
+  Spacelike,
+}
+impl CausalType {
+  /// Classify the sign of a signed squared norm $g(v, v)$.
+  pub fn from_norm_sq(norm_sq: f64) -> Self {
+    match norm_sq
+      .partial_cmp(&0.0)
+      .expect("Squared norm must not be NaN.")
+    {
+      std::cmp::Ordering::Less => Self::Timelike,
+      std::cmp::Ordering::Equal => Self::Null,
+      std::cmp::Ordering::Greater => Self::Spacelike,
+    }
+  }
+}
+
+/// A Gram matrix: a non-degenerate symmetric bilinear form expressed in a
+/// basis, of arbitrary signature $(p, q)$.
+///
+/// Riemannian ($q = 0$, positive definite) and Lorentzian inner products are
+/// one signature-parameterized type, not two code paths: every operation is
+/// defined for any signature, and the few that are signature-sensitive (the
+/// volume factor, the causal trichotomy) read the signature off the form
+/// itself rather than assuming it.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Gramian {
-  /// S.P.D. matrix
+  /// Symmetric non-degenerate matrix.
   matrix: Matrix,
 }
 impl Gramian {
   pub fn new(matrix: Matrix) -> Self {
-    assert!(is_spd(&matrix), "Matrix must be s.p.d.");
-    Self { matrix }
+    assert!(is_symmetric(&matrix), "Matrix must be symmetric.");
+    let this = Self { matrix };
+    assert!(
+      this.is_nondegenerate(),
+      "Matrix must be non-degenerate (invertible)."
+    );
+    this
   }
   pub fn new_unchecked(matrix: Matrix) -> Self {
     if cfg!(debug_assertions) {
@@ -47,6 +96,28 @@ impl Gramian {
     let matrix = Matrix::identity(dim, dim);
     Self::new_unchecked(matrix)
   }
+  /// The flat pseudo-Euclidean form of signature $(p, q)$:
+  /// $"diag"(+1, dots.c, +1, -1, dots.c, -1)$ with $p$ pluses followed by $q$
+  /// minuses. `standard` is the case $q = 0$.
+  pub fn pseudo_euclidean(p: usize, q: usize) -> Self {
+    let dim = p + q;
+    let mut matrix = Matrix::identity(dim, dim);
+    for i in p..dim {
+      matrix[(i, i)] = -1.0;
+    }
+    Self::new_unchecked(matrix)
+  }
+  /// The Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$ in the mostly-plus
+  /// convention: the timelike direction is basis vector $0$, the remaining
+  /// $n - 1$ are spacelike, signature $(n - 1, 1)$. The flat model of a
+  /// Lorentzian manifold; its spatial block is exactly `standard(n - 1)`, which
+  /// is how the Riemannian world sits inside the Lorentzian one.
+  pub fn minkowski(dim: Dim) -> Self {
+    assert!(dim >= 1, "Minkowski space has at least the time axis.");
+    let mut matrix = Matrix::identity(dim, dim);
+    matrix[(0, 0)] = -1.0;
+    Self::new_unchecked(matrix)
+  }
 
   pub fn matrix(&self) -> &Matrix {
     &self.matrix
@@ -57,14 +128,46 @@ impl Gramian {
   pub fn det(&self) -> f64 {
     self.matrix.determinant()
   }
+  /// The volume factor $sqrt(abs(det g))$.
+  ///
+  /// For an indefinite form the determinant is negative whenever $q$ is odd,
+  /// so the absolute value is part of the definition, not a safeguard: this is
+  /// the density of the (pseudo-)volume form on any signature. The sign of the
+  /// determinant, $(-1)^q$, is carried separately by [`Self::signature`].
   pub fn det_sqrt(&self) -> f64 {
-    self.det().sqrt()
+    self.det().abs().sqrt()
+  }
+  /// The signature $(p, q)$: the number of positive and negative eigenvalues.
+  /// The empty $0 times 0$ form has signature $(0, 0)$.
+  pub fn signature(&self) -> Signature {
+    if self.matrix.is_empty() {
+      return (0, 0);
+    }
+    let eigenvalues = self.matrix.symmetric_eigenvalues();
+    let p = eigenvalues.iter().filter(|&&lambda| lambda > 0.0).count();
+    (p, self.dim() - p)
+  }
+  /// Whether the form is positive definite: the Riemannian special case
+  /// $q = 0$ of the pseudo-Riemannian generality.
+  pub fn is_riemannian(&self) -> bool {
+    na::Cholesky::new(self.matrix.clone()).is_some()
+  }
+  fn is_nondegenerate(&self) -> bool {
+    if self.matrix.is_empty() {
+      return true;
+    }
+    let eigenvalues = self.matrix.symmetric_eigenvalues();
+    let scale = eigenvalues.amax();
+    scale > 0.0
+      && eigenvalues
+        .iter()
+        .all(|lambda| lambda.abs() > 1e-12 * scale)
   }
   pub fn inverse(self) -> Self {
     let matrix = self
       .matrix
       .try_inverse()
-      .expect("Symmetric Positive Definite is always invertible.");
+      .expect("Non-degenerate is always invertible.");
     Self::new_unchecked(matrix)
   }
 
@@ -72,9 +175,12 @@ impl Gramian {
   ///
   /// $G$ is a covariant 2-tensor, and this is its pullback: if $J: U -> V$
   /// sends a basis of $U$ to vectors of $V$, the result is the Gramian $U$
-  /// inherits by measuring those images with $G$. Injective $J$ (full column
-  /// rank) keeps the result s.p.d.; the affine child-cell Jacobians of a
-  /// simplex subdivision are square and invertible, so it stays a metric.
+  /// inherits by measuring those images with $G$. For definite $G$, injective
+  /// $J$ (full column rank) keeps the result a metric; for indefinite $G$ the
+  /// pullback onto a proper subspace can be degenerate (a null subspace), so
+  /// only square invertible $J$ -- e.g. the affine child-cell Jacobians of a
+  /// simplex subdivision -- is guaranteed to stay a metric, with the same
+  /// signature by Sylvester's law of inertia.
   pub fn pullback(&self, jacobian: &Matrix) -> Self {
     Self::new_unchecked(self.inner_mat(jacobian, jacobian))
   }
@@ -89,13 +195,17 @@ impl Gramian {
     self.basis_inner(i, i)
   }
   pub fn basis_norm(&self, i: usize) -> f64 {
-    self.basis_norm_sq(i).sqrt()
+    self.basis_norm_sq(i).abs().sqrt()
   }
   /// Cosine of the angle between basis vectors `i` and `j`.
+  ///
+  /// An angle presupposes a definite metric; on an indefinite one the
+  /// Cauchy-Schwarz bound fails and this quotient is not a cosine.
   pub fn basis_angle_cos(&self, i: usize, j: usize) -> f64 {
     self.basis_inner(i, j) / self.basis_norm(i) / self.basis_norm(j)
   }
   /// Angle (in radians) between basis vectors `i` and `j`.
+  /// Meaningful on a definite metric only, like [`Self::basis_angle_cos`].
   pub fn basis_angle(&self, i: usize, j: usize) -> f64 {
     self.basis_angle_cos(i, j).acos()
   }
@@ -138,20 +248,24 @@ impl std::ops::Index<(usize, usize)> for Gramian {
   }
 }
 
-/// A Riemannian metric: the Gramian on tangent vectors together with its
-/// inverse, the induced Gramian on covectors.
+/// A pseudo-Riemannian metric: the Gramian on tangent vectors together with
+/// its inverse, the induced Gramian on covectors.
 ///
-/// Keeping both eliminates the recurring question of whether a computation
-/// needs $g$ or $g^(-1)$: contravariant quantities (vectors) are measured by
-/// [`Self::vector_gramian`], covariant ones (forms) by
-/// [`Self::covector_gramian`].
+/// One signature-parameterized type for every non-degenerate symmetric metric:
+/// Riemannian geometry is the special case $q = 0$, Lorentzian geometry the
+/// case $q = 1$ (mostly-plus), with no separate code path for either.
+///
+/// Keeping both Gramians eliminates the recurring question of whether a
+/// computation needs $g$ or $g^(-1)$: contravariant quantities (vectors) are
+/// measured by [`Self::vector_gramian`], covariant ones (forms) by
+/// [`Self::covector_gramian`] -- indefinite or not.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct RiemannianMetric {
+pub struct PseudoRiemannianMetric {
   vector_gramian: Gramian,
   covector_gramian: Gramian,
 }
-impl RiemannianMetric {
+impl PseudoRiemannianMetric {
   pub fn new(vector_gramian: Gramian) -> Self {
     let covector_gramian = vector_gramian.clone().inverse();
     Self {
@@ -166,6 +280,15 @@ impl RiemannianMetric {
       covector_gramian: Gramian::standard(dim),
     }
   }
+  /// The Minkowski metric $eta$ (mostly-plus, time along basis vector $0$):
+  /// the flat Lorentzian metric. $eta^(-1) = eta$, so both Gramians are the
+  /// same matrix.
+  pub fn minkowski(dim: Dim) -> Self {
+    Self {
+      vector_gramian: Gramian::minkowski(dim),
+      covector_gramian: Gramian::minkowski(dim),
+    }
+  }
 
   pub fn dim(&self) -> Dim {
     self.vector_gramian.dim()
@@ -178,9 +301,20 @@ impl RiemannianMetric {
   pub fn covector_gramian(&self) -> &Gramian {
     &self.covector_gramian
   }
-  /// $sqrt(det g)$: the volume scaling factor of the metric.
+  /// The volume factor $sqrt(abs(det g))$ of the metric: the density of the
+  /// (pseudo-)volume form, on any signature.
   pub fn det_sqrt(&self) -> f64 {
     self.vector_gramian.det_sqrt()
+  }
+  /// The signature $(p, q)$ of the metric. The covector Gramian shares it:
+  /// inversion preserves eigenvalue signs.
+  pub fn signature(&self) -> Signature {
+    self.vector_gramian.signature()
+  }
+  /// Whether the metric is Riemannian: the positive-definite special case
+  /// $q = 0$.
+  pub fn is_riemannian(&self) -> bool {
+    self.vector_gramian.is_riemannian()
   }
 
   /// The pullback of the metric along a linear map $J$ of tangent spaces:
@@ -188,34 +322,47 @@ impl RiemannianMetric {
   /// through $J$ and measuring them with $g$. The covector Gramian is the
   /// inverse, recomputed rather than pushed forward. For an affine subcell of
   /// a flat cell, $J$ is the cell's constant Jacobian and this is the subcell's
-  /// exact metric.
+  /// exact metric, of the same signature (Sylvester); for indefinite $g$ a
+  /// non-square $J$ can land on a degenerate (null) subspace, which is no
+  /// longer a metric -- see [`Gramian::pullback`].
   pub fn pullback(&self, jacobian: &Matrix) -> Self {
     Self::new(self.vector_gramian.pullback(jacobian))
   }
 }
 
 /// Metric operations on tangent vectors (contravariant quantities), measured
-/// by the metric tensor $g$. These are the canonical Riemannian measurements
-/// of directions and lengths; the dual operations on covectors are available
+/// by the metric tensor $g$. These are the canonical measurements of
+/// directions and magnitudes; the dual operations on covectors are available
 /// through [`Self::covector_gramian`].
-impl RiemannianMetric {
+impl PseudoRiemannianMetric {
   /// Inner product $g(v, w)$ of two tangent vectors.
   pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
     self.vector_gramian.inner(v, w)
   }
-  /// Squared length $g(v, v)$ of a tangent vector.
+  /// Signed squared length $g(v, v)$ of a tangent vector: the primitive that
+  /// stays well defined on any signature, and whose sign is the causal
+  /// character.
   pub fn norm_sq(&self, v: &Vector) -> f64 {
     self.vector_gramian.norm_sq(v)
   }
-  /// Length $sqrt(g(v, v))$ of a tangent vector.
+  /// Magnitude $sqrt(abs(g(v, v)))$ of a tangent vector. On an indefinite
+  /// metric this is meaningful only together with the causal character
+  /// ([`Self::causal_type`]); it is never NaN.
   pub fn norm(&self, v: &Vector) -> f64 {
     self.vector_gramian.norm(v)
   }
+  /// The causal character of a tangent vector: the sign of $g(v, v)$,
+  /// in the mostly-plus convention of [`CausalType`].
+  pub fn causal_type(&self, v: &Vector) -> CausalType {
+    self.vector_gramian.causal_type(v)
+  }
   /// Cosine of the angle between two tangent vectors.
+  /// Meaningful on a Riemannian (definite) metric only.
   pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
     self.vector_gramian.angle_cos(v, w)
   }
   /// Angle (in radians) between two tangent vectors.
+  /// Meaningful on a Riemannian (definite) metric only.
   pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
     self.vector_gramian.angle(v, w)
   }
@@ -230,25 +377,37 @@ impl Gramian {
   pub fn inner_mat(&self, v: &Matrix, w: &Matrix) -> Matrix {
     v.transpose() * self.matrix() * w
   }
+  /// Signed squared norm $g(v, v)$: the primitive, well defined and signed on
+  /// any signature.
   pub fn norm_sq(&self, v: &Vector) -> f64 {
     self.inner(v, v)
   }
-  /// Elementwise squared norms of a family of vectors (given as columns).
+  /// Elementwise signed squared norms of a family of vectors (given as columns).
   pub fn norm_sq_mat(&self, v: &Matrix) -> Matrix {
     self.inner_mat(v, v)
   }
+  /// Magnitude $sqrt(abs(g(v, v)))$. On an indefinite metric this is
+  /// meaningful only together with the causal character
+  /// ([`Self::causal_type`]); it is never NaN.
   pub fn norm(&self, v: &Vector) -> f64 {
-    self.inner(v, v).sqrt()
+    self.norm_sq(v).abs().sqrt()
   }
-  /// Elementwise norms of a family of vectors (given as columns).
+  /// Elementwise magnitudes of a family of vectors (given as columns).
   pub fn norm_mat(&self, v: &Matrix) -> Matrix {
-    self.inner_mat(v, v).map(f64::sqrt)
+    self.inner_mat(v, v).map(|x| x.abs().sqrt())
+  }
+  /// The causal character of `v`: the sign of $g(v, v)$, in the mostly-plus
+  /// convention of [`CausalType`].
+  pub fn causal_type(&self, v: &Vector) -> CausalType {
+    CausalType::from_norm_sq(self.norm_sq(v))
   }
   /// Cosine of the angle between `v` and `w`.
+  /// Meaningful on a definite metric only.
   pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
     self.inner(v, w) / self.norm(v) / self.norm(w)
   }
   /// Angle (in radians) between `v` and `w`.
+  /// Meaningful on a definite metric only.
   pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
     self.angle_cos(v, w).acos()
   }
@@ -348,13 +507,13 @@ mod tests {
     }
   }
 
-  /// A pulled-back Riemannian metric recomputes its covector Gramian as the
-  /// inverse of the pulled-back vector Gramian, rather than pushing the old
+  /// A pulled-back pseudo-Riemannian metric recomputes its covector Gramian as
+  /// the inverse of the pulled-back vector Gramian, rather than pushing the old
   /// inverse forward.
   #[test]
-  fn riemannian_pullback_inverts_the_pulled_back_metric() {
+  fn metric_pullback_inverts_the_pulled_back_metric() {
     for n in 1..=4 {
-      let metric = RiemannianMetric::new(spd(n));
+      let metric = PseudoRiemannianMetric::new(spd(n));
       let j = full_col_rank(n, n);
       let pulled = metric.pullback(&j);
       let expected_covector = pulled.vector_gramian().clone().inverse();
@@ -366,9 +525,9 @@ mod tests {
   }
 
   #[test]
-  fn riemannian_metric_measures_tangent_vectors_with_g() {
+  fn metric_measures_tangent_vectors_with_g() {
     let g = Gramian::new(Matrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 3.0]));
-    let metric = RiemannianMetric::new(g.clone());
+    let metric = PseudoRiemannianMetric::new(g.clone());
     let v = Vector::from_column_slice(&[1.0, 1.0]);
     let w = Vector::from_column_slice(&[1.0, -1.0]);
 
@@ -376,5 +535,81 @@ mod tests {
     assert!((metric.inner(&v, &w) - g.inner(&v, &w)).abs() < 1e-12);
     assert!((metric.norm(&v) - g.norm(&v)).abs() < 1e-12);
     assert!((metric.angle(&v, &w) - g.angle(&v, &w)).abs() < 1e-12);
+  }
+
+  /// The flat models carry their signature by construction: signature
+  /// $(p, q)$, determinant sign $(-1)^q$, unit volume factor -- swept over
+  /// every signature up to dimension 4, the Euclidean $q = 0$ and the empty
+  /// $0 times 0$ form included.
+  #[test]
+  fn flat_model_signatures() {
+    for dim in 0..=4 {
+      for q in 0..=dim {
+        let p = dim - q;
+        let g = Gramian::pseudo_euclidean(p, q);
+        assert_eq!(g.signature(), (p, q));
+        assert_eq!(g.is_riemannian(), q == 0);
+        if dim > 0 {
+          assert_eq!(g.det().signum(), (-1.0f64).powi(q as i32));
+        }
+        assert!((g.det_sqrt() - 1.0).abs() < 1e-12);
+      }
+    }
+  }
+
+  /// Sylvester's law of inertia: the signature is invariant under congruence,
+  /// i.e. under pullback along any invertible map.
+  #[test]
+  fn signature_is_congruence_invariant() {
+    for dim in 1..=4 {
+      for q in 0..=dim {
+        let g = Gramian::pseudo_euclidean(dim - q, q);
+        let j = full_col_rank(dim, dim);
+        assert_eq!(g.pullback(&j).signature(), (dim - q, q));
+      }
+    }
+  }
+
+  /// The causal trichotomy on Minkowski space: the time axis is timelike, the
+  /// space axes spacelike, the light-cone diagonal null -- and the magnitude
+  /// is never NaN, on either side of the cone.
+  #[test]
+  fn minkowski_causal_types() {
+    let eta = Gramian::minkowski(4);
+    assert_eq!(eta.signature(), (3, 1));
+
+    let e0 = Vector::from_column_slice(&[1.0, 0.0, 0.0, 0.0]);
+    let e1 = Vector::from_column_slice(&[0.0, 1.0, 0.0, 0.0]);
+    let light = Vector::from_column_slice(&[1.0, 1.0, 0.0, 0.0]);
+
+    assert_eq!(eta.causal_type(&e0), CausalType::Timelike);
+    assert_eq!(eta.causal_type(&e1), CausalType::Spacelike);
+    assert_eq!(eta.causal_type(&light), CausalType::Null);
+
+    assert!((eta.norm_sq(&e0) - -1.0).abs() < 1e-12);
+    assert!((eta.norm(&e0) - 1.0).abs() < 1e-12);
+    assert!((eta.norm(&light) - 0.0).abs() < 1e-12);
+
+    let metric = PseudoRiemannianMetric::minkowski(4);
+    assert_eq!(metric.signature(), (3, 1));
+    assert_eq!(metric.causal_type(&e0), CausalType::Timelike);
+    close(
+      metric.covector_gramian().matrix(),
+      metric.vector_gramian().matrix(),
+    );
+  }
+
+  /// A symmetric but degenerate matrix is not a metric.
+  #[test]
+  #[should_panic(expected = "non-degenerate")]
+  fn degenerate_is_rejected() {
+    Gramian::new(Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 0.0]));
+  }
+
+  /// A non-symmetric matrix is not a bilinear form of ours.
+  #[test]
+  #[should_panic(expected = "symmetric")]
+  fn nonsymmetric_is_rejected() {
+    Gramian::new(Matrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0]));
   }
 }

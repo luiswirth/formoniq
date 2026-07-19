@@ -12,7 +12,7 @@ pub mod refine;
 
 use crate::{atlas::refsimp_vol, topology::complex::Complex};
 
-use gramian::RiemannianMetric;
+use gramian::PseudoRiemannianMetric;
 
 use self::metric::Geometry;
 
@@ -21,7 +21,7 @@ use self::metric::Geometry;
 ///
 /// The chart contributes [`refsimp_vol`], the metric the factor
 /// $sqrt(det g)$ -- the whole of the geometry, in one scalar.
-pub fn cell_volume(metric: &RiemannianMetric) -> f64 {
+pub fn cell_volume(metric: &PseudoRiemannianMetric) -> f64 {
   refsimp_vol(metric.dim()) * metric.det_sqrt()
 }
 

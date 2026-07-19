@@ -1,7 +1,7 @@
 use {
   derham::{interpolate::form::WhitneyForm, section::Section},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
-  gramian::RiemannianMetric,
+  gramian::PseudoRiemannianMetric,
   multiindex::{factorial, Combination},
   simplicial::{
     atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
@@ -18,14 +18,14 @@ pub type ElMat = Matrix;
 pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &RiemannianMetric) -> ElMat;
+  fn eval(&self, metric: &PseudoRiemannianMetric) -> ElMat;
 }
 
 /// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
 ///
 /// Exact closed form: $vol(K) (1 + delta_(i j)) / ((n+1)(n+2))$.
 /// The barycentric building block of the Hodge mass matrix.
-fn scalar_mass_elmat(metric: &RiemannianMetric) -> ElMat {
+fn scalar_mass_elmat(metric: &PseudoRiemannianMetric) -> ElMat {
   let dim = metric.dim();
   let ndofs = dim + 1;
   let v = cell_volume(metric) / ((dim + 1) * (dim + 2)) as f64;
@@ -44,7 +44,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     0
   }
-  fn eval(&self, metric: &RiemannianMetric) -> ElMat {
+  fn eval(&self, metric: &PseudoRiemannianMetric) -> ElMat {
     let n = metric.dim() + 1;
     let v = cell_volume(metric) / n as f64;
     Matrix::from_diagonal_element(n, n, v)
@@ -83,7 +83,7 @@ impl ElMatProvider for HodgeMassElmat {
     self.grade
   }
 
-  fn eval(&self, metric: &RiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
     assert_eq!(self.dim, metric.dim());
 
     let scalar_mass = scalar_mass_elmat(metric);
@@ -136,7 +136,7 @@ impl ElMatProvider for DifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade - 1
   }
-  fn eval(&self, metric: &RiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
     let mass = self.mass.eval(metric);
     mass * &self.dif
   }
@@ -163,7 +163,7 @@ impl ElMatProvider for CodifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade
   }
-  fn eval(&self, metric: &RiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
     let mass = self.mass.eval(metric);
     &self.codif * mass
   }
@@ -194,7 +194,7 @@ impl ElMatProvider for CodifDifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade - 1
   }
-  fn eval(&self, metric: &RiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
     let mass = self.mass.eval(metric);
     &self.codif * mass * &self.dif
   }
@@ -203,7 +203,7 @@ impl ElMatProvider for CodifDifElmat {
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &RiemannianMetric, cell: Cell) -> ElVec;
+  fn eval(&self, metric: &PseudoRiemannianMetric, cell: Cell) -> ElVec;
 }
 
 /// Element vector of the source load
@@ -237,7 +237,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, metric: &RiemannianMetric, cell: Cell) -> ElVec {
+  fn eval(&self, metric: &PseudoRiemannianMetric, cell: Cell) -> ElVec {
     let inner = multiform_gramian(metric, self.grade());
 
     let mut elvec = ElVec::zeros(self.whitneys.len());
@@ -271,8 +271,8 @@ mod test {
   fn hodge_mass0_is_scalar_mass() {
     for dim in 0..=3 {
       let geo = SimplexLengths::standard(dim);
-      let hodge_mass = HodgeMassElmat::new(dim, 0).eval(&geo.riemannian_metric());
-      let scalar_mass = scalar_mass_elmat(&geo.riemannian_metric());
+      let hodge_mass = HodgeMassElmat::new(dim, 0).eval(&geo.metric());
+      let scalar_mass = scalar_mass_elmat(&geo.metric());
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }
@@ -282,7 +282,7 @@ mod test {
     let dim = 2;
     let grade = 1;
     let geo = SimplexLengths::standard(dim);
-    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.riemannian_metric());
+    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
       1./6.,1./3.,0.   ;
@@ -296,7 +296,7 @@ mod test {
     let dim = 2;
     let grade = 1;
     let geo = SimplexLengths::standard(dim);
-    let computed = DifElmat::new(dim, grade).eval(&geo.riemannian_metric());
+    let computed = DifElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
@@ -310,7 +310,7 @@ mod test {
     let dim = 2;
     let grade = 1;
     let geo = SimplexLengths::standard(dim);
-    let computed = CodifElmat::new(dim, grade).eval(&geo.riemannian_metric());
+    let computed = CodifElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
@@ -324,7 +324,7 @@ mod test {
     for dim in 1..=3 {
       let geo = SimplexLengths::standard(dim);
       for grade in 0..dim {
-        let difdif = CodifDifElmat::new(dim, grade).eval(&geo.riemannian_metric());
+        let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric());
 
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
           .map(|simp| WhitneyForm::standard(dim, simp).dif())
@@ -332,7 +332,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = awhitney.inner(bwhitney, &geo.riemannian_metric());
+            inner[(i, j)] = awhitney.inner(bwhitney, &geo.metric());
           }
         }
         inner *= geo.vol();
