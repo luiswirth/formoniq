@@ -7,7 +7,7 @@ license = "MIT OR Apache-2.0"
 description = "The smooth continuum manifold a simplicial mesh approximates: parametrizations and analytic differential-form data on it."
 repository = "https://github.com/luiswirth/formoniq"
 readme = "README.md"
-keywords = ["differential-geometry", "manifold", "parametrization"]
+keywords = ["geometry", "manifold", "parametrization"]
 categories = ["mathematics", "science"]
 
 [dependencies]
