@@ -26,10 +26,11 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> (Complex, MeshCoords) {
     nsubdivisions,
   );
 
-  // The icosahedron (and every subdivision of it) is consistently wound by
-  // construction, so no orientation fix-up is needed: `Skeleton` canonicalizes
-  // each cell to its colex vertex order regardless, and carries no separate
-  // winding datum for a top cell to get wrong.
+  // The input winding is discarded, and that loses nothing a `Complex` can
+  // hold: `Skeleton` canonicalizes each cell to its colex vertex order and
+  // carries no per-cell winding datum. The orientation is recovered when it is
+  // needed, coherently and for any mesh, by `Complex::orientation` -- so a
+  // generator has no orientation contract to uphold.
   let cells = triangles
     .into_iter()
     .map(|tri| Simplex::from_word(tri.to_vec()).1)

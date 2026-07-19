@@ -1,5 +1,6 @@
 use super::{
   handle::{KSimplexIdx, SimplexIdx, SkeletonRef},
+  orientation::Orientation,
   role::{roles, Facet, RoledSkeleton, SimplexRole},
   skeleton::Skeleton,
 };
@@ -32,6 +33,9 @@ pub struct Complex {
   /// Cached boundary operators $diff_k: C_k -> C_(k-1)$, indexed by $k$ in
   /// `0..=dim + 1`.
   boundary_operators: Vec<OnceLock<CooMatrix>>,
+  /// Cached coherent orientation, `None` once computed on a non-orientable
+  /// complex. See [`orientation`](super::orientation).
+  orientation: OnceLock<Option<Orientation>>,
 }
 
 impl Complex {
@@ -174,6 +178,11 @@ impl Complex {
     mat
   }
 
+  /// The orientation cache, for [`Complex::orientation`] to fill.
+  pub(super) fn orientation_cache(&self) -> &OnceLock<Option<Orientation>> {
+    &self.orientation
+  }
+
   /// $dif^k: Delta^k -> Delta^(k+1)$
   ///
   /// The coboundary operator, which is the discrete exterior derivative
@@ -237,6 +246,7 @@ impl Complex {
       skeletons,
       vertex_cells,
       boundary_operators: (0..dim + 2).map(|_| OnceLock::new()).collect(),
+      orientation: OnceLock::new(),
     }
   }
 }
