@@ -6,7 +6,9 @@ use indexmap::IndexSet;
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
 
-/// A container for simplices of the same dimension.
+/// The simplices of one fixed dimension, canonically colexicographically
+/// ordered and deduplicated. Position in that order is the [`KSimplexIdx`],
+/// the index every handle and boundary operator refers to.
 #[derive(Default, Debug, Clone)]
 pub struct Skeleton {
   simplices: IndexSet<Simplex>,
