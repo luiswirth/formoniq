@@ -47,7 +47,7 @@ impl MeshLengthsSq {
   /// the fine metrics are read back as edge lengths. Exact; refinement of a flat
   /// cell introduces no geometric error.
   pub fn refine(&self, sub: &Subdivision, coarse: &Complex) -> MeshLengthsSq {
-    let coarse_g = CellGramians::from_geometry(coarse, self);
+    let coarse_g = CellGramians::from_lengths(coarse, self);
     sub
       .refine_gramians(&coarse_g)
       .to_edge_lengths_sq(sub.complex())
@@ -85,7 +85,7 @@ impl MeshCoords {
 #[cfg(test)]
 mod test {
   use crate::gen::cartesian::CartesianGrid;
-  use crate::geometry::{cell_volume, metric::CellGramians};
+  use crate::geometry::cell_volume;
 
   /// The refined cells partition the measure of the coarse ones: refinement
   /// moves no volume, on the intrinsic representation. Each child also carries
@@ -94,7 +94,7 @@ mod test {
   fn measure_partition() {
     for dim in 1..=3 {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-      let coarse_g = CellGramians::from_geometry(&coarse, &coords);
+      let coarse_g = coords.to_cell_gramians(&coarse);
       let coarse_vol: f64 = coarse_g.metrics().iter().map(cell_volume).sum();
 
       for r in 1..=3 {
@@ -122,14 +122,14 @@ mod test {
   fn intrinsic_equals_extrinsic() {
     for dim in 1..=3 {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-      let coarse_g = CellGramians::from_geometry(&coarse, &coords);
+      let coarse_g = coords.to_cell_gramians(&coarse);
 
       for r in 1..=3 {
         let sub = coarse.refine(r);
         let intrinsic = sub.refine_gramians(&coarse_g);
 
         let fine_coords = coords.refine(&sub);
-        let extrinsic = CellGramians::from_geometry(sub.complex(), &fine_coords);
+        let extrinsic = fine_coords.to_cell_gramians(sub.complex());
 
         for (a, b) in intrinsic.metrics().iter().zip(extrinsic.metrics().iter()) {
           approx::assert_relative_eq!(

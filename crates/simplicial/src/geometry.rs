@@ -2,8 +2,8 @@
 //! layer downstream of it.
 //!
 //! [`metric`] is the intrinsic one and the only one the manifold's geometry
-//! actually rests on; [`coord`] is an embedding, one [`Geometry`] implementor
-//! among several. The dependency runs that way and not the other: an embedding
+//! actually rests on; [`coord`] is an embedding, one geometry source among
+//! several. The dependency runs that way and not the other: an embedding
 //! induces a metric, a metric induces no embedding.
 
 pub mod coord;
@@ -14,7 +14,7 @@ use crate::{atlas::refsimp_vol, topology::complex::Complex};
 
 use gramian::Metric;
 
-use self::metric::Geometry;
+use self::metric::mesh::MeshLengthsSq;
 
 /// The volume of a cell carrying the given metric tensor,
 /// $vol(K) = vol(hat(K)) sqrt(abs(det g))$.
@@ -34,10 +34,11 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// $A(v)$ is the barycentric lumped area $sum_(K ni v) "vol"(K) \/ 3$, the
 /// standard mass-lumping convention.
 ///
-/// Metric-only: works off any [`Geometry`], not just an embedding, since
+/// Intrinsic: reads the Regge edge lengths, not an embedding, since
 /// [`Gramian::vertex_angle`](gramian::Gramian::vertex_angle) needs no
-/// coordinates -- a Regge manifold given only as [`metric::mesh::MeshLengthsSq`]
-/// has a Gaussian curvature exactly as well as an embedded one. This is
+/// coordinates -- a Regge manifold given only as [`MeshLengthsSq`] has a
+/// Gaussian curvature exactly as well as an embedded one, which is why the
+/// primitive is what this consumes. This
 /// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the
 /// hinges are vertices, which is the one case implemented here. Generalizing
 /// to an $(n-2)$-dimensional hinge of an $n$-manifold needs dihedral angles
@@ -50,7 +51,7 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// Gauss-Bonnet defines discrete curvature to be, with
 /// $sum_v K(v) A(v) = 2 pi chi$ on a closed surface -- no refinement limit to
 /// converge under.
-pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &impl Geometry) -> Vec<f64> {
+pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -> Vec<f64> {
   assert_eq!(
     topology.dim(),
     2,

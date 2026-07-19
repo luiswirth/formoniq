@@ -45,7 +45,7 @@ use gramian::Metric;
 use simplicial::linalg::Matrix;
 use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
-  geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
+  geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
   Dim,
 };

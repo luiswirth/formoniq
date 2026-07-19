@@ -14,8 +14,6 @@
 //! what one field decides -- its materials, its own geometry, its attribute
 //! stream. Switching modes rewrites the second alone.
 
-use simplicial::geometry::metric::geometry::Geometry;
-
 use crate::bake::{self, BakedMesh};
 use crate::deposit::DepositLayout;
 use crate::render::{

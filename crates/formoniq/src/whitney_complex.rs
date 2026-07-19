@@ -1,10 +1,11 @@
 //! The Whitney finite element complex: the FEEC discretization of the
 //! L^2 de Rham complex on a simplicial pseudo-Riemannian manifold.
 //!
-//! The complex is generic over the [`Geometry`] supplying the per-cell metric,
-//! of any signature: a Regge (edge-length) Riemannian manifold, an embedded
-//! mesh, or a Lorentzian spacetime given by per-cell metrics or a Minkowski
-//! ambient all discretize through the same code. On an indefinite metric the
+//! The geometry is the intrinsic Regge primitive, [`MeshLengthsSq`], of any
+//! signature: a Riemannian manifold given by edge lengths and a Lorentzian
+//! spacetime given by signed edge lengths discretize through the same code. An
+//! embedded mesh or raw per-cell metrics reach it by converting to edge
+//! lengths at the door. On an indefinite metric the
 //! $L^2 Lambda^k$ "inner products" are the indefinite $L^2$ pairings and the
 //! mass matrices are symmetric non-degenerate rather than s.p.d. -- which is
 //! the honest structural difference, not a separate code path.
@@ -19,7 +20,7 @@ use {
   derham::cochain::Cochain,
   exterior::ExteriorGrade,
   simplicial::{
-    geometry::metric::{mesh::MeshLengthsSq, Geometry},
+    geometry::metric::mesh::MeshLengthsSq,
     linalg::{CooMatrix, CsrMatrix},
     topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
     Dim,
@@ -69,23 +70,17 @@ pub trait HilbertComplex {
 /// The topology supplies the exterior derivative, the geometry the inner
 /// products.
 ///
-/// Generic over the [`Geometry`] supplying the per-cell metric (defaulting to
-/// Regge squared edge lengths), of any signature: on a Lorentzian geometry the
-/// mass matrices carry the indefinite $L^2$ pairing.
-pub struct WhitneyComplex<'a, G: Geometry = MeshLengthsSq> {
+/// The geometry is the intrinsic Regge primitive [`MeshLengthsSq`], of any
+/// signature: on a Lorentzian geometry the mass matrices carry the indefinite
+/// $L^2$ pairing.
+#[derive(Clone, Copy)]
+pub struct WhitneyComplex<'a> {
   topology: &'a Complex,
-  geometry: &'a G,
+  geometry: &'a MeshLengthsSq,
 }
 
-impl<G: Geometry> Clone for WhitneyComplex<'_, G> {
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-impl<G: Geometry> Copy for WhitneyComplex<'_, G> {}
-
-impl<'a, G: Geometry + Sync> WhitneyComplex<'a, G> {
-  pub fn new(topology: &'a Complex, geometry: &'a G) -> Self {
+impl<'a> WhitneyComplex<'a> {
+  pub fn new(topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Self {
     Self { topology, geometry }
   }
 
@@ -95,7 +90,7 @@ impl<'a, G: Geometry + Sync> WhitneyComplex<'a, G> {
   pub fn topology(&self) -> &'a Complex {
     self.topology
   }
-  pub fn geometry(&self) -> &'a G {
+  pub fn geometry(&self) -> &'a MeshLengthsSq {
     self.geometry
   }
 
@@ -150,13 +145,13 @@ impl<'a, G: Geometry + Sync> WhitneyComplex<'a, G> {
   }
 
   /// The relative complex of the pair $(K, diff K)$.
-  pub fn relative(self) -> RelativeWhitneyComplex<'a, G> {
+  pub fn relative(self) -> RelativeWhitneyComplex<'a> {
     RelativeWhitneyComplex::new(self)
   }
   /// The relative complex of the pair $(K, Gamma)$ for a boundary part
   /// $Gamma subset.eq diff K$: mixed boundary conditions constrain only the
   /// DOFs on $Gamma$.
-  pub fn relative_to(self, constrained: &BoundaryWhitneyComplex) -> RelativeWhitneyComplex<'a, G> {
+  pub fn relative_to(self, constrained: &BoundaryWhitneyComplex) -> RelativeWhitneyComplex<'a> {
     RelativeWhitneyComplex::with_constrained(self, |grade| {
       if grade <= constrained.topology().dim() {
         constrained
@@ -172,13 +167,14 @@ impl<'a, G: Geometry + Sync> WhitneyComplex<'a, G> {
   }
 }
 
-/// The boundary complexes exist on the Regge (edge-data) instantiation: the
-/// trace geometry of the boundary is the restriction of the squared edge
-/// lengths, a pure data restriction that is total on any signature. On an
-/// indefinite parent a *null* facet carries degenerate induced data -- the
-/// degeneracy surfaces where a facet metric is actually built, which is the
-/// honest mathematical boundary of the concept.
-impl<'a> WhitneyComplex<'a, MeshLengthsSq> {
+/// The trace geometry of the boundary is the restriction of the squared edge
+/// lengths, a pure data restriction that is total on any signature -- which is
+/// the subsimplex-geometry generalization at work: the boundary facets are
+/// subsimplices of the cells, and their induced metric is read off the shared
+/// edge lengths directly. On an indefinite parent a *null* facet carries
+/// degenerate induced data -- the degeneracy surfaces where a facet metric is
+/// actually built, which is the honest mathematical boundary of the concept.
+impl<'a> WhitneyComplex<'a> {
   /// The Whitney complex of the boundary $diff K$ with the induced metric,
   /// together with the trace map. `None` on closed manifolds.
   pub fn boundary(&self) -> Option<BoundaryWhitneyComplex> {
@@ -196,7 +192,7 @@ impl<'a> WhitneyComplex<'a, MeshLengthsSq> {
   }
 }
 
-impl<G: Geometry + Sync> HilbertComplex for WhitneyComplex<'_, G> {
+impl HilbertComplex for WhitneyComplex<'_> {
   fn dim(&self) -> Dim {
     WhitneyComplex::dim(self)
   }
@@ -274,16 +270,16 @@ impl BoundaryWhitneyComplex {
 /// All operators are conjugates $E^T A E$ by the inclusion
 /// $E: C^k (K, diff K) arrow.hook C^k (K)$. On a boundaryless mesh this
 /// coincides with the full complex.
-pub struct RelativeWhitneyComplex<'a, G: Geometry = MeshLengthsSq> {
-  full: WhitneyComplex<'a, G>,
+pub struct RelativeWhitneyComplex<'a> {
+  full: WhitneyComplex<'a>,
   /// Per grade: sorted indices of the interior (non-boundary) simplices,
   /// which carry the DOFs of the relative complex.
   interior_simps: Vec<Vec<KSimplexIdx>>,
 }
 
-impl<'a, G: Geometry + Sync> RelativeWhitneyComplex<'a, G> {
+impl<'a> RelativeWhitneyComplex<'a> {
   /// Constrain the full boundary $diff K$.
-  pub fn new(full: WhitneyComplex<'a, G>) -> Self {
+  pub fn new(full: WhitneyComplex<'a>) -> Self {
     Self::with_constrained(full, |grade| {
       full
         .topology()
@@ -296,7 +292,7 @@ impl<'a, G: Geometry + Sync> RelativeWhitneyComplex<'a, G> {
   /// Constrain the given simplices per grade (the closure of the Dirichlet
   /// boundary part).
   fn with_constrained(
-    full: WhitneyComplex<'a, G>,
+    full: WhitneyComplex<'a>,
     constrained: impl Fn(ExteriorGrade) -> HashSet<KSimplexIdx>,
   ) -> Self {
     let interior_simps = (0..=full.dim())
@@ -313,7 +309,7 @@ impl<'a, G: Geometry + Sync> RelativeWhitneyComplex<'a, G> {
     }
   }
 
-  pub fn full(&self) -> WhitneyComplex<'a, G> {
+  pub fn full(&self) -> WhitneyComplex<'a> {
     self.full
   }
   pub fn dim(&self) -> Dim {
@@ -380,7 +376,7 @@ impl<'a, G: Geometry + Sync> RelativeWhitneyComplex<'a, G> {
   }
 }
 
-impl<G: Geometry + Sync> HilbertComplex for RelativeWhitneyComplex<'_, G> {
+impl HilbertComplex for RelativeWhitneyComplex<'_> {
   fn dim(&self) -> Dim {
     RelativeWhitneyComplex::dim(self)
   }

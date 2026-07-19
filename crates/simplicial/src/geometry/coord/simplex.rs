@@ -40,7 +40,7 @@ impl SimplexCoords<Ambient> {
   /// The metric a *Euclidean* ambient induces on this realization: the
   /// Gramian of the cell's spanning vectors. The general bridge is the
   /// pullback of the mesh's ambient inner product
-  /// ([`MeshCoords::cell_metric`](crate::geometry::metric::Geometry::cell_metric)),
+  /// ([`MeshCoords::cell_metric`](crate::geometry::coord::mesh::MeshCoords::cell_metric)),
   /// of which this is the standard-signature case.
   pub fn metric_tensor(&self) -> Gramian {
     Gramian::from_euclidean_vectors(self.spanning_vectors())

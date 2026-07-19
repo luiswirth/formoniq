@@ -2,6 +2,6 @@ pub mod geometry;
 pub mod mesh;
 pub mod simplex;
 
-pub use geometry::{CellGramians, Geometry};
+pub use geometry::CellGramians;
 
 pub type EdgeIdx = usize;

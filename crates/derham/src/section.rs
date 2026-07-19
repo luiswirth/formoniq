@@ -40,7 +40,7 @@ use {
     atlas::MeshPoint,
     geometry::{
       coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt, CoordRef},
-      metric::Geometry,
+      metric::mesh::MeshLengthsSq,
     },
     topology::complex::Complex,
   },
@@ -342,14 +342,14 @@ impl<V: Variance, A: Section<V>, B: Section<V>> Section<V> for Wedge<A, B> {
 /// the point lies in.
 ///
 /// The metric enters a field only here: [`Pullback`], [`Wedge`] and the de Rham
-/// map are metric-free, and the [`Geometry`] appears exactly where the
-/// mathematics demands it.
-pub struct MetricOp<'a, F, G> {
+/// map are metric-free, and the geometry ([`MeshLengthsSq`], the intrinsic
+/// primitive) appears exactly where the mathematics demands it.
+pub struct MetricOp<'a, F> {
   field: F,
   topology: &'a Complex,
-  geometry: &'a G,
+  geometry: &'a MeshLengthsSq,
 }
-impl<'a, F, G: Geometry> MetricOp<'a, F, G> {
+impl<F> MetricOp<'_, F> {
   fn cell_metric(&self, point: &MeshPoint) -> Metric {
     self.geometry.cell_metric(point.chart(self.topology))
   }
@@ -357,8 +357,8 @@ impl<'a, F, G: Geometry> MetricOp<'a, F, G> {
 
 /// The musical isomorphism $sharp$ applied pointwise: a differential form
 /// becomes a multivector field, on fully equal footing.
-pub struct Sharp<'a, F, G>(MetricOp<'a, F, G>);
-impl<F: Section<Covariant>, G: Geometry> Section<Contravariant> for Sharp<'_, F, G> {
+pub struct Sharp<'a, F>(MetricOp<'a, F>);
+impl<F: Section<Covariant>> Section<Contravariant> for Sharp<'_, F> {
   fn dim(&self) -> Dim {
     self.0.field.dim()
   }
@@ -372,8 +372,8 @@ impl<F: Section<Covariant>, G: Geometry> Section<Contravariant> for Sharp<'_, F,
 
 /// The musical isomorphism $flat$ applied pointwise: a multivector field
 /// becomes a differential form.
-pub struct Flat<'a, F, G>(MetricOp<'a, F, G>);
-impl<F: Section<Contravariant>, G: Geometry> Section<Covariant> for Flat<'_, F, G> {
+pub struct Flat<'a, F>(MetricOp<'a, F>);
+impl<F: Section<Contravariant>> Section<Covariant> for Flat<'_, F> {
   fn dim(&self) -> Dim {
     self.0.field.dim()
   }
@@ -387,8 +387,8 @@ impl<F: Section<Contravariant>, G: Geometry> Section<Covariant> for Flat<'_, F, 
 
 /// The Hodge star $star: Lambda^k -> Lambda^(n-k)$ applied pointwise,
 /// preserving the variance.
-pub struct HodgeStar<'a, F, G>(MetricOp<'a, F, G>);
-impl<V: Variance, F: Section<V>, G: Geometry> Section<V> for HodgeStar<'_, F, G> {
+pub struct HodgeStar<'a, F>(MetricOp<'a, F>);
+impl<V: Variance, F: Section<V>> Section<V> for HodgeStar<'_, F> {
   fn dim(&self) -> Dim {
     self.0.field.dim()
   }
@@ -409,11 +409,11 @@ pub trait SectionOps<V: Variance>: Sized + Section<V> {
   fn wedge<B: Section<V>>(self, other: B) -> Wedge<Self, B> {
     Wedge::new(self, other)
   }
-  fn hodge_star<'a, G: Geometry>(
+  fn hodge_star<'a>(
     self,
     topology: &'a Complex,
-    geometry: &'a G,
-  ) -> HodgeStar<'a, Self, G> {
+    geometry: &'a MeshLengthsSq,
+  ) -> HodgeStar<'a, Self> {
     HodgeStar(MetricOp {
       field: self,
       topology,
@@ -426,7 +426,7 @@ impl<V: Variance, F: Section<V>> SectionOps<V> for F {}
 /// The musicals, which change the variance and so cannot sit on the
 /// variance-generic [`SectionOps`].
 pub trait SharpOp: Sized + Section<Covariant> {
-  fn sharp<'a, G: Geometry>(self, topology: &'a Complex, geometry: &'a G) -> Sharp<'a, Self, G> {
+  fn sharp<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Sharp<'a, Self> {
     Sharp(MetricOp {
       field: self,
       topology,
@@ -437,7 +437,7 @@ pub trait SharpOp: Sized + Section<Covariant> {
 impl<F: Section<Covariant>> SharpOp for F {}
 
 pub trait FlatOp: Sized + Section<Contravariant> {
-  fn flat<'a, G: Geometry>(self, topology: &'a Complex, geometry: &'a G) -> Flat<'a, Self, G> {
+  fn flat<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Flat<'a, Self> {
     Flat(MetricOp {
       field: self,
       topology,
@@ -617,7 +617,7 @@ mod test {
   }
 
   /// $star star = (-1)^(k(n-k))$ holds pointwise on the field level, with the
-  /// cell metric supplied by the [`Geometry`].
+  /// cell metric supplied by the edge lengths.
   #[test]
   fn hodge_star_field_involution() {
     use multiindex::Sign;

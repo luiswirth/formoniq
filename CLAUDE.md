@@ -47,7 +47,7 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature; Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengthsSq`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
@@ -111,7 +111,8 @@ granularity).
 
 The rule bites *within* a crate too, not just between crates. `metric` must not
 import `coord`: an embedding induces a metric, a metric induces no embedding, so
-`impl Geometry for MeshCoords` belongs on the `coord` side. And the atlas sits
+`MeshCoords::cell_metric` (and `to_edge_lengths_sq`) belongs on the `coord`
+side. And the atlas sits
 below both — the reference cell, its barycentric coordinates and quadrature over
 it need neither a metric nor an embedding, so they must live in neither layer.
 
@@ -122,20 +123,40 @@ and passes tests.
 
 1. **Topology ⊥ Geometry.** The `Complex` is pure combinatorics: it knows
    incidence, orientation, boundary — nothing metric. Geometry is a *separate*
-   input, and enters only through the `Geometry` trait
-   (`fn cell_metric(&self, cell: SimplexRef) -> Metric`).
+   input, carried by `MeshLengthsSq` (signed squared edge lengths on the
+   1-skeleton) and reaching assembly as the per-cell metric its
+   `cell_metric(cell) -> Metric` derives. There is deliberately **no `Geometry`
+   trait**: a trait over geometry representations buys only lazy per-cell
+   streaming, which is negligible next to element-matrix evaluation, at the cost
+   of the totality edge lengths give for free. So the engine speaks one concrete
+   intrinsic type, and the other representations convert into it.
 
-2. **Intrinsic first, extrinsic second.** Assembly consumes only per-cell metric
-   tensors, never coordinates. `MeshCoords` (an embedding) is just one
-   `Geometry` implementor, on equal footing with Regge edge lengths
-   (`MeshLengthsSq`) and raw per-cell metrics (`CellGramians`). The Regge
-   primitive is the *signed squared* length — positive spacelike, zero null,
-   negative timelike, mirroring `norm_sq` — which is what keeps Regge geometry
-   total over every metric signature: Regge calculus was invented for
-   Lorentzian spacetimes, and an unsquared length would lose the causal sign. Anything that
-   *requires* an embedding is a wrapper for I/O, visualization or convenience —
-   it must not sit in the core path. A feature that only works on embedded
-   meshes is an unfinished feature.
+2. **Intrinsic first, extrinsic second, and edge lengths are the primitive.**
+   The engine consumes `MeshLengthsSq`, never coordinates: it is the Regge
+   primitive, the source of truth, and the one representation *total over every
+   grade* (see below). The *signed squared* length — positive spacelike, zero
+   null, negative timelike, mirroring `norm_sq` — is what keeps Regge geometry
+   total over every metric signature: Regge calculus was invented for Lorentzian
+   spacetimes, and an unsquared length would lose the causal sign. `MeshCoords`
+   (an embedding) and `CellGramians` (raw per-cell metrics) are *sources*, not
+   engine currencies: each converts to edge lengths at the boundary of the API
+   (`to_edge_lengths_sq`), on equal footing precisely because they reduce to the
+   same primitive. `CellGramians` also serves as the materialized cell column
+   (`from_lengths`) that refinement pulls back. Anything that *requires* an
+   embedding is a wrapper for I/O, visualization or convenience — it must not sit
+   in the core path. A feature that only works on embedded meshes is an
+   unfinished feature.
+
+   **Geometry is defined on every simplex, the chart only on the cells.** The
+   metric of any subsimplex — an edge's length, a facet's area, a hinge's metric
+   — is the Gramian of that simplex's own edges (`MeshLengthsSq::simplex_metric`,
+   `simplex_volume`), well defined from the shared edge data with no containing
+   cell consulted. This is why edge lengths, not `CellGramians`, is the
+   primitive: it answers geometry at every grade, which is what the boundary
+   trace, DEC-style constructions and higher-dimensional Regge curvature need. A
+   *chart*, by contrast, exists only on a top-dimensional simplex (invariant 3):
+   pinning a metric accessor to the `Cell` witness would conflate *has a metric*
+   (all simplices) with *carries a frame* (cells only).
 
    A **point of the simplicial manifold** is therefore `MeshPoint` — a `Chart`
    plus barycentric coordinates — never a global coordinate, which on a Regge
@@ -208,8 +229,10 @@ roles of `topology::role` are the same pattern on a runtime dimension: a
 dimension proposition, produced for free by navigation (`cells()`,
 `facets()`, `vertices()`, `edges()`) and checked once at the index boundary
 (`role()`); `Chart` is a type *alias* of the `Cell` witness — the atlas
-operations live in `ChartExt` — and `Geometry::cell_metric` consumes it, so
-"this simplex is a cell" is a type, never a repeated assertion. A role's one datum is its `RoleDim` — a dimension
+operations live in `ChartExt` — and `MeshLengthsSq::cell_metric` consumes it, so
+"this simplex is a cell" is a type, never a repeated assertion (the `Cell`
+witness marks the *chart*; the metric itself is total over every grade through
+`simplex_metric`). A role's one datum is its `RoleDim` — a dimension
 pinned absolutely or by codimension — and `Complex::role_skeleton::<R>()` is
 the total accessor derived from it: `None` where the complex has no such
 dimension, which is how the degenerate boundary stays total (a point has no
