@@ -82,7 +82,7 @@ impl<V: Variance, S: CoordSpace> FieldClosure<V, S> {
     Self::scalar(move |_| value, dim)
   }
   /// The scalar field extracting one coordinate component, $x |-> x_i$.
-  pub fn coordinate_component(icomp: usize, dim: Dim) -> Self {
+  pub fn coord_component(icomp: usize, dim: Dim) -> Self {
     assert!(icomp < dim, "Component index out of bounds");
     Self::scalar(move |x| x[icomp], dim)
   }
@@ -148,14 +148,14 @@ mod tests {
     }
   }
 
-  /// `coordinate_component` extracts $x_i$, and `constant_scalar` ignores its
+  /// `coord_component` extracts $x_i$, and `constant_scalar` ignores its
   /// argument.
   #[test]
   fn distinguished_scalar_fields() {
     let dim = 3;
     let x = point(&[2.0, -1.0, 4.0]);
     for i in 0..dim {
-      let f = DiffFormClosure::coordinate_component(i, dim);
+      let f = DiffFormClosure::coord_component(i, dim);
       assert_relative_eq!(f.at(&x).coeffs()[0], x[i]);
     }
     let c = DiffFormClosure::constant_scalar(7.0, dim);

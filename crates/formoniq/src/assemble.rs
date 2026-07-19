@@ -92,9 +92,7 @@ mod test {
   use super::*;
   use crate::operators::HodgeMassElmat;
 
-  use simplicial::{
-    gen::cartesian::CartesianMeshInfo, geometry::metric::CellGramians, linalg::Matrix,
-  };
+  use simplicial::{gen::cartesian::CartesianGrid, geometry::metric::CellGramians, linalg::Matrix};
 
   /// Cell Gramians are a first-class geometry: assembling against the per-cell
   /// metric tensors gives exactly the same Galerkin matrix as the edge-length
@@ -102,7 +100,7 @@ mod test {
   #[test]
   fn cell_gramians_assemble_identically() {
     let dim = 3;
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let lengths = coords.to_edge_lengths_sq(&topology);
     let gramians = CellGramians::from_geometry(&topology, &lengths);
 
@@ -132,7 +130,7 @@ mod test {
     use simplicial::geometry::coord::mesh::MeshCoords;
 
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let mut matrix = coords.into_matrix();
       matrix.row_mut(0).scale_mut(0.7);
       let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(dim));

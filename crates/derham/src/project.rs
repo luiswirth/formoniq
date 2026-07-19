@@ -65,7 +65,7 @@ pub fn derham_map(
     .map(|simp| {
       let cell = simp.cells().next().expect("Every simplex has a cell.");
       let positions = simp.simplex().relative_to(cell.simplex());
-      integrate_over_face(field, cell.idx(), &positions, &qr)
+      integrate_face(field, cell.idx(), &positions, &qr)
     })
     .collect::<Vec<_>>()
     .into();
@@ -97,7 +97,7 @@ pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> MultiVector
 /// for the spanning vectors $v_i$ of the face, so the integral is the
 /// quadrature of the duality pairing against the face's tangent blade --
 /// no metric anywhere.
-pub fn integrate_over_face(
+pub fn integrate_face(
   field: &impl Section<Covariant>,
   cell: SimplexIdx,
   positions: &Combination,
@@ -120,7 +120,7 @@ mod test {
 
   use {
     coorder::Coord, exterior::ExteriorElement, glatt::field::DiffFormClosure,
-    simplicial::gen::cartesian::CartesianMeshInfo, simplicial::linalg::Vector,
+    simplicial::gen::cartesian::CartesianGrid, simplicial::linalg::Vector,
   };
 
   use approx::assert_relative_eq;
@@ -172,7 +172,7 @@ mod test {
 
     for (form, dif_form) in cases {
       let dim = glatt::field::CoordField::dim(&form);
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       let dif_of_projected =
         derham_map(&form.pullback_on(&topology, &coords), &topology, 1).dif(&topology);
@@ -196,7 +196,7 @@ mod test {
   #[test]
   fn derham_map_is_independent_of_supporting_cell() {
     for dim in 2..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let field = DiffFormClosure::one_form(
         |p: &Coord| Vector::from_iterator(p.dim(), p.iter().map(|x| x.sin())),
         dim,
@@ -209,7 +209,7 @@ mod test {
           .cells()
           .map(|cell| {
             let positions = edge.simplex().relative_to(cell.simplex());
-            integrate_over_face(&pulled, cell.idx(), &positions, &qr)
+            integrate_face(&pulled, cell.idx(), &positions, &qr)
           })
           .collect();
 
@@ -232,7 +232,7 @@ mod test {
     use simplicial::atlas::ChartExt;
 
     for dim in 2..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for face_dim in 1..dim {
         for face in topology.skeleton(face_dim).handle_iter() {

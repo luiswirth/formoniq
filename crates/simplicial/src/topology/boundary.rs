@@ -178,7 +178,7 @@ impl BoundaryComplex {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianMeshInfo;
+  use crate::gen::cartesian::CartesianGrid;
 
   use crate::linalg::CsrMatrix;
 
@@ -187,7 +187,7 @@ mod test {
   #[test]
   fn boundary_of_cube_is_sphere() {
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       assert!(!boundary.complex().has_boundary());
       for k in 0..dim {
@@ -210,7 +210,7 @@ mod test {
   #[test]
   fn trace_is_cochain_map() {
     for dim in 2..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       for k in 0..(dim - 1) {
         let trace_k = CsrMatrix::from(&boundary.trace_operator(k));
@@ -230,7 +230,7 @@ mod test {
   #[test]
   fn trace_dimensions_are_exact() {
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       for k in 0..dim {
         let nboundary = boundary.complex().nsimplices(k);

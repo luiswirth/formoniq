@@ -100,7 +100,7 @@ impl SimplexLengthsSq {
   }
 
   /// The shape regularity measure of this cell.
-  pub fn shape_regularity_measure(&self) -> f64 {
+  pub fn shape_regularity(&self) -> f64 {
     self.diameter().powi(self.dim() as i32) / self.vol()
   }
 

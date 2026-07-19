@@ -45,7 +45,7 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use simplicial::gen::cartesian::CartesianMeshInfo;
+use simplicial::gen::cartesian::CartesianGrid;
 
 use std::f64::consts::PI;
 
@@ -55,8 +55,8 @@ fn main() {
 
   // The PEC box cavity [0, pi]^3: essential boundary conditions on every grade
   // are the relative Whitney complex.
-  let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
-  let (topology, coords) = box_mesh.compute_coord_complex();
+  let grid = CartesianGrid::new_unit_scaled(dim, nboxes_per_dim, PI);
+  let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let pec = whitney.relative();

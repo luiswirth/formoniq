@@ -13,7 +13,7 @@ extern crate nalgebra as na;
 use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
 use simplicial::{
-  gen::cartesian::CartesianMeshInfo,
+  gen::cartesian::CartesianGrid,
   linalg::{CooMatrix, CsrMatrix, Matrix},
 };
 
@@ -70,7 +70,7 @@ fn cohomology_dim(difs: &[Matrix], ndofs: &[usize], k: usize) -> usize {
 #[test]
 fn harmonics_are_cohomology_cube() {
   for dim in 1..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
@@ -119,7 +119,7 @@ fn harmonics_are_cohomology_sphere() {
 #[test]
 fn relative_harmonics_are_relative_cohomology_cube() {
   for dim in 1..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
@@ -154,7 +154,7 @@ fn relative_harmonics_are_relative_cohomology_cube() {
 #[test]
 fn relative_inclusion_is_cochain_map() {
   for dim in 1..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
@@ -177,7 +177,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use simplicial::linalg::Vector;
 
   let dim = 2;
-  let (topology, coords) = CartesianMeshInfo::new_unit(dim, 4).compute_coord_complex();
+  let (topology, coords) = CartesianGrid::new_unit(dim, 4).triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let boundary = whitney.boundary().unwrap();
@@ -225,7 +225,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
   };
 
   // Annulus: 3x3 boxes with the middle box removed.
-  let (square, coords) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+  let (square, coords) = CartesianGrid::new_unit(2, 3).triangulate();
   let cells: Vec<_> = square
     .cells()
     .handle_iter()

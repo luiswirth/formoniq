@@ -12,7 +12,7 @@ use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;
-use simplicial::{gen::cartesian::CartesianMeshInfo, linalg::CsrMatrix};
+use simplicial::{gen::cartesian::CartesianGrid, linalg::CsrMatrix};
 
 use approx::assert_relative_eq;
 
@@ -22,12 +22,12 @@ use approx::assert_relative_eq;
 #[test]
 fn inhomogeneous_dirichlet_reproduces_linear_solution() {
   for dim in 1..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let boundary = whitney.boundary().unwrap();
 
-    let exact = DiffFormClosure::coordinate_component(0, dim);
+    let exact = DiffFormClosure::coord_component(0, dim);
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
@@ -53,12 +53,12 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
 #[test]
 fn inhomogeneous_neumann_reproduces_linear_solution() {
   for dim in 1..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let boundary = whitney.boundary().unwrap();
 
-    let exact = DiffFormClosure::coordinate_component(0, dim);
+    let exact = DiffFormClosure::coord_component(0, dim);
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     // System: (grad u, grad v) + (u, v).
@@ -66,7 +66,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
-    let source = DiffFormClosure::coordinate_component(0, dim);
+    let source = DiffFormClosure::coord_component(0, dim);
     let source = source.pullback_on(&topology, &coords);
     let qr = simplicial::atlas::SimplexQuadRule::degree(dim, 3);
     let mut rhs =
@@ -107,7 +107,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
   use simplicial::geometry::coord::simplex::SimplexCoords;
 
   for dim in 2..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
@@ -123,7 +123,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
       .collect();
     let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
 
-    let exact = DiffFormClosure::coordinate_component(0, dim);
+    let exact = DiffFormClosure::coord_component(0, dim);
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
@@ -153,11 +153,11 @@ fn robin_reproduces_linear_solution() {
   use simplicial::geometry::coord::simplex::SimplexCoords;
 
   for dim in 1..=3 {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
-    let exact = DiffFormClosure::coordinate_component(0, dim);
+    let exact = DiffFormClosure::coord_component(0, dim);
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     let alpha = 1.0;

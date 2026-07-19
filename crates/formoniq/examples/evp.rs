@@ -20,7 +20,7 @@ mod util;
 
 use {
   formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
-  simplicial::gen::cartesian::CartesianMeshInfo,
+  simplicial::gen::cartesian::CartesianGrid,
   util::{algebraic_convergence_rate, report, BoundaryCondition},
 };
 
@@ -75,8 +75,8 @@ fn box_sweep() {
       let mut prev_ndofs = 0;
       for irefine in 0u32..=8 {
         let nboxes_per_dim = 2usize.pow(irefine);
-        let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
-        let (topology, coords) = box_mesh.compute_coord_complex();
+        let grid = CartesianGrid::new_unit_scaled(dim, nboxes_per_dim, PI);
+        let (topology, coords) = grid.triangulate();
         let metric = coords.to_edge_lengths_sq(&topology);
         let whitney = WhitneyComplex::new(&topology, &metric);
 

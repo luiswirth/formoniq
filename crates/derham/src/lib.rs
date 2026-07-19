@@ -16,7 +16,7 @@ mod test {
 
   use {
     simplicial::linalg::Vector,
-    simplicial::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex},
+    simplicial::{gen::cartesian::CartesianGrid, topology::complex::Complex},
   };
 
   use approx::assert_relative_eq;
@@ -33,11 +33,7 @@ mod test {
   #[test]
   fn whitney_basis_property() {
     let standard = (0..=4).map(Complex::standard);
-    let cartesian = (1..=3).map(|dim| {
-      CartesianMeshInfo::new_unit(dim, 2)
-        .compute_coord_complex()
-        .0
-    });
+    let cartesian = (1..=3).map(|dim| CartesianGrid::new_unit(dim, 2).triangulate().0);
 
     for topology in standard.chain(cartesian) {
       let dim = topology.dim();

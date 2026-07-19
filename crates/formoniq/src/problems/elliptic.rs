@@ -39,7 +39,7 @@ pub fn solve_source<C: HilbertComplex>(
 ) -> Result<(Cochain, Cochain, Cochain), EigenError> {
   let harmonics = solve_harmonics(complex, grade)?;
 
-  let galmats = MixedGalmats::compute(complex, grade);
+  let galmats = MixedGalMats::compute(complex, grade);
 
   let mass_u = CsrMatrix::from(&galmats.mass_u);
   let mass_harmonics = &mass_u * &harmonics;
@@ -135,7 +135,7 @@ pub fn solve_evp<C: HilbertComplex>(
   grade: ExteriorGrade,
   neigenvalues: usize,
 ) -> Result<(Vector, Matrix, Matrix), EigenError> {
-  let galmats = MixedGalmats::compute(complex, grade);
+  let galmats = MixedGalMats::compute(complex, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
 
@@ -254,14 +254,14 @@ impl HodgeBlocks {
   }
 }
 
-pub struct MixedGalmats {
+pub struct MixedGalMats {
   mass_sigma: GalMat,
   dif_sigma: GalMat,
   codif_u: GalMat,
   codifdif_u: GalMat,
   mass_u: GalMat,
 }
-impl MixedGalmats {
+impl MixedGalMats {
   pub fn compute<C: HilbertComplex>(complex: &C, grade: ExteriorGrade) -> Self {
     assert!(grade <= complex.dim());
 

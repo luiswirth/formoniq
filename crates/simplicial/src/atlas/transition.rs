@@ -159,7 +159,7 @@ mod test {
   use super::*;
   use crate::{
     atlas::{barycenter_bary, ChartExt, MeshPoint},
-    gen::cartesian::CartesianMeshInfo,
+    gen::cartesian::CartesianGrid,
     geometry::coord::simplex::SimplexRefExt,
     topology::complex::Complex,
   };
@@ -208,7 +208,7 @@ mod test {
   #[test]
   fn transition_roundtrip_on_the_overlap() {
     for dim in 1..=3 {
-      let (complex, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for (source, target, point) in adjacent_pairs(&complex) {
         let transition = source.transition_to(target);
@@ -227,7 +227,7 @@ mod test {
   #[test]
   fn no_transition_off_the_overlap() {
     for dim in 1..=3 {
-      let (complex, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for (source, target, _) in adjacent_pairs(&complex) {
         let interior = source.barycenter();
@@ -244,7 +244,7 @@ mod test {
   #[test]
   fn transition_cocycle() {
     for dim in 2..=3 {
-      let (complex, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       // A vertex of the mesh lies in the overlap of every cell around it.
       for vertex in complex.vertices().handle_iter() {
@@ -278,7 +278,7 @@ mod test {
   #[test]
   fn differential_is_the_change_of_frame() {
     for dim in 2..=3 {
-      let (complex, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (complex, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for facet in complex.skeleton(dim - 1).handle_iter() {
         let cells: Vec<_> = facet.cells().collect();

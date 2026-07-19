@@ -135,15 +135,11 @@ impl MeshLengthsSq {
 
   /// The shape regularity measure $rho$ of the whole mesh, which is the largest
   /// shape regularity measure over all cells.
-  pub fn shape_regularity_measure(&self, topology: &Complex) -> f64 {
+  pub fn shape_regularity(&self, topology: &Complex) -> f64 {
     topology
       .cells()
       .handle_iter()
-      .map(|cell| {
-        self
-          .simplex_lengths_sq(cell.get())
-          .shape_regularity_measure()
-      })
+      .map(|cell| self.simplex_lengths_sq(cell.get()).shape_regularity())
       .max_by(|a, b| a.partial_cmp(b).unwrap())
       .unwrap()
   }
@@ -229,14 +225,14 @@ pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianMeshInfo;
+  use crate::gen::cartesian::CartesianGrid;
 
   /// Coordinates and squared edge lengths read uniformly as data on simplices:
   /// coords (grade 0) return a column view, squared lengths (grade 1) a
   /// scalar ref.
   #[test]
   fn geometry_as_simplex_data() {
-    let (topology, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(2, 2).triangulate();
     let lengths_sq = coords.to_edge_lengths_sq(&topology);
 
     assert_eq!(SkeletonData::grade(&coords), 0);

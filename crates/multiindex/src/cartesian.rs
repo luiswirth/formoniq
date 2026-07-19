@@ -11,7 +11,7 @@ use super::Combination;
 
 /// Converts a linear index in `0..radix^dim` to a cartesian multi-index in
 /// ${0, dots, "radix"-1}^"dim"$ (least significant axis first).
-pub fn linear_index2cartesian_index(mut lin_idx: usize, radix: usize, dim: usize) -> Vec<usize> {
+pub fn linear2cartesian(mut lin_idx: usize, radix: usize, dim: usize) -> Vec<usize> {
   let mut cart_idx = vec![0; dim];
   for icomp in cart_idx.iter_mut() {
     *icomp = lin_idx % radix;
@@ -22,7 +22,7 @@ pub fn linear_index2cartesian_index(mut lin_idx: usize, radix: usize, dim: usize
 
 /// Converts a cartesian multi-index in ${0, dots, "radix"-1}^"dim"$ to a
 /// linear index in `0..radix^dim`.
-pub fn cartesian_index2linear_index(cart_idx: &[usize], radix: usize) -> usize {
+pub fn cartesian2linear(cart_idx: &[usize], radix: usize) -> usize {
   let mut lin_idx = 0;
   for &icomp in cart_idx.iter().rev() {
     lin_idx *= radix;
@@ -65,10 +65,10 @@ mod tests {
       for dim in 0..=4 {
         let count = radix.pow(dim as u32);
         for lin in 0..count {
-          let cart = linear_index2cartesian_index(lin, radix, dim);
+          let cart = linear2cartesian(lin, radix, dim);
           assert_eq!(cart.len(), dim);
           assert!(cart.iter().all(|&c| c < radix));
-          assert_eq!(cartesian_index2linear_index(&cart, radix), lin);
+          assert_eq!(cartesian2linear(&cart, radix), lin);
         }
       }
     }
@@ -86,7 +86,7 @@ mod tests {
           assert_eq!(stride, radix.pow(i as u32));
         }
         for lin in 0..radix.pow(dim as u32) {
-          let cart = linear_index2cartesian_index(lin, radix, dim);
+          let cart = linear2cartesian(lin, radix, dim);
           let weighted: usize = cart.iter().zip(&strides).map(|(&c, &s)| c * s).sum();
           assert_eq!(weighted, lin);
         }
@@ -107,7 +107,7 @@ mod tests {
             .collect();
           assert_eq!(
             corner_offset(corner, &strides),
-            cartesian_index2linear_index(&indicator, 2)
+            cartesian2linear(&indicator, 2)
           );
         }
       }

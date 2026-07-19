@@ -284,14 +284,14 @@ fn build(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{gen::cartesian::CartesianMeshInfo, geometry::coord::Coord};
+  use crate::{gen::cartesian::CartesianGrid, geometry::coord::Coord};
 
   /// The BVH locator agrees with the brute-force linear scan on every query,
   /// and reports points outside the mesh as such.
   #[test]
   fn locator_matches_brute_force() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 3).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let locator = PointLocator::new(&topology, &coords);
 
       // A grid of probe points covering the unit cube and a margin outside it.

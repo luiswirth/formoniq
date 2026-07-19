@@ -84,7 +84,7 @@ impl MeshCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::gen::cartesian::CartesianMeshInfo;
+  use crate::gen::cartesian::CartesianGrid;
   use crate::geometry::{cell_volume, metric::CellGramians};
 
   /// The refined cells partition the measure of the coarse ones: refinement
@@ -93,7 +93,7 @@ mod test {
   #[test]
   fn measure_partition() {
     for dim in 1..=3 {
-      let (coarse, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_g = CellGramians::from_geometry(&coarse, &coords);
       let coarse_vol: f64 = coarse_g.metrics().iter().map(cell_volume).sum();
 
@@ -121,7 +121,7 @@ mod test {
   #[test]
   fn intrinsic_equals_extrinsic() {
     for dim in 1..=3 {
-      let (coarse, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_g = CellGramians::from_geometry(&coarse, &coords);
 
       for r in 1..=3 {
@@ -150,7 +150,7 @@ mod test {
   fn lengths_match_coords() {
     use crate::topology::data::SkeletonData;
     for dim in 1..=3 {
-      let (coarse, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_lengths = coords.to_edge_lengths_sq(&coarse);
 
       for r in 1..=3 {

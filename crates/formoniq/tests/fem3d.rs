@@ -1,7 +1,7 @@
 use approx::assert_relative_eq;
 use formoniq::whitney_complex::WhitneyComplex;
 use simplicial::linalg::{Matrix, Vector};
-use simplicial::{gen::cartesian::CartesianMeshInfo, Dim};
+use simplicial::{gen::cartesian::CartesianGrid, Dim};
 
 const DIM: Dim = 3;
 
@@ -104,8 +104,8 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> Matrix {
 }
 
 fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
-  let box_mesh = CartesianMeshInfo::new_unit(DIM, nboxes_per_dim);
-  let (topology, coords) = box_mesh.compute_coord_complex();
+  let grid = CartesianGrid::new_unit(DIM, nboxes_per_dim);
+  let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let galmat = WhitneyComplex::new(&topology, &metric).codif_dif(0);
   (&galmat).into()

@@ -31,7 +31,7 @@ extern crate nalgebra_sparse as nas;
 
 use formoniq::whitney_complex::WhitneyComplex;
 use simplicial::{
-  gen::cartesian::CartesianMeshInfo,
+  gen::cartesian::CartesianGrid,
   linalg::{Matrix, Vector},
   Dim,
 };
@@ -181,8 +181,7 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> Matrix<i32> {
   let full_galmat = feec_galmat_full(dim, nboxes_per_dim);
 
   let boundary_vertices =
-    CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64)
-      .boundary_vertices();
+    CartesianGrid::new_unit_scaled(dim, nboxes_per_dim, nboxes_per_dim as f64).boundary_vertices();
   let galmat = full_galmat
     .remove_columns_at(&boundary_vertices)
     .remove_rows_at(&boundary_vertices);
@@ -192,8 +191,8 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> Matrix<i32> {
 
 /// Galmat from normalized LSE, where RHS galvec would be constant 1.
 fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> Matrix {
-  let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
-  let (topology, coords) = box_mesh.compute_coord_complex();
+  let grid = CartesianGrid::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
+  let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let mut galmat = Matrix::from(&whitney.codif_dif(0));

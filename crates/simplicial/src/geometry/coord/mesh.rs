@@ -270,7 +270,7 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{gen::cartesian::CartesianMeshInfo, geometry::metric::mesh::EdgeRefExt};
+  use crate::{gen::cartesian::CartesianGrid, geometry::metric::mesh::EdgeRefExt};
 
   /// The witness reads cohere across the layers: an edge's Regge squared
   /// length is the squared distance of its endpoints' coordinates in the
@@ -278,7 +278,7 @@ mod test {
   #[test]
   fn edge_length_is_endpoint_distance() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths_sq = coords.to_edge_lengths_sq(&topology);
       for edge in topology.edges().handle_iter() {
         let (vi, vj) = edge.endpoints();
@@ -297,7 +297,7 @@ mod test {
   #[test]
   fn minkowski_ambient_induces_lorentzian_cell_metrics() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let spacetime =
         MeshCoords::with_ambient(coords.matrix().clone(), gramian::Gramian::minkowski(dim));
       for cell in topology.cells().handle_iter() {
@@ -316,7 +316,7 @@ mod test {
   #[test]
   fn lorentzian_ambient_realizes_lorentzian_regge_data() {
     use gramian::CausalType;
-    let (topology, coords) = CartesianMeshInfo::new_unit(2, 1).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(2, 1).triangulate();
     let mut matrix = coords.matrix().clone();
     matrix.row_mut(0).scale_mut(0.7);
     let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(2));
