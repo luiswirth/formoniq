@@ -62,10 +62,12 @@ struct SurfaceMaterial {
 };
 
 // How a segment mark is drawn: its ink (`rgb` plus a base opacity), its
-// world-space half-width -- a fixed fraction of the scene's own extent, set on
-// the Rust side, not a pixel count, so a line reads the same thickness whether
-// the mesh fills the screen or sits in a corner of it -- the opacity it fades to
-// at the standing wave's node, and the wave it rides.
+// world-space half-width -- a fixed fraction of the mesh's own mean edge length,
+// set on the Rust side, not a pixel count, so a line reads the same thickness
+// whether the mesh fills the screen or sits in a corner of it, and the same
+// thickness relative to the edges it traces however finely the mesh is
+// refined -- the opacity it fades to at the standing wave's node, and the wave
+// it rides.
 struct SegmentMaterial {
     color: vec4<f32>,
     half_width_world: f32,
@@ -75,12 +77,12 @@ struct SegmentMaterial {
 };
 
 // How an arrow glyph is drawn: a flat mark in its surface cell, not a billboard.
-// `half_width_world` is the head's half-width and the world scale the fragment's
-// signed distance is in; the fractions are the arrow's proportions; the outline
-// is a fixed world band around the whole silhouette.
+// Every dimension is a proportion of the arrow's own length, which the bake
+// carries per glyph and sizes from the cell -- so the mark is one shape scaled
+// by its cell, self-similar at any refinement, and no world size appears here.
 struct GlyphMaterial {
     color: vec4<f32>,
-    half_width_world: f32,
+    width_fraction: f32,
     fade_floor: f32,
     wave_omega: f32,
     head_length_fraction: f32,

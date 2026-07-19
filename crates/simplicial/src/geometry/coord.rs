@@ -138,6 +138,46 @@ pub fn vertex_curvature_radius(topology: &Complex, coords: &MeshCoords) -> Vec<f
     .collect()
 }
 
+/// The mean edge length of the embedded mesh: its characteristic *local* length,
+/// as distinct from the coordinate extent, which is the object's *global* one.
+///
+/// The two are what a mark drawn on a mesh must choose between, and they answer
+/// different questions. A quantity that should read the same however finely the
+/// object is triangulated (how far a standing wave swells, how fast a tracer
+/// crosses) is a fraction of the extent. A quantity that draws the mesh's own
+/// features (the stroke of an edge, the size of a per-cell mark) is a fraction
+/// of this: tie it to the extent instead and refining the mesh leaves the
+/// strokes at their old width while the cells shrink underneath them, until the
+/// wireframe is a solid mass and the glyphs are stubs.
+///
+/// Zero for a complex with no edges (a point cloud), where there is no local
+/// length to speak of and a caller falls back on the extent.
+pub fn mean_edge_length(topology: &Complex, coords: &MeshCoords) -> f64 {
+  // The total accessor: a 0-complex has no edges, which is the answer rather
+  // than a case to exclude.
+  let Some(edges) = topology.role_skeleton::<crate::topology::role::roles::Edge>() else {
+    return 0.0;
+  };
+  let mut total = 0.0;
+  let mut count = 0usize;
+  for edge in edges.handle_iter() {
+    let v = &edge.simplex().vertices;
+    total += (coords.coord(v[1]) - coords.coord(v[0])).norm();
+    count += 1;
+  }
+  if count == 0 {
+    0.0
+  } else {
+    total / count as f64
+  }
+}
+
+/// How far [`vertex_reach`] looks for a bottleneck, in mean edge lengths. Sets
+/// the thickest feature the non-local term can detect, and with it the cost:
+/// the walk visits $O("this"^2)$ occupied cells per vertex, since a surface
+/// meets a box in a face rather than filling it.
+const REACH_SEARCH_EDGES: i32 = 8;
+
 /// The **reach** of the embedded surface at every vertex: the largest $r$ such
 /// that the normal offset by any $|d| <= r$ is still an embedding, so no fold
 /// and no self-intersection.
@@ -169,7 +209,25 @@ pub fn vertex_curvature_radius(topology: &Complex, coords: &MeshCoords) -> Vec<f
 /// does: a thin feature is found immediately and terminates the walk early. The
 /// initial bound is the curvature radius, itself capped by `max_reach` (pass
 /// the object's own extent), because a reach exceeding the object is not a
-/// meaningful cap and an uncapped one would make a flat mesh scan globally.
+/// meaningful cap.
+///
+/// That shrinking ball is not enough on its own, and the reason is worth
+/// stating: on a *convex* surface nothing ever reduces the estimate below the
+/// curvature radius, so the ball stays as wide as the object while refinement
+/// shrinks the grid under it, and the walk pays $O(V)$ cells per vertex to
+/// confirm an absence -- $O(V^2)$ overall, seconds at ten thousand vertices.
+/// So the search is also capped at a fixed number of mean edge lengths,
+/// which makes it $O(V)$: a surface meets a box of side $s$ in $O(s^2)$ cells,
+/// so a bounded box is a bounded cost per vertex.
+///
+/// What that trades away, precisely: a bottleneck *wider* than that
+/// neighborhood is not seen, and the curvature radius alone bounds there. This
+/// is a statement about the mesh's own resolution rather than an arbitrary
+/// cutoff -- a gap spanning many times the local edge length is not a thin
+/// feature at the scale the mesh resolves, and a feature thinner than the mesh
+/// is not represented in the first place. A shape with two sheets far apart in
+/// edge lengths but close relative to the object (a wide, finely meshed
+/// horseshoe) is the case this does not catch.
 ///
 /// Defined for an embedded *surface* whose normal field exists: `INFINITY`
 /// (no bound) at every vertex of a complex that is not 2-dimensional or not
@@ -192,18 +250,11 @@ pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> 
 
   // A grid sized by the mean edge length: fine enough that a shell is a thin
   // layer, coarse enough that a cell holds a few vertices.
-  let mut edge_total = 0.0;
-  let mut edge_count = 0usize;
-  for edge in topology.edges().handle_iter() {
-    let vertices = &edge.simplex().vertices;
-    edge_total += (points[vertices[1]] - points[vertices[0]]).norm();
-    edge_count += 1;
-  }
-  let spacing = if edge_count > 0 {
-    (edge_total / edge_count as f64).max(1e-12)
-  } else {
+  let spacing = mean_edge_length(topology, coords);
+  if spacing <= 0.0 {
     return unbounded;
-  };
+  }
+  let spacing = spacing.max(1e-12);
   let grid = PointGrid::new(&points, spacing);
 
   let curvature = vertex_curvature_radius(topology, coords);
@@ -214,8 +265,9 @@ pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> 
       let (p, n) = (points[v], normals[v]);
       let mut best = curvature[v].min(max_reach);
       // Shell by shell, stopping once even the nearest point of the next shell
-      // is farther than twice the running bound.
-      for shell in 0.. {
+      // is farther than twice the running bound -- or once the neighborhood is
+      // exhausted, whichever comes first.
+      for shell in 0..=REACH_SEARCH_EDGES {
         if (shell as f64) * spacing > 2.0 * best {
           break;
         }
@@ -373,6 +425,37 @@ mod tests {
   /// the safe radius is exactly the safe direction for a fold-safety cap, so
   /// this is loose on purpose, not a correctness gap; the exact Gauss-Bonnet
   /// identity elsewhere is what checks correctness.
+  /// The mesh's local length scale halves when every edge is split: it tracks
+  /// the *refinement*, which is exactly what distinguishes it from the
+  /// coordinate extent, which does not move at all. A mark sized by one and a
+  /// mark sized by the other therefore answer different questions, and this is
+  /// the statement of that difference.
+  #[test]
+  fn mean_edge_length_halves_under_subdivision() {
+    let mut previous: Option<f64> = None;
+    for subdivisions in 1..=4 {
+      let (topology, coords) = crate::gen::sphere::mesh_sphere_surface(subdivisions);
+      let mean = mean_edge_length(&topology, &coords);
+      if let Some(previous) = previous {
+        let ratio = mean / previous;
+        assert!(
+          (ratio - 0.5).abs() < 0.05,
+          "subdivision {subdivisions}: edge length scaled by {ratio}, expected ~0.5"
+        );
+      }
+      previous = Some(mean);
+    }
+  }
+
+  /// A point cloud has no edges and so no local length; the caller is told so
+  /// rather than dividing by a count of zero.
+  #[test]
+  fn a_complex_without_edges_has_no_local_length() {
+    let complex = Complex::standard(0);
+    let coords = MeshCoords::standard(0);
+    assert_eq!(mean_edge_length(&complex, &coords), 0.0);
+  }
+
   /// On the unit sphere the reach is the radius, and it is the *curvature*
   /// half that says so: the medial axis is the center point. The tangent-ball
   /// formula returns exactly $R$ for every pair on a sphere, so this also

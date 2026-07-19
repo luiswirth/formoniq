@@ -76,7 +76,7 @@ fn vs_main(vertex: GlyphVertex) -> VertexOutput {
     // The arrow lies flat in the cell, coplanar with the fill, so it is nudged
     // toward the camera to draw over the surface instead of z-fighting it -- the
     // same bias the wireframe takes, tied to the mark's own world scale.
-    let biased = depth_biased_corner(vertex.position, frame.view_dir.xyz, material.half_width_world);
+    let biased = depth_biased_corner(vertex.position, frame.view_dir.xyz, material.width_fraction * vertex.length);
 
     var out: VertexOutput;
     out.clip_position = frame.view_proj * vec4<f32>(biased, 1.0);
@@ -102,14 +102,15 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // The quad is cut down to the arrow's silhouette, one screen pixel of
     // gradient wide, so the edge is resolved rather than aliased.
     let head_len = material.head_length_fraction * in.length;
-    let dist = sd_arrow(in.xy, in.length, material.half_width_world, head_len, material.shaft_width_fraction);
+    let half_width = material.width_fraction * in.length;
+    let dist = sd_arrow(in.xy, in.length, half_width, head_len, material.shaft_width_fraction);
     let edge = max(fwidth(dist), 1e-6);
     let ink = 1.0 - smoothstep(-edge, edge, dist);
 
     // The outline is the same silhouette a fixed world width further out. Zero
     // draws no rim -- `rim` and `ink` coincide, and the ink-only path below is
     // exact, not a case split.
-    let outline_world = material.outline_width_fraction * material.half_width_world;
+    let outline_world = material.outline_width_fraction * half_width;
     let rim = 1.0 - smoothstep(-edge, edge, dist - outline_world);
 
     // Clip the arrow to its cell: discard where any interpolated barycentric

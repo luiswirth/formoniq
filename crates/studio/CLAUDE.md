@@ -71,6 +71,20 @@ as it can go before either one commits.
   is the thing to avoid. The shared 1-skeleton cannot tear without being
   duplicated, so the segment marks keep the continuous recovery at every grade.
 
+  **A mark is sized by the length its own question is about.** Two scales are
+  available and they are not interchangeable: the object's *extent* and the
+  mesh's *mean edge length*. A quantity that should read the same however finely
+  the object is triangulated — how far a standing wave swells, how fast a tracer
+  crosses, how dense the glyph lattice is — is a fraction of the extent. A mark
+  that draws the mesh's own features — the stroke of an edge, the size of a
+  per-cell mark — is a fraction of the edge length, or of a length already
+  derived from it. Getting this backwards reads correctly at exactly one
+  refinement: tie a stroke to the extent and refining the mesh shrinks the cells
+  while the strokes stay put, until the wireframe is a solid mass and the
+  arrows are stubs. A mark whose every dimension is a proportion of one
+  cell-derived length is self-similar, and then there is no resolution at which
+  it can be wrong.
+
   **A displacement is bounded by scaling it, never by clamping it.** The bound
   is the mesh's *reach* — the distance to its own medial axis, below which the
   normal offset is still an embedding. Curvature radius is only half of that

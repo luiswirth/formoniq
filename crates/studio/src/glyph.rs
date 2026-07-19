@@ -139,8 +139,10 @@ fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) ->
 ///
 /// `target_spacing` is the world spacing the per-cell lattice aims for (see
 /// [`glyph_refinement`]); `peak` is the field's greatest magnitude, which the
-/// fade is measured against; `half_width` and `outline_width` are the arrow's
-/// world dimensions, which size the quad the fragment carves the arrow from.
+/// fade is measured against; `width_fraction` and `outline_fraction` are the
+/// arrow's proportions -- its half-width as a fraction of its own length, and
+/// the rim as a fraction of that half-width -- from which the quad the fragment
+/// carves the arrow from is sized per cell.
 ///
 /// The arrow lies in the cell rather than facing the camera, so its four corners
 /// are final geometry and each carries its barycentric coordinate directly
@@ -157,14 +159,11 @@ pub(crate) fn bake_glyphs(
   cochain: &Cochain,
   target_spacing: f64,
   peak: f64,
-  half_width: f64,
-  outline_width: f64,
+  width_fraction: f64,
+  outline_fraction: f64,
 ) -> Vec<GlyphVertex> {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   let mut vertices = Vec::new();
-  // The quad is grown past the arrow by the rim's own width, with slack for its
-  // antialiased outer edge, so the outline has room on every side.
-  let margin = outline_width * 1.5;
 
   for cell in topology.cells().handle_iter() {
     let metric = coords.cell_metric(cell);
@@ -181,6 +180,16 @@ pub(crate) fn bake_glyphs(
     // keep a gap instead of meeting tip-to-tail on any cell shape -- not the
     // diameter, which would only bound the spacing along the longest direction.
     let length = GLYPH_LENGTH_FRACTION * min_edge / refinement as f64;
+    // Every other dimension of the arrow is a fraction of that length, so the
+    // whole mark is one shape scaled by the cell it sits in -- a coarse mesh's
+    // arrow and a refined mesh's are the same drawing at different sizes. A
+    // width in world units would instead stay put while the length shrank with
+    // the cell, and the arrow would thicken into a stub as the mesh refined.
+    let half_width = width_fraction * length;
+    let outline_width = outline_fraction * half_width;
+    // The quad is grown past the arrow by the rim's own width, with slack for
+    // its antialiased outer edge, so the outline has room on every side.
+    let margin = outline_width * 1.5;
     let cell_verts: Vec<Vector> = coord_simplex
       .coord_iter()
       .map(|v| v.view().into_owned())
@@ -241,4 +250,69 @@ pub(crate) fn bake_glyphs(
   }
 
   vertices
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// An arrow is one shape scaled by its cell. Every dimension of the mark is a
+  /// fraction of its own length, so the quad's half-height over that length is
+  /// the *same* number on every glyph of every cell, however the cells differ
+  /// in size -- and, since the length is the cell's own lattice spacing,
+  /// however finely the mesh is refined.
+  ///
+  /// This is what a world-space width could not give: the length shrinks with
+  /// the cell and a fixed width does not, so on a refined mesh the arrows
+  /// thicken into stubs and this ratio climbs without bound. Checked across a
+  /// refinement sweep, where that divergence is exactly what would show.
+  #[test]
+  fn an_arrow_is_self_similar_at_every_refinement() {
+    let (width_fraction, outline_fraction) = (0.36, 0.27);
+    let mut ratios = Vec::new();
+
+    for subdivisions in 1..=3 {
+      let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(subdivisions);
+      let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+      let vertices = bake_glyphs(
+        &topology,
+        &coords,
+        &cochain,
+        0.06,
+        1.0,
+        width_fraction,
+        outline_fraction,
+      );
+      assert!(!vertices.is_empty(), "the sweep must produce glyphs");
+
+      // Six corners per glyph: the two triangles of its quad.
+      for glyph in vertices.chunks(6) {
+        let length = f64::from(glyph[0].length);
+        assert!(length > 0.0);
+        let half_height = glyph
+          .iter()
+          .map(|v| f64::from(v.arrow_xy[1]).abs())
+          .fold(0.0, f64::max);
+        ratios.push(half_height / length);
+      }
+    }
+
+    let (lo, hi) = ratios
+      .iter()
+      .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &r| {
+        (lo.min(r), hi.max(r))
+      });
+    // At `f32`, which is what the corner is stored as -- the residual is the
+    // round-trip, not a variation in the shape.
+    assert!(
+      (hi - lo) < 1e-6,
+      "the arrow's proportions must not vary with the cell: {lo} to {hi}"
+    );
+    // And it is the proportion asked for: the half-width plus the rim's margin.
+    let expected = width_fraction * (1.0 + outline_fraction * 1.5);
+    assert!(
+      (lo - expected).abs() < 1e-6,
+      "expected a half-height of {expected} per unit length, got {lo}"
+    );
+  }
 }
