@@ -196,13 +196,18 @@ impl Default for Marks {
       // The glyphs are the cheap reading and the one that always says
       // something: a lattice evaluated once per bake, then drawn.
       glyphs: true,
-      // The particles are the expensive one -- a population advected every
-      // frame, with a deposit atlas stepped alongside it -- and it is a cost
-      // paid continuously rather than once. A weak GPU should not have to
-      // spend it to find out whether it wanted to, so it is opted into. The
-      // field is fully readable without them: the glyphs carry the direction
-      // and the fill carries the magnitude, and what the particles add is the
-      // dynamics, which is a second question about the same reduction.
+      // The particles are the expensive one, and expensive *everywhere*: the
+      // population is a fixed count (`PARTICLE_COUNT`), advected every frame
+      // with the deposit atlas stepped alongside it, so a four-triangle mesh
+      // costs what a hundred-thousand-cell one does. There is no mesh on which
+      // they come free and so no reason to assume them, and the cost is paid
+      // continuously rather than once. A weak GPU should not have to spend it
+      // to find out whether it wanted to.
+      //
+      // Nothing is lost by asking: the glyphs carry the direction and the fill
+      // carries the magnitude, so the field is fully readable without them.
+      // What the particles add is the dynamics, which is a second question
+      // about the same reduction.
       particles: false,
     }
   }
