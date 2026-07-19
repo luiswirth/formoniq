@@ -470,7 +470,7 @@ mod test {
     glatt::field::DiffFormClosure,
     simplicial::linalg::Vector,
     simplicial::{
-      gen::cartesian::CartesianMeshInfo,
+      gen::cartesian::CartesianGrid,
       geometry::coord::{locate::PointLocator, Coord},
     },
   };
@@ -496,7 +496,7 @@ mod test {
   #[test]
   fn located_sampling_matches_scan() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 3).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let locator = PointLocator::new(&topology, &coords);
 
       let field = DiffFormClosure::one_form(|p| p.vector().clone(), dim);
@@ -525,7 +525,7 @@ mod test {
   #[test]
   fn pullback_then_sample_is_identity() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 3).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let locator = PointLocator::new(&topology, &coords);
 
       let field = DiffFormClosure::one_form(
@@ -555,7 +555,7 @@ mod test {
     use simplicial::atlas::MeshPoint;
 
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       let field = DiffFormClosure::one_form(
         |p| Vector::from_iterator(p.dim(), p.iter().map(|x| (2.0 * x).cos())),
@@ -624,7 +624,7 @@ mod test {
     use simplicial::atlas::MeshPoint;
 
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
 
       for grade in 0..=dim {

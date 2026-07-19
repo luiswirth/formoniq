@@ -333,7 +333,7 @@ impl<'m, R: SimplexRole> Deref for RoledSkeleton<'m, R> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{gen::cartesian::CartesianMeshInfo, topology::complex::Complex};
+  use crate::{gen::cartesian::CartesianGrid, topology::complex::Complex};
 
   /// The role predicates, swept over all dimensions and grades: a role is
   /// admitted exactly on its dimension, and roles coexist where their
@@ -370,7 +370,7 @@ mod test {
   #[test]
   fn neighboring_is_symmetric_and_facet_induced() {
     for dim in 1..=3 {
-      let (complex, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for cell in complex.cells().handle_iter() {
         let interior = cell.facets().filter(|f| !f.is_boundary()).count();
         assert_eq!(cell.neighbors().count(), interior);
@@ -412,7 +412,7 @@ mod test {
   #[test]
   fn ridge_fans_walk_the_hinge() {
     for dim in 2..=3 {
-      let (complex, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for ridge in complex
         .role_skeleton::<roles::Ridge>()
         .unwrap()

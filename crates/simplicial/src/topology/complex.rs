@@ -254,9 +254,9 @@ mod test {
   #[cfg(feature = "serde")]
   #[test]
   fn save_load_roundtrip() {
-    use crate::gen::cartesian::CartesianMeshInfo;
+    use crate::gen::cartesian::CartesianGrid;
 
-    let (topology, _) = CartesianMeshInfo::new_unit(3, 2).compute_coord_complex();
+    let (topology, _) = CartesianGrid::new_unit(3, 2).triangulate();
 
     let path = std::env::temp_dir().join(format!("simplicial_test_{}.cbor", std::process::id()));
     topology.save(&path).unwrap();
@@ -275,10 +275,10 @@ mod test {
   /// formats and cochain indexing rely on.
   #[test]
   fn skeletons_are_colex_ordered_and_vertices_contiguous() {
-    use crate::gen::cartesian::CartesianMeshInfo;
+    use crate::gen::cartesian::CartesianGrid;
 
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 3).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 3).triangulate();
 
       // Vertices are exactly 0..nvertices, each labelled by its own kidx.
       let vertices = topology.skeleton(0);
@@ -301,11 +301,11 @@ mod test {
   /// $dif compose dif = 0$: the defining law of a cochain complex.
   #[test]
   fn coboundary_squares_to_zero() {
-    use crate::gen::cartesian::CartesianMeshInfo;
+    use crate::gen::cartesian::CartesianGrid;
     use crate::linalg::CsrMatrix;
 
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for k in 0..dim.saturating_sub(1) {
         let dif_k = CsrMatrix::from(&topology.coboundary_operator(k));
         let dif_kk = CsrMatrix::from(&topology.coboundary_operator(k + 1));
@@ -318,8 +318,7 @@ mod test {
   #[test]
   fn boundary_simplices_facets_are_boundary_facets() {
     for dim in 1..=3 {
-      let (topology, _) =
-        crate::gen::cartesian::CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = crate::gen::cartesian::CartesianGrid::new_unit(dim, 2).triangulate();
       assert_eq!(topology.boundary_simplices(dim - 1), {
         let mut facets: Vec<_> = topology
           .boundary_facets()
@@ -381,9 +380,9 @@ mod test {
   /// as their topological definitions demand.
   #[test]
   fn ref_navigation() {
-    use crate::gen::cartesian::CartesianMeshInfo;
+    use crate::gen::cartesian::CartesianGrid;
 
-    let (topology, _) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+    let (topology, _) = CartesianGrid::new_unit(2, 3).triangulate();
 
     for cell in topology.cells().handle_iter() {
       // A triangle has 3 facets (edges) and at most 3 neighbors across them.

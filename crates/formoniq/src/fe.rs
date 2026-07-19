@@ -103,7 +103,7 @@ mod test {
 
   use derham::section::CoordFieldExt;
   use glatt::field::DiffFormClosure;
-  use simplicial::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 
@@ -115,7 +115,7 @@ mod test {
   #[test]
   fn l2_projection_reproduces_whitney_forms() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
@@ -141,12 +141,12 @@ mod test {
   #[test]
   fn l2_error_vanishes_on_the_discrete_space() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       // A globally affine 0-form lies in the Whitney 0-form space.
-      let exact = DiffFormClosure::coordinate_component(0, dim);
+      let exact = DiffFormClosure::coord_component(0, dim);
       let exact = exact.pullback_on(&topology, &coords);
       let projected = l2_projection(&exact, whitney, Some(SimplexQuadRule::degree(dim, 3)));
 

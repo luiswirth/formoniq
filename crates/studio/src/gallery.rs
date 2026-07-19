@@ -206,8 +206,7 @@ impl MeshSource {
       }
       MeshSource::Grid { cells_axis } => {
         let (topology, coords) =
-          simplicial::gen::cartesian::CartesianMeshInfo::new_unit(2, *cells_axis)
-            .compute_coord_complex();
+          simplicial::gen::cartesian::CartesianGrid::new_unit(2, *cells_axis).triangulate();
         // The renderer draws in 3D and reads the surface normal off the
         // embedding; the grid is planar in $RR^2$, so lift it into the $z = 0$
         // plane of $RR^3$, exactly as the flat reference-cell scenes do.

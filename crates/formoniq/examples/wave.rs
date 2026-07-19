@@ -26,7 +26,7 @@ use {
     problems::wave::{cfl_dt, solve_wave, WaveState},
     whitney_complex::WhitneyComplex,
   },
-  simplicial::gen::cartesian::CartesianMeshInfo,
+  simplicial::gen::cartesian::CartesianGrid,
   simplicial::linalg::Vector,
   util::{BoundaryCondition, BoxEigenform},
 };
@@ -54,8 +54,8 @@ fn main() {
   for dim in 1..=3 {
     // Mesh and Whitney complex depend only on `dim`, not `grade`, so they are
     // built once per dimension and shared across the grade sweep below.
-    let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, NBOXES, PI);
-    let (topology, coords) = box_mesh.compute_coord_complex();
+    let grid = CartesianGrid::new_unit_scaled(dim, NBOXES, PI);
+    let (topology, coords) = grid.triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 

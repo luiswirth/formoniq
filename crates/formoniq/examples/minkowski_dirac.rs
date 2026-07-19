@@ -89,7 +89,7 @@ use glatt::field::DiffFormClosure;
 use gramian::{CausalType, Gramian, PseudoRiemannianMetric};
 use multiindex::Sign;
 use simplicial::{
-  atlas::SimplexQuadRule, gen::cartesian::CartesianMeshInfo, geometry::coord::mesh::MeshCoords,
+  atlas::SimplexQuadRule, gen::cartesian::CartesianGrid, geometry::coord::mesh::MeshCoords,
   linalg::Vector,
 };
 
@@ -221,7 +221,7 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
 
   let mut previous: Option<(usize, f64, f64)> = None;
   for &nsub in nsubs {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, nsub).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, nsub).triangulate();
     let mut matrix = coords.into_matrix();
     matrix.row_mut(0).scale_mut(TIME_SCALE);
     // The same vertex coordinates seen twice: once inducing the Lorentzian

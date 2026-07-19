@@ -5,7 +5,7 @@ use multiindex::{
   factorial, Combination,
 };
 
-pub use multiindex::cartesian::{cartesian_index2linear_index, linear_index2cartesian_index};
+pub use multiindex::cartesian::{cartesian2linear, linear2cartesian};
 
 use crate::{
   geometry::coord::mesh::MeshCoords,
@@ -48,12 +48,12 @@ impl Rect {
   }
 }
 
-pub struct CartesianMeshInfo {
+pub struct CartesianGrid {
   rect: Rect,
   ncells_axis: usize,
 }
 // constructors
-impl CartesianMeshInfo {
+impl CartesianGrid {
   pub fn new_min_max(min: Vector, max: Vector, ncells_axis: usize) -> Self {
     let rect = Rect::new_min_max(min, max);
     Self { rect, ncells_axis }
@@ -68,7 +68,7 @@ impl CartesianMeshInfo {
   }
 }
 // getters
-impl CartesianMeshInfo {
+impl CartesianGrid {
   pub fn rect(&self) -> &Rect {
     &self.rect
   }
@@ -97,7 +97,7 @@ impl CartesianMeshInfo {
     self.nvertices_axis().pow(self.dim() as u32)
   }
   pub fn vertex_cart_idx(&self, ivertex: usize) -> Vec<usize> {
-    linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim())
+    linear2cartesian(ivertex, self.nvertices_axis(), self.dim())
   }
   pub fn vertex_pos(&self, ivertex: usize) -> Vector {
     let cart_idx = self.vertex_cart_idx(ivertex);
@@ -106,7 +106,7 @@ impl CartesianMeshInfo {
   }
 
   pub fn is_vertex_on_boundary(&self, vertex: usize) -> bool {
-    let coords = linear_index2cartesian_index(vertex, self.nvertices_axis(), self.rect.dim());
+    let coords = linear2cartesian(vertex, self.nvertices_axis(), self.rect.dim());
     coords
       .iter()
       .any(|&c| c == 0 || c == self.nvertices_axis() - 1)
@@ -117,14 +117,13 @@ impl CartesianMeshInfo {
     for d in 0..self.dim() {
       let nvertices_boundary_facet = self.nvertices_axis().pow(self.dim() as u32 - 1);
       for ivertex in 0..nvertices_boundary_facet {
-        let vertex_icart =
-          linear_index2cartesian_index(ivertex, self.nvertices_axis(), self.dim() - 1);
+        let vertex_icart = linear2cartesian(ivertex, self.nvertices_axis(), self.dim() - 1);
         let mut low_boundary = vertex_icart.clone();
         low_boundary.insert(d, 0);
         let mut high_boundary = vertex_icart;
         high_boundary.insert(d, self.nvertices_axis() - 1);
-        let low_boundary = cartesian_index2linear_index(&low_boundary, self.nvertices_axis());
-        let high_boundary = cartesian_index2linear_index(&high_boundary, self.nvertices_axis());
+        let low_boundary = cartesian2linear(&low_boundary, self.nvertices_axis());
+        let high_boundary = cartesian2linear(&high_boundary, self.nvertices_axis());
         r.push(low_boundary);
         r.push(high_boundary);
       }
@@ -133,18 +132,18 @@ impl CartesianMeshInfo {
   }
 }
 
-impl CartesianMeshInfo {
-  pub fn compute_coord_complex(&self) -> (Complex, MeshCoords) {
-    let (skeleton, coords) = self.compute_coord_cells();
+impl CartesianGrid {
+  pub fn triangulate(&self) -> (Complex, MeshCoords) {
+    let (skeleton, coords) = self.triangulate_cells();
     let complex = Complex::from_cells(skeleton);
     (complex, coords)
   }
-  pub fn compute_coord_cells(&self) -> (Skeleton, MeshCoords) {
-    let skeleton = self.compute_cell_skeleton();
-    let coords = self.compute_vertex_coords();
+  pub fn triangulate_cells(&self) -> (Skeleton, MeshCoords) {
+    let skeleton = self.cell_skeleton();
+    let coords = self.vertex_coords();
     (skeleton, coords)
   }
-  pub fn compute_vertex_coords(&self) -> MeshCoords {
+  pub fn vertex_coords(&self) -> MeshCoords {
     let mut coords = Matrix::zeros(self.dim(), self.nvertices());
     for (ivertex, mut coord) in coords.column_iter_mut().enumerate() {
       coord.copy_from(&self.vertex_pos(ivertex));
@@ -159,14 +158,14 @@ impl CartesianMeshInfo {
   /// cube is a maximal chain
   /// $emptyset subset {a_1} subset {a_1, a_2} subset dots.c$
   /// in this subset lattice, one per permutation of the axes.
-  pub fn compute_cell_skeleton(&self) -> Skeleton {
+  pub fn cell_skeleton(&self) -> Skeleton {
     let dim = self.dim();
     let strides = strides(self.nvertices_axis(), dim);
 
     let mut simplices: Vec<Simplex> = Vec::with_capacity(factorial(dim) * self.ncells());
     for ibox in 0..self.ncells() {
-      let box_cart = linear_index2cartesian_index(ibox, self.ncells_axis(), dim);
-      let origin = cartesian_index2linear_index(&box_cart, self.nvertices_axis());
+      let box_cart = linear2cartesian(ibox, self.ncells_axis(), dim);
+      let origin = cartesian2linear(&box_cart, self.nvertices_axis());
 
       for axes in (0..dim).permutations(dim) {
         let chain = axes.iter().scan(Combination::empty(), |corner, &axis| {
@@ -186,12 +185,12 @@ impl CartesianMeshInfo {
 
 #[cfg(test)]
 mod test {
-  use super::CartesianMeshInfo;
+  use super::CartesianGrid;
   use crate::linalg::Matrix;
 
   #[test]
   fn unit_cube_mesh() {
-    let (mesh, coords) = CartesianMeshInfo::new_unit(3, 1).compute_coord_cells();
+    let (mesh, coords) = CartesianGrid::new_unit(3, 1).triangulate_cells();
 
     #[rustfmt::skip]
     let expected_coords = Matrix::from_column_slice(3, 8, &[
@@ -221,7 +220,7 @@ mod test {
 
   #[test]
   fn unit_square_mesh() {
-    let (mesh, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_cells();
+    let (mesh, coords) = CartesianGrid::new_unit(2, 2).triangulate_cells();
 
     #[rustfmt::skip]
     let expected_coords = Matrix::from_column_slice(2, 9, &[

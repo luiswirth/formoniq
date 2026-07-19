@@ -177,12 +177,12 @@ mod test {
   #[cfg(feature = "serde")]
   use super::*;
   #[cfg(feature = "serde")]
-  use simplicial::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianGrid;
 
   #[cfg(feature = "serde")]
   #[test]
   fn save_load_roundtrip_and_compatibility() {
-    let (topology, _) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+    let (topology, _) = CartesianGrid::new_unit(2, 3).triangulate();
     let cochain = Cochain::from_function(|s| s.kidx() as f64, 1, &topology);
     assert!(cochain.is_compatible_with(&topology));
 
@@ -194,7 +194,7 @@ mod test {
     assert_eq!(loaded.grade(), cochain.grade());
     assert_eq!(loaded.coeffs(), cochain.coeffs());
 
-    let other = CartesianMeshInfo::new_unit(2, 5).compute_coord_complex().0;
+    let other = CartesianGrid::new_unit(2, 5).triangulate().0;
     assert!(!loaded.is_compatible_with(&other));
   }
 }

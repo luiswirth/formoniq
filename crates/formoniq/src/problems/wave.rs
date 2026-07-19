@@ -155,7 +155,7 @@ pub fn cfl_dt(mesh_geo: &MeshLengthsSq, vel: f64) -> f64 {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
-  use simplicial::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 
@@ -167,7 +167,7 @@ mod test {
   #[test]
   fn energy_conserved_at_every_grade() {
     for dim in 2..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
 

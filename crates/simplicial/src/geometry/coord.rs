@@ -176,8 +176,7 @@ mod tests {
   /// must never clamp displacement on a flat surface.
   #[test]
   fn flat_grid_has_unbounded_curvature_radius() {
-    let (topology, coords) =
-      crate::gen::cartesian::CartesianMeshInfo::new_unit(2, 4).compute_coord_complex();
+    let (topology, coords) = crate::gen::cartesian::CartesianGrid::new_unit(2, 4).triangulate();
     let coords = coords.embed_euclidean(3);
     let boundary: std::collections::HashSet<usize> =
       topology.boundary_vertices().into_iter().collect();

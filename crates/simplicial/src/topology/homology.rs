@@ -461,14 +461,14 @@ fn mod_inverse(a: i64, p: i64) -> i64 {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianMeshInfo;
+  use crate::gen::cartesian::CartesianGrid;
   use crate::topology::skeleton::Skeleton;
 
   /// A square annulus: the $3 times 3$ unit mesh with the middle cell removed,
   /// so $b_1 = 1$ (one hole).
   fn annulus() -> Complex {
     use crate::geometry::coord::simplex::SimplexCoords;
-    let (square, coords) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+    let (square, coords) = CartesianGrid::new_unit(2, 3).triangulate();
     let cells: Vec<_> = square
       .cells()
       .handle_iter()
@@ -485,11 +485,7 @@ mod test {
   /// A spread of complexes with nontrivial homology across the grades.
   fn test_complexes() -> Vec<Complex> {
     let mut complexes: Vec<Complex> = (1..=3)
-      .map(|dim| {
-        CartesianMeshInfo::new_unit(dim, 2)
-          .compute_coord_complex()
-          .0
-      })
+      .map(|dim| CartesianGrid::new_unit(dim, 2).triangulate().0)
       .collect();
     complexes.push(crate::gen::sphere::mesh_sphere_surface(1).0);
     complexes.push(annulus());
@@ -586,7 +582,7 @@ mod test {
   #[test]
   fn euler_poincare() {
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let alt_betti: i64 = topology
         .betti_numbers()
         .iter()
@@ -601,7 +597,7 @@ mod test {
   #[test]
   fn cube_is_contractible() {
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let expected: Vec<usize> = std::iter::once(1)
         .chain(std::iter::repeat_n(0, dim))
         .collect();
@@ -632,7 +628,7 @@ mod test {
   #[test]
   fn box_lefschetz_duality() {
     for dim in 1..=3 {
-      let (topology, _) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for k in 0..=dim {
         assert_eq!(
           topology.relative_betti_number(k),

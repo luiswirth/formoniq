@@ -493,7 +493,7 @@ mod test {
   use crate::{
     linalg::faer::FaerCholesky, problems::elliptic::HodgeBlocks, whitney_complex::WhitneyComplex,
   };
-  use simplicial::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 
@@ -510,7 +510,7 @@ mod test {
     simplicial::topology::complex::Complex,
     simplicial::geometry::coord::mesh::MeshCoords,
   ) {
-    let (topology, coords) = CartesianMeshInfo::new_unit(dim, nsub).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(dim, nsub).triangulate();
     let mut matrix = coords.into_matrix();
     matrix.row_mut(0).scale_mut(0.7);
     let spacetime = simplicial::geometry::coord::mesh::MeshCoords::with_ambient(
@@ -543,7 +543,7 @@ mod test {
   #[test]
   fn operator_is_skew_symmetric() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
@@ -565,7 +565,7 @@ mod test {
   #[test]
   fn dirac_squared_is_negative_hodge_laplacian() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
@@ -621,7 +621,7 @@ mod test {
   #[test]
   fn energy_conserved_at_every_dimension() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
@@ -649,7 +649,7 @@ mod test {
   #[test]
   fn leapfrog_conserves_staggered_energy_at_every_dimension() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
@@ -675,7 +675,7 @@ mod test {
   #[test]
   fn selfadjoint_operator_is_symmetric() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let (_, spacetime) = minkowski_mesh(dim, 2);
       let riemannian = coords.to_edge_lengths_sq(&topology);
 
@@ -803,7 +803,7 @@ mod test {
     }
 
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let riemannian = coords.to_edge_lengths_sq(&topology);
       run(&topology, &coords, &riemannian);
 
@@ -821,7 +821,7 @@ mod test {
   /// grade-parity coloring) against the trusted Gauss–Legendre [`solve_dirac`].
   #[test]
   fn leapfrog_agrees_with_gauss_legendre() {
-    let (topology, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(2, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let dirac = HodgeDirac::assemble(&whitney);

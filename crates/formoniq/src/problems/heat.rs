@@ -99,7 +99,7 @@ mod test {
   use crate::linalg::quadratic_form_sparse;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
-  use simplicial::gen::cartesian::CartesianMeshInfo;
+  use simplicial::gen::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 
@@ -112,7 +112,7 @@ mod test {
   #[test]
   fn energy_dissipates_at_every_grade() {
     for dim in 1..=3 {
-      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
 
@@ -149,7 +149,7 @@ mod test {
   /// pins it down.
   #[test]
   fn steady_state_matches_static_hodge_laplace() {
-    let (topology, coords) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
+    let (topology, coords) = CartesianGrid::new_unit(2, 3).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();

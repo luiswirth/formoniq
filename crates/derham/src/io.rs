@@ -8,7 +8,7 @@ use std::{
   path::Path,
 };
 
-pub fn read_cochain_from_file(path: impl AsRef<Path>, grade: ExteriorGrade) -> io::Result<Cochain> {
+pub fn load_cochain(path: impl AsRef<Path>, grade: ExteriorGrade) -> io::Result<Cochain> {
   let file = File::open(path)?;
   let reader = BufReader::new(file);
 
@@ -23,7 +23,7 @@ pub fn read_cochain_from_file(path: impl AsRef<Path>, grade: ExteriorGrade) -> i
 
   Ok(Cochain::new(grade, coeffs.into()))
 }
-pub fn save_cochain_to_file(cochain: &Cochain, path: impl AsRef<Path>) -> std::io::Result<()> {
+pub fn save_cochain(cochain: &Cochain, path: impl AsRef<Path>) -> std::io::Result<()> {
   let file = File::create(path)?;
   let writer = BufWriter::new(file);
   write_cochain(writer, cochain)
