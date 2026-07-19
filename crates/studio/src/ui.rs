@@ -118,6 +118,24 @@ impl Default for FieldView {
   }
 }
 
+/// Below this viewport width, in egui points, the two sidebars cannot dock
+/// beside a viewport worth looking at: 180 and 250 points of panel leave a
+/// phone with nothing in the middle. It is a threshold on the *window*, not a
+/// platform check -- a narrow desktop window gets the same layout, and that is
+/// the point. Above it the docked layout is unchanged.
+pub(crate) const COMPACT_WIDTH: f32 = 720.0;
+
+/// Which sidebar is over the scene when the viewport is too narrow to dock
+/// both. At most one, so the scene keeps most of the screen, and `None` by
+/// default so what a reader sees first is the mesh rather than a control panel.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) enum OpenPanel {
+  #[default]
+  None,
+  Browser,
+  Inspector,
+}
+
 /// Which of a line field's marks are drawn.
 ///
 /// The two are not a choice between renderings of one thing; they answer
@@ -414,6 +432,8 @@ pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
 /// borrow, so building it and rendering the panel cannot conflict with the
 /// `&mut self` calls the caller makes to apply the response afterward.
 pub(crate) struct PanelModel<'a> {
+  /// See [`PanelResponse::open_panel`].
+  pub(crate) open_panel: OpenPanel,
   pub(crate) mesh_source: MeshSource,
   pub(crate) study: Study,
   pub(crate) is_loading: bool,
@@ -454,6 +474,9 @@ pub(crate) struct PanelModel<'a> {
 /// can compare against the model unconditionally rather than branching on
 /// whether a widget fired.
 pub(crate) struct PanelResponse {
+  /// Which sidebar the reader has over the scene, in the compact layout.
+  /// Meaningless while both dock, and left alone there.
+  pub(crate) open_panel: OpenPanel,
   pub(crate) requested_mesh: MeshSource,
   pub(crate) requested_study: Study,
   /// The index into `presets` of a preset the user picked this frame, if any.
@@ -495,6 +518,24 @@ pub(crate) struct PanelResponse {
 /// is on `ctx`'s own egui pass, so the caller is free to apply the returned
 /// changes however it likes.
 pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
+  // The one layout decision, and it is a function of the viewport rather than a
+  // mode anything stores: below this width the two sidebars cannot dock beside
+  // a viewport worth looking at, so they stop being docked. Their *content* is
+  // untouched -- the panel taxonomy still mirrors the two objects on screen
+  // (see this crate's CLAUDE.md); what changes is only whether a panel sits
+  // beside the scene or over it.
+  let compact = ui.available_width() < COMPACT_WIDTH;
+  let mut open_panel = model.open_panel;
+  // Wide: both dock, always, exactly as before. Compact: at most one is open,
+  // and none is by default, so the scene is what a reader sees first.
+  let mut browser_open = !compact || open_panel == OpenPanel::Browser;
+  let mut inspector_open = !compact || open_panel == OpenPanel::Inspector;
+  let side_width = if compact {
+    (ui.available_width() * 0.85).min(280.0)
+  } else {
+    180.0
+  };
+
   let mut requested_mesh = model.mesh_source.clone();
   let mut requested_study = model.study.clone();
   let mut requested_preset = None;
@@ -512,8 +553,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   // Left sidebar: the browser. The curated presets on top -- each a point in
   // the mesh × study product, chosen as a whole -- then the raw two axes below.
   egui::Panel::left("browser")
-    .default_size(180.0)
-    .show(ui, |ui| {
+    .default_size(side_width)
+    .show_collapsible(ui, &mut browser_open, |ui| {
       ui.add_space(4.0);
       ui.heading("Browser");
       ui.separator();
@@ -641,8 +682,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   // Right inspector: the knobs of what is shown -- the study's own parameters
   // and the camera mode.
   egui::Panel::right("inspector")
-    .default_size(250.0)
-    .show(ui, |ui| {
+    .default_size(if compact { side_width } else { 250.0 })
+    .show_collapsible(ui, &mut inspector_open, |ui| {
       ui.add_space(4.0);
       ui.heading("Inspector");
       ui.separator();
@@ -762,6 +803,21 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   egui::Panel::bottom("transport").show(ui, |ui| {
     ui.add_space(2.0);
     ui.horizontal(|ui| {
+      // The compact layout's only new control: which sidebar is over the scene.
+      // Selectable rather than a pair of buttons, because at most one is open
+      // and "none" is a real state -- clicking the open one closes it.
+      if compact {
+        for (side, label) in [
+          (OpenPanel::Browser, "\u{2630}"),
+          (OpenPanel::Inspector, "\u{2699}"),
+        ] {
+          let is_open = open_panel == side;
+          if ui.selectable_label(is_open, label).clicked() {
+            open_panel = if is_open { OpenPanel::None } else { side };
+          }
+        }
+        ui.separator();
+      }
       let omega = model.eigenvalue.map(|l| l.max(0.0).sqrt());
       // A field runs a clock when it oscillates (an eigenmode) or when it is a
       // sampled trajectory; only a static or harmonic field has nothing to play.
@@ -804,7 +860,17 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     ui.add_space(2.0);
   });
 
+  // A panel dragged shut reports itself closed, so the toggle follows the
+  // gesture rather than disagreeing with it.
+  if compact && !browser_open && open_panel == OpenPanel::Browser {
+    open_panel = OpenPanel::None;
+  }
+  if compact && !inspector_open && open_panel == OpenPanel::Inspector {
+    open_panel = OpenPanel::None;
+  }
+
   PanelResponse {
+    open_panel,
     requested_mesh,
     requested_study,
     requested_preset,
@@ -824,6 +890,48 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// The layout is a function of the window's width alone, and it is the
+  /// *window*, not the platform: a narrow desktop window and a phone get the
+  /// same answer. Below the threshold nothing docks by default, so the scene is
+  /// what a reader sees first rather than two panels meeting in the middle.
+  #[test]
+  fn the_compact_layout_leaves_the_scene_visible() {
+    // A phone in portrait, at the viewer's own UI zoom.
+    let phone = 390.0 / UI_ZOOM_FOR_TEST;
+    assert!(
+      phone < COMPACT_WIDTH,
+      "a phone must land in the compact layout"
+    );
+    // Both sidebars docked would leave nothing: that is the condition being
+    // escaped, stated rather than assumed.
+    assert!(
+      180.0 + 250.0 > phone,
+      "the docked sidebars must genuinely exceed a phone's width"
+    );
+    // And nothing is open by default.
+    assert_eq!(OpenPanel::default(), OpenPanel::None);
+
+    // A desktop window keeps the docked layout untouched.
+    const { assert!(1280.0 / UI_ZOOM_FOR_TEST > COMPACT_WIDTH) };
+  }
+
+  /// The compact sidebar never covers the whole screen, so the scene stays
+  /// partly visible even with one open -- an overlay, not a takeover.
+  #[test]
+  fn a_compact_sidebar_leaves_some_scene_showing() {
+    for width in [320.0_f32, 390.0, 540.0, 700.0] {
+      let side = (width * 0.85).min(280.0);
+      assert!(
+        side < width,
+        "width {width}: sidebar {side} covers everything"
+      );
+    }
+  }
+
+  /// Mirrors `app.rs`'s `UI_ZOOM`: the panel widths above are egui points, and
+  /// the zoom is what turns a device's pixels into them.
+  const UI_ZOOM_FOR_TEST: f32 = 1.25;
 
   fn shell_sizes(eigenvalues: &[f64]) -> Vec<usize> {
     degeneracy_shells(eigenvalues.iter().map(|&l| Some(l)))
