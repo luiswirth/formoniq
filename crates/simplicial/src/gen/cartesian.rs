@@ -13,6 +13,7 @@ use crate::{
   Dim,
 };
 
+/// An axis-aligned box $[min, max] subset RR^d$.
 pub struct Rect {
   min: Vector,
   max: Vector,
@@ -48,6 +49,10 @@ impl Rect {
   }
 }
 
+/// A uniform structured grid on an axis-aligned box: `ncells_axis` cells per
+/// side, $"ncells_axis"^d$ cubes in all, each Kuhn-triangulated into $d!$
+/// simplices. [`triangulate`](Self::triangulate) produces the simplicial
+/// `Complex` and its vertex `MeshCoords`.
 pub struct CartesianGrid {
   rect: Rect,
   ncells_axis: usize,
