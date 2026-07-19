@@ -310,6 +310,12 @@ impl MeshDisplay {
     self.baked.raycast(origin.coords, dir)
   }
 
+  /// The per-vertex displacement ceiling the bake derived from the mesh's
+  /// reach: what [`safe_amplitude`] scales the field against.
+  pub(crate) fn displacement_ceilings(&self) -> impl Iterator<Item = f32> + '_ {
+    self.baked.positions.iter().map(|v| v.max_displacement)
+  }
+
   /// The rendered triangles' cell-corner map, for reading a field per corner in
   /// its own cell (see [`crate::scene::surface_corner_values`]).
   pub(crate) fn cell_corners(&self) -> &[crate::bake::CellCorner] {
@@ -344,6 +350,72 @@ pub(crate) struct FieldAttributes {
   /// Per mesh vertex, for the segment marks: the 1-skeleton is shared and
   /// cannot tear, so it rides the continuous nodal recovery at every grade.
   pub(crate) wire_height: Vec<f32>,
+}
+
+/// The largest *uniform* amplitude at which no vertex displaces past its own
+/// reach: $A = min_v ("ceiling"_v \/ max_t |h_v (t)|)$.
+///
+/// A single global scalar, and that is the whole point. The per-vertex clamp in
+/// the shader can only bound the displacement by discarding the field's shape
+/// where it binds, and it binds at a *different* value at every vertex -- so on
+/// a mesh whose reach varies (any real shape: thin ears, sharp creases, a
+/// smooth belly) it flattens the mode in patches and leaves a visible seam
+/// between clamped and unclamped neighbours. That is not a bound on the
+/// deformation, it is a different deformation.
+///
+/// Scaling instead is the one operation an eigenmode is indifferent to: it is
+/// defined up to a scalar, so a global $A$ changes nothing about *which* mode is
+/// shown, only how far it swings. The displaced surface stays exactly $x + A f
+/// (x) n(x)$ with the field's own shape intact, and the reach bound
+/// ([`vertex_reach`](simplicial::geometry::coord::vertex_reach)) is what makes
+/// that map an embedding -- no fold, no self-intersection.
+///
+/// The maximum is over the field's whole evolution, not its representative
+/// frame: a trajectory's later frame can exceed its first, and an amplitude fit
+/// to frame zero would clamp exactly when the wave gets interesting. A standing
+/// wave rides $cos(sqrt(lambda) t) in [-1, 1]$, so its representative *is* its
+/// peak.
+///
+/// With this in force the shader's clamp is a guard that does not fire in
+/// normal operation, rather than the mechanism -- it stays for the case no
+/// bound anticipates (a mesh whose reach the estimator could not resolve).
+fn safe_amplitude(scene: &Scene, mesh: &MeshDisplay, selection: Selection) -> f32 {
+  amplitude_bound(
+    mesh.displacement_ceilings(),
+    &peak_heights(scene, selection),
+  )
+}
+
+/// The bound itself, over the per-vertex ceilings and peaks: `INFINITY` where
+/// nothing constrains it (a field that vanishes, a mesh with no reach bound),
+/// which composes correctly with the aesthetic ceiling the caller mins against.
+fn amplitude_bound(ceilings: impl Iterator<Item = f32>, peaks: &[f32]) -> f32 {
+  ceilings
+    .zip(peaks)
+    .filter(|(_, &peak)| peak > 1e-12)
+    .map(|(ceiling, &peak)| ceiling / peak)
+    .fold(f32::INFINITY, f32::min)
+}
+
+/// The peak $max_t |h_v (t)|$ of the displacement height at every vertex, over
+/// the field's whole time evolution. The nodal (continuous) height throughout:
+/// it is what the segments ride, and it bounds the per-cell rigid height too,
+/// being an average of the same per-cell values.
+fn peak_heights(scene: &Scene, selection: Selection) -> Vec<f32> {
+  let nvertices = scene.coords.nvertices();
+  let cochain = scene.field_cochain(selection);
+  let mut peaks = vec![0.0f32; nvertices];
+  let mut absorb = |cochain: &derham::cochain::Cochain| {
+    let heights = crate::scene::nodal_heights(&scene.topology, &scene.coords, cochain);
+    for (peak, h) in peaks.iter_mut().zip(heights) {
+      *peak = peak.max(h.abs() as f32);
+    }
+  };
+  match scene.field_time(selection) {
+    crate::scene::FieldTime::Trajectory { frames, .. } => frames.iter().for_each(&mut absorb),
+    _ => absorb(cochain),
+  }
+  peaks
 }
 
 /// How long a [`crate::scene::FieldTime::Trajectory`] takes to play through
@@ -446,11 +518,15 @@ impl FieldDisplay {
         // the wave collapses to no displacement rather than a special case
         // here.
         let wave_omega = field.time.wave_omega();
-        // Normalized by the field's own peak so every mode reaches the same peak
-        // displacement -- a fraction of the object's extent, not its mesh width,
-        // so the lobes read at orbital scale regardless of resolution.
+        // Two ceilings, and the amplitude is whichever binds first. The
+        // aesthetic one normalizes by the field's own peak so every mode
+        // reaches the same displacement -- a fraction of the object's extent,
+        // not its mesh width, so the lobes read at orbital scale regardless of
+        // resolution. The geometric one is the mesh's reach, and it is what
+        // keeps a shape with thin features from displacing through itself.
         let wave_amplitude = if field.time.animates() {
-          WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale
+          let aesthetic = WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale;
+          aesthetic.min(safe_amplitude(scene, mesh, selection))
         } else {
           0.0
         };
@@ -706,5 +782,155 @@ impl FieldDisplay {
       particles,
       deposit,
     }
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use simplicial::geometry::coord::{vertex_curvature_radius, vertex_reach};
+
+  /// The law the amplitude bound exists to enforce: at the chosen amplitude no
+  /// vertex displaces past its own reach, so the deformation stays an
+  /// embedding. Checked where it actually bites -- a slab thin enough that the
+  /// bound is set by its thickness -- and stated as the displacement, not as
+  /// the scalar, since that is the quantity that folds a surface.
+  #[test]
+  fn no_vertex_displaces_past_its_reach() {
+    let thickness = 0.04;
+    let (topology, coords) = slab(thickness);
+    let cochain = derham::cochain::Cochain::new(
+      0,
+      na::DVector::from_fn(coords.nvertices(), |i, _| {
+        // An arbitrary sign-changing field: what matters is that it is not
+        // constant, so the bound is set somewhere specific.
+        ((i as f64) * 0.7).sin()
+      }),
+    );
+    let heights = crate::scene::nodal_heights(&topology, &coords, &cochain);
+    let peaks: Vec<f32> = heights.iter().map(|h| h.abs() as f32).collect();
+
+    let extent = 1.0;
+    let reach = vertex_reach(&topology, &coords, extent);
+    let ceilings: Vec<f32> = reach.iter().map(|r| (0.9 * r) as f32).collect();
+
+    let amplitude = amplitude_bound(ceilings.iter().copied(), &peaks);
+    assert!(amplitude.is_finite(), "the bound must bind on a thin slab");
+
+    for (i, (&peak, &ceiling)) in peaks.iter().zip(&ceilings).enumerate() {
+      assert!(
+        amplitude * peak <= ceiling + 1e-6,
+        "vertex {i} displaces {} past its ceiling {ceiling}",
+        amplitude * peak
+      );
+    }
+
+    // And the bound is the *thickness*, not the curvature. The faces are flat,
+    // so a curvature-only ceiling permits a displacement exceeding the slab's
+    // own half-thickness -- which is the two faces passing through each other,
+    // stated as the concrete failure rather than as a ratio between bounds.
+    let curvature: Vec<f32> = vertex_curvature_radius(&topology, &coords)
+      .iter()
+      .map(|r| (0.9 * r) as f32)
+      .collect();
+    let curvature_only = amplitude_bound(curvature.iter().copied(), &peaks);
+    let deepest = curvature_only * peaks.iter().cloned().fold(0.0, f32::max);
+    assert!(
+      deepest > (thickness / 2.0) as f32,
+      "curvature alone must permit a displacement of {deepest} past the \
+       half-thickness {}, i.e. through the opposite face",
+      thickness / 2.0
+    );
+    // The reach bound does not.
+    assert!(amplitude * peaks.iter().cloned().fold(0.0, f32::max) <= (thickness / 2.0) as f32);
+  }
+
+  /// A field that vanishes everywhere constrains nothing, and the bound says so
+  /// rather than dividing by zero -- the caller's aesthetic ceiling then
+  /// decides alone.
+  #[test]
+  fn a_vanishing_field_is_unconstrained() {
+    assert_eq!(
+      amplitude_bound([1.0f32, 2.0].into_iter(), &[0.0, 0.0]),
+      f32::INFINITY
+    );
+  }
+
+  fn slab(
+    thickness: f64,
+  ) -> (
+    simplicial::topology::complex::Complex,
+    simplicial::geometry::coord::mesh::MeshCoords,
+  ) {
+    use simplicial::linalg::{Matrix, Vector};
+    use simplicial::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
+    let n = 8;
+    let half = thickness / 2.0;
+    let idx = |i: usize, j: usize, top: usize| top * (n + 1) * (n + 1) + j * (n + 1) + i;
+    let mut pts: Vec<Vector> = Vec::new();
+    for top in 0..2 {
+      let z = if top == 0 { -half } else { half };
+      for j in 0..=n {
+        for i in 0..=n {
+          pts.push(Vector::from_vec(vec![
+            i as f64 / n as f64,
+            j as f64 / n as f64,
+            z,
+          ]));
+        }
+      }
+    }
+    let mut quads: Vec<[usize; 4]> = Vec::new();
+    for top in 0..2 {
+      for j in 0..n {
+        for i in 0..n {
+          quads.push([
+            idx(i, j, top),
+            idx(i + 1, j, top),
+            idx(i + 1, j + 1, top),
+            idx(i, j + 1, top),
+          ]);
+        }
+      }
+    }
+    for k in 0..n {
+      quads.push([
+        idx(k, 0, 0),
+        idx(k + 1, 0, 0),
+        idx(k + 1, 0, 1),
+        idx(k, 0, 1),
+      ]);
+      quads.push([
+        idx(k, n, 0),
+        idx(k + 1, n, 0),
+        idx(k + 1, n, 1),
+        idx(k, n, 1),
+      ]);
+      quads.push([
+        idx(0, k, 0),
+        idx(0, k + 1, 0),
+        idx(0, k + 1, 1),
+        idx(0, k, 1),
+      ]);
+      quads.push([
+        idx(n, k, 0),
+        idx(n, k + 1, 0),
+        idx(n, k + 1, 1),
+        idx(n, k, 1),
+      ]);
+    }
+    let cells = quads
+      .into_iter()
+      .flat_map(|q| {
+        [
+          Simplex::from_word(vec![q[0], q[1], q[2]]).1,
+          Simplex::from_word(vec![q[0], q[2], q[3]]).1,
+        ]
+      })
+      .collect();
+    (
+      Complex::from_cells(Skeleton::new(cells)),
+      simplicial::geometry::coord::mesh::MeshCoords::from(Matrix::from_columns(&pts)),
+    )
   }
 }
