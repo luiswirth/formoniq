@@ -238,6 +238,15 @@ enumeration of views. A `Preset` is a named point in that product together with
 the field it opens on: selecting one sets the two axes and the selection, and
 everything afterward is the ordinary platform.
 
+**The shipped meshes are the asset directory, not a list of them.** `build.rs`
+enumerates `assets/meshes` and generates the table the picker and the CLI read,
+so a mesh is added by dropping the file in: its extension picks the reader, its
+stem is its name. Generated at build time rather than scanned at run time
+because the assets are embedded in the binary, which is what lets the web build
+— with no filesystem to scan — ship the same set. A hand-written list of what is
+in a directory is a second source of truth for something the directory already
+knows, and the two drift.
+
 A preset is therefore a *configuration*, never a code path — the moment a
 curated example would need its own branch to build or display, it has stopped
 being a preset and the generalization has a hole. This is the same dissolution

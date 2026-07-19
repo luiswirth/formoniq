@@ -67,58 +67,83 @@ pub const WAVE_FINAL_TIME: f64 = 12.0;
 /// per-grade eigensolve reuses it rather than remeshing.
 pub(crate) type Mesh = (Complex, MeshCoords);
 
-/// One of the CC0 surface meshes the studio ships as a built-in gallery,
-/// embedded in the binary (see `assets/meshes`, and its `SOURCES.md` for
-/// provenance). Chosen to span topology -- genus 0 and genus 1 -- so the
-/// harmonic (zero-eigenvalue) modes the gallery shows at grade 1 range over
-/// $dim H^1 = 2 g$.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub enum BuiltinMesh {
-  /// Spot the cow (genus 0).
-  Spot,
-  /// Bob (genus 1).
-  Bob,
-  /// Blub the fish (genus 0); the largest, so the slowest to solve.
-  Blub,
+/// One of the surface meshes the studio ships, embedded in the binary (see
+/// `assets/meshes`, and its `SOURCES.md` for provenance and topology).
+///
+/// The set is *not* written down here: `build.rs` enumerates the asset
+/// directory and generates the table below, so a mesh dropped into
+/// `assets/meshes` is selectable with no code to change, and there is no list
+/// that can fall out of step with what actually ships. A handle is an index
+/// into that table -- the meshes are fixed for the life of the binary, so an
+/// index is a name, and comparing two is comparing which mesh they are.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct BuiltinMesh(usize);
+
+/// How a shipped asset is read. The extension decides, in `build.rs`: the
+/// gallery does not care which format a mesh arrived in, only that it becomes
+/// a complex and its coordinates.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Format {
+  Obj,
+  Gmsh,
 }
 
-impl BuiltinMesh {
-  pub const ALL: [BuiltinMesh; 3] = [BuiltinMesh::Spot, BuiltinMesh::Bob, BuiltinMesh::Blub];
+pub(crate) struct Builtin {
+  name: &'static str,
+  format: Format,
+  /// The asset's bytes. If the git-LFS content was never fetched these are the
+  /// LFS pointer text, which the readers report as an empty or malformed mesh
+  /// rather than silently mis-loading.
+  bytes: &'static [u8],
+}
 
-  pub(crate) fn label(self) -> &'static str {
-    match self {
-      BuiltinMesh::Spot => "Spot (cow)",
-      BuiltinMesh::Bob => "Bob",
-      BuiltinMesh::Blub => "Blub (fish)",
-    }
+include!(concat!(env!("OUT_DIR"), "/builtin_meshes.rs"));
+
+impl BuiltinMesh {
+  /// Every shipped mesh, in the table's own (name-sorted) order.
+  pub fn all() -> impl ExactSizeIterator<Item = BuiltinMesh> {
+    (0..BUILTINS.len()).map(BuiltinMesh)
   }
 
-  /// The mesh's name as a caller writes it: ASCII, lowercase, no spaces --
-  /// what the picker's own label is not, since a label is prose and this is a
-  /// token. Paired with [`Self::from_name`], so a mesh added to [`Self::ALL`]
-  /// reaches the CLI without a second list to keep in step.
+  fn entry(self) -> &'static Builtin {
+    &BUILTINS[self.0]
+  }
+
+  /// The mesh's name as a caller writes it: the asset's file stem, which is
+  /// ASCII, lowercase and space-free by the same convention that names the
+  /// files. Paired with [`Self::from_name`], so a mesh reaches the CLI and the
+  /// picker together, from the one table.
   pub fn name(self) -> &'static str {
-    match self {
-      BuiltinMesh::Spot => "spot",
-      BuiltinMesh::Bob => "bob",
-      BuiltinMesh::Blub => "blub",
+    self.entry().name
+  }
+
+  /// The picker's label: the name, capitalized. Prose is not derivable from a
+  /// filename, so the filename *is* the label -- renaming the asset is how a
+  /// mesh is renamed, rather than a second table of display strings that the
+  /// first one could disagree with.
+  pub(crate) fn label(self) -> String {
+    let name = self.name();
+    let mut chars = name.chars();
+    match chars.next() {
+      Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+      None => String::new(),
     }
   }
 
   pub fn from_name(name: &str) -> Option<Self> {
-    Self::ALL.into_iter().find(|m| m.name() == name)
+    Self::all().find(|m| m.name() == name)
   }
 
-  /// The embedded OBJ source of the mesh. Baked in with `include_str!`, so it
-  /// travels with the binary and needs no filesystem at runtime (and works on
-  /// wasm). If the git-LFS content was never fetched this is the LFS pointer
-  /// text, which [`crate::io::obj::parse`] reports as an empty mesh rather than
-  /// silently mis-loading.
-  fn obj(self) -> &'static str {
-    match self {
-      BuiltinMesh::Spot => include_str!("../assets/meshes/spot.obj"),
-      BuiltinMesh::Bob => include_str!("../assets/meshes/bob.obj"),
-      BuiltinMesh::Blub => include_str!("../assets/meshes/blub.obj"),
+  /// The mesh, parsed by whichever reader its format calls for.
+  pub(crate) fn build(self) -> Result<(Complex, MeshCoords), String> {
+    let entry = self.entry();
+    match entry.format {
+      Format::Obj => {
+        let text = std::str::from_utf8(entry.bytes)
+          .map_err(|e| format!("{}: not UTF-8 ({e})", self.label()))?;
+        crate::io::obj::parse(text).map_err(|e| format!("{}: {e}", self.label()))
+      }
+      Format::Gmsh => Ok(simplicial::io::gmsh::gmsh2coord_complex(entry.bytes)),
     }
   }
 }
@@ -184,7 +209,7 @@ impl MeshSource {
       MeshSource::Grid { .. } => "Grid".to_string(),
       MeshSource::ReferenceCell { .. } => "Reference cell".to_string(),
       MeshSource::Triforce => "Triforce".to_string(),
-      MeshSource::Builtin(builtin) => builtin.label().to_string(),
+      MeshSource::Builtin(builtin) => builtin.label(),
       MeshSource::Custom { name } => name.clone(),
       MeshSource::File(path) => path
         .file_name()
@@ -219,9 +244,7 @@ impl MeshSource {
         Ok((topology, coords.embed_euclidean((*dim).max(3))))
       }
       MeshSource::Triforce => Ok(crate::demos::triforce()),
-      MeshSource::Builtin(builtin) => {
-        crate::io::obj::parse(builtin.obj()).map_err(|e| format!("{}: {e}", builtin.label()))
-      }
+      MeshSource::Builtin(builtin) => builtin.build(),
       MeshSource::Custom { .. } => {
         unreachable!("a custom mesh is installed directly, never rebuilt from its descriptor")
       }
@@ -415,21 +438,15 @@ fn curl_on_triforce() -> Preset {
 /// The curated first-wave presets, in browser order. Each is a configuration of
 /// the general platform: a mesh, a study, and the field to open on.
 pub(crate) fn presets() -> Vec<Preset> {
-  vec![
+  // A preset naming a shipped mesh looks it up by name, and is offered only if
+  // that asset is present: the mesh set is the asset directory's, so a preset
+  // over a mesh nobody shipped is not a configuration that exists.
+  let bob = BuiltinMesh::from_name("bob");
+  let mut presets = vec![
     Preset {
       name: "Spherical harmonics",
       mesh: MeshSource::START,
       study: Study::start(),
-      selection: None,
-      marks: None,
-    },
-    Preset {
-      name: "Harmonic 1-forms",
-      mesh: MeshSource::Builtin(BuiltinMesh::Bob),
-      study: Study::Eigenmodes {
-        grade: 1,
-        nmodes: DEFAULT_NMODES,
-      },
       selection: None,
       marks: None,
     },
@@ -451,17 +468,6 @@ pub(crate) fn presets() -> Vec<Preset> {
     },
     curl_on_triforce(),
     Preset {
-      // A genus-1 surface, so the harmonic shell is genuinely 2-dimensional
-      // ($b_1 = 2$) rather than empty: the decomposition is the full
-      // exact + coexact + harmonic, not the contractible Helmholtz special
-      // case. Opens on the harmonic shell -- the component that sees the hole.
-      name: "Hodge decomposition",
-      mesh: MeshSource::Builtin(BuiltinMesh::Bob),
-      study: Study::HodgeDecomposition,
-      selection: Some(Selection::Line(3)),
-      marks: None,
-    },
-    Preset {
       name: "Heat equation",
       mesh: MeshSource::START,
       study: Study::Heat {
@@ -481,7 +487,35 @@ pub(crate) fn presets() -> Vec<Preset> {
       selection: None,
       marks: None,
     },
-  ]
+  ];
+
+  if let Some(bob) = bob {
+    presets.insert(
+      1,
+      Preset {
+        name: "Harmonic 1-forms",
+        mesh: MeshSource::Builtin(bob),
+        study: Study::Eigenmodes {
+          grade: 1,
+          nmodes: DEFAULT_NMODES,
+        },
+        selection: None,
+        marks: None,
+      },
+    );
+    presets.push(Preset {
+      // A genus-1 surface, so the harmonic shell is genuinely 2-dimensional
+      // ($b_1 = 2$) rather than empty: the decomposition is the full
+      // exact + coexact + harmonic, not the contractible Helmholtz special
+      // case. Opens on the harmonic shell -- the component that sees the hole.
+      name: "Hodge decomposition",
+      mesh: MeshSource::Builtin(bob),
+      study: Study::HodgeDecomposition,
+      selection: Some(Selection::Line(3)),
+      marks: None,
+    });
+  }
+  presets
 }
 
 /// What the viewer is showing: the `(mesh, study)` pair a build and its
@@ -753,30 +787,70 @@ mod tests {
     assert!(marks.glyphs && marks.particles);
   }
 
-  /// A preset's opening selection is an index into the scene its study builds,
-  /// so the way it goes wrong is silently: reorder a study's fields and the
-  /// preset opens on the wrong one, or past the end. This checks the two
-  /// presets that name a field explicitly -- the rest open on the platform
-  /// default and have no index to get wrong.
+  /// Every shipped asset loads. This is what the generated table buys and what
+  /// it risks: the picker now offers whatever is in `assets/meshes`, so a file
+  /// dropped in with an unreadable body, or an extension whose reader cannot
+  /// actually parse it, becomes a broken entry in the UI rather than a compile
+  /// error. Building each one here is the check that the directory and the
+  /// readers agree.
   ///
-  /// The Hodge preset is checked on `torus0.msh` rather than on its own mesh
-  /// (Bob): what its `Line(3)` index depends on is the shell ordering of
+  /// A closed surface is not asserted -- a shipped mesh need not be closed --
+  /// but a mesh with no cells is either an unfetched LFS pointer or a file that
+  /// is not a mesh at all, and neither belongs in the picker.
+  #[test]
+  fn every_shipped_mesh_loads() {
+    assert!(
+      BuiltinMesh::all().len() > 0,
+      "the asset directory must ship at least one mesh"
+    );
+    for builtin in BuiltinMesh::all() {
+      let (topology, coords) = builtin
+        .build()
+        .unwrap_or_else(|e| panic!("{}: {e}", builtin.name()));
+      assert!(
+        topology.nsimplices(topology.dim()) > 0,
+        "{}: built empty (unfetched LFS asset?)",
+        builtin.name()
+      );
+      assert_eq!(
+        coords.nvertices(),
+        topology.nsimplices(0),
+        "{}: coordinates and vertices disagree",
+        builtin.name()
+      );
+    }
+  }
+
+  /// The names the CLI accepts are the picker's, and they are unique -- the
+  /// file stems, so two assets differing only by extension would collide and
+  /// `from_name` would silently resolve to whichever sorted first.
+  #[test]
+  fn shipped_mesh_names_are_unique_and_resolve() {
+    let names: Vec<&str> = BuiltinMesh::all().map(|m| m.name()).collect();
+    let unique: std::collections::HashSet<&&str> = names.iter().collect();
+    assert_eq!(
+      unique.len(),
+      names.len(),
+      "duplicate mesh names in {names:?}"
+    );
+    for builtin in BuiltinMesh::all() {
+      assert_eq!(BuiltinMesh::from_name(builtin.name()), Some(builtin));
+    }
+  }
+
+  /// The other preset that names a field explicitly. Its `Line(3)` is an index
+  /// into the scene its study builds, so it breaks silently when the shells are
+  /// reordered -- pinned here to the shell's name instead.
+  ///
+  /// Checked on `torus0.msh` rather than on its own mesh (Bob): what the index
+  /// depends on is the shell ordering of
   /// `Study::HodgeDecomposition` and the surface's first Betti number, and the
   /// torus fixture has the same $b_1 = 2$ at 127 vertices instead of ~3000. It
   /// is a faithful stand-in for what is being tested, not a weaker one -- and
   /// it keeps Bob's harmonic solve out of the test suite, for the reason
   /// `assets/meshes/SOURCES.md` already records.
   #[test]
-  fn a_preset_opens_on_the_field_it_names() {
-    // The curl preset, on its own (cheap) mesh.
-    let preset = start_preset();
-    let scene = preset.study.build(&preset.mesh.build().unwrap());
-    let Some(Selection::Line(index)) = preset.selection else {
-      panic!("the start preset opens on a line field");
-    };
-    assert_eq!(scene.line_fields[index].name, "pure curl");
-
-    // The Hodge preset's shell index, on the cheap genus-1 stand-in.
+  fn the_hodge_preset_opens_on_the_harmonic_shell() {
     let hodge = presets()
       .into_iter()
       .find(|p| matches!(p.study, Study::HodgeDecomposition))

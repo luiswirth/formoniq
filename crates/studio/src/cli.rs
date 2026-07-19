@@ -104,7 +104,10 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
     _ => BuiltinMesh::from_name(s)
       .map(MeshSource::Builtin)
       .ok_or_else(|| {
-        let builtins = BuiltinMesh::ALL.map(BuiltinMesh::name).join("`, `");
+        let builtins = BuiltinMesh::all()
+          .map(BuiltinMesh::name)
+          .collect::<Vec<_>>()
+          .join("`, `");
         format!(
           "expected `sphere`, `grid`, `refcell`, `triforce`, `{builtins}`, or a mesh directory, \
            got `{s}`"
