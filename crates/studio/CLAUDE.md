@@ -54,12 +54,22 @@ as it can go before either one commits.
   unshared already, for the deposit atlas), so a cell the form vanishes on stays
   exactly black instead of inheriting a neighbour's value through a shared vertex.
   A per-vertex tint cannot state this and silently bleeds a DOF's magnitude into
-  every incident cell. What genuinely *is* per vertex is the standing-wave
-  **displacement height**: a geometric height of one connected surface must be
-  single-valued at a vertex or the surface tears, so it takes the continuous
-  nodal recovery of that same value. Colormap and height coincide only for a
-  genuine 0-form; the split is the honest field readout versus the surface's
-  geometry.
+  every incident cell.
+
+  The **displacement height** follows the field's own continuity, by the same
+  reduction that picks the mark rather than by a second rule. $cal(W) Lambda^0$
+  is $P_1$: a vertex has one value, the nodal recovery *is* the field, and the
+  surface displaces as one connected sheet. $cal(W) Lambda^n$ is $P_0$: the
+  reduced density is constant per cell and discontinuous across it, so there is
+  no continuous height to ride and each cell displaces **rigidly**, by its own
+  constant. That tears the surface, and the tear is the mark — cells separate by
+  exactly the jump across their shared face, so the discontinuity becomes
+  visible space and the surface re-closes under refinement. Smoothing it instead
+  would show one field flat-shaded in color and smooth in shape, two
+  contradictory claims in one frame. A nodal average where the field is
+  genuinely discontinuous is a recovery, and presenting a recovery as the field
+  is the thing to avoid. The shared 1-skeleton cannot tear without being
+  duplicated, so the segment marks keep the continuous recovery at every grade.
 
 Between the two the discipline is lived, not hoped for: a curve integrator works
 in the barycentric charts of the atlas and crosses cells through the
@@ -90,6 +100,13 @@ Two reductions carry that, and they are the same move made on the two axes:
   reduction to show, so those fields are refused at `Scene::field` rather than
   drawn with a per-cell sign; a field that reaches a mark is already the proof
   that its orientation exists.
+
+  Where a gauge is genuinely free, prefer making the mark independent of it over
+  picking a value for it. The rigid cell displacement $d_K n_K$ is the model:
+  the density and the cell normal flip together, so the motion is invariant. The
+  gauges that remain are pinned only as far as reproducibility needs — a mode's
+  sign is arbitrary, so it is fixed canonically; a solve's is physical and is
+  left alone.
 - **Intrinsic dimension reduces to a render primitive.** An $n$-manifold reduces
   to the primitive $min(n, 2)$ in the bake: a surface to wound triangles, a curve
   to segments, a point cloud to points, and a solid to the 2-simplices of its

@@ -759,6 +759,14 @@ impl Scene {
     line_fields: &mut Vec<LineField>,
   ) {
     let FieldMeta { name, time, dof } = meta;
+    // A mode's sign is arbitrary, so it is pinned; a trajectory's is physical
+    // (it solved from an initial condition), and its frames are what the
+    // display reads, so flipping the representative alone would desync it.
+    let cochain = if time.is_trajectory() {
+      cochain
+    } else {
+      canonical_sign(cochain)
+    };
     let n = topology.dim();
     let k = cochain.grade();
 
@@ -890,17 +898,104 @@ pub(crate) fn surface_corner_values(
   values
 }
 
+/// A cochain in canonical sign: the coefficient of largest magnitude is made
+/// positive, ties broken by colex rank.
+///
+/// An eigenvector is defined only up to a scalar, and a solver may return
+/// either sign on a whim -- so the same mode can come out red where it was blue
+/// between two runs of the same scene, for reasons that are not the
+/// mathematics. Pinning it is what makes a rendered field reproducible, and it
+/// dominates the orientation gauge (which is already deterministic): the
+/// field's own sign sits in front of the density either way.
+///
+/// A gauge fix, not a normalization: the magnitude is untouched, so the
+/// colormap range still spans what the field actually is. The zero cochain is
+/// its own canonical form, having no largest coefficient to orient by.
+///
+/// Applies to modes only. A trajectory's sign is *physical* -- it solved from
+/// an initial condition -- and flipping it would be a lie about the solve, so
+/// the caller excludes it.
+fn canonical_sign(cochain: Cochain) -> Cochain {
+  let pivot = cochain
+    .coeffs()
+    .iter()
+    .copied()
+    .enumerate()
+    .max_by(|(_, a), (_, b)| {
+      a.abs()
+        .partial_cmp(&b.abs())
+        .unwrap_or(std::cmp::Ordering::Equal)
+    });
+  match pivot {
+    Some((_, c)) if c < 0.0 => Cochain::new(cochain.grade(), -cochain.coeffs()),
+    _ => cochain,
+  }
+}
+
+/// The surface's displacement height per rendered corner, by the strategy the
+/// field's own continuity calls for -- the same reduction that picks the mark,
+/// asked once more.
+///
+/// $cal(W) Lambda^0$ is $P_1$ and continuous, so a vertex has one value and the
+/// nodal recovery below *is* the field: the surface displaces as one connected
+/// sheet, exactly. $cal(W) Lambda^n$ is $P_0$: the reduced density is constant
+/// on each cell and genuinely discontinuous across it, so there is no
+/// continuous height to displace by, and the nodal average would invent one --
+/// showing a $P_0$ field flat-shaded in color and smooth in shape, two
+/// contradictory claims about one field in one frame. Instead each cell
+/// displaces *rigidly*, by its own constant value.
+///
+/// **A rigidly displaced surface tears, and that is the point.** The cells
+/// separate by exactly the jump in the density across their shared face, so the
+/// discontinuity becomes visible space rather than being smoothed away, and the
+/// surface visibly re-closes under refinement as the jump vanishes. It is the
+/// displacement counterpart of reading the colormap per corner.
+///
+/// The direction stays the *vertex* normal, so a cell translates rather than
+/// moving exactly along its own normal. On a resolved mesh the two differ by
+/// the normal's variation across one cell. What this costs is stated in
+/// [`reduced_form`]'s terms: $d_K n_K$ with the orientation-induced cell normal
+/// would be invariant under the orientation gauge outright, whereas the
+/// embedding's outward normal fixes that gauge only up to one *global* sign --
+/// the same ambiguity an eigenvector already carries, and not the per-cell
+/// scrambling that made the star wrong.
+pub(crate) fn surface_corner_heights(
+  topology: &Complex,
+  coords: &MeshCoords,
+  cochain: &Cochain,
+  cell_corners: &[CellCorner],
+) -> Vec<f64> {
+  let n = topology.dim();
+  let k = cochain.grade();
+  if k > n - k {
+    // Discontinuous: the per-corner read is already constant on each cell, so
+    // the honest colormap value and the rigid height are the same number.
+    return surface_corner_values(topology, coords, cochain, cell_corners);
+  }
+  let nodal = nodal_heights(topology, coords, cochain);
+  cell_corners
+    .iter()
+    .flat_map(|cc| {
+      let vertices = SimplexIdx::new(n, cc.cell)
+        .handle(topology)
+        .simplex()
+        .vertices
+        .clone();
+      cc.local.map(|ilocal| nodal[vertices[ilocal]])
+    })
+    .collect()
+}
+
 /// The per-vertex displacement height: the reduced field's nodal average over
 /// the cells incident at each vertex.
 ///
-/// The colormap must be discontinuous (see [`surface_corner_values`]), but the
-/// standing-wave *displacement* is a geometric height of one connected object,
-/// and a shared vertex has one position -- displacing its incident cells' copies
-/// apart would tear the surface (or the curve). So displacement takes this
-/// continuous nodal recovery, exact for a genuine 0-form whose incident cells
-/// already agree. It is a function of the field alone, not of the render
-/// primitive, so it is defined at every dimension -- a 1-manifold has no fill to
-/// average corners over, yet its curve still displaces.
+/// Exact for a continuous field ($cal(W) Lambda^0$), where the incident cells
+/// already agree and this is the identity on the DOFs; a smoothing recovery
+/// wherever the reduction stars, which is why the surface does not use it there
+/// (see [`surface_corner_heights`]). It stays the height of the *segment* marks
+/// at every grade: the 1-skeleton is shared between cells and cannot tear
+/// without duplicating it, so the wireframe rides the continuous recovery and
+/// reads as the reference the fill's torn cells sit around.
 pub(crate) fn nodal_heights(
   topology: &Complex,
   coords: &MeshCoords,
@@ -1153,6 +1248,89 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// A top-grade field displaces its cells *rigidly*: the height is constant
+  /// within each cell, which is what makes the fill tear along the field's own
+  /// discontinuity instead of smoothing across it. Constant to zero spread,
+  /// not approximately -- the Whitney top form is genuinely $P_0$.
+  #[test]
+  fn top_grade_displacement_is_constant_within_each_cell() {
+    let scene = Scene::spherical_harmonics(1, 2);
+    let baked = crate::bake::BakedMesh::new(&scene.topology, &scene.coords);
+    let top = scene
+      .fields
+      .iter()
+      .find(|f| f.grade == scene.topology.dim())
+      .expect("a top-grade scalar field");
+    let heights = surface_corner_heights(
+      &scene.topology,
+      &scene.coords,
+      &top.cochain,
+      &baked.cell_corners,
+    );
+    for corner in heights.chunks(3) {
+      assert_eq!(
+        corner[0], corner[1],
+        "a cell's corners must share one rigid height"
+      );
+      assert_eq!(corner[0], corner[2]);
+    }
+  }
+
+  /// A grade-0 field stays continuous: the corners a shared mesh vertex
+  /// contributes to agree, so the surface displaces as one sheet and does not
+  /// tear. The other half of the dispatch, and the reason it is a dispatch
+  /// rather than a switch to rigid displacement everywhere.
+  #[test]
+  fn grade_zero_displacement_agrees_at_a_shared_vertex() {
+    let scene = Scene::spherical_harmonics(1, 2);
+    let baked = crate::bake::BakedMesh::new(&scene.topology, &scene.coords);
+    let scalar = scene
+      .fields
+      .iter()
+      .find(|f| f.grade == 0)
+      .expect("a grade-0 field");
+    let heights = surface_corner_heights(
+      &scene.topology,
+      &scene.coords,
+      &scalar.cochain,
+      &baked.cell_corners,
+    );
+    let mut seen: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
+    for (cc, corner) in baked.cell_corners.iter().zip(heights.chunks(3)) {
+      let vertices = SimplexIdx::new(scene.topology.dim(), cc.cell)
+        .handle(&scene.topology)
+        .simplex()
+        .vertices
+        .clone();
+      for (slot, &ilocal) in cc.local.iter().enumerate() {
+        let previous = seen.insert(vertices[ilocal], corner[slot]);
+        if let Some(previous) = previous {
+          assert!((previous - corner[slot]).abs() < 1e-12);
+        }
+      }
+    }
+  }
+
+  /// The sign gauge is pinned, so a solver returning the opposite eigenvector
+  /// renders the identical picture: the largest-magnitude coefficient comes out
+  /// positive either way, and the magnitudes are untouched.
+  #[test]
+  fn canonical_sign_is_a_gauge_fix() {
+    let c = Cochain::new(0, na::DVector::from_vec(vec![0.5, -2.0, 1.0]));
+    let flipped = Cochain::new(0, -c.coeffs());
+    assert_eq!(
+      canonical_sign(c.clone()).coeffs(),
+      canonical_sign(flipped).coeffs()
+    );
+    // The pivot is made positive, and nothing is rescaled.
+    let fixed = canonical_sign(c);
+    assert_eq!(fixed.coeffs()[1], 2.0);
+    assert_eq!(fixed.coeffs()[0], -0.5);
+    // The zero cochain is its own canonical form.
+    let zero = Cochain::new(0, na::DVector::zeros(3));
+    assert_eq!(canonical_sign(zero.clone()).coeffs(), zero.coeffs());
+  }
 
   /// The harmonic top-grade form on a closed orientable surface is a multiple
   /// of the volume form, $h = c dvol$, so its reduction $star h = c$ is
