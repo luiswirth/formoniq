@@ -125,10 +125,10 @@ pub(crate) struct State {
   mesh_view: crate::ui::MeshView,
   field_view: crate::ui::FieldView,
 
-  /// Which sidebar is over the scene in the compact (narrow-window) layout.
-  /// Viewer state like the two views above: it rebuilds nothing, and which
-  /// controls a reader wants in front of them is not a fact about the object.
-  open_panel: crate::ui::OpenPanel,
+  /// Which sidebars are open. Viewer state like the two views above: it
+  /// rebuilds nothing, and which controls a reader wants in front of them is
+  /// not a fact about the object.
+  sidebars: crate::ui::Sidebars,
 
   /// How the scene's light reaches the display. Viewer state for the same
   /// reason: it rebuilds nothing, and it is a question about what is being
@@ -296,7 +296,7 @@ impl State {
         marks: start.marks.unwrap_or_default(),
         ..Default::default()
       },
-      open_panel: crate::ui::OpenPanel::default(),
+      sidebars: crate::ui::Sidebars::default(),
       post: crate::ui::Post::default(),
       drag: None,
       cursor: None,
@@ -832,7 +832,7 @@ impl State {
       .map(|duration| (self.trajectory_solve_time(duration), duration));
 
     let model = PanelModel {
-      open_panel: self.open_panel,
+      sidebars: self.sidebars,
       mesh_source: mesh_source.clone(),
       study: study.clone(),
       is_loading: self.gallery.is_loading(),
@@ -928,7 +928,7 @@ impl State {
     // same frame as a mesh or study change.
     self.mesh_view = response.mesh_view;
     self.field_view = response.field_view;
-    self.open_panel = response.open_panel;
+    self.sidebars = response.sidebars;
     self.post = response.post;
     self.clock.set_playing(response.playing);
 

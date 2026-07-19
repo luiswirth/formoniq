@@ -248,10 +248,17 @@ they bind the same way the parent's invariants do:
   belongs to, because that taxonomy mirrors the two objects on screen and a
   second one keyed on screen size would cut across it. Below the width where
   both sidebars plus a usable viewport fit, nothing docks by default: the scene
-  is what a reader sees first and a sidebar is something they open. Derived
-  per frame from the available width, so it is a function of the viewport rather
-  than a mode anything stores, and a narrow desktop window gets exactly what a
-  phone gets — there is no mobile build, only a narrow one.
+  is what a reader sees first and a sidebar is something they open. A narrow
+  desktop window gets exactly what a phone gets — there is no mobile build, only
+  a narrow one.
+
+  **The sidebars collapse at every width, and the layout only supplies the
+  default.** Wanting the controls out of the way to look at the scene is not
+  something only a small screen wants, so the toggles are always there. What the
+  width decides is what an *untouched* sidebar does; a reader's explicit choice
+  outranks it and survives a resize. That is a third state, not a boolean — the
+  default has to stay derivable, or the first frame on a phone shows two panels
+  meeting in the middle before anything can correct them.
 
 ## The platform is a product; presets are points in it
 
