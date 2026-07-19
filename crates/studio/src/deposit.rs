@@ -30,19 +30,23 @@ use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 /// the per-cell resolutions are allocated out of. The trail is sampled from
 /// this atlas by the fill and magnified onto whatever screen area the cell
 /// covers, so it is this budget -- not the particle count or the splat -- that
-/// sets how sharp a filament reads when a cell fills the view. R16Float at this
-/// side is ~33 MB per texture, ~67 MB across the ping-pong pair: comfortably
-/// within core WebGPU limits, and the passes that touch it are the per-step
-/// fade (a single full-atlas blit) and the per-fragment fill, both negligible
-/// against the per-particle splat, so the resolution is nearly free of frame
-/// cost.
-pub const ATLAS_SIZE: u32 = 4096;
+/// sets how sharp a filament reads when a cell fills the view.
+///
+/// The bound is the *fade*: the whole atlas is blitted once per advection step,
+/// and a slow display owes the [`crate::app`] step cap's worth of them every
+/// frame, so the per-frame fade bandwidth grows as the square of this side. At
+/// 2048 the ping-pong pair is ~16 MB of R16Float and the fade stays cheap on a
+/// weak integrated GPU; the bicubic reconstruction in the fill recovers most of
+/// the sharpness a larger atlas would buy, at a per-fragment cost the display
+/// bounds rather than the atlas. A budget scaled to the adapter, rather than one
+/// fixed side, is the way to spend more where the hardware affords it.
+pub const ATLAS_SIZE: u32 = 2048;
 
 /// Bounds on one cell's lattice resolution. The floor keeps a sliver from
 /// degenerating below the splat kernel's own footprint; the cap keeps one huge
 /// cell (a coarse mesh's) from spending the whole budget on itself.
 const MIN_RESOLUTION: u32 = 4;
-const MAX_RESOLUTION: u32 = 1024;
+const MAX_RESOLUTION: u32 = 512;
 
 /// Empty texels around each block, so a bilinear read at a cell's edge touches
 /// only the cell's own block -- the neighbouring block in the *atlas* belongs
