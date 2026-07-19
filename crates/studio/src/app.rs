@@ -159,6 +159,20 @@ pub(crate) struct State {
   cursor: Option<winit::dpi::PhysicalPosition<f64>>,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
 
+  /// The fingers currently touching the surface, in the order they landed.
+  /// Touch has no hover -- a finger exists only while down -- so this is both
+  /// the pointer state and the gesture's arity: one finger looks, two pinch.
+  /// The mouse path is untouched by it; the two input sources are independent
+  /// and a device that emits one never emits the other for the same motion.
+  touches: Vec<(u64, winit::dpi::PhysicalPosition<f64>)>,
+  /// The touch gesture's baseline from the previous move: the centroid every
+  /// finger is measured against, and (for two-finger pinch) their mean spread
+  /// about it. Held as deltas rather than absolutes so a finger landing or
+  /// lifting only re-seats the baseline ([`State::reseat_touch`]) instead of
+  /// jumping the camera by the discontinuity in the centroid.
+  touch_centroid: Option<(f64, f64)>,
+  touch_spread: Option<f64>,
+
   /// Physical keys currently held, for the fly controls (`WASD` +
   /// `Space`/`Shift`/`Ctrl`). Tracked independently of winit's own key-repeat
   /// so movement follows the frame rate, not the repeat rate.
@@ -301,6 +315,9 @@ impl State {
       drag: None,
       cursor: None,
       last_mouse_pos: None,
+      touches: Vec::new(),
+      touch_centroid: None,
+      touch_spread: None,
       keys_held: std::collections::HashSet::new(),
       last_frame: web_time::Instant::now(),
       gallery,
@@ -628,8 +645,121 @@ impl State {
         let focus = self.cursor_point();
         self.zoom_by(scroll * ZOOM_PER_NOTCH, focus);
       }
+      WindowEvent::Touch(touch) => self.handle_touch(touch),
       _ => {}
     }
+  }
+
+  /// Touch navigation, the finger counterpart to the mouse split above and
+  /// built on the same camera primitives -- one finger looks (pans, in the
+  /// orthographic view that does not rotate), two fingers pinch to zoom and
+  /// drag to pan. Nothing here is web-only: winit delivers `Touch` on every
+  /// platform that has a touchscreen, so a touch laptop gets the same gestures
+  /// the browser does, which is why it lives in the shared input path and not
+  /// in `web.rs`.
+  fn handle_touch(&mut self, touch: &winit::event::Touch) {
+    use winit::event::TouchPhase;
+    match touch.phase {
+      TouchPhase::Started => {
+        self.touches.push((touch.id, touch.location));
+        self.reseat_touch();
+      }
+      TouchPhase::Ended | TouchPhase::Cancelled => {
+        self.touches.retain(|(id, _)| *id != touch.id);
+        self.reseat_touch();
+      }
+      TouchPhase::Moved => {
+        if let Some(slot) = self.touches.iter_mut().find(|(id, _)| *id == touch.id) {
+          slot.1 = touch.location;
+        }
+        self.apply_touch();
+      }
+    }
+  }
+
+  /// Recomputes the gesture baseline from the fingers currently down, called
+  /// whenever their count changes. This is what keeps a landing or lifting
+  /// finger from jolting the camera: the next move measures its delta against
+  /// the configuration that produced it, not the one before it.
+  fn reseat_touch(&mut self) {
+    self.touch_centroid = self.touch_centroid_now();
+    self.touch_spread = self.touch_spread_now();
+  }
+
+  /// The mean of the active finger positions, or `None` with no finger down.
+  fn touch_centroid_now(&self) -> Option<(f64, f64)> {
+    if self.touches.is_empty() {
+      return None;
+    }
+    let n = self.touches.len() as f64;
+    let (sx, sy) = self
+      .touches
+      .iter()
+      .fold((0.0, 0.0), |(sx, sy), (_, p)| (sx + p.x, sy + p.y));
+    Some((sx / n, sy / n))
+  }
+
+  /// The fingers' mean distance from their centroid: the pinch's one scalar.
+  /// `None` below two fingers, where a spread is undefined and no pinch runs.
+  fn touch_spread_now(&self) -> Option<f64> {
+    if self.touches.len() < 2 {
+      return None;
+    }
+    let (cx, cy) = self.touch_centroid_now()?;
+    let n = self.touches.len() as f64;
+    let spread = self
+      .touches
+      .iter()
+      .map(|(_, p)| ((p.x - cx).powi(2) + (p.y - cy).powi(2)).sqrt())
+      .sum::<f64>()
+      / n;
+    Some(spread)
+  }
+
+  /// Turns the current finger configuration into a camera motion, relative to
+  /// the baseline the last move (or [`Self::reseat_touch`]) left. One finger
+  /// rotates about the eye -- the look gesture, or a pan in the orthographic
+  /// view that declines rotation, mirroring the mouse. Two fingers pinch about
+  /// their centroid and pan by its translation, the two composing the way a map
+  /// does.
+  fn apply_touch(&mut self) {
+    let Some((cx, cy)) = self.touch_centroid_now() else {
+      return;
+    };
+    // The centroid drives picking for the pinch focus, exactly as the cursor
+    // does for the wheel: one finger's position is the pointer.
+    self.cursor = Some(winit::dpi::PhysicalPosition::new(cx, cy));
+
+    if let Some((px, py)) = self.touch_centroid {
+      let (dx, dy) = ((cx - px) as f32, (cy - py) as f32);
+      match self.touches.len() {
+        1 if !self.camera.orthographic => {
+          let eye = self.camera.eye;
+          self
+            .camera
+            .rotate(dx * RADIANS_PER_PIXEL, dy * RADIANS_PER_PIXEL, eye);
+        }
+        _ => {
+          // One finger in the orthographic view, or two in either -- both pan.
+          let scale = self.camera.world_per_pixel(self.size.height);
+          self.camera.eye += (self.camera.up() * dy - self.camera.right() * dx) * scale;
+        }
+      }
+    }
+
+    // The pinch rides on top of the two-finger pan: the ratio of spreads is the
+    // multiplicative zoom the wheel already speaks, about the point the fingers
+    // straddle.
+    if let (Some(prev), Some(now)) = (self.touch_spread, self.touch_spread_now()) {
+      if prev > f64::EPSILON && now > f64::EPSILON {
+        let e_folds = (now / prev).ln() as f32;
+        let focus = self.cursor_point();
+        self.zoom_by(e_folds, focus);
+      }
+    }
+
+    self.touch_centroid = Some((cx, cy));
+    self.touch_spread = self.touch_spread_now();
   }
 
   /// Where a ray meets the mesh, or -- on a miss, and for a bake with no
