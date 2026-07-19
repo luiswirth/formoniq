@@ -17,7 +17,7 @@ values; nothing is specialized to 2D or 3D.
   an antiderivation squaring to zero), the duality pairing between the two
   variances, and the exterior power Λ^k A of a linear map, the matrix of k×k
   minors.
-- Metric operations, entering only through a `PseudoRiemannianMetric` of any
+- Metric operations, entering only through a `Metric` of any
   signature (Riemannian and Lorentzian are one code path): induced inner
   products on Λ^k, the musical isomorphisms flat and sharp, and the Hodge star
   defined by α ∧ ⋆β = ⟨α, β⟩ vol.

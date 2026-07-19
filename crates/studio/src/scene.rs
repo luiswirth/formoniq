@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use glatt::field::DiffFormClosure;
-use gramian::PseudoRiemannianMetric;
+use gramian::Metric;
 use simplicial::linalg::Vector;
 
 use crate::bake::CellCorner;
@@ -795,7 +795,7 @@ impl Scene {
 /// value $W c$ if its grade is already $<= n-k$, else its Hodge star, so the
 /// result always has grade $min(k, n-k)$. The star is where -- and the only
 /// place -- a metric enters the reduction.
-pub(crate) fn reduced_form(form: MultiForm, metric: &PseudoRiemannianMetric) -> MultiForm {
+pub(crate) fn reduced_form(form: MultiForm, metric: &Metric) -> MultiForm {
   let n = form.dim();
   let k = form.grade();
   if k <= n - k {
@@ -882,7 +882,7 @@ pub(crate) fn nodal_heights(
 fn reduced_value(
   interpolant: &WhitneyInterpolant,
   cell: Cell,
-  metric: &PseudoRiemannianMetric,
+  metric: &Metric,
   ilocal: usize,
 ) -> f64 {
   let mut weights = na::DVector::zeros(cell.nvertices());

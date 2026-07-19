@@ -1,7 +1,7 @@
 use {
   derham::{interpolate::form::WhitneyForm, section::Section},
   exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
-  gramian::PseudoRiemannianMetric,
+  gramian::Metric,
   multiindex::{factorial, Combination},
   simplicial::{
     atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
@@ -18,14 +18,14 @@ pub type ElMat = Matrix;
 pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &PseudoRiemannianMetric) -> ElMat;
+  fn eval(&self, metric: &Metric) -> ElMat;
 }
 
 /// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
 ///
 /// Exact closed form: $vol(K) (1 + delta_(i j)) / ((n+1)(n+2))$.
 /// The barycentric building block of the Hodge mass matrix.
-fn scalar_mass_elmat(metric: &PseudoRiemannianMetric) -> ElMat {
+fn scalar_mass_elmat(metric: &Metric) -> ElMat {
   let dim = metric.dim();
   let ndofs = dim + 1;
   let v = cell_volume(metric) / ((dim + 1) * (dim + 2)) as f64;
@@ -44,7 +44,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     0
   }
-  fn eval(&self, metric: &PseudoRiemannianMetric) -> ElMat {
+  fn eval(&self, metric: &Metric) -> ElMat {
     let n = metric.dim() + 1;
     let v = cell_volume(metric) / n as f64;
     Matrix::from_diagonal_element(n, n, v)
@@ -83,7 +83,7 @@ impl ElMatProvider for HodgeMassElmat {
     self.grade
   }
 
-  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &Metric) -> Matrix {
     assert_eq!(self.dim, metric.dim());
 
     let scalar_mass = scalar_mass_elmat(metric);
@@ -136,7 +136,7 @@ impl ElMatProvider for DifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade - 1
   }
-  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &Metric) -> Matrix {
     let mass = self.mass.eval(metric);
     mass * &self.dif
   }
@@ -163,7 +163,7 @@ impl ElMatProvider for CodifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade
   }
-  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &Metric) -> Matrix {
     let mass = self.mass.eval(metric);
     &self.codif * mass
   }
@@ -194,7 +194,7 @@ impl ElMatProvider for CodifDifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade - 1
   }
-  fn eval(&self, metric: &PseudoRiemannianMetric) -> Matrix {
+  fn eval(&self, metric: &Metric) -> Matrix {
     let mass = self.mass.eval(metric);
     &self.codif * mass * &self.dif
   }
@@ -203,7 +203,7 @@ impl ElMatProvider for CodifDifElmat {
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &PseudoRiemannianMetric, cell: Cell) -> ElVec;
+  fn eval(&self, metric: &Metric, cell: Cell) -> ElVec;
 }
 
 /// Element vector of the source load
@@ -237,7 +237,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, metric: &PseudoRiemannianMetric, cell: Cell) -> ElVec {
+  fn eval(&self, metric: &Metric, cell: Cell) -> ElVec {
     let inner = multiform_gramian(metric, self.grade());
 
     let mut elvec = ElVec::zeros(self.whitneys.len());

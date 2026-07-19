@@ -86,7 +86,7 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use gramian::{CausalType, Gramian, PseudoRiemannianMetric};
+use gramian::{CausalType, Gramian, Metric};
 use multiindex::Sign;
 use simplicial::{
   atlas::SimplexQuadRule, gen::cartesian::CartesianGrid, geometry::coord::mesh::MeshCoords,
@@ -133,7 +133,7 @@ fn blade_name(blade: &multiindex::Combination) -> String {
 /// where the Riemannian star of middle grade in 4D squares to $+1$.
 fn lorentzian_star_table() {
   let dim = 4;
-  let eta = PseudoRiemannianMetric::minkowski(dim);
+  let eta = Metric::minkowski(dim);
 
   println!("Lorentzian Hodge star on 2-forms of Minkowski R^(1,3) (mostly-plus):");
   for blade in exterior_bases(dim, 2) {
@@ -162,7 +162,7 @@ fn lorentzian_star_table() {
 fn clifford_dispersion() {
   println!("Wave covector a and its causal character under eta (mostly-plus):");
   for dim in [2, 3, 4] {
-    let eta = PseudoRiemannianMetric::minkowski(dim);
+    let eta = Metric::minkowski(dim);
     let a = wave_covector(dim);
     let norm_sq = a.inner(&a, &eta);
     let causal = CausalType::from_norm_sq(norm_sq);
@@ -191,7 +191,7 @@ fn polarization(dim: Dim, grade: usize) -> MultiForm {
 }
 
 fn convergence(dim: Dim, nsubs: &[usize]) {
-  let eta = PseudoRiemannianMetric::minkowski(dim);
+  let eta = Metric::minkowski(dim);
   let a = wave_covector(dim);
   let a_sharp = a.sharp(&eta);
   let a_vec = a.coeffs().clone();

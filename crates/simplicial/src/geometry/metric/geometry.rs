@@ -29,7 +29,7 @@ use crate::{
   Dim,
 };
 
-use gramian::PseudoRiemannianMetric;
+use gramian::Metric;
 
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
@@ -41,11 +41,11 @@ use std::{io, path::Path};
 pub trait Geometry {
   /// The flat metric tensor of a cell. The [`Cell`] witness is the
   /// precondition: only a top-dimensional simplex has a metric here.
-  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric;
+  fn cell_metric(&self, cell: Cell) -> Metric;
 }
 
 impl Geometry for MeshLengthsSq {
-  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
+  fn cell_metric(&self, cell: Cell) -> Metric {
     self.simplex_lengths_sq(cell.get()).metric()
   }
 }
@@ -56,10 +56,10 @@ impl Geometry for MeshLengthsSq {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CellGramians {
-  metrics: SkeletonVec<PseudoRiemannianMetric>,
+  metrics: SkeletonVec<Metric>,
 }
 impl CellGramians {
-  pub fn new(dim: Dim, metrics: Vec<PseudoRiemannianMetric>) -> Self {
+  pub fn new(dim: Dim, metrics: Vec<Metric>) -> Self {
     Self {
       metrics: SkeletonVec::new(dim, metrics),
     }
@@ -75,7 +75,7 @@ impl CellGramians {
     Self::new(topology.dim(), metrics)
   }
 
-  pub fn metrics(&self) -> &SkeletonVec<PseudoRiemannianMetric> {
+  pub fn metrics(&self) -> &SkeletonVec<Metric> {
     &self.metrics
   }
 
@@ -117,13 +117,13 @@ impl CellGramians {
 }
 
 impl Geometry for CellGramians {
-  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
+  fn cell_metric(&self, cell: Cell) -> Metric {
     self.metrics[cell.get()].clone()
   }
 }
 
 /// Regge signed squared edge lengths from a cell's metric tensor, on any
 /// signature.
-pub fn simplex_lengths_sq_of(metric: &PseudoRiemannianMetric) -> SimplexLengthsSq {
+pub fn simplex_lengths_sq_of(metric: &Metric) -> SimplexLengthsSq {
   SimplexLengthsSq::from_metric_tensor(metric.vector_gramian())
 }
