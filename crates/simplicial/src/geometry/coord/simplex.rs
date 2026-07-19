@@ -9,8 +9,8 @@
 //!   [`Simplex`] ([`SimplexCoords::from_simplex_and_coords`], the
 //!   [`SimplexRefExt`] handle method),
 //! - the metric it *induces* ([`metric_tensor`](SimplexCoords::metric_tensor))
-//!   and the Regge edge lengths it *realizes*
-//!   ([`to_lengths`](SimplexCoords::to_lengths)).
+//!   and the Regge squared edge lengths it *realizes*
+//!   ([`to_lengths_sq`](SimplexCoords::to_lengths_sq)).
 //!
 //! These are the two bridges down into the intrinsic layer, and they run
 //! downward only: the metric layer never learns that coordinates exist
@@ -18,7 +18,7 @@
 
 use super::mesh::MeshCoords;
 use crate::{
-  geometry::metric::simplex::SimplexLengths,
+  geometry::metric::simplex::SimplexLengthsSq,
   topology::{handle::SimplexRef, simplex::Simplex},
 };
 
@@ -46,12 +46,13 @@ impl SimplexCoords<Ambient> {
     Gramian::from_euclidean_vectors(self.spanning_vectors())
   }
 
-  /// The Regge edge lengths this coordinate realization has: the bridge from
-  /// the extrinsic layer down into the intrinsic one.
-  pub fn to_lengths(&self) -> SimplexLengths {
-    let lengths: Vec<f64> = self.edges().map(|e| e.vol()).collect();
-    // SAFETY: Edge lengths stem from a realization already.
-    SimplexLengths::new_unchecked(lengths.into(), self.dim_intrinsic())
+  /// The Regge squared edge lengths this (Euclidean-ambient) coordinate
+  /// realization has: the bridge from the extrinsic layer down into the
+  /// intrinsic one.
+  pub fn to_lengths_sq(&self) -> SimplexLengthsSq {
+    let lengths_sq: Vec<f64> = self.edges().map(|e| e.vol().powi(2)).collect();
+    // SAFETY: Squared lengths stem from a realization already.
+    SimplexLengthsSq::new_unchecked(lengths_sq.into(), self.dim_intrinsic())
   }
 }
 
@@ -71,20 +72,24 @@ impl SimplexRefExt for SimplexRef<'_> {
 mod test {
   use super::*;
   use crate::atlas::ref_vertices;
-  use crate::geometry::metric::simplex::SimplexLengths;
+  use crate::geometry::metric::simplex::SimplexLengthsSq;
   use crate::linalg::Vector;
 
   use approx::assert_relative_eq;
 
-  /// The standard coordinate simplex realizes the standard edge lengths: the
-  /// two descriptions of the reference cell agree, extrinsic and intrinsic.
+  /// The standard coordinate simplex realizes the standard squared edge
+  /// lengths: the two descriptions of the reference cell agree, extrinsic
+  /// and intrinsic.
   #[test]
   fn ref_coords_realize_ref_lengths() {
     for dim in 0..=4 {
       let coords: SimplexCoords = SimplexCoords::new(ref_vertices(dim));
-      let lengths = coords.to_lengths();
-      assert_relative_eq!(lengths.vector(), SimplexLengths::standard(dim).vector());
-      assert_relative_eq!(coords.vol(), lengths.vol());
+      let lengths_sq = coords.to_lengths_sq();
+      assert_relative_eq!(
+        lengths_sq.vector(),
+        SimplexLengthsSq::standard(dim).vector()
+      );
+      assert_relative_eq!(coords.vol(), lengths_sq.vol());
     }
   }
 

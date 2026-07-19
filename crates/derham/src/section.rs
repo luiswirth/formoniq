@@ -625,7 +625,7 @@ mod test {
 
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let lengths = coords.to_edge_lengths(&topology);
+      let lengths = coords.to_edge_lengths_sq(&topology);
 
       for grade in 0..=dim {
         let ndofs = topology.nsimplices(grade);

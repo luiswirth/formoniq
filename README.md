@@ -18,8 +18,8 @@ solutions computed on them, solved client-side via WebAssembly and WebGPU.
   extremal grades, a one-element mesh) run on the same code paths as the interior
   ones and return the trivial answer rather than being excluded.
 - **Three interchangeable geometry inputs.** Assembly consumes only the per-cell
-  metric, provided as Regge edge lengths, raw metric tensors, or vertex
-  coordinates. Nothing in the core path needs coordinates.
+  metric, provided as Regge signed squared edge lengths, raw metric tensors,
+  or vertex coordinates. Nothing in the core path needs coordinates.
 - **Any metric signature.** The metric is pseudo-Riemannian: Riemannian and
   Lorentzian geometry are one signature-parameterized type, the Hodge star
   reading the signature off the metric itself, which makes spacetime FEEC on
@@ -178,7 +178,7 @@ classification the Whitney space is the lowest-order trimmed polynomial space,
 Most finite element implementations assume an embedding: the domain lives in Rᴺ
 and geometry is read from vertex coordinates. formoniq does not. A domain is an
 abstract simplicial complex carrying a pseudo-Riemannian metric supplied intrinsically,
-from Regge-style edge lengths, from per-cell metric tensors, or, where an
+from Regge-style signed squared edge lengths, from per-cell metric tensors, or, where an
 embedding happens to be available, from vertex coordinates on equal footing with
 the other two.
 

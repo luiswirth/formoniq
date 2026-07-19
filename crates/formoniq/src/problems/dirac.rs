@@ -544,7 +544,7 @@ mod test {
   fn operator_is_skew_symmetric() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
 
@@ -566,7 +566,7 @@ mod test {
   fn dirac_squared_is_negative_hodge_laplacian() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
 
@@ -622,7 +622,7 @@ mod test {
   fn energy_conserved_at_every_dimension() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
 
@@ -650,7 +650,7 @@ mod test {
   fn leapfrog_conserves_staggered_energy_at_every_dimension() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
       let color = dirac.grade_parity_coloring();
@@ -677,7 +677,7 @@ mod test {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
       let (_, spacetime) = minkowski_mesh(dim, 2);
-      let riemannian = coords.to_edge_lengths(&topology);
+      let riemannian = coords.to_edge_lengths_sq(&topology);
 
       let check = |dirac: &HodgeDirac| {
         let a = &dirac.op;
@@ -804,7 +804,7 @@ mod test {
 
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let riemannian = coords.to_edge_lengths(&topology);
+      let riemannian = coords.to_edge_lengths_sq(&topology);
       run(&topology, &coords, &riemannian);
 
       // On the Minkowski side the constant field is interpolated on the
@@ -822,7 +822,7 @@ mod test {
   #[test]
   fn leapfrog_agrees_with_gauss_legendre() {
     let (topology, coords) = CartesianMeshInfo::new_unit(2, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let dirac = HodgeDirac::assemble(&whitney);
 

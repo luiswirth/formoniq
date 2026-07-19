@@ -16,7 +16,7 @@ use super::{
   skeleton::Skeleton,
 };
 use crate::{
-  geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengths},
+  geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq},
   topology::VertexIdx,
   Dim,
 };
@@ -146,10 +146,13 @@ impl BoundaryComplex {
     trace
   }
 
-  /// The induced geometry: parent edge lengths restricted to the boundary.
-  pub fn trace_lengths(&self, parent: &MeshLengths) -> MeshLengths {
+  /// The induced geometry: parent squared edge lengths restricted to the
+  /// boundary. A pure data restriction, total on any signature; on an
+  /// indefinite parent a null facet carries degenerate data, which surfaces
+  /// where a facet metric is actually built from it, not here.
+  pub fn trace_lengths_sq(&self, parent: &MeshLengthsSq) -> MeshLengthsSq {
     // A 0-dimensional boundary (of a 1d mesh) has no edges.
-    let lengths: Vec<f64> = if self.dim() == 0 {
+    let lengths_sq: Vec<f64> = if self.dim() == 0 {
       Vec::new()
     } else {
       self
@@ -158,7 +161,7 @@ impl BoundaryComplex {
         .map(|&iedge| parent[iedge])
         .collect()
     };
-    MeshLengths::new_unchecked(lengths.into())
+    MeshLengthsSq::new_unchecked(lengths_sq.into())
   }
 
   /// The vertex coordinates restricted to the boundary.

@@ -106,7 +106,7 @@ fn fem3d_galmat(nboxes_per_dim: usize) -> Matrix {
 fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = box_mesh.compute_coord_complex();
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
   let galmat = WhitneyComplex::new(&topology, &metric).codif_dif(0);
   (&galmat).into()
 }

@@ -194,7 +194,7 @@ fn feec_galmat_interior(dim: Dim, mut nboxes_per_dim: usize) -> Matrix<i32> {
 fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> Matrix {
   let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_axis, nboxes_axis as f64);
   let (topology, coords) = box_mesh.compute_coord_complex();
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let mut galmat = Matrix::from(&whitney.codif_dif(0));
   let mass = Matrix::from(&whitney.mass(0));
@@ -216,5 +216,8 @@ fn cast_int(mat: Matrix) -> Matrix<i32> {
     mat.iter().all(|e| (e - e.round()).abs() <= TOL),
     "Failed to round matrix:\n{mat:.2}"
   );
-  mat.try_cast().unwrap()
+  // Round before casting: `try_cast` truncates toward zero, which would turn
+  // an entry a few ulps below an integer into the integer beneath it --
+  // inconsistent with the tolerance just asserted.
+  mat.map(f64::round).try_cast().unwrap()
 }

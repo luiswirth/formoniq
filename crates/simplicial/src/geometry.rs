@@ -36,7 +36,7 @@ pub fn cell_volume(metric: &PseudoRiemannianMetric) -> f64 {
 ///
 /// Metric-only: works off any [`Geometry`], not just an embedding, since
 /// [`Gramian::vertex_angle`](gramian::Gramian::vertex_angle) needs no
-/// coordinates -- a Regge manifold given only as [`metric::mesh::MeshLengths`]
+/// coordinates -- a Regge manifold given only as [`metric::mesh::MeshLengthsSq`]
 /// has a Gaussian curvature exactly as well as an embedded one. This is
 /// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the
 /// hinges are vertices, which is the one case implemented here. Generalizing
@@ -92,13 +92,13 @@ mod tests {
   /// Gauss-Bonnet on the unit sphere ($chi = 2$): $sum_v K(v) A(v) = 4 pi$
   /// exactly, independent of the triangulation and of the area convention --
   /// a machine-checked identity, not a tolerance around a numerically
-  /// approximated constant. Driven through [`metric::mesh::MeshLengths`], the
+  /// approximated constant. Driven through [`metric::mesh::MeshLengthsSq`], the
   /// Regge-only representation, to demonstrate this needs no embedding at
   /// all.
   #[test]
   fn sphere_gauss_bonnet_holds_exactly() {
     let (topology, coords) = crate::gen::sphere::mesh_sphere_surface(3);
-    let lengths = coords.to_edge_lengths(&topology);
+    let lengths = coords.to_edge_lengths_sq(&topology);
     let gauss = vertex_gaussian_curvature(&topology, &lengths);
 
     let nvertices = topology.skeleton_raw(0).len();

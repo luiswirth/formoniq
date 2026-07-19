@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 
 use formoniq::operators::{self, ElMatProvider};
 use simplicial::linalg::Matrix;
-use simplicial::{atlas::refsimp_vol, geometry::metric::simplex::SimplexLengths, Dim};
+use simplicial::{atlas::refsimp_vol, geometry::metric::simplex::SimplexLengthsSq, Dim};
 
 use approx::assert_relative_eq;
 
@@ -18,7 +18,7 @@ where
     };
     let elmat = elmat(dim);
 
-    let refcell = SimplexLengths::standard(dim);
+    let refcell = SimplexLengthsSq::standard(dim);
     let computed_elmat = elmat.eval(&refcell.metric());
 
     assert_relative_eq!(&computed_elmat, &expected_elmat);

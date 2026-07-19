@@ -103,7 +103,7 @@ mod test {
   fn cell_gramians_assemble_identically() {
     let dim = 3;
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let lengths = coords.to_edge_lengths(&topology);
+    let lengths = coords.to_edge_lengths_sq(&topology);
     let gramians = CellGramians::from_geometry(&topology, &lengths);
 
     for grade in 0..=dim {
@@ -118,6 +118,46 @@ mod test {
         HodgeMassElmat::new(dim, grade),
       ));
       approx::assert_relative_eq!(from_lengths, from_gramians, epsilon = 1e-12);
+    }
+  }
+
+  /// The three geometry representations are interchangeable on a *Lorentzian*
+  /// mesh too: a Minkowski embedding, the Regge signed squared edge lengths it
+  /// realizes, and the per-cell metrics sampled from either all assemble the
+  /// same Galerkin matrices. This is Regge calculus doing what it was invented
+  /// for -- a simplicial spacetime carried by edge data alone, no coordinates
+  /// in the assembly path.
+  #[test]
+  fn lorentzian_geometries_assemble_identically() {
+    use simplicial::geometry::coord::mesh::MeshCoords;
+
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
+      let mut matrix = coords.into_matrix();
+      matrix.row_mut(0).scale_mut(0.7);
+      let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(dim));
+      let regge = spacetime.to_edge_lengths_sq(&topology);
+      let gramians = CellGramians::from_geometry(&topology, &regge);
+
+      for grade in 0..=dim {
+        let from_coords = Matrix::from(&assemble_galmat(
+          &topology,
+          &spacetime,
+          HodgeMassElmat::new(dim, grade),
+        ));
+        let from_regge = Matrix::from(&assemble_galmat(
+          &topology,
+          &regge,
+          HodgeMassElmat::new(dim, grade),
+        ));
+        let from_gramians = Matrix::from(&assemble_galmat(
+          &topology,
+          &gramians,
+          HodgeMassElmat::new(dim, grade),
+        ));
+        approx::assert_relative_eq!(from_coords, from_regge, epsilon = 1e-12);
+        approx::assert_relative_eq!(from_regge, from_gramians, epsilon = 1e-12);
+      }
     }
   }
 }
