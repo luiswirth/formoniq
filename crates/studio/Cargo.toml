@@ -38,6 +38,10 @@ bytemuck = { version = "1.25.1", features = ["derive"] }
 # there and re-exports `std::time` verbatim on native. Used everywhere the
 # viewer reads a wall clock.
 web-time = "1.1.0"
+# The glyph bake is per cell and the cells are independent. Builds for wasm the
+# same way it does for `simplicial` below, where it runs sequentially: the plain
+# `wasm32` target has no threads to spread over.
+rayon = "1.12.0"
 
 # Native-only: the CLI, the blocking executor, the terminal logger, the in-egui
 # file browser and the PNG encoder are all things a browser either forbids or

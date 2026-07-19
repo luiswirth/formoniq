@@ -70,32 +70,44 @@ pub struct SegmentVertex {
   pub opacity: f32,
 }
 
-/// A vertex of a glyph mark: a corner of the flat quad an arrow is drawn on,
-/// lying in its surface cell. Unlike a [`SegmentVertex`] it carries no billboard
-/// -- the arrow has a plane, its cell's -- so the corner's world position is
-/// final, and the fragment reads the arrow's silhouette from the quad-local
-/// coordinate and clips it to the cell from the barycentric one.
+/// A glyph mark, as one instance: an arrow lying flat in its surface cell.
+///
+/// Instanced rather than expanded into corners on the CPU. The quad's six
+/// corners are `@builtin(vertex_index)` arithmetic in the vertex shader, and
+/// every dimension of the arrow is a proportion of its own length
+/// ([`GlyphMaterial`](crate::render::uniform::GlyphMaterial)), so nothing about
+/// a corner needs storing -- only what distinguishes one arrow from another.
+///
+/// The one datum that looks per-corner is the barycentric coordinate the
+/// fragment clips against, and it is not: the quad is planar and `global2bary`
+/// is affine, so the coordinate over the quad is exactly its value at the
+/// center plus two gradients. Three vectors reproduce what was six copies of
+/// four floats.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
-pub struct GlyphVertex {
-  /// The corner's world position, in the cell's plane on the undisplaced
-  /// surface.
-  pub position: [f32; 3],
-  /// The corner in the arrow's own frame: `x` along the field from the tail at
-  /// `0` to the tip at `length`, `y` across it, both in world units. The
-  /// coordinate the fragment's arrow silhouette is a function of.
-  pub arrow_xy: [f32; 2],
-  /// The arrow's length in world units, so the fragment can place the head. One
-  /// value per glyph, carried on every corner.
+pub struct GlyphInstance {
+  /// The arrow's center in world space, on the undisplaced surface.
+  pub center: [f32; 3],
+  /// The arrow's length in world units: its lattice's realized spacing, and the
+  /// scale every other dimension of the mark is a fraction of.
   pub length: f32,
+  /// The unit direction the arrow points, in its cell's plane: the sharped
+  /// field, pushed into ambient coordinates.
+  pub direction: [f32; 3],
   /// Opacity multiplier in $[0, 1]$: the field's magnitude here against its
   /// peak, so a vanishing field's arrow fades rather than points arbitrarily.
   pub opacity: f32,
-  /// The corner's barycentric coordinate within its cell, padded to four with
-  /// ones. The clip discards a fragment where any weight is negative, i.e.
-  /// outside the cell the arrow was sampled in; the pad is ones so a cell of
-  /// intrinsic dimension below three never trips it.
-  pub cell_bary: [f32; 4],
+  /// The in-plane unit vector across the arrow, completing its frame.
+  pub across: [f32; 3],
+  pub _pad0: f32,
+  /// The cell barycentric coordinate at the arrow's center, padded to four with
+  /// ones so a cell of intrinsic dimension below three never trips the clip.
+  pub bary_center: [f32; 4],
+  /// Its gradients per world unit along [`Self::direction`] and
+  /// [`Self::across`], padded with zeros, from which the fragment's coordinate
+  /// is affine.
+  pub bary_along: [f32; 4],
+  pub bary_across: [f32; 4],
 }
 
 /// The primitives one complex's cells bake to, at dimension $min(n, 2)$.
