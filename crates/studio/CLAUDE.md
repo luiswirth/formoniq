@@ -71,6 +71,21 @@ as it can go before either one commits.
   is the thing to avoid. The shared 1-skeleton cannot tear without being
   duplicated, so the segment marks keep the continuous recovery at every grade.
 
+  **A displacement is bounded by scaling it, never by clamping it.** The bound
+  is the mesh's *reach* — the distance to its own medial axis, below which the
+  normal offset is still an embedding. Curvature radius is only half of that
+  bound, the local half; the other half is the bottleneck, how far the surface
+  is from a different sheet of itself, and it is the half that thin features
+  live in. A flat plate has infinite curvature radius and reach $t \/ 2$, so a
+  curvature-only ceiling lets its two faces pass through each other. Given the
+  bound, the amplitude is one global scalar chosen so no vertex exceeds it. A
+  per-vertex clamp is the wrong instrument: it binds at a different value at
+  every vertex, so it flattens the field in patches and seams the surface
+  between clamped and unclamped neighbours — that is not a bounded deformation
+  but a different one. Scaling is the operation an eigenmode is indifferent to,
+  being defined up to a scalar, so it bounds the picture without changing which
+  mode the picture is of.
+
 Between the two the discipline is lived, not hoped for: a curve integrator works
 in the barycentric charts of the atlas and crosses cells through the
 `Transition`, committing to an ambient position only where it must. Anything new

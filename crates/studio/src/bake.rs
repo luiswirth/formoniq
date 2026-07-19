@@ -25,17 +25,17 @@ use std::collections::HashMap;
 use bytemuck::{Pod, Zeroable};
 use simplicial::linalg::Vector;
 use simplicial::{
-  geometry::coord::{mesh::MeshCoords, vertex_curvature_radius},
+  geometry::coord::{mesh::MeshCoords, vertex_reach},
   topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex},
   Dim,
 };
 
-/// Fraction of the local curvature radius (see [`vertex_curvature_radius`])
-/// allowed as peak normal displacement, mirroring `WAVE_AMPLITUDE_FRACTION`'s
-/// role against the scene extent in `app.rs`: kept below 1 so a vertex never
-/// reaches its own focal point, where the normal offset would fold the surface
-/// back on itself.
-const CURVATURE_SAFETY_FRACTION: f64 = 0.9;
+/// Fraction of the local [`reach`](vertex_reach) allowed as normal
+/// displacement: kept below 1 so a vertex never reaches its own medial axis,
+/// where the offset would either fold through its focal point or meet the
+/// sheet of surface facing it. The reach bounds both, which is why this is the
+/// only safety fraction the displacement needs.
+const REACH_SAFETY_FRACTION: f64 = 0.9;
 
 /// The static half of a baked vertex: everything that is a function of the mesh
 /// and its embedding, and of no field on it.
@@ -163,7 +163,17 @@ impl BakedMesh {
     // The one dimension dispatch: the cells' primitive, the overlay, and the
     // displacement frame (normal and curvature cap) are one decision, made
     // once, here.
-    let (cells, wireframe, normals, curvature_radius) = match topology.dim() {
+    // Beyond the object's own extent a reach is not a meaningful bound, and an
+    // unbounded one would make a flat mesh search globally for a bottleneck
+    // that is not there.
+    let centroid = ambient.iter().sum::<na::Vector3<f64>>() / (nvertices.max(1) as f64);
+    let extent = ambient
+      .iter()
+      .map(|p| (p - centroid).norm())
+      .fold(0.0, f64::max)
+      .max(1e-6);
+
+    let (cells, wireframe, normals, reach) = match topology.dim() {
       0 => (
         PrimBatch::Points((0..nvertices as u32).collect()),
         Vec::new(),
@@ -183,7 +193,7 @@ impl BakedMesh {
           PrimBatch::Triangles(triangles),
           skeleton_indices(topology, 1),
           normals,
-          vertex_curvature_radius(topology, coords),
+          vertex_reach(topology, coords, extent),
         )
       }
       // An observer in $RR^3$ sees only the boundary of a solid, so that is
@@ -215,7 +225,7 @@ impl BakedMesh {
         BakedVertex {
           position: [p.x as f32, p.y as f32, p.z as f32],
           normal: [n.x as f32, n.y as f32, n.z as f32],
-          max_displacement: (CURVATURE_SAFETY_FRACTION * curvature_radius[i]) as f32,
+          max_displacement: (REACH_SAFETY_FRACTION * reach[i]) as f32,
         }
       })
       .collect();
