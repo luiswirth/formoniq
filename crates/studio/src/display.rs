@@ -626,8 +626,6 @@ impl FieldDisplay {
           &field.cochain,
           f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
           peak,
-          f64::from(GLYPH_WIDTH_FRACTION),
-          f64::from(GLYPH_OUTLINE_WIDTH_FRACTION),
         );
         let glyphs = GlyphBatch::new(&ctx.device, &vertices);
 

@@ -43,6 +43,7 @@
 
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use rayon::prelude::*;
 use simplicial::linalg::Vector;
 use simplicial::{
   atlas::{ref_lattice_bary, MeshPoint},
@@ -51,7 +52,7 @@ use simplicial::{
 };
 
 use crate::{
-  bake::{to_vec3, GlyphVertex},
+  bake::{to_vec3, GlyphInstance},
   scene::reduced_form,
 };
 
@@ -139,10 +140,10 @@ fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) ->
 ///
 /// `target_spacing` is the world spacing the per-cell lattice aims for (see
 /// [`glyph_refinement`]); `peak` is the field's greatest magnitude, which the
-/// fade is measured against; `width_fraction` and `outline_fraction` are the
-/// arrow's proportions -- its half-width as a fraction of its own length, and
-/// the rim as a fraction of that half-width -- from which the quad the fragment
-/// carves the arrow from is sized per cell.
+/// fade is measured against. The arrow's *proportions* are not passed: they are
+/// fractions of its own length, applied in the vertex shader when it generates
+/// the quad, so the bake decides only where each arrow is, which way it points
+/// and how long it is.
 ///
 /// The arrow lies in the cell rather than facing the camera, so its four corners
 /// are final geometry and each carries its barycentric coordinate directly
@@ -159,160 +160,169 @@ pub(crate) fn bake_glyphs(
   cochain: &Cochain,
   target_spacing: f64,
   peak: f64,
-  width_fraction: f64,
-  outline_fraction: f64,
-) -> Vec<GlyphVertex> {
+) -> Vec<GlyphInstance> {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-  let mut vertices = Vec::new();
 
-  for cell in topology.cells().handle_iter() {
-    let metric = coords.cell_metric(cell);
-    let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
-    // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential pushes
-    // the sharped field out of the cell's tangent frame into the ambient one, and
-    // `global2bary` reads a corner back to the weights the clip tests. The one
-    // place the embedding enters.
-    let coord_simplex = cell.coord_simplex(coords);
-    let (min_edge, diameter) = cell_extent(&coord_simplex);
-    let refinement = glyph_refinement(cell.dim(), diameter, target_spacing);
-    // A fixed fraction of the lattice's realized spacing in its tightest
-    // direction (the shortest edge over the refinement), so neighbouring arrows
-    // keep a gap instead of meeting tip-to-tail on any cell shape -- not the
-    // diameter, which would only bound the spacing along the longest direction.
-    let length = GLYPH_LENGTH_FRACTION * min_edge / refinement as f64;
-    // Every other dimension of the arrow is a fraction of that length, so the
-    // whole mark is one shape scaled by the cell it sits in -- a coarse mesh's
-    // arrow and a refined mesh's are the same drawing at different sizes. A
-    // width in world units would instead stay put while the length shrank with
-    // the cell, and the arrow would thicken into a stub as the mesh refined.
-    let half_width = width_fraction * length;
-    let outline_width = outline_fraction * half_width;
-    // The quad is grown past the arrow by the rim's own width, with slack for
-    // its antialiased outer edge, so the outline has room on every side.
-    let margin = outline_width * 1.5;
-    let cell_verts: Vec<Vector> = coord_simplex
-      .coord_iter()
-      .map(|v| v.view().into_owned())
-      .collect();
+  // Per cell, and the cells are independent: each reads the shared interpolant
+  // and writes only its own arrows, so the walk is a map rather than a fold.
+  topology
+    .cells()
+    .handle_iter()
+    .collect::<Vec<_>>()
+    .into_par_iter()
+    .flat_map_iter(|cell| {
+      let metric = coords.cell_metric(cell);
+      let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+      // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential
+      // pushes the sharped field out of the cell's tangent frame into the
+      // ambient one, and `global2bary` reads a point back to the weights the
+      // clip tests. The one place the embedding enters.
+      let coord_simplex = cell.coord_simplex(coords);
+      let (min_edge, diameter) = cell_extent(&coord_simplex);
+      let refinement = glyph_refinement(cell.dim(), diameter, target_spacing);
+      // A fixed fraction of the lattice's realized spacing in its tightest
+      // direction (the shortest edge over the refinement), so neighbouring
+      // arrows keep a gap instead of meeting tip-to-tail on any cell shape --
+      // not the diameter, which would only bound the spacing along the longest
+      // direction.
+      let length = GLYPH_LENGTH_FRACTION * min_edge / refinement as f64;
+      let cell_verts: Vec<Vector> = coord_simplex
+        .coord_iter()
+        .map(|v| v.view().into_owned())
+        .collect();
 
-    for bary in ref_lattice_bary(cell.dim(), refinement) {
-      let point = MeshPoint::new(cell.idx(), bary);
-      let field = reduced_form(interpolant.eval(&point), &metric, sign).sharp(&metric);
-      let ambient: Vector = coord_simplex.pushforward_vector(field.coeffs());
-      let magnitude = ambient.norm();
-      let opacity = if peak > 0.0 {
-        (magnitude / peak).clamp(0.0, 1.0)
-      } else {
-        0.0
-      };
+      ref_lattice_bary(cell.dim(), refinement)
+        .map(|bary| {
+          let point = MeshPoint::new(cell.idx(), bary);
+          let field = reduced_form(interpolant.eval(&point), &metric, sign).sharp(&metric);
+          let ambient: Vector = coord_simplex.pushforward_vector(field.coeffs());
+          let magnitude = ambient.norm();
+          let opacity = if peak > 0.0 {
+            (magnitude / peak).clamp(0.0, 1.0)
+          } else {
+            0.0
+          };
 
-      // The arrow's in-plane frame. A field that vanishes here points nowhere,
-      // and its arrow is invisible (opacity 0), so any direction does -- the
-      // first spanning edge stands in. The perpendicular is an in-plane vector
-      // with the field component removed, so the whole arrow lies in the cell.
-      let direction = if magnitude > 0.0 {
-        &ambient / magnitude
-      } else {
-        (&cell_verts[1] - &cell_verts[0]).normalize()
-      };
-      let perp = cell_verts[1..]
-        .iter()
-        .map(|v| v - &cell_verts[0])
-        .map(|edge| &edge - &direction * edge.dot(&direction))
-        .find(|c| c.norm() > 1e-10)
-        .map(|c| c.normalize())
-        .unwrap_or_else(|| Vector::zeros(direction.len()));
+          // The arrow's in-plane frame. A field that vanishes here points
+          // nowhere, and its arrow is invisible (opacity 0), so any direction
+          // does -- the first spanning edge stands in. The perpendicular is an
+          // in-plane vector with the field component removed, so the whole
+          // arrow lies in the cell.
+          let direction = if magnitude > 0.0 {
+            &ambient / magnitude
+          } else {
+            (&cell_verts[1] - &cell_verts[0]).normalize()
+          };
+          let across = cell_verts[1..]
+            .iter()
+            .map(|v| v - &cell_verts[0])
+            .map(|edge| &edge - &direction * edge.dot(&direction))
+            .find(|c| c.norm() > 1e-10)
+            .map(|c| c.normalize())
+            .unwrap_or_else(|| Vector::zeros(direction.len()));
 
-      let center = coord_simplex.bary2global(point.bary()).view().into_owned();
-      let corner = |x: f64, y: f64| -> GlyphVertex {
-        let world = &center + &direction * (x - length / 2.0) + &perp * y;
-        let cell_bary = coord_simplex.global2bary(&Coord::new(world.clone()));
-        let p = to_vec3(&world);
-        GlyphVertex {
-          position: [p.x as f32, p.y as f32, p.z as f32],
-          arrow_xy: [x as f32, y as f32],
-          length: length as f32,
-          opacity: opacity as f32,
-          cell_bary: bary_clip4(&cell_bary.view().into_owned()),
-        }
-      };
+          let center = coord_simplex.bary2global(point.bary()).view().into_owned();
+          // `global2bary` is affine and the quad is planar, so the clip
+          // coordinate over the whole arrow is its value here plus these two
+          // gradients -- exactly, not to first order. A unit step along each
+          // frame axis *is* the gradient.
+          let bary_at = |p: &Vector| {
+            bary_clip4(
+              &coord_simplex
+                .global2bary(&Coord::new(p.clone()))
+                .view()
+                .into_owned(),
+            )
+          };
+          let bary_center = bary_at(&center);
+          let gradient = |axis: &Vector| {
+            let moved = bary_at(&(&center + axis));
+            let mut g = [0.0f32; 4];
+            for i in 0..4 {
+              g[i] = moved[i] - bary_center[i];
+            }
+            g
+          };
 
-      let (x0, x1) = (-margin, length + margin);
-      let (y0, y1) = (-(half_width + margin), half_width + margin);
-      let (bl, br, tr, tl) = (
-        corner(x0, y0),
-        corner(x1, y0),
-        corner(x1, y1),
-        corner(x0, y1),
-      );
-      vertices.extend([bl, br, tr, bl, tr, tl]);
-    }
-  }
-
-  vertices
+          let c = to_vec3(&center);
+          let d = to_vec3(&direction);
+          let a = to_vec3(&across);
+          GlyphInstance {
+            center: [c.x as f32, c.y as f32, c.z as f32],
+            length: length as f32,
+            direction: [d.x as f32, d.y as f32, d.z as f32],
+            opacity: opacity as f32,
+            across: [a.x as f32, a.y as f32, a.z as f32],
+            _pad0: 0.0,
+            bary_center,
+            bary_along: gradient(&direction),
+            bary_across: gradient(&across),
+          }
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+    })
+    .collect()
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
 
-  /// An arrow is one shape scaled by its cell. Every dimension of the mark is a
-  /// fraction of its own length, so the quad's half-height over that length is
-  /// the *same* number on every glyph of every cell, however the cells differ
-  /// in size -- and, since the length is the cell's own lattice spacing,
-  /// however finely the mesh is refined.
+  /// The arrow is sized by the mesh, not by the object: its length is its
+  /// lattice's realized spacing, so it shrinks with the cells under refinement
+  /// rather than staying put while they shrink underneath it. Stated as a ratio
+  /// to the mean edge length, which is what must stay bounded.
   ///
-  /// This is what a world-space width could not give: the length shrinks with
-  /// the cell and a fixed width does not, so on a refined mesh the arrows
-  /// thicken into stubs and this ratio climbs without bound. Checked across a
-  /// refinement sweep, where that divergence is exactly what would show.
+  /// Every *other* dimension of the arrow is a fraction of this length, applied
+  /// in the vertex shader, so self-similarity is structural now and there is no
+  /// stored width that could disagree with it -- this is the one number the
+  /// bake still decides.
   #[test]
-  fn an_arrow_is_self_similar_at_every_refinement() {
-    let (width_fraction, outline_fraction) = (0.36, 0.27);
+  fn an_arrow_is_sized_by_its_cell_at_every_refinement() {
     let mut ratios = Vec::new();
-
-    for subdivisions in 1..=3 {
+    for subdivisions in 1..=4 {
       let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(subdivisions);
       let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
-      let vertices = bake_glyphs(
-        &topology,
-        &coords,
-        &cochain,
-        0.06,
-        1.0,
-        width_fraction,
-        outline_fraction,
-      );
-      assert!(!vertices.is_empty(), "the sweep must produce glyphs");
+      let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
+      assert!(!instances.is_empty(), "the sweep must produce glyphs");
 
-      // Six corners per glyph: the two triangles of its quad.
-      for glyph in vertices.chunks(6) {
-        let length = f64::from(glyph[0].length);
-        assert!(length > 0.0);
-        let half_height = glyph
-          .iter()
-          .map(|v| f64::from(v.arrow_xy[1]).abs())
-          .fold(0.0, f64::max);
-        ratios.push(half_height / length);
-      }
+      let edge = simplicial::geometry::coord::mean_edge_length(&topology, &coords);
+      let longest = instances
+        .iter()
+        .map(|g| f64::from(g.length))
+        .fold(0.0, f64::max);
+      assert!(longest > 0.0);
+      ratios.push(longest / edge);
     }
 
-    let (lo, hi) = ratios
-      .iter()
-      .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &r| {
-        (lo.min(r), hi.max(r))
-      });
-    // At `f32`, which is what the corner is stored as -- the residual is the
-    // round-trip, not a variation in the shape.
-    assert!(
-      (hi - lo) < 1e-6,
-      "the arrow's proportions must not vary with the cell: {lo} to {hi}"
-    );
-    // And it is the proportion asked for: the half-width plus the rim's margin.
-    let expected = width_fraction * (1.0 + outline_fraction * 1.5);
-    assert!(
-      (lo - expected).abs() < 1e-6,
-      "expected a half-height of {expected} per unit length, got {lo}"
-    );
+    // Bounded above and below across the sweep: the arrow neither outgrows its
+    // cell nor collapses relative to it. The band is wide because the lattice
+    // refinement is an integer and steps as the cells cross the target spacing.
+    for ratio in &ratios {
+      assert!(
+        *ratio > 0.05 && *ratio < 1.0,
+        "arrow length is {ratio} of the mean edge across the sweep: {ratios:?}"
+      );
+    }
+  }
+
+  /// One instance per lattice point, six corners generated per instance in the
+  /// shader: the bake stores arrows, not corners.
+  #[test]
+  fn the_bake_emits_one_instance_per_lattice_point() {
+    let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(1);
+    let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+    let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
+
+    let expected: usize = topology
+      .cells()
+      .handle_iter()
+      .map(|cell| {
+        let (_, diameter) = cell_extent(&cell.coord_simplex(&coords));
+        ref_lattice_bary(cell.dim(), glyph_refinement(cell.dim(), diameter, 0.06)).count()
+      })
+      .sum();
+    assert_eq!(instances.len(), expected);
   }
 }

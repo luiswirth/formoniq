@@ -1263,6 +1263,7 @@ dependencies = [
  "naga",
  "nalgebra",
  "pollster",
+ "rayon",
  "simplicial",
  "wasm-bindgen",
  "wasm-bindgen-futures",

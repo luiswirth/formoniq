@@ -16,7 +16,7 @@ use wgpu::util::DeviceExt;
 
 use super::particles::ParticleBatch;
 use super::uniform::{GlyphMaterial, SegmentMaterial, SurfaceMaterial};
-use crate::bake::{BakedMesh, BakedVertex, GlyphVertex, PrimBatch, SegmentVertex};
+use crate::bake::{BakedMesh, BakedVertex, GlyphInstance, PrimBatch, SegmentVertex};
 
 /// A `VERTEX` buffer holding `data`, never empty: a zero-length
 /// `create_buffer_init` is rejected, and an empty batch (a field with no
@@ -59,15 +59,19 @@ const fn segment_attributes(loc: u32) -> [wgpu::VertexAttribute; 4] {
   [p, n, m, attribute(28, loc + 3, wgpu::VertexFormat::Float32)]
 }
 
-/// A `GlyphVertex`'s five: world position, the arrow-frame coordinate, the
-/// arrow length, the opacity, then the cell-barycentric clip coordinate.
-const fn glyph_attributes() -> [wgpu::VertexAttribute; 5] {
+/// A `GlyphInstance`'s eight: the arrow's center and length, its in-plane
+/// frame and opacity, then the three vectors the cell-barycentric clip
+/// coordinate is affine in.
+const fn glyph_attributes() -> [wgpu::VertexAttribute; 8] {
   [
     attribute(0, 0, wgpu::VertexFormat::Float32x3),
-    attribute(12, 1, wgpu::VertexFormat::Float32x2),
-    attribute(20, 2, wgpu::VertexFormat::Float32),
-    attribute(24, 3, wgpu::VertexFormat::Float32),
-    attribute(28, 4, wgpu::VertexFormat::Float32x4),
+    attribute(12, 1, wgpu::VertexFormat::Float32),
+    attribute(16, 2, wgpu::VertexFormat::Float32x3),
+    attribute(28, 3, wgpu::VertexFormat::Float32),
+    attribute(32, 4, wgpu::VertexFormat::Float32x3),
+    attribute(48, 5, wgpu::VertexFormat::Float32x4),
+    attribute(64, 6, wgpu::VertexFormat::Float32x4),
+    attribute(80, 7, wgpu::VertexFormat::Float32x4),
   ]
 }
 
@@ -84,7 +88,7 @@ const SEGMENT_A: [wgpu::VertexAttribute; 4] = segment_attributes(0);
 const SEGMENT_B: [wgpu::VertexAttribute; 4] = segment_attributes(4);
 const SEGMENT_VALUE_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
 const SEGMENT_VALUE_B: [wgpu::VertexAttribute; 1] = value_attribute(9);
-const GLYPH: [wgpu::VertexAttribute; 5] = glyph_attributes();
+const GLYPH: [wgpu::VertexAttribute; 8] = glyph_attributes();
 
 /// A filled triangle surface: per-corner vertex streams, three corners per
 /// triangle, unshared.
@@ -295,34 +299,38 @@ fn gather(values: &[f32], segments: &[[u32; 2]], end: usize) -> Vec<f32> {
 /// the corners are already expanded, since a quad's diagonal is not shared the
 /// way a mesh edge is, and the arrow-frame coordinate differs per corner anyway.
 pub struct GlyphBatch {
-  corners: wgpu::Buffer,
-  ncorners: u32,
+  instances: wgpu::Buffer,
+  ninstances: u32,
 }
 
+/// The corners of one arrow's quad: two triangles, six vertices, generated in
+/// the vertex shader from `@builtin(vertex_index)` rather than stored.
+const GLYPH_CORNERS: u32 = 6;
+
 impl GlyphBatch {
-  /// `vertices` is the flat corner stream, six per glyph. An empty stream is a
-  /// valid batch that draws nothing.
-  pub fn new(device: &wgpu::Device, vertices: &[GlyphVertex]) -> Self {
+  /// One instance per arrow. An empty stream is a valid batch that draws
+  /// nothing.
+  pub fn new(device: &wgpu::Device, instances: &[GlyphInstance]) -> Self {
     Self {
-      corners: vertex_buffer(device, "Glyph Corners", vertices),
-      ncorners: vertices.len() as u32,
+      instances: vertex_buffer(device, "Glyph Instances", instances),
+      ninstances: instances.len() as u32,
     }
   }
 
   pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 1] {
     [wgpu::VertexBufferLayout {
-      array_stride: size_of::<GlyphVertex>() as wgpu::BufferAddress,
-      step_mode: wgpu::VertexStepMode::Vertex,
+      array_stride: size_of::<GlyphInstance>() as wgpu::BufferAddress,
+      step_mode: wgpu::VertexStepMode::Instance,
       attributes: &GLYPH,
     }]
   }
 
   pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
-    if self.ncorners == 0 {
+    if self.ninstances == 0 {
       return;
     }
-    pass.set_vertex_buffer(0, self.corners.slice(..));
-    pass.draw(0..self.ncorners, 0..1);
+    pass.set_vertex_buffer(0, self.instances.slice(..));
+    pass.draw(0..GLYPH_CORNERS, 0..self.ninstances);
   }
 }
 

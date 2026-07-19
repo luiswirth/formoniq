@@ -15,12 +15,22 @@
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(1) @binding(0) var<uniform> material: GlyphMaterial;
 
-struct GlyphVertex {
-    @location(0) position: vec3<f32>,
-    @location(1) arrow_xy: vec2<f32>,
-    @location(2) length: f32,
+// One arrow, as one instance. The quad's six corners are generated below from
+// the vertex index rather than stored: every dimension of the arrow is a
+// proportion of its own length, so a corner carries no information an instance
+// does not already have.
+struct GlyphInstance {
+    @location(0) center: vec3<f32>,
+    @location(1) length: f32,
+    @location(2) direction: vec3<f32>,
     @location(3) opacity: f32,
-    @location(4) cell_bary: vec4<f32>,
+    @location(4) across: vec3<f32>,
+    // The cell-barycentric clip coordinate at the arrow's center, and its
+    // gradients along the two frame axes. `global2bary` is affine and the quad
+    // is planar, so this reproduces the coordinate over the whole arrow exactly.
+    @location(5) bary_center: vec4<f32>,
+    @location(6) bary_along: vec4<f32>,
+    @location(7) bary_across: vec4<f32>,
 };
 
 struct VertexOutput {
@@ -72,18 +82,41 @@ fn sd_arrow(p: vec2<f32>, length: f32, hw: f32, head_len: f32, shaft_frac: f32) 
 }
 
 @vertex
-fn vs_main(vertex: GlyphVertex) -> VertexOutput {
+fn vs_main(instance: GlyphInstance, @builtin(vertex_index) index: u32) -> VertexOutput {
+    // The quad's two triangles, as corner indices 0..3 laid out
+    // (0,0) (1,0) (1,1) (0,1): the first triangle is 0,1,2 and the second
+    // 0,2,3. Arithmetic rather than a lookup table -- WebKit is strict about
+    // what it will specialize, and this needs nothing specialized.
+    let k = index % 3u;
+    let corner = select(k, select(k + 1u, 0u, k == 0u), index >= 3u);
+    let unit = vec2<f32>(f32(((corner + 1u) / 2u) % 2u), f32(corner / 2u));
+
+    // The arrow's extent in its own frame, every part of it a proportion of the
+    // length, plus the rim's margin so the outline has room on every side.
+    let half_width = material.width_fraction * instance.length;
+    let margin = material.outline_width_fraction * half_width * 1.5;
+    let x = mix(-margin, instance.length + margin, unit.x);
+    let y = mix(-(half_width + margin), half_width + margin, unit.y);
+
+    // Centered on its sample: the arrow reaches half its length either way,
+    // rather than starting at the point and overshooting ahead of it.
+    let world = instance.center
+        + instance.direction * (x - instance.length * 0.5)
+        + instance.across * y;
+
     // The arrow lies flat in the cell, coplanar with the fill, so it is nudged
     // toward the camera to draw over the surface instead of z-fighting it -- the
     // same bias the wireframe takes, tied to the mark's own world scale.
-    let biased = depth_biased_corner(vertex.position, frame.view_dir.xyz, material.width_fraction * vertex.length);
+    let biased = depth_biased_corner(world, frame.view_dir.xyz, half_width);
 
     var out: VertexOutput;
     out.clip_position = frame.view_proj * vec4<f32>(biased, 1.0);
-    out.opacity = vertex.opacity;
-    out.xy = vertex.arrow_xy;
-    out.length = vertex.length;
-    out.cell_bary = vertex.cell_bary;
+    out.opacity = instance.opacity;
+    out.xy = vec2<f32>(x, y);
+    out.length = instance.length;
+    out.cell_bary = instance.bary_center
+        + instance.bary_along * (x - instance.length * 0.5)
+        + instance.bary_across * y;
     return out;
 }
 
