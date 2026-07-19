@@ -44,6 +44,21 @@
     <script type="module">
       const message = document.getElementById("message");
 
+      // The glue and the wasm are only valid as a *pair*: the wasm imports
+      // exactly the functions that bindgen run emitted. Their filenames are
+      // constant across every deploy, so a browser is free to serve one from
+      // cache and fetch the other -- and a mismatched pair fails at
+      // instantiation with an unhelpful "import must be callable".
+      //
+      // Stamping both URLs with the build makes each deploy's modules distinct,
+      // so they are cached and evicted together. The deploy substitutes the
+      // commit; a local build leaves the placeholder, where one stamp for every
+      // build is no worse than the none it had before.
+      const BUILD = "__BUILD_STAMP__";
+      // The worker loads the same glue and must be stamped with it, and its URL
+      // is built in Rust -- so the stamp is left where that code can read it.
+      globalThis.__FORMONIQ_BUILD__ = BUILD;
+
       // WebGPU only, by choice: the viewer targets the modern backend and does
       // not carry a WebGL2 fallback. Fail early and legibly where it is absent.
       if (!("gpu" in navigator)) {
@@ -52,8 +67,13 @@
           "Try a recent Chrome, Edge, or a browser with WebGPU enabled.";
       } else {
         try {
-          const wasm = await import("./formoniq_studio.js");
-          await wasm.default();
+          const wasm = await import(`./formoniq_studio.js?v=${BUILD}`);
+          // Passed explicitly: the glue resolves the wasm against its own
+          // `import.meta.url`, which drops the query and would leave the wasm
+          // free to come from cache while the glue did not.
+          await wasm.default({
+            module_or_path: `./formoniq_studio_bg.wasm?v=${BUILD}`,
+          });
           message.classList.add("hidden");
           wasm.start();
         } catch (err) {

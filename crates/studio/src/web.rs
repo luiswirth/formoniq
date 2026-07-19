@@ -133,12 +133,32 @@ pub(crate) mod worker {
     }
   }
 
+  /// The worker script, carrying this build's stamp so it loads the *same*
+  /// glue and wasm the page did.
+  ///
+  /// The page puts the stamp on the global object (see `index.html`), which is
+  /// the only way it can reach here: it is substituted into the HTML at deploy
+  /// time, long after this code is compiled. Absent -- a page served without
+  /// it -- the URL is bare, which is what it was before stamping and is no
+  /// worse.
+  fn worker_url() -> String {
+    let stamp = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("__FORMONIQ_BUILD__"))
+      .ok()
+      .and_then(|value| value.as_string())
+      .unwrap_or_default();
+    if stamp.is_empty() {
+      "./solve_worker.js".to_string()
+    } else {
+      format!("./solve_worker.js?v={stamp}")
+    }
+  }
+
   pub(crate) fn spawn(request: SolveRequest) -> Handle {
     let options = web_sys::WorkerOptions::new();
     // The worker `import`s the same wasm-bindgen glue the page does, so it must
     // be a module worker.
     options.set_type(web_sys::WorkerType::Module);
-    let worker = web_sys::Worker::new_with_options("./solve_worker.js", &options)
+    let worker = web_sys::Worker::new_with_options(&worker_url(), &options)
       .expect("the solve worker script is served beside the page");
 
     let slot: Rc<RefCell<Option<SolveOutcome>>> = Rc::new(RefCell::new(None));

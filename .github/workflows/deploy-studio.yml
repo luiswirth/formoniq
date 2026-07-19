@@ -77,6 +77,12 @@ jobs:
           # The solve worker loads the same glue this bindgen just emitted, so
           # it ships beside it rather than being bundled into the page.
           cp crates/studio/web/solve_worker.js dist/
+          # Stamp the page with the commit it was built from. The glue and the
+          # wasm are only valid as a pair and their filenames never change, so
+          # without this a returning visitor can pair a cached module with a
+          # freshly fetched one -- which fails at instantiation, not at fetch.
+          sed -i "s/__BUILD_STAMP__/${GITHUB_SHA}/" dist/index.html
+          grep -q "__BUILD_STAMP__" dist/index.html && exit 1 || true
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
