@@ -255,11 +255,12 @@ pub struct SegmentMaterial {
 pub struct GlyphMaterial {
   /// The arrow's ink: `rgb` plus the base opacity every fragment starts at.
   pub color: [f32; 4],
-  /// The arrowhead's half-width in world space, which its base spans in full and
-  /// the shaft narrows down from. The quad the arrow is drawn on is sized from
-  /// it in the bake, so it also fixes the world scale the fragment's signed
-  /// distance is measured in.
-  pub half_width_world: f32,
+  /// The arrowhead's half-width, as a fraction of the arrow's own length (which
+  /// the bake carries per glyph). A proportion rather than a world width, so the
+  /// arrow is one shape scaled by the cell it sits in and reads the same on a
+  /// coarse mesh and a refined one; the quad is sized from the same product in
+  /// the bake.
+  pub width_fraction: f32,
   /// Opacity at the standing wave's node, relative to the crest: the glyphs of
   /// an eigenmode fade where the field vanishes and an arrow is meaningless. A
   /// static field passes 1.
@@ -270,8 +271,8 @@ pub struct GlyphMaterial {
   /// arrow, self-similar since both are fractions.
   pub head_length_fraction: f32,
   pub shaft_width_fraction: f32,
-  /// The outline's rim width, as a fraction of [`Self::half_width_world`] -- a
-  /// fixed world-space band around the whole silhouette, drawn black so it
+  /// The outline's rim width, as a fraction of the arrow's half-width -- so the
+  /// rim scales with the arrow like every other proportion, drawn black so it
   /// separates from either colormap beneath it. Zero draws no rim.
   pub outline_width_fraction: f32,
   pub _pad0: f32,

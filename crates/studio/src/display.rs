@@ -63,12 +63,23 @@ pub(crate) fn post_uniform(post: Post) -> PostUniform {
 /// lobe never overshoots the origin and inverts the surface.
 const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 
-/// The wireframe's half-width as a fraction of the scene's own extent (its
-/// radius) -- the same object-intrinsic scale the standing-wave displacement
-/// uses -- rather than a fixed screen-pixel count, so the line reads the same
-/// thickness whether the mesh is zoomed to fill the screen or shrunk to a corner
-/// of it.
-const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
+/// The wireframe's half-width as a fraction of the mesh's *mean edge length*,
+/// not of the scene's extent.
+///
+/// It draws the mesh's own edges, so its scale is the mesh's local one
+/// ([`mean_edge_length`](simplicial::geometry::coord::mean_edge_length)) rather
+/// than the object's global one. Against the extent it read correctly at one
+/// refinement only: refine the mesh and the cells shrink while the strokes stay
+/// put, until the wireframe is a solid mass with no surface visible between the
+/// lines. Against the edge length it is the same drawing at every resolution --
+/// a reference triangle and a hundred-thousand-cell mesh both get a line a
+/// small fraction of the edge it traces, and the surface stays visible between
+/// the lines at every resolution.
+///
+/// Still world-space, so the original reasoning is untouched: the line reads the
+/// same whether the mesh fills the screen or sits in a corner of it. Only which
+/// length it is a fraction *of* has changed.
+const WIREFRAME_WIDTH_FRACTION: f32 = 0.012;
 
 /// The world-space spacing the glyph lattice aims for within a cell, on the
 /// same object-intrinsic scale as every other mark's: not a fixed sample
@@ -80,9 +91,17 @@ const WIREFRAME_WIDTH_FRACTION: f32 = 0.004;
 /// overshooting past each other or leaving gaps (see `glyph.rs`).
 const GLYPH_SPACING_FRACTION: f32 = 0.06;
 
-/// The glyph's half-width: the arrowhead's, which its base spans in full, and
-/// which [`GLYPH_SHAFT_WIDTH_FRACTION`] narrows the shaft down from.
-const GLYPH_WIDTH_FRACTION: f32 = 0.012;
+/// The glyph's half-width as a fraction of the arrow's *own length*: the
+/// arrowhead's, which its base spans in full, and which
+/// [`GLYPH_SHAFT_WIDTH_FRACTION`] narrows the shaft down from.
+///
+/// A proportion, joining the head length and shaft width that already were
+/// ones, so an arrow is a single shape scaled by the cell it sits in and the
+/// whole mark is self-similar. The length is already cell-derived (the
+/// lattice's realized spacing), so a world-space width was the one dimension
+/// that did not follow the mesh: on a refined mesh the arrows shortened and
+/// kept their width, thickening into stubs.
+const GLYPH_WIDTH_FRACTION: f32 = 0.36;
 
 /// The arrowhead's length as a fraction of the glyph's own, and the shaft's
 /// half-width as a fraction of the head's base. A head a third of the arrow, on
@@ -95,14 +114,13 @@ const GLYPH_SHAFT_WIDTH_FRACTION: f32 = 0.32;
 /// field rather than as a wall of marks. Drawn over the fill.
 const GLYPH_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.75];
 
-/// The outline's world-space rim width. Converted to a fraction of
-/// [`GLYPH_WIDTH_FRACTION`] where it is used, so the two stay this many world
-/// units apart wherever the taper has already scaled the local half-width
-/// down -- a constant rim, not one that thins toward the tip along with the
-/// arrow it traces. The color is fixed black in `segments.wgsl`: the one color
-/// that separates from every sample of either colormap, the same reasoning the
+/// The outline's rim, as a fraction of the arrow's half-width -- so it is a
+/// constant rim around the silhouette rather than one that thins toward the tip
+/// along with the arrow it traces, and it scales with the arrow like every other
+/// proportion. The color is fixed black in `segments.wgsl`: the one color that
+/// separates from every sample of either colormap, the same reasoning the
 /// shader's own doc gives for not colormapping the ink itself.
-const GLYPH_OUTLINE_WIDTH_FRACTION: f32 = 0.0032;
+const GLYPH_OUTLINE_WIDTH_FRACTION: f32 = 0.27;
 
 /// The opacity the glyphs of an eigenmode fade to at the standing wave's node,
 /// where the field vanishes and an arrow is meaningless -- never fully, since
@@ -508,6 +526,19 @@ impl FieldDisplay {
     let (attributes, (raw_min, raw_max)) =
       field_attributes(&scene.topology, &scene.coords, cochain, mesh.cell_corners());
 
+    // The mesh's own local length, which the marks that draw its features are
+    // sized by -- as against `amplitude_scale`, the object's global extent,
+    // which sizes what should read the same at any resolution. A mesh with no
+    // edges has no local length, and falls back on the global one.
+    let mesh_scale = {
+      let mean = simplicial::geometry::coord::mean_edge_length(&scene.topology, &scene.coords);
+      if mean > 0.0 {
+        mean as f32
+      } else {
+        amplitude_scale
+      }
+    };
+
     let (glyphs, particles, speed_ratio, mut surface) = match selection {
       Selection::Scalar(index) => {
         let field = &scene.fields[index];
@@ -594,8 +625,8 @@ impl FieldDisplay {
           &field.cochain,
           f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
           peak,
-          f64::from(GLYPH_WIDTH_FRACTION * amplitude_scale),
-          f64::from(GLYPH_OUTLINE_WIDTH_FRACTION * amplitude_scale),
+          f64::from(GLYPH_WIDTH_FRACTION),
+          f64::from(GLYPH_OUTLINE_WIDTH_FRACTION),
         );
         let glyphs = GlyphBatch::new(&ctx.device, &vertices);
 
@@ -697,7 +728,7 @@ impl FieldDisplay {
       // mesh rather than the flat rest one, and it has no node to fade at.
       wireframe: SegmentMaterial {
         color: [0.0, 0.0, 0.0, 1.0],
-        half_width_world: WIREFRAME_WIDTH_FRACTION * amplitude_scale,
+        half_width_world: WIREFRAME_WIDTH_FRACTION * mesh_scale,
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
@@ -705,17 +736,18 @@ impl FieldDisplay {
       // The glyphs share the surface's clock but not its displacement: the
       // samples sit on the undisplaced surface, so only the node fade reads the
       // mode. The outline rides the same material -- `glyph.wgsl` composites the
-      // rim under the ink in one pass -- as a fraction of the glyph's own
-      // half-width, so it stays `GLYPH_OUTLINE_WIDTH_FRACTION` world units out.
+      // rim under the ink in one pass. Every dimension here is a proportion of
+      // the arrow's own length, which the bake sets per cell, so the mark is
+      // self-similar at any refinement and none of it is a world size.
       // The clip to the cell is intrinsic to the flat mark and needs no flag.
       glyph: GlyphMaterial {
         color: GLYPH_INK,
-        half_width_world: GLYPH_WIDTH_FRACTION * amplitude_scale,
+        width_fraction: GLYPH_WIDTH_FRACTION,
         fade_floor: GLYPH_NODE_OPACITY,
         wave_omega: surface.wave_omega,
         head_length_fraction: GLYPH_HEAD_LENGTH_FRACTION,
         shaft_width_fraction: GLYPH_SHAFT_WIDTH_FRACTION,
-        outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION / GLYPH_WIDTH_FRACTION,
+        outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION,
         _pad0: 0.0,
         _pad1: 0.0,
       },
