@@ -21,6 +21,7 @@ pub(crate) mod glyph;
 pub mod io;
 pub mod render;
 pub mod scene;
+pub(crate) mod solve;
 pub mod ui;
 
 /// The web entry point and its platform glue (canvas mount, async device

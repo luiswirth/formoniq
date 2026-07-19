@@ -65,7 +65,7 @@ pub struct Scene {
 /// only in where the animation is evaluated. The previous `Option<f64>`
 /// eigenvalue was already this axis in two states (`None`/`Some`); this names the
 /// third.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum FieldTime {
   Static,
   StandingWave { eigenvalue: f64 },
@@ -150,7 +150,7 @@ impl FieldTime {
 /// density is read per cell at draw time (`surface_corner_values`), not stored
 /// -- so the top form's discontinuity across cells survives to the colormap
 /// instead of being averaged away.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScalarField {
   pub name: String,
   /// The grade $k$ of the form this field was reconstructed from, before the
@@ -189,7 +189,7 @@ pub struct ScalarField {
 /// only the magnitude tint through zero. A single real eigenmode does not
 /// travel, so the glyphs are never advected -- only the particles are, on the
 /// object's own clock.
-#[derive(Clone)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct LineField {
   pub name: String,
   /// The grade $k$ of the form this field was reconstructed from, before the

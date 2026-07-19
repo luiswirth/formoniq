@@ -74,6 +74,9 @@ jobs:
             --out-name formoniq_studio \
             target/wasm32-unknown-unknown/release/formoniq_studio.wasm
           cp crates/studio/web/index.html dist/
+          # The solve worker loads the same glue this bindgen just emitted, so
+          # it ships beside it rather than being bundled into the page.
+          cp crates/studio/web/solve_worker.js dist/
 
       - uses: actions/configure-pages@v6
       - uses: actions/upload-pages-artifact@v5
