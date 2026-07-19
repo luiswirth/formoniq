@@ -28,7 +28,7 @@ use winit::event_loop::EventLoop;
 use crate::demos::default_selection;
 use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
 use crate::gallery::{presets, Gallery, MeshSource, Preset, Study};
-use crate::render::{camera::Camera, FrameView, GpuContext, Renderer, DEFAULT_SSAA_SCALE};
+use crate::render::{camera::Camera, ssaa_for_dpr, FrameView, GpuContext, Renderer};
 use crate::scene::Scene;
 use crate::ui::{Entry, PanelModel, Selection};
 
@@ -257,7 +257,11 @@ impl State {
       .unwrap();
     surface.configure(&ctx.device, &config);
 
-    let renderer = Renderer::new(&ctx, config.format, DEFAULT_SSAA_SCALE);
+    let renderer = Renderer::new(
+      &ctx,
+      config.format,
+      ssaa_for_dpr(window.scale_factor() as f32),
+    );
 
     // Show the window immediately: the gallery opens on a cheap placeholder of
     // the starting mesh and builds the starting preset's study in the
@@ -1386,6 +1390,13 @@ impl ApplicationHandler for App {
     #[cfg(target_arch = "wasm32")]
     if self.state.is_none() {
       self.state = crate::web::take_ready_state();
+      // The renderer just landed. Its initial size races the async bootstrap
+      // and the `Resized` that would correct it was dropped while `state` was
+      // still `None` (see `web::canvas_surface_size`), so reconcile the surface
+      // to the page's settled canvas size now rather than render 1x1 forever.
+      if let (Some(state), Some(window)) = (self.state.as_mut(), self.window.as_ref()) {
+        state.resize(crate::web::canvas_surface_size(window));
+      }
     }
     // Not while occluded: see the field doc on `occluded`. The loop resumes
     // on its own once `WindowEvent::Occluded(false)` fires the next redraw.

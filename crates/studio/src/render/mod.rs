@@ -67,6 +67,27 @@ pub const MASK_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
 /// and the segment marks uniformly, at the cost of the extra fill rate.
 pub const DEFAULT_SSAA_SCALE: u32 = 2;
 
+/// The supersampling factor for a display of device-pixel ratio `dpr`.
+///
+/// Supersampling models the observation -- it antialiases what the eye resolves
+/// -- and a dense display already oversamples the layout by its own pixel ratio.
+/// The quantity that reads on screen is therefore the *total* samples per layout
+/// pixel per axis, `dpr * ssaa`; past [`DEFAULT_SSAA_SCALE`] of them the extra
+/// draws detail the display cannot show while the scene fill grows as its
+/// square. So hold that product near the target the desktop uses rather than the
+/// multiplier: a `dpr = 1` monitor keeps the full factor, a `dpr = 2` or `3`
+/// phone drops toward the floor of `1`. This is where a phone's *always-on*
+/// scene cost lives -- a `dpr = 3` panel at the fixed factor renders every scene
+/// pass at nine times the pixels the screen resolves.
+///
+/// The scene target alone rides this; the UI still composites at full device
+/// resolution (a later pass onto the surface), so its text stays crisp.
+pub fn ssaa_for_dpr(dpr: f32) -> u32 {
+  #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+  let scaled = (f64::from(DEFAULT_SSAA_SCALE) / f64::from(dpr.max(1.0))).round() as u32;
+  scaled.clamp(1, DEFAULT_SSAA_SCALE)
+}
+
 /// The WGSL source of one pass: the shared preamble (types, pure functions)
 /// followed by the body. Concatenated because WGSL has no `#include`; the shader
 /// test validates this same concatenation, so a preamble/body mismatch fails

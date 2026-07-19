@@ -68,6 +68,28 @@ pub(crate) fn take_ready_state() -> Option<State> {
   READY_STATE.with(|slot| slot.borrow_mut().take())
 }
 
+/// The canvas's true drawing-buffer size: its laid-out CSS box scaled by the
+/// device pixel ratio.
+///
+/// Read once, when the async bootstrap installs the renderer, to reconcile the
+/// surface with the size the page settled on. winit sizes the canvas from an
+/// initial pre-layout measurement (1x1) and only corrects it on a `Resized`
+/// event -- but the first such event, fired when `mount_canvas` lays the canvas
+/// out, arrives *during* the async device build, before any [`State`] exists to
+/// receive it, and the CSS box does not change again to re-emit it. Absent this
+/// reconciliation the surface keeps the 1x1 bootstrap size until an unrelated
+/// resize (a desktop window drag, a phone rotation) happens to re-trigger it --
+/// which never comes on a phone held still.
+pub(crate) fn canvas_surface_size(window: &Window) -> winit::dpi::PhysicalSize<u32> {
+  let canvas = window.canvas().expect("winit created a canvas on the web");
+  let dpr = web_sys::window()
+    .map(|w| w.device_pixel_ratio())
+    .unwrap_or(1.0);
+  let width = (f64::from(canvas.client_width()) * dpr).round() as u32;
+  let height = (f64::from(canvas.client_height()) * dpr).round() as u32;
+  winit::dpi::PhysicalSize::new(width.max(1), height.max(1))
+}
+
 /// Appends the winit-created `<canvas>` to the document body and sizes it to
 /// fill the viewport. winit builds the canvas but leaves attaching it to the
 /// page to the embedder.
