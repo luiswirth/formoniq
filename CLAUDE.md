@@ -47,7 +47,7 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `PseudoRiemannianMetric` (Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengths`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengthsSq`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
@@ -128,7 +128,11 @@ and passes tests.
 2. **Intrinsic first, extrinsic second.** Assembly consumes only per-cell metric
    tensors, never coordinates. `MeshCoords` (an embedding) is just one
    `Geometry` implementor, on equal footing with Regge edge lengths
-   (`MeshLengths`) and raw per-cell metrics (`CellGramians`). Anything that
+   (`MeshLengthsSq`) and raw per-cell metrics (`CellGramians`). The Regge
+   primitive is the *signed squared* length — positive spacelike, zero null,
+   negative timelike, mirroring `norm_sq` — which is what keeps Regge geometry
+   total over every metric signature: Regge calculus was invented for
+   Lorentzian spacetimes, and an unsquared length would lose the causal sign. Anything that
    *requires* an embedding is a wrapper for I/O, visualization or convenience —
    it must not sit in the core path. A feature that only works on embedded
    meshes is an unfinished feature.

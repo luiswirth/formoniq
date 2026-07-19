@@ -262,7 +262,7 @@ mod test {
 
   use derham::interpolate::form::WhitneyForm;
   use simplicial::{
-    geometry::metric::simplex::SimplexLengths, topology::simplex::standard_subsimps,
+    geometry::metric::simplex::SimplexLengthsSq, topology::simplex::standard_subsimps,
   };
 
   use approx::assert_relative_eq;
@@ -270,7 +270,7 @@ mod test {
   #[test]
   fn hodge_mass0_is_scalar_mass() {
     for dim in 0..=3 {
-      let geo = SimplexLengths::standard(dim);
+      let geo = SimplexLengthsSq::standard(dim);
       let hodge_mass = HodgeMassElmat::new(dim, 0).eval(&geo.metric());
       let scalar_mass = scalar_mass_elmat(&geo.metric());
       assert_relative_eq!(&hodge_mass, &scalar_mass);
@@ -281,7 +281,7 @@ mod test {
   fn hodge_mass_dim2_grade1() {
     let dim = 2;
     let grade = 1;
-    let geo = SimplexLengths::standard(dim);
+    let geo = SimplexLengthsSq::standard(dim);
     let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
@@ -295,7 +295,7 @@ mod test {
   fn dif_n2_k1() {
     let dim = 2;
     let grade = 1;
-    let geo = SimplexLengths::standard(dim);
+    let geo = SimplexLengthsSq::standard(dim);
     let computed = DifElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
@@ -309,7 +309,7 @@ mod test {
   fn codif_n2_k1() {
     let dim = 2;
     let grade = 1;
-    let geo = SimplexLengths::standard(dim);
+    let geo = SimplexLengthsSq::standard(dim);
     let computed = CodifElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
@@ -322,7 +322,7 @@ mod test {
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in 1..=3 {
-      let geo = SimplexLengths::standard(dim);
+      let geo = SimplexLengthsSq::standard(dim);
       for grade in 0..dim {
         let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric());
 

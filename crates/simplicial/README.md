@@ -25,17 +25,20 @@ of each child.
 
 **Geometry** is a pluggable input behind one trait: a per-cell pseudo-Riemannian
 metric of any signature. Three interchangeable implementations are provided:
-Regge edge lengths (Riemannian by nature), raw per-cell metric tensors, and
+Regge signed squared edge lengths (positive spacelike, zero null, negative
+timelike — the calculus Regge invented for general relativity, on the primitive
+that keeps every signature expressible), raw per-cell metric tensors, and
 vertex coordinates in a flat ambient space of any signature (Euclidean by
 default, Minkowski for a spacetime mesh). An embedding induces a metric and is
 one implementation among these, not a prerequisite. Volumes, mesh widths, shape
-regularity and Gaussian curvature by angle defect are computed from edge lengths
+regularity and Gaussian curvature by angle defect are computed from edge data
 alone, on manifolds with no global coordinates (a flat torus, an abstract
-Riemannian manifold). Extrinsic quantities (mean curvature, a BVH point
-locator) sit downstream of the intrinsic layer.
+Riemannian manifold, a coordinate-free simplicial spacetime). Extrinsic
+quantities (mean curvature, a BVH point locator) sit downstream of the
+intrinsic layer.
 
 Distance geometry connects the metric representations: Cayley-Menger
-realizability checks, and the exact conversion between edge lengths and metric
+realizability checks, and the exact conversion between squared edge lengths and metric
 tensors in both directions. Refinement transports all three geometry
 representations exactly.
 

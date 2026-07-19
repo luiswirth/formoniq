@@ -57,7 +57,7 @@ fn main() {
   // are the relative Whitney complex.
   let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
   let (topology, coords) = box_mesh.compute_coord_complex();
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let pec = whitney.relative();
   // The solver returns states in the ambient Whitney space (extended by zero on

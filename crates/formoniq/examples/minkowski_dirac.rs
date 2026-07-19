@@ -34,6 +34,14 @@
 //!   metric enters only through the [`Geometry`] the mesh carries. One
 //!   pseudo-Riemannian code path, no Lorentzian special case.
 //!
+//! - **Regge calculus, as Regge intended.** The geometry the assembly actually
+//!   consumes is not the coordinates but the Regge data derived from them: one
+//!   signed squared length per edge (positive spacelike, zero null, negative
+//!   timelike), from which each cell's Lorentzian metric is reconstructed by
+//!   polarization -- "general relativity without coordinates". The run prints
+//!   the causal census of the edges; the coordinates are used only on the I/O
+//!   side, to interpolate the exact solution and to measure errors.
+//!
 //! The manufactured solution is the plane wave $u_k = sin(a dot x + phi)
 //! thin omega_k$ on every grade at once (the field is genuinely mixed-grade:
 //! $sans(D)$ couples neighbouring grades), with $J = (sans(D) + m) u$
@@ -216,13 +224,16 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, nsub).compute_coord_complex();
     let mut matrix = coords.into_matrix();
     matrix.row_mut(0).scale_mut(TIME_SCALE);
-    // The same vertex coordinates seen twice: as the Lorentzian spacetime
-    // geometry assembly consumes, and as the Euclidean comparison geometry
-    // errors are measured in (the indefinite pairing cannot norm an error).
+    // The same vertex coordinates seen twice: once inducing the Lorentzian
+    // Regge data below, and as the Euclidean comparison geometry errors are
+    // measured in (the indefinite pairing cannot norm an error).
     let euclidean = MeshCoords::new(matrix.clone());
     let spacetime = MeshCoords::with_ambient(matrix, Gramian::minkowski(dim));
+    // The assembly geometry: signed squared edge lengths, nothing else. From
+    // here on the spacetime is a Regge manifold; the embedding is forgotten.
+    let regge = spacetime.to_edge_lengths_sq(&topology);
 
-    let whitney = WhitneyComplex::new(&topology, &spacetime);
+    let whitney = WhitneyComplex::new(&topology, &regge);
     let relative = whitney.relative();
 
     let mut loads = Vec::with_capacity(dim + 1);
@@ -256,7 +267,7 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
         k,
         assemble_galvec(
           &topology,
-          &spacetime,
+          &regge,
           SourceElVec::new(&source_section, Some(SimplexQuadRule::degree(dim, 3))),
         ),
       ));
@@ -278,6 +289,22 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
     let error = l2_error_of(&solution);
     let interp_error = l2_error_of(&lift);
     let ndofs: usize = (0..=dim).map(|k| whitney.ndofs(k)).sum();
+
+    if nsub == nsubs[0] {
+      let mut census = [0usize; 3];
+      for edge in topology.edges().handle_iter() {
+        use simplicial::geometry::metric::mesh::EdgeRefExt;
+        match edge.causal_type(&regge) {
+          gramian::CausalType::Timelike => census[0] += 1,
+          gramian::CausalType::Null => census[1] += 1,
+          gramian::CausalType::Spacelike => census[2] += 1,
+        }
+      }
+      println!(
+        "  regge edge census at nsub={nsub}: {} timelike, {} null, {} spacelike",
+        census[0], census[1], census[2]
+      );
+    }
 
     let rates = previous
       .map(|(n, e, i)| {

@@ -23,7 +23,7 @@ use approx::assert_relative_eq;
 fn inhomogeneous_dirichlet_reproduces_linear_solution() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let boundary = whitney.boundary().unwrap();
 
@@ -54,7 +54,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
 fn inhomogeneous_neumann_reproduces_linear_solution() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let boundary = whitney.boundary().unwrap();
 
@@ -108,7 +108,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
 
   for dim in 2..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     // Partition of the boundary facets by their barycenter.
@@ -154,7 +154,7 @@ fn robin_reproduces_linear_solution() {
 
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     let exact = DiffFormClosure::coordinate_component(0, dim);

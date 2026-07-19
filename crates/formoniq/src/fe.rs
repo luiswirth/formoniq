@@ -116,7 +116,7 @@ mod test {
   fn l2_projection_reproduces_whitney_forms() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let lengths = coords.to_edge_lengths(&topology);
+      let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       for grade in 0..=dim {
@@ -142,7 +142,7 @@ mod test {
   fn l2_error_vanishes_on_the_discrete_space() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let lengths = coords.to_edge_lengths(&topology);
+      let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       // A globally affine 0-form lies in the Whitney 0-form space.

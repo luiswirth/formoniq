@@ -14,7 +14,8 @@ specialized to 2D or 3D.
 
 - **Coordinate-free assembly.** The Galerkin operators of the Whitney
   discretization of the L² de Rham complex, assembled in parallel from per-cell
-  metrics alone. An embedding, Regge edge lengths and raw metric tensors are
+  metrics alone. An embedding, Regge signed squared edge lengths and raw
+  metric tensors are
   three interchangeable geometry inputs; the solvers run identically on all
   three, including on manifolds with no global coordinates.
 - **The Hodge-Laplace problem.** Source and eigenvalue problems in the mixed

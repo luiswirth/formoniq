@@ -10,7 +10,7 @@ use crate::linalg::{faer::FaerCholesky, quadratic_form_sparse};
 use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 use simplicial::{
-  geometry::metric::mesh::MeshLengths,
+  geometry::metric::mesh::MeshLengthsSq,
   linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector},
 };
 
@@ -146,7 +146,7 @@ pub fn solve_wave<C: HilbertComplex>(
 /// For explicit time stepping typically Cmax = 1.
 /// Implicit time stepping is usually more lenient, allowing bigger values.
 /// We assume here Cmax = 1, with a 5% safety margin.
-pub fn cfl_dt(mesh_geo: &MeshLengths, vel: f64) -> f64 {
+pub fn cfl_dt(mesh_geo: &MeshLengthsSq, vel: f64) -> f64 {
   const MARGIN: f64 = 0.95;
   MARGIN * mesh_geo.mesh_width_min() / vel
 }
@@ -168,7 +168,7 @@ mod test {
   fn energy_conserved_at_every_grade() {
     for dim in 2..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
 
       for grade in 0..=dim {

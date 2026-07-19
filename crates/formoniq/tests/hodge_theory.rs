@@ -71,7 +71,7 @@ fn cohomology_dim(difs: &[Matrix], ndofs: &[usize], k: usize) -> usize {
 fn harmonics_are_cohomology_cube() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     for k in 0..=dim {
@@ -93,7 +93,7 @@ fn harmonics_are_cohomology_cube() {
 #[test]
 fn harmonics_are_cohomology_sphere() {
   let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(1);
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let dim = topology.dim();
 
@@ -120,7 +120,7 @@ fn harmonics_are_cohomology_sphere() {
 fn relative_harmonics_are_relative_cohomology_cube() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
 
@@ -155,7 +155,7 @@ fn relative_harmonics_are_relative_cohomology_cube() {
 fn relative_inclusion_is_cochain_map() {
   for dim in 1..=3 {
     let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
 
@@ -178,7 +178,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   let dim = 2;
   let (topology, coords) = CartesianMeshInfo::new_unit(dim, 4).compute_coord_complex();
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let boundary = whitney.boundary().unwrap();
 
@@ -237,7 +237,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
     .map(|cell| cell.simplex().clone())
     .collect();
   let topology = Complex::from_cells(Skeleton::new(cells));
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let dim = topology.dim();
 
