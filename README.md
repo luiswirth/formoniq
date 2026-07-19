@@ -186,9 +186,11 @@ Everything the solver needs is read from the metric alone: lengths, areas,
 volumes, the Hodge star and the Hodge-Laplace operator, all without a global
 coordinate. The same code then runs on domains that have no global coordinates
 at all, such as a flat torus or a manifold given only by its edge lengths.
-Because the metric is the only geometric input, the formulation extends without
-special cases to pseudo-Riemannian geometry, for instance a Lorentzian metric on
-a 4D spacetime, a direction being explored toward Maxwell's equations.
+Because the metric is the only geometric input, the same formulation covers
+pseudo-Riemannian geometry of any signature without special cases, the Hodge star
+reading the signature off the metric itself. A Lorentzian metric on a 4D
+spacetime is one such signature: Maxwell's equations run on it as the covariant
+Hodge-Dirac (Dirac-Kähler) operator, hyperbolic through the signature alone.
 
 ## Topology and cohomology
 
