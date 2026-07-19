@@ -1,9 +1,9 @@
 # simplicial
 
-Simplicial manifolds of arbitrary dimension, with geometry as a separate,
-pluggable input. Nothing is specialized to 2D or 3D; dimension is a runtime
-value, and the degenerate cases (a point, a single cell, an empty skeleton) run
-on the same code paths and return the trivial answer.
+Simplicial manifolds of arbitrary dimension, with geometry a separate input from
+topology. Nothing is specialized to 2D or 3D; dimension is a runtime value, and
+the degenerate cases (a point, a single cell, an empty skeleton) run on the same
+code paths and return the trivial answer.
 
 ## The design
 
@@ -23,19 +23,22 @@ barycentric weights), Grundmann-Möller quadrature exact to prescribed degree in
 every dimension, and uniform (Freudenthal) refinement recording the affine map
 of each child.
 
-**Geometry** is a pluggable input behind one trait: a per-cell pseudo-Riemannian
-metric of any signature. Three interchangeable implementations are provided:
-Regge signed squared edge lengths (positive spacelike, zero null, negative
-timelike — the calculus Regge invented for general relativity, on the primitive
-that keeps every signature expressible), raw per-cell metric tensors, and
-vertex coordinates in a flat ambient space of any signature (Euclidean by
-default, Minkowski for a spacetime mesh). An embedding induces a metric and is
-one implementation among these, not a prerequisite. Volumes, mesh widths, shape
-regularity and Gaussian curvature by angle defect are computed from edge data
-alone, on manifolds with no global coordinates (a flat torus, an abstract
-Riemannian manifold, a coordinate-free simplicial spacetime). Extrinsic
-quantities (mean curvature, a BVH point locator) sit downstream of the
-intrinsic layer.
+**Geometry** enters as one concrete intrinsic currency: the signed squared edge
+lengths on the 1-skeleton (positive spacelike, zero null, negative timelike — the
+primitive Regge invented for general relativity, and the representation that keeps
+every signature expressible), from which a per-cell pseudo-Riemannian metric of
+any signature is derived. That metric is defined on every simplex, not only the
+cells: an edge's length, a facet's area, a hinge's metric are read off the shared
+edge data with no containing cell consulted. Coordinates and raw per-cell metric
+tensors are sources rather than a separate abstraction — each converts to the
+edge-length primitive at the API boundary, on equal footing — so an embedding (in
+a flat ambient space of any signature, Euclidean by default, Minkowski for a
+spacetime mesh) induces a metric but is never a prerequisite. Volumes, mesh
+widths, shape regularity and Gaussian curvature by angle defect are computed from
+edge data alone, on manifolds with no global coordinates (a flat torus, an
+abstract Riemannian manifold, a coordinate-free simplicial spacetime). Extrinsic
+quantities (mean curvature, a BVH point locator) sit downstream of the intrinsic
+layer.
 
 Distance geometry connects the metric representations: Cayley-Menger
 realizability checks, and the exact conversion between squared edge lengths and metric

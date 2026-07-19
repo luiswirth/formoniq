@@ -69,8 +69,9 @@ boundaries rather than by convention.
   tracked at the type level, so pullback, the musical isomorphisms and the Hodge
   star take their direction and metric from the type rather than from a
   convention.
-- **`simplicial`**: the simplicial manifold, with pure-combinatorial topology on
-  one side and geometry entering only through a `Geometry` trait on the other.
+- **`simplicial`**: the simplicial manifold, keeping pure-combinatorial topology
+  separate from geometry, which enters intrinsically as signed squared edge
+  lengths, with coordinates and per-cell metrics as sources converting into them.
 - **`glatt`**: the continuum manifold that the simplicial one approximates, with
   parametrizations and analytic differential-form data on them.
 - **`derham`**: discrete differential forms, where the exterior algebra, the mesh
