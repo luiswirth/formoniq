@@ -242,6 +242,16 @@ they bind the same way the parent's invariants do:
   test is the same cut the radiance/display split makes, extended along time.
 - **The UI is a pure function of the model** returning requested changes, not a
   mutator of it.
+- **Layout answers to the window, never to the platform.** What a narrow
+  viewport changes is whether a sidebar is *docked beside* the scene or *laid
+  over* it — never what the panels contain, and never which panel a control
+  belongs to, because that taxonomy mirrors the two objects on screen and a
+  second one keyed on screen size would cut across it. Below the width where
+  both sidebars plus a usable viewport fit, nothing docks by default: the scene
+  is what a reader sees first and a sidebar is something they open. Derived
+  per frame from the available width, so it is a function of the viewport rather
+  than a mode anything stores, and a narrow desktop window gets exactly what a
+  phone gets — there is no mobile build, only a narrow one.
 
 ## The platform is a product; presets are points in it
 
