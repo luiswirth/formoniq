@@ -8,7 +8,7 @@
 //!
 //! $ diff_t u = sans(D) u = (dif - delta) u $
 //!
-//! --- the Clifford / geometric-algebra formulation. The four grades carry the
+//! --- the mixed-grade formulation. The four grades carry the
 //! four classical equations at once: grade 1 is the electric field $E$, grade 2
 //! the magnetic flux $B$, and the two extremal grades are the Gauss constraints
 //! ($delta E = 0$ in grade 0, $dif B = 0$ in grade 3), which stay negligible for
