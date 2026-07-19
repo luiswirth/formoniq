@@ -571,10 +571,11 @@ mod tests {
   /// Every field of every Whitney basis gallery bakes, at every dimension the
   /// ambient reaches: the scene's grade reduction and the bake's dimension
   /// reduction compose without a hole, and each field samples to one colormap
-  /// value per rendered corner and one displacement height per mesh vertex.
+  /// value per rendered corner, one surface displacement height per corner and
+  /// one segment height per mesh vertex.
   #[test]
   fn every_whitney_basis_field_bakes() {
-    use crate::scene::{nodal_heights, surface_corner_values, Scene};
+    use crate::scene::{nodal_heights, surface_corner_heights, surface_corner_values, Scene};
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
       assert!(!scene.fields.is_empty());
@@ -594,6 +595,9 @@ mod tests {
         let colors =
           surface_corner_values(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
         assert_eq!(colors.len(), ncorners);
+        let surface_heights =
+          surface_corner_heights(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
+        assert_eq!(surface_heights.len(), ncorners);
         let heights = nodal_heights(&scene.topology, &scene.coords, cochain);
         assert_eq!(heights.len(), baked.positions.len());
       }

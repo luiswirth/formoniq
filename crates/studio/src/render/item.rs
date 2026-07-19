@@ -107,7 +107,6 @@ pub struct SurfaceBatch {
   deposit_uvs: wgpu::Buffer,
   /// The triangle list over the *mesh* vertex table, retained so a field change
   /// re-gathers the per-vertex displacement height into corner order.
-  triangles: Vec<[u32; 3]>,
   ncorners: u32,
 }
 
@@ -135,26 +134,21 @@ impl SurfaceBatch {
       heights: vertex_buffer(device, "Surface Heights", &zeros),
       deposit_uvs: vertex_buffer(device, "Surface Deposit UVs", deposit_uvs),
       ncorners: corners.len() as u32,
-      triangles: triangles.clone(),
     })
   }
 
-  /// Rebinds the surface to a different field of the same mesh. `colors` is
-  /// per corner (three per triangle, cell-local) and written straight through;
-  /// `heights` is per *mesh* vertex and gathered here into corner order. One
-  /// buffer write each, no rebake.
+  /// Rebinds the surface to a different field of the same mesh. Both streams
+  /// are per corner (three per triangle, cell-local) and written straight
+  /// through: the height is *not* gathered from a per-vertex stream here,
+  /// because a cell-rigid displacement has no per-vertex preimage to gather
+  /// from. Which strategy produced it is
+  /// the scene's height reduction's to decide. One buffer write each, no rebake.
   pub fn write_attributes(&self, queue: &wgpu::Queue, colors: &[f32], heights: &[f32]) {
     if !colors.is_empty() {
       queue.write_buffer(&self.colors, 0, bytemuck::cast_slice(colors));
     }
-    let gathered: Vec<f32> = self
-      .triangles
-      .iter()
-      .flatten()
-      .map(|&i| heights[i as usize])
-      .collect();
-    if !gathered.is_empty() {
-      queue.write_buffer(&self.heights, 0, bytemuck::cast_slice(&gathered));
+    if !heights.is_empty() {
+      queue.write_buffer(&self.heights, 0, bytemuck::cast_slice(heights));
     }
   }
 

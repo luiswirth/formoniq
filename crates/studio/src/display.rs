@@ -322,22 +322,28 @@ impl MeshDisplay {
   /// its wave.
   pub(crate) fn write_attributes(&self, queue: &wgpu::Queue, attributes: &FieldAttributes) {
     if let Some(surface) = &self.surface {
-      surface.write_attributes(queue, &attributes.color, &attributes.height);
+      surface.write_attributes(queue, &attributes.color, &attributes.surface_height);
     }
-    self.segments.write_attributes(queue, &attributes.height);
+    self
+      .segments
+      .write_attributes(queue, &attributes.wire_height);
   }
 }
 
-/// The two field streams a [`FieldDisplay`] hands back for the GPU: the
-/// per-corner cell-local colormap value, and the per-vertex continuous
-/// displacement height. Split because they answer different questions -- the
-/// honest (discontinuous) field readout versus the single-valued height of one
-/// connected surface -- and coincide only for a genuine 0-form.
+/// The field streams a [`FieldDisplay`] hands back for the GPU. Split because
+/// they answer different questions -- the honest (discontinuous) field readout,
+/// the height the fill's cells ride, and the single-valued height the shared
+/// 1-skeleton must ride -- and they coincide only for a genuine 0-form.
 pub(crate) struct FieldAttributes {
   /// Per rendered corner (three per triangle), in the bake's triangle order.
   pub(crate) color: Vec<f32>,
-  /// Per mesh vertex.
-  pub(crate) height: Vec<f32>,
+  /// Per rendered corner, in the same order as [`Self::color`]: continuous
+  /// where the field is, constant per cell where it is not
+  /// ([`crate::scene::surface_corner_heights`]).
+  pub(crate) surface_height: Vec<f32>,
+  /// Per mesh vertex, for the segment marks: the 1-skeleton is shared and
+  /// cannot tear, so it rides the continuous nodal recovery at every grade.
+  pub(crate) wire_height: Vec<f32>,
 }
 
 /// How long a [`crate::scene::FieldTime::Trajectory`] takes to play through
@@ -358,12 +364,15 @@ pub(crate) fn field_attributes(
   cell_corners: &[crate::bake::CellCorner],
 ) -> (FieldAttributes, (f32, f32)) {
   let colors = crate::scene::surface_corner_values(topology, coords, cochain, cell_corners);
-  let heights = crate::scene::nodal_heights(topology, coords, cochain);
+  let surface_heights =
+    crate::scene::surface_corner_heights(topology, coords, cochain, cell_corners);
+  let wire_heights = crate::scene::nodal_heights(topology, coords, cochain);
   let bounds = crate::scene::corner_bounds(&colors);
   (
     FieldAttributes {
       color: bake::attributes(&colors),
-      height: bake::attributes(&heights),
+      surface_height: bake::attributes(&surface_heights),
+      wire_height: bake::attributes(&wire_heights),
     },
     bounds,
   )
