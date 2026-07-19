@@ -101,7 +101,6 @@ use crate::{
 use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 use simplicial::{
-  geometry::metric::Geometry,
   linalg::{CooMatrix, CsrMatrix, Vector},
   Dim,
 };
@@ -443,8 +442,8 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 /// $u = hat(g) + E u_0$, $E^T (A + m M) E thin u_0 = E^T (b - (A + m M) hat(g))$
 /// reduces to the homogeneous problem on `relative`'s interior DOFs, and the
 /// returned field is the lifted ambient solution.
-pub fn solve_dirac_source<G: Geometry + Sync>(
-  relative: &RelativeWhitneyComplex<G>,
+pub fn solve_dirac_source(
+  relative: &RelativeWhitneyComplex,
   mass_term: f64,
   load: &MixedField,
   boundary_values: &MixedField,
@@ -678,6 +677,7 @@ mod test {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let (_, spacetime) = minkowski_mesh(dim, 2);
       let riemannian = coords.to_edge_lengths_sq(&topology);
+      let lorentzian = spacetime.to_edge_lengths_sq(&topology);
 
       let check = |dirac: &HodgeDirac| {
         let a = &dirac.op;
@@ -692,7 +692,8 @@ mod test {
         &riemannian,
       )));
       check(&HodgeDirac::assemble_selfadjoint(&WhitneyComplex::new(
-        &topology, &spacetime,
+        &topology,
+        &lorentzian,
       )));
     }
   }
@@ -708,7 +709,8 @@ mod test {
   fn selfadjoint_dirac_squares_to_hodge_laplacian_on_minkowski() {
     for dim in 1..=3 {
       let (topology, spacetime) = minkowski_mesh(dim, 2);
-      let whitney = WhitneyComplex::new(&topology, &spacetime);
+      let regge = spacetime.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &regge);
       let dirac = HodgeDirac::assemble_selfadjoint(&whitney);
 
       let lu: Vec<_> = (0..=dim)
@@ -759,9 +761,12 @@ mod test {
   /// and Lorentzian geometry alike.
   #[test]
   fn dirac_source_reproduces_constant_field() {
-    use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+    use simplicial::{
+      geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq},
+      topology::complex::Complex,
+    };
 
-    fn run<G: Geometry + Sync>(topology: &Complex, coords: &MeshCoords, geometry: &G) {
+    fn run(topology: &Complex, coords: &MeshCoords, geometry: &MeshLengthsSq) {
       let dim = topology.dim();
       let whitney = WhitneyComplex::new(topology, geometry);
       let relative = whitney.relative();
@@ -811,7 +816,11 @@ mod test {
       // causally generic (time-scaled) coordinates themselves.
       let (topology, spacetime) = minkowski_mesh(dim, 2);
       let euclidean_view = MeshCoords::new(spacetime.matrix().clone());
-      run(&topology, &euclidean_view, &spacetime);
+      run(
+        &topology,
+        &euclidean_view,
+        &spacetime.to_edge_lengths_sq(&topology),
+      );
     }
   }
 

@@ -46,10 +46,7 @@ use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use simplicial::linalg::Vector;
 use simplicial::{
   atlas::{ref_lattice_bary, MeshPoint},
-  geometry::{
-    coord::{mesh::MeshCoords, simplex::SimplexRefExt},
-    metric::geometry::Geometry,
-  },
+  geometry::coord::{mesh::MeshCoords, simplex::SimplexRefExt},
   topology::complex::Complex,
 };
 

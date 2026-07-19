@@ -1,23 +1,32 @@
-//! Geometry: the metric a mesh carries, in any of its equivalent forms.
+//! The intrinsic geometry of a mesh, in its two coordinate-free forms.
 //!
-//! The geometry of a simplicial manifold is intrinsic -- it is fully carried by
-//! the pseudo-Riemannian metric of each cell, of any signature, with no
-//! reference to coordinates. The
-//! [`Geometry`] trait captures exactly that: `cell_metric` gives a cell its flat
-//! metric tensor.
-//! It is implemented by every geometry representation, related by the
-//! derivation chain coords $->$ squared edge lengths $->$ per-cell metric:
+//! The geometry of a simplicial manifold is intrinsic: it is fully carried by
+//! the pseudo-Riemannian metric of each simplex, of any signature, with no
+//! reference to coordinates. Two representations carry it, related by the
+//! derivation chain squared edge lengths $->$ per-simplex metric:
 //!
-//! - [`MeshLengthsSq`]: intrinsic Regge geometry, signed squared edge lengths
-//!   (grade-1 data), of any signature.
-//! - [`CellGramians`]: the metric tensors themselves as per-cell data (grade
-//!   n) -- the most local, coordinate-free geometry, living natively on the
-//!   cell skeleton with no need of a global edge indexing.
-//! - [`MeshCoords`](crate::geometry::coord::mesh::MeshCoords): an extrinsic
-//!   embedding (grade-0 data), which *induces* a metric. It implements
-//!   [`Geometry`] from the [`coord`](crate::geometry::coord) module, one layer
-//!   up: an embedding knows about the metric it induces, but the metric layer
-//!   knows nothing of embeddings, and must not.
+//! - [`MeshLengthsSq`]: the Regge primitive, signed squared edge lengths
+//!   (grade-1 data) on the 1-skeleton, of any signature. It is *total over
+//!   every grade*: the metric of any subsimplex is the Gramian of that
+//!   simplex's own edges ([`MeshLengthsSq::simplex_metric`]), so this is the
+//!   representation the whole engine speaks, and the one boundary traces and
+//!   curvature read.
+//! - [`CellGramians`]: the per-cell metric tensors as grade-n data -- the
+//!   materialized cell column of the derivation chain, living natively on the
+//!   cell skeleton with no need of a global edge indexing. A convenience for a
+//!   source that arrives as raw per-cell metrics and the intermediary of
+//!   [`refine_gramians`](crate::topology::refine::Subdivision::refine_gramians);
+//!   it converts back to edge lengths losslessly on a face-consistent geometry.
+//!
+//! An embedding ([`MeshCoords`](crate::geometry::coord::mesh::MeshCoords),
+//! grade-0 data) is a *third* source, but it lives one layer up in
+//! [`coord`](crate::geometry::coord): an embedding induces a metric, the metric
+//! layer knows nothing of embeddings and must not.
+//!
+//! There is no trait unifying the representations. Each answers "the metric of
+//! a simplex" concretely, and a source that arrives in another form converts to
+//! edge lengths (the primitive) or per-cell metrics at the boundary of the API,
+//! not through runtime dispatch on the hot path.
 
 use super::{mesh::MeshLengthsSq, simplex::SimplexLengthsSq};
 use crate::{
@@ -34,25 +43,9 @@ use gramian::Metric;
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
 
-/// The intrinsic geometry of a mesh: the pseudo-Riemannian metric of each
-/// cell, which is all the metric information the manifold carries. The
-/// signature is the metric's own: a Riemannian mesh and a Lorentzian
-/// spacetime mesh implement the same trait.
-pub trait Geometry {
-  /// The flat metric tensor of a cell. The [`Cell`] witness is the
-  /// precondition: only a top-dimensional simplex has a metric here.
-  fn cell_metric(&self, cell: Cell) -> Metric;
-}
-
-impl Geometry for MeshLengthsSq {
-  fn cell_metric(&self, cell: Cell) -> Metric {
-    self.simplex_lengths_sq(cell.get()).metric()
-  }
-}
-
 /// The per-cell metric tensors as grade-n data on the mesh: the most local,
 /// coordinate-free geometry. Each cell independently carries its flat metric,
-/// so this is defined on the cell skeleton alone.
+/// so this is defined on the cell skeleton alone, with no global edge indexing.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CellGramians {
@@ -65,14 +58,20 @@ impl CellGramians {
     }
   }
 
-  /// Sample the per-cell metrics of any other geometry over a complex.
-  pub fn from_geometry(topology: &Complex, geometry: &impl Geometry) -> Self {
+  /// Materialize the per-cell metrics of the Regge (edge-length) geometry: the
+  /// $"lengths" -> "metric"$ leg of the derivation chain, read at mesh scope.
+  pub fn from_lengths(topology: &Complex, lengths: &MeshLengthsSq) -> Self {
     let metrics = topology
       .cells()
       .handle_iter()
-      .map(|cell| geometry.cell_metric(cell))
+      .map(|cell| lengths.cell_metric(cell))
       .collect();
     Self::new(topology.dim(), metrics)
+  }
+
+  /// The flat metric tensor of a cell: a direct lookup, no derivation.
+  pub fn cell_metric(&self, cell: Cell) -> Metric {
+    self.metrics[cell.get()].clone()
   }
 
   pub fn metrics(&self) -> &SkeletonVec<Metric> {
@@ -113,12 +112,6 @@ impl CellGramians {
   #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     crate::io::cbor::load_cbor(path)
-  }
-}
-
-impl Geometry for CellGramians {
-  fn cell_metric(&self, cell: Cell) -> Metric {
-    self.metrics[cell.get()].clone()
   }
 }
 

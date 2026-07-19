@@ -4,13 +4,13 @@ use crate::{
     complex::Complex,
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef, SkeletonRef},
-    role::Edge,
+    role::{Cell, Edge},
   },
   Dim,
 };
 
 use crate::linalg::Vector;
-use gramian::CausalType;
+use gramian::{CausalType, Metric};
 
 use itertools::Itertools;
 use rayon::iter::ParallelIterator;
@@ -152,6 +152,36 @@ impl MeshLengthsSq {
       .into();
     // SAFETY: Non-degeneracy was checked at construction.
     SimplexLengthsSq::new_unchecked(lengths_sq, simplex.dim())
+  }
+
+  /// The intrinsic metric tensor of *any* simplex, of any grade: the Gramian
+  /// of that simplex's own edges. Geometry is defined on the whole skeleton,
+  /// not only the cells -- an edge has a length, a facet has an area, a hinge
+  /// has a metric -- because every subsimplex's metric is the restriction of
+  /// any containing cell's, equivalently the Gramian built from its edges. A
+  /// containing cell need not be consulted: the edge lengths are shared, so
+  /// every cell induces the same metric on a shared face, and this is well
+  /// defined from the edge data alone.
+  ///
+  /// This is the metric, not the chart. Only a top-dimensional simplex carries
+  /// a [`Chart`](crate::atlas::Chart) -- a frame in which to express a section
+  /// -- but *every* simplex has a metric to measure it by.
+  pub fn simplex_metric(&self, simplex: SimplexRef) -> Metric {
+    self.simplex_lengths_sq(simplex).metric()
+  }
+
+  /// The flat metric tensor of a cell: [`Self::simplex_metric`] at top
+  /// dimension, the form the assembly path consumes.
+  pub fn cell_metric(&self, cell: Cell) -> Metric {
+    self.simplex_metric(cell.get())
+  }
+
+  /// The volume of any simplex, of any grade and signature:
+  /// $vol(hat(K)) sqrt(abs(det g))$ read off its own edge lengths. An edge's
+  /// length, a facet's area, a cell's volume -- one formula, total over the
+  /// skeleton.
+  pub fn simplex_volume(&self, simplex: SimplexRef) -> f64 {
+    self.simplex_lengths_sq(simplex).vol()
   }
 
   /// Whether every simplex of the skeleton has a non-degenerate induced

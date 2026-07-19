@@ -31,7 +31,7 @@
 //! - **The signature is the whole difference.** The discrete operator is the
 //!   same `HodgeDirac` block assembly as the Riemannian 3+1 Maxwell evolution
 //!   (`examples/dirac.rs`), in its self-adjoint sign $A = A^T$; the Minkowski
-//!   metric enters only through the [`Geometry`] the mesh carries. One
+//!   metric enters only through the signed edge lengths the mesh carries. One
 //!   pseudo-Riemannian code path, no Lorentzian special case.
 //!
 //! - **Regge calculus, as Regge intended.** The geometry the assembly actually
@@ -70,8 +70,6 @@
 //!   time scale keep the discrete system invertible here; the observed
 //!   convergence is that of a manufactured-solution verification, not a claim
 //!   of uniform hyperbolic well-posedness.
-//!
-//! [`Geometry`]: simplicial::geometry::metric::Geometry
 
 extern crate nalgebra as na;
 
@@ -232,6 +230,9 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
     // The assembly geometry: signed squared edge lengths, nothing else. From
     // here on the spacetime is a Regge manifold; the embedding is forgotten.
     let regge = spacetime.to_edge_lengths_sq(&topology);
+    // The Euclidean comparison geometry as intrinsic edge lengths: a positive
+    // metric to norm errors in, the indefinite pairing cannot.
+    let euclidean_lengths = euclidean.to_edge_lengths_sq(&topology);
 
     let whitney = WhitneyComplex::new(&topology, &regge);
     let relative = whitney.relative();
@@ -281,7 +282,7 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
       (0..=dim)
         .map(|k| {
           let section = exact_sections[k].pullback_on(&topology, &euclidean);
-          fe_l2_error(field.grade(k), &section, &topology, &euclidean).powi(2)
+          fe_l2_error(field.grade(k), &section, &topology, &euclidean_lengths).powi(2)
         })
         .sum::<f64>()
         .sqrt()

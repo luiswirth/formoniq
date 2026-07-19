@@ -28,7 +28,7 @@ use {
   exterior::{multiform_gramian, Covariant},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
-    geometry::{cell_volume, metric::Geometry},
+    geometry::{cell_volume, metric::mesh::MeshLengthsSq},
     linalg::{CsrMatrix, Vector},
     topology::complex::Complex,
   },
@@ -47,7 +47,7 @@ pub fn fe_l2_error<F: Section<Covariant>>(
   fe_cochain: &Cochain,
   exact: &F,
   topology: &Complex,
-  geometry: &impl Geometry,
+  geometry: &MeshLengthsSq,
 ) -> f64 {
   let dim = topology.dim();
   let grade = fe_cochain.grade();
@@ -80,9 +80,9 @@ pub fn fe_l2_error<F: Section<Covariant>>(
 ///
 /// Unlike the de Rham map this is defined for any $L^2$ form, but it does not
 /// commute with $dif$ and it costs a global solve. See the module docs.
-pub fn l2_projection<F: Sync + Section<Covariant>, G: Geometry + Sync>(
+pub fn l2_projection<F: Sync + Section<Covariant>>(
   field: &F,
-  whitney: WhitneyComplex<G>,
+  whitney: WhitneyComplex,
   qr: Option<SimplexQuadRule>,
 ) -> Cochain {
   let grade = field.grade();

@@ -20,7 +20,7 @@ pub use coorder::{Ambient, Coord, CoordRef};
 use crate::linalg::{RowVector, RowVectorView, Vector, VectorView};
 
 use self::mesh::MeshCoords;
-use super::{cell_volume, metric::Geometry};
+use super::cell_volume;
 use crate::topology::complex::Complex;
 
 pub type TangentVector = Vector;
@@ -57,7 +57,7 @@ fn cot_angle(u: &Vector, w: &Vector) -> f64 {
 /// Extrinsic, unlike [`super::vertex_gaussian_curvature`]: the cotangent
 /// weight is read off the embedded edge vectors, not the metric alone, so
 /// this lives on the `coord` side and needs an actual [`MeshCoords`], not
-/// just a [`Geometry`]. $A(v)$ is the same barycentric lumped area
+/// just the intrinsic edge lengths. $A(v)$ is the same barycentric lumped area
 /// [`super::vertex_gaussian_curvature`] uses, so the two combine into
 /// consistent principal curvatures in [`vertex_curvature_radius`].
 pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64> {
@@ -122,7 +122,7 @@ pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64
 /// caller relies on an independent upper bound there (e.g. the mesh's own
 /// coordinate extent) rather than this curvature-based one.
 pub fn vertex_curvature_radius(topology: &Complex, coords: &MeshCoords) -> Vec<f64> {
-  let gauss = super::vertex_gaussian_curvature(topology, coords);
+  let gauss = super::vertex_gaussian_curvature(topology, &coords.to_edge_lengths_sq(topology));
   let mean = vertex_mean_curvature(topology, coords);
   let boundary: std::collections::HashSet<usize> =
     topology.boundary_vertices().into_iter().collect();

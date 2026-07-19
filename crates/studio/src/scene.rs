@@ -13,7 +13,7 @@ use derham::{
 use exterior::{ExteriorGrade, MultiForm};
 use simplicial::{
   atlas::MeshPoint,
-  geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
+  geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, handle::SimplexIdx, role::Cell, simplex::Simplex},
   Dim,
 };

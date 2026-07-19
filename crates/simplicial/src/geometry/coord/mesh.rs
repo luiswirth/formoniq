@@ -1,6 +1,6 @@
 use super::{simplex::SimplexRefExt, Coord, CoordRef};
 use crate::{
-  geometry::metric::{mesh::MeshLengthsSq, Geometry},
+  geometry::metric::{mesh::MeshLengthsSq, CellGramians},
   topology::{
     data::SkeletonData,
     handle::KSimplexIdx,
@@ -32,20 +32,33 @@ pub struct MeshCoords {
   ambient: Gramian,
 }
 
-/// An embedding *induces* a metric: the pullback $J^top eta J$ of the ambient
-/// inner product along the cell's spanning vectors -- the first fundamental
-/// form, of whatever signature the ambient carries.
-///
-/// This impl lives here, not in the metric layer, and that is the whole point --
-/// coordinates know about the metric they induce, the metric knows nothing of
-/// coordinates (invariant 2).
-impl Geometry for MeshCoords {
-  fn cell_metric(&self, cell: Cell) -> Metric {
+impl MeshCoords {
+  /// The metric an embedding *induces* on a cell: the pullback $J^top eta J$
+  /// of the ambient inner product along the cell's spanning vectors -- the
+  /// first fundamental form, of whatever signature the ambient carries.
+  ///
+  /// This lives here, not in the metric layer, and that is the whole point:
+  /// coordinates know about the metric they induce, the metric knows nothing
+  /// of coordinates (invariant 2). An embedding reaches the intrinsic engine
+  /// as a *source* -- it converts to edge lengths ([`Self::to_edge_lengths_sq`])
+  /// or per-cell metrics ([`Self::to_cell_gramians`]) at the boundary of the
+  /// API; the core never asks an embedding for anything.
+  pub fn cell_metric(&self, cell: Cell) -> Metric {
     Metric::new(
       self
         .ambient
         .pullback(&cell.coord_simplex(self).spanning_vectors()),
     )
+  }
+
+  /// Materialize the per-cell metrics this embedding induces.
+  pub fn to_cell_gramians(&self, topology: &Complex) -> CellGramians {
+    let metrics = topology
+      .cells()
+      .handle_iter()
+      .map(|cell| self.cell_metric(cell))
+      .collect();
+    CellGramians::new(topology.dim(), metrics)
   }
 }
 
@@ -270,7 +283,46 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{gen::cartesian::CartesianGrid, geometry::metric::mesh::EdgeRefExt};
+  use crate::{
+    gen::cartesian::CartesianGrid,
+    geometry::{cell_volume, coord::simplex::SimplexRefExt, metric::mesh::EdgeRefExt},
+  };
+
+  /// Geometry is defined on every simplex, not only the cells: the intrinsic
+  /// metric [`MeshLengthsSq::simplex_metric`] reads off a subsimplex's own edge
+  /// lengths equals the metric the embedding induces on that subsimplex (the
+  /// ambient inner product pulled back along its spanning vectors), at every
+  /// grade. The subsimplex generalization is exact, and well defined from the
+  /// edge data alone -- no containing cell is consulted.
+  #[test]
+  fn simplex_metric_matches_induced_at_every_grade() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      for grade in 1..=dim {
+        for simp in topology.skeleton(grade).handle_iter() {
+          let from_lengths = lengths.simplex_metric(simp);
+          let induced = Metric::new(
+            coords
+              .ambient()
+              .pullback(&simp.coord_simplex(&coords).spanning_vectors()),
+          );
+          approx::assert_relative_eq!(
+            from_lengths.vector_gramian().matrix(),
+            induced.vector_gramian().matrix(),
+            epsilon = 1e-12
+          );
+          // The volume accessor is total over the skeleton and agrees with the
+          // metric's own volume factor.
+          approx::assert_relative_eq!(
+            lengths.simplex_volume(simp),
+            cell_volume(&from_lengths),
+            epsilon = 1e-12
+          );
+        }
+      }
+    }
+  }
 
   /// The witness reads cohere across the layers: an edge's Regge squared
   /// length is the squared distance of its endpoints' coordinates in the

@@ -24,10 +24,7 @@
 //! boundary, whose faces are not charts. Both give the empty layout, which
 //! every consumer treats as "no deposit" by arithmetic rather than by branch.
 
-use simplicial::{
-  geometry::{coord::mesh::MeshCoords, metric::geometry::Geometry},
-  topology::complex::Complex,
-};
+use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
 
 /// The atlas texture's side, in texels. One fixed square texture: the budget
 /// the per-cell resolutions are allocated out of.
