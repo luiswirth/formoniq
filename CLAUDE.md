@@ -47,7 +47,7 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature; Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
@@ -214,7 +214,32 @@ and passes tests.
    do. Do not let a `Metric` leak into a signature that does not
    mathematically need one.
 
-6. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
+6. **Orientation is a gauge inside the complex and a datum outside it.** A
+   `Skeleton` stores every simplex in colex vertex order, so each cell's
+   orientation is fixed by the indexing convention and is unrelated to its
+   neighbors'. That is not a defect: flipping a cell sends $omega_K |-> -omega_K$,
+   every assembled operator transforms by the diagonal congruence $A |-> S A S$
+   with $S = "diag"(plus.minus 1)$, and the chain complex, the spectrum and the
+   homology are all invariant. **No assembly, solve or homology computation may
+   depend on a coherent orientation** -- if one does, it has a bug, not a missing
+   input.
+
+   The gauge becomes physical exactly when a question is asked about the manifold
+   *as a whole* rather than cell by cell: a global volume form, hence
+   $star: Lambda^n -> Lambda^0$ on a top-grade form, hence $integral_M$. Those
+   are one question. Its answer is `Complex::orientation`, the coherent
+   orientation propagated across interior facets, and it is `None` on a
+   non-orientable complex -- so holding an `&Orientation` *is* the proof of
+   orientability, in the same sense as the `role::` witnesses. **Anything that
+   stars a top-grade form, or integrates over the manifold, takes that
+   orientation; code that cannot get one refuses rather than proceeding per
+   cell.** A per-cell star without it returns $plus.minus$ the true value with
+   the sign flipping wherever colex disagrees with the manifold, which is
+   plausible on screen and wrong. Orientability is per connected component, and
+   the orientation is fixed only up to a global sign on each -- the ordinary
+   ambiguity of a fundamental class, not a choice the code could avoid.
+
+7. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
    runtime dispatch, in anything on the assembly hot path. HPC is a requirement,
    not an afterthought (`rayon`-parallel assembly is already the norm).
 
