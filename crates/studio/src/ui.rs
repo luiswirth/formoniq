@@ -125,15 +125,47 @@ impl Default for FieldView {
 /// the point. Above it the docked layout is unchanged.
 pub(crate) const COMPACT_WIDTH: f32 = 720.0;
 
-/// Which sidebar is over the scene when the viewport is too narrow to dock
-/// both. At most one, so the scene keeps most of the screen, and `None` by
-/// default so what a reader sees first is the mesh rather than a control panel.
+/// Whether a sidebar is shown.
+///
+/// [`Self::Auto`] defers to the layout -- open where there is room to dock it,
+/// closed where there is not -- and is what a session starts in, so neither a
+/// phone nor a desktop needs the default written down for it. A toggle or a
+/// drag makes it explicit, and it stays explicit: once a reader has said what
+/// they want, the layout does not override them on the next resize.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
-pub(crate) enum OpenPanel {
+pub(crate) enum Visibility {
   #[default]
-  None,
-  Browser,
-  Inspector,
+  Auto,
+  Shown,
+  Hidden,
+}
+
+impl Visibility {
+  /// What this resolves to given what the layout would do on its own.
+  fn resolve(self, layout_default: bool) -> bool {
+    match self {
+      Visibility::Auto => layout_default,
+      Visibility::Shown => true,
+      Visibility::Hidden => false,
+    }
+  }
+
+  fn of(shown: bool) -> Self {
+    if shown {
+      Visibility::Shown
+    } else {
+      Visibility::Hidden
+    }
+  }
+}
+
+/// Which sidebars the reader has open. Both are collapsible at every width:
+/// hiding the controls to see the scene is not a thing only a small screen
+/// wants.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) struct Sidebars {
+  pub(crate) browser: Visibility,
+  pub(crate) inspector: Visibility,
 }
 
 /// Which of a line field's marks are drawn.
@@ -432,8 +464,8 @@ pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
 /// borrow, so building it and rendering the panel cannot conflict with the
 /// `&mut self` calls the caller makes to apply the response afterward.
 pub(crate) struct PanelModel<'a> {
-  /// See [`PanelResponse::open_panel`].
-  pub(crate) open_panel: OpenPanel,
+  /// See [`PanelResponse::sidebars`].
+  pub(crate) sidebars: Sidebars,
   pub(crate) mesh_source: MeshSource,
   pub(crate) study: Study,
   pub(crate) is_loading: bool,
@@ -474,9 +506,8 @@ pub(crate) struct PanelModel<'a> {
 /// can compare against the model unconditionally rather than branching on
 /// whether a widget fired.
 pub(crate) struct PanelResponse {
-  /// Which sidebar the reader has over the scene, in the compact layout.
-  /// Meaningless while both dock, and left alone there.
-  pub(crate) open_panel: OpenPanel,
+  /// Which sidebars are open after this frame.
+  pub(crate) sidebars: Sidebars,
   pub(crate) requested_mesh: MeshSource,
   pub(crate) requested_study: Study,
   /// The index into `presets` of a preset the user picked this frame, if any.
@@ -525,11 +556,16 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   // (see this crate's CLAUDE.md); what changes is only whether a panel sits
   // beside the scene or over it.
   let compact = ui.available_width() < COMPACT_WIDTH;
-  let mut open_panel = model.open_panel;
-  // Wide: both dock, always, exactly as before. Compact: at most one is open,
-  // and none is by default, so the scene is what a reader sees first.
-  let mut browser_open = !compact || open_panel == OpenPanel::Browser;
-  let mut inspector_open = !compact || open_panel == OpenPanel::Inspector;
+  // What the layout does when the reader has not said: dock both where there is
+  // room, open neither where there is not, so a narrow viewport shows the scene
+  // first. Either way both are collapsible, and a toggle overrides this.
+  let layout_default = !compact;
+  let mut browser_open = model.sidebars.browser.resolve(layout_default);
+  let mut inspector_open = model.sidebars.inspector.resolve(layout_default);
+  // What the panels were actually drawn with this frame. Anything that differs
+  // by the end of it -- a toggle, a panel dragged shut -- is the reader
+  // speaking, and is what makes the visibility explicit.
+  let drawn = (browser_open, inspector_open);
   let side_width = if compact {
     (ui.available_width() * 0.85).min(280.0)
   } else {
@@ -803,21 +839,31 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   egui::Panel::bottom("transport").show(ui, |ui| {
     ui.add_space(2.0);
     ui.horizontal(|ui| {
-      // The compact layout's only new control: which sidebar is over the scene.
-      // Selectable rather than a pair of buttons, because at most one is open
-      // and "none" is a real state -- clicking the open one closes it.
-      if compact {
-        for (side, label) in [
-          (OpenPanel::Browser, "\u{2630}"),
-          (OpenPanel::Inspector, "\u{2699}"),
-        ] {
-          let is_open = open_panel == side;
-          if ui.selectable_label(is_open, label).clicked() {
-            open_panel = if is_open { OpenPanel::None } else { side };
-          }
+      // The sidebar toggles, at every width. Lit while the panel is open, so
+      // the control shows the state rather than only changing it.
+      if ui
+        .selectable_label(browser_open, "\u{2630}")
+        .on_hover_text("Browser")
+        .clicked()
+      {
+        browser_open = !browser_open;
+        // Nothing to dock beside: a second panel would bury the scene the
+        // first one is already covering most of.
+        if compact && browser_open {
+          inspector_open = false;
         }
-        ui.separator();
       }
+      if ui
+        .selectable_label(inspector_open, "\u{2699}")
+        .on_hover_text("Inspector")
+        .clicked()
+      {
+        inspector_open = !inspector_open;
+        if compact && inspector_open {
+          browser_open = false;
+        }
+      }
+      ui.separator();
       let omega = model.eigenvalue.map(|l| l.max(0.0).sqrt());
       // A field runs a clock when it oscillates (an eigenmode) or when it is a
       // sampled trajectory; only a static or harmonic field has nothing to play.
@@ -860,17 +906,24 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     ui.add_space(2.0);
   });
 
-  // A panel dragged shut reports itself closed, so the toggle follows the
-  // gesture rather than disagreeing with it.
-  if compact && !browser_open && open_panel == OpenPanel::Browser {
-    open_panel = OpenPanel::None;
-  }
-  if compact && !inspector_open && open_panel == OpenPanel::Inspector {
-    open_panel = OpenPanel::None;
-  }
+  // Only a change from what was drawn is the reader speaking; anything
+  // untouched stays on whatever it was, `Auto` included, so resizing the window
+  // still moves a sidebar the reader has never touched.
+  let sidebars = Sidebars {
+    browser: if browser_open == drawn.0 {
+      model.sidebars.browser
+    } else {
+      Visibility::of(browser_open)
+    },
+    inspector: if inspector_open == drawn.1 {
+      model.sidebars.inspector
+    } else {
+      Visibility::of(inspector_open)
+    },
+  };
 
   PanelResponse {
-    open_panel,
+    sidebars,
     requested_mesh,
     requested_study,
     requested_preset,
@@ -891,33 +944,26 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 mod tests {
   use super::*;
 
-  /// The layout is a function of the window's width alone, and it is the
-  /// *window*, not the platform: a narrow desktop window and a phone get the
-  /// same answer. Below the threshold nothing docks by default, so the scene is
-  /// what a reader sees first rather than two panels meeting in the middle.
+  /// The width threshold means what it claims: a phone falls below it, a
+  /// desktop window above, and the two docked sidebars genuinely do not fit
+  /// beside a viewport at phone width -- which is the condition the compact
+  /// layout exists to escape.
   #[test]
-  fn the_compact_layout_leaves_the_scene_visible() {
-    // A phone in portrait, at the viewer's own UI zoom.
+  fn the_threshold_separates_a_phone_from_a_desktop() {
     let phone = 390.0 / UI_ZOOM_FOR_TEST;
     assert!(
       phone < COMPACT_WIDTH,
-      "a phone must land in the compact layout"
+      "a phone ({phone} points) must land in the compact layout"
     );
-    // Both sidebars docked would leave nothing: that is the condition being
-    // escaped, stated rather than assumed.
     assert!(
       180.0 + 250.0 > phone,
       "the docked sidebars must genuinely exceed a phone's width"
     );
-    // And nothing is open by default.
-    assert_eq!(OpenPanel::default(), OpenPanel::None);
-
-    // A desktop window keeps the docked layout untouched.
     const { assert!(1280.0 / UI_ZOOM_FOR_TEST > COMPACT_WIDTH) };
   }
 
-  /// The compact sidebar never covers the whole screen, so the scene stays
-  /// partly visible even with one open -- an overlay, not a takeover.
+  /// A compact sidebar never covers the whole screen: it is an overlay, not a
+  /// takeover, so the scene stays partly visible even with one open.
   #[test]
   fn a_compact_sidebar_leaves_some_scene_showing() {
     for width in [320.0_f32, 390.0, 540.0, 700.0] {
@@ -927,6 +973,65 @@ mod tests {
         "width {width}: sidebar {side} covers everything"
       );
     }
+  }
+
+  /// The layout decides only what the reader has not. `Auto` follows the
+  /// width -- docked where there is room, closed where there is not -- and an
+  /// explicit choice outranks it at any width, which is what makes the panels
+  /// collapsible on a desktop rather than only on a phone.
+  #[test]
+  fn visibility_defers_to_the_layout_only_until_the_reader_speaks() {
+    let wide = true;
+    let narrow = false;
+    assert!(Visibility::Auto.resolve(wide));
+    assert!(!Visibility::Auto.resolve(narrow));
+    // Explicit wins either way.
+    assert!(Visibility::Shown.resolve(narrow));
+    assert!(!Visibility::Hidden.resolve(wide));
+  }
+
+  /// A toggle sticks. The first version of this compared the post-frame state
+  /// against the *resolved* value rather than the value the panels were drawn
+  /// with, so opening a closed panel was immediately undone and the button did
+  /// nothing at all. The round trip is the test: resolve, toggle, write back,
+  /// resolve again.
+  #[test]
+  fn toggling_a_sidebar_survives_the_frame() {
+    for layout_default in [true, false] {
+      let stored = Visibility::Auto;
+      let drawn = stored.resolve(layout_default);
+
+      // The reader clicks it.
+      let toggled = !drawn;
+      let written = if toggled == drawn {
+        stored
+      } else {
+        Visibility::of(toggled)
+      };
+
+      assert_ne!(written, Visibility::Auto, "a click must become explicit");
+      assert_eq!(
+        written.resolve(layout_default),
+        toggled,
+        "the next frame must draw what the click asked for"
+      );
+    }
+  }
+
+  /// An untouched sidebar stays on `Auto`, so resizing the window still moves
+  /// it -- the state records a decision, not every frame's outcome.
+  #[test]
+  fn an_untouched_sidebar_keeps_following_the_layout() {
+    let stored = Visibility::Auto;
+    let drawn = stored.resolve(true);
+    let written = if drawn == stored.resolve(true) {
+      stored
+    } else {
+      Visibility::of(drawn)
+    };
+    assert_eq!(written, Visibility::Auto);
+    // And it follows the width when that changes.
+    assert!(!written.resolve(false));
   }
 
   /// Mirrors `app.rs`'s `UI_ZOOM`: the panel widths above are egui points, and
