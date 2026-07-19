@@ -22,7 +22,7 @@ use simplicial::{
 };
 
 use crate::scene::Scene;
-use crate::ui::Selection;
+use crate::ui::{Marks, Selection};
 
 // Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
 // eigensolve is dense in the vertex count, so keep this modest for an instant
@@ -376,6 +376,40 @@ pub(crate) struct Preset {
   /// The field the preset opens on, or `None` to open on the scene's first
   /// mode (the platform's own default).
   pub(crate) selection: Option<Selection>,
+  /// The marks the preset opens with, or `None` for the platform default.
+  /// Still configuration, not a code path: a preset may say which readings of
+  /// its field it is worth first seeing together (a line field whose glyphs
+  /// and flow complement each other), and everything after that first frame is
+  /// the ordinary toggle.
+  pub(crate) marks: Option<Marks>,
+}
+
+/// The preset the viewer opens on, and one of the curated set rather than a
+/// startup configuration beside it: "where the viewer starts" is a choice of
+/// point in the platform's product, which is exactly what a [`Preset`] is. Kept
+/// as one constructor used from both places so the opening view and the entry
+/// in the browser cannot drift apart.
+///
+/// The pure curl on the triforce, with both of a line field's marks: the glyphs
+/// state what the field is at a point and the particles what it does over time,
+/// and a rotational field is where seeing the two at once says most.
+pub(crate) fn start_preset() -> Preset {
+  curl_on_triforce()
+}
+
+fn curl_on_triforce() -> Preset {
+  Preset {
+    name: "Constant / curl / div",
+    mesh: MeshSource::Triforce,
+    study: Study::Cochains(crate::demos::triforce_examples()),
+    // The second of the three (constant, curl, div), all grade 1 and so all
+    // line fields, in the order `triforce_examples` builds them.
+    selection: Some(Selection::Line(1)),
+    marks: Some(Marks {
+      glyphs: true,
+      particles: true,
+    }),
+  }
 }
 
 /// The curated first-wave presets, in browser order. Each is a configuration of
@@ -387,6 +421,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::START,
       study: Study::start(),
       selection: None,
+      marks: None,
     },
     Preset {
       name: "Harmonic 1-forms",
@@ -396,6 +431,7 @@ pub(crate) fn presets() -> Vec<Preset> {
         nmodes: DEFAULT_NMODES,
       },
       selection: None,
+      marks: None,
     },
     Preset {
       name: "Whitney basis",
@@ -404,19 +440,16 @@ pub(crate) fn presets() -> Vec<Preset> {
       },
       study: Study::WhitneyBasis,
       selection: None,
+      marks: None,
     },
     Preset {
       name: "Global shape functions",
       mesh: MeshSource::Triforce,
       study: Study::WhitneyBasis,
       selection: None,
+      marks: None,
     },
-    Preset {
-      name: "Constant / curl / div",
-      mesh: MeshSource::Triforce,
-      study: Study::Cochains(crate::demos::triforce_examples()),
-      selection: Some(Selection::Line(0)),
-    },
+    curl_on_triforce(),
     Preset {
       // A genus-1 surface, so the harmonic shell is genuinely 2-dimensional
       // ($b_1 = 2$) rather than empty: the decomposition is the full
@@ -426,6 +459,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::Builtin(BuiltinMesh::Bob),
       study: Study::HodgeDecomposition,
       selection: Some(Selection::Line(3)),
+      marks: None,
     },
     Preset {
       name: "Heat equation",
@@ -435,6 +469,7 @@ pub(crate) fn presets() -> Vec<Preset> {
         final_time: HEAT_FINAL_TIME,
       },
       selection: None,
+      marks: None,
     },
     Preset {
       name: "Wave equation",
@@ -444,6 +479,7 @@ pub(crate) fn presets() -> Vec<Preset> {
         final_time: WAVE_FINAL_TIME,
       },
       selection: None,
+      marks: None,
     },
   ]
 }
@@ -537,15 +573,20 @@ impl Gallery {
   /// (delivered later by [`Self::poll`]). The placeholder shares the loader's
   /// mesh, so the window is up on the first frame without waiting on any
   /// eigensolve.
-  pub(crate) fn new(source: MeshSource) -> (Self, Scene) {
-    // The starting source is the icosphere, whose build is infallible.
-    let mesh = Arc::new(source.build().expect("the starting mesh builds"));
+  /// Opens on `preset`, so the starting point is the same configuration the
+  /// browser offers rather than a second hardcoded pair beside it.
+  pub(crate) fn new(preset: &Preset) -> (Self, Scene) {
+    let mesh = Arc::new(preset.mesh.build().expect("the starting mesh builds"));
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
+    let last_grade = match &preset.study {
+      Study::Eigenmodes { grade, .. } => *grade,
+      _ => 0,
+    };
     let mut gallery = Self {
-      mesh_source: source,
+      mesh_source: preset.mesh.clone(),
       mesh,
-      study: Study::start(),
-      last_grade: 0,
+      study: preset.study.clone(),
+      last_grade,
       cache: Vec::new(),
       loading: None,
       error: None,
@@ -686,5 +727,79 @@ impl Gallery {
     self.loading = None;
     self.cache.push((shown, scene.clone()));
     Some(scene)
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  /// The opening preset resolves to the field it means. Its selection is an
+  /// *index* into the scene's line fields, so it is exactly the kind of thing
+  /// that goes quietly wrong when the study's cochains are reordered -- this
+  /// pins it to the field's name instead, which is what the preset is really
+  /// choosing.
+  #[test]
+  fn the_start_preset_opens_on_the_curl_field() {
+    let preset = start_preset();
+    let mesh = preset.mesh.build().expect("the starting mesh builds");
+    let scene = preset.study.build(&mesh);
+    let Some(Selection::Line(index)) = preset.selection else {
+      panic!("the start preset opens on a line field");
+    };
+    assert_eq!(scene.line_fields[index].name, "pure curl");
+    // Both marks, which is the whole reason this preset opens the viewer.
+    let marks = preset.marks.expect("the start preset sets its marks");
+    assert!(marks.glyphs && marks.particles);
+  }
+
+  /// A preset's opening selection is an index into the scene its study builds,
+  /// so the way it goes wrong is silently: reorder a study's fields and the
+  /// preset opens on the wrong one, or past the end. This checks the two
+  /// presets that name a field explicitly -- the rest open on the platform
+  /// default and have no index to get wrong.
+  ///
+  /// The Hodge preset is checked on `torus0.msh` rather than on its own mesh
+  /// (Bob): what its `Line(3)` index depends on is the shell ordering of
+  /// `Study::HodgeDecomposition` and the surface's first Betti number, and the
+  /// torus fixture has the same $b_1 = 2$ at 127 vertices instead of ~3000. It
+  /// is a faithful stand-in for what is being tested, not a weaker one -- and
+  /// it keeps Bob's harmonic solve out of the test suite, for the reason
+  /// `assets/meshes/SOURCES.md` already records.
+  #[test]
+  fn a_preset_opens_on_the_field_it_names() {
+    // The curl preset, on its own (cheap) mesh.
+    let preset = start_preset();
+    let scene = preset.study.build(&preset.mesh.build().unwrap());
+    let Some(Selection::Line(index)) = preset.selection else {
+      panic!("the start preset opens on a line field");
+    };
+    assert_eq!(scene.line_fields[index].name, "pure curl");
+
+    // The Hodge preset's shell index, on the cheap genus-1 stand-in.
+    let hodge = presets()
+      .into_iter()
+      .find(|p| matches!(p.study, Study::HodgeDecomposition))
+      .expect("a Hodge decomposition preset");
+    let mesh =
+      simplicial::io::gmsh::gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));
+    assert!(
+      mesh.0.nsimplices(1) > 0,
+      "torus fixture built empty (unfetched LFS asset?)"
+    );
+    let scene = hodge.study.build(&mesh);
+    let Some(Selection::Line(index)) = hodge.selection else {
+      panic!("the Hodge preset opens on a line field");
+    };
+    assert!(
+      index < scene.line_fields.len(),
+      "Hodge preset opens on line {index} of {}",
+      scene.line_fields.len()
+    );
+    assert!(
+      scene.line_fields[index].name.contains("harmonic"),
+      "the Hodge preset opens on the harmonic shell, got {:?}",
+      scene.line_fields[index].name
+    );
   }
 }

@@ -241,10 +241,14 @@ impl State {
     let renderer = Renderer::new(&ctx, config.format, DEFAULT_SSAA_SCALE);
 
     // Show the window immediately: the gallery opens on a cheap placeholder of
-    // the starting mesh and builds the first grade's eigenmodes in the
+    // the starting mesh and builds the starting preset's study in the
     // background, swapping it in when it lands (`poll_view_load`), rather than
-    // blocking the first frame on the solve.
-    let (gallery, scene) = Gallery::new(MeshSource::START);
+    // blocking the first frame on the solve. The placeholder carries no fields
+    // of that study yet, so the preset's own opening selection and marks are
+    // applied when its scene arrives, through the same pending path a
+    // browser-selected preset takes.
+    let start = crate::gallery::start_preset();
+    let (gallery, scene) = Gallery::new(&start);
     let selection = default_selection(&scene);
     let amplitude_scale = scene_extent(&scene) as f32;
     let mesh_display = MeshDisplay::build(&ctx.device, &scene);
@@ -283,7 +287,10 @@ impl State {
       clock: WaveClock::new(),
       steps_taken: 0,
       mesh_view: crate::ui::MeshView::default(),
-      field_view: crate::ui::FieldView::default(),
+      field_view: crate::ui::FieldView {
+        marks: start.marks.unwrap_or_default(),
+        ..Default::default()
+      },
       post: crate::ui::Post::default(),
       drag: None,
       cursor: None,
@@ -294,7 +301,7 @@ impl State {
       scene,
       selection,
       presets: presets(),
-      pending_selection: None,
+      pending_selection: start.selection,
       amplitude_scale,
       egui_ctx,
       egui_winit_state,
@@ -420,12 +427,21 @@ impl State {
     }
   }
 
-  /// Applies a preset: sets both axes and the opening field, then installs the
-  /// scene the gallery hands back (a cache hit or a placeholder on the new
-  /// mesh). The preset's field is remembered in `pending_selection` and applied
-  /// once the real scene lands. A build failure is recorded and shown.
+  /// Applies a preset: sets both axes, the opening field and the marks it opens
+  /// with, then installs the scene the gallery hands back (a cache hit or a
+  /// placeholder on the new mesh). The preset's field is remembered in
+  /// `pending_selection` and applied once the real scene lands. A build failure
+  /// is recorded and shown.
+  ///
+  /// The marks apply at once rather than pending: they are a view setting, not
+  /// a fact about the scene, so there is nothing to wait for. A preset that
+  /// names none leaves the reader's current toggles alone -- only an explicit
+  /// opening view overrides them.
   fn set_preset(&mut self, index: usize) {
     self.pending_selection = self.presets[index].selection;
+    if let Some(marks) = self.presets[index].marks {
+      self.field_view.marks = marks;
+    }
     match self.gallery.select_preset(&self.presets[index]) {
       Ok(Some(scene)) => self.install_scene(scene),
       Ok(None) => {}
