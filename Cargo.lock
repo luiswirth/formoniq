@@ -1243,6 +1243,7 @@ name = "formoniq-studio"
 version = "0.1.0"
 dependencies = [
  "bytemuck",
+ "ciborium",
  "clap",
  "console_error_panic_hook",
  "console_log",
@@ -1259,11 +1260,13 @@ dependencies = [
  "glatt",
  "gramian",
  "image",
+ "js-sys",
  "log",
  "naga",
  "nalgebra",
  "pollster",
  "rayon",
+ "serde",
  "simplicial",
  "wasm-bindgen",
  "wasm-bindgen-futures",

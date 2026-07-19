@@ -264,7 +264,7 @@ impl MeshSource {
 /// inspector edits them. Every study builds on every [`MeshSource`], and the
 /// build goes through the general [`Scene`] constructors -- there is no
 /// per-study display path.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Study {
   /// Hodge-Laplace eigenmodes of a single grade: the standing-wave normal
   /// modes $Delta u = lambda u$, solved once and memoized. The harmonic forms
@@ -336,7 +336,7 @@ impl Study {
 
 /// A named entry of a [`Study::Cochains`] list: an explicit cochain kept as
 /// data ([`CochainSpec`]) plus the name the picker shows it under.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamedCochain {
   pub name: String,
   pub spec: CochainSpec,
@@ -344,7 +344,7 @@ pub struct NamedCochain {
 
 /// A concrete cochain kept as data rather than as a constructed vector, so a
 /// preset builds one and the resolution against a mesh happens at build time.
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CochainSpec {
   /// A grade-1 cochain given as a coefficient per edge, each edge addressed by
   /// its ordered vertex pair $(v_0, v_1)$ with $v_0 < v_1$ -- the canonical
@@ -526,54 +526,6 @@ pub(crate) struct Shown {
   pub(crate) study: Study,
 }
 
-/// A rebuild of `T` running off the render thread, so a solve that triggers an
-/// eigensolve never blocks the UI. `poll` is non-blocking and yields the
-/// result exactly once, the frame it arrives.
-///
-/// The web has no background thread to offload onto (the plain `wasm32` target
-/// is single-threaded), so there the build runs synchronously in `spawn` and
-/// `poll` simply hands back the finished result on the next frame -- the same
-/// contract, minus the concurrency. A heavy eigensolve therefore blocks the tab
-/// briefly on the web rather than running in the background; restoring the
-/// off-thread build there needs a web worker, tracked separately.
-#[cfg(not(target_arch = "wasm32"))]
-struct PendingLoad<T> {
-  rx: std::sync::mpsc::Receiver<T>,
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl<T: Send + 'static> PendingLoad<T> {
-  fn spawn(build: impl FnOnce() -> T + Send + 'static) -> Self {
-    let (tx, rx) = std::sync::mpsc::channel();
-    std::thread::spawn(move || {
-      let _ = tx.send(build());
-    });
-    Self { rx }
-  }
-
-  fn poll(&self) -> Option<T> {
-    self.rx.try_recv().ok()
-  }
-}
-
-#[cfg(target_arch = "wasm32")]
-struct PendingLoad<T> {
-  result: std::cell::Cell<Option<T>>,
-}
-
-#[cfg(target_arch = "wasm32")]
-impl<T: 'static> PendingLoad<T> {
-  fn spawn(build: impl FnOnce() -> T + 'static) -> Self {
-    Self {
-      result: std::cell::Cell::new(Some(build())),
-    }
-  }
-
-  fn poll(&self) -> Option<T> {
-    self.result.take()
-  }
-}
-
 /// The gallery's lazy, memoized loader. Owns the current mesh; each
 /// `(mesh, study)` pair's scene is built at most once -- the expensive
 /// eigensolves on a background thread -- and cached, so revisiting a pair is
@@ -594,7 +546,7 @@ pub(crate) struct Gallery {
   /// resumes that grade rather than resetting to 0.
   pub(crate) last_grade: ExteriorGrade,
   cache: Vec<(Shown, Scene)>,
-  loading: Option<(Shown, PendingLoad<Scene>)>,
+  loading: Option<(Shown, crate::solve::Pending)>,
   /// The last mesh-source failure (a malformed OBJ, an unfetched asset),
   /// surfaced in the panel until the next successful mesh change. `None` when
   /// the current mesh loaded cleanly.
@@ -647,9 +599,8 @@ impl Gallery {
   }
 
   fn spawn(&mut self, shown: Shown) {
-    let mesh = self.mesh.clone();
-    let study = shown.study.clone();
-    self.loading = Some((shown, PendingLoad::spawn(move || study.build(&mesh))));
+    let request = crate::solve::SolveRequest::new(&self.mesh, shown.study.clone());
+    self.loading = Some((shown, crate::solve::Pending::spawn(request)));
   }
 
   /// Requests a build of the current pair against `self.mesh` (which the caller
@@ -754,10 +705,13 @@ impl Gallery {
   /// `Some` exactly once, the frame a background build lands: memoizes it and
   /// hands it back to be installed.
   pub(crate) fn poll(&mut self) -> Option<Scene> {
-    let (shown, scene) = self
-      .loading
-      .as_ref()
-      .and_then(|(shown, pending)| pending.poll().map(|scene| (shown.clone(), scene)))?;
+    // The outcome carries only the fields; the mesh it was solved on is the
+    // one still held here, so the scene is reassembled rather than returned.
+    let (shown, scene) = self.loading.as_ref().and_then(|(shown, pending)| {
+      pending
+        .poll()
+        .map(|outcome| (shown.clone(), outcome.into_scene(&self.mesh)))
+    })?;
     self.loading = None;
     self.cache.push((shown, scene.clone()));
     Some(scene)

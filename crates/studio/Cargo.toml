@@ -42,6 +42,11 @@ web-time = "1.1.0"
 # same way it does for `simplicial` below, where it runs sequentially: the plain
 # `wasm32` target has no threads to spread over.
 rayon = "1.12.0"
+# The solve payload's encoding: CBOR, the same the engine's own `save`/`load`
+# use, so a request crossing into a web worker is the encoding a mesh on disk
+# already has rather than a second format.
+serde = { version = "1.0.228", features = ["derive"] }
+ciborium = "0.2.2"
 
 # Native-only: the CLI, the blocking executor, the terminal logger, the in-egui
 # file browser and the PNG encoder are all things a browser either forbids or
@@ -75,11 +80,18 @@ wasm-bindgen = "0.2.100"
 wasm-bindgen-futures = "0.4.50"
 console_error_panic_hook = "0.1.7"
 console_log = "1.0"
+js-sys = "0.3.77"
 web-sys = { version = "0.3.77", features = [
   "Document",
   "Window",
   "Element",
   "HtmlCanvasElement",
+  # The solve worker: the viewer's one expensive call runs here rather than on
+  # the main thread, so the tab keeps rendering while a study solves.
+  "Worker",
+  "WorkerOptions",
+  "WorkerType",
+  "MessageEvent",
 ] }
 # Not used directly: the eigensolver's `faer` pulls `rand`, which pulls
 # `getrandom`, and on the `unknown` web target that has no OS entropy source to

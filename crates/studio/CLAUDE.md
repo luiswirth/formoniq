@@ -332,11 +332,21 @@ around:
   native features, gated off the web build -- which has nowhere to read or write.
   A feature that needs local files is native by nature, not a web regression to
   fix.
-- **Single-threaded.** The plain `wasm32` target has no background thread, so a
-  scene's solve runs synchronously where native offloads it (`PendingLoad`), and
-  `faer` builds without its `rayon` thread pool. A heavy eigensolve therefore
-  blocks the tab briefly; restoring an off-thread build there is a web-worker
-  concern, kept out of the shared path.
+- **Single-threaded within a context, so the solve moves to another one.** The
+  plain `wasm32` target has no background thread and `faer` builds without its
+  `rayon` pool, so a study cannot be solved off the main thread the way native
+  does it. It is sent to a *worker* instead: the build is a request and an
+  outcome (`solve`), not a closure, because a closure cannot cross a
+  `postMessage` boundary and a value can. Message passing, not shared memory —
+  `SharedArrayBuffer` threads would need cross-origin isolation and a nightly
+  toolchain, which a static host cannot give and this does not need. The worker
+  loads the same module and calls the same solver, so there is one
+  implementation and the boundary is only transport.
+
+  The request carries the mesh itself rather than a descriptor of it. A
+  descriptor would cover every mesh the gallery can regenerate and miss the one
+  that matters — a mesh the reader loaded, which exists nowhere else and is the
+  one whose size nobody has bounded.
 - **WebGPU only, by choice.** No WebGL2 fallback -- the viewer targets the modern
   backend and fails legibly where it is absent, rather than constraining the
   render features to the WebGL2 subset.
