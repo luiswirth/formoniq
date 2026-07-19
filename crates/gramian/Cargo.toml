@@ -4,10 +4,10 @@ version = "0.2.0"
 edition = "2021"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
-description = "A Gram matrix and Riemannian metric: an inner product expressed in a basis."
+description = "A Gram matrix and pseudo-Riemannian metric: an inner product of arbitrary signature expressed in a basis."
 repository = "https://github.com/luiswirth/formoniq"
 readme = "README.md"
-keywords = ["gram-matrix", "riemannian-metric", "linear-algebra"]
+keywords = ["gram-matrix", "pseudo-riemannian", "linear-algebra"]
 categories = ["mathematics"]
 
 [dependencies]

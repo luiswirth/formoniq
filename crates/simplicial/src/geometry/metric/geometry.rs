@@ -1,7 +1,8 @@
 //! Geometry: the metric a mesh carries, in any of its equivalent forms.
 //!
 //! The geometry of a simplicial manifold is intrinsic -- it is fully carried by
-//! the Riemannian metric of each cell, with no reference to coordinates. The
+//! the pseudo-Riemannian metric of each cell, of any signature, with no
+//! reference to coordinates. The
 //! [`Geometry`] trait captures exactly that: `cell_metric` gives a cell its flat
 //! metric tensor.
 //! It is implemented by every geometry representation, related by the
@@ -27,22 +28,24 @@ use crate::{
   Dim,
 };
 
-use gramian::RiemannianMetric;
+use gramian::PseudoRiemannianMetric;
 
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
 
-/// The intrinsic geometry of a mesh: the Riemannian metric of each cell, which
-/// is all the metric information the manifold carries.
+/// The intrinsic geometry of a mesh: the pseudo-Riemannian metric of each
+/// cell, which is all the metric information the manifold carries. The
+/// signature is the metric's own: a Riemannian mesh and a Lorentzian
+/// spacetime mesh implement the same trait.
 pub trait Geometry {
   /// The flat metric tensor of a cell. The [`Cell`] witness is the
   /// precondition: only a top-dimensional simplex has a metric here.
-  fn cell_metric(&self, cell: Cell) -> RiemannianMetric;
+  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric;
 }
 
 impl Geometry for MeshLengths {
-  fn cell_metric(&self, cell: Cell) -> RiemannianMetric {
-    self.simplex_lengths(cell.get()).riemannian_metric()
+  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
+    self.simplex_lengths(cell.get()).metric()
   }
 }
 
@@ -52,10 +55,10 @@ impl Geometry for MeshLengths {
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CellGramians {
-  metrics: SkeletonVec<RiemannianMetric>,
+  metrics: SkeletonVec<PseudoRiemannianMetric>,
 }
 impl CellGramians {
-  pub fn new(dim: Dim, metrics: Vec<RiemannianMetric>) -> Self {
+  pub fn new(dim: Dim, metrics: Vec<PseudoRiemannianMetric>) -> Self {
     Self {
       metrics: SkeletonVec::new(dim, metrics),
     }
@@ -71,7 +74,7 @@ impl CellGramians {
     Self::new(topology.dim(), metrics)
   }
 
-  pub fn metrics(&self) -> &SkeletonVec<RiemannianMetric> {
+  pub fn metrics(&self) -> &SkeletonVec<PseudoRiemannianMetric> {
     &self.metrics
   }
 
@@ -113,12 +116,12 @@ impl CellGramians {
 }
 
 impl Geometry for CellGramians {
-  fn cell_metric(&self, cell: Cell) -> RiemannianMetric {
+  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
     self.metrics[cell.get()].clone()
   }
 }
 
 /// Regge edge lengths from a cell's metric tensor.
-pub fn simplex_lengths_of(metric: &RiemannianMetric) -> SimplexLengths {
+pub fn simplex_lengths_of(metric: &PseudoRiemannianMetric) -> SimplexLengths {
   SimplexLengths::from_metric_tensor(metric.vector_gramian())
 }

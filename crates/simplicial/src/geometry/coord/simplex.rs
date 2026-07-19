@@ -37,9 +37,11 @@ impl SimplexCoords<Ambient> {
     SimplexCoords::new(vert_coords)
   }
 
-  /// The metric this embedding induces: the Gramian of the cell's spanning
-  /// vectors, measured with the Euclidean structure of the ambient space. The
-  /// bridge from the extrinsic layer down into the intrinsic one.
+  /// The metric a *Euclidean* ambient induces on this realization: the
+  /// Gramian of the cell's spanning vectors. The general bridge is the
+  /// pullback of the mesh's ambient inner product
+  /// ([`MeshCoords::cell_metric`](crate::geometry::metric::Geometry::cell_metric)),
+  /// of which this is the standard-signature case.
   pub fn metric_tensor(&self) -> Gramian {
     Gramian::from_euclidean_vectors(self.spanning_vectors())
   }
