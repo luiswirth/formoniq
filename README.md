@@ -38,7 +38,7 @@ solutions computed on them, solved client-side via WebAssembly and WebGPU.
 - **Problems.** The Hodge-Laplace source and eigenvalue problems in the mixed
   Arnold, Falk and Winther formulation, with the harmonic space and gauge
   constraint handled explicitly. Maxwell's equations as the Hodge-Dirac evolution
-  on the full de Rham complex, and the covariant (Dirac-Kähler) form of the same
+  on the full de Rham complex, and the covariant form of the same
   operator solved directly on a Minkowski spacetime mesh, where hyperbolicity
   comes from the signature rather than a time-stepping loop. The heat and wave
   equations.
@@ -208,7 +208,7 @@ Because the metric is the only geometric input, the same formulation covers
 pseudo-Riemannian geometry of any signature without special cases, the Hodge star
 reading the signature off the metric itself. A Lorentzian metric on a 4D
 spacetime is one such signature: Maxwell's equations run on it as the covariant
-Hodge-Dirac (Dirac-Kähler) operator, hyperbolic through the signature alone.
+Hodge-Dirac operator, hyperbolic through the signature alone.
 
 ## Topology and cohomology
 

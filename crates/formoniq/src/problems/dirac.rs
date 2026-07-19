@@ -1,8 +1,8 @@
 //! Maxwell's equations as the Hodge–Dirac evolution on the *whole* de Rham
-//! complex --- the Clifford-algebra formulation, in the 3+1 split.
+//! complex, in the 3+1 split.
 //!
-//! Geometric algebra collapses the two Maxwell field equations into one. The
-//! Hodge–Dirac operator
+//! One first-order operator collapses the two Maxwell field equations into one.
+//! The Hodge–Dirac operator
 //!
 //! $ sans(D) = dif - delta: Lambda^bullet -> Lambda^bullet, quad
 //!   Lambda^bullet = plus.circle.big_(k=0)^n Lambda^k, $
@@ -32,8 +32,7 @@
 //! $dif B = 0$ (no monopoles). The four classical equations are the four grades
 //! of one Dirac evolution. The *field* itself is not mixed-grade --- it is
 //! $E + B$, living in grades 1 and 2 (a single Faraday 2-form before the split);
-//! the whole graded space is carried because $sans(D)$ is grade-mixing (the
-//! Clifford structure), so it maps the field out into the neighbouring grades,
+//! the whole graded space is carried because $sans(D)$ is grade-mixing, so it maps the field out into the neighbouring grades,
 //! where the divergence/Gauss parts land.
 //!
 //! # The sign, and the canonical Hodge–Dirac operator
@@ -167,7 +166,7 @@ impl MixedField {
 /// evolution $M dot(u) = A u$ on a Riemannian slice, and the *self-adjoint*
 /// canonical $dif + delta$ ($A = A^T$), the covariant static operator of
 /// $sans(D) u = f$ -- on a Lorentzian spacetime mesh (indefinite $M$) this is
-/// the hyperbolic Dirac–Kähler / spacetime-Maxwell operator, no split and no
+/// the hyperbolic spacetime-Maxwell operator, no split and no
 /// time integrator involved. Same blocks, same code; the sign of the
 /// super-diagonal is the entire difference.
 ///
@@ -423,7 +422,7 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 ///
 /// on the full de Rham complex, with essential boundary values imposed by
 /// affine lifting. This is the spacetime form of the equation: on a Lorentzian
-/// mesh it is the Dirac–Kähler equation with mass $m$ (squaring to
+/// mesh it is the massive Hodge–Dirac equation with mass $m$ (squaring to
 /// Klein–Gordon, $sans(D)^2 = Delta$ the d'Alembertian), Maxwell with sources
 /// the middle grades of the massless case. No time integrator appears -- on a
 /// spacetime mesh, time is one of the mesh directions and causality lives in

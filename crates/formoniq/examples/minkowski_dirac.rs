@@ -1,4 +1,4 @@
-//! The Dirac–Kähler equation on Minkowski spacetime: the covariant Hodge–Dirac
+//! The massive Hodge–Dirac equation on Minkowski spacetime: the covariant
 //! source problem
 //!
 //! $ (sans(D) + m) u = J, quad sans(D) = dif + delta, $
@@ -97,7 +97,7 @@ use std::f64::consts::PI;
 /// from 1, so no mesh edge or diagonal is lightlike (causal genericity) and no
 /// box period resonates with the spatial ones.
 const TIME_SCALE: f64 = 0.7;
-/// The Dirac--Kähler mass term $m$.
+/// The mass term $m$ of the Hodge--Dirac operator.
 const MASS: f64 = 1.5;
 /// Phase offset of the plane wave, keeping it generic against the mesh.
 const PHASE: f64 = 0.3;
@@ -209,7 +209,7 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
   };
 
   println!(
-    "Dirac-Kahler (D + m) u = J on [0,{TIME_SCALE}] x [0,1]^{}, eta = diag(-1,+1,..): dim {dim}, m = {MASS}",
+    "Hodge-Dirac (D + m) u = J on [0,{TIME_SCALE}] x [0,1]^{}, eta = diag(-1,+1,..): dim {dim}, m = {MASS}",
     dim - 1
   );
   println!(
