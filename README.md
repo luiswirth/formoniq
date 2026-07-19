@@ -136,6 +136,13 @@ rebuild toward the more general library described above.
 
 ## Getting started
 
+The crates are published on [crates.io](https://crates.io/crates/formoniq), with
+documentation on [docs.rs](https://docs.rs/formoniq). Depend on the engine with
+`cargo add formoniq`, or on any lower crate on its own (`cargo add exterior`,
+`cargo add simplicial`, ...).
+
+To build from source:
+
 ```sh
 cargo test --workspace
 cargo run --release --example source
