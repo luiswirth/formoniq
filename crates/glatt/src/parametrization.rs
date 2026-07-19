@@ -20,11 +20,11 @@
 //!
 //! Metric-independent by construction: the pseudo-inverse here is the
 //! Moore-Penrose one for the ambient *Euclidean* metric, which is what "nearest
-//! point" means, and no `PseudoRiemannianMetric` of the continuum enters.
+//! point" means, and no `Metric` of the continuum enters.
 
 use coorder::{Ambient, Coord, CoordSpace, Coords, Matrix, Vector};
 use exterior::Dim;
-use gramian::{Gramian, PseudoRiemannianMetric};
+use gramian::{Gramian, Metric};
 
 /// A smooth parametrization $phi: Omega -> RR^N$ of the continuum, with its
 /// derived Jacobian and chart.
@@ -198,8 +198,8 @@ impl<S: CoordSpace> Parametrization<S> {
   /// and metric-aware meshing (placing cells so they are well-shaped in $g$, not
   /// in the flat coordinates). It presupposes no inverse and no closed form --
   /// only the Jacobian, which is always available.
-  pub fn induced_metric(&self, u: &Coords<S>) -> PseudoRiemannianMetric {
-    PseudoRiemannianMetric::new(Gramian::from_euclidean_vectors(self.jacobian(u)))
+  pub fn induced_metric(&self, u: &Coords<S>) -> Metric {
+    Metric::new(Gramian::from_euclidean_vectors(self.jacobian(u)))
   }
 }
 

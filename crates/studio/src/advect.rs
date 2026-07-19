@@ -41,7 +41,7 @@
 //! life.
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use gramian::PseudoRiemannianMetric;
+use gramian::Metric;
 use simplicial::linalg::Matrix;
 use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
@@ -204,11 +204,7 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
 /// choice: the sharped reduced field is affine on the cell, and an affine map
 /// on a simplex is exactly the barycentric interpolation of its vertex values.
 /// The $n + 1$ evaluations are the field, not an approximation of it.
-fn flow_generator(
-  interpolant: &WhitneyInterpolant,
-  cell: SimplexIdx,
-  metric: &PseudoRiemannianMetric,
-) -> Matrix {
+fn flow_generator(interpolant: &WhitneyInterpolant, cell: SimplexIdx, metric: &Metric) -> Matrix {
   let dim = cell.dim();
   let vertices = ref_vertices(dim);
   let mut vertex_field = Matrix::zeros(dim, dim + 1);

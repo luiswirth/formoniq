@@ -2,7 +2,7 @@ use super::EdgeIdx;
 use crate::{topology::simplex::nedges, Dim};
 
 use crate::linalg::{Matrix, Vector};
-use gramian::{CausalType, Gramian, PseudoRiemannianMetric};
+use gramian::{CausalType, Gramian, Metric};
 use multiindex::{combinations, factorial, Combination};
 
 /// The signed squared edge lengths of a simplex: Regge calculus, on any
@@ -209,8 +209,8 @@ impl SimplexLengthsSq {
   /// The full metric: the Gramian on tangent vectors together with its
   /// inverse on covectors, of whatever signature the squared lengths
   /// describe.
-  pub fn metric(&self) -> PseudoRiemannianMetric {
-    PseudoRiemannianMetric::new(self.to_metric_tensor())
+  pub fn metric(&self) -> Metric {
+    Metric::new(self.to_metric_tensor())
   }
 
   /// Regge calculus: the metric tensor is the polarization identity in the

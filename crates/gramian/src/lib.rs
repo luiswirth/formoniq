@@ -261,11 +261,11 @@ impl std::ops::Index<(usize, usize)> for Gramian {
 /// [`Self::covector_gramian`] -- indefinite or not.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct PseudoRiemannianMetric {
+pub struct Metric {
   vector_gramian: Gramian,
   covector_gramian: Gramian,
 }
-impl PseudoRiemannianMetric {
+impl Metric {
   pub fn new(vector_gramian: Gramian) -> Self {
     let covector_gramian = vector_gramian.clone().inverse();
     Self {
@@ -334,7 +334,7 @@ impl PseudoRiemannianMetric {
 /// by the metric tensor $g$. These are the canonical measurements of
 /// directions and magnitudes; the dual operations on covectors are available
 /// through [`Self::covector_gramian`].
-impl PseudoRiemannianMetric {
+impl Metric {
   /// Inner product $g(v, w)$ of two tangent vectors.
   pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
     self.vector_gramian.inner(v, w)
@@ -513,7 +513,7 @@ mod tests {
   #[test]
   fn metric_pullback_inverts_the_pulled_back_metric() {
     for n in 1..=4 {
-      let metric = PseudoRiemannianMetric::new(spd(n));
+      let metric = Metric::new(spd(n));
       let j = full_col_rank(n, n);
       let pulled = metric.pullback(&j);
       let expected_covector = pulled.vector_gramian().clone().inverse();
@@ -527,7 +527,7 @@ mod tests {
   #[test]
   fn metric_measures_tangent_vectors_with_g() {
     let g = Gramian::new(Matrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 3.0]));
-    let metric = PseudoRiemannianMetric::new(g.clone());
+    let metric = Metric::new(g.clone());
     let v = Vector::from_column_slice(&[1.0, 1.0]);
     let w = Vector::from_column_slice(&[1.0, -1.0]);
 
@@ -590,7 +590,7 @@ mod tests {
     assert!((eta.norm(&e0) - 1.0).abs() < 1e-12);
     assert!((eta.norm(&light) - 0.0).abs() < 1e-12);
 
-    let metric = PseudoRiemannianMetric::minkowski(4);
+    let metric = Metric::minkowski(4);
     assert_eq!(metric.signature(), (3, 1));
     assert_eq!(metric.causal_type(&e0), CausalType::Timelike);
     close(

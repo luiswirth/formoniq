@@ -11,7 +11,7 @@ use crate::{
 };
 
 use crate::linalg::{Matrix, Vector};
-use gramian::{Gramian, PseudoRiemannianMetric};
+use gramian::{Gramian, Metric};
 
 use itertools::Itertools;
 
@@ -40,8 +40,8 @@ pub struct MeshCoords {
 /// coordinates know about the metric they induce, the metric knows nothing of
 /// coordinates (invariant 2).
 impl Geometry for MeshCoords {
-  fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
-    PseudoRiemannianMetric::new(
+  fn cell_metric(&self, cell: Cell) -> Metric {
+    Metric::new(
       self
         .ambient
         .pullback(&cell.coord_simplex(self).spanning_vectors()),

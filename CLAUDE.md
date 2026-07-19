@@ -44,7 +44,7 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets), `cartesian::` (radix multi-indices) |
-| `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `PseudoRiemannianMetric` (Riemannian is $q = 0$), `CausalType` |
+| `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature; Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
 | `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`Geometry` trait, `MeshCoords`, `MeshLengthsSq`, `CellGramians`) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
@@ -123,7 +123,7 @@ and passes tests.
 1. **Topology ⊥ Geometry.** The `Complex` is pure combinatorics: it knows
    incidence, orientation, boundary — nothing metric. Geometry is a *separate*
    input, and enters only through the `Geometry` trait
-   (`fn cell_metric(&self, cell: SimplexRef) -> PseudoRiemannianMetric`).
+   (`fn cell_metric(&self, cell: SimplexRef) -> Metric`).
 
 2. **Intrinsic first, extrinsic second.** Assembly consumes only per-cell metric
    tensors, never coordinates. `MeshCoords` (an embedding) is just one
@@ -190,7 +190,7 @@ and passes tests.
 5. **Metric-free stays metric-free.** The exterior derivative, the boundary
    operator, the wedge, the interior product, the duality pairing and the de Rham
    map involve *no* metric. Only the Hodge star, the musicals and inner products
-   do. Do not let a `PseudoRiemannianMetric` leak into a signature that does not
+   do. Do not let a `Metric` leak into a signature that does not
    mathematically need one.
 
 6. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and

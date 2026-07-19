@@ -16,7 +16,8 @@ metrics of arbitrary signature.
   through J and measuring with G). Flat models are built in: Euclidean,
   pseudo-Euclidean of any signature, and Minkowski (mostly-plus, time along
   the first basis vector).
-- `PseudoRiemannianMetric`: a Gramian paired with its inverse, so both g and
+- `Metric`: a pseudo-Riemannian metric tensor of any signature, a Gramian
+  paired with its inverse, so both g and
   g⁻¹ are available directly. Tangent vectors are measured with the vector
   Gramian, covectors with the covector Gramian, and the pullback recomputes
   the inverse rather than pushing it forward.
