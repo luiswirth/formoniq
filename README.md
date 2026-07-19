@@ -5,6 +5,16 @@ equations are formulated in the language of differential forms and solved on
 simplicial pseudo-Riemannian manifolds of arbitrary dimension, intrinsically,
 without reference to any coordinate embedding.
 
+formoniq makes no distinction between Riemannian and Lorentzian geometry. The
+metric carries its own signature, and a single assembly serves both regimes:
+elliptic Hodge-Laplace problems on a Riemannian mesh, and hyperbolic field theory
+on a Lorentzian spacetime mesh. The geometry is Regge calculus on signed squared
+edge lengths (positive spacelike, zero null, negative timelike), which is the
+coordinate-free spacetime discretization Regge introduced for general relativity.
+On a Minkowski mesh, Maxwell's equations solve as a covariant Hodge-Dirac operator
+that is hyperbolic through the metric signature alone, assembled from the Regge
+lengths with the embedding forgotten.
+
 Research code, under active development.
 
 An interactive build of the viewer runs in the browser, with no installation, at
