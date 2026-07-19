@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use glatt::field::DiffFormClosure;
 use gramian::Metric;
 use simplicial::linalg::Vector;
+use simplicial::Sign;
 
 use crate::bake::CellCorner;
 use crate::ui::Selection;
@@ -760,6 +761,22 @@ impl Scene {
     let FieldMeta { name, time, dof } = meta;
     let n = topology.dim();
     let k = cochain.grade();
+
+    // The reduction stars whenever $k > n-k$, and the star needs a global
+    // volume form, which a non-orientable mesh does not have. The field is
+    // then not drawable at all -- there is no orientation-independent density
+    // or direction to show -- so it is refused here rather than rendered with
+    // a per-cell sign that means nothing. Everything below the star is
+    // unaffected and still files normally; the solver is unaffected either
+    // way, since the gauge cancels inside the assembly.
+    if k > n - k && !topology.is_orientable() {
+      eprintln!(
+        "field '{name}' (grade {k} of {n}) needs the Hodge star to be drawn, \
+         and the mesh is non-orientable: no global volume form, so it is skipped"
+      );
+      return;
+    }
+
     match k.min(n - k) {
       0 => {
         // The original $k$-cochain is kept whole; the reduction to a density (a
@@ -795,14 +812,47 @@ impl Scene {
 /// value $W c$ if its grade is already $<= n-k$, else its Hodge star, so the
 /// result always has grade $min(k, n-k)$. The star is where -- and the only
 /// place -- a metric enters the reduction.
-pub(crate) fn reduced_form(form: MultiForm, metric: &Metric) -> MultiForm {
+///
+/// `sign` is the cell's coherent orientation
+/// ([`Orientation::sign`](simplicial::topology::orientation::Orientation::sign)),
+/// and it is the *second* thing the star needs beyond the metric. A cell's
+/// stored colex vertex order fixes a volume form only up to sign, so
+/// $star: Lambda^n -> Lambda^0$ read cell by cell returns the density against
+/// each cell's own arbitrary frame -- $plus.minus$ the true one, flipping
+/// wherever colex disagrees with the manifold's orientation. Multiplying by
+/// `sign` is what makes the reduced value comparable across cells, and hence
+/// what makes a top-grade density or an $(n-1)$-form's direction mean anything
+/// globally. Below the star the sign is irrelevant, which is why it costs
+/// nothing to pass it always: [`reduction_sign`] returns `Pos` there.
+pub(crate) fn reduced_form(form: MultiForm, metric: &Metric, sign: Sign) -> MultiForm {
   let n = form.dim();
   let k = form.grade();
   if k <= n - k {
     form
   } else {
-    form.hodge_star(metric)
+    form.hodge_star(metric) * sign.as_f64()
   }
+}
+
+/// The orientation factor [`reduced_form`] needs on one cell: `Pos` when the
+/// reduction is the identity (no star, so no volume form and no orientation),
+/// otherwise the cell's coherent orientation.
+///
+/// Panics on a non-orientable complex, and that is sound rather than a lurking
+/// edge case: a field whose reduction needs the star is *not filed* into the
+/// scene at all unless the mesh is orientable (see [`Scene::field`]), so
+/// holding a field that reaches here is already the proof that the orientation
+/// exists. The refusal happens once, where the field is built, instead of at
+/// every draw.
+pub(crate) fn reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGrade) -> Sign {
+  let n = topology.dim();
+  if grade <= n - grade {
+    return Sign::Pos;
+  }
+  topology
+    .orientation()
+    .expect("a starred field is only filed on an orientable mesh")
+    .sign(cell)
 }
 
 /// The surface colormap scalar at every rendered triangle corner, read *in the
@@ -888,7 +938,8 @@ fn reduced_value(
   let mut weights = na::DVector::zeros(cell.nvertices());
   weights[ilocal] = 1.0;
   let point = MeshPoint::new(cell.idx(), weights.into());
-  let form = reduced_form(interpolant.eval(&point), metric);
+  let sign = reduction_sign(cell.complex(), cell, interpolant.cochain().grade());
+  let form = reduced_form(interpolant.eval(&point), metric, sign);
   if form.grade() == 0 {
     form.coeffs()[0]
   } else {
@@ -1102,6 +1153,39 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// The harmonic top-grade form on a closed orientable surface is a multiple
+  /// of the volume form, $h = c dvol$, so its reduction $star h = c$ is
+  /// *constant* over the whole manifold. That makes the reduced readout of the
+  /// $lambda = 0$ grade-2 mode on the sphere a law with an exact answer, and
+  /// the sharpest available statement that the Hodge star is being taken
+  /// against one global volume form rather than each cell's own.
+  ///
+  /// It is precisely the test the colex vertex order fails without a coherent
+  /// orientation: the density comes out $plus.minus c$ cell by cell, and the
+  /// nodal average of that collapses toward zero instead of reproducing $c$.
+  #[test]
+  fn harmonic_top_form_reduces_to_a_constant_density() {
+    use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
+
+    let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(2);
+    let lengths = coords.to_edge_lengths_sq(&topology);
+    let (eigenvals, _, eigenfuncs) =
+      solve_evp(&WhitneyComplex::new(&topology, &lengths), 2, 1).unwrap();
+    // $b_2 = 1$ on the sphere: the lowest grade-2 mode is the harmonic one.
+    assert!(eigenvals[0].abs() < 1e-8, "expected the harmonic mode");
+
+    let cochain = Cochain::new(2, eigenfuncs.column(0).into_owned());
+    let heights = nodal_heights(&topology, &coords, &cochain);
+    let mean = heights.iter().sum::<f64>() / heights.len() as f64;
+    assert!(mean.abs() > 1e-3, "the density must not cancel to zero");
+    for h in heights {
+      assert!(
+        (h - mean).abs() / mean.abs() < 1e-10,
+        "reduced harmonic density {h} is not the constant {mean}"
+      );
+    }
+  }
 
   /// A trajectory's frame at an instant is the linear interpolation of its
   /// bracketing samples, clamped to the sampled interval: the interpolation is

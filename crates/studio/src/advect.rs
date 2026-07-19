@@ -43,6 +43,7 @@
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
 use simplicial::linalg::Matrix;
+use simplicial::Sign;
 use simplicial::{
   atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
   geometry::coord::mesh::MeshCoords,
@@ -110,7 +111,8 @@ impl AdvectBake {
 
     for cell in topology.cells().handle_iter() {
       let metric = coords.cell_metric(cell);
-      let generator = flow_generator(&interpolant, cell.idx(), &metric);
+      let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+      let generator = flow_generator(&interpolant, cell.idx(), &metric, sign);
 
       // One exponential, then `depth` squarings: level $k$ is $(e^(M h))^(2^k)$
       // by the flow's own semigroup law, so the higher levels cost a multiply
@@ -168,7 +170,8 @@ pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     .map(|cell| {
       let metric = coords.cell_metric(cell);
       let point = MeshPoint::barycenter(cell.idx());
-      reduced_form(interpolant.eval(&point), &metric).norm(&metric)
+      let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+      reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric)
     })
     .fold(0.0, f64::max)
 }
@@ -188,7 +191,8 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     let metric = coords.cell_metric(cell);
     let weight = metric.det_sqrt();
     let point = MeshPoint::barycenter(cell.idx());
-    weighted += weight * reduced_form(interpolant.eval(&point), &metric).norm(&metric);
+    let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+    weighted += weight * reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric);
     total += weight;
   }
   if total > 0.0 {
@@ -204,14 +208,19 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
 /// choice: the sharped reduced field is affine on the cell, and an affine map
 /// on a simplex is exactly the barycentric interpolation of its vertex values.
 /// The $n + 1$ evaluations are the field, not an approximation of it.
-fn flow_generator(interpolant: &WhitneyInterpolant, cell: SimplexIdx, metric: &Metric) -> Matrix {
+fn flow_generator(
+  interpolant: &WhitneyInterpolant,
+  cell: SimplexIdx,
+  metric: &Metric,
+  sign: Sign,
+) -> Matrix {
   let dim = cell.dim();
   let vertices = ref_vertices(dim);
   let mut vertex_field = Matrix::zeros(dim, dim + 1);
   for i in 0..=dim {
     let local = Local::new(vertices.column(i).into_owned());
     let point = MeshPoint::new(cell, local2bary(&local));
-    let form = reduced_form(interpolant.eval(&point), metric);
+    let form = reduced_form(interpolant.eval(&point), metric, sign);
     vertex_field.set_column(i, form.sharp(metric).coeffs());
   }
   ref_difbarys(dim) * vertex_field
@@ -347,7 +356,7 @@ mod tests {
       let interpolant = WhitneyInterpolant::new(cochain, &topology);
       for cell in topology.cells().handle_iter() {
         let metric = coords.cell_metric(cell);
-        let generator = flow_generator(&interpolant, cell.idx(), &metric);
+        let generator = flow_generator(&interpolant, cell.idx(), &metric, Sign::Pos);
         for column in 0..generator.ncols() {
           let sum: f64 = generator.column(column).sum();
           assert!(

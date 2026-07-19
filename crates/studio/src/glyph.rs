@@ -168,6 +168,7 @@ pub(crate) fn bake_glyphs(
 
   for cell in topology.cells().handle_iter() {
     let metric = coords.cell_metric(cell);
+    let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
     // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential pushes
     // the sharped field out of the cell's tangent frame into the ambient one, and
     // `global2bary` reads a corner back to the weights the clip tests. The one
@@ -187,7 +188,7 @@ pub(crate) fn bake_glyphs(
 
     for bary in ref_lattice_bary(cell.dim(), refinement) {
       let point = MeshPoint::new(cell.idx(), bary);
-      let field = reduced_form(interpolant.eval(&point), &metric).sharp(&metric);
+      let field = reduced_form(interpolant.eval(&point), &metric, sign).sharp(&metric);
       let ambient: Vector = coord_simplex.pushforward_vector(field.coeffs());
       let magnitude = ambient.norm();
       let opacity = if peak > 0.0 {
