@@ -1,5 +1,11 @@
 use crate::{Matrix, Vector, VectorView};
 
+/// An affine map $x |-> A x + b$ between coordinate spaces, with linear part
+/// $A$ and translation $b$.
+///
+/// The linear part need not be square: a cell parametrization $hat(K) -> RR^N$
+/// has a tall injective $A$, inverted in the least-squares sense by
+/// [`Self::apply_backward`] and [`Self::pseudo_inverse`].
 pub struct AffineTransform {
   pub translation: Vector,
   pub linear: Matrix,
@@ -21,6 +27,9 @@ impl AffineTransform {
   pub fn apply_forward(&self, coord: VectorView) -> Vector {
     &self.linear * coord + &self.translation
   }
+  /// The least-squares preimage: the $x$ minimizing $norm(A x + b - y)$, from
+  /// the SVD of $A$. On an injective $A$ it is the exact inverse of
+  /// [`Self::apply_forward`]; total on the zero-dimensional domain.
   pub fn apply_backward(&self, coord: VectorView) -> Vector {
     if self.dim_domain() == 0 {
       return Vector::zeros(0);
