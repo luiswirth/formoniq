@@ -602,7 +602,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           if ui.selectable_label(is_triforce, "Triforce").clicked() {
             requested_mesh = MeshSource::Triforce;
           }
-          for builtin in BuiltinMesh::ALL {
+          for builtin in BuiltinMesh::all() {
             let selected = requested_mesh == MeshSource::Builtin(builtin);
             if ui.selectable_label(selected, builtin.label()).clicked() {
               requested_mesh = MeshSource::Builtin(builtin);
