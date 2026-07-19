@@ -23,7 +23,7 @@
 //! through $R$.
 
 use {
-  crate::linalg::faer::FaerCholesky,
+  crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
   exterior::{multiform_gramian, Covariant},
   simplicial::{
@@ -80,9 +80,9 @@ pub fn fe_l2_error<F: Section<Covariant>>(
 ///
 /// Unlike the de Rham map this is defined for any $L^2$ form, but it does not
 /// commute with $dif$ and it costs a global solve. See the module docs.
-pub fn l2_projection<F: Sync + Section<Covariant>>(
+pub fn l2_projection<F: Sync + Section<Covariant>, G: Geometry + Sync>(
   field: &F,
-  whitney: WhitneyComplex,
+  whitney: WhitneyComplex<G>,
   qr: Option<SimplexQuadRule>,
 ) -> Cochain {
   let grade = field.grade();
@@ -92,7 +92,9 @@ pub fn l2_projection<F: Sync + Section<Covariant>>(
     whitney.geometry(),
     SourceElVec::new(field, qr),
   );
-  Cochain::new(grade, FaerCholesky::new(mass).solve(&load))
+  // The mass is s.p.d. only on a Riemannian geometry; on an indefinite one it
+  // is symmetric non-degenerate, so LU covers every signature uniformly.
+  Cochain::new(grade, FaerLu::new(mass).solve(&load))
 }
 
 #[cfg(test)]

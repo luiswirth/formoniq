@@ -28,7 +28,10 @@ solutions computed on them, solved client-side via WebAssembly and WebGPU.
 - **Problems.** The Hodge-Laplace source and eigenvalue problems in the mixed
   Arnold, Falk and Winther formulation, with the harmonic space and gauge
   constraint handled explicitly. Maxwell's equations as the Hodge-Dirac evolution
-  on the full de Rham complex. The heat and wave equations.
+  on the full de Rham complex, and the covariant (Dirac-Kähler) form of the same
+  operator solved directly on a Minkowski spacetime mesh, where hyperbolicity
+  comes from the signature rather than a time-stepping loop. The heat and wave
+  equations.
 - **Structure-preserving time integration.** Symplectic Gauss-Legendre and an
   explicit Yee-style leapfrog conserving the discrete energy, and L-stable Radau
   IIA for the dissipative problems, on the singular-mass systems the mixed

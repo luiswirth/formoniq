@@ -89,7 +89,7 @@ pub type LocalRef<'a> = CoordsRef<'a, LocalCartesian>;
 ///
 /// A property of the chart, not of the geometry: it is the factor by which a
 /// chart integral scales, and the metric enters only through the further factor
-/// $sqrt(det g)$ (see [`cell_volume`](crate::geometry::cell_volume)).
+/// $sqrt(abs(det g))$ (see [`cell_volume`](crate::geometry::cell_volume)).
 pub fn refsimp_vol(dim: Dim) -> f64 {
   factorial_f64(dim).recip()
 }
