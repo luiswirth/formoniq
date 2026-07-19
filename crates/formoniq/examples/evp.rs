@@ -77,7 +77,7 @@ fn box_sweep() {
         let nboxes_per_dim = 2usize.pow(irefine);
         let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
         let (topology, coords) = box_mesh.compute_coord_complex();
-        let metric = coords.to_edge_lengths(&topology);
+        let metric = coords.to_edge_lengths_sq(&topology);
         let whitney = WhitneyComplex::new(&topology, &metric);
 
         let ndofs = whitney.ndofs(grade)
@@ -176,7 +176,7 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
     Some("msh") => simplicial::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
     _ => return Err("Unknown or missing file extension.".into()),
   };
-  let metric = coords.to_edge_lengths(&topology);
+  let metric = coords.to_edge_lengths_sq(&topology);
 
   let grade: usize = prompt("Enter exterior grade.")?.parse()?;
   let neigen: usize = prompt("Enter number of eigenvalues.")?.parse()?;

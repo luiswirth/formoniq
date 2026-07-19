@@ -62,7 +62,7 @@ fn main() {
         let nboxes_per_dim = 2usize.pow(irefine);
         let box_mesh = CartesianMeshInfo::new_unit_scaled(dim, nboxes_per_dim, PI);
         let (topology, coords) = box_mesh.compute_coord_complex();
-        let metric = coords.to_edge_lengths(&topology);
+        let metric = coords.to_edge_lengths_sq(&topology);
         let whitney = WhitneyComplex::new(&topology, &metric);
 
         let ndofs = whitney.ndofs(grade)

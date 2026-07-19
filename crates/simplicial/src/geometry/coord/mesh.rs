@@ -1,6 +1,6 @@
 use super::{simplex::SimplexRefExt, Coord, CoordRef};
 use crate::{
-  geometry::metric::{mesh::MeshLengths, Geometry},
+  geometry::metric::{mesh::MeshLengthsSq, Geometry},
   topology::{
     data::SkeletonData,
     handle::KSimplexIdx,
@@ -157,25 +157,25 @@ impl MeshCoords {
     self.matrix.column_iter_mut()
   }
 
-  pub fn to_edge_lengths(&self, topology: &Complex) -> MeshLengths {
-    assert!(
-      self.ambient.is_riemannian(),
-      "Edge lengths represent Riemannian (positive-definite) geometry only."
-    );
+  /// The Regge geometry this embedding realizes: the signed squared length
+  /// of each edge under the ambient inner product, of whatever signature the
+  /// ambient carries -- an embedding into Minkowski space yields Lorentzian
+  /// Regge data, causal signs included.
+  pub fn to_edge_lengths_sq(&self, topology: &Complex) -> MeshLengthsSq {
     // A 0-manifold is a discrete set of points: its 1-skeleton is empty, so the
     // edge-length representation of its (trivial, 0-dimensional) geometry is the
     // empty vector.
     if topology.dim() == 0 {
-      return MeshLengths::new_unchecked(Vector::zeros(0));
+      return MeshLengthsSq::new_unchecked(Vector::zeros(0));
     }
     let edges = topology.edges();
-    let mut edge_lengths = Vector::zeros(edges.len());
+    let mut edge_lengths_sq = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {
       let (vi, vj) = edge.endpoints();
-      edge_lengths[iedge] = self.ambient.norm(&(vj.coord(self) - vi.coord(self)));
+      edge_lengths_sq[iedge] = self.ambient.norm_sq(&(vj.coord(self) - vi.coord(self)));
     }
-    // SAFETY: Edge Lengths come from a coordinate realizations.
-    MeshLengths::new_unchecked(edge_lengths)
+    // SAFETY: Squared lengths come from a coordinate realization.
+    MeshLengthsSq::new_unchecked(edge_lengths_sq)
   }
 }
 
@@ -272,17 +272,19 @@ mod test {
   use super::*;
   use crate::{gen::cartesian::CartesianMeshInfo, geometry::metric::mesh::EdgeRefExt};
 
-  /// The witness reads cohere across the layers: an edge's Regge length is
-  /// the distance of its endpoints' coordinates in the inducing embedding.
+  /// The witness reads cohere across the layers: an edge's Regge squared
+  /// length is the squared distance of its endpoints' coordinates in the
+  /// inducing embedding.
   #[test]
   fn edge_length_is_endpoint_distance() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let lengths = coords.to_edge_lengths(&topology);
+      let lengths_sq = coords.to_edge_lengths_sq(&topology);
       for edge in topology.edges().handle_iter() {
         let (vi, vj) = edge.endpoints();
-        let distance = (vj.coord(&coords) - vi.coord(&coords)).norm();
-        assert_eq!(edge.length(&lengths), distance);
+        let displacement = vj.coord(&coords) - vi.coord(&coords);
+        assert_eq!(edge.length_sq(&lengths_sq), displacement.norm_squared());
+        assert_eq!(edge.length(&lengths_sq), displacement.norm());
       }
     }
   }
@@ -306,14 +308,41 @@ mod test {
     }
   }
 
-  /// Regge edge lengths represent Riemannian geometry only: a Lorentzian
-  /// embedding has timelike and null edges, which have no length.
+  /// A Minkowski embedding realizes Lorentzian Regge data: the signed
+  /// squared edge lengths carry the causal character of every edge, and the
+  /// per-cell metric reconstructed from them is the same Lorentzian metric
+  /// the embedding induces -- Regge calculus doing exactly what it was
+  /// invented for.
   #[test]
-  #[should_panic(expected = "Riemannian")]
-  fn lorentzian_ambient_has_no_edge_lengths() {
+  fn lorentzian_ambient_realizes_lorentzian_regge_data() {
+    use gramian::CausalType;
     let (topology, coords) = CartesianMeshInfo::new_unit(2, 1).compute_coord_complex();
-    let spacetime =
-      MeshCoords::with_ambient(coords.matrix().clone(), gramian::Gramian::minkowski(2));
-    spacetime.to_edge_lengths(&topology);
+    let mut matrix = coords.matrix().clone();
+    matrix.row_mut(0).scale_mut(0.7);
+    let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(2));
+    let regge = spacetime.to_edge_lengths_sq(&topology);
+
+    let mut seen = std::collections::HashSet::new();
+    for edge in topology.edges().handle_iter() {
+      seen.insert(edge.causal_type(&regge) as u8);
+      match edge.causal_type(&regge) {
+        CausalType::Timelike => assert!(edge.length_sq(&regge) < 0.0),
+        CausalType::Null => assert_eq!(edge.length_sq(&regge), 0.0),
+        CausalType::Spacelike => assert!(edge.length_sq(&regge) > 0.0),
+      }
+    }
+    // The time-scaled mesh has both timelike and spacelike edges.
+    assert!(seen.len() >= 2);
+
+    for cell in topology.cells().handle_iter() {
+      let from_regge = regge.cell_metric(cell);
+      let from_coords = spacetime.cell_metric(cell);
+      approx::assert_relative_eq!(
+        from_regge.vector_gramian().matrix(),
+        from_coords.vector_gramian().matrix(),
+        epsilon = 1e-12
+      );
+      assert_eq!(from_regge.signature(), (1, 1));
+    }
   }
 }

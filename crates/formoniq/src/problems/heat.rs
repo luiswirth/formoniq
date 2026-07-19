@@ -113,7 +113,7 @@ mod test {
   fn energy_dissipates_at_every_grade() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
 
       for grade in 0..=dim {
@@ -150,7 +150,7 @@ mod test {
   #[test]
   fn steady_state_matches_static_hodge_laplace() {
     let (topology, coords) = CartesianMeshInfo::new_unit(2, 3).compute_coord_complex();
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
     let grade = 1;

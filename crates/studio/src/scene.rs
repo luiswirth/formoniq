@@ -320,7 +320,7 @@ impl Scene {
   ) {
     use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
 
-    let metric = coords.to_edge_lengths(topology);
+    let metric = coords.to_edge_lengths_sq(topology);
     let solved = solve_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
     let (eigenvals, _, eigenfuncs) = match solved {
       Ok(solved) => solved,
@@ -648,7 +648,7 @@ impl Scene {
   pub fn heat(topology: Complex, coords: MeshCoords, nsteps: usize, final_time: f64) -> Self {
     use formoniq::{problems::heat::solve_heat, whitney_complex::WhitneyComplex};
 
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
 
@@ -673,7 +673,7 @@ impl Scene {
       whitney_complex::WhitneyComplex,
     };
 
-    let metric = coords.to_edge_lengths(&topology);
+    let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     let initial = ambient_bump(&topology, &coords);
@@ -938,7 +938,7 @@ pub(crate) fn hodge_decompose(
   use simplicial::linalg::CsrMatrix;
 
   let grade = input.grade();
-  let metric = coords.to_edge_lengths(topology);
+  let metric = coords.to_edge_lengths_sq(topology);
   let complex = WhitneyComplex::new(topology, &metric);
 
   // The load vector of the source problem is the Riesz representation of the
@@ -1001,7 +1001,7 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
   use simplicial::linalg::CsrMatrix;
 
   let swirl = hodge_probe_form(topology, coords);
-  let metric = coords.to_edge_lengths(topology);
+  let metric = coords.to_edge_lengths_sq(topology);
   let complex = WhitneyComplex::new(topology, &metric);
   let mass = CsrMatrix::from(&complex.mass(1));
   let m_norm = |v: &Vector| (&mass * v).dot(v).max(0.0).sqrt();
@@ -1336,7 +1336,7 @@ mod tests {
       let input = hodge_probe_input(&topology, &coords);
       let parts = hodge_decompose(&topology, &coords, &input).expect("the decomposition solves");
 
-      let metric = coords.to_edge_lengths(&topology);
+      let metric = coords.to_edge_lengths_sq(&topology);
       let complex = WhitneyComplex::new(&topology, &metric);
       assert_eq!(
         complex.harmonic_dim(1),

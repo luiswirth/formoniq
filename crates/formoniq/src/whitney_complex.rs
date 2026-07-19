@@ -19,7 +19,7 @@ use {
   derham::cochain::Cochain,
   exterior::ExteriorGrade,
   simplicial::{
-    geometry::metric::{mesh::MeshLengths, Geometry},
+    geometry::metric::{mesh::MeshLengthsSq, Geometry},
     linalg::{CooMatrix, CsrMatrix},
     topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
     Dim,
@@ -70,9 +70,9 @@ pub trait HilbertComplex {
 /// products.
 ///
 /// Generic over the [`Geometry`] supplying the per-cell metric (defaulting to
-/// Regge edge lengths), of any signature: on a Lorentzian geometry the mass
-/// matrices carry the indefinite $L^2$ pairing.
-pub struct WhitneyComplex<'a, G: Geometry = MeshLengths> {
+/// Regge squared edge lengths), of any signature: on a Lorentzian geometry the
+/// mass matrices carry the indefinite $L^2$ pairing.
+pub struct WhitneyComplex<'a, G: Geometry = MeshLengthsSq> {
   topology: &'a Complex,
   geometry: &'a G,
 }
@@ -172,12 +172,13 @@ impl<'a, G: Geometry + Sync> WhitneyComplex<'a, G> {
   }
 }
 
-/// The boundary complexes exist on the Regge (edge-length) instantiation only:
-/// the trace geometry of a facet is its induced edge lengths, and an indefinite
-/// metric has no such lengths -- its trace on a null facet is degenerate, no
-/// longer a metric at all. This is a mathematical boundary of the concept, not
-/// a missing feature.
-impl<'a> WhitneyComplex<'a, MeshLengths> {
+/// The boundary complexes exist on the Regge (edge-data) instantiation: the
+/// trace geometry of the boundary is the restriction of the squared edge
+/// lengths, a pure data restriction that is total on any signature. On an
+/// indefinite parent a *null* facet carries degenerate induced data -- the
+/// degeneracy surfaces where a facet metric is actually built, which is the
+/// honest mathematical boundary of the concept.
+impl<'a> WhitneyComplex<'a, MeshLengthsSq> {
   /// The Whitney complex of the boundary $diff K$ with the induced metric,
   /// together with the trace map. `None` on closed manifolds.
   pub fn boundary(&self) -> Option<BoundaryWhitneyComplex> {
@@ -190,7 +191,7 @@ impl<'a> WhitneyComplex<'a, MeshLengths> {
   /// condition.
   pub fn boundary_part(&self, facets: Vec<Facet>) -> BoundaryWhitneyComplex {
     let boundary = self.topology.facet_subcomplex(facets);
-    let geometry = boundary.trace_lengths(self.geometry);
+    let geometry = boundary.trace_lengths_sq(self.geometry);
     BoundaryWhitneyComplex { boundary, geometry }
   }
 }
@@ -230,7 +231,7 @@ impl<G: Geometry + Sync> HilbertComplex for WhitneyComplex<'_, G> {
 /// carrying the geometry induced from the parent mesh.
 pub struct BoundaryWhitneyComplex {
   boundary: BoundaryComplex,
-  geometry: MeshLengths,
+  geometry: MeshLengthsSq,
 }
 
 impl BoundaryWhitneyComplex {
@@ -241,7 +242,7 @@ impl BoundaryWhitneyComplex {
   pub fn topology(&self) -> &Complex {
     self.boundary.complex()
   }
-  pub fn geometry(&self) -> &MeshLengths {
+  pub fn geometry(&self) -> &MeshLengthsSq {
     &self.geometry
   }
   pub fn boundary_complex(&self) -> &BoundaryComplex {
@@ -273,7 +274,7 @@ impl BoundaryWhitneyComplex {
 /// All operators are conjugates $E^T A E$ by the inclusion
 /// $E: C^k (K, diff K) arrow.hook C^k (K)$. On a boundaryless mesh this
 /// coincides with the full complex.
-pub struct RelativeWhitneyComplex<'a, G: Geometry = MeshLengths> {
+pub struct RelativeWhitneyComplex<'a, G: Geometry = MeshLengthsSq> {
   full: WhitneyComplex<'a, G>,
   /// Per grade: sorted indices of the interior (non-boundary) simplices,
   /// which carry the DOFs of the relative complex.

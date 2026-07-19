@@ -6,9 +6,10 @@
 //! [`Geometry`] trait captures exactly that: `cell_metric` gives a cell its flat
 //! metric tensor.
 //! It is implemented by every geometry representation, related by the
-//! derivation chain coords $->$ edge lengths $->$ per-cell metric:
+//! derivation chain coords $->$ squared edge lengths $->$ per-cell metric:
 //!
-//! - [`MeshLengths`]: intrinsic Regge edge lengths (grade-1 data).
+//! - [`MeshLengthsSq`]: intrinsic Regge geometry, signed squared edge lengths
+//!   (grade-1 data), of any signature.
 //! - [`CellGramians`]: the metric tensors themselves as per-cell data (grade
 //!   n) -- the most local, coordinate-free geometry, living natively on the
 //!   cell skeleton with no need of a global edge indexing.
@@ -18,7 +19,7 @@
 //!   up: an embedding knows about the metric it induces, but the metric layer
 //!   knows nothing of embeddings, and must not.
 
-use super::{mesh::MeshLengths, simplex::SimplexLengths};
+use super::{mesh::MeshLengthsSq, simplex::SimplexLengthsSq};
 use crate::{
   topology::{
     complex::Complex,
@@ -43,9 +44,9 @@ pub trait Geometry {
   fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric;
 }
 
-impl Geometry for MeshLengths {
+impl Geometry for MeshLengthsSq {
   fn cell_metric(&self, cell: Cell) -> PseudoRiemannianMetric {
-    self.simplex_lengths(cell.get()).metric()
+    self.simplex_lengths_sq(cell.get()).metric()
   }
 }
 
@@ -78,25 +79,25 @@ impl CellGramians {
     &self.metrics
   }
 
-  /// The Regge edge lengths this geometry induces: the missing metric $->$
-  /// lengths leg of the derivation chain, read at mesh scope. Each cell's
-  /// metric gives the lengths of its own edges ([`simplex_lengths_of`]), scattered
-  /// to the global edges; an edge shared between cells receives the same length
-  /// from each (the metrics agree on a shared face), so the result is
-  /// well defined. A 0-manifold has an empty edge skeleton and yields the empty
-  /// vector.
-  pub fn to_edge_lengths(&self, topology: &Complex) -> MeshLengths {
+  /// The Regge squared edge lengths this geometry induces: the missing
+  /// metric $->$ lengths leg of the derivation chain, read at mesh scope, on
+  /// any signature. Each cell's metric gives the signed squared lengths of
+  /// its own edges ([`simplex_lengths_sq_of`]), scattered to the global
+  /// edges; an edge shared between cells receives the same value from each
+  /// (the metrics agree on a shared face), so the result is well defined. A
+  /// 0-manifold has an empty edge skeleton and yields the empty vector.
+  pub fn to_edge_lengths_sq(&self, topology: &Complex) -> MeshLengthsSq {
     if topology.dim() == 0 {
-      return MeshLengths::new_unchecked(crate::linalg::Vector::zeros(0));
+      return MeshLengthsSq::new_unchecked(crate::linalg::Vector::zeros(0));
     }
-    let mut edge_lengths = crate::linalg::Vector::zeros(topology.edges().len());
+    let mut edge_lengths_sq = crate::linalg::Vector::zeros(topology.edges().len());
     for cell in topology.cells().handle_iter() {
-      let lengths = simplex_lengths_of(&self.metrics[cell.get()]);
+      let lengths_sq = simplex_lengths_sq_of(&self.metrics[cell.get()]);
       for (local, edge) in cell.get().edges().enumerate() {
-        edge_lengths[edge.kidx()] = lengths.length(local);
+        edge_lengths_sq[edge.kidx()] = lengths_sq.length_sq(local);
       }
     }
-    MeshLengths::new_unchecked(edge_lengths)
+    MeshLengthsSq::new_unchecked(edge_lengths_sq)
   }
 
   /// Whether this could be the per-cell geometry of `topology`: one metric per
@@ -121,7 +122,8 @@ impl Geometry for CellGramians {
   }
 }
 
-/// Regge edge lengths from a cell's metric tensor.
-pub fn simplex_lengths_of(metric: &PseudoRiemannianMetric) -> SimplexLengths {
-  SimplexLengths::from_metric_tensor(metric.vector_gramian())
+/// Regge signed squared edge lengths from a cell's metric tensor, on any
+/// signature.
+pub fn simplex_lengths_sq_of(metric: &PseudoRiemannianMetric) -> SimplexLengthsSq {
+  SimplexLengthsSq::from_metric_tensor(metric.vector_gramian())
 }

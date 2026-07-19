@@ -18,7 +18,7 @@
 //!   the law that ties the two.
 
 use crate::{
-  geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengths, metric::CellGramians},
+  geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq, metric::CellGramians},
   linalg::Vector,
   topology::{complex::Complex, refine::Subdivision},
 };
@@ -39,18 +39,18 @@ impl Subdivision {
   }
 }
 
-impl MeshLengths {
-  /// Refine intrinsic Regge geometry: the refined edge lengths of the flat
+impl MeshLengthsSq {
+  /// Refine intrinsic Regge geometry: the refined squared edge lengths of the flat
   /// subdivision. Routed through the metric primitive
   /// ([`Subdivision::refine_gramians`]) rather than reimplemented -- coarse
   /// lengths give per-cell metrics, those are pulled back onto the children, and
   /// the fine metrics are read back as edge lengths. Exact; refinement of a flat
   /// cell introduces no geometric error.
-  pub fn refine(&self, sub: &Subdivision, coarse: &Complex) -> MeshLengths {
+  pub fn refine(&self, sub: &Subdivision, coarse: &Complex) -> MeshLengthsSq {
     let coarse_g = CellGramians::from_geometry(coarse, self);
     sub
       .refine_gramians(&coarse_g)
-      .to_edge_lengths(sub.complex())
+      .to_edge_lengths_sq(sub.complex())
   }
 }
 
@@ -151,12 +151,12 @@ mod test {
     use crate::topology::data::SkeletonData;
     for dim in 1..=3 {
       let (coarse, coords) = CartesianMeshInfo::new_unit(dim, 2).compute_coord_complex();
-      let coarse_lengths = coords.to_edge_lengths(&coarse);
+      let coarse_lengths = coords.to_edge_lengths_sq(&coarse);
 
       for r in 1..=3 {
         let sub = coarse.refine(r);
         let intrinsic = coarse_lengths.refine(&sub, &coarse);
-        let extrinsic = coords.refine(&sub).to_edge_lengths(sub.complex());
+        let extrinsic = coords.refine(&sub).to_edge_lengths_sq(sub.complex());
 
         assert_eq!(intrinsic.len(), extrinsic.len());
         for (a, b) in intrinsic.iter().zip(extrinsic.iter()) {
