@@ -83,6 +83,13 @@ Two reductions carry that, and they are the same move made on the two axes:
 
 - **Grade reduces to a mark.** A $k$-form reduces to its *reduced grade*
   $min(k, n-k)$ through the Hodge star, and the render mark is chosen on that.
+  Where that star actually fires ($k > n-k$) it needs a *global* volume form, so
+  the reduction takes the cell's coherent orientation alongside the metric — the
+  parent's invariant 6, and the one place the viewer needs a topological datum
+  the solver never asks for. A mesh with no coherent orientation has no such
+  reduction to show, so those fields are refused at `Scene::field` rather than
+  drawn with a per-cell sign; a field that reaches a mark is already the proof
+  that its orientation exists.
 - **Intrinsic dimension reduces to a render primitive.** An $n$-manifold reduces
   to the primitive $min(n, 2)$ in the bake: a surface to wound triangles, a curve
   to segments, a point cloud to points, and a solid to the 2-simplices of its
