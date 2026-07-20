@@ -25,7 +25,9 @@ use crate::{
   gen::cartesian::CartesianGrid,
   geometry::metric::mesh::MeshLengthsSq,
   linalg::Vector,
-  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
+  topology::{
+    complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton, VertexIdx,
+  },
   Dim,
 };
 
@@ -76,10 +78,36 @@ impl FlatTorus {
 
   /// The topology and the Regge geometry of the torus: the periodic complex and
   /// its signed squared edge lengths.
+  ///
+  /// No coordinates: the flat torus admits no isometric embedding in $RR^d$, so
+  /// the intrinsic geometry is the only faithful one. This is invariant 2 with
+  /// nothing to fall back on.
   pub fn triangulate(&self) -> (Complex, MeshLengthsSq) {
-    let complex = Complex::from_cells(self.cell_skeleton());
-    let lengths = self.edge_lengths_sq(&complex);
+    let (complex, lengths, _) = self.triangulate_ordered();
     (complex, lengths)
+  }
+
+  /// As [`FlatTorus::triangulate`], also returning the Kuhn chain order each
+  /// cell was built in, which identification and the colex sort would otherwise
+  /// discard.
+  ///
+  /// `None` if that order is not face-consistent. The tiling matches across the
+  /// periodic seam, so it is expected to be; the check is what says so rather
+  /// than an assumption.
+  pub fn triangulate_ordered(&self) -> (Complex, MeshLengthsSq, Option<CellOrdering>) {
+    let words = self.cell_words();
+    let complex = Complex::from_cells(Skeleton::new(
+      words
+        .iter()
+        .map(|word| Simplex::from_word(word.clone()).1)
+        .collect(),
+    ));
+    let lengths = self.edge_lengths_sq(&complex);
+    let ordering = (words.len() == complex.cells().len()).then(|| {
+      let ordering = CellOrdering::new(&complex, words);
+      ordering.is_face_consistent(&complex).then_some(ordering)
+    });
+    (complex, lengths, ordering.flatten())
   }
 
   /// The quotient vertex of a grid vertex: reduce each Cartesian coordinate
@@ -92,23 +120,23 @@ impl FlatTorus {
     cartesian2linear(&reduced, n)
   }
 
-  fn cell_skeleton(&self) -> Skeleton {
+  /// Each cell as the identified image of its Kuhn chain, in chain order.
+  ///
+  /// Reduction permutes the vertices out of ascending order, which is exactly
+  /// the ordering datum a colex sort would destroy.
+  fn cell_words(&self) -> Vec<Vec<VertexIdx>> {
     let grid = CartesianGrid::new_unit(self.dim(), self.ncells_axis);
-    let simplices = grid
+    grid
       .cell_skeleton()
       .into_iter()
       .map(|simplex| {
-        let vertices = simplex
+        simplex
           .vertices
           .iter()
           .map(|&v| self.reduce_vertex(v))
-          .collect();
-        // Reduction reorders vertices; `from_word` re-sorts to the colex
-        // representative (the discarded sign is immaterial to a generator).
-        Simplex::from_word(vertices).1
+          .collect()
       })
-      .collect();
-    Skeleton::new(simplices)
+      .collect()
   }
 
   /// The signed squared length of every edge, read off the flat geometry: an
@@ -149,6 +177,49 @@ impl FlatTorus {
 mod test {
   use super::FlatTorus;
   use multiindex::binomial;
+
+  /// The generator's Kuhn chain order survives identification as a
+  /// face-consistent ordering, and refining in it keeps the torus self-similar:
+  /// one shape class, on a closed manifold with no boundary to anchor anything.
+  ///
+  /// The tiling matches across the periodic seam, which is what makes the
+  /// quotient conforming; this is that statement made checkable.
+  #[test]
+  fn the_chain_order_survives_identification() {
+    use crate::geometry::metric::mesh::MeshLengthsSq;
+    use crate::topology::complex::Complex;
+
+    fn shape_classes(complex: &Complex, lengths: &MeshLengthsSq) -> usize {
+      let mut classes: Vec<Vec<u64>> = complex
+        .cells()
+        .handle_iter()
+        .map(|cell| {
+          let mut ls: Vec<f64> = lengths
+            .simplex_lengths_sq(*cell)
+            .vector()
+            .iter()
+            .copied()
+            .collect();
+          ls.sort_by(|a, b| a.partial_cmp(b).unwrap());
+          let max = *ls.last().unwrap();
+          ls.iter().map(|l| (l / max * 1e6).round() as u64).collect()
+        })
+        .collect();
+      classes.sort_unstable();
+      classes.dedup();
+      classes.len()
+    }
+
+    for dim in 1..=3 {
+      let (complex, lengths, ordering) = FlatTorus::new_unit(dim, 3).triangulate_ordered();
+      let ordering = ordering.expect("the tiling matches across the seam");
+      assert_eq!(shape_classes(&complex, &lengths), 1);
+
+      let sub = complex.refine_with(&ordering, 2);
+      let fine_lengths = lengths.refine(&sub, &complex);
+      assert_eq!(shape_classes(sub.complex(), &fine_lengths), 1);
+    }
+  }
 
   /// The flat torus is closed (no boundary) and carries the cohomology of
   /// $T^d$: Betti numbers $b_k = binom(d, k)$, Euler characteristic $0$, for
