@@ -1436,4 +1436,54 @@ mod tests {
   fn missing_eigenvalue_declines_to_shell() {
     assert!(degeneracy_shells([Some(1.0), None, Some(2.0)]).is_none());
   }
+
+  /// Every standard view looks straight down a coordinate axis: its forward is a
+  /// unit axis vector, one component $plus.minus 1$ and the other two zero. That
+  /// is what makes it the square-on plan/elevation a free orbit never lands on.
+  #[test]
+  fn standard_views_look_down_an_axis() {
+    use crate::render::camera::Camera;
+    for view in CameraView::ALL {
+      let mut camera = Camera::new(1.0);
+      let (yaw, pitch) = view.angles();
+      camera.snap_to(yaw, pitch);
+      let f = camera.forward();
+      let axes = [f.x, f.y, f.z];
+      let ones = axes
+        .iter()
+        .filter(|&&c| (c.abs() - 1.0).abs() < 1e-6)
+        .count();
+      let zeros = axes.iter().filter(|&&c| c.abs() < 1e-6).count();
+      assert_eq!(ones, 1, "{}: forward {f:?} is not an axis", view.label());
+      assert_eq!(zeros, 2, "{}: forward {f:?} is not an axis", view.label());
+    }
+    // And the six are distinct vantages, not a shorter list with repeats.
+    let dirs: std::collections::HashSet<[i32; 3]> = CameraView::ALL
+      .iter()
+      .map(|v| {
+        let mut c = Camera::new(1.0);
+        let (yaw, pitch) = v.angles();
+        c.snap_to(yaw, pitch);
+        let f = c.forward();
+        [f.x.round() as i32, f.y.round() as i32, f.z.round() as i32]
+      })
+      .collect();
+    assert_eq!(dirs.len(), 6, "the six standard views must be distinct");
+  }
+
+  /// The size caption names every dimension present and totals over the whole
+  /// range, so it reads right in any dimension rather than for a fixed few
+  /// skeletons -- the low dimensions by their classical names, higher ones by
+  /// the general "$k$-simplices".
+  #[test]
+  fn mesh_stats_line_names_each_dimension() {
+    assert_eq!(
+      mesh_stats_line(&[12, 30, 20]),
+      "12 vertices · 30 edges · 20 faces"
+    );
+    assert_eq!(
+      mesh_stats_line(&[5, 10, 10, 5, 1]),
+      "5 vertices · 10 edges · 10 faces · 5 cells · 1 4-simplices"
+    );
+  }
 }
