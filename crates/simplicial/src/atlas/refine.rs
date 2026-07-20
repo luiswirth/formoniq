@@ -197,6 +197,87 @@ mod test {
   use super::*;
   use crate::atlas::{ref_lattice, refsimp_vol};
 
+  /// Freudenthal subdivision *composes*: refining an ordered simplex $R$-fold
+  /// and then $R'$-fold again is the $R R'$-fold refinement, cell for cell.
+  ///
+  /// $ "refine"_(R') compose "refine"_R = "refine"_(R R') $
+  ///
+  /// The semigroup law of the reference pattern, and the reason a refinement
+  /// tower stays inside the Kuhn family: every child is similar to its parent,
+  /// in every dimension, at every level. It holds only when each child is
+  /// refined in the order this pattern emits its corners -- that order carries
+  /// Freudenthal's type, and it is the whole of what a child inherits. Sorting a
+  /// child's vertices instead (by a global numbering, say) reproduces the
+  /// pattern at the first level and drifts out of the family after, into a
+  /// growing number of congruence classes.
+  #[test]
+  fn refinement_composes_on_ordered_simplices() {
+    /// The children of an ordered simplex, each in the pattern's own corner
+    /// order: the parent's vertices read through the lattice weights.
+    fn refine_ordered(vertices: &[Vector], refinement: usize) -> Vec<Vec<Vector>> {
+      let dim = vertices.len() - 1;
+      let pattern = ref_refinement(dim, refinement);
+      pattern
+        .children()
+        .iter()
+        .map(|child| {
+          child
+            .iter()
+            .map(|&corner| {
+              pattern.vertices()[corner]
+                .iter()
+                .enumerate()
+                .fold(Vector::zeros(dim), |point, (i, &weight)| {
+                  point + (weight as f64 / refinement as f64) * &vertices[i]
+                })
+            })
+            .collect()
+        })
+        .collect()
+    }
+
+    /// The cells as sorted vertex coordinates, quantized: the mesh's identity,
+    /// independent of the order the children were produced in.
+    fn mesh(cells: &[Vec<Vector>]) -> Vec<Vec<Vec<i64>>> {
+      let mut cells: Vec<Vec<Vec<i64>>> = cells
+        .iter()
+        .map(|cell| {
+          let mut vertices: Vec<Vec<i64>> = cell
+            .iter()
+            .map(|v| v.iter().map(|x| (x * 1e9).round() as i64).collect())
+            .collect();
+          vertices.sort();
+          vertices
+        })
+        .collect();
+      cells.sort();
+      cells
+    }
+
+    for dim in 1..=4 {
+      // The Kuhn simplex of the unit cube: the chain of partial sums of the axes.
+      let mut corner = Vector::zeros(dim);
+      let mut kuhn = vec![corner.clone()];
+      for axis in 0..dim {
+        corner[axis] = 1.0;
+        kuhn.push(corner.clone());
+      }
+
+      for refinement in 1..=3 {
+        let tower: Vec<Vec<Vector>> = refine_ordered(&kuhn, refinement)
+          .iter()
+          .flat_map(|child| refine_ordered(child, refinement))
+          .collect();
+        assert_eq!(
+          mesh(&tower),
+          mesh(&refine_ordered(&kuhn, refinement * refinement)),
+          "dim {dim}: refining twice by {refinement} must equal refining once by {}",
+          refinement * refinement
+        );
+      }
+    }
+  }
+
   /// The edgewise subdivision has $R^n$ children, its vertices are exactly the
   /// lattice $L_R^n$, and every child is a nondegenerate simplex.
   #[test]
