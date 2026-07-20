@@ -33,17 +33,23 @@ pub(crate) const SPHERE_SUBDIVISIONS: usize = 3;
 // turns the background solve from seconds into minutes -- the cap keeps every
 // reachable mesh solvable while the window stays responsive.
 pub(crate) const SPHERE_SUBDIVISIONS_MAX: usize = 4;
-// Cells per axis the unit-square grid opens on, and the upper end of its
+// Cells per axis the unit-cube grid opens on, and the upper end of its
 // refinement slider. A grid this fine keeps the dense per-grade solve well
 // inside the sphere's cost, so the same cap reasoning applies loosely.
 pub(crate) const GRID_CELLS_DEFAULT: usize = 8;
 pub(crate) const GRID_CELLS_MAX: usize = 20;
 
+// The intrinsic dimension the grid opens on, and the top of its dimension
+// slider: the same $1..=3$ the reference cell spans, since both live in the
+// fixed ambient $RR^3$. A square (dim 2) matches the historical planar grid.
+pub const GRID_DIM_DEFAULT: Dim = 2;
+pub const GRID_DIM_MAX: Dim = 3;
+
 // The reference cell the Whitney-basis study opens on, and the top of its
 // dimension slider: the intrinsic dimensions the fixed ambient $RR^3$ embeds.
 // A triangle (dim 2) matches the historical local-shape-function gallery.
 pub const REFERENCE_CELL_DIM: Dim = 2;
-pub(crate) const REFERENCE_CELL_DIM_MAX: Dim = 3;
+pub const REFERENCE_CELL_DIM_MAX: Dim = 3;
 
 // Hodge-Laplace modes an eigenmode study solves for by default. Chosen so both
 // low grades close on a complete degeneracy shell on the sphere: grade 0 fills
@@ -167,11 +173,13 @@ impl BuiltinMesh {
 pub enum MeshSource {
   /// An icosphere of the given subdivision depth.
   Sphere { subdivisions: usize },
-  /// A triangulated unit square with the given number of cells per axis, a
-  /// surface with boundary -- so its Hodge-Laplace spectrum is the natural
-  /// (Neumann) one, and its degeneracies (a mode and its transpose share an
-  /// eigenvalue) fill the pyramid's rows just as the sphere's multiplets do.
-  Grid { cells_axis: usize },
+  /// A triangulated unit cube of the given intrinsic dimension, with the given
+  /// number of cells per axis: a manifold with boundary in arbitrary dimension.
+  /// The Kuhn triangulation is dimension-general, so `dim = 1` is an interval,
+  /// `dim = 2` a square of triangles, `dim = 3` a cube of tetrahedra -- one
+  /// generator, no special case. `dim` ranges over $1..=3$, the intrinsic
+  /// dimensions the fixed ambient $RR^3$ embeds.
+  Grid { dim: Dim, cells_axis: usize },
   /// The standard reference cell of the given intrinsic dimension as a one-cell
   /// mesh. The Whitney-basis study on it is the local shape functions, so
   /// "local shape functions" is that composition, not a study of its own.
@@ -229,13 +237,13 @@ impl MeshSource {
       MeshSource::Sphere { subdivisions } => {
         Ok(simplicial::gen::sphere::mesh_sphere_surface(*subdivisions))
       }
-      MeshSource::Grid { cells_axis } => {
+      MeshSource::Grid { dim, cells_axis } => {
         let (topology, coords) =
-          simplicial::gen::cartesian::CartesianGrid::new_unit(2, *cells_axis).triangulate();
-        // The renderer draws in 3D and reads the surface normal off the
-        // embedding; the grid is planar in $RR^2$, so lift it into the $z = 0$
-        // plane of $RR^3$, exactly as the flat reference-cell scenes do.
-        Ok((topology, coords.embed_euclidean(3)))
+          simplicial::gen::cartesian::CartesianGrid::new_unit(*dim, *cells_axis).triangulate();
+        // The renderer draws in 3D; a grid of intrinsic dimension below 3 lifts
+        // into $RR^3$ (a curve or a $z = 0$ surface), a no-op once `dim >= 3`,
+        // exactly as the flat reference-cell scenes do.
+        Ok((topology, coords.embed_euclidean((*dim).max(3))))
       }
       MeshSource::ReferenceCell { dim } => {
         let (topology, coords) = standard_coord_complex(*dim);

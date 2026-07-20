@@ -9,8 +9,9 @@ use simplicial::{topology::simplex::Simplex, Dim};
 
 use crate::gallery::{
   BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
-  GRID_CELLS_DEFAULT, GRID_CELLS_MAX, HEAT_FINAL_TIME, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX,
-  SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX, WAVE_FINAL_TIME,
+  GRID_CELLS_DEFAULT, GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME,
+  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
+  WAVE_FINAL_TIME,
 };
 use crate::scene::{dof_label, FieldOffers};
 
@@ -693,6 +694,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
           if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
             requested_mesh = MeshSource::Grid {
+              dim: GRID_DIM_DEFAULT,
               cells_axis: GRID_CELLS_DEFAULT,
             };
           }
@@ -719,7 +721,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         MeshSource::Sphere { subdivisions } => {
           ui.add(egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"));
         }
-        MeshSource::Grid { cells_axis } => {
+        MeshSource::Grid { dim, cells_axis } => {
+          ui.add(egui::Slider::new(dim, 1..=GRID_DIM_MAX).text("dimension"));
           ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
         }
         MeshSource::ReferenceCell { dim } => {
