@@ -253,7 +253,14 @@ impl Displayed {
 
     let extent = scene_extent(&scene) as f32;
     let mesh = MeshDisplay::build(&ctx.device, &scene);
-    let (field, attributes) = FieldDisplay::build(ctx, &scene, &mesh, selection, extent);
+    let (field, attributes) = FieldDisplay::build(
+      ctx,
+      &scene,
+      &mesh,
+      selection,
+      extent,
+      crate::scene::Scalarization::default(),
+    );
     mesh.write_attributes(&ctx.queue, &attributes);
     let aspect = spec.size.0.max(1) as f32 / spec.size.1.max(1) as f32;
     let camera = default_camera(&scene, aspect);

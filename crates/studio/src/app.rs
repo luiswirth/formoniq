@@ -277,8 +277,14 @@ impl State {
     let selection = default_selection(&scene);
     let amplitude_scale = scene_extent(&scene) as f32;
     let mesh_display = MeshDisplay::build(&ctx.device, &scene);
-    let (display, attributes) =
-      FieldDisplay::build(&ctx, &scene, &mesh_display, selection, amplitude_scale);
+    let (display, attributes) = FieldDisplay::build(
+      &ctx,
+      &scene,
+      &mesh_display,
+      selection,
+      amplitude_scale,
+      crate::scene::Scalarization::default(),
+    );
     mesh_display.write_attributes(&ctx.queue, &attributes);
 
     let camera = default_camera(&scene, config.width as f32 / config.height as f32);
@@ -414,6 +420,7 @@ impl State {
       &self.mesh_display,
       selection,
       self.amplitude_scale,
+      self.field_view.scalarization,
     );
     self
       .mesh_display
@@ -1119,7 +1126,16 @@ impl State {
     // selection or a buffer. So they apply regardless of the branch above, where
     // being inside it would silently drop a toggle that happened to fire on the
     // same frame as a mesh or study change.
+    // The one setting here that is not free: the medium is baked from the
+    // cochain the operator produces, so changing which operator that is
+    // rebuilds the field display exactly the way switching fields does.
+    // Compared before the assignment, since the assignment is what loses the
+    // old value.
+    let rescalarized = self.field_view.scalarization != response.field_view.scalarization;
     self.field_view = response.field_view;
+    if rescalarized {
+      self.apply_field(self.selection);
+    }
     self.sidebars = response.sidebars;
     self.post = response.post;
     self.clock.set_playing(response.playing);

@@ -276,6 +276,12 @@ pub(crate) struct FieldOffers {
   /// line field, and the glyphs and particles are its two readings. A density
   /// has no mark beyond the surface it paints, which is the mesh's.
   pub(crate) marks: bool,
+  /// Whether the field has an interior to march. A solid's field lives in a
+  /// volume the boundary primitive cannot show, so the medium is offered
+  /// exactly when the manifold is codimension-zero enough to have one -- an
+  /// intrinsic-dimension question, not a grade one, which is why it is the only
+  /// offer read off the complex rather than the selection.
+  pub(crate) volume: bool,
 }
 
 impl FieldOffers {
@@ -283,7 +289,7 @@ impl FieldOffers {
   /// eigenmode (a raw Whitney basis function), whose whole rendering is the
   /// tint on the mesh's surface.
   pub(crate) fn any(self) -> bool {
-    self.displacement || self.marks
+    self.displacement || self.marks || self.volume
   }
 }
 
@@ -293,14 +299,17 @@ impl Scene {
   /// reduction (which list it indexes is which mark it landed in), so this
   /// reads it off rather than dispatching on grade a second time.
   pub(crate) fn offers(&self, selection: Selection) -> FieldOffers {
+    let volume = self.topology.dim() >= 3;
     match selection {
       Selection::Scalar(index) => FieldOffers {
         displacement: self.fields[index].time.animates(),
         marks: false,
+        volume,
       },
       Selection::Line(_) => FieldOffers {
         displacement: false,
         marks: true,
+        volume,
       },
     }
   }
@@ -870,6 +879,55 @@ pub(crate) fn scalarize(form: MultiForm, metric: &Metric, signed: Option<Sign>) 
   }
 }
 
+/// Which natural operator a field is read through before it is reduced to a
+/// scalar.
+///
+/// The scalar every scalar-consuming mark draws is `scalarize(F omega)`, and
+/// this is $F$. Each variant is total over grade and dimension, degenerating
+/// rather than being excluded: $dif omega = 0$ at $k = n$, and [`scalarize`]
+/// takes the resulting top or bottom grade uniformly. The axis is deliberately
+/// separate from the reduction -- the operator is metric-free, the reduction is
+/// where the metric enters.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub(crate) enum Scalarization {
+  /// $omega$ itself: where the field is, and the only reading that needs no
+  /// derivative.
+  #[default]
+  Value,
+  /// $dif omega$: where the field *varies*. At $k = n - 1$ this is the source
+  /// density, a top form the reduction stars into a signed scalar -- so the
+  /// classical divergence is not a case here but the same composite at one
+  /// grade.
+  Differential,
+}
+
+impl Scalarization {
+  /// The cochain this reading actually draws. Metric-free: the coboundary is
+  /// the simplicial exterior derivative, so nothing here consults a geometry.
+  pub(crate) fn apply<'a>(self, cochain: &'a Cochain, topology: &Complex) -> Cow<'a, Cochain> {
+    match self {
+      Self::Value => Cow::Borrowed(cochain),
+      Self::Differential => Cow::Owned(cochain.dif(topology)),
+    }
+  }
+
+  pub(crate) const ALL: [Self; 2] = [Self::Value, Self::Differential];
+
+  pub(crate) fn label(self) -> &'static str {
+    match self {
+      Self::Value => "value",
+      Self::Differential => "differential",
+    }
+  }
+
+  pub(crate) fn hover(self) -> &'static str {
+    match self {
+      Self::Value => "The field itself, |omega|: where it is",
+      Self::Differential => "The exterior derivative, |d omega|: where it varies. Metric-free",
+    }
+  }
+}
+
 /// The orientation factor [`reduced_form`] needs on one cell: `Pos` when the
 /// reduction is the identity (no star, so no volume form and no orientation),
 /// otherwise the cell's coherent orientation.
@@ -1390,6 +1448,31 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// The medium is offered exactly where there is an interior to march, and
+  /// that is an *intrinsic-dimension* question rather than a grade one: at
+  /// $n <= 2$ the boundary primitive already draws the whole manifold, and at
+  /// $n >= 3$ it cannot. Swept over both, and over every grade at each, since
+  /// the answer must not depend on which field is selected.
+  #[test]
+  fn the_medium_is_offered_exactly_on_a_solid() {
+    for dim in 1..=3 {
+      let scene = Scene::whitney_basis(dim);
+      let selections = (0..scene.fields.len())
+        .map(Selection::Scalar)
+        .chain((0..scene.line_fields.len()).map(Selection::Line));
+      let mut asked = 0;
+      for selection in selections {
+        assert_eq!(
+          scene.offers(selection).volume,
+          dim >= 3,
+          "dimension {dim} offered the wrong medium"
+        );
+        asked += 1;
+      }
+      assert!(asked > 0, "dimension {dim} produced no field to ask about");
+    }
+  }
 
   /// The magnitude branch of [`scalarize`] is Hodge-invariant:
   /// $|omega|_g = |star omega|_g$, the star being an isometry on a Riemannian

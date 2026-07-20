@@ -187,6 +187,18 @@ pub(crate) struct FieldView {
   /// it costs no branch below the display.
   pub(crate) displacement: bool,
   pub(crate) marks: Marks,
+  /// Whether a solid's interior is drawn as a medium. An item of the draw list,
+  /// so "off" drops it and costs no branch below the display -- unlike the
+  /// displacement above, which is a deformation and switches off by going to
+  /// zero.
+  pub(crate) volume: bool,
+  /// Which natural operator the field is read through before it is reduced to a
+  /// scalar. Unlike every other setting here it is not free: the medium is
+  /// baked from the resulting cochain, so changing it rebuilds the field
+  /// display the way switching fields does. It belongs here anyway, because it
+  /// is a question about how the field is *read*, and where the answer costs a
+  /// rebake is an implementation fact rather than a taxonomy.
+  pub(crate) scalarization: crate::scene::Scalarization,
 }
 
 impl Default for FieldView {
@@ -194,6 +206,8 @@ impl Default for FieldView {
     Self {
       displacement: true,
       marks: Marks::default(),
+      volume: true,
+      scalarization: crate::scene::Scalarization::default(),
     }
   }
 }
@@ -1179,6 +1193,26 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
                 .on_hover_text("Arrows on each cell's barycentric lattice: the field at a point");
               ui.checkbox(&mut field_view.marks.particles, "Particles")
                 .on_hover_text("Advected points: the field's dynamics, legible in motion");
+            }
+            // The medium, and what it reads. The operator sits under the toggle
+            // it feeds rather than in a section of its own: it is one question
+            // about one object, and a second heading would split what a reader
+            // adjusts together.
+            if model.offers.volume {
+              ui.checkbox(&mut field_view.volume, "Volume")
+                .on_hover_text("The interior as a participating medium: what the boundary primitive cannot show");
+              ui.horizontal(|ui| {
+                ui.label("read as");
+                for option in crate::scene::Scalarization::ALL {
+                  if ui
+                    .selectable_label(field_view.scalarization == option, option.label())
+                    .on_hover_text(option.hover())
+                    .clicked()
+                  {
+                    field_view.scalarization = option;
+                  }
+                }
+              });
             }
           });
         }
