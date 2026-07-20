@@ -87,6 +87,14 @@ pub(crate) struct MeshView {
   /// the skeleton and coloring it are separate choices, and coloring is a no-op
   /// while it is hidden.
   pub(crate) wireframe_colored: bool,
+  /// The drawn 0-skeleton: a billboard disc at every mesh vertex. On by default:
+  /// at the shared skeleton stroke width a vertex is a rounded node capping the
+  /// edges that meet it, so it completes the wireframe into a graph rather than
+  /// cluttering it.
+  pub(crate) points: bool,
+  /// Whether the 0-skeleton reflects the field as a heatmap, as `wireframe_colored`
+  /// does for the 1-skeleton.
+  pub(crate) points_colored: bool,
 }
 
 impl Default for MeshView {
@@ -95,6 +103,8 @@ impl Default for MeshView {
       surface: true,
       wireframe: true,
       wireframe_colored: false,
+      points: true,
+      points_colored: false,
     }
   }
 }
@@ -802,6 +812,10 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         .on_hover_text("The drawn 1-skeleton: an overlay on a surface, the cells themselves on a curve");
       ui.add_enabled(mesh_view.wireframe, egui::Checkbox::new(&mut mesh_view.wireframe_colored, "Color 1-skeleton"))
         .on_hover_text("Reflect the selected field on the 1-skeleton as a heatmap, instead of the structural geometry ink");
+      ui.checkbox(&mut mesh_view.points, "0-skeleton")
+        .on_hover_text("The drawn 0-skeleton: a billboard disc at every mesh vertex");
+      ui.add_enabled(mesh_view.points, egui::Checkbox::new(&mut mesh_view.points_colored, "Color 0-skeleton"))
+        .on_hover_text("Reflect the selected field on the 0-skeleton as a heatmap, instead of the structural geometry ink");
 
       // The field side is the only one gated, and it asks rather than
       // dispatches: which settings a field offers is its reduced grade's answer

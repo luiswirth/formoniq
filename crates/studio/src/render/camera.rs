@@ -531,7 +531,7 @@ mod tests {
   #[test]
   fn a_world_scale_bias_survives_depth_quantization() {
     let extent = 1.0_f32;
-    // The wireframe's nudge: `4 * WIREFRAME_WIDTH_FRACTION * extent`.
+    // The skeleton marks' nudge: `4 * SKELETON_WIDTH_FRACTION * extent`.
     let bias = 4.0 * 0.004 * extent;
 
     let mut c = at(0.4, -0.3);

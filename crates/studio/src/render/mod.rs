@@ -15,6 +15,7 @@ pub mod fill;
 pub mod glyph;
 pub mod item;
 pub mod particles;
+pub mod points;
 pub mod renderer;
 pub mod segments;
 pub mod uniform;
@@ -152,6 +153,7 @@ mod tests {
     let bodies: &[(&str, &str)] = &[
       ("fill.wgsl", include_str!("fill.wgsl")),
       ("segments.wgsl", include_str!("segments.wgsl")),
+      ("points.wgsl", include_str!("points.wgsl")),
       ("glyph.wgsl", include_str!("glyph.wgsl")),
       ("downsample.wgsl", include_str!("downsample.wgsl")),
       ("advect.wgsl", include_str!("advect.wgsl")),
