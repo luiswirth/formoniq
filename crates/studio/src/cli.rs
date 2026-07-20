@@ -7,9 +7,9 @@ use std::path::{Path, PathBuf};
 use clap::{Parser, Subcommand};
 use formoniq_studio::export::{export, ExportSpec};
 use formoniq_studio::gallery::{
-  BuiltinMesh, CochainSpec, MeshSource, NamedCochain, Study, DEFAULT_NMODES,
-  DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, REFERENCE_CELL_DIM,
-  REFERENCE_CELL_DIM_MAX, WAVE_FINAL_TIME,
+  BuiltinMesh, CochainSpec, MeshSource, NamedCochain, QuotientSurface, Study, DEFAULT_NMODES,
+  DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME,
+  QUOTIENT_CELLS_DEFAULT, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, WAVE_FINAL_TIME,
 };
 use simplicial::Dim;
 
@@ -34,9 +34,10 @@ enum Command {
     study: Study,
     /// Which mesh to run the study on: `sphere`, `grid[dim]`, `refcell[dim]`
     /// (the optional trailing digit is the intrinsic dimension, 1..=3 -- e.g.
-    /// `grid3` is a cube of tetrahedra, `refcell1` a single edge), `triforce`, a
-    /// built-in by name, or a directory holding a mesh saved by the engine's own
-    /// `topology.cbor`/`coords.cbor` pair.
+    /// `grid3` is a cube of tetrahedra, `refcell1` a single edge), `triforce`,
+    /// `donut` or `moebius` (the two flat quotients that fit in RR^3, the
+    /// second non-orientable), a built-in by name, or a directory holding a mesh
+    /// saved by the engine's own `topology.cbor`/`coords.cbor` pair.
     #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
     mesh: MeshSource,
     /// A cochain saved by the engine (`Cochain::save`) to show, in addition
@@ -148,6 +149,10 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
   match s {
     "sphere" => Ok(MeshSource::START),
     "triforce" => Ok(MeshSource::Triforce),
+    _ if QuotientSurface::from_name(s).is_some() => Ok(MeshSource::Quotient {
+      surface: QuotientSurface::from_name(s).unwrap(),
+      cells_axis: QUOTIENT_CELLS_DEFAULT,
+    }),
     _ if Path::new(s).is_dir() => Ok(MeshSource::File(PathBuf::from(s))),
     _ => BuiltinMesh::from_name(s)
       .map(MeshSource::Builtin)
@@ -157,8 +162,8 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
           .collect::<Vec<_>>()
           .join("`, `");
         format!(
-          "expected `sphere`, `grid[dim]`, `refcell[dim]`, `triforce`, `{builtins}`, or a mesh \
-           directory, got `{s}`"
+          "expected `sphere`, `grid[dim]`, `refcell[dim]`, `triforce`, `donut`, `moebius`, \
+           `{builtins}`, or a mesh directory, got `{s}`"
         )
       }),
   }
