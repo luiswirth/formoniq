@@ -308,16 +308,27 @@ impl MeshDisplay {
       _ => Vec::new(),
     };
     let vertices = baked.segment_vertices();
-    let values = vec![0.0; vertices.len()];
+    let heights = vec![0.0; vertices.len()];
     let segments = match &baked.cells {
       crate::bake::PrimBatch::Segments(cells) => cells.as_slice(),
       _ => &baked.wireframe,
     };
+    let zeros = vec![0.0f32; segments.len()];
     Self {
       surface: SurfaceBatch::new(device, &baked, &deposit_uvs),
-      segments: SegmentBatch::new(device, &vertices, &values, segments),
+      segments: SegmentBatch::new(device, &vertices, &heights, [&zeros, &zeros], segments),
       baked,
       deposit_layout,
+    }
+  }
+
+  /// The 1-skeleton's edges (as pairs of mesh-vertex indices): the cells of a
+  /// 1-manifold, the overlay otherwise. What the segment marks are drawn over,
+  /// and what their per-edge trace colors are read on.
+  pub(crate) fn segments(&self) -> &[[u32; 2]] {
+    match &self.baked.cells {
+      crate::bake::PrimBatch::Segments(cells) => cells,
+      _ => &self.baked.wireframe,
     }
   }
 
@@ -348,9 +359,11 @@ impl MeshDisplay {
     if let Some(surface) = &self.surface {
       surface.write_attributes(queue, &attributes.color, &attributes.surface_height);
     }
-    self
-      .segments
-      .write_attributes(queue, &attributes.wire_height);
+    self.segments.write_attributes(
+      queue,
+      &attributes.wire_height,
+      [&attributes.segment_colors[0], &attributes.segment_colors[1]],
+    );
   }
 }
 
@@ -368,6 +381,9 @@ pub(crate) struct FieldAttributes {
   /// Per mesh vertex, for the segment marks: the 1-skeleton is shared and
   /// cannot tear, so it rides the continuous nodal recovery at every grade.
   pub(crate) wire_height: Vec<f32>,
+  /// Per segment endpoint (two parallel arrays), for the 1-skeleton's colormap:
+  /// the trace of the field on each edge ([`crate::scene::segment_colors`]).
+  pub(crate) segment_colors: [Vec<f32>; 2],
 }
 
 /// The largest *uniform* amplitude at which no vertex displaces past its own
@@ -452,20 +468,38 @@ pub(crate) fn field_attributes(
   coords: &simplicial::geometry::coord::mesh::MeshCoords,
   cochain: &derham::cochain::Cochain,
   cell_corners: &[crate::bake::CellCorner],
-) -> (FieldAttributes, (f32, f32)) {
+  segments: &[[u32; 2]],
+) -> (FieldAttributes, FieldRanges) {
   let colors = crate::scene::surface_corner_values(topology, coords, cochain, cell_corners);
   let surface_heights =
     crate::scene::surface_corner_heights(topology, coords, cochain, cell_corners);
   let wire_heights = crate::scene::nodal_heights(topology, coords, cochain);
-  let bounds = crate::scene::corner_bounds(&colors);
+  let segment_colors = crate::scene::segment_colors(topology, coords, cochain, segments);
+  // Each skeleton normalizes against its own values: a k-skeleton traces a
+  // different-grade density on a different scale, so a shared range would
+  // flatten one to read the other.
+  let fill = crate::scene::corner_bounds(&colors);
+  let segment =
+    crate::scene::corner_bounds(&[segment_colors[0].clone(), segment_colors[1].clone()].concat());
   (
     FieldAttributes {
       color: bake::attributes(&colors),
       surface_height: bake::attributes(&surface_heights),
       wire_height: bake::attributes(&wire_heights),
+      segment_colors: [
+        bake::attributes(&segment_colors[0]),
+        bake::attributes(&segment_colors[1]),
+      ],
     },
-    bounds,
+    FieldRanges { fill, segment },
   )
+}
+
+/// The colormap range of each skeleton that reflects the field, kept separate
+/// because they measure different-grade densities on different scales.
+pub(crate) struct FieldRanges {
+  pub(crate) fill: (f32, f32),
+  pub(crate) segment: (f32, f32),
 }
 
 /// The material parameters for showing one field of a scene, and the geometry
@@ -524,8 +558,14 @@ impl FieldDisplay {
       Selection::Scalar(index) => &scene.fields[index].cochain,
       Selection::Line(index) => &scene.line_fields[index].cochain,
     };
-    let (attributes, (raw_min, raw_max)) =
-      field_attributes(&scene.topology, &scene.coords, cochain, mesh.cell_corners());
+    let (attributes, ranges) = field_attributes(
+      &scene.topology,
+      &scene.coords,
+      cochain,
+      mesh.cell_corners(),
+      mesh.segments(),
+    );
+    let (raw_min, raw_max) = ranges.fill;
 
     // The mesh's own local length, which the marks that draw its features are
     // sized by -- as against `amplitude_scale`, the object's global extent,
@@ -718,19 +758,42 @@ impl FieldDisplay {
       Some(trails)
     });
 
+    // The 1-skeleton's colormap range, by the same rule the fill uses: an
+    // eigenmode pulses through zero, so its range is symmetric; a static field
+    // keeps its own. Diverging where the trace is signed (values cross zero -- a
+    // 0-form, or the manifold top form) or the mode pulses.
+    let animates = scene.field_time(selection).animates();
+    let (raw_seg_min, raw_seg_max) = ranges.segment;
+    let (segment_min, segment_max) = if animates {
+      let s = raw_seg_min.abs().max(raw_seg_max.abs()).max(f32::EPSILON);
+      (-s, s)
+    } else {
+      (raw_seg_min, raw_seg_max)
+    };
+    let segment_diverging = f32::from(animates || raw_seg_min < 0.0);
+
     let display = Self {
       glyphs,
       particles,
       deposit,
       surface,
       // The wireframe rides the surface's own wave, so it tracks the displaced
-      // mesh rather than the flat rest one, and it has no node to fade at.
+      // mesh rather than the flat rest one, and it has no node to fade at. Its
+      // colormap range is the 1-skeleton's own (a diverging map when the trace
+      // is signed -- a 0-form, or the pulse through zero -- else sequential);
+      // `colored` is left off here and set per frame from the view toggle, since
+      // whether the skeleton reflects the field is a view choice, not the
+      // field's.
       wireframe: SegmentMaterial {
         color: [0.0, 0.0, 0.0, 1.0],
         half_width_world: WIREFRAME_WIDTH_FRACTION * mesh_scale,
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
+        min_val: segment_min,
+        max_val: segment_max,
+        diverging: segment_diverging,
+        colored: 0.0,
       },
       // The glyphs share the surface's clock but not its displacement: the
       // samples sit on the undisplaced surface, so only the node fade reads the
@@ -784,6 +847,10 @@ impl FieldDisplay {
       surface.wave_amplitude = 0.0;
       wireframe.wave_amplitude = 0.0;
     }
+    // Whether the 1-skeleton reflects the field is a view choice, applied here
+    // rather than baked into the material: the range is the field's, the mode
+    // is the reader's.
+    wireframe.colored = f32::from(mesh_view.wireframe_colored);
     // The population is stepped only when the flow is shown, and the trail
     // follows it: without the population the atlas is neither stepped nor bound,
     // so the material reverts to the identity rather than dimming the fill to a

@@ -388,6 +388,7 @@ impl State {
       &self.scene.coords,
       &cochain,
       self.mesh_display.cell_corners(),
+      self.mesh_display.segments(),
     );
     self
       .mesh_display

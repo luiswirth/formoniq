@@ -13,13 +13,15 @@
 // shader, never a neighbor -- both ends of the same segment have to be visible
 // to one invocation to compute the perpendicular.
 //
-// The ink is deliberately not the shared colormap. The division of labour is
-// that the surface carries the magnitude and the marks carry the geometry, so
-// colormapping a ribbon would restate what the fill beneath it already says.
-// `display.rs` draws each ribbon that needs to separate from a field it crosses
-// as two `Segments` items sharing one batch -- a wider light halo, a narrower
-// dark core on top -- the standard cartographic outline, correct against either
-// colormap without knowing which.
+// A segment mark has two inks, chosen by `material.colored`. Off, it is the
+// fixed geometry color: the structural skeleton (the old wireframe), and the
+// halo/core outline `display.rs` draws for a ribbon that must separate from a
+// field it crosses (a wider light segment, a narrower dark one on top -- the
+// standard cartographic outline). On, it is the shared colormap of the field
+// traced onto the mark's own simplices (`colormap_sample`), the same palette
+// the fill reads: a colored k-skeleton is one mark at a different ink, not a
+// second pass. Visibility and coloring are independent -- a hidden skeleton is
+// simply dropped from the draw list.
 
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(1) @binding(0) var<uniform> material: SegmentMaterial;
@@ -29,14 +31,19 @@ struct EndpointA {
     @location(1) normal: vec3<f32>,
     @location(2) max_displacement: f32,
     @location(3) opacity: f32,
-    @location(8) value: f32,
+    // The displacement height (the shared nodal recovery: continuous, per
+    // vertex), and the colormap value (the trace on this mark's own simplex:
+    // per edge). Height rides the wave; color reads the field.
+    @location(8) height: f32,
+    @location(10) color_value: f32,
 };
 struct EndpointB {
     @location(4) position: vec3<f32>,
     @location(5) normal: vec3<f32>,
     @location(6) max_displacement: f32,
     @location(7) opacity: f32,
-    @location(9) value: f32,
+    @location(9) height: f32,
+    @location(11) color_value: f32,
 };
 
 struct VertexOutput {
@@ -46,6 +53,8 @@ struct VertexOutput {
     // other, in units of the material's half-width. The one coordinate the ink
     // profile is a function of.
     @location(1) across: f32,
+    // The field value interpolated along the segment, for the colormap ink.
+    @location(2) color_value: f32,
 };
 
 @vertex
@@ -55,8 +64,8 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     // does not sit on a displaced surface -- a curve's own cells -- carries a
     // zero normal, and the displacement is the identity on it.
     let osc = wave_osc(frame, material.wave_omega);
-    let world_a = wave_displace(material.wave_amplitude, osc, a.position, a.normal, a.value, a.max_displacement);
-    let world_b = wave_displace(material.wave_amplitude, osc, b.position, b.normal, b.value, b.max_displacement);
+    let world_a = wave_displace(material.wave_amplitude, osc, a.position, a.normal, a.height, a.max_displacement);
+    let world_b = wave_displace(material.wave_amplitude, osc, b.position, b.normal, b.height, b.max_displacement);
     let perp = billboard_perp(world_a, world_b, frame.view_dir.xyz);
     let corner = billboard_corner(world_a, world_b, perp, material.half_width_world, vertex_index);
     let biased_corner = depth_biased_corner(corner, frame.view_dir.xyz, material.half_width_world);
@@ -65,6 +74,9 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
     out.opacity = select(a.opacity, b.opacity, billboard_is_b(vertex_index));
     out.across = billboard_side(vertex_index);
+    // The quad's two ends carry A's and B's values, so the rasterizer
+    // interpolates the field linearly along the segment.
+    out.color_value = select(a.color_value, b.color_value, billboard_is_b(vertex_index));
     return out;
 }
 
@@ -92,9 +104,19 @@ fn fs_main(in: VertexOutput) -> FsOut {
     let edge = fwidth(in.across);
     let ink = 1.0 - smoothstep(1.0 - edge, 1.0 + edge, abs(in.across));
 
+    // The ink: the field's colormap where the mark reflects a field, else the
+    // fixed geometry color. The colormap pulses with the standing wave in step
+    // with the fill, and stays in [0, 1] (never above 1, so the tone curve is
+    // untouched -- `unbounded = 0`), exactly as the geometry ink does.
+    let field_rgb = colormap_sample(
+        material.min_val, material.max_val, material.diverging,
+        in.color_value * wave_osc(frame, material.wave_omega),
+    );
+    let rgb = select(material.color.rgb, field_rgb, material.colored > 0.5);
+
     let envelope = in.opacity * mix(material.fade_floor, 1.0, env);
     var out: FsOut;
-    out.color = vec4<f32>(material.color.rgb, material.color.a * envelope * ink);
+    out.color = vec4<f32>(rgb, material.color.a * envelope * ink);
     out.unbounded = 0.0;
     return out;
 }

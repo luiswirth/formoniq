@@ -86,8 +86,10 @@ const SURFACE_DEPOSIT_UV: [wgpu::VertexAttribute; 1] =
 const SURFACE_HEIGHT: [wgpu::VertexAttribute; 1] = value_attribute(5);
 const SEGMENT_A: [wgpu::VertexAttribute; 4] = segment_attributes(0);
 const SEGMENT_B: [wgpu::VertexAttribute; 4] = segment_attributes(4);
-const SEGMENT_VALUE_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
-const SEGMENT_VALUE_B: [wgpu::VertexAttribute; 1] = value_attribute(9);
+const SEGMENT_HEIGHT_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
+const SEGMENT_HEIGHT_B: [wgpu::VertexAttribute; 1] = value_attribute(9);
+const SEGMENT_COLOR_A: [wgpu::VertexAttribute; 1] = value_attribute(10);
+const SEGMENT_COLOR_B: [wgpu::VertexAttribute; 1] = value_attribute(11);
 const GLYPH: [wgpu::VertexAttribute; 8] = glyph_attributes();
 
 /// A filled triangle surface: per-corner vertex streams, three corners per
@@ -204,21 +206,30 @@ impl SurfaceBatch {
 /// re-gathers the endpoint values without the caller re-expanding them.
 pub struct SegmentBatch {
   endpoints: [wgpu::Buffer; 2],
-  values: [wgpu::Buffer; 2],
+  /// The displacement height, per endpoint: the shared nodal recovery, gathered
+  /// from a per-vertex table (continuous, so a vertex has one height).
+  heights: [wgpu::Buffer; 2],
+  /// The colormap value, per endpoint: the trace of the field onto each
+  /// segment's own simplex, already per edge (a grade-1 density differs between
+  /// edges sharing a vertex, so it cannot come from a per-vertex table).
+  colors: [wgpu::Buffer; 2],
   segments: Vec<[u32; 2]>,
   nsegments: u32,
 }
 
 impl SegmentBatch {
-  /// `vertices` and `values` are one table, indexed by `segments`. An empty
+  /// `vertices` is a per-mesh-vertex table indexed by `segments`; `heights` is a
+  /// parallel per-vertex table gathered the same way; `colors` is already per
+  /// edge endpoint (`colors[end][i]` is segment `i`'s `end`). An empty
   /// `segments` is a valid batch that draws nothing.
   pub fn new(
     device: &wgpu::Device,
     vertices: &[SegmentVertex],
-    values: &[f32],
+    heights: &[f32],
+    colors: [&[f32]; 2],
     segments: &[[u32; 2]],
   ) -> Self {
-    assert_eq!(vertices.len(), values.len());
+    assert_eq!(vertices.len(), heights.len());
     let endpoints_of = |end: usize| -> Vec<SegmentVertex> {
       segments.iter().map(|s| vertices[s[end] as usize]).collect()
     };
@@ -227,9 +238,13 @@ impl SegmentBatch {
         vertex_buffer(device, "Segment Endpoint A", &endpoints_of(0)),
         vertex_buffer(device, "Segment Endpoint B", &endpoints_of(1)),
       ],
-      values: [
-        vertex_buffer(device, "Segment Value A", &gather(values, segments, 0)),
-        vertex_buffer(device, "Segment Value B", &gather(values, segments, 1)),
+      heights: [
+        vertex_buffer(device, "Segment Height A", &gather(heights, segments, 0)),
+        vertex_buffer(device, "Segment Height B", &gather(heights, segments, 1)),
+      ],
+      colors: [
+        vertex_buffer(device, "Segment Color A", colors[0]),
+        vertex_buffer(device, "Segment Color B", colors[1]),
       ],
       nsegments: segments.len() as u32,
       segments: segments.to_vec(),
@@ -237,19 +252,25 @@ impl SegmentBatch {
   }
 
   /// Rebinds the mark to a different field over the same segments: the endpoint
-  /// positions, normals and opacities are the mesh's, and stay.
-  pub fn write_attributes(&self, queue: &wgpu::Queue, values: &[f32]) {
-    for (end, buffer) in self.values.iter().enumerate() {
-      let gathered = gather(values, &self.segments, end);
+  /// positions, normals and opacities are the mesh's, and stay. `heights` is per
+  /// mesh vertex (gathered here); `colors` is per edge endpoint (written as-is).
+  pub fn write_attributes(&self, queue: &wgpu::Queue, heights: &[f32], colors: [&[f32]; 2]) {
+    for (end, buffer) in self.heights.iter().enumerate() {
+      let gathered = gather(heights, &self.segments, end);
       if !gathered.is_empty() {
         queue.write_buffer(buffer, 0, bytemuck::cast_slice(&gathered));
+      }
+    }
+    for (buffer, color) in self.colors.iter().zip(colors) {
+      if !color.is_empty() {
+        queue.write_buffer(buffer, 0, bytemuck::cast_slice(color));
       }
     }
   }
 
   /// Endpoint A's static stream at locations 0..=3 and B's at 4..=7, their
-  /// per-field values at 8 and 9.
-  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 4] {
+  /// displacement heights at 8 and 9, their colormap values at 10 and 11.
+  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 6] {
     const fn endpoint(
       attributes: &'static [wgpu::VertexAttribute],
     ) -> wgpu::VertexBufferLayout<'static> {
@@ -271,8 +292,10 @@ impl SegmentBatch {
     [
       endpoint(&SEGMENT_A),
       endpoint(&SEGMENT_B),
-      value(&SEGMENT_VALUE_A),
-      value(&SEGMENT_VALUE_B),
+      value(&SEGMENT_HEIGHT_A),
+      value(&SEGMENT_HEIGHT_B),
+      value(&SEGMENT_COLOR_A),
+      value(&SEGMENT_COLOR_B),
     ]
   }
 
@@ -284,8 +307,10 @@ impl SegmentBatch {
     }
     pass.set_vertex_buffer(0, self.endpoints[0].slice(..));
     pass.set_vertex_buffer(1, self.endpoints[1].slice(..));
-    pass.set_vertex_buffer(2, self.values[0].slice(..));
-    pass.set_vertex_buffer(3, self.values[1].slice(..));
+    pass.set_vertex_buffer(2, self.heights[0].slice(..));
+    pass.set_vertex_buffer(3, self.heights[1].slice(..));
+    pass.set_vertex_buffer(4, self.colors[0].slice(..));
+    pass.set_vertex_buffer(5, self.colors[1].slice(..));
     pass.draw(0..6, 0..self.nsegments);
   }
 }

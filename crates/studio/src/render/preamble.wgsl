@@ -74,6 +74,10 @@ struct SegmentMaterial {
     fade_floor: f32,
     wave_amplitude: f32,
     wave_omega: f32,
+    min_val: f32,
+    max_val: f32,
+    diverging: f32,
+    colored: f32,
 };
 
 // How an arrow glyph is drawn: a flat mark in its surface cell, not a billboard.
@@ -149,9 +153,17 @@ fn saturate_color(color: vec3<f32>) -> vec3<f32> {
     return clamp(mix(vec3<f32>(luma), color, SATURATION_BOOST), vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+// The shared colormap: normalize a value into its range and read the palette,
+// diverging (centered) for a signed field, sequential for a magnitude. One
+// function for every mark that reflects a field -- the fill, and any colored
+// skeleton -- so they cannot drift apart.
+fn colormap_sample(min_val: f32, max_val: f32, is_diverging: f32, value: f32) -> vec3<f32> {
+    let t = (value - min_val) / (max_val - min_val);
+    return saturate_color(select(viridis(t), diverging(t), is_diverging > 0.5));
+}
+
 fn colormap_in(material: SurfaceMaterial, value: f32) -> vec3<f32> {
-    let t = (value - material.min_val) / (material.max_val - material.min_val);
-    return saturate_color(select(viridis(t), diverging(t), material.diverging > 0.5));
+    return colormap_sample(material.min_val, material.max_val, material.diverging, value);
 }
 
 // A segment (a mesh edge, a curve's cell) drawn with constant world-space

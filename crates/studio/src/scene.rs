@@ -910,6 +910,48 @@ pub(crate) fn surface_corner_values(
   values
 }
 
+/// The 1-skeleton colormap value at each segment's two endpoints, as two
+/// parallel arrays (`[i]` is segment `i`'s two ends) -- the [`trace_value`] of
+/// the field on each edge.
+///
+/// The $k = 1$ counterpart of [`surface_corner_values`]'s $k = 2$: the same
+/// trace, on a different skeleton, at a different render primitive. Per edge
+/// rather than per vertex because a grade-1 density differs between edges
+/// sharing a vertex, and single-valued by conformity so no averaging enters. A
+/// grade above 1 traces to zero on every edge (the reduction returns 0), so the
+/// 1-skeleton of a flux field is uncolored, honestly.
+pub(crate) fn segment_colors(
+  topology: &Complex,
+  coords: &MeshCoords,
+  cochain: &Cochain,
+  segments: &[[u32; 2]],
+) -> [Vec<f64>; 2] {
+  let mut ends = [
+    Vec::with_capacity(segments.len()),
+    Vec::with_capacity(segments.len()),
+  ];
+  for &vpair in segments {
+    let mut vs = [vpair[0] as usize, vpair[1] as usize];
+    vs.sort_unstable();
+    let edge = topology
+      .skeleton(1)
+      .handle_by_simplex(&Simplex::new(vs.to_vec()));
+    for (end, &v) in vpair.iter().enumerate() {
+      let corner = vs.iter().position(|&p| p == v as usize).unwrap();
+      let mut weights = Vector::zeros(2);
+      weights[corner] = 1.0;
+      ends[end].push(trace_value(
+        topology,
+        coords,
+        cochain,
+        edge,
+        &Bary::new(weights),
+      ));
+    }
+  }
+  ends
+}
+
 /// A cochain in canonical sign: the coefficient of largest magnitude is made
 /// positive, ties broken by colex rank.
 ///
