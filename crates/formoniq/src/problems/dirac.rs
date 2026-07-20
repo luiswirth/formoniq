@@ -493,11 +493,19 @@ pub fn solve_dirac_source(
   let rhs = inclusion.transpose() * (dirac.flatten(load) - &system * &lift);
   let system_relative = inclusion.transpose() * &system * &inclusion;
 
-  // At $m = 0$ the relative operator carries the one-dimensional top-grade
-  // harmonic; border the system with it rather than handing a singular matrix
-  // to LU. The multiplier is the load's component along the harmonic, zero
-  // exactly when the problem is consistent.
-  let interior = match (mass_term == 0.0).then(|| top_harmonic(relative)).flatten() {
+  // At $m = 0$ border the system with the top-grade harmonic rather than
+  // handing a singular matrix to LU. The mode is in the kernel exactly when the
+  // essential part is the *whole* boundary, where $H^n (M, diff M) = RR$; on a
+  // partial part -- the causal posing a hyperbolic problem needs -- that
+  // relative cohomology vanishes, the operator is nonsingular, and bordering
+  // with a non-kernel vector would over-constrain it. So the mode is tested,
+  // not assumed.
+  let harmonic = (mass_term == 0.0)
+    .then(|| top_harmonic(relative))
+    .flatten()
+    .filter(|h| (&system_relative * h).norm() <= 1e-8 * h.norm());
+
+  let interior = match harmonic {
     Some(h) => solve_bordered(&system_relative, &rhs, &h),
     None => FaerLu::new(system_relative).solve(&rhs),
   };
