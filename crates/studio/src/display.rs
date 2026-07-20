@@ -658,6 +658,8 @@ impl FieldDisplay {
             // The identity: a scalar field has no particles and lays no trail.
             deposit_floor: 1.0,
             deposit_gain: 0.0,
+            // Overridden per frame from the 2-skeleton's coloring toggle.
+            colored: 1.0,
           },
         )
       }
@@ -743,6 +745,8 @@ impl FieldDisplay {
             // The identity until the deposit below exists; patched then.
             deposit_floor: 1.0,
             deposit_gain: 0.0,
+            // Overridden per frame from the 2-skeleton's coloring toggle.
+            colored: 1.0,
           },
         )
       }
@@ -899,9 +903,10 @@ impl FieldDisplay {
     }
     // Whether a skeleton reflects the field is a view choice, applied here
     // rather than baked into the material: the range is the field's, the mode
-    // is the reader's.
-    wireframe.colored = f32::from(mesh_view.wireframe_colored);
-    points.colored = f32::from(mesh_view.points_colored);
+    // is the reader's. Uniform across the three skeletons, faces included.
+    surface.colored = f32::from(mesh_view.skeleton(2).colored);
+    wireframe.colored = f32::from(mesh_view.skeleton(1).colored);
+    points.colored = f32::from(mesh_view.skeleton(0).colored);
     // The population is stepped only when the flow is shown, and the trail
     // follows it: without the population the atlas is neither stepped nor bound,
     // so the material reverts to the identity rather than dimming the fill to a
@@ -917,16 +922,20 @@ impl FieldDisplay {
     }
 
     let mut items = Vec::new();
-    if let Some(batch) = mesh.surface.as_ref().filter(|_| mesh_view.surface) {
+    if let Some(batch) = mesh
+      .surface
+      .as_ref()
+      .filter(|_| mesh_view.skeleton(2).visible)
+    {
       items.push(RenderItem::Surface(batch, surface));
     }
     if let Some(glyphs) = self.glyphs.as_ref().filter(|_| field_view.marks.glyphs) {
       items.push(RenderItem::Glyphs(glyphs, self.glyph));
     }
-    if mesh_view.wireframe {
+    if mesh_view.skeleton(1).visible {
       items.push(RenderItem::Segments(&mesh.segments, wireframe));
     }
-    if mesh_view.points {
+    if mesh_view.skeleton(0).visible {
       items.push(RenderItem::Points(&mesh.points, points));
     }
     DrawList {

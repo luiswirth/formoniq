@@ -98,7 +98,10 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // surface: an eigenmode's crest and trough swing through the (symmetric)
     // colormap in sync with the up/down motion. A non-eigenmode has omega = 0,
     // so cos(0) = 1 leaves the color static.
-    let ink = colormap_in(material, in.value * wave_osc(frame, material.wave_omega));
+    // The field's colormap where the faces reflect it, else a flat neutral
+    // geometry ink -- the 2-skeleton's coloring toggle, the same the marks carry.
+    let field_ink = colormap_in(material, in.value * wave_osc(frame, material.wave_omega));
+    let ink = select(vec3<f32>(0.34, 0.34, 0.36), field_ink, material.colored > 0.5);
     // The flow's illumination: trails brighten the surface under them, in
     // radiance, before the tone map. Hue stays the colormap's -- the data --
     // and the deposit carries luminance only. Floor 1, gain 0 is the identity:

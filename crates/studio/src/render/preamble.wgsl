@@ -59,6 +59,7 @@ struct SurfaceMaterial {
     diverging: f32,
     deposit_floor: f32,
     deposit_gain: f32,
+    colored: f32,
 };
 
 // How a segment mark is drawn: its ink (`rgb` plus a base opacity), its

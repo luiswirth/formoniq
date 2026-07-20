@@ -206,6 +206,11 @@ pub struct SurfaceMaterial {
   /// never a second pipeline.
   pub deposit_floor: f32,
   pub deposit_gain: f32,
+  /// Whether the faces reflect the field as a heatmap (`1.0`) or are the flat
+  /// structural geometry ink (`0.0`) -- the 2-skeleton's coloring toggle, the
+  /// same one the segment and point marks carry, so all three skeletons are
+  /// peers.
+  pub colored: f32,
 }
 
 /// How the scene's radiance reaches the display: the WGSL `Post`.
