@@ -1080,6 +1080,13 @@ impl State {
       }
     }
 
+    // Restart returns the clock to its start and the advected population to its
+    // seeds, exactly as selecting a fresh field does, without leaving the field.
+    if response.restart {
+      self.clock.restart();
+      self.steps_taken = 0;
+    }
+
     // Re-framing the scene reads only its coordinates and the current aspect,
     // touching neither the shown pair nor a buffer, so it applies here with the
     // other orthogonal view changes. It discards a fly-through's pose, which is

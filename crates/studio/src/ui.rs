@@ -794,6 +794,10 @@ pub(crate) struct PanelResponse {
   /// the trajectory slider moved -- a static field and an eigenmode have no
   /// timeline to scrub.
   pub(crate) scrub_time: Option<f64>,
+  /// Whether "Restart" was clicked: the caller returns the clock to its start
+  /// -- a trajectory's first frame, a standing wave's crest -- keeping the
+  /// play/pause state.
+  pub(crate) restart: bool,
   /// Whether the standing wave should be running after this frame -- the
   /// play/pause toggle. Defaults to the model's own state when the control
   /// wasn't touched, like the other fields.
@@ -858,6 +862,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut reset_camera = false;
   let mut camera_view = None;
   let mut scrub_time = None;
+  let mut restart = false;
   let mut playing = model.playing;
   #[cfg(not(target_arch = "wasm32"))]
   let mut load_obj_clicked = false;
@@ -1217,6 +1222,16 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // A field runs a clock when it oscillates (an eigenmode) or when it is a
       // sampled trajectory; only a static or harmonic field has nothing to play.
       let has_clock = omega.is_some_and(|w| w > 1e-9) || model.trajectory.is_some();
+      // Back to the start: a trajectory's first frame, a standing wave's crest.
+      // Disabled with the play control, since a field with no clock has no start
+      // to return to.
+      if ui
+        .add_enabled(has_clock, egui::Button::new("⏮"))
+        .on_hover_text("Restart")
+        .clicked()
+      {
+        restart = true;
+      }
       let label = if playing { "⏸" } else { "▶" };
       if ui
         .add_enabled(has_clock, egui::Button::new(label))
@@ -1296,6 +1311,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     reset_camera,
     camera_view,
     scrub_time,
+    restart,
     playing,
     #[cfg(not(target_arch = "wasm32"))]
     load_obj_clicked,
