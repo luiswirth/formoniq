@@ -68,44 +68,53 @@ impl Post {
 /// the field is read *on* it. So these are independent of which field is
 /// selected and unchanged by switching one -- and there is no availability rule
 /// to write, because a scene without geometry is not a scene.
+/// How one $k$-skeleton is drawn: whether it appears, and whether it reflects
+/// the field or is the structural geometry ink. The two are independent -- hiding
+/// a skeleton and coloring it are separate choices, and coloring is a no-op while
+/// it is hidden.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) struct SkeletonView {
+  pub(crate) visible: bool,
+  pub(crate) colored: bool,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct MeshView {
-  /// The filled cells. The surface is the mesh's own geometry -- a field only
-  /// paints it -- which is why it is here rather than among the field's marks.
-  ///
-  /// It is also what writes depth, so with it off the marks and the wireframe
-  /// stop occluding and the far side of the mesh shows through. That is the
-  /// picture a reader turning it off is asking for, not an artifact to guard
-  /// against.
-  pub(crate) surface: bool,
-  /// The drawn 1-skeleton: an overlay on a surface, the cells themselves on a
-  /// curve. One item under one name, since the bake already unified the two --
-  /// so toggling it off on a 1-manifold leaves an empty picture, which is the
-  /// correct total answer and not a case to exclude.
-  pub(crate) wireframe: bool,
-  /// Whether the 1-skeleton reflects the selected field as a heatmap, or is
-  /// drawn in the structural geometry ink. Independent of `wireframe`: hiding
-  /// the skeleton and coloring it are separate choices, and coloring is a no-op
-  /// while it is hidden.
-  pub(crate) wireframe_colored: bool,
-  /// The drawn 0-skeleton: a billboard disc at every mesh vertex. On by default:
-  /// at the shared skeleton stroke width a vertex is a rounded node capping the
-  /// edges that meet it, so it completes the wireframe into a graph rather than
-  /// cluttering it.
-  pub(crate) points: bool,
-  /// Whether the 0-skeleton reflects the field as a heatmap, as `wireframe_colored`
-  /// does for the 1-skeleton.
-  pub(crate) points_colored: bool,
+  /// The view of each $k$-skeleton, indexed by $k in {0, 1, 2}$: the points, the
+  /// edges, the faces. They are peers -- one uniform pair of questions (drawn?
+  /// colored?) asked of every skeleton the mesh has, no privileged "surface"
+  /// among them. Which skeletons actually exist is the mesh's dimension's answer
+  /// ($k <= min(n, 2)$); a skeleton the mesh lacks is simply never offered.
+  pub(crate) skeletons: [SkeletonView; 3],
+}
+
+impl MeshView {
+  /// The view of the $k$-skeleton.
+  pub(crate) fn skeleton(&self, k: usize) -> SkeletonView {
+    self.skeletons[k]
+  }
 }
 
 impl Default for MeshView {
   fn default() -> Self {
+    // Faces reflect the field (the historical fill); edges and points are the
+    // structural geometry ink, so the default view is a colored surface framed
+    // by a plain graph.
     Self {
-      surface: true,
-      wireframe: true,
-      wireframe_colored: false,
-      points: true,
-      points_colored: false,
+      skeletons: [
+        SkeletonView {
+          visible: true,
+          colored: false,
+        },
+        SkeletonView {
+          visible: true,
+          colored: false,
+        },
+        SkeletonView {
+          visible: true,
+          colored: true,
+        },
+      ],
     }
   }
 }
@@ -474,6 +483,26 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
 /// and a tangent line field (discussion #101). Whether the reduction went
 /// through a Hodge star ($k$ above the fold) is noted so the top-grade section
 /// reads as a density arrived at by $star$, not a bare 0-form.
+/// A $k$-skeleton's label, with the render primitive it draws to: the reader
+/// sees both the intrinsic object and its picture. Faces, edges, points are the
+/// $k <= 2$ the ambient reaches.
+pub(crate) fn skeleton_label(k: usize) -> String {
+  let primitive = match k {
+    0 => "points",
+    1 => "edges",
+    _ => "faces",
+  };
+  format!("{k}-skeleton · {primitive}")
+}
+
+fn skeleton_hover(k: usize) -> &'static str {
+  match k {
+    0 => "The 0-skeleton: a disc at every vertex, the graph's nodes",
+    1 => "The 1-skeleton: every edge, the graph's links",
+    _ => "The 2-skeleton: the filled faces. Also what writes depth -- with it off, the far side shows through",
+  }
+}
+
 pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
   let reduced = grade.min(n - grade);
   let mark = match reduced {
@@ -807,18 +836,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // mesh, and the field read on it. That is `display.rs`'s own seam between
       // `MeshDisplay` and `FieldDisplay`, so these mirror a distinction the code
       // already makes rather than laying a second taxonomy over it.
+      // The skeletons, as peers: one row per k-skeleton the mesh has
+      // (k <= min(n, 2)), faces at the top, each with the same two questions --
+      // drawn, and colored by the field or left as structural geometry.
       ui.separator();
-      ui.label("Mesh");
-      ui.checkbox(&mut mesh_view.surface, "Surface")
-        .on_hover_text("The filled cells. Also what writes depth: with it off, the marks stop occluding and the far side shows through");
-      ui.checkbox(&mut mesh_view.wireframe, "1-skeleton")
-        .on_hover_text("The drawn 1-skeleton: an overlay on a surface, the cells themselves on a curve");
-      ui.add_enabled(mesh_view.wireframe, egui::Checkbox::new(&mut mesh_view.wireframe_colored, "Color 1-skeleton"))
-        .on_hover_text("Reflect the selected field on the 1-skeleton as a heatmap, instead of the structural geometry ink");
-      ui.checkbox(&mut mesh_view.points, "0-skeleton")
-        .on_hover_text("The drawn 0-skeleton: a billboard disc at every mesh vertex");
-      ui.add_enabled(mesh_view.points, egui::Checkbox::new(&mut mesh_view.points_colored, "Color 0-skeleton"))
-        .on_hover_text("Reflect the selected field on the 0-skeleton as a heatmap, instead of the structural geometry ink");
+      ui.label("Skeletons");
+      for k in (0..=model.scene_dim.min(2)).rev() {
+        let sk = &mut mesh_view.skeletons[k];
+        ui.horizontal(|ui| {
+          ui.checkbox(&mut sk.visible, skeleton_label(k))
+            .on_hover_text(skeleton_hover(k));
+          ui.add_enabled(sk.visible, egui::Checkbox::new(&mut sk.colored, "color"))
+            .on_hover_text("Reflect the selected field on this skeleton as a heatmap, instead of the structural geometry ink");
+        });
+      }
 
       // The field side is the only one gated, and it asks rather than
       // dispatches: which settings a field offers is its reduced grade's answer
