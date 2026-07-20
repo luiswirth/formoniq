@@ -1,12 +1,22 @@
 //! Hodge-Laplace eigenvalue problem.
 //!
 //! By default, a generic sweep over every dimension $0 <= n <= 3$, every form
-//! grade $0 <= k <= n$, and both boundary conditions on the flat box $[0, pi]^n$:
-//! the lowest eigenvalues of the mixed Hodge Laplacian, refined until their
-//! algebraic self-convergence rate shows. The count of zero eigenvalues is the
-//! harmonic dimension — absolute $b_k (K)$ ($1$ at grade $0$) versus relative
-//! $b_k (K, diff K)$ ($1$ at top grade) on the contractible box, an exact
-//! topological anchor and a staging of Poincaré--Lefschetz duality.
+//! grade $0 <= k <= n$, and three cases: the contractible box $[0, pi]^n$ under
+//! each of its two boundary conditions, and the closed flat torus, which has no
+//! boundary and hence only one problem. The lowest eigenvalues of the mixed
+//! Hodge Laplacian, refined until their algebraic self-convergence rate shows.
+//!
+//! The count of zero eigenvalues is the harmonic dimension, an exact topological
+//! prediction the discrete problem reproduces at every resolution: absolute
+//! $b_k (K)$ ($1$ at grade $0$) against relative $b_k (K, diff K)$ ($1$ at top
+//! grade) on the box, staging Poincaré--Lefschetz duality, and $b_k (T^d) =
+//! binom(d, k)$ on the torus — the only case where it is neither $0$ nor $1$,
+//! and so the only one that tests the harmonic sector rather than anchoring it.
+//! A row whose count disagrees is marked `!`.
+//!
+//! One loop body serves all three. A closed manifold's boundary subcomplex is
+//! empty, so the relative problem there *is* the absolute one: the torus is not
+//! a case the code excludes but one it cannot tell apart.
 //!
 //! Run with `-i` / `--interactive` to instead load an external mesh (`.msh`)
 //! and read the grade and eigenvalue count from stdin — the way to put
@@ -20,8 +30,7 @@ mod util;
 
 use {
   formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
-  simplicial::{gen::cartesian::CartesianGrid, topology::ordering::CellOrdering},
-  util::{algebraic_convergence_rate, report, BoundaryCondition},
+  util::{algebraic_convergence_rate, report, BoundaryCondition, Manifold},
 };
 
 use std::f64::consts::PI;
@@ -36,27 +45,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
   if interactive {
     interactive_mesh()
   } else {
-    box_sweep();
+    sweep();
     Ok(())
   }
 }
 
-/// The default: the mixed Hodge-Laplace spectrum on the flat box, swept over all
-/// dimensions and grades, with each eigenvalue's self-convergence rate.
-fn box_sweep() {
+/// The default: the mixed Hodge-Laplace spectrum swept over all dimensions,
+/// grades and manifolds, with each eigenvalue's self-convergence rate.
+fn sweep() {
   let neigen = 6;
   // Dimension 0 is the base case: the box is a single point, the de Rham complex
   // is $RR$ in degree 0, the Hodge Laplacian is the zero operator, and the whole
   // spectrum is ${0}$ with multiplicity $b_0 = 1$. It carries no convergence (a
   // point does not refine), but it runs on exactly the same code.
-  // Both boundary conditions: absolute (natural / Neumann) on the full
-  // Whitney complex, relative (essential / Dirichlet) on its
-  // boundary-vanishing subcomplex. The zero-eigenvalue count is the harmonic
-  // dimension — $b_k (K)$ for absolute, $b_k (K, diff K)$ for relative — so
-  // the harmonic mode sits at grade $0$ for absolute and top grade for
-  // relative, staging Poincaré--Lefschetz duality. On the point ($n = 0$)
-  // the boundary is empty and the two coincide.
-  const BCS: [BoundaryCondition; 2] = [BoundaryCondition::Absolute, BoundaryCondition::Relative];
+  //
+  // Three cases, one loop body. The box carries a boundary and hence the two
+  // dual conditions: absolute (natural / Neumann) on the full Whitney complex,
+  // relative (essential / Dirichlet) on its boundary-vanishing subcomplex, so
+  // the harmonic mode sits at grade $0$ for one and top grade for the other,
+  // staging Poincare--Lefschetz duality. The torus is closed, so its boundary
+  // subcomplex is empty and the two conditions *are* the same problem -- not a
+  // case the code excludes but one it cannot tell apart, which is the totality
+  // claim rather than a special path. What the torus adds is a harmonic sector
+  // that is genuinely large: $b_k (T^d) = binom(d, k)$, against $0$ or $1$ on the
+  // contractible box, so it is the only case here that tests the harmonic part
+  // of the mixed solve rather than merely anchoring it.
+  let cases: [(Manifold, BoundaryCondition); 3] = [
+    (Manifold::Box, BoundaryCondition::Absolute),
+    (Manifold::Box, BoundaryCondition::Relative),
+    (Manifold::Torus, BoundaryCondition::Absolute),
+  ];
 
   for dim in 0..=3 {
     for grade in 0..=dim {
@@ -65,49 +83,51 @@ fn box_sweep() {
       // ceiling.
       const MAX_DOFS: usize = 20_000;
 
-      // Rows are gathered per BC and printed as grouped tables afterwards, so
-      // the mesh and Whitney complex — independent of `bc` — are built once
-      // per refinement and shared by both BCs, not duplicated.
-      // History of the lowest eigenvalues per level, for the three-point
-      // Richardson estimate of each eigenvalue's convergence order.
-      let mut history: [Vec<Vec<f64>>; 2] = [const { Vec::new() }; 2];
-      let mut rows: [Vec<String>; 2] = [const { Vec::new() }; 2];
-      let mut prev_ndofs = 0;
-      // A Freudenthal refinement tower over one coarse box generates the
-      // h-family: nested meshes, and the mesh-agnostic path rather than the
-      // structured generator. Each level refines the previous one in the ordering
-      // the subdivision inherits, which is what makes refinement compose and
-      // keeps every cell similar to the coarse box.
-      let (mut topology, coords) = CartesianGrid::new_unit_scaled(dim, 1, PI).triangulate();
-      let mut metric = coords.to_edge_lengths_sq(&topology);
-      let mut ordering = CellOrdering::colex(&topology);
-      for irefine in 0u32..=8 {
-        if irefine > 0 {
-          let sub = topology.refine_with(&ordering, 2);
-          metric = metric.refine(&sub, &topology);
-          ordering = sub.ordering().clone();
-          topology = sub.into_complex();
+      // Each case owns its mesh, since the manifolds differ; the loop body that
+      // refines and solves does not.
+      for &(manifold, bc) in &cases {
+        // A torus needs a dimension to be a torus: $T^0$ is a point, already
+        // covered by the box's base case.
+        if manifold == Manifold::Torus && dim == 0 {
+          continue;
         }
-        let whitney = WhitneyComplex::new(&topology, &metric);
+        let harmonic_dim = manifold.harmonic_dim(dim, grade, bc);
+        // History of the lowest eigenvalues per level, for the three-point
+        // Richardson estimate of each eigenvalue's convergence order.
+        let mut history: Vec<Vec<f64>> = Vec::new();
+        let mut rows: Vec<String> = Vec::new();
+        let mut prev_ndofs = 0;
 
-        let ndofs = whitney.ndofs(grade)
-          + if grade > 0 {
-            whitney.ndofs(grade - 1)
-          } else {
-            0
-          };
-        // Stop once the solve would exceed the budget, or once refinement
-        // no longer grows the mesh — a 0-manifold is a single point and does not
-        // subdivide, so it has exactly one level.
-        if !history[0].is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
-          break;
-        }
-        prev_ndofs = ndofs;
+        let (mut topology, mut metric, mut ordering) = manifold.coarse_mesh(dim, PI);
+        for irefine in 0u32..=8 {
+          if irefine > 0 {
+            let sub = topology.refine_with(&ordering, 2);
+            metric = metric.refine(&sub, &topology);
+            ordering = sub.ordering().clone();
+            topology = sub.into_complex();
+          }
+          let whitney = WhitneyComplex::new(&topology, &metric);
 
-        let ncells = topology.cells().len();
-        for (i, bc) in BCS.into_iter().enumerate() {
-          let relative = bc == BoundaryCondition::Relative;
-          let (eigenvals, _, _) = if relative {
+          let ndofs = whitney.ndofs(grade)
+            + if grade > 0 {
+              whitney.ndofs(grade - 1)
+            } else {
+              0
+            };
+          // Stop once the solve would exceed the budget, or once refinement no
+          // longer grows the mesh — a 0-manifold is a single point and does not
+          // subdivide, so it has exactly one level.
+          if !history.is_empty() && (ndofs > MAX_DOFS || ndofs == prev_ndofs) {
+            break;
+          }
+          prev_ndofs = ndofs;
+
+          let ncells = topology.cells().len();
+          // The relative problem is posed on the boundary-vanishing subcomplex.
+          // On a closed manifold that subcomplex is the whole complex, so this
+          // branch is not a case distinction the torus escapes — it is one that
+          // collapses on it.
+          let (eigenvals, _, _) = if bc == BoundaryCondition::Relative {
             elliptic::solve_evp(&whitney.relative(), grade, neigen).unwrap()
           } else {
             elliptic::solve_evp(&whitney, grade, neigen).unwrap()
@@ -119,7 +139,7 @@ fn box_sweep() {
           // Richardson: with three successive levels the ratio of consecutive
           // differences estimates the order without knowing the exact eigenvalue.
           // FEEC eigenvalues converge as $O(h^2)$, so expect a rate near 2.
-          let rates: Option<Vec<f64>> = match history[i].as_slice() {
+          let rates: Option<Vec<f64>> = match history.as_slice() {
             [.., older, newer] => Some(
               (0..eigenvals.len().min(newer.len()).min(older.len()))
                 .map(|j| {
@@ -132,7 +152,18 @@ fn box_sweep() {
             _ => None,
           };
 
-          let mut row = format!("| {irefine:>2} | {ncells:>7} |");
+          // The harmonic dimension is exact, not asymptotic: FEEC reproduces it
+          // at every resolution, so a mismatch is a defect rather than a coarse
+          // mesh. Flagged in the row instead of asserted, since the examples are
+          // read by hand.
+          let nzero = eigenvals.iter().filter(|l| l.abs() <= 1e-6).count();
+          let harmonic_flag = if nzero == harmonic_dim.min(eigenvals.len()) {
+            ' '
+          } else {
+            '!'
+          };
+
+          let mut row = format!("|{harmonic_flag}{irefine:>2} | {ncells:>7} |");
           for (j, &lambda) in eigenvals.iter().enumerate() {
             // A near-zero eigenvalue is a harmonic mode: FEEC captures it exactly,
             // so a "convergence rate" would only compare solver noise — mark it,
@@ -147,22 +178,21 @@ fn box_sweep() {
               report::rate(rate)
             ));
           }
-          rows[i].push(row);
+          rows.push(row);
 
-          history[i].push(eigenvals);
+          history.push(eigenvals);
         }
-      }
 
-      for (i, bc) in BCS.into_iter().enumerate() {
         println!(
-          "\nHodge-Laplace spectrum — dim {dim}, grade {grade}, {}",
+          "\nHodge-Laplace spectrum — {} dim {dim}, grade {grade}, {} — harmonic dim {harmonic_dim}",
+          manifold.label(),
           bc.label()
         );
         println!(
           "| {:>2} | {:>7} | lowest {neigen} eigenvalues (self-conv rate)",
           "r", "ncells"
         );
-        for row in &rows[i] {
+        for row in &rows {
           println!("{row}");
         }
       }

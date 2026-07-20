@@ -11,7 +11,13 @@ use {
   coorder::Coord,
   exterior::ExteriorElement,
   glatt::field::DiffFormClosure,
-  multiindex::{Combination, Sign},
+  multiindex::{binomial, Combination, Sign},
+  simplicial::{
+    gen::{cartesian::CartesianGrid, torus::FlatTorus},
+    geometry::metric::mesh::MeshLengthsSq,
+    linalg::Vector,
+    topology::{complex::Complex, ordering::CellOrdering},
+  },
 };
 
 /// The algebraic (as opposed to asymptotic) convergence rate between two
@@ -87,6 +93,77 @@ impl BoundaryCondition {
     match self {
       Self::Absolute => "absolute",
       Self::Relative => "relative",
+    }
+  }
+}
+
+/// A closed manifold has no boundary, so the two boundary conditions coincide
+/// there: the boundary subcomplex is empty and the relative problem *is* the
+/// absolute one. That is why a torus case carries `Absolute` rather than a
+/// third variant — running both would repeat a solve, not test one more thing.
+///
+/// The manifold an example is posed on.
+///
+/// Both are flat, both are Kuhn-triangulated, and both reach the solver as the
+/// same pair of a `Complex` and its `MeshLengthsSq`, so one loop body serves
+/// them. What differs is topology, and only topology: the box is contractible
+/// and has a boundary, the torus is closed with $b_k = binom(d, k)$.
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Manifold {
+  /// The contractible box $[0, pi]^n$, with a boundary and hence two distinct
+  /// boundary conditions.
+  Box,
+  /// The flat torus $RR^d \/ ZZ^d$: closed, so no boundary conditions, and with
+  /// the cohomology of a product of circles.
+  Torus,
+}
+
+impl Manifold {
+  pub fn label(self) -> &'static str {
+    match self {
+      Self::Box => "box",
+      Self::Torus => "torus",
+    }
+  }
+
+  /// The coarsest mesh, with the generator's own ordering so that the
+  /// refinement tower stays self-similar.
+  ///
+  /// The torus starts at three cells per axis, the fewest a periodic axis
+  /// admits: two would glue a cell onto itself. Its geometry is intrinsic with
+  /// no coordinates at all -- the flat torus does not embed isometrically in
+  /// $RR^d$ -- which is exactly why the solver consumes edge lengths.
+  pub fn coarse_mesh(self, dim: usize, scale: f64) -> (Complex, MeshLengthsSq, CellOrdering) {
+    match self {
+      Self::Box => {
+        let (topology, coords) = CartesianGrid::new_unit_scaled(dim, 1, scale).triangulate();
+        let lengths = coords.to_edge_lengths_sq(&topology);
+        let ordering = CellOrdering::colex(&topology);
+        (topology, lengths, ordering)
+      }
+      Self::Torus => {
+        let (topology, lengths, ordering) =
+          FlatTorus::new(Vector::from_element(dim, scale), 3).triangulate_ordered();
+        let ordering = ordering.expect("the Kuhn tiling matches across the periodic seam");
+        (topology, lengths, ordering)
+      }
+    }
+  }
+
+  /// The harmonic dimension the discrete problem must reproduce exactly: the
+  /// number of zero eigenvalues, and a purely topological prediction.
+  ///
+  /// $b_k (K) = delta_(k 0)$ on the contractible box, its Lefschetz dual
+  /// $b_k (K, diff K) = delta_(k n)$ under the relative condition, and
+  /// $b_k (T^d) = binom(d, k)$ on the torus -- the one case where the number is
+  /// not $0$ or $1$, so the only one that really tests the harmonic sector.
+  pub fn harmonic_dim(self, dim: usize, grade: usize, bc: BoundaryCondition) -> usize {
+    match self {
+      Self::Box => usize::from(match bc {
+        BoundaryCondition::Absolute => grade == 0,
+        BoundaryCondition::Relative => grade == dim,
+      }),
+      Self::Torus => binomial(dim, grade),
     }
   }
 }
