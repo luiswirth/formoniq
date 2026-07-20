@@ -154,6 +154,15 @@ fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) ->
 /// The glyphs sit on the undisplaced surface: the fragment biases them toward
 /// the camera off it, the way the wireframe is, so they draw over the fill
 /// rather than z-fighting it.
+///
+/// **The complex passed here is the render surface, not the mesh** (see
+/// [`crate::surface::Surface`]), and the cochain is its trace. That is what an
+/// arrow *is*: a mark lying in the manifold it is drawn on, which for a solid
+/// is $diff M$ and never a tetrahedron. A cell of a $3$-manifold has no plane
+/// for a flat quad to lie in, no determined perpendicular for its `across`
+/// axis, and no side for the depth bias to lean toward -- the frame built below
+/// is well posed exactly because `cell` is at most a triangle. A volume glyph
+/// is a different mark with a camera-facing frame, not this one run on tets.
 pub(crate) fn bake_glyphs(
   topology: &Complex,
   coords: &MeshCoords,
@@ -303,6 +312,54 @@ mod tests {
       assert!(
         *ratio > 0.05 && *ratio < 1.0,
         "arrow length is {ratio} of the mean edge across the sweep: {ratios:?}"
+      );
+    }
+  }
+
+  /// On a solid the arrows live on the boundary surface, never in the volume.
+  ///
+  /// The failure this pins is not cosmetic. A tetrahedron has no plane for a
+  /// flat quad to lie in, so glyphing the cells of a $3$-manifold produced
+  /// arrows with an arbitrary `across` axis at points inside an opaque solid --
+  /// the mark evaluated on an object it cannot be a mark of. Stated as a
+  /// geometric fact rather than a count: every arrow's center lies *on* $diff M$,
+  /// so none is interior. Checked against the unit cube's faces, where being on
+  /// the boundary is exactly having a coordinate at 0 or 1.
+  #[test]
+  fn a_solids_arrows_lie_on_its_boundary_surface() {
+    use crate::surface::Surface;
+    use simplicial::gen::cartesian::CartesianGrid;
+
+    let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
+    let surface = Surface::of(&topology, &coords);
+    assert_eq!(
+      surface.dim(&topology),
+      2,
+      "the render surface is a 2-manifold"
+    );
+
+    let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+    let traced = surface
+      .trace(&topology, &cochain)
+      .expect("a 1-form traces onto the boundary");
+    let instances = bake_glyphs(
+      surface.complex(&topology),
+      surface.coords(&coords),
+      &traced,
+      0.3,
+      1.0,
+    );
+    assert!(!instances.is_empty(), "a solid must still get arrows");
+
+    for glyph in &instances {
+      let on_face = glyph
+        .center
+        .iter()
+        .any(|&x| x.abs() < 1e-6 || (x - 1.0).abs() < 1e-6);
+      assert!(
+        on_face,
+        "arrow at {:?} is interior to the solid, not on its boundary",
+        glyph.center
       );
     }
   }

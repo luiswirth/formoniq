@@ -141,6 +141,30 @@ Two reductions carry that, and they are the same move made on the two axes:
   to segments, a point cloud to points, and a solid to the 2-simplices of its
   boundary — all of it an observer in $RR^3$ can see.
 
+**The two reductions compose, and the order is fixed: dimension first, grade
+second.** The object a mark is a mark *of* is the render surface — the mesh
+itself below $n = 3$, the boundary $diff M$ for a solid — so the $n$ in
+$min(k, n-k)$ is the *surface's*, never the mesh's. `Surface` is that reduction
+named once, and it is a genuine manifold one dimension down, with its own
+complex, orientation and metric. A field reaches it by its **trace**
+$i^*: C^k (M) -> C^k (diff M)$, a cochain map, hence a real Whitney form on
+$diff M$ rather than a resampling or a nodal recovery.
+
+Getting the order backwards is what a dimension-blind mark looks like: a
+$2$-form on a solid reduces to grade 1 against the volume (arrows) but to grade
+0 against the boundary (a density), and only the latter is a claim about
+anything on screen — a flux has no direction in the surface carrying it. An
+arrow glyph is the sharp case, because a flat mark needs a plane to lie in and a
+determined perpendicular, and a tetrahedron supplies neither.
+
+**The trace is total in grade but vanishes at the top**, since
+$C^n (diff M) = 0$. A top-grade density is a *volume* quantity, and reading it
+on the boundary is a sampling of the cells behind it, never a trace — the two
+must not be conflated, and a mark that needs the volume says so rather than
+tracing to zero and drawing nothing. Volume marks (a camera-facing glyph, a
+slice) are where this extends; they are a different mark with a different frame,
+not this one run on cells.
+
 Each case distinction is confined to its own reduction — to the mark, and to the
 bake — never smeared through the renderer, which sees only which *items* a frame
 has, never why. The consequence is that one segment pipeline serves the wireframe

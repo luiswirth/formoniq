@@ -737,13 +737,27 @@ impl FieldDisplay {
         // reference: a glyph's opacity is its own magnitude against the field's
         // greatest, so the mark reports where the field is strong without
         // spending its length on it.
-        let vertices = crate::glyph::bake_glyphs(
-          &scene.topology,
-          &scene.coords,
-          &field.cochain,
-          f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
-          peak,
-        );
+        // The glyphs are drawn on the render surface and read the field's trace
+        // there: for a solid that is $diff M$, a proper closed 2-manifold whose
+        // triangles are the very ones the fill draws. A line field always
+        // traces (its grade is 1, and any render surface has dimension >= 1
+        // where cells exist), so the `None` arm is the degenerate mesh with no
+        // surface at all -- no triangles, hence no arrows.
+        let surface_topology = scene.surface.complex(&scene.topology);
+        let surface_coords = scene.surface.coords(&scene.coords);
+        let vertices = scene
+          .surface
+          .trace(&scene.topology, &field.cochain)
+          .map(|traced| {
+            crate::glyph::bake_glyphs(
+              surface_topology,
+              surface_coords,
+              &traced,
+              f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
+              peak,
+            )
+          })
+          .unwrap_or_default();
         let glyphs = GlyphBatch::new(&ctx.device, &vertices);
 
         let particles = (peak > 0.0)

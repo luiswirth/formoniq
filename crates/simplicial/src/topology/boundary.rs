@@ -30,6 +30,7 @@ use crate::linalg::{CooMatrix, Matrix};
 /// For the full boundary $diff K$ this is a closed $(n-1)$-manifold; a
 /// subset $Gamma$ of the boundary facets gives the boundary part of mixed
 /// boundary conditions.
+#[derive(Debug, Clone)]
 pub struct BoundaryComplex {
   complex: Complex,
   /// Per grade: boundary k-simplex index -> parent k-simplex index.
