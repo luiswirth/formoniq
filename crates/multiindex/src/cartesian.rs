@@ -64,6 +64,21 @@ pub fn corner_offset(corner: Combination, strides: &[usize]) -> usize {
   corner.iter().map(|axis| strides[axis]).sum()
 }
 
+/// The per-axis strides of a *mixed*-radix linear index: the running product
+/// $"stride"_i = product_(j < i) "radix"_j$.
+///
+/// The uniform [`strides`] is the constant-radix case, $"radix"^i$.
+pub fn mixed_strides(radices: &[usize]) -> Vec<usize> {
+  radices
+    .iter()
+    .scan(1, |stride, &radix| {
+      let this = *stride;
+      *stride *= radix;
+      Some(this)
+    })
+    .collect()
+}
+
 /// The per-axis strides of the linear index of a cartesian grid:
 /// $"stride"_i = "radix"^i$.
 pub fn strides(radix: usize, dim: usize) -> Vec<usize> {
