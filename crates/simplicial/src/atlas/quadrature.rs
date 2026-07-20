@@ -16,7 +16,7 @@ use super::{Bary, BaryRef, MeshPoint};
 use crate::{topology::handle::SimplexIdx, Dim};
 
 use crate::linalg::{Vector, VectorView};
-use multiindex::{binomial, factorial_f64, Combination};
+use multiindex::{binomial, factorial_f64, Combination, Composition};
 
 /// A quadrature rule on the reference simplex, with barycentric nodes.
 pub struct SimplexQuadRule {
@@ -50,10 +50,13 @@ impl SimplexQuadRule {
         (-1.0f64).powi(i as i32) * 2.0f64.powi(-2 * (s as i32)) * denominator.powi(d as i32)
           / (factorial_f64(i) * factorial_f64(d + n - i));
 
-      for beta in compositions(s - i, n + 1) {
+      for beta in Composition::all(n + 1, s - i) {
         points.push(Bary::from_iterator(
           n + 1,
-          beta.iter().map(|&b| (2 * b + 1) as f64 / denominator),
+          beta
+            .parts()
+            .iter()
+            .map(|&b| (2 * b + 1) as f64 / denominator),
         ));
         weights[ipoint] = weight;
         ipoint += 1;
@@ -76,23 +79,6 @@ impl SimplexQuadRule {
   pub fn degree(dim: Dim, degree: usize) -> Self {
     Self::grundmann_moeller(dim, degree / 2)
   }
-}
-
-/// All $beta in NN_0^"nparts"$ with $|beta| = "total"$.
-fn compositions(total: usize, nparts: usize) -> Vec<Vec<usize>> {
-  if nparts == 1 {
-    return vec![vec![total]];
-  }
-  (0..=total)
-    .flat_map(|first| {
-      compositions(total - first, nparts - 1)
-        .into_iter()
-        .map(move |mut rest| {
-          rest.insert(0, first);
-          rest
-        })
-    })
-    .collect()
 }
 
 impl SimplexQuadRule {
@@ -195,11 +181,14 @@ mod tests {
         let quadrule = SimplexQuadRule::grundmann_moeller(dim, s);
         let max_degree = 2 * s + 1;
         for degree in 0..=max_degree {
-          for alpha in compositions(degree, dim + 1) {
-            let monomial =
-              |bary: BaryRef| -> f64 { (0..=dim).map(|i| bary[i].powi(alpha[i] as i32)).product() };
+          for alpha in Composition::all(dim + 1, degree) {
+            let monomial = |bary: BaryRef| -> f64 {
+              (0..=dim)
+                .map(|i| bary[i].powi(alpha.parts()[i] as i32))
+                .product()
+            };
             let computed = quadrule.integrate_ref(&monomial, refsimp_vol(dim));
-            let exact = exact_barycentric_monomial(&alpha);
+            let exact = exact_barycentric_monomial(alpha.parts());
             assert_abs_diff_eq!(computed, exact, epsilon = 1e-12);
           }
         }

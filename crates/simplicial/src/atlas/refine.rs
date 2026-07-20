@@ -41,7 +41,7 @@ use crate::linalg::{Matrix, Vector};
 use crate::Dim;
 
 use itertools::Itertools;
-use multiindex::compositions;
+use multiindex::Composition;
 
 use std::collections::HashMap;
 
@@ -67,7 +67,9 @@ pub struct ReferenceRefinement {
 pub fn ref_refinement(dim: Dim, refinement: usize) -> ReferenceRefinement {
   assert!(refinement >= 1, "A refinement is at least one.");
 
-  let vertices: Vec<Vec<usize>> = compositions(dim + 1, refinement).collect();
+  let vertices: Vec<Vec<usize>> = Composition::all(dim + 1, refinement)
+    .map(Composition::into_parts)
+    .collect();
   let rank: HashMap<&Vec<usize>, usize> =
     vertices.iter().enumerate().map(|(i, k)| (k, i)).collect();
 
