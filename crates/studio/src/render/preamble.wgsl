@@ -212,34 +212,6 @@ fn billboard_corner(world_a: vec3<f32>, world_b: vec3<f32>, perp: vec3<f32>, hal
     let self_world = select(world_a, world_b, billboard_is_b(vertex_index));
     return self_world + perp * half_width * billboard_side(vertex_index);
 }
-
-// Nudges a corner toward the camera, along the view direction, by a small
-// multiple of the mark's own half-width, so it draws on top of the coplanar
-// face beneath it instead of z-fighting it. Coplanar is the whole difficulty:
-// the true depth gap is zero, so something has to break the tie, and it may as
-// well be a distance the mark already has.
-//
-// Along the view axis, not toward the eye point: under an orthographic
-// projection the two differ, and a nudge toward a finite eye would move a corner
-// laterally -- shifting the mark off the fill it outlines -- rather than purely
-// in depth. Along the forward axis the whole nudge is depth.
-//
-// World space, and tied to the mark's own scale, so the nudge is a fixed small
-// distance rather than a fixed small *depth* -- an NDC-space offset would stand
-// for an ever larger eye-space distance the farther out it is applied, and past
-// some distance would exceed a surface's own front-to-back gap, letting the far
-// side's wireframe win against the near side's fill.
-//
-// The multiple is not a precision threshold: the depth buffer is reversed-Z
-// float, whose resolution is roughly uniform in $z$, so a world-space nudge
-// survives the divide at any zoom. It only has to beat coplanarity, and stay
-// far below any real front/back separation -- which it does everywhere except
-// an imperceptible sliver at the silhouette, where that separation shrinks
-// continuously to zero and a biased line necessarily wins.
-fn depth_biased_corner(corner: vec3<f32>, view_dir: vec3<f32>, half_width: f32) -> vec3<f32> {
-    return corner - view_dir * (4.0 * half_width);
-}
-
 // A particle, i.e. a `MeshPoint`, plus what respawning it needs.
 //
 // `vec4` carries the weights for every intrinsic dimension the ambient reaches:

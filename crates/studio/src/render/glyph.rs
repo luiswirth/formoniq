@@ -8,15 +8,16 @@
 //! value only on the open cell it was sampled in.
 //!
 //! Alpha-blended and depth-testing but not depth-writing, exactly as the segment
-//! marks: the arrows are translucent and lie over the fill, biased toward the
-//! camera off the surface they are coplanar with.
+//! marks: the arrows are translucent and lie over the fill they are coplanar
+//! with. The tie is broken in *depth* by the pipeline's bias, never by moving
+//! the quad -- see the depth-bias state the pass is built with.
 
 use super::{
-  color_target, depth_stencil,
+  color_target, depth_stencil_biased,
   item::GlyphBatch,
   primitive, shader_module,
   uniform::{FrameUniform, GlyphMaterial, UniformBinding, UniformPool},
-  MASK_FORMAT,
+  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS,
 };
 
 pub struct GlyphPass {
@@ -55,7 +56,7 @@ impl GlyphPass {
         ],
       }),
       primitive: primitive(),
-      depth_stencil: Some(depth_stencil(false)),
+      depth_stencil: Some(depth_stencil_biased(false, SURFACE_MARK_DEPTH_BIAS)),
       multisample: wgpu::MultisampleState::default(),
       multiview_mask: None,
       cache: None,

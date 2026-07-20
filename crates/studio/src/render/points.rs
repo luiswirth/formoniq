@@ -6,11 +6,11 @@
 //! the discs are translucent and sit over the surface that already wrote depth.
 
 use super::{
-  color_target, depth_stencil,
+  color_target, depth_stencil_biased,
   item::PointBatch,
   primitive, shader_module,
   uniform::{FrameUniform, SegmentMaterial, UniformPool},
-  MASK_FORMAT,
+  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS,
 };
 
 pub struct PointPass {
@@ -49,7 +49,7 @@ impl PointPass {
         ],
       }),
       primitive: primitive(),
-      depth_stencil: Some(depth_stencil(true)),
+      depth_stencil: Some(depth_stencil_biased(true, SURFACE_MARK_DEPTH_BIAS)),
       multisample: wgpu::MultisampleState::default(),
       multiview_mask: None,
       cache: None,

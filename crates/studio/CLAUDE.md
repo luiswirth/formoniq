@@ -333,8 +333,21 @@ pleasing approach, and treat quality as a requirement rather than a finish. The
 mathematics decides *what* is drawn — the reduced grade picks the mark, the
 eigenvalue drives the standing wave — and the graphics craft decides *how well*.
 
-Two durable conventions, kept general on purpose:
+Three durable conventions, kept general on purpose:
 
+- **A mark drawn on a surface is biased in depth, never displaced in space.** A
+  glyph in its cell and a wireframe edge along its simplex are coplanar with the
+  fill and must win the depth comparison; that is a claim about $z$ alone, and
+  the rasterizer's depth bias is what makes it, after the mark's screen position
+  is already fixed. Translating the mark toward the camera instead is the
+  plausible wrong answer: it puts the mark at a depth its surface does not have,
+  so the two show parallax and the mark slides across its own face as the camera
+  orbits, and the offset is measured in the mark's size rather than the gap to
+  what is in front, so on a *closed* surface a far face's marks pass through the
+  near one. One open sheet hides both faults — there is nothing to slide against
+  and nothing in front to pierce — so this is a fault that only a solid's
+  boundary reveals, and it is why the convention is written down rather than
+  rediscovered.
 - **Shaders are checked by the test suite**, not only at pipeline creation, so a
   broken shader fails `cargo test` rather than the running viewer. The check runs
   naga's frontend — the one the *native* build uses — so it catches parse and

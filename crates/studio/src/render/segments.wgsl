@@ -68,10 +68,8 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     let world_b = wave_displace(material.wave_amplitude, osc, b.position, b.normal, b.height, b.max_displacement);
     let perp = billboard_perp(world_a, world_b, frame.view_dir.xyz);
     let corner = billboard_corner(world_a, world_b, perp, material.half_width_world, vertex_index);
-    let biased_corner = depth_biased_corner(corner, frame.view_dir.xyz, material.half_width_world);
-
     var out: VertexOutput;
-    out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
+    out.clip_position = frame.view_proj * vec4<f32>(corner, 1.0);
     out.opacity = select(a.opacity, b.opacity, billboard_is_b(vertex_index));
     out.across = billboard_side(vertex_index);
     // The quad's two ends carry A's and B's values, so the rasterizer

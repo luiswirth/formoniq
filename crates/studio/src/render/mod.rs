@@ -110,14 +110,56 @@ fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::Shader
 ///
 /// [`OPENGL_TO_REVERSED_WGPU_MATRIX`]: camera::OPENGL_TO_REVERSED_WGPU_MATRIX
 fn depth_stencil(write: bool) -> wgpu::DepthStencilState {
+  depth_stencil_biased(write, 0)
+}
+
+/// Depth bias in *units of depth*, which is the only place a mark drawn on a
+/// surface may be nudged.
+///
+/// A mark that lies in a surface -- a glyph in its cell, a wireframe edge along
+/// its simplex -- is coplanar with the fill and would z-fight it. The fix is to
+/// win the depth comparison, and that is a statement about depth alone: the
+/// rasterizer offsets the fragment's $z$ after the mark's screen position is
+/// already fixed, so the mark stays welded to the geometry it belongs to.
+///
+/// **Never displace the mark in world space to achieve this.** Translating a
+/// corner toward the camera does make it draw in front, and it is wrong in two
+/// ways that no amount of tuning fixes. It puts the mark at a different *depth*
+/// than the surface it claims to lie on, so the two exhibit parallax and the
+/// mark visibly slides across its own face as the camera orbits. And the offset
+/// is measured in the mark's own size rather than in the distance to whatever
+/// is in front, so on a closed surface -- a solid's boundary, where a near face
+/// and a far face both exist -- a far face's marks translate straight through
+/// the near one. A single open sheet hides both faults, having nothing to slide
+/// against and nothing in front to pierce, which is why this survived until a
+/// solid was drawn.
+///
+/// `slope_scale` is what a constant alone cannot supply: a face seen near
+/// edge-on spans many depth units across one pixel, so the offset it needs
+/// grows with the depth gradient. Constant-only bias either fails at grazing
+/// angles or is set so large it detaches everywhere else.
+fn depth_stencil_biased(write: bool, units: i32) -> wgpu::DepthStencilState {
   wgpu::DepthStencilState {
     format: DEPTH_FORMAT,
     depth_write_enabled: Some(write),
     depth_compare: Some(wgpu::CompareFunction::Greater),
     stencil: wgpu::StencilState::default(),
-    bias: wgpu::DepthBiasState::default(),
+    // Depth is reversed, so *nearer is larger* and drawing over the fill means
+    // biasing the depth up. A negative constant here would push the mark behind
+    // the very surface it is meant to sit on -- the sign is tied to the
+    // `Greater` comparison above, not free.
+    bias: wgpu::DepthBiasState {
+      constant: units,
+      slope_scale: if units == 0 { 0.0 } else { 2.0 },
+      clamp: 0.0,
+    },
   }
 }
+
+/// The bias a mark lying *in* the surface takes. Small: it has to beat
+/// coplanar z-fighting and nothing more, since it no longer has to compensate
+/// for a world-space displacement.
+const SURFACE_MARK_DEPTH_BIAS: i32 = 64;
 
 /// The triangle-list primitive state shared by every pipeline here: nothing is
 /// culled, since a surface is viewed from both sides.
