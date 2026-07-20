@@ -461,4 +461,14 @@ pub struct DrawList<'a> {
   /// frame has both. Beside the items for the same reason: it is stepped with
   /// the advection and read by the fill, so it belongs to no single mark.
   pub deposit: Option<&'a super::deposit::DepositBatch>,
+  /// The medium the whole scene is immersed in, when the manifold is a solid.
+  ///
+  /// Beside the items rather than among them because its place in the order is
+  /// not the caller's to state: it is composited after everything opaque, and
+  /// clamped by the depth those items wrote. An item's position in `items` says
+  /// what lies over what, and a medium lies over nothing -- it lies *between*.
+  pub volume: Option<(
+    &'a super::volume::VolumeBatch,
+    super::volume::VolumeMaterial,
+  )>,
 }

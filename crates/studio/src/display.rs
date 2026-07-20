@@ -22,6 +22,7 @@ use crate::render::{
   item::{DrawList, GlyphBatch, PointBatch, RenderItem, SegmentBatch, SurfaceBatch},
   particles::ParticleBatch,
   uniform::{GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
+  volume::{VolumeBatch, VolumeMaterial},
   GpuContext,
 };
 use crate::scene::Scene;
@@ -62,6 +63,19 @@ pub(crate) fn post_uniform(post: Post) -> PostUniform {
 /// orbital-lobe shape rather than a faint ripple. Kept below 1 so a negative
 /// lobe never overshoots the origin and inverts the surface.
 const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
+
+/// The medium's absorption at full field magnitude, in inverse units of the
+/// object's own extent: a ray crossing the whole object through its peak is
+/// attenuated by $e^(-6)$, so the strongest region reads as nearly opaque while
+/// a tenth of that stays translucent enough to see structure behind it. Stated
+/// against the extent rather than the mesh scale because how solid a field looks
+/// should not change when the mesh is refined.
+const VOLUME_DENSITY_PER_EXTENT: f32 = 6.0;
+
+/// The medium's radiance at full absorption. Above 1 so a dense core clears the
+/// bloom threshold and glows, which is the same criterion every other mark
+/// blooms by: what exceeds the display range is what spills.
+const VOLUME_EMISSION: f32 = 1.4;
 
 /// The stroke half-width shared by the 1-skeleton's segments and the
 /// 0-skeleton's discs, as a fraction of the mesh's *mean edge length* (not the
@@ -558,12 +572,23 @@ pub(crate) struct FieldDisplay {
   /// advection and read by the fill as illumination. Present exactly when the
   /// particles are and the mesh carries an atlas (intrinsic dimension 2).
   deposit: Option<DepositBatch>,
+  /// The medium a solid's field is drawn as, `None` below intrinsic dimension
+  /// 3. The dimension reduction's third case: a surface rasterizes, a solid's
+  /// interior is marched, and which one applies is the bake's question rather
+  /// than the renderer's.
+  volume: Option<VolumeDisplay>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
   /// The 0-skeleton's material: a `SegmentMaterial` too, since a point mark and
   /// a segment mark differ only in primitive, not in what drives them.
   points: SegmentMaterial,
   glyph: GlyphMaterial,
+}
+
+/// The sampled medium and how it is read: the two halves the volume pass takes.
+pub(crate) struct VolumeDisplay {
+  batch: VolumeBatch,
+  material: VolumeMaterial,
 }
 
 impl FieldDisplay {
@@ -811,10 +836,42 @@ impl FieldDisplay {
     let (segment_min, segment_max, segment_diverging) = colormap_range(ranges.segment);
     let (point_min, point_max, point_diverging) = colormap_range(ranges.point);
 
+    // The medium, for a solid only: below intrinsic dimension 3 the boundary
+    // primitive already carries the whole manifold, and a bounding box of fog
+    // around a surface would be a claim about an interior it does not have.
+    let volume = (scene.topology.dim() >= 3).then(|| {
+      let grid = crate::volume::VolumeGrid::sample(&scene.topology, &scene.coords, cochain);
+      let batch = VolumeBatch::new(&ctx.device, &ctx.queue, &grid);
+      let material = VolumeMaterial {
+        origin: [batch.origin[0], batch.origin[1], batch.origin[2], 0.0],
+        size: [batch.size[0], batch.size[1], batch.size[2], 0.0],
+        value_min: batch.value_min,
+        value_range: batch.value_range,
+        // The surface's own colormap parameters, not a second set derived here:
+        // the fog and the boundary fill are one field read one way, and an
+        // eigenmode's symmetric range and diverging palette have to be the same
+        // on both or the medium contradicts the shell containing it.
+        min_val: surface.min_val,
+        max_val: surface.max_val,
+        diverging: surface.diverging,
+        wave_omega: surface.wave_omega,
+        density: VOLUME_DENSITY_PER_EXTENT / amplitude_scale.max(f32::EPSILON),
+        emission: VOLUME_EMISSION,
+        // Twice per voxel along a ray: the bake resolved the field at voxel
+        // centers, so a step of half a voxel is the finest sampling that says
+        // anything the grid does not already, and a coarser one walks over
+        // features the bake paid for.
+        step_size: 0.5 * batch.voxel,
+        ..VolumeMaterial::default()
+      };
+      VolumeDisplay { batch, material }
+    });
+
     let display = Self {
       glyphs,
       particles,
       deposit,
+      volume,
       surface,
       // The wireframe rides the surface's own wave, so it tracks the displaced
       // mesh rather than the flat rest one, and it has no node to fade at. Its
@@ -942,6 +999,7 @@ impl FieldDisplay {
       items,
       particles,
       deposit,
+      volume: self.volume.as_ref().map(|v| (&v.batch, v.material)),
     }
   }
 }

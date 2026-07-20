@@ -19,6 +19,7 @@ pub mod points;
 pub mod renderer;
 pub mod segments;
 pub mod uniform;
+pub mod volume;
 
 pub use context::GpuContext;
 pub use renderer::{FrameView, Renderer};
@@ -159,6 +160,7 @@ mod tests {
       ("advect.wgsl", include_str!("advect.wgsl")),
       ("bloom.wgsl", include_str!("bloom.wgsl")),
       ("deposit.wgsl", include_str!("deposit.wgsl")),
+      ("volume.wgsl", include_str!("volume.wgsl")),
     ];
     for (name, body) in bodies {
       // The downsample body reads `SSAA_SCALE`, which the pipeline bakes in as a
@@ -223,6 +225,7 @@ mod tests {
       ("Cell", size_of::<super::advect::Cell>()),
       ("AdvectParams", size_of::<super::advect::AdvectParams>()),
       ("DepositParams", size_of::<super::deposit::DepositParams>()),
+      ("VolumeMaterial", size_of::<super::volume::VolumeMaterial>()),
     ];
 
     for (name, rust_size) in expected {

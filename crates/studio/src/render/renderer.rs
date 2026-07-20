@@ -17,6 +17,7 @@ use super::{
     FrameUniform, GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding,
     UniformPool,
   },
+  volume::{VolumeMaterial, VolumePass},
   DEPTH_CLEAR, DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
 };
 
@@ -76,6 +77,9 @@ struct Targets {
   mask_view: wgpu::TextureView,
   bloom: BloomChain,
   scene_color: SceneColorBinding,
+  /// The scene depth, bound for the volume march to clamp against. Rebuilt with
+  /// the targets, since the depth texture it names is.
+  volume_depth: wgpu::BindGroup,
 }
 
 impl Targets {
@@ -89,6 +93,7 @@ impl Targets {
     device: &wgpu::Device,
     downsample: &DownsamplePass,
     bloom_pass: &BloomPass,
+    volume: &VolumePass,
     size: (u32, u32),
     ssaa: u32,
   ) -> Self {
@@ -117,6 +122,7 @@ impl Targets {
     let mask_view = target("Scene Unbounded Mask Texture (supersampled)", MASK_FORMAT);
     let bloom = bloom_pass.chain(device, &scene_color_view, (width, height));
     let scene_color = downsample.bind(device, &scene_color_view, bloom.glow(), &mask_view);
+    let volume_depth = volume.bind_depth(device, &depth_view);
     Self {
       size,
       depth_view,
@@ -124,6 +130,7 @@ impl Targets {
       mask_view,
       bloom,
       scene_color,
+      volume_depth,
     }
   }
 }
@@ -155,6 +162,8 @@ pub struct Renderer {
   dummy_deposit: wgpu::BindGroup,
   bloom: BloomPass,
   downsample: DownsamplePass,
+  volume: VolumePass,
+  volume_material: UniformBinding<VolumeMaterial>,
   targets: Option<Targets>,
 }
 
@@ -182,6 +191,12 @@ impl Renderer {
     let point_materials = UniformPool::new(device, "point material", Stages::VERTEX_FRAGMENT);
     let glyph_materials = UniformPool::new(device, "glyph material", Stages::VERTEX_FRAGMENT);
     let post = UniformBinding::new(device, "post", Stages::FRAGMENT, PostUniform::default());
+    let volume_material = UniformBinding::new(
+      device,
+      "volume material",
+      Stages::FRAGMENT,
+      VolumeMaterial::default(),
+    );
     Self {
       format,
       ssaa,
@@ -197,12 +212,14 @@ impl Renderer {
       dummy_deposit: dummy_read_bind_group(device),
       bloom: BloomPass::new(device),
       downsample: DownsamplePass::new(device, format, &post, ssaa),
+      volume: VolumePass::new(device, SCENE_FORMAT, &volume_material),
       frame,
       surface_materials,
       segment_materials,
       point_materials,
       glyph_materials,
       post,
+      volume_material,
       // Allocated on the first frame, from the size the caller renders at:
       // there is no size to guess at construction, and a window that never
       // opens should allocate nothing.
@@ -280,6 +297,7 @@ impl Renderer {
         &ctx.device,
         &self.downsample,
         &self.bloom,
+        &self.volume,
         view.size,
         self.ssaa,
       ));
@@ -381,6 +399,49 @@ impl Renderer {
           ),
         }
       }
+    }
+
+    // The medium, after every opaque mark and before the glow. Here rather than
+    // among the items because it reads the depth those items wrote, which a
+    // pass cannot do while that depth is its own attachment -- and because
+    // front-to-back accumulation makes its own order, so it has no place in the
+    // caller's.
+    if let Some((batch, mut material)) = view.items.volume {
+      // The unprojection is the camera's, not the material's: the display layer
+      // decides how the medium reads, and where it is read *from* is a fact
+      // about this frame. Filled here so the two cannot come apart, and so an
+      // export and a window unproject with the matrix they each drew with.
+      material.inv_view_proj = view
+        .camera
+        .build_view_projection_matrix()
+        .try_inverse()
+        .unwrap_or_else(nalgebra::Matrix4::identity)
+        .into();
+      material.time = view.time;
+      self.volume_material.write(&ctx.queue, material);
+      let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+        label: Some("Volume Pass"),
+        color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+          view: &targets.scene_color_view,
+          resolve_target: None,
+          // Loaded, not cleared: the medium composites over the scene.
+          ops: wgpu::Operations {
+            load: wgpu::LoadOp::Load,
+            store: wgpu::StoreOp::Store,
+          },
+          depth_slice: None,
+        })],
+        depth_stencil_attachment: None,
+        timestamp_writes: None,
+        occlusion_query_set: None,
+        multiview_mask: None,
+      });
+      self.volume.draw(
+        &mut pass,
+        self.volume_material.bind_group(),
+        &targets.volume_depth,
+        batch,
+      );
     }
 
     // The glow: whatever the scene wrote above the display's range, blurred
