@@ -201,8 +201,7 @@ impl BakedMesh {
         vec![f64::INFINITY; nvertices],
       ),
       2 => {
-        let triangles = orient_triangles(&cell_indices(topology));
-        let normals = vertex_normals(&triangles, &ambient);
+        let (triangles, normals) = oriented_surface(topology, &ambient);
         (
           PrimBatch::Triangles(triangles),
           skeleton_indices(topology, 1),
@@ -213,12 +212,14 @@ impl BakedMesh {
       // A solid ($n >= 3$) has no visible interior and no slicing tool yet, so
       // the fill is its boundary surface alone; the full interior 2-skeleton
       // the previous rule drew was unseeable clutter, and its faces -- shared by
-      // two cells, hence non-manifold -- left `orient_triangles` and the vertex
-      // normals meaningless. The boundary $diff M$ *is* a closed 2-manifold, so
-      // it bakes exactly as the $n = 2$ arm does: consistent winding, a genuine
-      // outward normal, and a real reach (a surface notion) computed on $diff M$
-      // and scattered back to the shared parent vertex table -- interior
-      // vertices keep `INFINITY`, never displacing.
+      // two cells, hence non-manifold -- left the winding and the vertex normals
+      // meaningless. The boundary $diff M$ *is* a closed 2-manifold, so the fill
+      // is literally the $n = 2$ bake run on it: [`oriented_surface`] winds and
+      // normals it from $diff M$'s own coherent orientation (invariant 6),
+      // outward by its signed volume, and [`vertex_reach`] gives a real reach --
+      // all in $diff M$'s local numbering, then scattered back to the shared
+      // parent vertex table, where interior vertices keep `INFINITY` and never
+      // displace.
       //
       // The 1-skeleton stays the *whole* mesh's, not the boundary's: shown on
       // its own it is how the interior is inspected, which the fill no longer
@@ -227,19 +228,21 @@ impl BakedMesh {
         let boundary = topology
           .boundary_complex()
           .expect("a solid has a nonempty boundary");
-        let facet_tris: Vec<[u32; 3]> = topology
-          .boundary_facets()
-          .iter()
-          .map(|f| index_tuple(&f.simplex().vertices))
-          .collect();
-        let triangles = orient_triangles(&facet_tris);
-        let normals = vertex_normals(&triangles, &ambient);
+        let to_parent = boundary.parent_kidxs(0);
+        let local_points: Vec<na::Vector3<f64>> = to_parent.iter().map(|&p| ambient[p]).collect();
 
-        let boundary_reach =
-          vertex_reach(boundary.complex(), &boundary.trace_coords(coords), extent);
+        let (local_tris, local_normals) = oriented_surface(boundary.complex(), &local_points);
+        let local_reach = vertex_reach(boundary.complex(), &boundary.trace_coords(coords), extent);
+
+        let triangles: Vec<[u32; 3]> = local_tris
+          .iter()
+          .map(|t| t.map(|v| to_parent[v as usize] as u32))
+          .collect();
+        let mut normals = vec![na::Vector3::zeros(); nvertices];
         let mut reach = vec![f64::INFINITY; nvertices];
-        for (local, &parent) in boundary.parent_kidxs(0).iter().enumerate() {
-          reach[parent] = boundary_reach[local];
+        for (local, &parent) in to_parent.iter().enumerate() {
+          normals[parent] = local_normals[local];
+          reach[parent] = local_reach[local];
         }
 
         (
@@ -445,6 +448,66 @@ fn directed_edges(t: [u32; 3]) -> [(u32, u32); 3] {
   [(t[0], t[1]), (t[1], t[2]), (t[2], t[0])]
 }
 
+/// Coherently wound triangles and unit vertex normals of an embedded surface
+/// complex, taken from the complex's *own* orientation (invariant 6) rather
+/// than rediscovered geometrically: the manifold already knows how its cells
+/// glue, so the winding is `Complex::orientation`'s, and the normals follow it.
+///
+/// A *closed* surface is then flipped to face outward -- its signed volume
+/// fixes the one global sign the intrinsic orientation leaves free -- so a
+/// constant mode inflates rather than collapses. An open surface has no inside
+/// and a non-orientable one no coherent normal field at all, so there the
+/// geometric flood-fill ([`orient_triangles`]) stands, with its arbitrary but
+/// consistent global sign.
+fn oriented_surface(
+  complex: &Complex,
+  points: &[na::Vector3<f64>],
+) -> (Vec<[u32; 3]>, Vec<na::Vector3<f64>>) {
+  let Some(orientation) = complex.orientation() else {
+    let triangles = orient_triangles(&cell_indices(complex));
+    let normals = vertex_normals(&triangles, points);
+    return (triangles, normals);
+  };
+
+  let mut triangles: Vec<[u32; 3]> = complex
+    .cells()
+    .handle_iter()
+    .map(|cell| {
+      let mut t = index_tuple::<3>(&cell.simplex().vertices);
+      // A negatively signed cell winds against the coherent orientation; swap a
+      // pair to bring it into agreement.
+      if orientation.sign(cell).is_neg() {
+        t.swap(1, 2);
+      }
+      t
+    })
+    .collect();
+
+  // The signed volume fixes the free global sign of a closed surface: negative
+  // means the coherent winding faces inward, so flip winding across the board.
+  if !complex.has_boundary() && signed_volume(&triangles, points) < 0.0 {
+    for t in &mut triangles {
+      t.swap(1, 2);
+    }
+  }
+
+  let normals = vertex_normals(&triangles, points);
+  (triangles, normals)
+}
+
+/// Six times the signed volume a closed wound triangle surface encloses,
+/// $sum_T det[a_T | b_T | c_T]$ (the divergence theorem on $x |-> x \/ 3$).
+/// Positive exactly when the winding faces outward.
+fn signed_volume(triangles: &[[u32; 3]], points: &[na::Vector3<f64>]) -> f64 {
+  triangles
+    .iter()
+    .map(|t| {
+      let [a, b, c] = t.map(|v| points[v as usize]);
+      a.dot(&b.cross(&c))
+    })
+    .sum()
+}
+
 /// Consistently winds a triangle soup by flood-filling face adjacency: two
 /// triangles sharing an edge are consistent iff they traverse that edge in
 /// opposite directions.
@@ -610,8 +673,10 @@ mod tests {
 
   /// A solid bakes its boundary surface, not its full 2-skeleton: the fill is
   /// the facets bounding one cell, so a multi-cell grid draws strictly fewer
-  /// triangles than its interior-inclusive 2-skeleton, and every boundary
-  /// vertex gets a real (nonzero) displacement normal.
+  /// triangles than its interior-inclusive 2-skeleton. Every boundary vertex
+  /// gets a nonzero displacement normal, and -- the boundary being closed --
+  /// one that points *outward*, so a constant mode inflates rather than
+  /// collapses.
   #[test]
   fn a_solid_bakes_only_its_boundary() {
     use simplicial::gen::cartesian::CartesianGrid;
@@ -629,14 +694,25 @@ mod tests {
       "the interior was dropped"
     );
 
-    // A boundary vertex carries a nonzero normal, so its displacement axis is
-    // well defined -- the bug the full 2-skeleton's cancelling normals caused.
+    // The unit cube's centroid; a boundary vertex's outward normal has a
+    // positive component along the ray from it.
+    let centroid = na::Vector3::repeat(0.5);
     let boundary = topology.boundary_complex().unwrap();
     for &v in boundary.parent_kidxs(0) {
-      let n = baked.positions[v].normal;
+      let p = &baked.positions[v];
+      let n = na::Vector3::new(p.normal[0] as f64, p.normal[1] as f64, p.normal[2] as f64);
       assert!(
-        n[0].abs() + n[1].abs() + n[2].abs() > 0.0,
+        n.norm() > 0.5,
         "boundary vertex {v} has no displacement normal"
+      );
+      let pos = na::Vector3::new(
+        p.position[0] as f64,
+        p.position[1] as f64,
+        p.position[2] as f64,
+      );
+      assert!(
+        (pos - centroid).dot(&n) > 0.0,
+        "boundary vertex {v} normal points inward"
       );
     }
   }
