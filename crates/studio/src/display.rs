@@ -601,6 +601,7 @@ impl FieldDisplay {
     mesh: &MeshDisplay,
     selection: Selection,
     amplitude_scale: f32,
+    scalarization: crate::scene::Scalarization,
   ) -> (Self, FieldAttributes) {
     // The field is read once per rendered corner, each in its own cell, so a
     // reduced-grade Whitney form's discontinuity across cells reaches the
@@ -840,20 +841,35 @@ impl FieldDisplay {
     // primitive already carries the whole manifold, and a bounding box of fog
     // around a surface would be a claim about an interior it does not have.
     let volume = (scene.topology.dim() >= 3).then(|| {
-      let grid = crate::volume::VolumeGrid::sample(&scene.topology, &scene.coords, cochain);
+      // The operator, applied to the cochain before it is sampled. Metric-free
+      // and exact at the cochain level: the coboundary is the simplicial
+      // exterior derivative, so this is $dif omega$ and not a difference
+      // quotient of the interpolant.
+      let read = scalarization.apply(cochain, &scene.topology);
+      let grid = crate::volume::VolumeGrid::sample(&scene.topology, &scene.coords, &read);
       let batch = VolumeBatch::new(&ctx.device, &ctx.queue, &grid);
+      // The colormap is the surface's only where the medium draws the *same*
+      // field. Read through an operator it is a different one, with its own
+      // range, and borrowing the surface's would map it against a scale it
+      // never takes. The wave carries over either way: $dif$ is linear, so
+      // $dif(omega cos(omega t)) = (dif omega) cos(omega t)$ and the pulse is
+      // the same one.
+      let (min_val, max_val, diverging) = match scalarization {
+        crate::scene::Scalarization::Value => (surface.min_val, surface.max_val, surface.diverging),
+        _ => {
+          let lo = batch.value_min;
+          let hi = batch.value_min + batch.value_range;
+          (lo, hi, f32::from(lo < 0.0))
+        }
+      };
       let material = VolumeMaterial {
         origin: [batch.origin[0], batch.origin[1], batch.origin[2], 0.0],
         size: [batch.size[0], batch.size[1], batch.size[2], 0.0],
         value_min: batch.value_min,
         value_range: batch.value_range,
-        // The surface's own colormap parameters, not a second set derived here:
-        // the fog and the boundary fill are one field read one way, and an
-        // eigenmode's symmetric range and diverging palette have to be the same
-        // on both or the medium contradicts the shell containing it.
-        min_val: surface.min_val,
-        max_val: surface.max_val,
-        diverging: surface.diverging,
+        min_val,
+        max_val,
+        diverging,
         wave_omega: surface.wave_omega,
         density: VOLUME_DENSITY_PER_EXTENT / amplitude_scale.max(f32::EPSILON),
         emission: VOLUME_EMISSION,
@@ -999,7 +1015,10 @@ impl FieldDisplay {
       items,
       particles,
       deposit,
-      volume: self.volume.as_ref().map(|v| (&v.batch, v.material)),
+      volume: field_view
+        .volume
+        .then(|| self.volume.as_ref().map(|v| (&v.batch, v.material)))
+        .flatten(),
     }
   }
 }
