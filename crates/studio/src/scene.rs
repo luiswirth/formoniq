@@ -6,6 +6,7 @@ use simplicial::linalg::Vector;
 use simplicial::Sign;
 
 use crate::bake::CellCorner;
+use crate::surface::Surface;
 use crate::ui::Selection;
 use derham::{
   cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, project::derham_map,
@@ -45,6 +46,11 @@ use simplicial::{
 pub struct Scene {
   pub topology: Complex,
   pub coords: MeshCoords,
+  /// The reduction the bake draws and every field mark is chosen against: the
+  /// mesh itself below $n = 3$, its boundary $diff M$ for a solid. Built once
+  /// with the scene, because the marks are filed against its dimension, not
+  /// the parent's.
+  pub(crate) surface: Surface,
   pub fields: Vec<ScalarField>,
   pub line_fields: Vec<LineField>,
 }
@@ -327,6 +333,7 @@ impl Scene {
   /// viewer down.
   fn eigenmode_fields(
     topology: &Complex,
+    surface: &Surface,
     coords: &MeshCoords,
     grade: ExteriorGrade,
     nmodes: usize,
@@ -350,6 +357,7 @@ impl Scene {
       let cochain = Cochain::new(grade, col.into_owned());
       Self::field(
         topology,
+        surface,
         FieldMeta {
           name,
           time: FieldTime::StandingWave { eigenvalue: lambda },
@@ -369,10 +377,22 @@ impl Scene {
   /// instantiation of this ([`Self::spherical_harmonics`]), not a special
   /// case baked into the solve.
   pub fn eigenmodes(topology: Complex, coords: MeshCoords, nmodes: usize) -> Self {
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
-    Self::eigenmode_fields(&topology, &coords, 0, nmodes, &mut fields, &mut line_fields);
+    Self::eigenmode_fields(
+      &topology,
+      &surface,
+      &coords,
+      0,
+      nmodes,
+      &mut fields,
+      &mut line_fields,
+    );
     Self {
+      surface,
       topology,
       coords,
       fields,
@@ -394,6 +414,9 @@ impl Scene {
     use simplicial::gen::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
     for grade in 0..=topology.dim() {
@@ -402,6 +425,7 @@ impl Scene {
       line_fields.append(&mut l);
     }
     Self {
+      surface,
       topology,
       coords,
       fields,
@@ -422,10 +446,14 @@ impl Scene {
     grade: ExteriorGrade,
     nmodes: usize,
   ) -> (Vec<ScalarField>, Vec<LineField>) {
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(topology, coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
     Self::eigenmode_fields(
       topology,
+      &surface,
       coords,
       grade,
       nmodes,
@@ -462,6 +490,7 @@ impl Scene {
       dof: None,
     }];
     Self {
+      surface: Surface::of(&topology, &coords),
       topology,
       coords,
       fields,
@@ -480,6 +509,7 @@ impl Scene {
   ) -> Self {
     let (fields, line_fields) = Self::eigenmodes_grade(topology, coords, grade, nmodes);
     Self {
+      surface: Surface::of(topology, coords),
       topology: topology.clone(),
       coords: coords.clone(),
       fields,
@@ -523,11 +553,15 @@ impl Scene {
     coords: MeshCoords,
     specs: &[crate::gallery::NamedCochain],
   ) -> Self {
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
     for named in specs {
       Self::field(
         &topology,
+        &surface,
         FieldMeta {
           name: named.name.clone(),
           time: FieldTime::Static,
@@ -540,6 +574,7 @@ impl Scene {
     }
 
     Self {
+      surface,
       topology,
       coords,
       fields,
@@ -562,6 +597,9 @@ impl Scene {
   pub fn hodge_decomposition(topology: Complex, coords: MeshCoords) -> Self {
     let input = hodge_probe_input(&topology, &coords);
 
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
 
@@ -581,6 +619,7 @@ impl Scene {
     for (name, cochain) in named {
       Self::field(
         &topology,
+        &surface,
         FieldMeta {
           name: name.to_string(),
           time: FieldTime::Static,
@@ -593,6 +632,7 @@ impl Scene {
     }
 
     Self {
+      surface,
       topology,
       coords,
       fields,
@@ -613,6 +653,9 @@ impl Scene {
   /// `standard_subsimps` on the single-cell reference complex.
   fn whitney_basis_on(topology: Complex, coords: MeshCoords) -> Self {
     let dim = topology.dim();
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
     for grade in 0..=dim {
@@ -626,6 +669,7 @@ impl Scene {
 
         Self::field(
           &topology,
+          &surface,
           FieldMeta {
             name,
             time: FieldTime::Static,
@@ -639,6 +683,7 @@ impl Scene {
     }
 
     Self {
+      surface,
       topology,
       coords,
       fields,
@@ -727,10 +772,14 @@ impl Scene {
     dt: f64,
     frames: Vec<Cochain>,
   ) -> Self {
+    // Built before the fields are filed: the mark each one gets is chosen
+    // against the surface's dimension, not the mesh's.
+    let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
     Self::field(
       &topology,
+      &surface,
       FieldMeta {
         name: "trajectory".to_string(),
         time: FieldTime::Trajectory { dt, frames },
@@ -741,6 +790,7 @@ impl Scene {
       &mut line_fields,
     );
     Self {
+      surface,
       topology,
       coords,
       fields,
@@ -777,8 +827,22 @@ impl Scene {
   /// at $n >= 4$) has no mark yet. The reduction is not applied here: the
   /// original cochain is stored whole, and the render mark reads it per cell at
   /// draw time (see [`surface_corner_values`]).
+  ///
+  /// **The grade reduces against the surface's dimension, not the mesh's**, and
+  /// that is what makes the mark the mark of the thing on screen. A field on a
+  /// solid is seen through its boundary, so the $n$ in $min(k, n-k)$ is
+  /// $dim diff M$: a $2$-form on a $3$-manifold is a line field in the volume
+  /// but the boundary's *top* form, hence a density, where it is actually
+  /// drawn. Reducing against the parent would file it as arrows for a flux that
+  /// has no direction on the surface carrying it.
+  ///
+  /// The exception is the grade that does not trace at all ($k = n$, where
+  /// $C^k (diff M) = 0$): a volume density is not a surface quantity, so it
+  /// reduces against the parent and is drawn by sampling the cells behind the
+  /// boundary, until a volume mark exists to own it.
   fn field(
     topology: &Complex,
+    surface: &Surface,
     meta: FieldMeta,
     cochain: Cochain,
     fields: &mut Vec<ScalarField>,
@@ -793,8 +857,14 @@ impl Scene {
     } else {
       canonical_sign(cochain)
     };
-    let n = topology.dim();
     let k = cochain.grade();
+    // The manifold the mark is *drawn on*. A grade that does not trace is a
+    // volume quantity and keeps the parent's reduction (see the doc above).
+    let n = if surface.traces(topology, k) {
+      surface.dim(topology)
+    } else {
+      topology.dim()
+    };
 
     // The reduction stars whenever $k > n-k$, and the star needs a global
     // volume form, which a non-orientable mesh does not have. The field is
@@ -803,7 +873,10 @@ impl Scene {
     // a per-cell sign that means nothing. Everything below the star is
     // unaffected and still files normally; the solver is unaffected either
     // way, since the gauge cancels inside the assembly.
-    if k > n - k && !topology.is_orientable() {
+    // Orientability is asked of the manifold whose volume form the star needs
+    // -- the one `n` was just read from, so the check and the reduction cannot
+    // disagree about which object they are talking about.
+    if k > n - k && !surface.complex(topology).is_orientable() {
       eprintln!(
         "field '{name}' (grade {k} of {n}) needs the Hodge star to be drawn, \
          and the mesh is non-orientable: no global volume form, so it is skipped"
@@ -1898,6 +1971,7 @@ mod tests {
     .unwrap();
     let (fields, _) = Scene::eigenmodes_grade(&topology, &coords, 0, 4);
     let scene = Scene {
+      surface: Surface::of(&topology, &coords),
       topology,
       coords,
       fields,

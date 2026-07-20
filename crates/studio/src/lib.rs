@@ -22,6 +22,7 @@ pub mod io;
 pub mod render;
 pub mod scene;
 pub(crate) mod solve;
+pub(crate) mod surface;
 pub mod ui;
 pub mod volume;
 pub(crate) mod welcome;

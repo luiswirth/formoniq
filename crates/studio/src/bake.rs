@@ -22,6 +22,7 @@
 
 use std::collections::HashMap;
 
+use crate::surface::Surface;
 use bytemuck::{Pod, Zeroable};
 use simplicial::linalg::Vector;
 use simplicial::{
@@ -225,14 +226,20 @@ impl BakedMesh {
       // its own it is how the interior is inspected, which the fill no longer
       // can.
       _ => {
-        let boundary = topology
-          .boundary_complex()
-          .expect("a solid has a nonempty boundary");
-        let to_parent = boundary.parent_kidxs(0);
+        // The render surface is the same object the field marks are drawn on
+        // and traced onto, so the fill and the glyphs cannot disagree about
+        // which triangles exist. A *closed* solid has no boundary and no
+        // surface: it draws no fill rather than panicking, since being closed
+        // is a property of a manifold, not an error.
+        let surface = Surface::of(topology, coords);
+        // `None` is the closed solid: no boundary, hence no vertex map and no
+        // fill. The empty triangle list is the right answer, not a panic.
+        let to_parent = surface.vertex_to_parent().unwrap_or(&[]);
         let local_points: Vec<na::Vector3<f64>> = to_parent.iter().map(|&p| ambient[p]).collect();
 
-        let (local_tris, local_normals) = oriented_surface(boundary.complex(), &local_points);
-        let local_reach = vertex_reach(boundary.complex(), &boundary.trace_coords(coords), extent);
+        let (local_tris, local_normals) =
+          oriented_surface(surface.complex(topology), &local_points);
+        let local_reach = vertex_reach(surface.complex(topology), surface.coords(coords), extent);
 
         let triangles: Vec<[u32; 3]> = local_tris
           .iter()
