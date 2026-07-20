@@ -3,6 +3,7 @@ pub mod complex;
 pub mod data;
 pub mod handle;
 pub mod homology;
+pub mod ordering;
 pub mod orientation;
 pub mod refine;
 pub mod role;
