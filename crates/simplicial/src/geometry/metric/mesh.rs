@@ -200,6 +200,34 @@ impl MeshLengthsSq {
       .all(|simp| self.simplex_lengths_sq(simp).is_coordinate_realizable())
   }
 
+  /// The causal census of the edges: how many are timelike, null, spacelike
+  /// under this (signed) Regge geometry.
+  ///
+  /// On a Riemannian mesh every edge is spacelike and the census is trivial.
+  /// It carries content only on an indefinite signature, where it is the
+  /// well-posedness diagnostic of spacetime FEEC: a *null* edge degenerates the
+  /// indefinite $L^2$ pairing on Whitney 1-forms exactly (the mass rank-deficient
+  /// by the null count), so a Lorentzian mesh is *causally generic*
+  /// ([`Self::is_causally_generic`]) precisely when the null count is zero.
+  pub fn causal_census(&self, topology: &Complex) -> CausalCensus {
+    let mut census = CausalCensus::default();
+    for edge in topology.edges().handle_iter() {
+      *match edge.causal_type(self) {
+        CausalType::Timelike => &mut census.timelike,
+        CausalType::Null => &mut census.null,
+        CausalType::Spacelike => &mut census.spacelike,
+      } += 1;
+    }
+    census
+  }
+
+  /// Whether no edge is lightlike: the well-posedness condition of spacetime
+  /// FEEC, since a null edge makes the indefinite Whitney 1-form mass singular.
+  /// Always true on a Riemannian mesh.
+  pub fn is_causally_generic(&self, topology: &Complex) -> bool {
+    self.causal_census(topology).null == 0
+  }
+
   /// Whether this could be the edge geometry of `topology`: one squared
   /// length per edge, nothing more.
   pub fn is_compatible_with(&self, topology: &Complex) -> bool {
@@ -219,6 +247,26 @@ impl std::ops::Index<EdgeIdx> for MeshLengthsSq {
   type Output = f64;
   fn index(&self, iedge: EdgeIdx) -> &Self::Output {
     &self.vector[iedge]
+  }
+}
+
+/// The count of edges of each causal character in a mesh: the output of
+/// [`MeshLengthsSq::causal_census`]. On a Lorentzian spacetime the `null` field
+/// is the obstruction to well-posedness; on a Riemannian mesh every edge falls
+/// in `spacelike`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CausalCensus {
+  pub timelike: usize,
+  pub null: usize,
+  pub spacelike: usize,
+}
+impl std::fmt::Display for CausalCensus {
+  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    write!(
+      f,
+      "{} timelike, {} null, {} spacelike",
+      self.timelike, self.null, self.spacelike
+    )
   }
 }
 
