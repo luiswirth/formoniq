@@ -289,9 +289,23 @@ impl<'a> RelativeWhitneyComplex<'a> {
         .collect()
     })
   }
-  /// Constrain the given simplices per grade (the closure of the Dirichlet
-  /// boundary part).
-  fn with_constrained(
+  /// Constrain the given simplices per grade: the *mixed* complex
+  /// $C^k (K, Gamma)$ of cochains whose trace vanishes on a chosen part
+  /// $Gamma subset.eq diff K$ only, the rest of the boundary carrying the
+  /// natural condition.
+  ///
+  /// `constrained` must return the simplices of the *closure* of $Gamma$ --- a
+  /// half-open part is not a subcomplex, and the conjugates $E^T A E$ would no
+  /// longer restrict a cochain complex.
+  ///
+  /// The two extremes are the familiar ones: all of $diff K$ is
+  /// [`Self::new`] (fully essential), the empty set the full
+  /// [`WhitneyComplex`] (fully natural). The genuinely mixed choice is what a
+  /// *hyperbolic* problem needs: on a spacetime mesh the Dirichlet part is the
+  /// past face together with the timelike sides, the future face left free,
+  /// because prescribing data on the whole boundary of a hyperbolic operator is
+  /// the ill-posed Hadamard problem rather than a stricter one.
+  pub fn with_constrained(
     full: WhitneyComplex<'a>,
     constrained: impl Fn(ExteriorGrade) -> HashSet<KSimplexIdx>,
   ) -> Self {
