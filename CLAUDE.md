@@ -43,11 +43,11 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
-| `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets), `cartesian::` (radix multi-indices) |
+| `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `cartesian::` (radix multi-indices) |
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature; Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
@@ -130,6 +130,17 @@ and passes tests.
    streaming, which is negligible next to element-matrix evaluation, at the cost
    of the totality edge lengths give for free. So the engine speaks one concrete
    intrinsic type, and the other representations convert into it.
+
+   This separation is the privileged one, and it is privileged because it is
+   *mathematical*: the boundary operator, the exterior derivative, the wedge and
+   homology are metric-free facts, and the metric is a genuine second input that
+   no amount of combinatorics derives. A mesh carries other data too — a
+   coherent `Orientation`, a `CellOrdering` — and keeping those separate is good
+   design, but they are not peers of this split. Orientation is *derivable*
+   (`Complex::orientation` computes it; external winding only picks which of the
+   $2^c$ generators is meant), and ordering carries no invariant content about
+   the manifold at all. Both are presentation, not mathematics. Do not let the
+   list of things a mesh carries flatten into one axis.
 
 2. **Intrinsic first, extrinsic second, and edge lengths are the primitive.**
    The engine consumes `MeshLengthsSq`, never coordinates: it is the Regge
@@ -239,7 +250,39 @@ and passes tests.
    the orientation is fixed only up to a global sign on each -- the ordinary
    ambiguity of a fundamental class, not a choice the code could avoid.
 
-7. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
+7. **A generator's vertex ordering is data, and the mesh cannot recreate it.**
+   A `Skeleton` stores every simplex colex-sorted, which fixes each cell's
+   vertex order from the *global numbering* — a labelling, hence gauge. A mesh
+   generator usually produces each cell in an order of its own that carries
+   structure (the maximal chain of a Kuhn simplex, an external mesher's node
+   order), and the sort discards it. It is not recoverable afterwards: a
+   per-cell order is strictly more expressive than the restriction of any global
+   numbering, so relabelling the vertices however cleverly does not bring it
+   back. `CellOrdering` therefore carries it alongside the complex, never inside
+   it, and colex is the trivial ordering a mesh has implicitly.
+
+   The orderings of a mesh are not independent — they must agree on shared faces
+   (`is_face_consistent`), or two cells subdivide their common face differently
+   and the refinement is non-conforming. That law is what makes an ordering a
+   structure rather than a bag of permutations. Its *parity* is a second, weaker
+   reading of the same datum: the winding a mesh file means by the order it
+   lists a face's corners, hence an `Orientation`, validated through
+   `Complex::orient_by` so a miswound file yields `None` rather than a witness
+   that lies.
+
+   **Nothing in assembly, solving or homology may consult an ordering** — those
+   are invariant under relabelling, and a dependence there is a bug, exactly as
+   in invariant 6. It exists for the algorithms whose *output* is a mesh, and
+   the reason it must exist is uniform refinement: Freudenthal subdivision
+   composes, $"refine"_(R') compose "refine"_R = "refine"_(R R')$, only when each
+   child is subdivided in the order the reference pattern emitted its corners.
+   Re-deriving that order by sorting reproduces it at the first level and drifts
+   after, leaving the family the generator produced — invisibly in dimension
+   two, where the sort happens to agree, and badly above it. The composition law
+   is affine, hence true of any mesh; what is special to a Kuhn grid is that the
+   children are *similar* to the parent, so a tower there stays self-similar.
+
+8. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
    runtime dispatch, in anything on the assembly hot path. HPC is a requirement,
    not an afterthought (`rayon`-parallel assembly is already the norm).
 
@@ -311,6 +354,15 @@ Sweep over all dimensions and grades (`for dim in 0..=4`, `for grade in 0..=dim`
 rather than fixing one case. The examples in `crates/formoniq/examples/` are the
 end-to-end check — convergence rates, spectra — but they are run and read by
 hand, not asserted by `cargo test`.
+
+**Combinations and compositions are different objects.** A `Combination` is a
+subset, the basis of $Lambda^k$: repetition forbidden, order carrying a `Sign`.
+A `Composition` is an exponent vector, the basis of $"Sym"^d$: the graded monoid
+$x^k x^(k') = x^(k + k')$, no sign. Stars and bars bijects them and is kept as a
+theorem, never as a representation — it is not natural in the ambient size,
+absorbing an unbounded *degree* into an index count a combination bounds by the
+dimension, which is how a bitset ceiling leaks into a refinement level. Each
+owns its representation.
 
 **Colexicographic order is the one indexing convention.** Basis blades,
 combinations, simplex vertices and the simplices within a skeleton are all
