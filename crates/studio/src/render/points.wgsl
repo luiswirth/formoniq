@@ -56,10 +56,8 @@ fn vs_main(p: Point, @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
     let uv = quad_corner(vertex_index);
     let corner = world + (right * uv.x + up * uv.y) * material.half_width_world;
-    let biased_corner = depth_biased_corner(corner, view_dir, material.half_width_world);
-
     var out: VertexOutput;
-    out.clip_position = frame.view_proj * vec4<f32>(biased_corner, 1.0);
+    out.clip_position = frame.view_proj * vec4<f32>(corner, 1.0);
     out.opacity = p.opacity;
     out.uv = uv;
     out.color_value = p.color_value;

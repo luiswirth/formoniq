@@ -104,13 +104,13 @@ fn vs_main(instance: GlyphInstance, @builtin(vertex_index) index: u32) -> Vertex
         + instance.direction * (x - instance.length * 0.5)
         + instance.across * y;
 
-    // The arrow lies flat in the cell, coplanar with the fill, so it is nudged
-    // toward the camera to draw over the surface instead of z-fighting it -- the
-    // same bias the wireframe takes, tied to the mark's own world scale.
-    let biased = depth_biased_corner(world, frame.view_dir.xyz, half_width);
-
+    // The arrow lies flat in its cell and is left exactly there. It is coplanar
+    // with the fill, and that is resolved in *depth* by the pipeline's bias, not
+    // by moving the mark: an arrow displaced toward the camera would sit at a
+    // depth its own surface does not have, and would slide across the face it
+    // belongs to as the camera orbits.
     var out: VertexOutput;
-    out.clip_position = frame.view_proj * vec4<f32>(biased, 1.0);
+    out.clip_position = frame.view_proj * vec4<f32>(world, 1.0);
     out.opacity = instance.opacity;
     out.xy = vec2<f32>(x, y);
     out.length = instance.length;
