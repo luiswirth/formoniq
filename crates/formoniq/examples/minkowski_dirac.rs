@@ -88,7 +88,7 @@ use gramian::{CausalType, Gramian, Metric};
 use multiindex::Sign;
 use simplicial::{
   atlas::SimplexQuadRule, gen::cartesian::CartesianGrid, geometry::coord::mesh::MeshCoords,
-  linalg::Vector,
+  linalg::Vector, topology::ordering::CellOrdering,
 };
 
 use std::f64::consts::PI;
@@ -219,14 +219,29 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
 
   // One coarse cube, Freudenthal-refined `nsub`-fold per level: the mesh-agnostic
   // path, and on a Kuhn cube identical to the grid the generator would build.
-  let (base_topology, base_coords) = CartesianGrid::new_unit(dim, 1).triangulate();
+  let (mut topology, mut coords) = CartesianGrid::new_unit(dim, 1).triangulate();
+  let mut ordering = CellOrdering::colex(&topology);
+  // The resolutions are successive multiples, so the levels form a refinement
+  // tower: each is reached from the previous by the quotient factor, carrying
+  // the ordering the subdivision inherits. That is what makes the tower agree
+  // with refining the coarse cube once by `nsub`.
+  let mut current = 1usize;
 
   let mut previous: Option<(usize, f64, f64)> = None;
   for &nsub in nsubs {
-    let sub = base_topology.refine(nsub);
-    let coords = base_coords.refine(&sub);
-    let topology = sub.into_complex();
-    let mut matrix = coords.into_matrix();
+    assert_eq!(
+      nsub % current,
+      0,
+      "a tower needs each resolution to be a multiple of the last"
+    );
+    if nsub > current {
+      let sub = topology.refine_with(&ordering, nsub / current);
+      coords = coords.refine(&sub);
+      ordering = sub.ordering().clone();
+      topology = sub.into_complex();
+      current = nsub;
+    }
+    let mut matrix = coords.clone().into_matrix();
     matrix.row_mut(0).scale_mut(TIME_SCALE);
     // The same vertex coordinates seen twice: once inducing the Lorentzian
     // Regge data below, and as the Euclidean comparison geometry errors are

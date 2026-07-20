@@ -262,18 +262,35 @@ mod test {
         corner[axis] = 1.0;
         kuhn.push(corner.clone());
       }
+      // And a sheared image of it. The subdivision is defined by barycentric
+      // weights, so it commutes with any affine map: the law is affine, not a
+      // property of the Kuhn simplex, and therefore holds on an arbitrary mesh.
+      // What *is* special to Kuhn is similarity of the children -- an affine map
+      // preserves the composition but not the shape classes.
+      let skewed: Vec<Vector> = kuhn
+        .iter()
+        .map(|v| {
+          let mut w = v.clone();
+          for axis in 0..dim {
+            w[axis] += 0.3 * (axis + 1) as f64 * v[(axis + 1) % dim] + 0.1 * v[axis];
+          }
+          w
+        })
+        .collect();
 
-      for refinement in 1..=3 {
-        let tower: Vec<Vec<Vector>> = refine_ordered(&kuhn, refinement)
-          .iter()
-          .flat_map(|child| refine_ordered(child, refinement))
-          .collect();
-        assert_eq!(
-          mesh(&tower),
-          mesh(&refine_ordered(&kuhn, refinement * refinement)),
-          "dim {dim}: refining twice by {refinement} must equal refining once by {}",
-          refinement * refinement
-        );
+      for base in [&kuhn, &skewed] {
+        for refinement in 1..=3 {
+          let tower: Vec<Vec<Vector>> = refine_ordered(base, refinement)
+            .iter()
+            .flat_map(|child| refine_ordered(child, refinement))
+            .collect();
+          assert_eq!(
+            mesh(&tower),
+            mesh(&refine_ordered(base, refinement * refinement)),
+            "dim {dim}: refining twice by {refinement} must equal refining once by {}",
+            refinement * refinement
+          );
+        }
       }
     }
   }
