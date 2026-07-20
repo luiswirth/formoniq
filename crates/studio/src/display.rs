@@ -348,7 +348,7 @@ impl MeshDisplay {
     let heights = vec![0.0; vertices.len()];
     let segments = match &baked.cells {
       crate::bake::PrimBatch::Segments(cells) => cells.as_slice(),
-      _ => &baked.wireframe,
+      _ => &baked.edges,
     };
     let seg_zeros = vec![0.0f32; segments.len()];
     let vertex_zeros = vec![0.0f32; vertices.len()];
@@ -374,7 +374,7 @@ impl MeshDisplay {
   pub(crate) fn segments(&self) -> &[[u32; 2]] {
     match &self.baked.cells {
       crate::bake::PrimBatch::Segments(cells) => cells,
-      _ => &self.baked.wireframe,
+      _ => &self.baked.edges,
     }
   }
 
@@ -596,7 +596,7 @@ pub(crate) struct FieldDisplay {
   /// than the renderer's.
   volume: Option<VolumeDisplay>,
   surface: SurfaceMaterial,
-  wireframe: SegmentMaterial,
+  edges: SegmentMaterial,
   /// The 0-skeleton's material: a `SegmentMaterial` too, since a point mark and
   /// a segment mark differ only in primitive, not in what drives them.
   points: SegmentMaterial,
@@ -910,14 +910,13 @@ impl FieldDisplay {
       deposit,
       volume,
       surface,
-      // The wireframe rides the surface's own wave, so it tracks the displaced
+      // The 1-skeleton rides the surface's own wave, so it tracks the displaced
       // mesh rather than the flat rest one, and it has no node to fade at. Its
-      // colormap range is the 1-skeleton's own (a diverging map when the trace
-      // is signed -- a 0-form, or the pulse through zero -- else sequential);
-      // `colored` is left off here and set per frame from the view toggle, since
-      // whether the skeleton reflects the field is a view choice, not the
-      // field's.
-      wireframe: SegmentMaterial {
+      // colormap range is its own (a diverging map when the trace is signed -- a
+      // 0-form, or the pulse through zero -- else sequential); `colored` is left
+      // off here and set per frame from the view toggle, since whether the
+      // skeleton reflects the field is a view choice, not the field's.
+      edges: SegmentMaterial {
         color: [0.0, 0.0, 0.0, 1.0],
         half_width_world: SKELETON_WIDTH_FRACTION * mesh_scale,
         fade_floor: 1.0,
@@ -930,7 +929,7 @@ impl FieldDisplay {
       },
       // The 0-skeleton rides the same wave and clock; its disc is a few edge
       // fractions wide, and its colormap range is its own. `colored`, like the
-      // wireframe's, is the view's to set per frame.
+      // 1-skeleton's, is the view's to set per frame.
       points: SegmentMaterial {
         color: [0.0, 0.0, 0.0, 1.0],
         half_width_world: SKELETON_WIDTH_FRACTION * mesh_scale,
@@ -986,20 +985,20 @@ impl FieldDisplay {
     mesh_view: MeshView,
     field_view: FieldView,
   ) -> DrawList<'a> {
-    // The wireframe rides the surface's wave, so the two amplitudes are one
+    // The 1-skeleton rides the surface's wave, so the two amplitudes are one
     // setting; the glyphs sample the undisplaced surface and carry a zero
     // amplitude already.
-    let (mut surface, mut wireframe, mut points) = (self.surface, self.wireframe, self.points);
+    let (mut surface, mut edges, mut points) = (self.surface, self.edges, self.points);
     if !field_view.displacement {
       surface.wave_amplitude = 0.0;
-      wireframe.wave_amplitude = 0.0;
+      edges.wave_amplitude = 0.0;
       points.wave_amplitude = 0.0;
     }
     // Whether a skeleton reflects the field is a view choice, applied here
     // rather than baked into the material: the range is the field's, the mode
     // is the reader's. Uniform across the three skeletons, faces included.
     surface.colored = f32::from(mesh_view.skeleton(2).colored);
-    wireframe.colored = f32::from(mesh_view.skeleton(1).colored);
+    edges.colored = f32::from(mesh_view.skeleton(1).colored);
     points.colored = f32::from(mesh_view.skeleton(0).colored);
     // The population is stepped only when the flow is shown, and the trail
     // follows it: without the population the atlas is neither stepped nor bound,
@@ -1027,7 +1026,7 @@ impl FieldDisplay {
       items.push(RenderItem::Glyphs(glyphs, self.glyph));
     }
     if mesh_view.skeleton(1).visible {
-      items.push(RenderItem::Segments(&mesh.segments, wireframe));
+      items.push(RenderItem::Segments(&mesh.segments, edges));
     }
     if mesh_view.skeleton(0).visible {
       items.push(RenderItem::Points(&mesh.points, points));

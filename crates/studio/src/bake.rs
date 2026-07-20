@@ -154,10 +154,12 @@ pub struct BakedMesh {
   /// Static per-vertex data, one entry per mesh vertex.
   pub positions: Vec<BakedVertex>,
   pub cells: PrimBatch,
-  /// The 1-skeleton, as the wireframe overlay over a filled surface. Empty
-  /// where the cells already *are* the 1-skeleton ($n <= 1$), so a curve's
-  /// edges are drawn once rather than twice.
-  pub wireframe: Vec<[u32; 2]>,
+  /// The mesh's full 1-skeleton. An overlay over the fill, and -- rendered on
+  /// its own through the mesh display -- the way a solid's interior structure
+  /// is inspected, since the fill shows only the boundary surface. Empty where
+  /// the cells already *are* the 1-skeleton ($n <= 1$), so a curve's edges are
+  /// drawn once rather than twice.
+  pub edges: Vec<[u32; 2]>,
   /// One entry per rendered triangle, in the same order as
   /// [`PrimBatch::Triangles`], mapping it to the cell its field is read in.
   /// Empty for a bake with no fill (a curve, a point cloud).
@@ -185,7 +187,7 @@ impl BakedMesh {
       .fold(0.0, f64::max)
       .max(1e-6);
 
-    let (cells, wireframe, normals, reach) = match topology.dim() {
+    let (cells, edges, normals, reach) = match topology.dim() {
       0 => (
         PrimBatch::Points((0..nvertices as u32).collect()),
         Vec::new(),
@@ -208,27 +210,43 @@ impl BakedMesh {
           vertex_reach(topology, coords, extent),
         )
       }
-      // A solid ($n >= 3$) renders its full 2- and 1-skeletons, interior
-      // simplices included -- every $k$-skeleton for $k <= min(n, 2)$, the same
-      // rule the lower dimensions follow. Occlusion of the interior behind the
-      // boundary is a future concern; for now everything is drawn.
+      // A solid ($n >= 3$) has no visible interior and no slicing tool yet, so
+      // the fill is its boundary surface alone; the full interior 2-skeleton
+      // the previous rule drew was unseeable clutter, and its faces -- shared by
+      // two cells, hence non-manifold -- left `orient_triangles` and the vertex
+      // normals meaningless. The boundary $diff M$ *is* a closed 2-manifold, so
+      // it bakes exactly as the $n = 2$ arm does: consistent winding, a genuine
+      // outward normal, and a real reach (a surface notion) computed on $diff M$
+      // and scattered back to the shared parent vertex table -- interior
+      // vertices keep `INFINITY`, never displacing.
       //
-      // There is no coherent displacement axis: a vertex of the full 2-skeleton
-      // lies on many non-coplanar faces, so its face normals cancel and the
-      // existing "no axis -> identity displacement" rule leaves it undisplaced --
-      // the honest answer, since the surface-normal standing wave is a
-      // 2-manifold viz and a solid's mode reads through the colored skeleton
-      // instead. The reach is a finite extent-scaled backstop (the boundary
-      // surface's own reach is deferred with the rest of the volumetric case),
-      // so a stray non-cancelling normal cannot blow the displacement up.
+      // The 1-skeleton stays the *whole* mesh's, not the boundary's: shown on
+      // its own it is how the interior is inspected, which the fill no longer
+      // can.
       _ => {
-        let triangles = orient_triangles(&skeleton_indices(topology, 2));
+        let boundary = topology
+          .boundary_complex()
+          .expect("a solid has a nonempty boundary");
+        let facet_tris: Vec<[u32; 3]> = topology
+          .boundary_facets()
+          .iter()
+          .map(|f| index_tuple(&f.simplex().vertices))
+          .collect();
+        let triangles = orient_triangles(&facet_tris);
         let normals = vertex_normals(&triangles, &ambient);
+
+        let boundary_reach =
+          vertex_reach(boundary.complex(), &boundary.trace_coords(coords), extent);
+        let mut reach = vec![f64::INFINITY; nvertices];
+        for (local, &parent) in boundary.parent_kidxs(0).iter().enumerate() {
+          reach[parent] = boundary_reach[local];
+        }
+
         (
           PrimBatch::Triangles(triangles),
           skeleton_indices(topology, 1),
           normals,
-          vec![extent; nvertices],
+          reach,
         )
       }
     };
@@ -257,12 +275,12 @@ impl BakedMesh {
     Self {
       positions,
       cells,
-      wireframe,
+      edges,
       cell_corners,
     }
   }
 
-  /// The mesh's own vertices as segment vertices: the table the wireframe
+  /// The mesh's own vertices as segment vertices: the table the 1-skeleton
   /// overlay (and a 1-manifold's cells) are drawn from, at full opacity.
   pub fn segment_vertices(&self) -> Vec<SegmentVertex> {
     self
@@ -531,28 +549,28 @@ mod tests {
         (0, PrimBatch::Points(p)) => assert_eq!(p.len(), ncells),
         (1, PrimBatch::Segments(s)) => assert_eq!(s.len(), ncells),
         (2, PrimBatch::Triangles(t)) => assert_eq!(t.len(), ncells),
-        // The tetrahedron's full 2-skeleton: its four faces, which for a single
-        // cell are all on the boundary (there is no interior face to add).
+        // A solid bakes its boundary surface; a single tetrahedron's boundary
+        // is its four faces (no face is shared, so all are boundary).
         (3, PrimBatch::Triangles(t)) => assert_eq!(t.len(), 4),
         (d, b) => panic!("dim {d} baked to {b:?}"),
       }
-      for &[a, b] in &baked.wireframe {
+      for &[a, b] in &baked.edges {
         assert!((a as usize) < nvertices && (b as usize) < nvertices);
       }
     }
   }
 
-  /// The wireframe overlay is the 1-skeleton of a filled surface, and empty
+  /// The 1-skeleton overlay is the mesh's edges over a filled surface, and empty
   /// where the cells already are the 1-skeleton: a curve's edges are drawn
   /// once, not twice.
   #[test]
-  fn wireframe_is_the_overlay_only_where_there_is_a_fill() {
+  fn edges_are_the_overlay_only_where_there_is_a_fill() {
     for dim in 0..=2 {
       let (topology, coords) = standard_coord_complex(dim);
       let coords = coords.embed_euclidean(3);
       let baked = BakedMesh::new(&topology, &coords);
       let expected = if dim == 2 { topology.nsimplices(1) } else { 0 };
-      assert_eq!(baked.wireframe.len(), expected);
+      assert_eq!(baked.edges.len(), expected);
     }
   }
 
@@ -587,6 +605,39 @@ mod tests {
           }
         }
       }
+    }
+  }
+
+  /// A solid bakes its boundary surface, not its full 2-skeleton: the fill is
+  /// the facets bounding one cell, so a multi-cell grid draws strictly fewer
+  /// triangles than its interior-inclusive 2-skeleton, and every boundary
+  /// vertex gets a real (nonzero) displacement normal.
+  #[test]
+  fn a_solid_bakes_only_its_boundary() {
+    use simplicial::gen::cartesian::CartesianGrid;
+    let (topology, coords) = CartesianGrid::new_unit(3, 3).triangulate();
+    let coords = coords.embed_euclidean(3);
+    let baked = BakedMesh::new(&topology, &coords);
+
+    let PrimBatch::Triangles(triangles) = &baked.cells else {
+      panic!("a solid bakes to triangles");
+    };
+    let nboundary = topology.boundary_facets().len();
+    assert_eq!(triangles.len(), nboundary);
+    assert!(
+      nboundary < topology.nsimplices(2),
+      "the interior was dropped"
+    );
+
+    // A boundary vertex carries a nonzero normal, so its displacement axis is
+    // well defined -- the bug the full 2-skeleton's cancelling normals caused.
+    let boundary = topology.boundary_complex().unwrap();
+    for &v in boundary.parent_kidxs(0) {
+      let n = baked.positions[v].normal;
+      assert!(
+        n[0].abs() + n[1].abs() + n[2].abs() > 0.0,
+        "boundary vertex {v} has no displacement normal"
+      );
     }
   }
 
