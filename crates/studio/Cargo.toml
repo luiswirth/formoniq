@@ -68,6 +68,10 @@ env_logger = "0.11.11"
 egui-file-dialog = "0.14.1"
 clap = { version = "4.6.2", features = ["derive"] }
 image = { version = "0.25.10", default-features = false, features = ["png"] }
+# The per-user config directory the one-time welcome's marker file lives in.
+# Pure Rust and already in the tree via `egui-file-dialog`; the cross-platform
+# path logic is not worth reimplementing by hand from `$HOME`.
+directories = "6.0.0"
 
 # Web-only: the wasm entry point, the async bridge for surface creation, the DOM
 # handles for mounting the canvas, and the panic/log plumbing that routes into
@@ -86,6 +90,9 @@ web-sys = { version = "0.3.77", features = [
   "Window",
   "Element",
   "HtmlCanvasElement",
+  # The one-time welcome's persistence: the browser has no filesystem for a
+  # marker file, so the dismissed flag lives in `localStorage` instead.
+  "Storage",
   # The solve worker: the viewer's one expensive call runs here rather than on
   # the main thread, so the tab keeps rendering while a study solves.
   "Worker",

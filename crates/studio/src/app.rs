@@ -135,6 +135,12 @@ pub(crate) struct State {
   /// looked for rather than about the object.
   post: crate::ui::Post,
 
+  /// Whether the one-time welcome modal is still up. Seeded from the persisted
+  /// first-run marker (`welcome::should_show`), cleared -- and the marker
+  /// written -- the frame the reader dismisses it. Purely a viewer concern, so
+  /// it lives here beside the other shell state.
+  show_welcome: bool,
+
   /// The standing wave's transport clock: the elapsed animation time the
   /// renderer is handed each frame, pausable from the transport bar and reset
   /// whenever the field changes so a newly selected mode starts at its crest.
@@ -312,6 +318,7 @@ impl State {
       },
       sidebars: crate::ui::Sidebars::default(),
       post: crate::ui::Post::default(),
+      show_welcome: crate::welcome::should_show(),
       drag: None,
       cursor: None,
       last_mouse_pos: None,
@@ -999,9 +1006,37 @@ impl State {
     #[cfg(not(target_arch = "wasm32"))]
     let export_dialog = &mut self.export_dialog;
 
+    // The one-time welcome, drawn here rather than in the pure panel: it is
+    // stateful (dismissing it writes the persisted marker) and platform-shaped,
+    // like the file dialogs above. Read the flag before the closure and report
+    // the dismissal back through a local, since the closure cannot touch `self`
+    // while `model` borrows it.
+    let show_welcome = self.show_welcome;
+    let mut welcome_dismissed = false;
+
     let mut response = None;
     let full_output = ctx.run_ui(raw_input, |ui| {
       response = Some(crate::ui::panel(ui, &model));
+
+      // A modal, so the greeting sits over the whole shell and takes the first
+      // interaction: a backdrop click, Escape or the button all dismiss it.
+      if show_welcome {
+        let modal = egui::Modal::new(egui::Id::new("welcome")).show(ui.ctx(), |ui| {
+          ui.set_max_width(430.0);
+          ui.heading(crate::welcome::TITLE);
+          ui.add_space(8.0);
+          ui.label(crate::welcome::message());
+          ui.add_space(12.0);
+          ui.vertical_centered(|ui| {
+            if ui.button("Get started").clicked() {
+              ui.close();
+            }
+          });
+        });
+        if modal.should_close() {
+          welcome_dismissed = true;
+        }
+      }
 
       // Both browsers draw as their own windows and open on the panel's
       // request; each must be updated within the frame, after the panel. `Ui`
@@ -1020,6 +1055,13 @@ impl State {
       }
     });
     let response = response.expect("the closure always runs exactly once");
+
+    // Persist the dismissal once, the frame it happens, so the next launch --
+    // this session's or a later one's -- skips the greeting.
+    if welcome_dismissed {
+      self.show_welcome = false;
+      crate::welcome::mark_seen();
+    }
 
     // A finished file pick, a preset, a mesh-source change and a study switch
     // each replace the field set and the camera's natural orientation

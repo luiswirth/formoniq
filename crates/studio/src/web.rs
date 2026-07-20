@@ -68,6 +68,35 @@ pub(crate) fn take_ready_state() -> Option<State> {
   READY_STATE.with(|slot| slot.borrow_mut().take())
 }
 
+/// The `localStorage` key the dismissed-welcome flag is stored under. The web
+/// half of [`crate::welcome`]'s persistence: the browser has no filesystem for
+/// a marker file, so the one-time greeting is remembered here instead. All the
+/// `localStorage` access is confined to this module, the same discipline the
+/// rest of the web glue keeps.
+const WELCOME_KEY: &str = "formoniq-studio.welcome_seen";
+
+/// The browser's `localStorage`, if the document exposes it (a private-mode or
+/// sandboxed context may not). `None` is treated by the callers as "not stored",
+/// so the greeting simply shows each launch there rather than failing.
+fn local_storage() -> Option<web_sys::Storage> {
+  web_sys::window().and_then(|w| w.local_storage().ok().flatten())
+}
+
+/// Whether the reader has dismissed the welcome before, read from
+/// `localStorage`. False (show it) when the store is unavailable or the key is
+/// unset.
+pub(crate) fn welcome_seen() -> bool {
+  local_storage().is_some_and(|store| store.get_item(WELCOME_KEY).ok().flatten().is_some())
+}
+
+/// Records that the welcome was dismissed. Best-effort: a store that rejects the
+/// write leaves the greeting to reappear next launch rather than erroring.
+pub(crate) fn mark_welcome_seen() {
+  if let Some(store) = local_storage() {
+    let _ = store.set_item(WELCOME_KEY, "1");
+  }
+}
+
 /// Appends the winit-created `<canvas>` to the document body and sizes it to
 /// fill the viewport. winit builds the canvas but leaves attaching it to the
 /// page to the embedder.
