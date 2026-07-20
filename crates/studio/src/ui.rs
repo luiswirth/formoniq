@@ -62,12 +62,6 @@ impl Post {
   pub(crate) const ALL: [Self; 3] = [Self::Clamp, Self::Tonemap, Self::Bloom];
 }
 
-/// What of the mesh itself is drawn: [`crate::display::MeshDisplay`]'s items.
-///
-/// The seam is `display.rs`'s own: the mesh is the object every scene has, and
-/// the field is read *on* it. So these are independent of which field is
-/// selected and unchanged by switching one -- and there is no availability rule
-/// to write, because a scene without geometry is not a scene.
 /// How one $k$-skeleton is drawn: whether it appears, and whether it reflects
 /// the field or is the structural geometry ink. The two are independent -- hiding
 /// a skeleton and coloring it are separate choices, and coloring is a no-op while
@@ -78,6 +72,12 @@ pub(crate) struct SkeletonView {
   pub(crate) colored: bool,
 }
 
+/// What of the mesh itself is drawn: [`crate::display::MeshDisplay`]'s items.
+///
+/// The seam is `display.rs`'s own: the mesh is the object every scene has, and
+/// the field is read *on* it. So these are independent of which field is
+/// selected and unchanged by switching one -- and there is no availability rule
+/// to write, because a scene without geometry is not a scene.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct MeshView {
   /// The view of each $k$-skeleton, indexed by $k in {0, 1, 2}$: the points, the
@@ -483,6 +483,23 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
 /// and a tangent line field (discussion #101). Whether the reduction went
 /// through a Hodge star ($k$ above the fold) is noted so the top-grade section
 /// reads as a density arrived at by $star$, not a bare 0-form.
+/// One titled, collapsible group of controls.
+///
+/// The sidebars are a list of sections and nothing else, so the reader's unit
+/// of attention is the section rather than the individual widget: a heading
+/// that says which question the rows below answer, and a fold for the ones this
+/// reader is not asking. Default-open, because a control that has to be found
+/// before it can be seen is a control most readers never learn exists.
+fn section(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui)) {
+  egui::CollapsingHeader::new(egui::RichText::new(title).strong())
+    .default_open(true)
+    .show_unindented(ui, |ui| {
+      ui.add_space(2.0);
+      body(ui);
+      ui.add_space(4.0);
+    });
+}
+
 /// A $k$-skeleton's label, with the render primitive it draws to: the reader
 /// sees both the intrinsic object and its picture. Faces, edges, points are the
 /// $k <= 2$ the ambient reaches.
@@ -652,56 +669,56 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       ui.heading("Browser");
       ui.separator();
 
-      ui.label("Presets");
-      for (i, preset) in model.presets.iter().enumerate() {
-        if ui.selectable_label(false, preset.name).clicked() {
-          requested_preset = Some(i);
+      section(ui, "Presets", |ui| {
+        for (i, preset) in model.presets.iter().enumerate() {
+          if ui.selectable_label(false, preset.name).clicked() {
+            requested_preset = Some(i);
+          }
         }
-      }
-      ui.separator();
+      });
 
       // The study axis. Eigenmodes and the Whitney basis are the two generic
       // studies; an explicit cochain list has no generic form to pick, so it
       // shows as the selected study only when a preset installed it.
-      ui.label("Study");
-      ui.horizontal_wrapped(|ui| {
-        let on_eigenmodes = matches!(model.study, Study::Eigenmodes { .. });
-        if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
-          requested_study = Study::Eigenmodes {
-            grade: model.last_grade,
-            nmodes: DEFAULT_NMODES,
-          };
-        }
-        let on_whitney = matches!(model.study, Study::WhitneyBasis);
-        if ui.selectable_label(on_whitney, "Whitney basis").clicked() {
-          requested_study = Study::WhitneyBasis;
-        }
-        let on_hodge = matches!(model.study, Study::HodgeDecomposition);
-        if ui
-          .selectable_label(on_hodge, "Hodge decomposition")
-          .clicked()
-        {
-          requested_study = Study::HodgeDecomposition;
-        }
-        let on_heat = matches!(model.study, Study::Heat { .. });
-        if ui.selectable_label(on_heat, "Heat").clicked() && !on_heat {
-          requested_study = Study::Heat {
-            nsteps: DEFAULT_TRAJECTORY_STEPS,
-            final_time: HEAT_FINAL_TIME,
-          };
-        }
-        let on_wave = matches!(model.study, Study::Wave { .. });
-        if ui.selectable_label(on_wave, "Wave").clicked() && !on_wave {
-          requested_study = Study::Wave {
-            nsteps: DEFAULT_TRAJECTORY_STEPS,
-            final_time: WAVE_FINAL_TIME,
-          };
-        }
-        if matches!(model.study, Study::Cochains(_)) {
-          let _ = ui.selectable_label(true, "Cochains");
-        }
+      section(ui, "Study", |ui| {
+        ui.horizontal_wrapped(|ui| {
+          let on_eigenmodes = matches!(model.study, Study::Eigenmodes { .. });
+          if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
+            requested_study = Study::Eigenmodes {
+              grade: model.last_grade,
+              nmodes: DEFAULT_NMODES,
+            };
+          }
+          let on_whitney = matches!(model.study, Study::WhitneyBasis);
+          if ui.selectable_label(on_whitney, "Whitney basis").clicked() {
+            requested_study = Study::WhitneyBasis;
+          }
+          let on_hodge = matches!(model.study, Study::HodgeDecomposition);
+          if ui
+            .selectable_label(on_hodge, "Hodge decomposition")
+            .clicked()
+          {
+            requested_study = Study::HodgeDecomposition;
+          }
+          let on_heat = matches!(model.study, Study::Heat { .. });
+          if ui.selectable_label(on_heat, "Heat").clicked() && !on_heat {
+            requested_study = Study::Heat {
+              nsteps: DEFAULT_TRAJECTORY_STEPS,
+              final_time: HEAT_FINAL_TIME,
+            };
+          }
+          let on_wave = matches!(model.study, Study::Wave { .. });
+          if ui.selectable_label(on_wave, "Wave").clicked() && !on_wave {
+            requested_study = Study::Wave {
+              nsteps: DEFAULT_TRAJECTORY_STEPS,
+              final_time: WAVE_FINAL_TIME,
+            };
+          }
+          if matches!(model.study, Study::Cochains(_)) {
+            let _ = ui.selectable_label(true, "Cochains");
+          }
+        });
       });
-      ui.separator();
 
       // The mesh axis: every study runs on every mesh, so the picker is always
       // shown. A generated family resets to its default refinement when first
@@ -710,68 +727,71 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // "Mesh source", not "Mesh": this is which object to build, while the
       // inspector's "Mesh" is what of it to draw. Two questions, and the longer
       // name is the one that says which this is.
-      ui.label("Mesh source");
-      egui::ComboBox::from_id_salt("mesh-source")
-        .selected_text(requested_mesh.label())
-        .show_ui(ui, |ui| {
-          let is_sphere = matches!(requested_mesh, MeshSource::Sphere { .. });
-          if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
-            requested_mesh = MeshSource::Sphere {
-              subdivisions: SPHERE_SUBDIVISIONS,
-            };
-          }
-          let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
-          if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
-            requested_mesh = MeshSource::Grid {
-              dim: GRID_DIM_DEFAULT,
-              cells_axis: GRID_CELLS_DEFAULT,
-            };
-          }
-          let is_ref = matches!(requested_mesh, MeshSource::ReferenceCell { .. });
-          if ui.selectable_label(is_ref, "Reference cell").clicked() && !is_ref {
-            requested_mesh = MeshSource::ReferenceCell {
-              dim: REFERENCE_CELL_DIM,
-            };
-          }
-          let is_triforce = matches!(requested_mesh, MeshSource::Triforce);
-          if ui.selectable_label(is_triforce, "Triforce").clicked() {
-            requested_mesh = MeshSource::Triforce;
-          }
-          for builtin in BuiltinMesh::all() {
-            let selected = requested_mesh == MeshSource::Builtin(builtin);
-            if ui.selectable_label(selected, builtin.label()).clicked() {
-              requested_mesh = MeshSource::Builtin(builtin);
+      section(ui, "Mesh source", |ui| {
+        egui::ComboBox::from_id_salt("mesh-source")
+          .selected_text(requested_mesh.label())
+          .show_ui(ui, |ui| {
+            let is_sphere = matches!(requested_mesh, MeshSource::Sphere { .. });
+            if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
+              requested_mesh = MeshSource::Sphere {
+                subdivisions: SPHERE_SUBDIVISIONS,
+              };
             }
+            let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
+            if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
+              requested_mesh = MeshSource::Grid {
+                dim: GRID_DIM_DEFAULT,
+                cells_axis: GRID_CELLS_DEFAULT,
+              };
+            }
+            let is_ref = matches!(requested_mesh, MeshSource::ReferenceCell { .. });
+            if ui.selectable_label(is_ref, "Reference cell").clicked() && !is_ref {
+              requested_mesh = MeshSource::ReferenceCell {
+                dim: REFERENCE_CELL_DIM,
+              };
+            }
+            let is_triforce = matches!(requested_mesh, MeshSource::Triforce);
+            if ui.selectable_label(is_triforce, "Triforce").clicked() {
+              requested_mesh = MeshSource::Triforce;
+            }
+            for builtin in BuiltinMesh::all() {
+              let selected = requested_mesh == MeshSource::Builtin(builtin);
+              if ui.selectable_label(selected, builtin.label()).clicked() {
+                requested_mesh = MeshSource::Builtin(builtin);
+              }
+            }
+          });
+        // A generated family or the reference cell carries a slider; a built-in,
+        // the triforce or a loaded mesh has none.
+        match &mut requested_mesh {
+          MeshSource::Sphere { subdivisions } => {
+            ui.add(
+              egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"),
+            );
           }
-        });
-      // A generated family or the reference cell carries a slider; a built-in,
-      // the triforce or a loaded mesh has none.
-      match &mut requested_mesh {
-        MeshSource::Sphere { subdivisions } => {
-          ui.add(egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"));
+          MeshSource::Grid { dim, cells_axis } => {
+            ui.add(egui::Slider::new(dim, 1..=GRID_DIM_MAX).text("dimension"));
+            ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
+          }
+          MeshSource::ReferenceCell { dim } => {
+            ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
+          }
+          MeshSource::Triforce
+          | MeshSource::Builtin(_)
+          | MeshSource::Custom { .. }
+          | MeshSource::File(_) => {}
         }
-        MeshSource::Grid { dim, cells_axis } => {
-          ui.add(egui::Slider::new(dim, 1..=GRID_DIM_MAX).text("dimension"));
-          ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
+        // Opens the in-egui file browser; the pick itself is retrieved by the
+        // caller, which owns the (native-only) `egui_file_dialog` state. Absent on
+        // the web, which has no local filesystem to browse.
+        #[cfg(not(target_arch = "wasm32"))]
+        if ui.button("Load OBJ…").clicked() {
+          load_obj_clicked = true;
         }
-        MeshSource::ReferenceCell { dim } => {
-          ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
+        if let Some(error) = &model.mesh_error {
+          ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
         }
-        MeshSource::Triforce
-        | MeshSource::Builtin(_)
-        | MeshSource::Custom { .. }
-        | MeshSource::File(_) => {}
-      }
-      // Opens the in-egui file browser; the pick itself is retrieved by the
-      // caller, which owns the (native-only) `egui_file_dialog` state. Absent on
-      // the web, which has no local filesystem to browse.
-      #[cfg(not(target_arch = "wasm32"))]
-      if ui.button("Load OBJ…").clicked() {
-        load_obj_clicked = true;
-      }
-      if let Some(error) = &model.mesh_error {
-        ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
-      }
+      });
     });
 
   // Right inspector: the knobs of what is shown -- the study's own parameters
@@ -839,8 +859,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // The skeletons, as peers: one row per k-skeleton the mesh has
       // (k <= min(n, 2)), faces at the top, each with the same two questions --
       // drawn, and colored by the field or left as structural geometry.
-      ui.separator();
-      ui.label("Skeletons");
+      section(ui, "Skeletons", |ui| {
       for k in (0..=model.scene_dim.min(2)).rev() {
         let sk = &mut mesh_view.skeletons[k];
         ui.horizontal(|ui| {
@@ -850,6 +869,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
             .on_hover_text("Reflect the selected field on this skeleton as a heatmap, instead of the structural geometry ink");
         });
       }
+      });
 
       // The field side is the only one gated, and it asks rather than
       // dispatches: which settings a field offers is its reduced grade's answer
@@ -857,8 +877,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       // use is to be wrong -- and a section with no knobs is one too, so a
       // density that is no eigenmode shows no section at all.
       if model.offers.any() {
-        ui.separator();
-        ui.label("Field");
+        section(ui, "Field", |ui| {
         if model.offers.displacement {
           ui.checkbox(&mut field_view.displacement, "Displacement")
             .on_hover_text("The standing wave, along the surface's normal: the mode's own geometry");
@@ -869,16 +888,17 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           ui.checkbox(&mut field_view.marks.particles, "Particles")
             .on_hover_text("Advected points: the field's dynamics, legible in motion");
         }
+        });
       }
 
       // Radio, not two checkboxes: the rungs are cumulative, so the states are
       // three and not four.
-      ui.separator();
-      ui.label("Light");
-      ui.horizontal_wrapped(|ui| {
-        for rung in Post::ALL {
-          ui.radio_value(&mut post, rung, rung.label());
-        }
+      section(ui, "Light", |ui| {
+        ui.horizontal_wrapped(|ui| {
+          for rung in Post::ALL {
+            ui.radio_value(&mut post, rung, rung.label());
+          }
+        });
       });
 
       ui.separator();
