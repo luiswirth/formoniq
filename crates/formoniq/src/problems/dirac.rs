@@ -441,6 +441,18 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 /// $u = hat(g) + E u_0$, $E^T (A + m M) E thin u_0 = E^T (b - (A + m M) hat(g))$
 /// reduces to the homogeneous problem on `relative`'s interior DOFs, and the
 /// returned field is the lifted ambient solution.
+///
+/// # The massless kernel
+///
+/// At $m = 0$ the relative operator is *singular*, and not by accident: its
+/// kernel is the space of relative harmonic fields, which Poincaré--Lefschetz
+/// duality pins to $H^n (M, diff M) tilde.equiv H_0 (M) = RR$ on a connected
+/// mesh --- one dimension, in the top grade, on any geometry and any signature.
+/// The Lorentzian signature does not remove it: it is topological, not
+/// spectral. [`top_harmonic`] writes that mode down in closed form, and this
+/// solve deflates it, returning the unique solution orthogonal to it. Grades
+/// $k < n$ are untouched, so a field living below the top grade --- the
+/// Faraday 2-form of Maxwell for $n > 2$ --- is unique outright.
 pub fn solve_dirac_source(
   relative: &RelativeWhitneyComplex,
   mass_term: f64,
@@ -481,8 +493,79 @@ pub fn solve_dirac_source(
   let rhs = inclusion.transpose() * (dirac.flatten(load) - &system * &lift);
   let system_relative = inclusion.transpose() * &system * &inclusion;
 
-  let interior = FaerLu::new(system_relative).solve(&rhs);
+  // At $m = 0$ the relative operator carries the one-dimensional top-grade
+  // harmonic; border the system with it rather than handing a singular matrix
+  // to LU. The multiplier is the load's component along the harmonic, zero
+  // exactly when the problem is consistent.
+  let interior = match (mass_term == 0.0).then(|| top_harmonic(relative)).flatten() {
+    Some(h) => solve_bordered(&system_relative, &rhs, &h),
+    None => FaerLu::new(system_relative).solve(&rhs),
+  };
   dirac.unflatten(&(lift + inclusion * interior))
+}
+
+/// The relative harmonic field of the massless Hodge–Dirac operator, in the
+/// flat relative DOF layout: top grade only, every lower grade zero.
+///
+/// $ h_n = M_n^(-1) z, quad z = "the fundamental class", $
+///
+/// with $z$ the coherent orientation read off the cells. This is the whole
+/// kernel, not a member of it: a field supported in grade $n$ is annihilated by
+/// $dif + delta$ exactly when $D_(n-1)^T M_n u_n = 0$, i.e. when $M_n u_n$ is a
+/// relative $n$-cycle, and the relative $n$-cycles of a connected mesh are the
+/// multiples of the fundamental class. Hence $dim ker = dim H^n (M, diff M) = 1$
+/// --- the closed form of the Poincaré--Lefschetz statement, needing no
+/// eigensolve.
+///
+/// `None` on a non-orientable mesh, where no fundamental class exists
+/// (invariant 6: holding the orientation *is* the proof of orientability).
+/// There the kernel is genuinely absent, $H^n (M, diff M) = 0$ over $RR$, and
+/// the operator is invertible without deflation.
+pub fn top_harmonic(relative: &RelativeWhitneyComplex) -> Option<Vector> {
+  let dim = relative.dim();
+  let orientation = relative.full().topology().orientation()?;
+
+  let z = Vector::from_iterator(
+    orientation.signs().len(),
+    orientation.signs().iter().map(|s| s.as_f64()),
+  );
+  let h_n = FaerLu::new(CsrMatrix::from(&relative.mass(dim))).solve(&z);
+
+  let ndofs: Vec<usize> = (0..=dim).map(|k| relative.ndofs(k)).collect();
+  let mut h = Vector::zeros(ndofs.iter().sum());
+  let offset: usize = ndofs[..dim].iter().sum();
+  h.rows_mut(offset, ndofs[dim]).copy_from(&h_n);
+  Some(h)
+}
+
+/// Solve the consistent singular system $S u = f$ with $ker S = "span"{h}$ by
+/// bordering, returning the unique solution with $h^T u = 0$:
+///
+/// $ mat(S, h; h^T, 0) vec(u, c) = vec(f, 0). $
+///
+/// The bordered matrix is nonsingular precisely because $h$ spans the kernel,
+/// so one LU replaces a pseudo-inverse. The multiplier $c$ is the residual
+/// along $h$, zero when $f perp ker S$.
+fn solve_bordered(system: &CsrMatrix, rhs: &Vector, h: &Vector) -> Vector {
+  let n = rhs.len();
+  let mut bordered = CooMatrix::new(n + 1, n + 1);
+  for (r, c, &v) in system.triplet_iter() {
+    bordered.push(r, c, v);
+  }
+  for (i, &v) in h.iter().enumerate() {
+    if v != 0.0 {
+      bordered.push(i, n, v);
+      bordered.push(n, i, v);
+    }
+  }
+
+  let mut bordered_rhs = Vector::zeros(n + 1);
+  bordered_rhs.rows_mut(0, n).copy_from(rhs);
+
+  FaerLu::new(CsrMatrix::from(&bordered))
+    .solve(&bordered_rhs)
+    .rows(0, n)
+    .into_owned()
 }
 
 #[cfg(test)]
@@ -514,6 +597,36 @@ mod test {
   /// the assembled Hodge–Dirac operator is skew-symmetric, $A + A^T = 0$, to
   /// roundoff and at every dimension. This is integration by parts made
   /// structural --- the super-diagonal blocks are the negated transposes of the
+  /// Poincaré--Lefschetz, discretely: the closed-form top-grade harmonic
+  /// $h_n = M_n^(-1) z$ is annihilated by the massless self-adjoint
+  /// Hodge--Dirac operator, in every dimension and on either signature. This is
+  /// the statement that $ker(dif + delta) supset.eq H^n (M, diff M)$ is realized
+  /// exactly on the nose by the fundamental class, with no eigensolve.
+  #[test]
+  fn top_harmonic_is_annihilated() {
+    for dim in 1..=4 {
+      for minkowski in [false, true] {
+        let (topology, coords) = if minkowski {
+          CartesianGrid::minkowski(dim, 2)
+        } else {
+          CartesianGrid::new_unit(dim, 2).triangulate()
+        };
+        let regge = coords.to_edge_lengths_sq(&topology);
+        let whitney = WhitneyComplex::new(&topology, &regge);
+        let relative = whitney.relative();
+
+        let h = top_harmonic(&relative).expect("a box is orientable");
+        let dirac = HodgeDirac::assemble_selfadjoint(&relative);
+        let residual = (dirac.op() * &h).norm() / h.norm();
+
+        assert!(
+          residual < 1e-9,
+          "dim {dim} minkowski {minkowski}: |A h|/|h| = {residual:.3e}"
+        );
+      }
+    }
+  }
+
   /// sub-diagonal ones by construction --- and it is what conserves energy.
   #[test]
   fn operator_is_skew_symmetric() {
