@@ -2025,21 +2025,29 @@ mod tests {
   ///
   /// Deliberately not Bob or another gallery mesh: those run to several
   /// thousand vertices, and the harmonic solve at that size dominates the
-  /// entire workspace test suite's runtime. `torus0.msh` -- a genus-1 surface
-  /// at 127 vertices, the coarsest level of a Gmsh refinement family -- is kept
-  /// as a fixture solely for this test (see `assets/meshes/SOURCES.md`).
+  /// entire workspace test suite's runtime. The generated donut is the genus-1
+  /// case at a few dozen vertices, and being generated it needs no asset at
+  /// all -- what it stands for is $b_1 = 2$, which its construction guarantees
+  /// rather than a file's contents happening to have it.
   #[test]
   fn hodge_decomposition_splits_orthogonally() {
     use crate::gallery::MeshSource;
+    use crate::gallery::{QuotientSurface, QUOTIENT_CELLS_DEFAULT};
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
-    use simplicial::io::gmsh::gmsh2coord_complex;
     use simplicial::linalg::CsrMatrix;
 
-    let torus = || gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));
+    let torus = || {
+      MeshSource::Quotient {
+        surface: QuotientSurface::Donut,
+        cells_axis: QUOTIENT_CELLS_DEFAULT,
+      }
+      .build()
+      .unwrap()
+    };
 
     for (label, build, betti_1) in [
       (
-        "torus0.msh",
+        "Donut",
         &torus as &dyn Fn() -> (Complex, MeshCoords),
         2usize,
       ),

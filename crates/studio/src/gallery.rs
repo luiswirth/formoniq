@@ -140,6 +140,11 @@ pub struct BuiltinMesh(usize);
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum Format {
   Obj,
+  // Constructed only by `build.rs`, from the extension of whatever is in the
+  // asset directory -- so it goes unconstructed whenever no `.msh` ships, and
+  // that is not a reason to drop the reader. The directory is the source of
+  // truth for which meshes exist; the formats are what it may contain.
+  #[allow(dead_code)]
   Gmsh,
 }
 
@@ -1056,25 +1061,24 @@ mod tests {
   /// into the scene its study builds, so it breaks silently when the shells are
   /// reordered -- pinned here to the shell's name instead.
   ///
-  /// Checked on `torus0.msh` rather than on its own mesh (Bob): what the index
-  /// depends on is the shell ordering of
-  /// `Study::HodgeDecomposition` and the surface's first Betti number, and the
-  /// torus fixture has the same $b_1 = 2$ at 127 vertices instead of ~3000. It
-  /// is a faithful stand-in for what is being tested, not a weaker one -- and
-  /// it keeps Bob's harmonic solve out of the test suite, for the reason
-  /// `assets/meshes/SOURCES.md` already records.
+  /// Checked on the generated donut rather than on its own mesh (Bob): what the
+  /// index depends on is the shell ordering of `Study::HodgeDecomposition` and
+  /// the surface's first Betti number, and the donut has the same $b_1 = 2$ at
+  /// a few dozen vertices instead of ~3000. It is a faithful stand-in for what
+  /// is being tested, not a weaker one -- and it keeps Bob's harmonic solve out
+  /// of the test suite.
   #[test]
   fn the_hodge_preset_opens_on_the_harmonic_shell() {
     let hodge = presets()
       .into_iter()
       .find(|p| matches!(p.study, Study::HodgeDecomposition))
       .expect("a Hodge decomposition preset");
-    let mesh =
-      simplicial::io::gmsh::gmsh2coord_complex(include_bytes!("../assets/meshes/torus0.msh"));
-    assert!(
-      mesh.0.nsimplices(1) > 0,
-      "torus fixture built empty (unfetched LFS asset?)"
-    );
+    let mesh = MeshSource::Quotient {
+      surface: QuotientSurface::Donut,
+      cells_axis: QUOTIENT_CELLS_DEFAULT,
+    }
+    .build()
+    .expect("a generated mesh always builds");
     let scene = hodge.study.build(&mesh);
     let Some(Selection::Line(index)) = hodge.selection else {
       panic!("the Hodge preset opens on a line field");
