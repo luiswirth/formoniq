@@ -70,6 +70,30 @@ impl Cochain {
     Cochain::new(self.grade() + 1, dif_operator * self.coeffs())
   }
 
+  /// The trace onto a subsimplex: the pullback of the discrete form along the
+  /// inclusion $iota_tau: tau arrow.r.hook M$, as a cochain on `simplex`
+  /// regarded as its own standard cell
+  /// ([`Complex::standard`](simplicial::topology::complex::Complex::standard)).
+  ///
+  /// Metric-free (invariant 5: the trace is a pullback). Combinatorially it is
+  /// the restriction of the cochain to the subsimplices of `simplex`: the
+  /// [`faces`](SimplexRef::faces) come in the colex order of their local vertex
+  /// positions, the same order the DOFs of the standard cell take, and colex is
+  /// preserved under passing to a subset, so each face's coefficient is read off
+  /// with no sign. A grade exceeding `simplex.dim()` has no faces of that grade
+  /// and traces to the empty cochain -- the zero of $Lambda^k(tau) = 0$ -- which
+  /// is how the trace stays total below the form's grade.
+  ///
+  /// Whitney interpolation commutes with it, $tr_tau compose W = W_tau compose
+  /// tr_tau$ (test `whitney_trace_commutes` in
+  /// [`crate::interpolate`]): the Whitney field on the subsimplex is the
+  /// interpolation of the traced cochain, so the trace of a Whitney form comes
+  /// for free.
+  pub fn trace(&self, simplex: SimplexRef) -> Self {
+    let coeffs: Vec<f64> = simplex.faces(self.grade).map(|face| self[face]).collect();
+    Self::new(self.grade, Vector::from_vec(coeffs))
+  }
+
   /// Whether this could be a cochain on `topology`: same grade, one
   /// coefficient per simplex of that grade.
   pub fn is_compatible_with(&self, topology: &Complex) -> bool {
