@@ -115,4 +115,59 @@ mod test {
       }
     }
   }
+
+  /// $tr_tau compose W = W_tau compose tr_tau$: Whitney interpolation commutes
+  /// with the trace onto a subsimplex.
+  ///
+  /// Pulling the reconstructed field back onto a face equals reconstructing, on
+  /// that face as its own standard cell, the traced (restricted) cochain -- so
+  /// the trace of a Whitney form is the Whitney form of the trace. Swept over
+  /// every cell dimension, every grade, and every subsimplex whose dimension can
+  /// still carry the grade ($d >= k$; below it the trace is the zero of the empty
+  /// space and there is nothing to interpolate).
+  #[test]
+  fn whitney_trace_commutes() {
+    use simplicial::atlas::{ref_face_spanning_vectors, Bary};
+
+    for n in 1..=3 {
+      let complex = Complex::standard(n);
+      let cell = complex.cells().handle_iter().next().unwrap();
+
+      for k in 0..=n {
+        let ndofs = complex.nsimplices(k);
+        let cochain = Cochain::new(
+          k,
+          Vector::from_iterator(ndofs, (0..ndofs).map(|i| 0.5 * (i as f64) - 1.0)),
+        );
+        let interpolant = WhitneyInterpolant::new(cochain.clone(), &complex);
+
+        for d in k..=n {
+          for tau in cell.faces(d) {
+            let positions = tau.simplex().relative_to(cell.simplex());
+
+            let weights: Vec<f64> = (0..=d).map(|i| (i + 2) as f64).collect();
+            let total: f64 = weights.iter().sum();
+            let face_bary =
+              Bary::new(Vector::from_iterator(d + 1, weights.iter().map(|w| w / total)));
+
+            // tr_tau (W c): the ambient field pulled back along iota_tau.
+            let ambient =
+              interpolant.eval(&MeshPoint::on_face(cell.idx(), &positions, &face_bary));
+            let traced_field = ambient.pullback(&ref_face_spanning_vectors(n, &positions));
+
+            // W_tau (tr_tau c): the traced cochain interpolated on tau's own cell.
+            let sub = Complex::standard(d);
+            let sub_cell = sub.cells().handle_iter().next().unwrap();
+            let field_of_trace = WhitneyInterpolant::new(cochain.trace(tau), &sub)
+              .eval(&MeshPoint::new(sub_cell.idx(), face_bary.clone()));
+
+            assert!(
+              traced_field.eq_epsilon(&field_of_trace, 1e-12),
+              "n={n} k={k} d={d}"
+            );
+          }
+        }
+      }
+    }
+  }
 }
