@@ -31,6 +31,33 @@ pub fn cartesian2linear(cart_idx: &[usize], radix: usize) -> usize {
   lin_idx
 }
 
+/// Converts a cartesian multi-index to a linear index when the axes carry
+/// *different* radices: the positional number of mixed base
+/// $"radix"_0, dots, "radix"_(d-1)$, least significant axis first.
+///
+/// The uniform [`cartesian2linear`] is the constant-radix case.
+pub fn cartesian2linear_mixed(cart_idx: &[usize], radices: &[usize]) -> usize {
+  let mut lin_idx = 0;
+  for (&icomp, &radix) in cart_idx.iter().zip(radices).rev() {
+    lin_idx *= radix;
+    lin_idx += icomp;
+  }
+  lin_idx
+}
+
+/// The inverse of [`cartesian2linear_mixed`]: the mixed-radix digits of a
+/// linear index in `0..radices.product()`.
+pub fn linear2cartesian_mixed(mut lin_idx: usize, radices: &[usize]) -> Vec<usize> {
+  radices
+    .iter()
+    .map(|&radix| {
+      let digit = lin_idx % radix;
+      lin_idx /= radix;
+      digit
+    })
+    .collect()
+}
+
 /// The linear-index offset of a cube corner (a set of axes with coordinate 1)
 /// under the given per-axis strides.
 pub fn corner_offset(corner: Combination, strides: &[usize]) -> usize {
@@ -69,6 +96,35 @@ mod tests {
           assert_eq!(cart.len(), dim);
           assert!(cart.iter().all(|&c| c < radix));
           assert_eq!(cartesian2linear(&cart, radix), lin);
+        }
+      }
+    }
+  }
+
+  /// Mixed-radix linearization is a bijection onto `0..radices.product()`, and
+  /// reduces to the uniform one when every radix agrees.
+  #[test]
+  fn mixed_radix_round_trip() {
+    for radices in [
+      vec![],
+      vec![1],
+      vec![4],
+      vec![2, 3],
+      vec![3, 1, 4],
+      vec![2, 2, 2],
+    ] {
+      let count: usize = radices.iter().product();
+      for lin in 0..count {
+        let cart = linear2cartesian_mixed(lin, &radices);
+        assert!(cart.iter().zip(&radices).all(|(&c, &r)| c < r));
+        assert_eq!(cartesian2linear_mixed(&cart, &radices), lin);
+      }
+      if let Ok(&radix) = radices.iter().all_equal_value() {
+        for lin in 0..count {
+          assert_eq!(
+            linear2cartesian_mixed(lin, &radices),
+            linear2cartesian(lin, radix, radices.len())
+          );
         }
       }
     }

@@ -282,6 +282,14 @@ and passes tests.
    is affine, hence true of any mesh; what is special to a Kuhn grid is that the
    children are *similar* to the parent, so a tower there stays self-similar.
 
+   An ordering is therefore a partial datum, not a guaranteed one, and
+   `is_face_consistent` is what decides. The Kuhn triangulation of a box is not
+   invariant under reflection — mirroring an axis exchanges the diagonal — so a
+   mesh glued along a *reflecting* seam is conforming but admits no
+   face-consistent Kuhn order, and its generator returns `None` rather than an
+   ordering that lies. The mesh is still fully usable; what is lost is only the
+   self-similarity of a refinement tower.
+
 8. **Zero-cost abstractions.** Generics and monomorphization, not `dyn` and
    runtime dispatch, in anything on the assembly hot path. HPC is a requirement,
    not an afterthought (`rayon`-parallel assembly is already the norm).
