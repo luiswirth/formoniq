@@ -91,6 +91,16 @@ fn field_at(m: VolumeMaterial, x: vec3<f32>) -> f32 {
     return m.value_min + texel * m.value_range;
 }
 
+// A per-pixel dither in `[0, 1)`, Jimenez's interleaved-gradient noise: a cheap
+// hash whose values are spatially well-distributed, so neighbouring pixels get
+// decorrelated offsets rather than the same one. Used to jitter each ray's first
+// sample. Deliberately a pure function of the pixel and nothing else -- no time,
+// no frame counter -- so a re-rendered static frame is bit-identical and the
+// redraw-on-demand loop never shimmers a paused medium.
+fn interleaved_gradient_noise(pixel: vec2<f32>) -> f32 {
+    return fract(52.9829189 * fract(dot(pixel, vec2<f32>(0.06711056, 0.00583715))));
+}
+
 // How much of the display range a value occupies, which is what drives both the
 // absorption and the emission. Magnitude, not signed value: a diverging field's
 // two lobes are equally present as medium, and only the *color* distinguishes
@@ -132,7 +142,14 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     var radiance = vec3<f32>(0.0);
     var transmittance = 1.0;
     let dt = m.step_size;
-    var t = span.x + dt * 0.5;
+    // Jitter the first sample across `[0, dt)` per pixel instead of a fixed
+    // half-step. A shared offset lines every ray's sample planes up into rings
+    // wherever the step is coarse relative to the field; a per-pixel offset
+    // trades those rings for high-frequency noise, which the SSAA box filter
+    // then averages down -- far less objectionable at equal step count, so the
+    // step can be coarser for the same perceived quality. The mean offset is
+    // still ~0.5, so the midpoint rule is preserved in expectation.
+    var t = span.x + dt * interleaved_gradient_noise(in.clip.xy);
     for (var i = 0; i < MAX_STEPS; i = i + 1) {
         if (t >= span.y || transmittance < MIN_TRANSMITTANCE) {
             break;
