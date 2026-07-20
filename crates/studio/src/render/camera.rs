@@ -376,6 +376,19 @@ mod tests {
     }
   }
 
+  /// Snapping to any orientation holds the pivot: the vantage changes while the
+  /// object stays framed, the invariant every canned pose is built on.
+  #[test]
+  fn snap_to_holds_the_pivot() {
+    for (yaw, pitch) in sweep() {
+      let mut c = at(0.4, -0.2);
+      let pivot = c.pivot();
+      c.snap_to(yaw, pitch);
+      assert!((c.forward().norm() - 1.0).abs() < 1e-6);
+      assert!((c.pivot() - pivot).norm() < 1e-4, "yaw={yaw} pitch={pitch}");
+    }
+  }
+
   /// Away from the poles the carried frame reproduces `look_at_rh` exactly:
   /// this camera is its analytic continuation, not a different convention.
   #[test]
