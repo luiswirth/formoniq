@@ -8,9 +8,10 @@ use exterior::ExteriorGrade;
 use simplicial::{topology::simplex::Simplex, Dim};
 
 use crate::gallery::{
-  BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
-  EIGENMODES_NMODES_MAX, EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT, GRID_CELLS_MAX,
-  GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX, HEAT_FINAL_TIME_MIN,
+  BuiltinMesh, MeshSource, Preset, QuotientSurface, Study, DEFAULT_NMODES,
+  DEFAULT_TRAJECTORY_STEPS, EIGENMODES_NMODES_MAX, EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT,
+  GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX,
+  HEAT_FINAL_TIME_MIN, QUOTIENT_CELLS_DEFAULT, QUOTIENT_CELLS_MAX, QUOTIENT_CELLS_MIN,
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
   TRAJECTORY_STEPS_MAX, TRAJECTORY_STEPS_MIN, WAVE_FINAL_TIME, WAVE_FINAL_TIME_MAX,
   WAVE_FINAL_TIME_MIN,
@@ -1037,6 +1038,16 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
                   dim: REFERENCE_CELL_DIM,
                 };
               }
+              for surface in [QuotientSurface::Donut, QuotientSurface::Moebius] {
+                let selected =
+                  matches!(requested_mesh, MeshSource::Quotient { surface: s, .. } if s == surface);
+                if ui.selectable_label(selected, surface.label()).clicked() && !selected {
+                  requested_mesh = MeshSource::Quotient {
+                    surface,
+                    cells_axis: QUOTIENT_CELLS_DEFAULT,
+                  };
+                }
+              }
               let is_triforce = matches!(requested_mesh, MeshSource::Triforce);
               if ui.selectable_label(is_triforce, "Triforce").clicked() {
                 requested_mesh = MeshSource::Triforce;
@@ -1069,6 +1080,12 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
             MeshSource::ReferenceCell { dim } => {
               commit_slider(ui, dim, 1..=REFERENCE_CELL_DIM_MAX, "dimension")
             }
+            MeshSource::Quotient { cells_axis, .. } => commit_slider(
+              ui,
+              cells_axis,
+              QUOTIENT_CELLS_MIN..=QUOTIENT_CELLS_MAX,
+              "cells/axis",
+            ),
             MeshSource::Triforce
             | MeshSource::Builtin(_)
             | MeshSource::Custom { .. }

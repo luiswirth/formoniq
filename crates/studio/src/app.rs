@@ -1618,6 +1618,13 @@ impl ApplicationHandler for App {
     #[cfg(target_arch = "wasm32")]
     if self.state.is_none() {
       self.state = crate::web::take_ready_state();
+      // The surface was configured from whatever size the window reported when
+      // the async bootstrap started, and a `Resized` arriving in between was
+      // dropped with nothing to deliver it to. Reconfigure once on install so
+      // the first frame matches the canvas the compositor shows.
+      if let (Some(state), Some(window)) = (self.state.as_mut(), self.window.as_ref()) {
+        state.resize(window.inner_size());
+      }
     }
     // Still bootstrapping (the web async device/surface): poll until the state
     // lands, since nothing else will wake the loop to drain it.

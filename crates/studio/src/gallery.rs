@@ -21,6 +21,8 @@ use simplicial::{
   Dim,
 };
 
+use simplicial::gen::quotient::Identification;
+
 use crate::scene::Scene;
 use crate::ui::{Marks, Selection};
 
@@ -38,6 +40,34 @@ pub(crate) const SPHERE_SUBDIVISIONS_MAX: usize = 4;
 // inside the sphere's cost, so the same cap reasoning applies loosely.
 pub(crate) const GRID_CELLS_DEFAULT: usize = 8;
 pub(crate) const GRID_CELLS_MAX: usize = 20;
+
+// Cells on the *longest* axis a quotient surface opens on, and the ends of its
+// refinement slider. The shorter axes are scaled down from it, so the cells stay
+// near equilateral rather than inheriting the fundamental domain's aspect ratio.
+// Three is the floor the generator imposes on a closed axis.
+pub const QUOTIENT_CELLS_DEFAULT: usize = 12;
+pub(crate) const QUOTIENT_CELLS_MIN: usize = 3;
+pub(crate) const QUOTIENT_CELLS_MAX: usize = 48;
+
+// The donut's tube as a fraction of its revolution radius. The binding
+// constraint is not self-intersection of the mesh -- the generator already
+// bounds that -- but the *displaced* surface: a field's displacement is
+// amplitude-bounded by the mesh's reach, which here is the tube radius, so a
+// full-amplitude mode can grow the tube to twice its size. The hole, of radius
+// $1 - t$, therefore has to survive a tube of $2 t$, which needs $t < 1\/3$.
+// Above that the donut inflates shut and reads as a blob at every mode.
+const DONUT_TUBE_RATIO: f64 = 0.25;
+const MOEBIUS_RADIUS_SLACK: f64 = 2.0;
+// The period of the swept axis, chosen so the revolution radius comes out near
+// 1: the gallery's meshes are unit-scale, and the marks, the displacement bound
+// and the camera framing are all fractions of an object's extent, so a surface
+// an order of magnitude smaller reads wrong on every one of them.
+const QUOTIENT_CIRCUMFERENCE: f64 = std::f64::consts::TAU;
+// The band's width as a fraction of the revolution radius. Wide enough that
+// the quasi-uniform resolution puts several cells across it -- a band one cell
+// wide has no interior and nothing to show a field on -- and still well inside
+// `MOEBIUS_RADIUS_SLACK`, which keeps the swept strip clear of its own axis.
+const MOEBIUS_WIDTH_RATIO: f64 = 1.5;
 
 // The intrinsic dimension the grid opens on, and the top of its dimension
 // slider: the same $1..=3$ the reference cell spans, since both live in the
@@ -173,6 +203,88 @@ impl BuiltinMesh {
   }
 }
 
+/// Which flat quotient of the square, among those with an $RR^3$ realization.
+///
+/// Both are [`simplicial::gen::quotient::FlatQuotient`]s -- one generator, two
+/// per-axis identifications -- and both are drawn through the surfaces of
+/// revolution of `gen::quotient_embed`, the constructions that fit the fixed
+/// ambient $RR^3$. The rest of the family does not fit and so is not offered:
+/// the Klein bottle has no $RR^3$ embedding at all, and the isometric Clifford
+/// realization of the torus needs $RR^4$.
+///
+/// **The surface the viewer shows is the curved one, not the flat quotient.**
+/// A `MeshSource` produces coordinates, and every geometric quantity downstream
+/// is induced by them, so the donut here carries the Gaussian curvature of a
+/// torus of revolution -- positive on the outer rim, negative on the inner --
+/// and its spectrum is that surface's, not the flat torus's. This is the
+/// inversion of the parent's invariant 2 doing exactly what it says: the viewer
+/// is extrinsic by necessity, and the honest reading is that these are
+/// embedded surfaces which happen to be built by identification.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum QuotientSurface {
+  /// The torus of revolution: both axes periodic. Orientable and closed, with
+  /// the Betti numbers $1, 2, 1$ of $T^2$.
+  Donut,
+  /// The Möbius band: one axis twisted about an open fiber. **Non-orientable**,
+  /// and the one mesh in the gallery that is -- so it is where the reduced-grade
+  /// marks that need a coherent orientation are refused rather than drawn with
+  /// a per-cell sign.
+  Moebius,
+}
+
+impl QuotientSurface {
+  pub(crate) fn label(self) -> &'static str {
+    match self {
+      Self::Donut => "Donut",
+      Self::Moebius => "Möbius band",
+    }
+  }
+
+  /// The name a caller writes, on the CLI and in a preset.
+  pub fn name(self) -> &'static str {
+    match self {
+      Self::Donut => "donut",
+      Self::Moebius => "moebius",
+    }
+  }
+
+  pub fn from_name(name: &str) -> Option<Self> {
+    [Self::Donut, Self::Moebius]
+      .into_iter()
+      .find(|s| s.name() == name)
+  }
+
+  fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
+    use simplicial::gen::{quotient::FlatQuotient, quotient_embed};
+    let cells_axis = cells_axis.max(QUOTIENT_CELLS_MIN);
+    match self {
+      Self::Donut => {
+        // Quasi-uniform: the tube's period is `DONUT_TUBE_RATIO` of the
+        // sweep's, so a shared count would stretch every cell by that ratio.
+        let quotient = FlatQuotient::quasi_uniform(
+          simplicial::linalg::Vector::from_column_slice(&[
+            QUOTIENT_CIRCUMFERENCE,
+            QUOTIENT_CIRCUMFERENCE * DONUT_TUBE_RATIO,
+          ]),
+          vec![Identification::Periodic; 2],
+          cells_axis,
+        );
+        let coords = quotient_embed::donut_r3(&quotient, DONUT_TUBE_RATIO);
+        (quotient.triangulate().0, coords)
+      }
+      Self::Moebius => {
+        let quotient = FlatQuotient::moebius(
+          QUOTIENT_CIRCUMFERENCE,
+          MOEBIUS_WIDTH_RATIO * QUOTIENT_CIRCUMFERENCE / std::f64::consts::TAU,
+          cells_axis,
+        );
+        let coords = quotient_embed::moebius_r3(&quotient, MOEBIUS_RADIUS_SLACK);
+        (quotient.triangulate().0, coords)
+      }
+    }
+  }
+}
+
 /// The chosen source of the mesh a study runs on -- a runtime input, not a
 /// fixed sphere. A generated family carries its refinement (moved by a slider);
 /// a built-in, the reference cell, the triforce or a user-loaded file each
@@ -205,6 +317,12 @@ pub enum MeshSource {
   /// `dim` ranges over $1..=3$, the intrinsic dimensions the fixed ambient
   /// $RR^3$ embeds.
   ReferenceCell { dim: Dim },
+  /// A flat quotient of the square, realized in $RR^3$ as a surface of
+  /// revolution: the two members of the family that fit in the fixed ambient.
+  Quotient {
+    surface: QuotientSurface,
+    cells_axis: usize,
+  },
   /// The triforce teaching mesh ([`crate::demos::triforce`]): four cells around
   /// one interior vertex, flat in the $z = 0$ plane. The multi-cell counterpart
   /// of the reference cell -- the Whitney-basis study on it is the global shape
@@ -235,6 +353,7 @@ impl MeshSource {
       MeshSource::Sphere { .. } => "Sphere".to_string(),
       MeshSource::Grid { .. } => "Grid".to_string(),
       MeshSource::ReferenceCell { .. } => "Reference cell".to_string(),
+      MeshSource::Quotient { surface, .. } => surface.label().to_string(),
       MeshSource::Triforce => "Triforce".to_string(),
       MeshSource::Builtin(builtin) => builtin.label(),
       MeshSource::Custom { name } => name.clone(),
@@ -270,6 +389,10 @@ impl MeshSource {
         // a no-op once `dim >= 3`.
         Ok((topology, coords.embed_euclidean((*dim).max(3))))
       }
+      MeshSource::Quotient {
+        surface,
+        cells_axis,
+      } => Ok(surface.build(*cells_axis)),
       MeshSource::Triforce => Ok(crate::demos::triforce()),
       MeshSource::Builtin(builtin) => builtin.build(),
       MeshSource::Custom { .. } => {
@@ -819,6 +942,44 @@ mod tests {
           preset.name
         );
       }
+    }
+  }
+
+  /// Both quotient surfaces build, in $RR^3$, with the topology their gluing
+  /// says -- and the Möbius band is the gallery's **non-orientable** mesh,
+  /// which the donut is not.
+  ///
+  /// That contrast is the reason the band is offered at all: the reduced-grade
+  /// reduction takes a coherent orientation wherever the Hodge star fires, so
+  /// the band is the mesh on which that path is exercised rather than assumed.
+  /// A picker entry that could not be non-orientable would not test it.
+  #[test]
+  fn the_quotient_surfaces_build_and_differ_in_orientability() {
+    let cases = [
+      (QuotientSurface::Donut, vec![1, 2, 1], false, true),
+      (QuotientSurface::Moebius, vec![1, 1, 0], true, false),
+    ];
+    for (surface, betti, has_boundary, orientable) in cases {
+      let source = MeshSource::Quotient {
+        surface,
+        cells_axis: QUOTIENT_CELLS_DEFAULT,
+      };
+      let (topology, coords) = source.build().expect("a generated mesh always builds");
+
+      assert_eq!(coords.dim(), 3, "{}: the fixed ambient", surface.name());
+      assert_eq!(topology.dim(), 2, "{}: a surface", surface.name());
+      assert_eq!(topology.betti_numbers(), betti, "{}", surface.name());
+      assert_eq!(topology.has_boundary(), has_boundary, "{}", surface.name());
+      assert_eq!(
+        topology.orientation().is_some(),
+        orientable,
+        "{}",
+        surface.name()
+      );
+      // The label and the CLI name reach the picker and the command line from
+      // the one enum, so neither can name a surface the other cannot.
+      assert_eq!(source.label(), surface.label());
+      assert_eq!(QuotientSurface::from_name(surface.name()), Some(surface));
     }
   }
 
