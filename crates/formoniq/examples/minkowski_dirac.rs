@@ -217,9 +217,15 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
     "nsub", "dofs", "L2 error", "rate", "interp err", "rate"
   );
 
+  // One coarse cube, Freudenthal-refined `nsub`-fold per level: the mesh-agnostic
+  // path, and on a Kuhn cube identical to the grid the generator would build.
+  let (base_topology, base_coords) = CartesianGrid::new_unit(dim, 1).triangulate();
+
   let mut previous: Option<(usize, f64, f64)> = None;
   for &nsub in nsubs {
-    let (topology, coords) = CartesianGrid::new_unit(dim, nsub).triangulate();
+    let sub = base_topology.refine(nsub);
+    let coords = base_coords.refine(&sub);
+    let topology = sub.into_complex();
     let mut matrix = coords.into_matrix();
     matrix.row_mut(0).scale_mut(TIME_SCALE);
     // The same vertex coordinates seen twice: once inducing the Lorentzian
