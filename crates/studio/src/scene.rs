@@ -13,9 +13,14 @@ use derham::{
 };
 use exterior::{ExteriorGrade, MultiForm};
 use simplicial::{
-  atlas::MeshPoint,
+  atlas::{Bary, MeshPoint},
   geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, handle::SimplexIdx, role::Cell, simplex::Simplex},
+  topology::{
+    complex::Complex,
+    handle::{SimplexIdx, SimplexRef},
+    role::Cell,
+    simplex::Simplex,
+  },
   Dim,
 };
 
@@ -863,22 +868,17 @@ pub(crate) fn reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGrad
     .sign(cell)
 }
 
-/// The surface colormap scalar at every rendered triangle corner, read *in the
-/// corner's own cell* -- three per triangle, in [`CellCorner`] order.
+/// The surface colormap scalar at every rendered triangle corner -- three per
+/// triangle, in [`CellCorner`] order -- as the [`trace_value`] of the field on
+/// the triangle's own 2-simplex (the fill is the 2-skeleton).
 ///
-/// This is the fix for the discontinuity the reduced-grade fields have: a
-/// Whitney form is single-valued only in its *tangential* part across a face, so
-/// incident cells disagree at a shared vertex and its support ends exactly on
-/// cell edges. A per-vertex value shared between cells therefore leaks a basis
-/// function's magnitude into cells outside its support (via the rasterizer's
-/// interpolation across the shared vertex). Reading the field once per corner,
-/// each in its own cell, keeps the support exact: a cell the form vanishes on
-/// contributes three zeros and stays black.
-///
-/// A reduced grade of 0 takes the density (the signed 0-form coefficient); a
-/// reduced grade of 1 takes the magnitude $|V|_g$, the intrinsic
-/// chart-independent scalar (the direction is left to the glyph and particle
-/// marks, which read the true Whitney field cell by cell already).
+/// The trace is single-valued across the cells incident at the face by tangential
+/// conformity, so no per-corner cell disambiguation and no averaging is needed:
+/// a face the form vanishes on colors to zero because its trace *is* zero, and a
+/// grade above 2 traces to zero on every face, leaving the fill black (its home
+/// is volumetric, deferred). At $n = 2$ the face is the cell and this reproduces
+/// the reduced-grade density exactly; at $n = 3$ it reads the face's own trace,
+/// not a value borrowed from an incident tet.
 pub(crate) fn surface_corner_values(
   topology: &Complex,
   coords: &MeshCoords,
@@ -886,13 +886,25 @@ pub(crate) fn surface_corner_values(
   cell_corners: &[CellCorner],
 ) -> Vec<f64> {
   let n = topology.dim();
-  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   let mut values = Vec::with_capacity(3 * cell_corners.len());
   for cc in cell_corners {
-    let cell = SimplexIdx::new(n, cc.cell).handle(topology).role();
-    let metric = coords.cell_metric(cell);
+    let cell = SimplexIdx::new(n, cc.cell).handle(topology);
+    let mut positions = cc.local;
+    positions.sort_unstable();
+    let vertices = &cell.simplex().vertices;
+    let face_simplex = Simplex::new(positions.iter().map(|&p| vertices[p]).collect());
+    let face = topology.skeleton(2).handle_by_simplex(&face_simplex);
     for &ilocal in &cc.local {
-      values.push(reduced_value(&interpolant, cell, &metric, ilocal));
+      let corner = positions.iter().position(|&p| p == ilocal).unwrap();
+      let mut weights = Vector::zeros(3);
+      weights[corner] = 1.0;
+      values.push(trace_value(
+        topology,
+        coords,
+        cochain,
+        face,
+        &Bary::new(weights),
+      ));
     }
   }
   values
@@ -1037,6 +1049,71 @@ fn reduced_value(
   let form = reduced_form(interpolant.eval(&point), metric, sign);
   if form.grade() == 0 {
     form.coeffs()[0]
+  } else {
+    form.norm(metric)
+  }
+}
+
+/// The trace-reduced scalar of a field on a skeleton simplex: the one rule that
+/// colors every $k$-skeleton alike. Pull the Whitney field back onto the simplex
+/// ([`Cochain::trace`]) and reduce the traced form to a scalar with the
+/// simplex's own metric.
+///
+/// The trace is exact by tangential ($H(dif)$) conformity, so it is
+/// single-valued across the cells incident at a shared simplex -- no averaging,
+/// no tearing. The trace of a grade-$k$ form onto a $d$-simplex is a $k$-form on
+/// it, and $Lambda^k(tau) = 0$ for $d < k$: a form colors a skeleton *below* its
+/// grade with an honest zero. On the diagonal $d = k$ the trace is the constant
+/// top-form of density $c_tau \/ vol_g(tau)$, flat-shading the simplex by its
+/// cochain density; above it ($d > k$) the trace varies and the norm reads the
+/// magnitude.
+///
+/// The scalar is *signed* only where the sign is intrinsic, and its *magnitude*
+/// otherwise -- because a $k$-cochain value ($k >= 1$) is defined relative to the
+/// simplex's orientation, which here is the colex bookkeeping convention, so a
+/// signed color would paint that artifact on the screen. Two cases escape it:
+/// $k = 0$, where a vertex has trivial orientation and the value is a genuine
+/// scalar; and $k = d = n$, the manifold's own top form, where the coherent
+/// [`Complex::orientation`] fixes the global density -- consulted here exactly as
+/// invariant 6 demands, and refused on a non-orientable mesh. Nothing fixes the
+/// sign for $0 < k < n$: a manifold orientation induces *opposite*
+/// co-orientations on an interior facet ($diff compose diff = 0$), so it cannot
+/// reach the sub-top skeletons, and the honest reading there is the magnitude.
+/// The direction a magnitude drops is not lost -- it lives in the line-field
+/// mark, as a genuine vector.
+pub(crate) fn trace_value(
+  topology: &Complex,
+  coords: &MeshCoords,
+  cochain: &Cochain,
+  simplex: SimplexRef,
+  bary: &Bary,
+) -> f64 {
+  let n = topology.dim();
+  let d = simplex.dim();
+  let k = cochain.grade();
+  if k > d {
+    return 0.0;
+  }
+  let sub = Complex::standard(d);
+  let interpolant = WhitneyInterpolant::new(cochain.trace(simplex), &sub);
+  let cell = sub.cells().handle_iter().next().unwrap();
+  let form = interpolant.eval(&MeshPoint::new(cell.idx(), bary.clone()));
+  let metric = coords.simplex_metric(simplex);
+  // The manifold's top form is the one signed reduction beyond a plain 0-form;
+  // its density is coherent-orientation-relative (invariant 6).
+  let manifold_top = (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k));
+  trace_reduce(&form, &metric, manifold_top)
+}
+
+/// Reduce a traced form on a simplex to a colormap scalar: the signed
+/// coefficient of a genuine $0$-form, the coherent-signed Hodge star of the
+/// manifold's top form (`manifold_top` carrying that sign), the intrinsic
+/// magnitude $|omega|_g$ in every other case.
+fn trace_reduce(form: &MultiForm, metric: &Metric, manifold_top: Option<Sign>) -> f64 {
+  if form.grade() == 0 {
+    form.coeffs()[0]
+  } else if let Some(sign) = manifold_top {
+    form.hodge_star(metric).coeffs()[0] * sign.as_f64()
   } else {
     form.norm(metric)
   }
@@ -1248,6 +1325,37 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// On the diagonal $d = k$ the trace-colored value is the cochain density
+  /// $c_tau \/ vol_g(tau)$, and constant across the simplex however the point is
+  /// chosen -- the flat-shaded DOF the lowest-order element forces. Single-valued
+  /// with no averaging: the trace onto a $k$-simplex reads only that simplex's
+  /// own DOF.
+  #[test]
+  fn trace_diagonal_is_cochain_density() {
+    use simplicial::geometry::{cell_volume, coord::mesh::standard_coord_complex};
+    for n in 1..=3 {
+      let (topology, coords) = standard_coord_complex(n);
+      for k in 1..=n {
+        let ndofs = topology.nsimplices(k);
+        let cochain = Cochain::new(
+          k,
+          Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i + 1) as f64)),
+        );
+        for tau in topology.skeleton(k).handle_iter() {
+          // Magnitude of the density; its sign, where it has one, is governed by
+          // orientation, not the point on the simplex, which is what this pins.
+          let expected = (cochain[tau] / cell_volume(&coords.simplex_metric(tau))).abs();
+          for shift in [0.0, 0.13] {
+            let mut w = Vector::from_element(k + 1, (1.0 - shift) / (k + 1) as f64);
+            w[0] += shift;
+            let value = trace_value(&topology, &coords, &cochain, tau, &Bary::new(w));
+            assert!((value.abs() - expected).abs() < 1e-9, "n={n} k={k}");
+          }
+        }
+      }
+    }
+  }
 
   /// A top-grade field displaces its cells *rigidly*: the height is constant
   /// within each cell, which is what makes the fill tear along the field's own
