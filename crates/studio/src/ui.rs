@@ -558,6 +558,31 @@ fn section(ui: &mut egui::Ui, title: &str, body: impl FnOnce(&mut egui::Ui)) {
 /// A $k$-skeleton's label, with the render primitive it draws to: the reader
 /// sees both the intrinsic object and its picture. Faces, edges, points are the
 /// $k <= 2$ the ambient reaches.
+/// The noun for a $k$-simplex, so a count reads in the reader's terms: the low
+/// dimensions have their classical names, and anything higher is the general
+/// "$k$-simplices" rather than a name that would only exist for one dimension.
+fn simplex_noun(k: usize) -> String {
+  match k {
+    0 => "vertices".to_string(),
+    1 => "edges".to_string(),
+    2 => "faces".to_string(),
+    3 => "cells".to_string(),
+    _ => format!("{k}-simplices"),
+  }
+}
+
+/// A one-line size caption from the per-dimension simplex counts: "12 vertices ·
+/// 30 edges · 20 faces". Total over the range, so it stays right in any
+/// dimension rather than naming a fixed few skeletons.
+fn mesh_stats_line(counts: &[usize]) -> String {
+  counts
+    .iter()
+    .enumerate()
+    .map(|(k, n)| format!("{n} {}", simplex_noun(k)))
+    .collect::<Vec<_>>()
+    .join(" · ")
+}
+
 pub(crate) fn skeleton_label(k: usize) -> String {
   let primitive = match k {
     0 => "points",
@@ -705,6 +730,10 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) last_grade: ExteriorGrade,
   pub(crate) max_grade: Dim,
   pub(crate) scene_dim: Dim,
+  /// The mesh's simplex count per dimension, indexed by $k in 0..="scene_dim"$:
+  /// the vertices, edges, faces and up. A caption of the object's size, read
+  /// straight off the topology so it needs no embedding.
+  pub(crate) simplex_counts: Vec<usize>,
   pub(crate) entries: Vec<Entry<'a>>,
   pub(crate) mesh_error: Option<String>,
   pub(crate) selection: Selection,
@@ -897,6 +926,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       ui.menu_button("Help", |ui| {
         ui.label(concat!("formoniq-studio ", env!("CARGO_PKG_VERSION")));
         ui.label("A viewer for FEEC meshes, cochains and PDE solutions.");
+        ui.separator();
+        ui.menu_button("Navigation", |ui| {
+          // The controls the viewport reads, which no widget announces on its
+          // own -- so a reader who never guesses the drags never finds them.
+          // Phrased by projection, mirroring the input split in `app.rs`.
+          ui.label(egui::RichText::new("Perspective (curved mesh)").strong());
+          ui.label("Left-drag: orbit · Right-drag: look · Middle-drag: pan");
+          ui.label("Scroll: zoom to cursor · WASD: fly · Space/Shift: up/down · Ctrl: sprint");
+          ui.separator();
+          ui.label(egui::RichText::new("Orthographic (flat mesh)").strong());
+          ui.label("Drag: pan · Scroll: zoom · WASD: pan · Space/Shift: zoom out/in");
+          ui.separator();
+          ui.label("Touch: one finger looks/pans · two pinch to zoom and drag to pan");
+        });
       });
     });
   });
@@ -1097,6 +1140,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         // (k <= min(n, 2)), faces at the top, each with the same two questions
         // -- drawn, and colored by the field or left as structural geometry.
         section(ui, "Mesh", |ui| {
+          ui.weak(mesh_stats_line(&model.simplex_counts))
+            .on_hover_text("Simplex count per skeleton dimension, read off the topology");
           for k in (0..=model.scene_dim.min(2)).rev() {
             let sk = &mut mesh_view.skeletons[k];
             ui.horizontal(|ui| {

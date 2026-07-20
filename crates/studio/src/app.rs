@@ -971,6 +971,9 @@ impl State {
       last_grade: self.gallery.last_grade,
       max_grade: self.gallery.mesh.0.dim(),
       scene_dim: self.scene.topology.dim(),
+      simplex_counts: (0..=self.scene.topology.dim())
+        .map(|k| self.scene.topology.nsimplices(k))
+        .collect(),
       entries,
       mesh_error: self.gallery.error.clone(),
       selection: self.selection,
