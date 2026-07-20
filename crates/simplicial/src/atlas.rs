@@ -61,7 +61,7 @@ use crate::Dim;
 
 use crate::linalg::{Matrix, RowVector, Vector};
 use coorder::{CoordSpace, Coords, CoordsRef};
-use multiindex::{compositions, factorial_f64, Combination};
+use multiindex::{factorial_f64, Combination, Composition};
 
 /// The barycentric coordinate space of a chart: the affine weights
 /// $lambda in RR^(n+1)$, $sum_i lambda_i = 1$.
@@ -183,7 +183,7 @@ pub fn ref_vertices(dim: Dim) -> Matrix {
 /// $ L_R^n = { k in NN_0^(n+1) : sum_i k_i = R }, quad lambda = k \/ R $
 ///
 /// The compositions of $R$ into $n + 1$ parts, hence $binom(R + n, n)$ points,
-/// in the colex order of [`compositions`]. The integers are the primitive and
+/// in the colex order of [`Composition::all`](multiindex::Composition::all). The integers are the primitive and
 /// the weights the wrapper ([`ref_lattice_bary`]): a lattice point is an exact
 /// combinatorial object, and the two properties below are identities on the
 /// integers that would only be approximate equalities on the weights.
@@ -210,7 +210,7 @@ pub fn ref_lattice(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usiz
     refinement >= 1,
     "A lattice needs a refinement of at least one."
   );
-  compositions(dim + 1, refinement)
+  Composition::all(dim + 1, refinement).map(Composition::into_parts)
 }
 
 /// The lattice points strictly inside the reference cell: $k_i >= 1$ for every
@@ -235,8 +235,8 @@ pub fn ref_lattice_interior(dim: Dim, refinement: usize) -> impl Iterator<Item =
   refinement
     .checked_sub(dim + 1)
     .into_iter()
-    .flat_map(move |rest| compositions(dim + 1, rest))
-    .map(|k| k.into_iter().map(|k| k + 1).collect())
+    .flat_map(move |rest| Composition::all(dim + 1, rest))
+    .map(|k| k.parts().iter().map(|k| k + 1).collect())
 }
 
 /// [`ref_lattice_interior`] as barycentric weights.
