@@ -698,6 +698,11 @@ pub(crate) struct PanelResponse {
   pub(crate) field_view: FieldView,
   pub(crate) post: Post,
   pub(crate) orthographic: bool,
+  /// Whether "Reset camera" was clicked: re-frame the scene from its own
+  /// coordinates, the one way back once a fly-through has left the object off
+  /// screen. Orthogonal to the shown pair, so the caller applies it
+  /// unconditionally like the view toggles.
+  pub(crate) reset_camera: bool,
   /// Whether the standing wave should be running after this frame -- the
   /// play/pause toggle. Defaults to the model's own state when the control
   /// wasn't touched, like the other fields.
@@ -759,6 +764,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut field_view = model.field_view;
   let mut post = model.post;
   let mut orthographic = model.orthographic;
+  let mut reset_camera = false;
   let mut playing = model.playing;
   #[cfg(not(target_arch = "wasm32"))]
   let mut load_obj_clicked = false;
@@ -799,6 +805,14 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         ui.separator();
         ui.checkbox(&mut orthographic, "Orthographic")
           .on_hover_text("Parallel projection: no vanishing point, so a flat mesh keeps its scale");
+        if ui
+          .button("Reset camera")
+          .on_hover_text("Re-frame the scene from its own extent")
+          .clicked()
+        {
+          reset_camera = true;
+          ui.close();
+        }
         ui.separator();
         // The display transform, a cumulative ladder rather than a set of
         // independent flags (see `Post`), so a radio and not checkboxes.
@@ -828,7 +842,11 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 
         section(ui, "Presets", |ui| {
           for (i, preset) in model.presets.iter().enumerate() {
-            if ui.selectable_label(false, preset.name).clicked() {
+            if ui
+              .selectable_label(false, preset.name)
+              .on_hover_text(preset.description)
+              .clicked()
+            {
               requested_preset = Some(i);
             }
           }
@@ -1140,6 +1158,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     field_view,
     post,
     orthographic,
+    reset_camera,
     playing,
     #[cfg(not(target_arch = "wasm32"))]
     load_obj_clicked,

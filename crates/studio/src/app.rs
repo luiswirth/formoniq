@@ -1063,6 +1063,14 @@ impl State {
     self.post = response.post;
     self.clock.set_playing(response.playing);
 
+    // Re-framing the scene reads only its coordinates and the current aspect,
+    // touching neither the shown pair nor a buffer, so it applies here with the
+    // other orthogonal view changes. It discards a fly-through's pose, which is
+    // the whole point -- the way back when the object has gone off screen.
+    if response.reset_camera {
+      self.camera = default_camera(&self.scene, self.camera.aspect);
+    }
+
     // A finished export pick is likewise orthogonal to the shown pair: it reads
     // the current frame and writes it, changing nothing on screen.
     #[cfg(not(target_arch = "wasm32"))]
