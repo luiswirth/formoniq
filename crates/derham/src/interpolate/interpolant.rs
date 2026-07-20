@@ -147,12 +147,13 @@ mod test {
 
             let weights: Vec<f64> = (0..=d).map(|i| (i + 2) as f64).collect();
             let total: f64 = weights.iter().sum();
-            let face_bary =
-              Bary::new(Vector::from_iterator(d + 1, weights.iter().map(|w| w / total)));
+            let face_bary = Bary::new(Vector::from_iterator(
+              d + 1,
+              weights.iter().map(|w| w / total),
+            ));
 
             // tr_tau (W c): the ambient field pulled back along iota_tau.
-            let ambient =
-              interpolant.eval(&MeshPoint::on_face(cell.idx(), &positions, &face_bary));
+            let ambient = interpolant.eval(&MeshPoint::on_face(cell.idx(), &positions, &face_bary));
             let traced_field = ambient.pullback(&ref_face_spanning_vectors(n, &positions));
 
             // W_tau (tr_tau c): the traced cochain interpolated on tau's own cell.
