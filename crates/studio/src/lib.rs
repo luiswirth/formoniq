@@ -23,6 +23,7 @@ pub mod render;
 pub mod scene;
 pub(crate) mod solve;
 pub mod ui;
+pub mod volume;
 pub(crate) mod welcome;
 
 /// The web entry point and its platform glue (canvas mount, async device
