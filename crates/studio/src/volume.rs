@@ -34,7 +34,7 @@ use crate::scene::{reduction_sign, scalarize};
 /// finer mesh earns a finer grid until the ceiling, and the ceiling is where
 /// memory ($256^3$ scalars is 64 MB at `f32`) stops being reasonable on the web.
 const MIN_RESOLUTION: usize = 32;
-const MAX_RESOLUTION: usize = 192;
+const MAX_RESOLUTION: usize = 128;
 
 /// A scalar field sampled on a regular grid over the mesh's ambient bounding
 /// box: what the ray march integrates.
@@ -59,17 +59,26 @@ pub struct VolumeGrid {
 }
 
 impl VolumeGrid {
-  /// Sample `cochain` over the mesh's bounding box.
+  /// Sample `cochain` over the mesh's bounding box, inverting the embedding
+  /// through a locator the *mesh* owns.
+  ///
+  /// The locator is an argument rather than a local because building it is the
+  /// expensive half by an order of magnitude, and it depends on nothing this
+  /// call varies: a field switch re-samples, it does not re-triangulate.
   ///
   /// The scalar at a voxel is `scalarize` of the Whitney value there, read in
   /// the containing cell's own frame with that cell's metric -- the same
   /// reduction the surface marks use, so a field cannot mean one thing on a
   /// boundary face and another a millimetre inside it.
-  pub fn sample(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Self {
+  pub fn sample(
+    topology: &Complex,
+    coords: &MeshCoords,
+    cochain: &Cochain,
+    locator: &PointLocator,
+  ) -> Self {
     let (origin, size) = bounding_box(coords);
     let resolution = resolution_for(topology, coords, size);
     let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-    let locator = PointLocator::new(topology, coords);
     let k = cochain.grade();
     let n = topology.dim();
     let ambient = coords.dim();
@@ -214,7 +223,8 @@ mod tests {
     for dim in 1..=3 {
       let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let cochain = Cochain::new(0, na::DVector::from_element(topology.nsimplices(0), 2.5));
-      let grid = VolumeGrid::sample(&topology, &coords, &cochain);
+      let locator = PointLocator::new(&topology, &coords);
+      let grid = VolumeGrid::sample(&topology, &coords, &cochain, &locator);
 
       assert!((grid.peak - 2.5).abs() < 1e-6, "peak {} != 2.5", grid.peak);
       assert!(grid
@@ -242,7 +252,8 @@ mod tests {
     for dim in 1..=3 {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let cochain = Cochain::new(0, na::DVector::zeros(topology.nsimplices(0)));
-      let grid = VolumeGrid::sample(&topology, &coords, &cochain);
+      let locator = PointLocator::new(&topology, &coords);
+      let grid = VolumeGrid::sample(&topology, &coords, &cochain, &locator);
 
       for coord in coords.coord_iter() {
         for axis in 0..3 {

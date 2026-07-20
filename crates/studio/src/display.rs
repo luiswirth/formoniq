@@ -27,6 +27,7 @@ use crate::render::{
 };
 use crate::scene::Scene;
 use crate::ui::{FieldView, MeshView, Post, Selection};
+use simplicial::geometry::coord::locate::PointLocator;
 
 /// The exposure the scene's radiance is read at, before the display transform.
 ///
@@ -315,12 +316,28 @@ pub(crate) struct MeshDisplay {
   /// it is a field's, and is built by [`FieldDisplay`]. Empty away from
   /// intrinsic dimension 2.
   deposit_layout: DepositLayout,
+  /// The point locator the volume bake inverts the embedding through: a
+  /// function of the mesh and its coordinates alone, so it lives here for the
+  /// same reason the deposit layout does. Building it dominates the bake by an
+  /// order of magnitude (a BVH over every cell, against a sampling pass that is
+  /// linear in voxels), so rebuilding it to change fields would be the static
+  /// half leaking into the field half -- the one thing the split exists to
+  /// prevent. `None` below intrinsic dimension 3, where nothing marches and the
+  /// hierarchy would be built for no reader.
+  locator: Option<PointLocator>,
 }
 
 impl MeshDisplay {
+  /// The mesh's point locator, present exactly where something marches.
+  pub(crate) fn locator(&self) -> Option<&PointLocator> {
+    self.locator.as_ref()
+  }
+
   pub(crate) fn build(device: &wgpu::Device, scene: &Scene) -> Self {
     let baked = BakedMesh::new(&scene.topology, &scene.coords);
     let deposit_layout = DepositLayout::new(&scene.topology, &scene.coords);
+    let locator =
+      (scene.topology.dim() >= 3).then(|| PointLocator::new(&scene.topology, &scene.coords));
     let deposit_uvs = match &baked.cells {
       crate::bake::PrimBatch::Triangles(triangles) => {
         deposit_layout.corner_uvs(&scene.topology, triangles)
@@ -347,6 +364,7 @@ impl MeshDisplay {
       points: PointBatch::new(device, &vertices, &vertex_zeros, &vertex_zeros),
       baked,
       deposit_layout,
+      locator,
     }
   }
 
@@ -840,13 +858,16 @@ impl FieldDisplay {
     // The medium, for a solid only: below intrinsic dimension 3 the boundary
     // primitive already carries the whole manifold, and a bounding box of fog
     // around a surface would be a claim about an interior it does not have.
-    let volume = (scene.topology.dim() >= 3).then(|| {
+    // Gated on the locator rather than on the dimension: the mesh builds one
+    // exactly where something marches, so holding it *is* the proof there is an
+    // interior, and the dimension is asked once, where the hierarchy is built.
+    let volume = mesh.locator().map(|locator| {
       // The operator, applied to the cochain before it is sampled. Metric-free
       // and exact at the cochain level: the coboundary is the simplicial
       // exterior derivative, so this is $dif omega$ and not a difference
       // quotient of the interpolant.
       let read = scalarization.apply(cochain, &scene.topology);
-      let grid = crate::volume::VolumeGrid::sample(&scene.topology, &scene.coords, &read);
+      let grid = crate::volume::VolumeGrid::sample(&scene.topology, &scene.coords, &read, locator);
       let batch = VolumeBatch::new(&ctx.device, &ctx.queue, &grid);
       // The colormap is the surface's only where the medium draws the *same*
       // field. Read through an operator it is a different one, with its own
