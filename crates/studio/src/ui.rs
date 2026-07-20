@@ -82,6 +82,11 @@ pub(crate) struct MeshView {
   /// so toggling it off on a 1-manifold leaves an empty picture, which is the
   /// correct total answer and not a case to exclude.
   pub(crate) wireframe: bool,
+  /// Whether the 1-skeleton reflects the selected field as a heatmap, or is
+  /// drawn in the structural geometry ink. Independent of `wireframe`: hiding
+  /// the skeleton and coloring it are separate choices, and coloring is a no-op
+  /// while it is hidden.
+  pub(crate) wireframe_colored: bool,
 }
 
 impl Default for MeshView {
@@ -89,6 +94,7 @@ impl Default for MeshView {
     Self {
       surface: true,
       wireframe: true,
+      wireframe_colored: false,
     }
   }
 }
@@ -792,8 +798,10 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       ui.label("Mesh");
       ui.checkbox(&mut mesh_view.surface, "Surface")
         .on_hover_text("The filled cells. Also what writes depth: with it off, the marks stop occluding and the far side shows through");
-      ui.checkbox(&mut mesh_view.wireframe, "Wireframe")
+      ui.checkbox(&mut mesh_view.wireframe, "1-skeleton")
         .on_hover_text("The drawn 1-skeleton: an overlay on a surface, the cells themselves on a curve");
+      ui.add_enabled(mesh_view.wireframe, egui::Checkbox::new(&mut mesh_view.wireframe_colored, "Color 1-skeleton"))
+        .on_hover_text("Reflect the selected field on the 1-skeleton as a heatmap, instead of the structural geometry ink");
 
       // The field side is the only one gated, and it asks rather than
       // dispatches: which settings a field offers is its reduced grade's answer

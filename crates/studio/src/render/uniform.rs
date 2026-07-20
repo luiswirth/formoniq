@@ -232,7 +232,9 @@ pub struct PostUniform {
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
 pub struct SegmentMaterial {
-  /// The mark's ink: `rgb` plus the base opacity every fragment starts at.
+  /// The mark's geometry ink: `rgb` plus the base opacity every fragment starts
+  /// at. Used as the ink when `colored` is off (the structural skeleton); when
+  /// on, only the alpha is kept and the `rgb` is the colormap's.
   pub color: [f32; 4],
   /// Half-width in world space, in the same units the mesh's own coordinates
   /// are in -- not a pixel count, so a line reads the same thickness whether the
@@ -244,6 +246,17 @@ pub struct SegmentMaterial {
   pub fade_floor: f32,
   pub wave_amplitude: f32,
   pub wave_omega: f32,
+  /// The colormap range the per-endpoint trace value normalizes against, and
+  /// whether it is diverging -- the segment's own, independent of the fill's,
+  /// since a $k$-skeleton traces a different-grade density on a different scale.
+  /// Read only when `colored` is on.
+  pub min_val: f32,
+  pub max_val: f32,
+  pub diverging: f32,
+  /// Whether the mark reflects the field as a heatmap (`1.0`) or is drawn in the
+  /// structural geometry ink (`0.0`). The one bit that turns the wireframe into
+  /// a colored 1-skeleton and back -- a material flag, not a second pipeline.
+  pub colored: f32,
 }
 
 /// How an arrow glyph is drawn: a flat mark lying in its surface cell, the
