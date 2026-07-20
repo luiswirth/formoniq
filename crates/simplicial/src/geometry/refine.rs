@@ -85,6 +85,27 @@ impl MeshCoords {
 #[cfg(test)]
 mod test {
   use crate::gen::cartesian::CartesianGrid;
+  use crate::topology::complex::Complex;
+
+  fn signature(complex: &Complex, lengths: &MeshLengthsSq) -> Vec<Vec<u64>> {
+    let mut cells: Vec<Vec<u64>> = complex
+      .cells()
+      .handle_iter()
+      .map(|cell| {
+        let mut ls: Vec<u64> = lengths
+          .simplex_lengths_sq(*cell)
+          .vector()
+          .iter()
+          .map(|&l| (l * 1e9).round() as u64)
+          .collect();
+        ls.sort_unstable();
+        ls
+      })
+      .collect();
+    cells.sort_unstable();
+    cells
+  }
+
   use crate::geometry::cell_volume;
   use crate::geometry::metric::mesh::MeshLengthsSq;
 
@@ -98,27 +119,6 @@ mod test {
   /// over cells of each cell's sorted squared edge lengths.
   #[test]
   fn refine_reproduces_the_generator_family() {
-    use crate::topology::complex::Complex;
-
-    fn signature(complex: &Complex, lengths: &MeshLengthsSq) -> Vec<Vec<u64>> {
-      let mut cells: Vec<Vec<u64>> = complex
-        .cells()
-        .handle_iter()
-        .map(|cell| {
-          let mut ls: Vec<u64> = lengths
-            .simplex_lengths_sq(*cell)
-            .vector()
-            .iter()
-            .map(|&l| (l * 1e9).round() as u64)
-            .collect();
-          ls.sort_unstable();
-          ls
-        })
-        .collect();
-      cells.sort_unstable();
-      cells
-    }
-
     for dim in 1..=3 {
       for (n, r) in [(1, 2), (2, 2), (1, 3), (2, 3), (1, 4)] {
         let (coarse, coarse_coords) = CartesianGrid::new_unit(dim, n).triangulate();
@@ -218,6 +218,100 @@ mod test {
         for (a, b) in intrinsic.iter().zip(extrinsic.iter()) {
           approx::assert_relative_eq!(a, b, epsilon = 1e-12);
         }
+      }
+    }
+  }
+
+  /// A refinement *tower* built on the inherited ordering is the single
+  /// refinement of the product: refining twice by $R$ gives the same mesh as
+  /// once by $R^2$, cells and geometry alike.
+  ///
+  /// $ "refine"_R compose "refine"_R = "refine"_(R^2) $
+  ///
+  /// The mesh-level statement of the atlas law, and the reason a convergence
+  /// sweep may now be built level on level rather than from the base each time:
+  /// every cell stays similar to the coarse cell it descends from. Refining in
+  /// the colex ordering instead re-derives each child's order by sorting, which
+  /// agrees with the pattern only at the first level and drifts after -- into a
+  /// growing number of congruence classes above dimension two.
+  #[test]
+  fn a_tower_on_the_inherited_ordering_is_the_product_refinement() {
+    use crate::topology::ordering::CellOrdering;
+
+    for dim in 1..=3 {
+      let (coarse, coords) = CartesianGrid::new_unit(dim, 1).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&coarse);
+
+      for r in 2..=3 {
+        let once = coarse.refine(r * r);
+        let once_lengths = lengths.refine(&once, &coarse);
+
+        let first = coarse.refine_with(&CellOrdering::colex(&coarse), r);
+        let first_lengths = lengths.refine(&first, &coarse);
+        let second = first.complex().refine_with(first.ordering(), r);
+        let second_lengths = first_lengths.refine(&second, first.complex());
+
+        assert_eq!(
+          signature(second.complex(), &second_lengths),
+          signature(once.complex(), &once_lengths),
+          "dim {dim}: a tower of two {r}-fold refinements must be the {}-fold one",
+          r * r
+        );
+      }
+    }
+  }
+
+  /// Every cell of a tower is similar to the cell it came from: one similarity
+  /// class, at every level, in every dimension.
+  ///
+  /// The property the ordering exists to preserve, stated where it is visible.
+  /// Shape alone -- scale is divided out -- so it is a statement about mesh
+  /// quality rather than about which mesh was built.
+  #[test]
+  fn a_tower_stays_self_similar() {
+    use crate::topology::ordering::CellOrdering;
+
+    fn shape_classes(complex: &Complex, lengths: &MeshLengthsSq) -> usize {
+      let mut classes: Vec<Vec<u64>> = complex
+        .cells()
+        .handle_iter()
+        .map(|cell| {
+          let mut ls: Vec<f64> = lengths
+            .simplex_lengths_sq(*cell)
+            .vector()
+            .iter()
+            .copied()
+            .collect();
+          ls.sort_by(|a, b| a.partial_cmp(b).unwrap());
+          let max = *ls.last().unwrap();
+          ls.iter().map(|l| (l / max * 1e6).round() as u64).collect()
+        })
+        .collect();
+      classes.sort_unstable();
+      classes.dedup();
+      classes.len()
+    }
+
+    for dim in 1..=4 {
+      let (coarse, coords) = CartesianGrid::new_unit(dim, 1).triangulate();
+      let mut lengths = coords.to_edge_lengths_sq(&coarse);
+      let mut complex = coarse;
+      let mut ordering = CellOrdering::colex(&complex);
+
+      // Two levels already exhibit the drift the ordering prevents (the colex
+      // tower leaves one class at level two); the top dimension is capped there
+      // because a third level is ~10^5 cells for no further statement.
+      let levels = if dim <= 3 { 3 } else { 2 };
+      for level in 1..=levels {
+        let sub = complex.refine_with(&ordering, 2);
+        lengths = lengths.refine(&sub, &complex);
+        ordering = sub.ordering().clone();
+        complex = sub.into_complex();
+        assert_eq!(
+          shape_classes(&complex, &lengths),
+          1,
+          "dim {dim}, level {level}: a tower must stay self-similar"
+        );
       }
     }
   }
