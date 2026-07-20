@@ -18,7 +18,10 @@ use std::collections::HashMap;
 use std::fmt;
 
 use simplicial::linalg::Matrix;
-use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+use simplicial::{
+  geometry::coord::mesh::MeshCoords,
+  topology::{complex::Complex, ordering::CellOrdering, orientation::Orientation},
+};
 
 use crate::io::surface::TriangleSurface3D;
 
@@ -62,6 +65,24 @@ impl std::error::Error for ObjError {}
 /// Reads an OBJ string as a triangulated surface `Complex` with its ambient
 /// (3D) coordinates. See the module docs for the accepted subset of the format.
 pub fn parse(obj: &str) -> Result<(Complex, MeshCoords), ObjError> {
+  let (complex, coords, _) = parse_wound(obj)?;
+  Ok((complex, coords))
+}
+
+/// As [`parse`], also recovering the winding the file's faces are written in,
+/// as an [`Orientation`].
+///
+/// A face's corner order in an OBJ is *winding*: which way the surface normal
+/// points. That is orientation data, not the vertex ordering a refinement
+/// inherits -- the same-shaped datum meaning a different thing -- so it is
+/// returned as an `Orientation` and only its parity is read.
+///
+/// `None` when the file is not consistently wound, and hence carries no
+/// coherent orientation: a mesh from the wild may well have flipped faces, and
+/// on a non-orientable surface no winding could be coherent at all. The
+/// orientation is validated rather than asserted, so the witness still proves
+/// orientability.
+pub fn parse_wound(obj: &str) -> Result<(Complex, MeshCoords, Option<Orientation>), ObjError> {
   let mut positions: Vec<[f64; 3]> = Vec::new();
   let mut triangles: Vec<[usize; 3]> = Vec::new();
 
@@ -95,7 +116,15 @@ pub fn parse(obj: &str) -> Result<(Complex, MeshCoords), ObjError> {
     .map(|p| na::dvector![p[0], p[1], p[2]])
     .collect();
   let coords = MeshCoords::from(Matrix::from_columns(&columns));
-  Ok(TriangleSurface3D::new(triangles, coords).into_coord_complex())
+  let words: Vec<Vec<usize>> = triangles.iter().map(|t| t.to_vec()).collect();
+  let (complex, coords) = TriangleSurface3D::new(triangles, coords).into_coord_complex();
+
+  // A file may list a face twice, which the skeleton dedups; then the words do
+  // not name the cells one for one and there is no winding to read.
+  let orientation = (words.len() == complex.cells().len())
+    .then(|| CellOrdering::new(&complex, words).induced_orientation(&complex))
+    .flatten();
+  Ok((complex, coords, orientation))
 }
 
 /// The first three whitespace-separated floats of a `v` line; any further
@@ -241,5 +270,36 @@ f 1 2 5
   #[test]
   fn rejects_faceless_input() {
     assert!(matches!(parse("v 0 0 0\nv 1 0 0\n"), Err(ObjError::Empty)));
+  }
+
+  /// Two consistently wound triangles of the unit square carry a coherent
+  /// orientation; flipping one face's winding destroys it.
+  ///
+  /// Winding is read as parity and nothing else, and it is validated rather
+  /// than trusted -- a miswound file yields `None`, not a witness that lies.
+  #[test]
+  fn winding_becomes_an_orientation_only_when_coherent() {
+    let wound = "\
+v 0 0 0
+v 1 0 0
+v 0 1 0
+v 1 1 0
+f 1 2 3
+f 2 4 3
+";
+    let (_, _, orientation) = parse_wound(wound).unwrap();
+    assert!(
+      orientation.is_some(),
+      "consistent winding is a coherent orientation"
+    );
+
+    // The second face reversed: the two now induce the same orientation on the
+    // edge they share.
+    let flipped = wound.replace("f 2 4 3", "f 2 3 4");
+    let (_, _, orientation) = parse_wound(&flipped).unwrap();
+    assert!(
+      orientation.is_none(),
+      "a flipped face is not coherently wound"
+    );
   }
 }
