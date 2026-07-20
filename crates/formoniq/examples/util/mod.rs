@@ -13,7 +13,7 @@ use {
   glatt::field::DiffFormClosure,
   multiindex::{binomial, Combination, Sign},
   simplicial::{
-    gen::{cartesian::CartesianGrid, torus::FlatTorus},
+    gen::{cartesian::CartesianGrid, quotient::FlatQuotient},
     geometry::metric::mesh::MeshLengthsSq,
     linalg::Vector,
     topology::{complex::Complex, ordering::CellOrdering},
@@ -143,7 +143,7 @@ impl Manifold {
       }
       Self::Torus => {
         let (topology, lengths, ordering) =
-          FlatTorus::new(Vector::from_element(dim, scale), 3).triangulate_ordered();
+          FlatQuotient::torus(Vector::from_element(dim, scale), 3).triangulate_ordered();
         let ordering = ordering.expect("the Kuhn tiling matches across the periodic seam");
         (topology, lengths, ordering)
       }
