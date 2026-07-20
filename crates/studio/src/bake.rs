@@ -208,20 +208,27 @@ impl BakedMesh {
           vertex_reach(topology, coords, extent),
         )
       }
-      // An observer in $RR^3$ sees only the boundary of a solid, so that is
-      // what is baked. The curvature cap is the boundary surface's own, which
-      // this complex cannot report (its curvature estimators are those of an
-      // $n$-manifold, not of its boundary), so the displacement is left
-      // uncapped rather than clamped by a quantity that does not mean what the
-      // cap needs it to.
+      // A solid ($n >= 3$) renders its full 2- and 1-skeletons, interior
+      // simplices included -- every $k$-skeleton for $k <= min(n, 2)$, the same
+      // rule the lower dimensions follow. Occlusion of the interior behind the
+      // boundary is a future concern; for now everything is drawn.
+      //
+      // There is no coherent displacement axis: a vertex of the full 2-skeleton
+      // lies on many non-coplanar faces, so its face normals cancel and the
+      // existing "no axis -> identity displacement" rule leaves it undisplaced --
+      // the honest answer, since the surface-normal standing wave is a
+      // 2-manifold viz and a solid's mode reads through the colored skeleton
+      // instead. The reach is a finite extent-scaled backstop (the boundary
+      // surface's own reach is deferred with the rest of the volumetric case),
+      // so a stray non-cancelling normal cannot blow the displacement up.
       _ => {
-        let triangles = orient_triangles(&boundary_indices(topology, 2));
+        let triangles = orient_triangles(&skeleton_indices(topology, 2));
         let normals = vertex_normals(&triangles, &ambient);
         (
           PrimBatch::Triangles(triangles),
-          boundary_indices(topology, 1),
+          skeleton_indices(topology, 1),
           normals,
-          vec![f64::INFINITY; nvertices],
+          vec![extent; nvertices],
         )
       }
     };
@@ -399,14 +406,6 @@ fn skeleton_indices<const N: usize>(topology: &Complex, dim: Dim) -> Vec<[u32; N
     .collect()
 }
 
-fn boundary_indices<const N: usize>(topology: &Complex, dim: Dim) -> Vec<[u32; N]> {
-  topology
-    .boundary_simplices(dim)
-    .into_iter()
-    .map(|idx| index_tuple(&idx.handle(topology).simplex().vertices))
-    .collect()
-}
-
 fn index_tuple<const N: usize>(vertices: &[usize]) -> [u32; N] {
   assert_eq!(vertices.len(), N);
   std::array::from_fn(|i| {
@@ -532,7 +531,8 @@ mod tests {
         (0, PrimBatch::Points(p)) => assert_eq!(p.len(), ncells),
         (1, PrimBatch::Segments(s)) => assert_eq!(s.len(), ncells),
         (2, PrimBatch::Triangles(t)) => assert_eq!(t.len(), ncells),
-        // The tetrahedron's boundary: its four faces.
+        // The tetrahedron's full 2-skeleton: its four faces, which for a single
+        // cell are all on the boundary (there is no interior face to add).
         (3, PrimBatch::Triangles(t)) => assert_eq!(t.len(), 4),
         (d, b) => panic!("dim {d} baked to {b:?}"),
       }
