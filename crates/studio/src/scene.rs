@@ -11,7 +11,7 @@ use derham::{
   cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, project::derham_map,
   section::CoordFieldExt,
 };
-use exterior::{ExteriorGrade, MultiForm};
+use exterior::{Blade, ExteriorGrade, MultiForm};
 use simplicial::{
   atlas::{Bary, MeshPoint},
   geometry::coord::mesh::MeshCoords,
@@ -647,7 +647,7 @@ impl Scene {
   }
 
   /// The heat flow $diff_t u = -kappa Delta u$ of a localized initial bump, as a
-  /// single grade-0 [`FieldTime::Trajectory`] field: the sampled solution the
+  /// single [`FieldTime::Trajectory`] field of grade `grade`: the sampled solution the
   /// transport scrubs and the surface re-bakes per frame. The bump diffuses and
   /// decays -- the parabolic smoothing of the Hodge-Laplacian, shown directly
   /// rather than through its spectrum.
@@ -660,29 +660,41 @@ impl Scene {
   /// serves both.
   ///
   /// [`solve_heat`]: formoniq::problems::heat::solve_heat
-  pub fn heat(topology: Complex, coords: MeshCoords, nsteps: usize, final_time: f64) -> Self {
+  pub fn heat(
+    topology: Complex,
+    coords: MeshCoords,
+    grade: ExteriorGrade,
+    nsteps: usize,
+    final_time: f64,
+  ) -> Self {
     use formoniq::{problems::heat::solve_heat, whitney_complex::WhitneyComplex};
 
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
 
-    let initial = ambient_bump(&topology, &coords);
-    let source = Cochain::new(0, na::DVector::zeros(whitney.ndofs(0)));
+    let initial = ambient_bump(&topology, &coords, grade);
+    let source = Cochain::new(grade, na::DVector::zeros(whitney.ndofs(grade)));
     let dt = final_time / nsteps.max(1) as f64;
-    let frames = solve_heat(&relative, 0, nsteps, dt, &initial, &source, 1.0);
+    let frames = solve_heat(&relative, grade, nsteps, dt, &initial, &source, 1.0);
 
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
 
   /// The wave equation $diff_(t t) u = -Delta u$ of a localized initial bump at
-  /// rest, as a single grade-0 [`FieldTime::Trajectory`] field. The bump splits
+  /// rest, as a single [`FieldTime::Trajectory`] field of grade `grade`. The bump splits
   /// and its fronts propagate, reflecting off any boundary -- the hyperbolic
   /// counterpart of [`Self::heat`], on the same initial data and the same
   /// mesh-agnostic footing (a closed mesh uses the identity inclusion).
   ///
   /// [`solve_wave`]: formoniq::problems::wave::solve_wave
-  pub fn wave(topology: Complex, coords: MeshCoords, nsteps: usize, final_time: f64) -> Self {
+  pub fn wave(
+    topology: Complex,
+    coords: MeshCoords,
+    grade: ExteriorGrade,
+    nsteps: usize,
+    final_time: f64,
+  ) -> Self {
     use formoniq::{
       problems::wave::{solve_wave, WaveState},
       whitney_complex::WhitneyComplex,
@@ -691,21 +703,21 @@ impl Scene {
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
-    let initial = ambient_bump(&topology, &coords);
-    let ndofs = whitney.ndofs(0);
+    let initial = ambient_bump(&topology, &coords, grade);
+    let ndofs = whitney.ndofs(grade);
     let dt = final_time / nsteps.max(1) as f64;
     let times: Vec<f64> = (0..=nsteps).map(|k| k as f64 * dt).collect();
     let state = WaveState::new(initial.coeffs().clone(), na::DVector::zeros(ndofs));
-    let force = Cochain::new(0, na::DVector::zeros(ndofs));
-    let frames = solve_wave(&whitney, 0, &times, state, force)
+    let force = Cochain::new(grade, na::DVector::zeros(ndofs));
+    let frames = solve_wave(&whitney, grade, &times, state, force)
       .into_iter()
-      .map(|s| Cochain::new(0, s.pos))
+      .map(|s| Cochain::new(grade, s.pos))
       .collect();
 
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
 
-  /// Files a solved grade-0 trajectory into a scene through the same `field`
+  /// Files a solved trajectory of any grade into a scene through the same `field`
   /// dispatch every other field goes through: the trajectory's first frame is
   /// its spatial representative, the sampled family its [`FieldTime`].
   fn trajectory_scene(
@@ -1400,11 +1412,16 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
   derham_map(&pulled, topology, 2)
 }
 
-/// A localized grade-0 initial condition for a time-dependent solve, defined off
-/// the mesh's own coordinates: a Gaussian in ambient distance centered on the
-/// vertex *nearest* the centroid, of width a fixed fraction of the coordinate
-/// extent. Pulled onto the mesh through the `derham` bridge and de Rham mapped to a
-/// 0-cochain, so it lands on any embedded surface without assuming a shape.
+/// A localized grade-$k$ initial condition for a time-dependent solve, defined
+/// off the mesh's own coordinates: a Gaussian in ambient distance centered on
+/// the vertex *nearest* the centroid, of width a fixed fraction of the
+/// coordinate extent, times the first basis blade of grade `grade`. Pulled onto
+/// the mesh through the `derham` bridge and de Rham mapped to a `grade`-cochain,
+/// so it lands on any embedded mesh without assuming a shape.
+///
+/// Which blade carries the bump is a gauge of the ambient frame, not of the
+/// mathematics: any nonzero constant $k$-covector gives the same construction,
+/// and grade 0 (the empty blade) recovers the scalar bump exactly.
 ///
 /// The nearest-to-centroid vertex, not the farthest: on a mesh with boundary
 /// (the flat grid) the farthest vertex is a boundary corner, where a held
@@ -1412,7 +1429,7 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// interior, so its boundary trace is near zero and the flow is free. On a closed
 /// mesh every vertex is on the surface, so the nearest merely also works where a
 /// boundary exists.
-fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
+fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -> Cochain {
   let n = coords.dim();
   let nvertices = coords.nvertices().max(1) as f64;
   let centroid = coords
@@ -1434,12 +1451,14 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
     .map_or_else(|| centroid.clone(), |c| (*c).into_owned());
   let sigma = 0.25 * extent.max(1e-6);
 
-  let field = DiffFormClosure::scalar(
+  let blade = MultiForm::from_blade_signed(n, Sign::Pos, Blade::from_rank(grade, 0));
+  let field = DiffFormClosure::new(
     move |p| {
       let r2 = (p.vector() - &center).norm_squared();
-      (-r2 / (2.0 * sigma * sigma)).exp()
+      blade.clone() * (-r2 / (2.0 * sigma * sigma)).exp()
     },
     n,
+    grade,
   );
   let pulled = field.pullback_on(topology, coords);
   derham_map(&pulled, topology, 2)
@@ -1707,7 +1726,7 @@ mod tests {
     }
     .build()
     .unwrap();
-    let scene = Scene::heat(topology, coords, 20, 0.2);
+    let scene = Scene::heat(topology, coords, 0, 20, 0.2);
 
     assert_eq!(scene.fields.len(), 1);
     assert!(scene.line_fields.is_empty());
@@ -1735,7 +1754,7 @@ mod tests {
   fn heat_flow_is_total_on_a_closed_mesh() {
     use simplicial::gen::sphere::mesh_sphere_surface;
     let (topology, coords) = mesh_sphere_surface(2);
-    let scene = Scene::heat(topology, coords, 10, 0.2);
+    let scene = Scene::heat(topology, coords, 0, 10, 0.2);
 
     let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
       panic!("the heat flow is a trajectory");
@@ -1760,7 +1779,7 @@ mod tests {
     }
     .build()
     .unwrap();
-    let scene = Scene::wave(topology, coords, 30, 4.0);
+    let scene = Scene::wave(topology, coords, 0, 30, 4.0);
 
     let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
       panic!("the wave equation is a trajectory");
@@ -1773,6 +1792,61 @@ mod tests {
       "the conservative wave flow stays bounded"
     );
     assert!(scene.offers(Selection::Scalar(0)).displacement);
+  }
+
+  /// Both evolutions are posed at every grade of the de Rham complex, not just
+  /// at 0: the parabolic flow damps the $L^2$ norm and the symplectic wave flow
+  /// keeps it bounded, whatever grade the bump is a form of. Swept over every
+  /// grade of a surface, the extremal ones included -- the top grade is where a
+  /// grade-0-only construction (a scalar bump, a `ndofs(0)` source) would have
+  /// gone wrong silently.
+  #[test]
+  fn both_evolutions_run_at_every_grade() {
+    let (topology, coords) = crate::gallery::MeshSource::Grid {
+      dim: 2,
+      cells_axis: 4,
+    }
+    .build()
+    .unwrap();
+    let l2 = |c: &Cochain| c.coeffs().norm();
+
+    // A trajectory files under the mark its *reduced* grade earns, so on a
+    // surface grade 1 is a line field and 0 and 2 are densities; the single
+    // field is read from whichever list it landed in.
+    let only_field = |scene: &Scene| -> FieldTime {
+      let times: Vec<FieldTime> = scene
+        .fields
+        .iter()
+        .map(|f| f.time.clone())
+        .chain(scene.line_fields.iter().map(|f| f.time.clone()))
+        .collect();
+      assert_eq!(times.len(), 1, "exactly one trajectory field");
+      times.into_iter().next().unwrap()
+    };
+
+    for grade in 0..=topology.dim() {
+      let heat = Scene::heat(topology.clone(), coords.clone(), grade, 10, 0.2);
+      let FieldTime::Trajectory { frames, .. } = &only_field(&heat) else {
+        panic!("the heat flow is a trajectory at grade {grade}");
+      };
+      assert_eq!(frames.len(), 11);
+      assert_eq!(frames[0].grade(), grade);
+      assert!(
+        l2(frames.last().unwrap()) <= l2(&frames[0]) + 1e-12,
+        "the heat flow does not grow at grade {grade}"
+      );
+
+      let wave = Scene::wave(topology.clone(), coords.clone(), grade, 20, 2.0);
+      let FieldTime::Trajectory { frames, .. } = &only_field(&wave) else {
+        panic!("the wave equation is a trajectory at grade {grade}");
+      };
+      assert_eq!(frames[0].grade(), grade);
+      let initial = l2(&frames[0]);
+      assert!(
+        frames.iter().all(|f| l2(f) <= 4.0 * initial + 1e-12),
+        "the conservative wave flow stays bounded at grade {grade}"
+      );
+    }
   }
 
   /// What a field offers is its reduced grade's answer, and the answer is total

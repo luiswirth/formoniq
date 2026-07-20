@@ -654,26 +654,31 @@ fn commit_slider<Num: egui::emath::Numeric>(
 /// This is where [`Study`]'s variant parameters become editable -- the browser
 /// picks *which* study, and this edits the one picked, the split the crate's
 /// `CLAUDE.md` draws between the two panels.
+/// One tab per grade of the de Rham complex, for a study posed at a single
+/// grade. Every grade is offered, the top grade through its Hodge star just
+/// like grade 0. A grade change commits at once -- it is a different problem,
+/// not a knob on the current one.
+fn grade_tabs(ui: &mut egui::Ui, grade: &mut ExteriorGrade, max_grade: Dim) -> bool {
+  let mut commit = false;
+  ui.horizontal_wrapped(|ui| {
+    for g in 0..=max_grade {
+      if ui
+        .selectable_label(*grade == g, grade_mark_label(g, max_grade))
+        .clicked()
+        && *grade != g
+      {
+        *grade = g;
+        commit = true;
+      }
+    }
+  });
+  commit
+}
+
 fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
   match study {
     Study::Eigenmodes { grade, nmodes } => {
-      // One tab per grade of the de Rham complex; every grade is solved and
-      // shown, the top grade through its Hodge star just like grade 0. A grade
-      // change commits at once -- it is a different eigenproblem, not a knob on
-      // the current one.
-      let mut commit = false;
-      ui.horizontal_wrapped(|ui| {
-        for g in 0..=max_grade {
-          if ui
-            .selectable_label(*grade == g, grade_mark_label(g, max_grade))
-            .clicked()
-            && *grade != g
-          {
-            *grade = g;
-            commit = true;
-          }
-        }
-      });
+      let commit = grade_tabs(ui, grade, max_grade);
       commit
         | commit_slider(
           ui,
@@ -682,7 +687,12 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
           "modes",
         )
     }
-    Study::Heat { nsteps, final_time } => {
+    Study::Heat {
+      grade,
+      nsteps,
+      final_time,
+    } => {
+      let grade_changed = grade_tabs(ui, grade, max_grade);
       let steps = commit_slider(
         ui,
         nsteps,
@@ -695,9 +705,14 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
         HEAT_FINAL_TIME_MIN..=HEAT_FINAL_TIME_MAX,
         "final t",
       );
-      steps | time
+      grade_changed | steps | time
     }
-    Study::Wave { nsteps, final_time } => {
+    Study::Wave {
+      grade,
+      nsteps,
+      final_time,
+    } => {
+      let grade_changed = grade_tabs(ui, grade, max_grade);
       let steps = commit_slider(
         ui,
         nsteps,
@@ -710,7 +725,7 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
         WAVE_FINAL_TIME_MIN..=WAVE_FINAL_TIME_MAX,
         "final t",
       );
-      steps | time
+      grade_changed | steps | time
     }
     Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => false,
   }
@@ -1095,6 +1110,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           let on_heat = matches!(model.study, Study::Heat { .. });
           if ui.selectable_label(on_heat, "Heat").clicked() && !on_heat {
             requested_study = Study::Heat {
+              grade: model.last_grade,
               nsteps: DEFAULT_TRAJECTORY_STEPS,
               final_time: HEAT_FINAL_TIME,
             };
@@ -1102,6 +1118,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           let on_wave = matches!(model.study, Study::Wave { .. });
           if ui.selectable_label(on_wave, "Wave").clicked() && !on_wave {
             requested_study = Study::Wave {
+              grade: model.last_grade,
               nsteps: DEFAULT_TRAJECTORY_STEPS,
               final_time: WAVE_FINAL_TIME,
             };
