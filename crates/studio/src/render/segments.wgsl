@@ -80,6 +80,24 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     return out;
 }
 
+// A mark occludes the medium exactly to the extent it is opaque, and a depth
+// buffer can only say "fully" or "not at all". Two separate conditions decide
+// it, and conflating them costs either the silhouette or the occlusion:
+//
+// `SILHOUETTE_EPS` cuts the quad's *shape*. A billboard is far wider than the
+// mark drawn inside it, and that transparent margin must stay out of the depth
+// buffer or it carves a rectangular hole in the medium around every ribbon. The
+// threshold is near zero on purpose: the one-pixel `fwidth` gradient that
+// resolves the edge is kept intact, so the depth written overshoots the visible
+// mark by well under a pixel and the antialiasing is untouched.
+//
+// `OPAQUE_ENOUGH` asks whether the mark is see-through at all -- a ribbon faded
+// toward a standing-wave node, a tracer tapered to its tail. Those should not
+// occlude, because one can see through them, and the fog behind correctly shows
+// through too.
+const SILHOUETTE_EPS: f32 = 0.02;
+const OPAQUE_ENOUGH: f32 = 0.5;
+
 struct FsOut {
     @location(0) color: vec4<f32>,
     // A ribbon's ink is a fixed material color, alpha-blended -- never above 1,
@@ -116,6 +134,9 @@ fn fs_main(in: VertexOutput) -> FsOut {
 
     let envelope = in.opacity * mix(material.fade_floor, 1.0, env);
     var out: FsOut;
+    if (ink < SILHOUETTE_EPS || material.color.a * envelope < OPAQUE_ENOUGH) {
+        discard;
+    }
     out.color = vec4<f32>(rgb, material.color.a * envelope * ink);
     out.unbounded = 0.0;
     return out;

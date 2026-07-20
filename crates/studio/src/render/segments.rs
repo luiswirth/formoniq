@@ -60,7 +60,7 @@ impl SegmentPass {
         ],
       }),
       primitive: primitive(),
-      depth_stencil: Some(depth_stencil(false)),
+      depth_stencil: Some(depth_stencil(true)),
       multisample: wgpu::MultisampleState::default(),
       multiview_mask: None,
       cache: None,
