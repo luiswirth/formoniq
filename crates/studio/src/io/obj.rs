@@ -9,6 +9,12 @@
 //! current end of the vertex list), per the spec; and a polygon of more than
 //! three vertices is fan-triangulated.
 //!
+//! Two habits of a mesh from the wild are repaired rather than refused, because
+//! neither changes the surface: a degenerate face, whose corners are not three
+//! distinct vertices and which therefore is no simplex, is dropped; and vertices
+//! no face references are discarded, the rest relabelled onto the contiguous
+//! range a `Complex` requires.
+//!
 //! Fallible where a naive reader would panic: a malformed line, an out-of-range
 //! index, an empty or non-manifold surface is an [`ObjError`], not a crash, so a
 //! file the user picked that is not what it claims is reported rather than
@@ -106,10 +112,16 @@ pub fn parse_wound(obj: &str) -> Result<(Complex, MeshCoords, Option<Orientation
     }
   }
 
+  // A face may name the same corner twice -- directly, or through a fan of an
+  // n-gon that does. The triangle carries no geometry, is not a simplex (its
+  // vertices are not distinct), and would otherwise spuriously raise an edge's
+  // incidence count, so it is dropped before the surface is judged.
+  triangles.retain(|[a, b, c]| a != b && b != c && a != c);
   if triangles.is_empty() {
     return Err(ObjError::Empty);
   }
   check_manifold(&triangles)?;
+  let positions = close_vertex_gaps(&mut triangles, positions);
 
   let columns: Vec<_> = positions
     .iter()
@@ -188,6 +200,27 @@ fn parse_face<'a>(
     });
   }
   Ok(corners)
+}
+
+/// Discards vertices no triangle references and relabels the triangles onto the
+/// contiguous range that remains, returning the surviving positions.
+///
+/// A `Complex` requires its vertex labels to be exactly $0..n$, each used by
+/// some cell; an OBJ from the wild routinely carries loose points, or a `v`
+/// block shared by an object whose faces were not exported. Closing the gap
+/// here rather than after the fact keeps the triangle list -- and hence the
+/// winding words read off it -- in one numbering throughout.
+fn close_vertex_gaps(triangles: &mut [[usize; 3]], positions: Vec<[f64; 3]>) -> Vec<[f64; 3]> {
+  let mut used: Vec<usize> = triangles.iter().flatten().copied().collect();
+  used.sort_unstable();
+  used.dedup();
+  if used.len() == positions.len() {
+    return positions;
+  }
+  for corner in triangles.iter_mut().flatten() {
+    *corner = used.binary_search(corner).expect("corner is used");
+  }
+  used.into_iter().map(|v| positions[v]).collect()
 }
 
 /// Rejects a triangle soup that is not a 2-manifold: every undirected edge of a
@@ -270,6 +303,37 @@ f 1 2 5
   #[test]
   fn rejects_faceless_input() {
     assert!(matches!(parse("v 0 0 0\nv 1 0 0\n"), Err(ObjError::Empty)));
+  }
+
+  /// A face naming a corner twice is no simplex; it is dropped, not fatal, and
+  /// the surface around it still reads.
+  #[test]
+  fn drops_degenerate_faces() {
+    let obj = "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1 2 2\nf 1 2 3\n";
+    let (complex, _) = parse(obj).unwrap();
+    assert_eq!(complex.nsimplices(2), 1);
+
+    // A file of nothing but degenerate faces has no surface at all.
+    assert!(matches!(
+      parse("v 0 0 0\nv 1 0 0\nf 1 2 2\n"),
+      Err(ObjError::Empty)
+    ));
+  }
+
+  /// A vertex no face references is discarded and the rest relabelled, so the
+  /// complex's vertices are the contiguous range it requires -- whether the
+  /// orphan sits before the used vertices or after them.
+  #[test]
+  fn discards_orphan_vertices() {
+    for obj in [
+      "v 0 0 0\nv 1 0 0\nv 0 1 0\nv 9 9 9\nf 1 2 3\n",
+      "v 9 9 9\nv 0 0 0\nv 1 0 0\nv 0 1 0\nf 2 3 4\n",
+    ] {
+      let (complex, coords) = parse(obj).unwrap();
+      assert_eq!(complex.nsimplices(2), 1);
+      assert_eq!(complex.nsimplices(0), 3);
+      assert_eq!(coords.nvertices(), 3, "coords follow the relabelling");
+    }
   }
 
   /// Two consistently wound triangles of the unit square carry a coherent
