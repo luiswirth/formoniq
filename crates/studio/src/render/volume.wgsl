@@ -22,6 +22,15 @@
 @group(1) @binding(0) var volume: texture_3d<f32>;
 @group(1) @binding(1) var volume_sampler: sampler;
 
+// A coarse grid holding, per block, the maximum occupancy over that block --
+// `max |value|` normalized by the grid's peak magnitude, precomputed on the CPU
+// (see `VolumeBatch`). It is the empty-space acceleration structure: where a
+// whole block is empty the ray steps over it in one iteration instead of paying
+// a fine sample per step through vacuum. Nearest-sampled, so a lookup reads the
+// containing block's own maximum rather than a blend across the boundary.
+@group(1) @binding(2) var coarse: texture_3d<f32>;
+@group(1) @binding(3) var coarse_sampler: sampler;
+
 // The scene's depth, in its own group: it is reallocated whenever the target
 // resizes, so it cannot sit in the batch's bind group beside a texture that
 // outlives the resize.
@@ -111,6 +120,39 @@ fn occupancy(m: VolumeMaterial, value: f32) -> f32 {
     return clamp(abs(value) / max(scale, 1e-12), 0.0, 1.0);
 }
 
+// The maximum occupancy over the coarse block containing `x`, read from the
+// acceleration grid. Directly comparable to `MIN_OCCUPANCY`: the CPU normalizes
+// it by the grid's peak, which equals the shader's own occupancy scale. It is a
+// conservative upper bound on every fine sample in the block -- encoded with a
+// ceil, and the wave only shrinks a value ($|u cos| <= |u|$) -- so a block it
+// reports empty truly contributes nothing and skipping it drops no medium.
+fn block_occupancy(x: vec3<f32>) -> f32 {
+    let uvw = (x - volume_material.origin.xyz) / volume_material.size.xyz;
+    return textureSampleLevel(coarse, coarse_sampler, uvw, 0.0).r;
+}
+
+// Advance `t` past the far boundary of the coarse block containing `x`, so an
+// empty block costs one iteration rather than one per fine step. A slab DDA in
+// the grid's world frame; the block's world extent is the box divided by the
+// acceleration grid's own dimensions, so no side-channel is needed to know it.
+fn skip_block(m: VolumeMaterial, x: vec3<f32>, dir: vec3<f32>, t: f32) -> f32 {
+    let cdim = vec3<f32>(textureDimensions(coarse));
+    let block = m.size.xyz / cdim;
+    let cell = floor((x - m.origin.xyz) / block);
+    // The forward face on each axis: the upper boundary where the ray moves in
+    // the positive direction, the lower where it moves negative.
+    let next_index = cell + max(sign(dir), vec3<f32>(0.0));
+    let plane = m.origin.xyz + next_index * block;
+    let dt_axis = (plane - x) / dir;
+    // Only forward crossings count; a zero-direction axis (an infinity) and any
+    // floating-point backward noise are pushed out of the minimum.
+    let safe = select(vec3<f32>(1e30), dt_axis, dt_axis > vec3<f32>(0.0));
+    let cross = min(min(safe.x, safe.y), safe.z);
+    // Nudge past the boundary so the next iteration samples inside the next
+    // block; half a step guarantees forward progress even on a grazing ray.
+    return t + cross + m.step_size * 0.5;
+}
+
 @fragment
 fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
     let m = volume_material;
@@ -154,13 +196,20 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         if (t >= span.y || transmittance < MIN_TRANSMITTANCE) {
             break;
         }
-        // The standing wave, applied to the sampled value before anything reads it,
-    // so the palette and the opacity pulse together the way the fill's do.
-    let value = field_at(m, near + dir * t) * cos(m.wave_omega * m.time);
-        let a = occupancy(m, value);
+        let x = near + dir * t;
         // Empty space is the common case inside the box (the mesh does not fill
         // its own bounding box, and the field vanishes over much of what it
-        // does), so skipping it is most of the frame's speed.
+        // does). The coarse grid steps over a whole empty block at once, so the
+        // vacuum no longer costs a fine sample per step -- most of the frame's
+        // speed on a solid that only half-fills its bounds.
+        if (block_occupancy(x) <= MIN_OCCUPANCY) {
+            t = skip_block(m, x, dir, t);
+            continue;
+        }
+        // The standing wave, applied to the sampled value before anything reads
+        // it, so the palette and the opacity pulse together the way the fill's do.
+        let value = field_at(m, x) * cos(m.wave_omega * m.time);
+        let a = occupancy(m, value);
         if (a > MIN_OCCUPANCY) {
             let sigma = m.density * a;
             let absorbed = 1.0 - exp(-sigma * dt);

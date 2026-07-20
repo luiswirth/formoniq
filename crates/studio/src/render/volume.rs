@@ -25,6 +25,51 @@ use bytemuck::{Pod, Zeroable};
 use super::{color_target, primitive, shader_module, uniform::UniformBinding};
 use crate::volume::VolumeGrid;
 
+/// The edge, in fine voxels, of a block in the coarse empty-space grid. Larger
+/// blocks skip vacuum in fewer iterations but resolve the medium's boundary more
+/// coarsely, so a block half-full of empty space is still entered fine; 4 keeps
+/// the acceleration grid a 1/64 the size of the field while still tiling a
+/// half-empty box into blocks most of which are wholly one or the other.
+const COARSE_BLOCK: usize = 4;
+
+/// The coarse empty-space grid for `grid`: per block, `max |value|` over its
+/// `COARSE_BLOCK`-cubed fine voxels, normalized by the grid's peak magnitude and
+/// `ceil`-encoded into `R8Unorm`. Returned with its extent for upload.
+///
+/// The normalization matches the shader's occupancy scale (the peak *is* that
+/// scale, being `max |value|`), so a texel decodes straight to the block's
+/// maximum occupancy. `ceil` rounds any nonzero block up rather than down, so the
+/// bound is conservative: a block the grid calls empty has every fine sample
+/// below `MIN_OCCUPANCY`, and the march never skips medium it should have drawn.
+fn coarse_occupancy(grid: &VolumeGrid) -> (Vec<u8>, wgpu::Extent3d) {
+  let [rx, ry, rz] = grid.resolution;
+  let cres = grid.resolution.map(|r| r.div_ceil(COARSE_BLOCK).max(1));
+  let scale = grid.peak.max(1e-12);
+  let mut texels = vec![0u8; cres.iter().product()];
+  for cz in 0..cres[2] {
+    for cy in 0..cres[1] {
+      for cx in 0..cres[0] {
+        let mut peak = 0.0f32;
+        for iz in cz * COARSE_BLOCK..((cz + 1) * COARSE_BLOCK).min(rz) {
+          for iy in cy * COARSE_BLOCK..((cy + 1) * COARSE_BLOCK).min(ry) {
+            for ix in cx * COARSE_BLOCK..((cx + 1) * COARSE_BLOCK).min(rx) {
+              peak = peak.max(grid.values[ix + rx * (iy + ry * iz)].abs());
+            }
+          }
+        }
+        let occ = (peak / scale * 255.0).ceil().clamp(0.0, 255.0) as u8;
+        texels[cx + cres[0] * (cy + cres[1] * cz)] = occ;
+      }
+    }
+  }
+  let extent = wgpu::Extent3d {
+    width: cres[0] as u32,
+    height: cres[1] as u32,
+    depth_or_array_layers: cres[2] as u32,
+  };
+  (texels, extent)
+}
+
 /// The layout a [`VolumeBatch`]'s texture and sampler bind against.
 ///
 /// A free function, like `deposit_read_layout`, because both the pass and the
@@ -47,6 +92,24 @@ pub fn volume_read_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
       },
       wgpu::BindGroupLayoutEntry {
         binding: 1,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+        count: None,
+      },
+      // The coarse empty-space grid and its own nearest sampler: a block's
+      // maximum occupancy, read to step over vacuum a block at a time.
+      wgpu::BindGroupLayoutEntry {
+        binding: 2,
+        visibility: wgpu::ShaderStages::FRAGMENT,
+        ty: wgpu::BindingType::Texture {
+          sample_type: wgpu::TextureSampleType::Float { filterable: true },
+          view_dimension: wgpu::TextureViewDimension::D3,
+          multisampled: false,
+        },
+        count: None,
+      },
+      wgpu::BindGroupLayoutEntry {
+        binding: 3,
         visibility: wgpu::ShaderStages::FRAGMENT,
         ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
         count: None,
@@ -190,6 +253,52 @@ impl VolumeBatch {
       mipmap_filter: wgpu::MipmapFilterMode::Nearest,
       ..Default::default()
     });
+
+    // The coarse empty-space grid: each block holds the maximum occupancy over
+    // its `COARSE_BLOCK`-cubed fine voxels, `max |value|` normalized by the
+    // grid's peak so it decodes to the same `[0, 1]` occupancy the shader
+    // compares against `MIN_OCCUPANCY`. `ceil`-encoded, so a block with any
+    // content is never rounded down to empty -- the skip stays conservative.
+    let (coarse, coarse_extent) = coarse_occupancy(grid);
+    let coarse_texture = device.create_texture(&wgpu::TextureDescriptor {
+      label: Some("Volume Coarse Texture"),
+      size: coarse_extent,
+      mip_level_count: 1,
+      sample_count: 1,
+      dimension: wgpu::TextureDimension::D3,
+      format: wgpu::TextureFormat::R8Unorm,
+      usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+      view_formats: &[],
+    });
+    queue.write_texture(
+      wgpu::TexelCopyTextureInfo {
+        texture: &coarse_texture,
+        mip_level: 0,
+        origin: wgpu::Origin3d::ZERO,
+        aspect: wgpu::TextureAspect::All,
+      },
+      &coarse,
+      wgpu::TexelCopyBufferLayout {
+        offset: 0,
+        bytes_per_row: Some(coarse_extent.width),
+        rows_per_image: Some(coarse_extent.height),
+      },
+      coarse_extent,
+    );
+    let coarse_view = coarse_texture.create_view(&wgpu::TextureViewDescriptor::default());
+    // Nearest, so a lookup reads the containing block's own maximum rather than a
+    // blend across the boundary that could under-report it (and so falsely skip).
+    let coarse_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+      label: Some("Volume Coarse Sampler"),
+      address_mode_u: wgpu::AddressMode::ClampToEdge,
+      address_mode_v: wgpu::AddressMode::ClampToEdge,
+      address_mode_w: wgpu::AddressMode::ClampToEdge,
+      mag_filter: wgpu::FilterMode::Nearest,
+      min_filter: wgpu::FilterMode::Nearest,
+      mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+      ..Default::default()
+    });
+
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
       label: Some("Volume Bind Group"),
       layout: &layout,
@@ -201,6 +310,14 @@ impl VolumeBatch {
         wgpu::BindGroupEntry {
           binding: 1,
           resource: wgpu::BindingResource::Sampler(&sampler),
+        },
+        wgpu::BindGroupEntry {
+          binding: 2,
+          resource: wgpu::BindingResource::TextureView(&coarse_view),
+        },
+        wgpu::BindGroupEntry {
+          binding: 3,
+          resource: wgpu::BindingResource::Sampler(&coarse_sampler),
         },
       ],
     });
