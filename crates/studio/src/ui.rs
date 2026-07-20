@@ -9,9 +9,11 @@ use simplicial::{topology::simplex::Simplex, Dim};
 
 use crate::gallery::{
   BuiltinMesh, MeshSource, Preset, Study, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
-  GRID_CELLS_DEFAULT, GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME,
+  EIGENMODES_NMODES_MAX, EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT, GRID_CELLS_MAX,
+  GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX, HEAT_FINAL_TIME_MIN,
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
-  WAVE_FINAL_TIME,
+  TRAJECTORY_STEPS_MAX, TRAJECTORY_STEPS_MIN, WAVE_FINAL_TIME, WAVE_FINAL_TIME_MAX,
+  WAVE_FINAL_TIME_MIN,
 };
 use crate::scene::{dof_label, FieldOffers};
 
@@ -534,6 +536,109 @@ pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
   }
 }
 
+/// A slider whose edit is *committed* only when the handle is released (or the
+/// value is typed and confirmed), never mid-drag. It edits `value` live so the
+/// readout tracks the pointer, but returns `true` only on the frame the gesture
+/// ends -- so a parameter that drives an expensive rebuild (an eigensolve, a
+/// trajectory) re-solves once on release rather than on every frame the handle
+/// sweeps through. `changed() && !dragged()` catches the keyboard/step edits a
+/// drag never emits.
+fn commit_slider<Num: egui::emath::Numeric>(
+  ui: &mut egui::Ui,
+  value: &mut Num,
+  range: std::ops::RangeInclusive<Num>,
+  text: &str,
+) -> bool {
+  let response = ui.add(egui::Slider::new(value, range).text(text));
+  response.drag_stopped() || (response.changed() && !response.dragged())
+}
+
+/// The selected study's own parameters, edited in place against `study`.
+/// Returns whether the edit should be applied this frame: a discrete change (a
+/// grade tab) commits at once, a slider only when its drag ends (see
+/// [`commit_slider`]), so the re-solve the change triggers fires once. A study
+/// with no free parameters (the Whitney basis, the Hodge decomposition, an
+/// explicit cochain list) draws nothing and commits nothing.
+///
+/// This is where [`Study`]'s variant parameters become editable -- the browser
+/// picks *which* study, and this edits the one picked, the split the crate's
+/// `CLAUDE.md` draws between the two panels.
+fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
+  match study {
+    Study::Eigenmodes { grade, nmodes } => {
+      // One tab per grade of the de Rham complex; every grade is solved and
+      // shown, the top grade through its Hodge star just like grade 0. A grade
+      // change commits at once -- it is a different eigenproblem, not a knob on
+      // the current one.
+      let mut commit = false;
+      ui.horizontal_wrapped(|ui| {
+        for g in 0..=max_grade {
+          if ui
+            .selectable_label(*grade == g, grade_mark_label(g, max_grade))
+            .clicked()
+            && *grade != g
+          {
+            *grade = g;
+            commit = true;
+          }
+        }
+      });
+      commit
+        | commit_slider(
+          ui,
+          nmodes,
+          EIGENMODES_NMODES_MIN..=EIGENMODES_NMODES_MAX,
+          "modes",
+        )
+    }
+    Study::Heat { nsteps, final_time } => {
+      let steps = commit_slider(
+        ui,
+        nsteps,
+        TRAJECTORY_STEPS_MIN..=TRAJECTORY_STEPS_MAX,
+        "steps",
+      );
+      let time = commit_slider(
+        ui,
+        final_time,
+        HEAT_FINAL_TIME_MIN..=HEAT_FINAL_TIME_MAX,
+        "final t",
+      );
+      steps | time
+    }
+    Study::Wave { nsteps, final_time } => {
+      let steps = commit_slider(
+        ui,
+        nsteps,
+        TRAJECTORY_STEPS_MIN..=TRAJECTORY_STEPS_MAX,
+        "steps",
+      );
+      let time = commit_slider(
+        ui,
+        final_time,
+        WAVE_FINAL_TIME_MIN..=WAVE_FINAL_TIME_MAX,
+        "final t",
+      );
+      steps | time
+    }
+    Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => false,
+  }
+}
+
+/// The one-line equation each study is solving, for the inspector's caption. A
+/// reader who knows the mathematics recognizes the study from its equation;
+/// one who does not has the name above it.
+fn study_equation(study: &Study) -> &'static str {
+  match study {
+    Study::Eigenmodes { .. } => "Δu = λu · standing modes",
+    Study::WhitneyBasis => "grade × DOF · the Whitney basis",
+    Study::HodgeDecomposition => "ω = dα + δβ + h",
+    Study::Heat { .. } => "∂ₜu = −Δu · parabolic",
+    Study::Wave { .. } => "∂ₜₜu = −Δu · hyperbolic",
+    Study::Cochains(_) => "explicit cochains",
+  }
+}
+
 /// Everything the panel reads to draw one frame -- a snapshot, not a live
 /// borrow, so building it and rendering the panel cannot conflict with the
 /// `&mut self` calls the caller makes to apply the response afterward.
@@ -611,13 +716,13 @@ pub(crate) struct PanelResponse {
   pub(crate) export_png_clicked: bool,
 }
 
-/// Builds and tessellates the docked shell: a left sidebar (the preset browser
-/// and the two raw axes, mesh and study, for free composition), a right
-/// inspector (the study's own knobs -- eigenmode grade tabs, the mode picker or
-/// basis grid, or a spinner while it solves -- and the camera-mode toggle), a
-/// bottom transport bar (play/pause and the standing wave's readouts), and the
-/// field-name viewport overlay. No central panel is drawn, so the wgpu scene
-/// shows through the middle.
+/// Builds and tessellates the control shell: a top menu bar (file and view
+/// commands), a left sidebar (the preset browser and the two platform axes,
+/// mesh and study, for free composition), a right inspector (the study's own
+/// parameters, its mode picker or basis grid or a spinner while it solves, and
+/// the display settings for the two objects on screen), and a bottom transport
+/// bar (the sidebar toggles, play/pause and the standing wave's readouts). No
+/// central panel is drawn, so the wgpu scene shows through the middle.
 ///
 /// A pure function of `model`: it reads no other state and its only side effect
 /// is on `ctx`'s own egui pass, so the caller is free to apply the returned
@@ -660,28 +765,158 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   #[cfg(not(target_arch = "wasm32"))]
   let mut export_png_clicked = false;
 
-  // Left sidebar: the browser. The curated presets on top -- each a point in
-  // the mesh × study product, chosen as a whole -- then the raw two axes below.
-  egui::Panel::left("browser")
-    .default_size(side_width)
-    .show_collapsible(ui, &mut browser_open, |ui| {
-      ui.add_space(4.0);
-      ui.heading("Browser");
-      ui.separator();
-
-      section(ui, "Presets", |ui| {
-        for (i, preset) in model.presets.iter().enumerate() {
-          if ui.selectable_label(false, preset.name).clicked() {
-            requested_preset = Some(i);
-          }
+  // Top menu bar: the commands that are not a property of either object on
+  // screen -- reading and writing files, and how the shell itself is laid out
+  // and lit. Drawn first so it spans the full width above the sidebars, the
+  // conventional home a reader reaches for these by reflex.
+  egui::Panel::top("menubar").show(ui, |ui| {
+    egui::MenuBar::new().ui(ui, |ui| {
+      // File is native only: the web build has no local filesystem to read a
+      // mesh from or write a still to, so the whole menu is absent there rather
+      // than shown with dead entries.
+      #[cfg(not(target_arch = "wasm32"))]
+      ui.menu_button("File", |ui| {
+        if ui.button("Load OBJ…").clicked() {
+          load_obj_clicked = true;
+          ui.close();
+        }
+        if ui
+          .button("Export PNG…")
+          .on_hover_text("Save the current view as a still")
+          .clicked()
+        {
+          export_png_clicked = true;
+          ui.close();
         }
       });
 
-      // The study axis. Eigenmodes and the Whitney basis are the two generic
-      // studies; an explicit cochain list has no generic form to pick, so it
-      // shows as the selected study only when a preset installed it.
-      section(ui, "Study", |ui| {
-        ui.horizontal_wrapped(|ui| {
+      ui.menu_button("View", |ui| {
+        // The sidebar toggles, mirrored from the transport bar: a reader who
+        // thinks of "show the panels" as a view command finds it here, and one
+        // who reaches for the bottom-bar icons finds it there.
+        ui.checkbox(&mut browser_open, "Browser");
+        ui.checkbox(&mut inspector_open, "Inspector");
+        ui.separator();
+        ui.checkbox(&mut orthographic, "Orthographic")
+          .on_hover_text("Parallel projection: no vanishing point, so a flat mesh keeps its scale");
+        ui.separator();
+        // The display transform, a cumulative ladder rather than a set of
+        // independent flags (see `Post`), so a radio and not checkboxes.
+        ui.label("Light");
+        for rung in Post::ALL {
+          ui.radio_value(&mut post, rung, rung.label());
+        }
+      });
+
+      ui.menu_button("Help", |ui| {
+        ui.label(concat!("formoniq-studio ", env!("CARGO_PKG_VERSION")));
+        ui.label("A viewer for FEEC meshes, cochains and PDE solutions.");
+      });
+    });
+  });
+
+  // Left sidebar: the browser -- what object to build. The curated presets on
+  // top, each a whole point in the mesh × study product, then the two axes
+  // below for free composition.
+  egui::Panel::left("browser")
+    .default_size(side_width)
+    .show_collapsible(ui, &mut browser_open, |ui| {
+      egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.add_space(4.0);
+        ui.heading("Browser");
+        ui.separator();
+
+        section(ui, "Presets", |ui| {
+          for (i, preset) in model.presets.iter().enumerate() {
+            if ui.selectable_label(false, preset.name).clicked() {
+              requested_preset = Some(i);
+            }
+          }
+        });
+
+        // The mesh axis: every study runs on every mesh, so the picker is
+        // always shown. A generated family resets to its default refinement
+        // when first chosen; its refinement sliders commit on release so a
+        // drag re-solves once, not every frame it sweeps.
+        //
+        // "Mesh source", not "Mesh": this is which object to build, while the
+        // inspector's "Mesh" is what of it to draw. Two questions, and the
+        // longer name is the one that says which this is.
+        section(ui, "Mesh source", |ui| {
+          egui::ComboBox::from_id_salt("mesh-source")
+            .selected_text(requested_mesh.label())
+            .show_ui(ui, |ui| {
+              let is_sphere = matches!(requested_mesh, MeshSource::Sphere { .. });
+              if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
+                requested_mesh = MeshSource::Sphere {
+                  subdivisions: SPHERE_SUBDIVISIONS,
+                };
+              }
+              let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
+              if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
+                requested_mesh = MeshSource::Grid {
+                  dim: GRID_DIM_DEFAULT,
+                  cells_axis: GRID_CELLS_DEFAULT,
+                };
+              }
+              let is_ref = matches!(requested_mesh, MeshSource::ReferenceCell { .. });
+              if ui.selectable_label(is_ref, "Reference cell").clicked() && !is_ref {
+                requested_mesh = MeshSource::ReferenceCell {
+                  dim: REFERENCE_CELL_DIM,
+                };
+              }
+              let is_triforce = matches!(requested_mesh, MeshSource::Triforce);
+              if ui.selectable_label(is_triforce, "Triforce").clicked() {
+                requested_mesh = MeshSource::Triforce;
+              }
+              for builtin in BuiltinMesh::all() {
+                let selected = requested_mesh == MeshSource::Builtin(builtin);
+                if ui.selectable_label(selected, builtin.label()).clicked() {
+                  requested_mesh = MeshSource::Builtin(builtin);
+                }
+              }
+            });
+
+          // The refinement sliders of a generated family, edited against a
+          // draft and committed only on release: switching family (the combo
+          // above) applies at once, but sweeping a slider must not respawn the
+          // background solve on every frame of the drag.
+          let mut draft = requested_mesh.clone();
+          let committed = match &mut draft {
+            MeshSource::Sphere { subdivisions } => commit_slider(
+              ui,
+              subdivisions,
+              0..=SPHERE_SUBDIVISIONS_MAX,
+              "subdivisions",
+            ),
+            MeshSource::Grid { dim, cells_axis } => {
+              let d = commit_slider(ui, dim, 1..=GRID_DIM_MAX, "dimension");
+              let c = commit_slider(ui, cells_axis, 1..=GRID_CELLS_MAX, "cells/axis");
+              d | c
+            }
+            MeshSource::ReferenceCell { dim } => {
+              commit_slider(ui, dim, 1..=REFERENCE_CELL_DIM_MAX, "dimension")
+            }
+            MeshSource::Triforce
+            | MeshSource::Builtin(_)
+            | MeshSource::Custom { .. }
+            | MeshSource::File(_) => false,
+          };
+          if committed {
+            requested_mesh = draft;
+          }
+          if let Some(error) = &model.mesh_error {
+            ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
+          }
+        });
+
+        // The study axis: which computation to run on the mesh. Eigenmodes, the
+        // Whitney basis, the Hodge decomposition and the two time-dependent
+        // solves are the generic studies picked here; an explicit cochain list
+        // has no generic form to pick, so it shows as the selected study only
+        // when a preset installed it. The parameters of the picked study are the
+        // inspector's, not this list's.
+        section(ui, "Study", |ui| {
           let on_eigenmodes = matches!(model.study, Study::Eigenmodes { .. });
           if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
             requested_study = Study::Eigenmodes {
@@ -719,210 +954,96 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           }
         });
       });
-
-      // The mesh axis: every study runs on every mesh, so the picker is always
-      // shown. A generated family resets to its default refinement when first
-      // chosen; re-picking the current family keeps the slider's value.
-      //
-      // "Mesh source", not "Mesh": this is which object to build, while the
-      // inspector's "Mesh" is what of it to draw. Two questions, and the longer
-      // name is the one that says which this is.
-      section(ui, "Mesh source", |ui| {
-        egui::ComboBox::from_id_salt("mesh-source")
-          .selected_text(requested_mesh.label())
-          .show_ui(ui, |ui| {
-            let is_sphere = matches!(requested_mesh, MeshSource::Sphere { .. });
-            if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
-              requested_mesh = MeshSource::Sphere {
-                subdivisions: SPHERE_SUBDIVISIONS,
-              };
-            }
-            let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
-            if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
-              requested_mesh = MeshSource::Grid {
-                dim: GRID_DIM_DEFAULT,
-                cells_axis: GRID_CELLS_DEFAULT,
-              };
-            }
-            let is_ref = matches!(requested_mesh, MeshSource::ReferenceCell { .. });
-            if ui.selectable_label(is_ref, "Reference cell").clicked() && !is_ref {
-              requested_mesh = MeshSource::ReferenceCell {
-                dim: REFERENCE_CELL_DIM,
-              };
-            }
-            let is_triforce = matches!(requested_mesh, MeshSource::Triforce);
-            if ui.selectable_label(is_triforce, "Triforce").clicked() {
-              requested_mesh = MeshSource::Triforce;
-            }
-            for builtin in BuiltinMesh::all() {
-              let selected = requested_mesh == MeshSource::Builtin(builtin);
-              if ui.selectable_label(selected, builtin.label()).clicked() {
-                requested_mesh = MeshSource::Builtin(builtin);
-              }
-            }
-          });
-        // A generated family or the reference cell carries a slider; a built-in,
-        // the triforce or a loaded mesh has none.
-        match &mut requested_mesh {
-          MeshSource::Sphere { subdivisions } => {
-            ui.add(
-              egui::Slider::new(subdivisions, 0..=SPHERE_SUBDIVISIONS_MAX).text("subdivisions"),
-            );
-          }
-          MeshSource::Grid { dim, cells_axis } => {
-            ui.add(egui::Slider::new(dim, 1..=GRID_DIM_MAX).text("dimension"));
-            ui.add(egui::Slider::new(cells_axis, 1..=GRID_CELLS_MAX).text("cells/axis"));
-          }
-          MeshSource::ReferenceCell { dim } => {
-            ui.add(egui::Slider::new(dim, 1..=REFERENCE_CELL_DIM_MAX).text("dimension"));
-          }
-          MeshSource::Triforce
-          | MeshSource::Builtin(_)
-          | MeshSource::Custom { .. }
-          | MeshSource::File(_) => {}
-        }
-        // Opens the in-egui file browser; the pick itself is retrieved by the
-        // caller, which owns the (native-only) `egui_file_dialog` state. Absent on
-        // the web, which has no local filesystem to browse.
-        #[cfg(not(target_arch = "wasm32"))]
-        if ui.button("Load OBJ…").clicked() {
-          load_obj_clicked = true;
-        }
-        if let Some(error) = &model.mesh_error {
-          ui.colored_label(egui::Color32::LIGHT_RED, format!("⚠ {error}"));
-        }
-      });
     });
 
-  // Right inspector: the knobs of what is shown -- the study's own parameters
-  // and the camera mode.
+  // Right inspector: what is shown of the object the browser built. The study's
+  // own parameters and its mode picker, then the display settings for the two
+  // objects on screen -- the mesh, and the field read on it.
   egui::Panel::right("inspector")
     .default_size(if compact { side_width } else { 250.0 })
     .show_collapsible(ui, &mut inspector_open, |ui| {
-      ui.add_space(4.0);
-      ui.heading("Inspector");
-      ui.separator();
-
-      // One tab per grade of the de Rham complex; every grade is solved and
-      // shown, the top grade through its Hodge star just like grade 0.
-      if let Study::Eigenmodes { grade, .. } = &model.study {
-        let grade = *grade;
-        ui.horizontal_wrapped(|ui| {
-          for g in 0..=model.max_grade {
-            if ui
-              .selectable_label(g == grade, grade_mark_label(g, model.max_grade))
-              .clicked()
-            {
-              requested_study = Study::Eigenmodes {
-                grade: g,
-                nmodes: DEFAULT_NMODES,
-              };
-            }
-          }
-        });
+      egui::ScrollArea::vertical().show(ui, |ui| {
+        ui.add_space(4.0);
+        ui.heading("Inspector");
         ui.separator();
-      }
 
-      if model.is_loading {
-        ui.horizontal(|ui| {
-          ui.add(egui::Spinner::new().size(20.0));
-          if let Some(label) = &model.loading_label {
-            ui.label(format!("Solving {label}…"));
+        // The study section: the equation it solves, then its own editable
+        // parameters. The grade tabs, the mode count, the sampling steps -- the
+        // knobs of `Study`'s variant, edited here where the crate's CLAUDE.md
+        // says they live. A committed edit re-requests the study, which
+        // re-solves it; while it does, the spinner below replaces the picker.
+        section(ui, "Study", |ui| {
+          ui.weak(study_equation(&model.study));
+          // Edit a draft of the *live* study, not the value the browser may
+          // have just replaced this frame: a type switch above and a parameter
+          // edit here never both fire, and basing the draft on the live study
+          // keeps the two from racing.
+          let mut study_draft = model.study.clone();
+          if study_params(ui, &mut study_draft, model.max_grade) && requested_study == model.study {
+            requested_study = study_draft;
           }
         });
-      } else {
-        match &model.study {
-          Study::Eigenmodes { .. } => {
-            ui.label("λ shell × order");
-          }
-          Study::WhitneyBasis => {
-            ui.label("grade × DOF");
-          }
-          Study::HodgeDecomposition => {
-            ui.label("ω = dα + δβ + h");
-          }
-          Study::Heat { .. } => {
-            ui.label("∂ₜu = −Δu");
-          }
-          Study::Wave { .. } => {
-            ui.label("∂ₜₜu = −Δu");
-          }
-          Study::Cochains(_) => {}
-        };
-        render_modes(ui, &model.entries, &mut selection, model.scene_dim);
-      }
 
-      // What is drawn, in two sections by which object the setting reads: the
-      // mesh, and the field read on it. That is `display.rs`'s own seam between
-      // `MeshDisplay` and `FieldDisplay`, so these mirror a distinction the code
-      // already makes rather than laying a second taxonomy over it.
-      // The skeletons, as peers: one row per k-skeleton the mesh has
-      // (k <= min(n, 2)), faces at the top, each with the same two questions --
-      // drawn, and colored by the field or left as structural geometry.
-      section(ui, "Skeletons", |ui| {
-      for k in (0..=model.scene_dim.min(2)).rev() {
-        let sk = &mut mesh_view.skeletons[k];
-        ui.horizontal(|ui| {
-          ui.checkbox(&mut sk.visible, skeleton_label(k))
-            .on_hover_text(skeleton_hover(k));
-          ui.add_enabled(sk.visible, egui::Checkbox::new(&mut sk.colored, "color"))
-            .on_hover_text("Reflect the selected field on this skeleton as a heatmap, instead of the structural geometry ink");
+        section(ui, "Modes", |ui| {
+          if model.is_loading {
+            ui.horizontal(|ui| {
+              ui.add(egui::Spinner::new().size(20.0));
+              if let Some(label) = &model.loading_label {
+                ui.label(format!("Solving {label}…"));
+              }
+            });
+          } else {
+            render_modes(ui, &model.entries, &mut selection, model.scene_dim);
+          }
         });
-      }
-      });
 
-      // The field side is the only one gated, and it asks rather than
-      // dispatches: which settings a field offers is its reduced grade's answer
-      // (`Scene::offers`). A knob with nothing to toggle is a knob whose only
-      // use is to be wrong -- and a section with no knobs is one too, so a
-      // density that is no eigenmode shows no section at all.
-      if model.offers.any() {
-        section(ui, "Field", |ui| {
-        if model.offers.displacement {
-          ui.checkbox(&mut field_view.displacement, "Displacement")
-            .on_hover_text("The standing wave, along the surface's normal: the mode's own geometry");
+        // What is drawn, in two sections by which object the setting reads: the
+        // mesh, and the field read on it. That is `display.rs`'s own seam
+        // between `MeshDisplay` and `FieldDisplay`, so these mirror a
+        // distinction the code already makes rather than laying a second
+        // taxonomy over it.
+        //
+        // The skeletons, as peers: one row per k-skeleton the mesh has
+        // (k <= min(n, 2)), faces at the top, each with the same two questions
+        // -- drawn, and colored by the field or left as structural geometry.
+        section(ui, "Mesh", |ui| {
+          for k in (0..=model.scene_dim.min(2)).rev() {
+            let sk = &mut mesh_view.skeletons[k];
+            ui.horizontal(|ui| {
+              ui.checkbox(&mut sk.visible, skeleton_label(k))
+                .on_hover_text(skeleton_hover(k));
+              ui.add_enabled(sk.visible, egui::Checkbox::new(&mut sk.colored, "color"))
+                .on_hover_text("Reflect the selected field on this skeleton as a heatmap, instead of the structural geometry ink");
+            });
+          }
+        });
+
+        // The field side is the only one gated, and it asks rather than
+        // dispatches: which settings a field offers is its reduced grade's
+        // answer (`Scene::offers`). A knob with nothing to toggle is a knob
+        // whose only use is to be wrong -- and a section with no knobs is one
+        // too, so a density that is no eigenmode shows no section at all.
+        if model.offers.any() {
+          section(ui, "Field", |ui| {
+            if model.offers.displacement {
+              ui.checkbox(&mut field_view.displacement, "Displacement")
+                .on_hover_text("The standing wave, along the surface's normal: the mode's own geometry");
+            }
+            if model.offers.marks {
+              ui.checkbox(&mut field_view.marks.glyphs, "Glyphs")
+                .on_hover_text("Arrows on each cell's barycentric lattice: the field at a point");
+              ui.checkbox(&mut field_view.marks.particles, "Particles")
+                .on_hover_text("Advected points: the field's dynamics, legible in motion");
+            }
+          });
         }
-        if model.offers.marks {
-          ui.checkbox(&mut field_view.marks.glyphs, "Glyphs")
-            .on_hover_text("Arrows on each cell's barycentric lattice: the field at a point");
-          ui.checkbox(&mut field_view.marks.particles, "Particles")
-            .on_hover_text("Advected points: the field's dynamics, legible in motion");
-        }
-        });
-      }
-
-      // Radio, not two checkboxes: the rungs are cumulative, so the states are
-      // three and not four.
-      section(ui, "Light", |ui| {
-        ui.horizontal_wrapped(|ui| {
-          for rung in Post::ALL {
-            ui.radio_value(&mut post, rung, rung.label());
-          }
-        });
       });
-
-      ui.separator();
-      ui.checkbox(&mut orthographic, "Orthographic")
-        .on_hover_text("Parallel projection: no vanishing point, so a flat mesh keeps its scale");
-
-      // Writes exactly what is on screen -- the current field, camera and wave
-      // phase -- as a PNG still, at the window's own resolution and the export
-      // supersampling. The clip export the transport bar would host is a
-      // separate, later concern; this is the plain screenshot. Native only:
-      // there is no local filesystem to save to on the web.
-      #[cfg(not(target_arch = "wasm32"))]
-      if ui
-        .button("Export PNG…")
-        .on_hover_text("Save the current view as a still")
-        .clicked()
-      {
-        export_png_clicked = true;
-      }
     });
 
-  // Bottom transport bar: play/pause and the standing wave's readouts. Only an
-  // oscillating mode ($omega > 0$) has a wave to run, so the toggle is disabled
-  // for a static or harmonic field, where it would control nothing.
+  // Bottom transport bar: the sidebar toggles, play/pause and the standing
+  // wave's readouts. Only an oscillating mode ($omega > 0$) or a sampled
+  // trajectory has a clock to run, so the toggle is disabled for a static or
+  // harmonic field, where it would control nothing.
   egui::Panel::bottom("transport").show(ui, |ui| {
     ui.add_space(2.0);
     ui.horizontal(|ui| {

@@ -57,17 +57,36 @@ pub const REFERENCE_CELL_DIM_MAX: Dim = 3;
 // ($6 + 10 = 16$), so the orbital pyramid the UI lays these out in has no
 // half-built final row.
 pub const DEFAULT_NMODES: usize = 16;
+// The top of the eigenmode-count slider. The per-grade solve is dense
+// ($O(n^3)$) in the shift-invert factorization but the projected subspace is
+// what grows with the mode count, so a cap here keeps the background solve from
+// widening past what stays interactive. Enough to close the sphere's $l = 0..=5$
+// grade-0 pyramid ($sum_(l=0)^5 (2l+1) = 36$) with a full final row.
+pub const EIGENMODES_NMODES_MIN: usize = 1;
+pub const EIGENMODES_NMODES_MAX: usize = 36;
 
 // A time-dependent study samples its solution at this many steps over the
 // solve's final time. Enough that the linear interpolation between frames reads
 // as continuous motion at the trajectory's playback rate.
 pub const DEFAULT_TRAJECTORY_STEPS: usize = 160;
+// The trajectory-sampling slider's range. The lower end still reads as motion
+// under interpolation; the upper end is where the sampled frames stop earning
+// their memory against the linear interpolant between them.
+pub const TRAJECTORY_STEPS_MIN: usize = 10;
+pub const TRAJECTORY_STEPS_MAX: usize = 400;
 // The heat flow's final time: long enough for the initial bump to diffuse and
 // visibly decay on the unit-scale gallery meshes. The wave equation's, in the
 // same units: several periods of the lowest modes, so the fronts propagate and
 // reflect rather than barely stirring.
 pub const HEAT_FINAL_TIME: f64 = 0.5;
 pub const WAVE_FINAL_TIME: f64 = 12.0;
+// The final-time sliders' ranges, one per equation because the two evolve on
+// different scales: the parabolic smoothing settles quickly, the hyperbolic
+// fronts want several periods to propagate and reflect.
+pub const HEAT_FINAL_TIME_MIN: f64 = 0.05;
+pub const HEAT_FINAL_TIME_MAX: f64 = 2.0;
+pub const WAVE_FINAL_TIME_MIN: f64 = 1.0;
+pub const WAVE_FINAL_TIME_MAX: f64 = 30.0;
 
 /// The shared surface mesh a study solves against, built once so every
 /// per-grade eigensolve reuses it rather than remeshing.
