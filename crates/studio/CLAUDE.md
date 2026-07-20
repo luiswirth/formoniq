@@ -191,6 +191,20 @@ they bind the same way the parent's invariants do:
   costs a branch below the model — a setting naming an item drops it from the
   draw list, and one naming a deformation the items ride is a material at zero,
   the shape bloom's "off" already has.
+
+  What builds the object and what draws it are the two sidebars, and they keep
+  the two questions apart: the **browser** picks the point in `MeshSource ×
+  Study` — which mesh, which computation — and the **inspector** edits the
+  parameters of the study picked there and the display of the two objects it
+  produced. `Study`'s variant parameters (the eigenmode grade and count, a
+  trajectory's sampling) are the inspector's, not the browser's, because they
+  are knobs *on* the chosen study rather than the choice of it; an edit that
+  drives a re-solve commits on release, not mid-drag, so the background solve
+  fires once. What belongs to **neither** object — reading and writing files,
+  and the view shell itself (which sidebars show, the projection, the light
+  ladder, re-framing the camera) — is a **menu bar**, the conventional home a
+  reader reaches for these by reflex, and the one place a command that is not a
+  property of the mesh or the field is allowed to live.
 - **The renderer sees baked geometry and explicit time, and nothing else.** No
   FEEC types, no clock, no window, no surface. Time is an argument, so the
   interactive loop passes wall-clock seconds and an exporter passes the instant
