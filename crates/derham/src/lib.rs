@@ -6,6 +6,7 @@ pub mod cochain;
 pub mod interpolate;
 pub mod io;
 pub mod project;
+pub mod prolongate;
 pub mod section;
 
 #[cfg(test)]
