@@ -847,6 +847,29 @@ pub(crate) fn reduced_form(form: MultiForm, metric: &Metric, sign: Sign) -> Mult
   }
 }
 
+/// The scalar a form reduces to, for every mark that consumes one.
+///
+/// The one rule, total over grade and dimension: a $0$-form *is* a scalar and is
+/// read signed and metric-free; the manifold's top form is a pseudoscalar and
+/// becomes a scalar through $star$; everything else reduces by its magnitude
+/// $|omega|_g$, the direction being the line-field mark's to carry.
+///
+/// `signed` is `Some` exactly when the form is the manifold's own top form *and*
+/// a coherent orientation fixes its volume form, so holding one is the proof
+/// invariant 6 demands: only then is a signed density comparable across cells.
+/// The caller states that condition, because only the caller knows whether the
+/// form's own dimension is the manifold's (the trace onto a face is top on the
+/// face while carrying no global sign). `None` is the honest magnitude.
+pub(crate) fn scalarize(form: MultiForm, metric: &Metric, signed: Option<Sign>) -> f64 {
+  if form.grade() == 0 {
+    return form.coeffs()[0];
+  }
+  match signed {
+    Some(sign) => form.hodge_star(metric).coeffs()[0] * sign.as_f64(),
+    None => form.norm(metric),
+  }
+}
+
 /// The orientation factor [`reduced_form`] needs on one cell: `Pos` when the
 /// reduction is the identity (no star, so no volume form and no orientation),
 /// otherwise the cell's coherent orientation.
@@ -1105,13 +1128,9 @@ fn reduced_value(
   let mut weights = na::DVector::zeros(cell.nvertices());
   weights[ilocal] = 1.0;
   let point = MeshPoint::new(cell.idx(), weights.into());
-  let sign = reduction_sign(cell.complex(), cell, interpolant.cochain().grade());
-  let form = reduced_form(interpolant.eval(&point), metric, sign);
-  if form.grade() == 0 {
-    form.coeffs()[0]
-  } else {
-    form.norm(metric)
-  }
+  let k = interpolant.cochain().grade();
+  let signed = (k == cell.complex().dim()).then(|| reduction_sign(cell.complex(), cell, k));
+  scalarize(interpolant.eval(&point), metric, signed)
 }
 
 /// The trace-reduced scalar of a field on a skeleton simplex: the one rule that
@@ -1158,20 +1177,11 @@ pub(crate) fn trace_value(
   let interpolant = WhitneyInterpolant::new(cochain.trace(simplex), &sub);
   let cell = sub.cells().handle_iter().next().unwrap();
   let form = interpolant.eval(&MeshPoint::new(cell.idx(), bary.clone()));
-  // A genuine 0-form is signed and metric-free, so it short-circuits before the
-  // simplex metric is even formed -- which a 0-simplex (a vertex, the entire
-  // 0-skeleton) has none of to form.
-  if k == 0 {
-    return form.coeffs()[0];
-  }
-  let metric = coords.simplex_metric(simplex);
-  // The manifold's top form is the one signed reduction beyond a plain 0-form;
-  // its density is coherent-orientation-relative (invariant 6). Every other
-  // grade reads the intrinsic magnitude.
-  match (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k)) {
-    Some(sign) => form.hodge_star(&metric).coeffs()[0] * sign.as_f64(),
-    None => form.norm(&metric),
-  }
+  // A top form is the manifold's own only on a cell ($d = n$); on a face it is
+  // top for the face while no coherent orientation reaches it, so it reduces by
+  // magnitude like every other grade.
+  let signed = (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k));
+  scalarize(form, &coords.simplex_metric(simplex), signed)
 }
 
 /// The three $L^2$-orthogonal shells of the discrete Hodge decomposition of a
@@ -1380,6 +1390,53 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords) -> Cochain {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// The magnitude branch of [`scalarize`] is Hodge-invariant:
+  /// $|omega|_g = |star omega|_g$, the star being an isometry on a Riemannian
+  /// metric. So a field and its reduction ([`reduced_form`]) read the *same*
+  /// scalar, and which side of $k <-> n-k$ a mark happens to hold cannot change
+  /// the color on screen. Swept over every dimension and every strictly
+  /// intermediate grade, which is exactly where the magnitude branch applies.
+  #[test]
+  fn scalarize_is_hodge_invariant_off_the_extremal_grades() {
+    for dim in 2..=4 {
+      let metric = Metric::standard(dim);
+      for grade in 1..dim {
+        let ncoeffs = MultiForm::zero(dim, grade).coeffs().len();
+        for i in 0..ncoeffs {
+          let mut coeffs = na::DVector::zeros(ncoeffs);
+          coeffs[i] = 2.0;
+          let form = MultiForm::new(coeffs, dim, grade);
+          let starred = form.clone().hodge_star(&metric);
+          let (direct, reduced) = (
+            scalarize(form, &metric, None),
+            scalarize(starred, &metric, None),
+          );
+          assert!((direct - reduced).abs() < 1e-12, "{direct} != {reduced}");
+        }
+      }
+    }
+  }
+
+  /// The extremal grades are the signed ones, and they are signed for different
+  /// reasons: a $0$-form *is* a scalar (metric-free, no orientation involved),
+  /// while an $n$-form is a pseudoscalar whose sign is the coherent
+  /// orientation's. Flipping that orientation negates the readout and nothing
+  /// else, which is precisely invariant 6's gauge acting on the picture.
+  #[test]
+  fn scalarize_is_signed_at_the_extremal_grades() {
+    for dim in 1..=4 {
+      let metric = Metric::standard(dim);
+      let zero_form = MultiForm::new(na::dvector![-1.0], dim, 0);
+      assert!((scalarize(zero_form, &metric, None) + 1.0).abs() < 1e-12);
+
+      let top = MultiForm::new(na::dvector![1.0], dim, dim);
+      let pos = scalarize(top.clone(), &metric, Some(Sign::Pos));
+      let neg = scalarize(top, &metric, Some(Sign::Neg));
+      assert!((pos + neg).abs() < 1e-12);
+      assert!((pos.abs() - 1.0).abs() < 1e-12);
+    }
+  }
 
   /// On the diagonal $d = k$ the trace-colored value is the cochain density
   /// $c_tau \/ vol_g(tau)$, and constant across the simplex however the point is
