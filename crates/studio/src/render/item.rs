@@ -319,6 +319,82 @@ fn gather(values: &[f32], segments: &[[u32; 2]], end: usize) -> Vec<f32> {
   segments.iter().map(|s| values[s[end] as usize]).collect()
 }
 
+/// The 0-skeleton: one instanced billboard circle per mesh vertex, over the same
+/// per-vertex static/per-field split as the segments and reusing their
+/// `SegmentVertex` and locations. Everything is per vertex -- a 0-form is
+/// single-valued at a vertex, so unlike the edge colors there is nothing per
+/// simplex here. See `points.wgsl`.
+pub struct PointBatch {
+  points: wgpu::Buffer,
+  heights: wgpu::Buffer,
+  colors: wgpu::Buffer,
+  npoints: u32,
+}
+
+impl PointBatch {
+  /// One instance per mesh vertex; `heights` and `colors` are parallel per-vertex
+  /// tables. An empty batch draws nothing.
+  pub fn new(
+    device: &wgpu::Device,
+    vertices: &[SegmentVertex],
+    heights: &[f32],
+    colors: &[f32],
+  ) -> Self {
+    assert_eq!(vertices.len(), heights.len());
+    assert_eq!(vertices.len(), colors.len());
+    Self {
+      points: vertex_buffer(device, "Points", vertices),
+      heights: vertex_buffer(device, "Point Heights", heights),
+      colors: vertex_buffer(device, "Point Colors", colors),
+      npoints: vertices.len() as u32,
+    }
+  }
+
+  /// Rebinds the points to a different field of the same mesh: the static
+  /// per-vertex geometry stays, both per-vertex field streams are rewritten.
+  pub fn write_attributes(&self, queue: &wgpu::Queue, heights: &[f32], colors: &[f32]) {
+    if !heights.is_empty() {
+      queue.write_buffer(&self.heights, 0, bytemuck::cast_slice(heights));
+    }
+    if !colors.is_empty() {
+      queue.write_buffer(&self.colors, 0, bytemuck::cast_slice(colors));
+    }
+  }
+
+  /// The instance's static stream at locations 0..=3, its displacement height at
+  /// 8, its colormap value at 10 -- the same locations the segment endpoints use.
+  pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 3] {
+    const fn value(
+      attributes: &'static [wgpu::VertexAttribute],
+    ) -> wgpu::VertexBufferLayout<'static> {
+      wgpu::VertexBufferLayout {
+        array_stride: size_of::<f32>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes,
+      }
+    }
+    [
+      wgpu::VertexBufferLayout {
+        array_stride: size_of::<SegmentVertex>() as wgpu::BufferAddress,
+        step_mode: wgpu::VertexStepMode::Instance,
+        attributes: &SEGMENT_A,
+      },
+      value(&SEGMENT_HEIGHT_A),
+      value(&SEGMENT_COLOR_A),
+    ]
+  }
+
+  pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
+    if self.npoints == 0 {
+      return;
+    }
+    pass.set_vertex_buffer(0, self.points.slice(..));
+    pass.set_vertex_buffer(1, self.heights.slice(..));
+    pass.set_vertex_buffer(2, self.colors.slice(..));
+    pass.draw(0..6, 0..self.npoints);
+  }
+}
+
 /// A glyph mark: the arrows of a line field, each a flat quad (two triangles,
 /// six corners) lying in its surface cell. One vertex buffer, drawn unindexed --
 /// the corners are already expanded, since a quad's diagonal is not shared the
@@ -363,6 +439,7 @@ impl GlyphBatch {
 pub enum RenderItem<'a> {
   Surface(&'a SurfaceBatch, SurfaceMaterial),
   Segments(&'a SegmentBatch, SegmentMaterial),
+  Points(&'a PointBatch, SegmentMaterial),
   Glyphs(&'a GlyphBatch, GlyphMaterial),
 }
 

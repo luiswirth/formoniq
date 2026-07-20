@@ -19,7 +19,7 @@ use crate::deposit::DepositLayout;
 use crate::render::{
   camera::Camera,
   deposit::DepositBatch,
-  item::{DrawList, GlyphBatch, RenderItem, SegmentBatch, SurfaceBatch},
+  item::{DrawList, GlyphBatch, PointBatch, RenderItem, SegmentBatch, SurfaceBatch},
   particles::ParticleBatch,
   uniform::{GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
   GpuContext,
@@ -63,23 +63,26 @@ pub(crate) fn post_uniform(post: Post) -> PostUniform {
 /// lobe never overshoots the origin and inverts the surface.
 const WAVE_AMPLITUDE_FRACTION: f32 = 0.9;
 
-/// The wireframe's half-width as a fraction of the mesh's *mean edge length*,
-/// not of the scene's extent.
+/// The stroke half-width shared by the 1-skeleton's segments and the
+/// 0-skeleton's discs, as a fraction of the mesh's *mean edge length* (not the
+/// scene's extent).
 ///
-/// It draws the mesh's own edges, so its scale is the mesh's local one
-/// ([`mean_edge_length`](simplicial::geometry::coord::mean_edge_length)) rather
-/// than the object's global one. Against the extent it read correctly at one
-/// refinement only: refine the mesh and the cells shrink while the strokes stay
-/// put, until the wireframe is a solid mass with no surface visible between the
-/// lines. Against the edge length it is the same drawing at every resolution --
-/// a reference triangle and a hundred-thousand-cell mesh both get a line a
-/// small fraction of the edge it traces, and the surface stays visible between
-/// the lines at every resolution.
+/// It draws the mesh's own edges and vertices, so its scale is the mesh's local
+/// one ([`mean_edge_length`](simplicial::geometry::coord::mean_edge_length))
+/// rather than the object's global one. Against the extent it read correctly at
+/// one refinement only: refine the mesh and the cells shrink while the strokes
+/// stay put, until the wireframe is a solid mass with no surface visible between
+/// the lines. Against the edge length it is the same drawing at every resolution.
 ///
-/// Still world-space, so the original reasoning is untouched: the line reads the
-/// same whether the mesh fills the screen or sits in a corner of it. Only which
-/// length it is a fraction *of* has changed.
-const WIREFRAME_WIDTH_FRACTION: f32 = 0.012;
+/// Shared by both skeletons on purpose: a disc of this radius is exactly as wide
+/// as an edge is thick, so a vertex reads as a rounded node capping the edges
+/// that meet it, and the two skeletons combine into one graph-style drawing --
+/// nodes and links of a single stroke weight.
+///
+/// Still world-space, so a line reads the same whether the mesh fills the screen
+/// or sits in a corner of it. Only which length it is a fraction *of* has
+/// changed.
+const SKELETON_WIDTH_FRACTION: f32 = 0.012;
 
 /// The world-space spacing the glyph lattice aims for within a cell, on the
 /// same object-intrinsic scale as every other mark's: not a fixed sample
@@ -286,6 +289,9 @@ pub(crate) struct MeshDisplay {
   /// a bake with neither, which draws nothing rather than being a case to
   /// exclude.
   segments: SegmentBatch,
+  /// The 0-skeleton: one billboard disc per mesh vertex. Always present (every
+  /// pure complex has a 0-skeleton), shown only when the view asks.
+  points: PointBatch,
   /// The bake kept CPU-side, for the picking the camera's pivot needs. Held
   /// rather than rebuilt per pick: it is already what was uploaded, so a second
   /// bake could only disagree with what is on screen.
@@ -313,10 +319,18 @@ impl MeshDisplay {
       crate::bake::PrimBatch::Segments(cells) => cells.as_slice(),
       _ => &baked.wireframe,
     };
-    let zeros = vec![0.0f32; segments.len()];
+    let seg_zeros = vec![0.0f32; segments.len()];
+    let vertex_zeros = vec![0.0f32; vertices.len()];
     Self {
       surface: SurfaceBatch::new(device, &baked, &deposit_uvs),
-      segments: SegmentBatch::new(device, &vertices, &heights, [&zeros, &zeros], segments),
+      segments: SegmentBatch::new(
+        device,
+        &vertices,
+        &heights,
+        [&seg_zeros, &seg_zeros],
+        segments,
+      ),
+      points: PointBatch::new(device, &vertices, &vertex_zeros, &vertex_zeros),
       baked,
       deposit_layout,
     }
@@ -364,6 +378,9 @@ impl MeshDisplay {
       &attributes.wire_height,
       [&attributes.segment_colors[0], &attributes.segment_colors[1]],
     );
+    self
+      .points
+      .write_attributes(queue, &attributes.wire_height, &attributes.point_colors);
   }
 }
 
@@ -384,6 +401,9 @@ pub(crate) struct FieldAttributes {
   /// Per segment endpoint (two parallel arrays), for the 1-skeleton's colormap:
   /// the trace of the field on each edge ([`crate::scene::segment_colors`]).
   pub(crate) segment_colors: [Vec<f32>; 2],
+  /// Per mesh vertex, for the 0-skeleton's colormap: the field's value there
+  /// ([`crate::scene::point_colors`]).
+  pub(crate) point_colors: Vec<f32>,
 }
 
 /// The largest *uniform* amplitude at which no vertex displaces past its own
@@ -475,12 +495,14 @@ pub(crate) fn field_attributes(
     crate::scene::surface_corner_heights(topology, coords, cochain, cell_corners);
   let wire_heights = crate::scene::nodal_heights(topology, coords, cochain);
   let segment_colors = crate::scene::segment_colors(topology, coords, cochain, segments);
+  let point_colors = crate::scene::point_colors(topology, coords, cochain);
   // Each skeleton normalizes against its own values: a k-skeleton traces a
   // different-grade density on a different scale, so a shared range would
   // flatten one to read the other.
   let fill = crate::scene::corner_bounds(&colors);
   let segment =
     crate::scene::corner_bounds(&[segment_colors[0].clone(), segment_colors[1].clone()].concat());
+  let point = crate::scene::corner_bounds(&point_colors);
   (
     FieldAttributes {
       color: bake::attributes(&colors),
@@ -490,8 +512,13 @@ pub(crate) fn field_attributes(
         bake::attributes(&segment_colors[0]),
         bake::attributes(&segment_colors[1]),
       ],
+      point_colors: bake::attributes(&point_colors),
     },
-    FieldRanges { fill, segment },
+    FieldRanges {
+      fill,
+      segment,
+      point,
+    },
   )
 }
 
@@ -500,6 +527,7 @@ pub(crate) fn field_attributes(
 pub(crate) struct FieldRanges {
   pub(crate) fill: (f32, f32),
   pub(crate) segment: (f32, f32),
+  pub(crate) point: (f32, f32),
 }
 
 /// The material parameters for showing one field of a scene, and the geometry
@@ -532,6 +560,9 @@ pub(crate) struct FieldDisplay {
   deposit: Option<DepositBatch>,
   surface: SurfaceMaterial,
   wireframe: SegmentMaterial,
+  /// The 0-skeleton's material: a `SegmentMaterial` too, since a point mark and
+  /// a segment mark differ only in primitive, not in what drives them.
+  points: SegmentMaterial,
   glyph: GlyphMaterial,
 }
 
@@ -758,19 +789,23 @@ impl FieldDisplay {
       Some(trails)
     });
 
-    // The 1-skeleton's colormap range, by the same rule the fill uses: an
-    // eigenmode pulses through zero, so its range is symmetric; a static field
-    // keeps its own. Diverging where the trace is signed (values cross zero -- a
-    // 0-form, or the manifold top form) or the mode pulses.
+    // A skeleton's colormap range, by the same rule the fill uses: an eigenmode
+    // pulses through zero, so its range is symmetric; a static field keeps its
+    // own. Diverging where the trace is signed (values cross zero -- a 0-form, or
+    // the manifold top form) or the mode pulses. One rule for every colored
+    // skeleton, applied to each one's own range.
     let animates = scene.field_time(selection).animates();
-    let (raw_seg_min, raw_seg_max) = ranges.segment;
-    let (segment_min, segment_max) = if animates {
-      let s = raw_seg_min.abs().max(raw_seg_max.abs()).max(f32::EPSILON);
-      (-s, s)
-    } else {
-      (raw_seg_min, raw_seg_max)
+    let colormap_range = |(raw_min, raw_max): (f32, f32)| -> (f32, f32, f32) {
+      let (min_val, max_val) = if animates {
+        let s = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
+        (-s, s)
+      } else {
+        (raw_min, raw_max)
+      };
+      (min_val, max_val, f32::from(animates || raw_min < 0.0))
     };
-    let segment_diverging = f32::from(animates || raw_seg_min < 0.0);
+    let (segment_min, segment_max, segment_diverging) = colormap_range(ranges.segment);
+    let (point_min, point_max, point_diverging) = colormap_range(ranges.point);
 
     let display = Self {
       glyphs,
@@ -786,13 +821,27 @@ impl FieldDisplay {
       // field's.
       wireframe: SegmentMaterial {
         color: [0.0, 0.0, 0.0, 1.0],
-        half_width_world: WIREFRAME_WIDTH_FRACTION * mesh_scale,
+        half_width_world: SKELETON_WIDTH_FRACTION * mesh_scale,
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
         min_val: segment_min,
         max_val: segment_max,
         diverging: segment_diverging,
+        colored: 0.0,
+      },
+      // The 0-skeleton rides the same wave and clock; its disc is a few edge
+      // fractions wide, and its colormap range is its own. `colored`, like the
+      // wireframe's, is the view's to set per frame.
+      points: SegmentMaterial {
+        color: [0.0, 0.0, 0.0, 1.0],
+        half_width_world: SKELETON_WIDTH_FRACTION * mesh_scale,
+        fade_floor: 1.0,
+        wave_amplitude: surface.wave_amplitude,
+        wave_omega: surface.wave_omega,
+        min_val: point_min,
+        max_val: point_max,
+        diverging: point_diverging,
         colored: 0.0,
       },
       // The glyphs share the surface's clock but not its displacement: the
@@ -842,15 +891,17 @@ impl FieldDisplay {
     // The wireframe rides the surface's wave, so the two amplitudes are one
     // setting; the glyphs sample the undisplaced surface and carry a zero
     // amplitude already.
-    let (mut surface, mut wireframe) = (self.surface, self.wireframe);
+    let (mut surface, mut wireframe, mut points) = (self.surface, self.wireframe, self.points);
     if !field_view.displacement {
       surface.wave_amplitude = 0.0;
       wireframe.wave_amplitude = 0.0;
+      points.wave_amplitude = 0.0;
     }
-    // Whether the 1-skeleton reflects the field is a view choice, applied here
+    // Whether a skeleton reflects the field is a view choice, applied here
     // rather than baked into the material: the range is the field's, the mode
     // is the reader's.
     wireframe.colored = f32::from(mesh_view.wireframe_colored);
+    points.colored = f32::from(mesh_view.points_colored);
     // The population is stepped only when the flow is shown, and the trail
     // follows it: without the population the atlas is neither stepped nor bound,
     // so the material reverts to the identity rather than dimming the fill to a
@@ -874,6 +925,9 @@ impl FieldDisplay {
     }
     if mesh_view.wireframe {
       items.push(RenderItem::Segments(&mesh.segments, wireframe));
+    }
+    if mesh_view.points {
+      items.push(RenderItem::Points(&mesh.points, points));
     }
     DrawList {
       items,

@@ -11,6 +11,7 @@ use super::{
   fill::FillPass,
   glyph::GlyphPass,
   item::{DrawList, RenderItem},
+  points::PointPass,
   segments::SegmentPass,
   uniform::{
     FrameUniform, GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial, UniformBinding,
@@ -140,10 +141,12 @@ pub struct Renderer {
   frame: UniformBinding<FrameUniform>,
   surface_materials: UniformPool<SurfaceMaterial>,
   segment_materials: UniformPool<SegmentMaterial>,
+  point_materials: UniformPool<SegmentMaterial>,
   glyph_materials: UniformPool<GlyphMaterial>,
   post: UniformBinding<PostUniform>,
   fill: FillPass,
   segments: SegmentPass,
+  points: PointPass,
   glyphs: GlyphPass,
   advect: AdvectPass,
   deposit: DepositPass,
@@ -176,6 +179,7 @@ impl Renderer {
     );
     let surface_materials = UniformPool::new(device, "surface material", Stages::VERTEX_FRAGMENT);
     let segment_materials = UniformPool::new(device, "segment material", Stages::VERTEX_FRAGMENT);
+    let point_materials = UniformPool::new(device, "point material", Stages::VERTEX_FRAGMENT);
     let glyph_materials = UniformPool::new(device, "glyph material", Stages::VERTEX_FRAGMENT);
     let post = UniformBinding::new(device, "post", Stages::FRAGMENT, PostUniform::default());
     Self {
@@ -186,6 +190,7 @@ impl Renderer {
       // the one that has to know what it is.
       fill: FillPass::new(device, SCENE_FORMAT, &frame, &surface_materials),
       segments: SegmentPass::new(device, SCENE_FORMAT, &frame, &segment_materials),
+      points: PointPass::new(device, SCENE_FORMAT, &frame, &point_materials),
       glyphs: GlyphPass::new(device, SCENE_FORMAT, &frame, &glyph_materials),
       advect: AdvectPass::new(device),
       deposit: DepositPass::new(device),
@@ -195,6 +200,7 @@ impl Renderer {
       frame,
       surface_materials,
       segment_materials,
+      point_materials,
       glyph_materials,
       post,
       // Allocated on the first frame, from the size the caller renders at:
@@ -217,7 +223,7 @@ impl Renderer {
       .write(&ctx.queue, FrameUniform::new(view.camera, view.time));
     self.post.write(&ctx.queue, view.post);
 
-    let (mut nsurfaces, mut nsegments, mut nglyphs) = (0, 0, 0);
+    let (mut nsurfaces, mut nsegments, mut npoints, mut nglyphs) = (0, 0, 0, 0);
     view
       .items
       .items
@@ -236,6 +242,13 @@ impl Renderer {
             .write(&ctx.device, &ctx.queue, nsegments, *material);
           nsegments += 1;
           nsegments - 1
+        }
+        RenderItem::Points(_, material) => {
+          self
+            .point_materials
+            .write(&ctx.device, &ctx.queue, npoints, *material);
+          npoints += 1;
+          npoints - 1
         }
         RenderItem::Glyphs(_, material) => {
           self
@@ -352,6 +365,12 @@ impl Renderer {
             &mut pass,
             frame,
             self.segment_materials.bind_group(material),
+            batch,
+          ),
+          RenderItem::Points(batch, _) => self.points.draw(
+            &mut pass,
+            frame,
+            self.point_materials.bind_group(material),
             batch,
           ),
           RenderItem::Glyphs(batch, _) => self.glyphs.draw(

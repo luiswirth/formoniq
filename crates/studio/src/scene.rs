@@ -952,6 +952,24 @@ pub(crate) fn segment_colors(
   ends
 }
 
+/// The 0-skeleton colormap value at every mesh vertex -- the [`trace_value`] of
+/// the field on each 0-simplex.
+///
+/// The $k = 0$ member of the same family as [`segment_colors`] and
+/// [`surface_corner_values`]. A vertex is the one skeleton simplex a field is
+/// always single-valued on with no reduction: a 0-form reads its own value
+/// there, and any higher grade traces to zero (a $k$-form has no restriction to
+/// a point). Per vertex, not per incident cell -- the 0-form is continuous, so
+/// there is nothing to average.
+pub(crate) fn point_colors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<f64> {
+  let bary = Bary::new(Vector::from_element(1, 1.0));
+  topology
+    .skeleton(0)
+    .handle_iter()
+    .map(|vertex| trace_value(topology, coords, cochain, vertex, &bary))
+    .collect()
+}
+
 /// A cochain in canonical sign: the coefficient of largest magnitude is made
 /// positive, ties broken by colex rank.
 ///
@@ -1140,24 +1158,19 @@ pub(crate) fn trace_value(
   let interpolant = WhitneyInterpolant::new(cochain.trace(simplex), &sub);
   let cell = sub.cells().handle_iter().next().unwrap();
   let form = interpolant.eval(&MeshPoint::new(cell.idx(), bary.clone()));
+  // A genuine 0-form is signed and metric-free, so it short-circuits before the
+  // simplex metric is even formed -- which a 0-simplex (a vertex, the entire
+  // 0-skeleton) has none of to form.
+  if k == 0 {
+    return form.coeffs()[0];
+  }
   let metric = coords.simplex_metric(simplex);
   // The manifold's top form is the one signed reduction beyond a plain 0-form;
-  // its density is coherent-orientation-relative (invariant 6).
-  let manifold_top = (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k));
-  trace_reduce(&form, &metric, manifold_top)
-}
-
-/// Reduce a traced form on a simplex to a colormap scalar: the signed
-/// coefficient of a genuine $0$-form, the coherent-signed Hodge star of the
-/// manifold's top form (`manifold_top` carrying that sign), the intrinsic
-/// magnitude $|omega|_g$ in every other case.
-fn trace_reduce(form: &MultiForm, metric: &Metric, manifold_top: Option<Sign>) -> f64 {
-  if form.grade() == 0 {
-    form.coeffs()[0]
-  } else if let Some(sign) = manifold_top {
-    form.hodge_star(metric).coeffs()[0] * sign.as_f64()
-  } else {
-    form.norm(metric)
+  // its density is coherent-orientation-relative (invariant 6). Every other
+  // grade reads the intrinsic magnitude.
+  match (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k)) {
+    Some(sign) => form.hodge_star(&metric).coeffs()[0] * sign.as_f64(),
+    None => form.norm(&metric),
   }
 }
 
