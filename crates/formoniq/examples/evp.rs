@@ -20,7 +20,7 @@ mod util;
 
 use {
   formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
-  simplicial::gen::cartesian::CartesianGrid,
+  simplicial::{gen::cartesian::CartesianGrid, topology::ordering::CellOrdering},
   util::{algebraic_convergence_rate, report, BoundaryCondition},
 };
 
@@ -73,18 +73,21 @@ fn box_sweep() {
       let mut history: [Vec<Vec<f64>>; 2] = [const { Vec::new() }; 2];
       let mut rows: [Vec<String>; 2] = [const { Vec::new() }; 2];
       let mut prev_ndofs = 0;
-      // Freudenthal refinement of one coarse box generates the h-family: nested
-      // meshes, and the mesh-agnostic path rather than the structured generator.
-      // Each level refines the base $R$-fold rather than iterating the previous
-      // level, because Freudenthal children are not similar to their parent above
-      // dimension two — a single $R$-fold refinement of a Kuhn box reproduces the
-      // generator's grid cell for cell, an iterated one does not.
-      let (base_topology, base_coords) = CartesianGrid::new_unit_scaled(dim, 1, PI).triangulate();
-      let base_metric = base_coords.to_edge_lengths_sq(&base_topology);
+      // A Freudenthal refinement tower over one coarse box generates the
+      // h-family: nested meshes, and the mesh-agnostic path rather than the
+      // structured generator. Each level refines the previous one in the ordering
+      // the subdivision inherits, which is what makes refinement compose and
+      // keeps every cell similar to the coarse box.
+      let (mut topology, coords) = CartesianGrid::new_unit_scaled(dim, 1, PI).triangulate();
+      let mut metric = coords.to_edge_lengths_sq(&topology);
+      let mut ordering = CellOrdering::colex(&topology);
       for irefine in 0u32..=8 {
-        let sub = base_topology.refine(2usize.pow(irefine));
-        let metric = base_metric.refine(&sub, &base_topology);
-        let topology = sub.into_complex();
+        if irefine > 0 {
+          let sub = topology.refine_with(&ordering, 2);
+          metric = metric.refine(&sub, &topology);
+          ordering = sub.ordering().clone();
+          topology = sub.into_complex();
+        }
         let whitney = WhitneyComplex::new(&topology, &metric);
 
         let ndofs = whitney.ndofs(grade)
