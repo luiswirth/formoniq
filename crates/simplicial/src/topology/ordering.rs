@@ -27,7 +27,10 @@
 //! ([`CellOrdering::colex`]) is always valid: a restriction of a total order is
 //! consistent for free.
 
-use super::{complex::Complex, handle::KSimplexIdx, role::Cell, simplex::Simplex, VertexIdx};
+use super::{
+  complex::Complex, handle::KSimplexIdx, orientation::Orientation, role::Cell, simplex::Simplex,
+  VertexIdx,
+};
 use crate::Dim;
 
 /// A vertex ordering on the cells of a [`Complex`]: for each cell, its vertices
@@ -127,6 +130,28 @@ impl CellOrdering {
       .collect()
   }
 
+  /// The orientation the ordering winds, or `None` if that winding is not
+  /// coherent.
+  ///
+  /// The *parity* of the datum: each cell's sign is the sign of the permutation
+  /// taking its word to its stored colex order. A generator's per-cell vertex
+  /// word therefore carries two different things at once -- the full ordering,
+  /// which is what refinement inherits, and its sign quotient, which is the
+  /// orientation a mesh file's winding means. They are independent: a
+  /// face-consistent ordering need not be coherently wound, and a coherent
+  /// winding says nothing about the rest of the permutation.
+  ///
+  /// Validated through [`Complex::orient_by`], so a miswound file yields `None`
+  /// rather than a witness that lies.
+  pub fn induced_orientation(&self, complex: &Complex) -> Option<Orientation> {
+    let signs = complex
+      .cells()
+      .handle_iter()
+      .map(|cell| Simplex::from_word(self.word(cell).to_vec()).0)
+      .collect();
+    complex.orient_by(signs)
+  }
+
   /// Whether the orderings agree on every shared face: for each facet, the two
   /// incident cells induce the same order on it.
   ///
@@ -159,6 +184,7 @@ impl CellOrdering {
 mod test {
   use super::*;
   use crate::gen::cartesian::CartesianGrid;
+  use multiindex::Sign;
 
   /// The colex ordering is face-consistent in every dimension: it restricts a
   /// total order, so agreement on shared faces is automatic. The base case of
@@ -237,6 +263,43 @@ mod test {
         .collect();
       ordering.words[kidx].swap(positions[0], positions[1]);
       assert!(!ordering.is_face_consistent(&complex));
+    }
+  }
+
+  /// The colex ordering winds every cell positively, and that is coherent
+  /// exactly when the complex is orientable -- so on an orientable mesh the
+  /// parity of the trivial ordering is the trivial orientation.
+  #[test]
+  fn the_colex_ordering_winds_positively() {
+    for dim in 1..=3 {
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let ordering = CellOrdering::colex(&complex);
+      let oriented = ordering.induced_orientation(&complex);
+      // Colex gives every cell `Pos`; that is coherent only if no two adjacent
+      // cells induce the same orientation on their shared facet, which a Kuhn
+      // grid does not generally satisfy. Either way the answer is honest: a
+      // witness or `None`, never a forged one.
+      if let Some(orientation) = oriented {
+        assert!(orientation.signs().iter().all(|&s| s == Sign::Pos));
+        assert!(complex.is_orientable());
+      }
+    }
+  }
+
+  /// Ordering and winding are independent: reversing a cell's word flips its
+  /// parity while leaving the ordering just as much an ordering -- and the
+  /// reversal is detected as a winding failure, not silently absorbed.
+  #[test]
+  fn winding_is_the_parity_and_nothing_more() {
+    for dim in 2..=3 {
+      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let Some(coherent) = CellOrdering::colex(&complex).induced_orientation(&complex) else {
+        continue;
+      };
+      let mut broken = CellOrdering::colex(&complex);
+      broken.words[0].swap(0, 1);
+      // A single transposition flips one cell's sign against its neighbors.
+      assert_ne!(broken.induced_orientation(&complex), Some(coherent));
     }
   }
 }

@@ -48,10 +48,11 @@ use multiindex::Sign;
 /// the cell's own colex vertex order, such that adjacent cells induce opposite
 /// orientations on their shared facet.
 ///
-/// Only obtainable from [`Complex::orientation`], which returns `None` on a
-/// non-orientable complex -- so holding one *is* the proof that the mesh is
-/// orientable, in the sense of the type-level witnesses in
-/// [`role`](super::role). Code that needs a global volume form should take an
+/// Obtainable only by a coherence check that can fail: intrinsically from
+/// [`Complex::orientation`], or by validating an externally supplied candidate
+/// with [`Complex::orient_by`]. Both return `None` on a non-orientable complex,
+/// so holding one *is* the proof that the mesh is orientable, in the sense of
+/// the type-level witnesses in [`role`](super::role). Code that needs a global volume form should take an
 /// `&Orientation` rather than re-deriving or assuming the property.
 ///
 /// Fixed only up to a global sign per connected component.
@@ -111,6 +112,46 @@ impl Complex {
   /// bottle are the smallest failures.
   pub fn is_orientable(&self) -> bool {
     self.orientation().is_some()
+  }
+
+  /// Validate an externally supplied orientation: one [`Sign`] per cell,
+  /// relative to that cell's colex order, as a mesh file's winding gives it.
+  ///
+  /// `None` unless the candidate is *coherent* -- adjacent cells inducing
+  /// opposite orientations on every shared facet -- so the witness still means
+  /// what it means and a miswound file cannot forge one. This is the only thing
+  /// an external source adds over [`Complex::orientation`]: which of the $2^c$
+  /// generators is intended, a choice the intrinsic computation cannot make
+  /// because an orientation is fixed only up to a global sign per component.
+  ///
+  /// # Panics
+  /// If the candidate does not carry exactly one sign per cell.
+  pub fn orient_by(&self, signs: Vec<Sign>) -> Option<Orientation> {
+    let dim = self.dim();
+    assert_eq!(
+      signs.len(),
+      self.nsimplices(dim),
+      "an orientation candidate needs one sign per cell"
+    );
+    let induced = |cell: Cell<'_>, facet: SimplexIdx| -> Sign {
+      cell
+        .get()
+        .boundary()
+        .find(|(_, sub)| sub.idx() == facet)
+        .expect("a facet of a cell appears in its boundary")
+        .0
+    };
+    let facets = self.role_skeleton::<roles::Facet>()?;
+    let coherent = facets.handle_iter().all(|facet| {
+      let (a, b) = facet.adjacent_cells();
+      let Some(b) = b else {
+        // A boundary facet has one side and constrains nothing.
+        return true;
+      };
+      let (ka, kb) = (a.idx().kidx, b.idx().kidx);
+      signs[ka] * induced(a, facet.idx()) == (signs[kb] * induced(b, facet.idx())).other()
+    });
+    coherent.then_some(Orientation { signs })
   }
 
   fn compute_orientation(&self) -> Option<Orientation> {
