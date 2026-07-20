@@ -84,19 +84,22 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use gramian::{CausalType, Gramian, Metric};
+use gramian::{CausalType, Metric};
 use multiindex::Sign;
 use simplicial::{
-  atlas::SimplexQuadRule, gen::cartesian::CartesianGrid, geometry::coord::mesh::MeshCoords,
-  linalg::Vector, topology::ordering::CellOrdering,
+  atlas::SimplexQuadRule,
+  gen::cartesian::{CartesianGrid, CAUSAL_TIME_SCALE},
+  geometry::coord::mesh::MeshCoords,
+  linalg::Vector,
+  topology::ordering::CellOrdering,
 };
 
 use std::f64::consts::PI;
 
-/// The time axis of the unit box is scaled by this factor: irrationally away
-/// from 1, so no mesh edge or diagonal is lightlike (causal genericity) and no
-/// box period resonates with the spatial ones.
-const TIME_SCALE: f64 = 0.7;
+/// The time axis of the unit box is scaled by this factor: away from 1, so no
+/// mesh edge or diagonal is lightlike (causal genericity) and no box period
+/// resonates with the spatial ones.
+const TIME_SCALE: f64 = CAUSAL_TIME_SCALE;
 /// The mass term $m$ of the Hodge--Dirac operator.
 const MASS: f64 = 1.5;
 /// Phase offset of the plane wave, keeping it generic against the mesh.
@@ -217,9 +220,12 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
     "nsub", "dofs", "L2 error", "rate", "interp err", "rate"
   );
 
-  // One coarse cube, Freudenthal-refined `nsub`-fold per level: the mesh-agnostic
-  // path, and on a Kuhn cube identical to the grid the generator would build.
-  let (mut topology, mut coords) = CartesianGrid::new_unit(dim, 1).triangulate();
+  // One coarse causally generic Minkowski box, Freudenthal-refined `nsub`-fold
+  // per level: the mesh-agnostic path, and on a Kuhn cube identical to the grid
+  // the generator would build. The Minkowski ambient (and the time scaling that
+  // keeps the mesh off the light cone) survives refinement, since each child is
+  // a scaled copy of its parent.
+  let (mut topology, mut coords) = CartesianGrid::minkowski(dim, 1);
   let mut ordering = CellOrdering::colex(&topology);
   // The resolutions are successive multiples, so the levels form a refinement
   // tower: each is reached from the previous by the quotient factor, carrying
@@ -241,13 +247,12 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
       topology = sub.into_complex();
       current = nsub;
     }
-    let mut matrix = coords.clone().into_matrix();
-    matrix.row_mut(0).scale_mut(TIME_SCALE);
-    // The same vertex coordinates seen twice: once inducing the Lorentzian
-    // Regge data below, and as the Euclidean comparison geometry errors are
+    // The same vertex coordinates seen two ways: `coords` already carries the
+    // Minkowski ambient (inducing the Lorentzian Regge data below), and the
+    // Euclidean view of the same matrix is the comparison geometry errors are
     // measured in (the indefinite pairing cannot norm an error).
-    let euclidean = MeshCoords::new(matrix.clone());
-    let spacetime = MeshCoords::with_ambient(matrix, Gramian::minkowski(dim));
+    let euclidean = MeshCoords::new(coords.matrix().clone());
+    let spacetime = &coords;
     // The assembly geometry: signed squared edge lengths, nothing else. From
     // here on the spacetime is a Regge manifold; the embedding is forgotten.
     let regge = spacetime.to_edge_lengths_sq(&topology);
@@ -313,18 +318,9 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
     let ndofs: usize = (0..=dim).map(|k| whitney.ndofs(k)).sum();
 
     if nsub == nsubs[0] {
-      let mut census = [0usize; 3];
-      for edge in topology.edges().handle_iter() {
-        use simplicial::geometry::metric::mesh::EdgeRefExt;
-        match edge.causal_type(&regge) {
-          gramian::CausalType::Timelike => census[0] += 1,
-          gramian::CausalType::Null => census[1] += 1,
-          gramian::CausalType::Spacelike => census[2] += 1,
-        }
-      }
       println!(
-        "  regge edge census at nsub={nsub}: {} timelike, {} null, {} spacelike",
-        census[0], census[1], census[2]
+        "  regge edge census at nsub={nsub}: {}",
+        regge.causal_census(&topology)
       );
     }
 

@@ -495,29 +495,6 @@ mod test {
 
   use approx::assert_relative_eq;
 
-  /// A causally generic Minkowski spacetime mesh of the unit box: the time
-  /// axis is scaled off the light cone, since a mesh with null edges or
-  /// diagonals (the unit cartesian mesh in 2D: its diagonals are exactly
-  /// lightlike) has an exactly singular indefinite $L^2$ pairing on 1-forms.
-  /// Causal genericity of the mesh is a well-posedness condition of spacetime
-  /// FEEC, not a numerical nicety.
-  fn minkowski_mesh(
-    dim: Dim,
-    nsub: usize,
-  ) -> (
-    simplicial::topology::complex::Complex,
-    simplicial::geometry::coord::mesh::MeshCoords,
-  ) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, nsub).triangulate();
-    let mut matrix = coords.into_matrix();
-    matrix.row_mut(0).scale_mut(0.7);
-    let spacetime = simplicial::geometry::coord::mesh::MeshCoords::with_ambient(
-      matrix,
-      gramian::Gramian::minkowski(dim),
-    );
-    (topology, spacetime)
-  }
-
   /// A deterministic full field: every grade populated with a reproducible
   /// pattern, enough to couple all rungs of the complex.
   fn seed_field(dirac: &HodgeDirac) -> MixedField {
@@ -674,7 +651,7 @@ mod test {
   fn selfadjoint_operator_is_symmetric() {
     for dim in 1..=3 {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-      let (_, spacetime) = minkowski_mesh(dim, 2);
+      let (_, spacetime) = CartesianGrid::minkowski(dim, 2);
       let riemannian = coords.to_edge_lengths_sq(&topology);
       let lorentzian = spacetime.to_edge_lengths_sq(&topology);
 
@@ -707,7 +684,7 @@ mod test {
   #[test]
   fn selfadjoint_dirac_squares_to_hodge_laplacian_on_minkowski() {
     for dim in 1..=3 {
-      let (topology, spacetime) = minkowski_mesh(dim, 2);
+      let (topology, spacetime) = CartesianGrid::minkowski(dim, 2);
       let regge = spacetime.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &regge);
       let dirac = HodgeDirac::assemble_selfadjoint(&whitney);
@@ -813,7 +790,7 @@ mod test {
 
       // On the Minkowski side the constant field is interpolated on the
       // causally generic (time-scaled) coordinates themselves.
-      let (topology, spacetime) = minkowski_mesh(dim, 2);
+      let (topology, spacetime) = CartesianGrid::minkowski(dim, 2);
       let euclidean_view = MeshCoords::new(spacetime.matrix().clone());
       run(
         &topology,

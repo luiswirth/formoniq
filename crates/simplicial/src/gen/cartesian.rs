@@ -12,6 +12,18 @@ use crate::{
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
   Dim,
 };
+use gramian::Gramian;
+
+/// Time-axis scale of a causally generic Minkowski box (axis $0$ is time).
+///
+/// A Kuhn edge of the box spans a set $S$ of axes; under the Minkowski metric
+/// its signed squared length is $s = -rho^2 [t in S] + abs(S sect "space")$,
+/// null exactly when $t in S$ and $abs(S sect "space") = rho^2$. So no edge is
+/// lightlike iff $rho^2$ is not an integer in $[0, "dim")$ -- and $rho = 0.7$
+/// ($rho^2 = 0.49$) misses that integer set in every dimension. Uniform
+/// refinement scales every edge by the same factor, so a refinement tower stays
+/// causally generic. See [`CartesianGrid::minkowski`].
+pub const CAUSAL_TIME_SCALE: f64 = 0.7;
 
 /// An axis-aligned box $[min, max] subset RR^d$.
 pub struct Rect {
@@ -138,6 +150,35 @@ impl CartesianGrid {
 }
 
 impl CartesianGrid {
+  /// A causally generic Minkowski spacetime box, axis $0$ the time direction in
+  /// signature $(-, +, dots.c, +)$: the Kuhn triangulation of
+  /// $[0, rho] times [0, 1]^(d-1)$ with the flat Minkowski metric as its
+  /// ambient inner product, `ncells_axis` cells per side.
+  ///
+  /// The time axis is scaled by [`CAUSAL_TIME_SCALE`] so no mesh edge is
+  /// lightlike -- the well-posedness condition of spacetime FEEC, a null edge
+  /// degenerating the indefinite $L^2$ pairing on Whitney 1-forms. The returned
+  /// coordinates carry the Minkowski ambient, so
+  /// [`MeshCoords::to_edge_lengths_sq`] yields the signed Regge geometry
+  /// directly; a Euclidean comparison view (to norm errors, which the indefinite
+  /// pairing cannot) is [`MeshCoords::new`] on the same vertex matrix.
+  pub fn minkowski(dim: Dim, ncells_axis: usize) -> (Complex, MeshCoords) {
+    let mut max = Vector::from_element(dim, 1.0);
+    if dim > 0 {
+      max[0] = CAUSAL_TIME_SCALE;
+    }
+    let grid = Self::new_min_max(Vector::zeros(dim), max, ncells_axis);
+    let (complex, coords) = grid.triangulate();
+    let coords = MeshCoords::with_ambient(coords.into_matrix(), Gramian::minkowski(dim));
+    debug_assert!(
+      coords
+        .to_edge_lengths_sq(&complex)
+        .is_causally_generic(&complex),
+      "a Minkowski box must have no lightlike edge"
+    );
+    (complex, coords)
+  }
+
   pub fn triangulate(&self) -> (Complex, MeshCoords) {
     let (skeleton, coords) = self.triangulate_cells();
     let complex = Complex::from_cells(skeleton);
