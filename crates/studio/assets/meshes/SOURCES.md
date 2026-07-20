@@ -32,4 +32,3 @@ report as an empty or malformed mesh rather than silently mis-loading.
 
 | file        | is                         | notes |
 | ----------- | -------------------------- | ----- |
-| torus0.msh  | genus-1 surface (Gmsh 4.1) | 127 vertices, 254 triangles; the boundary surface Gmsh meshes by default for an OpenCASCADE `Torus(1)` primitive, coarsest of a refinement family. Selectable like any other, and small enough that every solve on it is instant -- which is also why it stands in for Bob wherever a test needs $b_1 = 2$ without a multi-thousand-vertex harmonic solve (`scene::tests::hodge_decomposition_splits_orthogonally`, `gallery::tests::the_hodge_preset_opens_on_the_harmonic_shell`). |
