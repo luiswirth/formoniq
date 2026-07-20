@@ -17,7 +17,7 @@ use wgpu::{Surface, SurfaceConfiguration};
 use winit::{
   application::ApplicationHandler,
   event::*,
-  event_loop::ActiveEventLoop,
+  event_loop::{ActiveEventLoop, ControlFlow},
   window::{Window, WindowId},
 };
 // The event loop is constructed only by the native `run`; the web build enters
@@ -48,6 +48,12 @@ const UI_ZOOM: f32 = 1.25;
 /// rate this is a few frames' worth, so ordinary jitter is absorbed and a long
 /// stall is not.
 const MAX_STEPS_PER_FRAME: u32 = 8;
+
+/// The `dt` cap for the fly controls, in seconds. Redraw-on-demand parks the
+/// loop between frames, so the wake-up frame's raw `dt` is the whole idle span;
+/// this bounds the step it can take to one slow frame's worth (~30 fps) rather
+/// than a lurch proportional to how long the viewer sat still.
+const MAX_FRAME_DT: f32 = 1.0 / 30.0;
 
 /// Radians of rotation per pixel dragged, and the fraction of the distance to
 /// the cursor's point one scroll notch closes. Zoom is multiplicative, so
@@ -929,7 +935,15 @@ impl State {
   /// inside the one egui pass, and applies the requested changes afterward.
   /// The model/response split keeps the panel itself a pure function of its
   /// input; only this method touches `self`.
-  fn run_ui(&mut self, window: &Window) -> (Vec<egui::ClippedPrimitive>, egui::TexturesDelta, f32) {
+  fn run_ui(
+    &mut self,
+    window: &Window,
+  ) -> (
+    Vec<egui::ClippedPrimitive>,
+    egui::TexturesDelta,
+    f32,
+    std::time::Duration,
+  ) {
     let ctx = self.egui_ctx.clone();
     let raw_input = self.egui_winit_state.take_egui_input(window);
 
@@ -1188,11 +1202,23 @@ impl State {
     self
       .egui_winit_state
       .handle_platform_output(window, full_output.platform_output);
+
+    // How long until egui itself next needs to repaint, independent of the
+    // field animation: a widget fade, a tooltip, a text-cursor blink. `ZERO`
+    // means repaint now, `Duration::MAX` means egui is settled and only an
+    // input event should wake it. The redraw-on-demand policy folds this in so
+    // the UI animates smoothly even while the scene is a static still.
+    let egui_repaint = full_output
+      .viewport_output
+      .get(&egui::ViewportId::ROOT)
+      .map_or(std::time::Duration::MAX, |o| o.repaint_delay);
+
     let paint_jobs = ctx.tessellate(full_output.shapes, full_output.pixels_per_point);
     (
       paint_jobs,
       full_output.textures_delta,
       full_output.pixels_per_point,
+      egui_repaint,
     )
   }
 
@@ -1223,18 +1249,25 @@ impl State {
     }
   }
 
-  fn render(&mut self, window: &Window) -> Result<(), ()> {
+  fn render(&mut self, window: &Window) -> Result<NextFrame, ()> {
     // Ahead of `run_ui`: applying a finished background load before the panel
     // is built is what makes the field pickers reflect the new scene on the
     // very frame it lands, rather than one frame late.
     self.poll_view_load();
 
     let now = web_time::Instant::now();
-    let dt = (now - self.last_frame).as_secs_f32();
+    // Clamped: redraw-on-demand parks the loop between frames, so the first
+    // frame after an idle stretch would otherwise see the whole idle span as its
+    // `dt` and lurch the fly camera across the scene. Movement only ever runs on
+    // back-to-back live frames, where the real `dt` is a fraction of this cap;
+    // the cap only ever bites on the wake-up frame, and a step of at most this is
+    // the honest thing to do there. (`WaveClock` reads wall-clock elapsed, not
+    // `dt`, so it needs no such guard.)
+    let dt = (now - self.last_frame).as_secs_f32().min(MAX_FRAME_DT);
     self.last_frame = now;
     self.apply_movement(dt);
 
-    let (paint_jobs, textures_delta, pixels_per_point) = self.run_ui(window);
+    let (paint_jobs, textures_delta, pixels_per_point, egui_repaint) = self.run_ui(window);
 
     // Registered unconditionally, ahead of the surface-acquire early-returns
     // below: egui reports a texture delta exactly once, on the frame it
@@ -1250,7 +1283,7 @@ impl State {
       wgpu::CurrentSurfaceTexture::Success(t) | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
       wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
         self.resize(self.size);
-        return Ok(());
+        return Ok(NextFrame::Now);
       }
       // `Occluded` here is normally moot -- `about_to_wait` already stops
       // chasing redraws once `WindowEvent::Occluded(true)` lands -- but
@@ -1267,7 +1300,7 @@ impl State {
         // so there is no synchronous spin to throttle (and no thread to sleep).
         #[cfg(not(target_arch = "wasm32"))]
         std::thread::sleep(std::time::Duration::from_millis(16));
-        return Ok(());
+        return Ok(NextFrame::Now);
       }
     };
     let view = output
@@ -1352,7 +1385,48 @@ impl State {
     );
     output.present();
 
-    Ok(())
+    Ok(self.next_frame(egui_repaint))
+  }
+
+  /// The redraw-on-demand policy for the frame just presented: whether the loop
+  /// must chase another frame, park until an event, or wake at an egui deadline.
+  ///
+  /// A frame is *live* -- and so asks for the next one immediately -- when the
+  /// scene is moving on its own: a background solve still running (its result
+  /// arrives off the event loop, so only continued polling sees it), a held fly
+  /// key, or a playing clock driving a field that actually varies in time (a
+  /// standing wave, a trajectory, or a line field's advected particles). A static
+  /// field with the clock paused and no input is *not* live: nothing on screen
+  /// will change until the reader acts, so the loop parks. egui's own repaint
+  /// need is folded in last, so a widget animation still runs over a still scene.
+  fn next_frame(&self, egui_repaint: std::time::Duration) -> NextFrame {
+    let field_animates = match self.selection {
+      // Particles advect through a line field while the clock runs, whatever its
+      // `FieldTime`; a scalar field moves only if its own time model does.
+      Selection::Line(_) => true,
+      Selection::Scalar(i) => self.scene.fields[i].time.animates(),
+    };
+    let live = self.gallery.is_loading()
+      || !self.keys_held.is_empty()
+      || (self.clock.playing && field_animates);
+
+    if live || egui_repaint.is_zero() {
+      NextFrame::Now
+    } else if egui_repaint == std::time::Duration::MAX {
+      NextFrame::Wait
+    } else {
+      // On the web the browser's animation-frame callback paces the loop, so
+      // there is no `WaitUntil` to honour -- fall back to chasing the next frame
+      // and let the rAF cadence throttle it.
+      #[cfg(target_arch = "wasm32")]
+      {
+        NextFrame::Now
+      }
+      #[cfg(not(target_arch = "wasm32"))]
+      {
+        NextFrame::At(web_time::Instant::now() + egui_repaint)
+      }
+    }
   }
 }
 
@@ -1426,6 +1500,27 @@ fn selection_in_range(scene: &Scene, selection: Selection) -> bool {
   }
 }
 
+/// When the loop should present the next frame, computed after each render.
+///
+/// Redraw-on-demand: a still frame over static content asks for nothing and the
+/// loop parks in `ControlFlow::Wait` until an event wakes it, so a paused viewer
+/// costs no GPU and no battery. A live frame -- an animating field, a held fly
+/// key, a background solve, or a pending egui animation -- asks for the next one.
+#[derive(Clone, Copy, Default)]
+enum NextFrame {
+  /// Redraw as soon as possible: something on screen is moving. Also the
+  /// bootstrap default, so the first frame is drawn once the state exists.
+  #[default]
+  Now,
+  /// Park until a window event arrives; nothing is changing.
+  Wait,
+  /// Redraw at a deadline: egui wants a repaint after a delay (a fade, a
+  /// tooltip) but nothing else is live. Native only; on the web the browser's
+  /// animation-frame callback paces the loop and `Now` stands in.
+  #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+  At(web_time::Instant),
+}
+
 #[derive(Default)]
 pub(crate) struct App {
   window: Option<Arc<Window>>,
@@ -1440,6 +1535,10 @@ pub(crate) struct App {
   // just this process. `WindowEvent::Occluded` is winit's own signal for
   // this and is what actually stops the spin, rather than a fixed sleep.
   occluded: bool,
+  // The redraw-on-demand policy the last presented frame asked for, applied in
+  // `about_to_wait` to set the control flow. `Now` by default so the very first
+  // frame draws once the state lands.
+  next_frame: NextFrame,
 }
 
 impl ApplicationHandler for App {
@@ -1487,6 +1586,7 @@ impl ApplicationHandler for App {
       WindowEvent::CloseRequested => event_loop.exit(),
       WindowEvent::Resized(physical_size) => {
         state.resize(physical_size);
+        window.request_redraw();
       }
       WindowEvent::Occluded(occluded) => {
         self.occluded = occluded;
@@ -1495,30 +1595,66 @@ impl ApplicationHandler for App {
         }
       }
       WindowEvent::RedrawRequested => {
-        let _ = state.render(window);
+        // The presented frame reports whether the loop must chase another; the
+        // policy is applied in `about_to_wait`, which runs right after.
+        self.next_frame = state.render(window).unwrap_or(NextFrame::Wait);
       }
       other => {
         if !consumed {
           state.handle_input(&other);
         }
+        // Redraw-on-demand: any input may have moved the camera, toggled a
+        // control, or started an egui animation, so a frame is asked for to
+        // reflect it. When no events arrive nothing is requested, which is the
+        // whole point -- a still viewer over static content renders nothing.
+        window.request_redraw();
       }
     }
   }
 
-  fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+  fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
     // The web `State::new` completes asynchronously; drain its slot once it
     // lands so the first real frame can render. No-op once installed.
     #[cfg(target_arch = "wasm32")]
     if self.state.is_none() {
       self.state = crate::web::take_ready_state();
     }
-    // Not while occluded: see the field doc on `occluded`. The loop resumes
-    // on its own once `WindowEvent::Occluded(false)` fires the next redraw.
-    if self.occluded {
+    // Still bootstrapping (the web async device/surface): poll until the state
+    // lands, since nothing else will wake the loop to drain it.
+    if self.state.is_none() {
+      event_loop.set_control_flow(ControlFlow::Poll);
       return;
     }
-    if let Some(window) = &self.window {
-      window.request_redraw();
+    // Never chase a redraw while occluded: `get_current_texture` cannot succeed,
+    // so it would be an unbounded busy-spin of driver calls (see the field doc
+    // on `occluded`). Park until `WindowEvent::Occluded(false)` requests one.
+    if self.occluded {
+      event_loop.set_control_flow(ControlFlow::Wait);
+      return;
+    }
+    let Some(window) = &self.window else {
+      return;
+    };
+    match self.next_frame {
+      // Chase the next frame immediately. Paired with `ControlFlow::Wait` this
+      // is the idiomatic redraw-on-demand loop: winit services the requested
+      // redraw, renders, and returns here to decide again.
+      NextFrame::Now => {
+        event_loop.set_control_flow(ControlFlow::Wait);
+        window.request_redraw();
+      }
+      // Nothing is changing; sleep until a window event arrives.
+      NextFrame::Wait => event_loop.set_control_flow(ControlFlow::Wait),
+      // egui wants a repaint at a deadline (a fade, a cursor blink) over an
+      // otherwise-static scene. Wake exactly then rather than spinning until it.
+      NextFrame::At(deadline) => {
+        if web_time::Instant::now() >= deadline {
+          event_loop.set_control_flow(ControlFlow::Wait);
+          window.request_redraw();
+        } else {
+          event_loop.set_control_flow(ControlFlow::WaitUntil(deadline));
+        }
+      }
     }
   }
 }
