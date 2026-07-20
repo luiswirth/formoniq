@@ -957,8 +957,14 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 
         section(ui, "Presets", |ui| {
           for (i, preset) in model.presets.iter().enumerate() {
+            // A preset is lit when the platform is standing exactly on the
+            // point it names -- its mesh and study both current -- so the
+            // browser shows where the reader is, not just where they can go.
+            // Editing an axis away from a preset unlights it; returning relights
+            // it, with no state beyond the two axes themselves.
+            let active = preset.mesh == model.mesh_source && preset.study == model.study;
             if ui
-              .selectable_label(false, preset.name)
+              .selectable_label(active, preset.name)
               .on_hover_text(preset.description)
               .clicked()
             {
