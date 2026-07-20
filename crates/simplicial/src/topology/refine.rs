@@ -18,8 +18,8 @@
 //! the new cells, its manifold check standing as the conformity assertion.
 
 use super::{
-  complex::Complex, data::SkeletonVec, handle::KSimplexIdx, simplex::Simplex, skeleton::Skeleton,
-  VertexIdx,
+  complex::Complex, data::SkeletonVec, handle::KSimplexIdx, ordering::CellOrdering,
+  simplex::Simplex, skeleton::Skeleton, VertexIdx,
 };
 use crate::{
   atlas::{ref_refinement, LocalCartesian, SimplexCoords},
@@ -44,6 +44,10 @@ pub struct Subdivision {
   /// and its barycentric coordinates there, enough to place it from any
   /// coarse-cell data. A coarse vertex needs no birth -- it maps to itself.
   new_births: Vec<VertexBirth>,
+  /// The refined complex's own vertex ordering: each child in the order the
+  /// reference pattern emitted its corners. Refining the next level in *this*
+  /// ordering is what makes refinement compose.
+  ordering: CellOrdering,
 }
 
 /// The provenance of a refined cell: which coarse cell it subdivides, and its
@@ -76,7 +80,38 @@ impl Complex {
   /// Purely topological and affine; carries no geometry. The returned
   /// [`Subdivision`] holds the refined [`Complex`] and the provenance a geometry
   /// is transported along.
+  ///
+  /// Refines in the colex ordering, the one a mesh carries implicitly. Prefer
+  /// [`Complex::refine_with`] when an ordering is available: composing *this*
+  /// with itself does not give the $R R'$-fold refinement above dimension two,
+  /// because each level re-derives a child's order by sorting rather than
+  /// inheriting it.
   pub fn refine(&self, refinement: usize) -> Subdivision {
+    self.refine_with(&CellOrdering::colex(self), refinement)
+  }
+
+  /// The uniform $R$-fold refinement, subdividing each cell in the order the
+  /// given [`CellOrdering`] gives its vertices.
+  ///
+  /// The ordering is what a refinement tower needs: with it, refinement
+  /// composes, $"refine"_(R') compose "refine"_R = "refine"_(R R')$, so a tower
+  /// stays inside the family its generator produced and every child is similar
+  /// to its parent. The refined complex's own ordering rides on the returned
+  /// [`Subdivision`] ([`Subdivision::ordering`]), which is what makes the next
+  /// level possible.
+  ///
+  /// # Panics
+  /// If the ordering is not an ordering of this complex's cells. It must also
+  /// be face-consistent ([`CellOrdering::is_face_consistent`]) -- two cells that
+  /// order a shared face differently subdivide it differently, and the result
+  /// is non-conforming; that is checked by `from_cells` when the refined
+  /// complex is built, not assumed here.
+  pub fn refine_with(&self, ordering: &CellOrdering, refinement: usize) -> Subdivision {
+    assert_eq!(
+      ordering.ncells(),
+      self.cells().len(),
+      "an ordering must cover exactly this complex's cells"
+    );
     let dim = self.dim();
     let pattern = ref_refinement(dim, refinement);
     let ncoarse_vertices = self.vertices().len();
@@ -91,21 +126,28 @@ impl Complex {
     // reindexed to the final colex order once the complex is built.
     let mut cells: Vec<Simplex> = Vec::new();
     let mut provenance: Vec<(Simplex, Child)> = Vec::new();
+    // Each child's corners in the pattern's own order: the refined mesh's
+    // ordering, and the whole of what a child inherits from its parent.
+    let mut words: Vec<Vec<VertexIdx>> = Vec::new();
 
     for cell in self.cells().handle_iter() {
-      let cverts = &cell.simplex().vertices;
+      let cverts = ordering.word(cell);
 
       let resolve = |pv: usize,
                      new_index: &mut HashMap<Vec<(VertexIdx, usize)>, usize>,
                      new_births: &mut Vec<VertexBirth>|
        -> VertexIdx {
         let k = &pattern.vertices()[pv];
-        let support: Vec<(VertexIdx, usize)> = k
+        // Sorted by vertex, so the key is canonical: the ordering permutes
+        // `cverts`, and two cells sharing this lattice point must still agree
+        // on its label or the refined mesh tears along their common face.
+        let mut support: Vec<(VertexIdx, usize)> = k
           .iter()
           .enumerate()
           .filter(|&(_, &w)| w > 0)
           .map(|(i, &w)| (cverts[i], w))
           .collect();
+        support.sort_unstable();
         // Supported on a single coarse vertex: it *is* that vertex.
         if support.len() == 1 {
           return support[0].0;
@@ -122,20 +164,42 @@ impl Complex {
         })
       };
 
+      // Where each ordered parent vertex sits in the stored (sorted) cell: the
+      // permutation the ordering is, and what re-expresses a lattice point in
+      // the frame the parent's metric is read in.
+      let sorted = &cell.simplex().vertices;
+      let slot: Vec<usize> = cverts
+        .iter()
+        .map(|v| sorted.binary_search(v).expect("a word permutes its cell"))
+        .collect();
+
       for child in pattern.children() {
         // Each corner as (global vertex, its parent-local coordinate). The
         // stored cell sorts its vertices globally, and the induced metric reads
         // that sorted order as its basis, so the child's realization in the
-        // parent frame must too -- hence the sort. This is why the Jacobian is
-        // per-cell and not pure reference data: which permutation sorts a
-        // child's corners depends on the coarse cell's global vertex labels.
+        // parent frame must too -- hence the sort, and hence the lattice weights
+        // are read through `slot` rather than through the pattern's own frame,
+        // whose axes follow the *ordering*. The two agree only when the ordering
+        // is the colex one. This is why the Jacobian is per-cell and not pure
+        // reference data.
         let mut corners: Vec<(VertexIdx, Vector)> = child
           .iter()
           .map(|&pv| {
             let global = resolve(pv, &mut new_index, &mut new_births);
-            (global, pattern.vertex_local(pv))
+            let weights = &pattern.vertices()[pv];
+            let mut local = Vector::zeros(dim);
+            let scale = (refinement as f64).recip();
+            for (i, &weight) in weights.iter().enumerate() {
+              // Barycentric weight on sorted vertex `slot[i]`; the reference
+              // frame places vertex 0 at the origin and vertex j at e_(j-1).
+              if slot[i] > 0 {
+                local[slot[i] - 1] += weight as f64 * scale;
+              }
+            }
+            (global, local)
           })
           .collect();
+        words.push(corners.iter().map(|&(global, _)| global).collect());
         corners.sort_by_key(|&(global, _)| global);
 
         // The child realized in the parent chart's local frame, in the stored
@@ -175,12 +239,17 @@ impl Complex {
         .collect(),
     );
 
+    // Matched by vertex set, which also validates that the words name exactly
+    // the refined cells.
+    let ordering = CellOrdering::new(&complex, words);
+
     Subdivision {
       complex,
       refinement,
       children,
       ncoarse_vertices,
       new_births,
+      ordering,
     }
   }
 }
@@ -194,6 +263,13 @@ impl Subdivision {
   }
   pub fn refinement(&self) -> usize {
     self.refinement
+  }
+  /// The refined complex's vertex ordering, inherited from the pattern.
+  ///
+  /// Feed it to [`Complex::refine_with`] to take the next level: that is what
+  /// makes a tower agree with a single refinement of the product refinement.
+  pub fn ordering(&self) -> &CellOrdering {
+    &self.ordering
   }
   /// The provenance of each refined cell, keyed by refined-cell kidx.
   pub fn children(&self) -> &SkeletonVec<Child> {
