@@ -86,6 +86,62 @@ impl MeshCoords {
 mod test {
   use crate::gen::cartesian::CartesianGrid;
   use crate::geometry::cell_volume;
+  use crate::geometry::metric::mesh::MeshLengthsSq;
+
+  /// Refining a Kuhn-triangulated grid reproduces the finer grid the generator
+  /// would have built: $"refine"("grid"(n), r) tilde.equiv "grid"(n r)$, up to
+  /// vertex relabelling. Freudenthal subdivision of a Kuhn cube *is* the Kuhn
+  /// triangulation of its $2^n$ subcubes, so the general refinement algorithm
+  /// loses none of the regularity of the structured generator -- in every
+  /// dimension, not just the 2D case where red refinement happens to be
+  /// self-similar. Congruence is tested on the intrinsic invariant: the multiset
+  /// over cells of each cell's sorted squared edge lengths.
+  #[test]
+  fn refine_reproduces_the_generator_family() {
+    use crate::topology::complex::Complex;
+
+    fn signature(complex: &Complex, lengths: &MeshLengthsSq) -> Vec<Vec<u64>> {
+      let mut cells: Vec<Vec<u64>> = complex
+        .cells()
+        .handle_iter()
+        .map(|cell| {
+          let mut ls: Vec<u64> = lengths
+            .simplex_lengths_sq(*cell)
+            .vector()
+            .iter()
+            .map(|&l| (l * 1e9).round() as u64)
+            .collect();
+          ls.sort_unstable();
+          ls
+        })
+        .collect();
+      cells.sort_unstable();
+      cells
+    }
+
+    for dim in 1..=3 {
+      for (n, r) in [(1, 2), (2, 2), (1, 3), (2, 3), (1, 4)] {
+        let (coarse, coarse_coords) = CartesianGrid::new_unit(dim, n).triangulate();
+        let sub = coarse.refine(r);
+        let refined = sub.complex();
+        let refined_lengths = coarse_coords
+          .to_edge_lengths_sq(&coarse)
+          .refine(&sub, &coarse);
+
+        let (direct, direct_coords) = CartesianGrid::new_unit(dim, n * r).triangulate();
+        let direct_lengths = direct_coords.to_edge_lengths_sq(&direct);
+
+        assert_eq!(refined.nsimplices(dim), direct.nsimplices(dim));
+        assert_eq!(refined.vertices().len(), direct.vertices().len());
+        assert_eq!(
+          signature(refined, &refined_lengths),
+          signature(&direct, &direct_lengths),
+          "dim {dim}, grid({n}) refined by {r} is not congruent to grid({})",
+          n * r
+        );
+      }
+    }
+  }
 
   /// The refined cells partition the measure of the coarse ones: refinement
   /// moves no volume, on the intrinsic representation. Each child also carries
