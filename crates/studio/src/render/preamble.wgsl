@@ -373,3 +373,53 @@ fn display_transform(post: Post, radiance: vec3<f32>, unbounded_mask: f32) -> ve
     let curved = select(clamped, aces(exposed), post.tonemap > 0.5);
     return mix(clamped, curved, unbounded_mask);
 }
+
+// How a volumetric field is marched: the box the grid occupies in world space,
+// the colormap range the transfer function reads through, and the two scalars
+// that turn a field value into a medium.
+//
+// `inv_view_proj` unprojects a pixel into a world-space ray, and it is the
+// *inverse* of the frame's own matrix rather than an eye position and a
+// frustum, because that one construction serves a perspective and an
+// orthographic camera alike: unproject the same pixel at two depths and the
+// segment between them is the ray, converging or parallel as the projection
+// dictates. An eye point would be the wrong primitive under an orthographic
+// projection, which has none.
+//
+// `density` is the absorption coefficient at full normalized value, in units of
+// inverse world length, so the medium's opacity is a property of how far light
+// travels through it and not of how many steps the march happens to take.
+// `emission` scales the radiance the medium gives off, in the same normalized
+// units, keeping the colormap's hue and letting its brightness be the knob.
+struct VolumeMaterial {
+    inv_view_proj: mat4x4<f32>,
+    // The grid's world-space minimum corner and extent, `w` unused.
+    origin: vec4<f32>,
+    size: vec4<f32>,
+    // The affine decoding of a texel back into a field value: the bake stores
+    // the scalar normalized into `[0, 1]`, so `value = value_min + texel *
+    // value_range`. Kept here rather than folded into the colormap range so the
+    // two stay separable -- the encoding is the texture's, the range is the
+    // field's.
+    value_min: f32,
+    value_range: f32,
+    min_val: f32,
+    max_val: f32,
+    diverging: f32,
+    density: f32,
+    emission: f32,
+    // World-space distance between consecutive samples along a ray.
+    step_size: f32,
+    // The standing wave, exactly as the fill carries it: the medium's value is
+    // $u(t) = u cos(omega t)$. A solid has no surface to displace along a
+    // normal, so the wave shows as the *pulse* alone -- the fog thinning to
+    // nothing as the cosine crosses zero and refilling with the opposite sign.
+    // A field with no eigenvalue has `wave_omega = 0`, and $cos(0) = 1$ leaves
+    // it static through the same arithmetic.
+    wave_omega: f32,
+    // Seconds into that wave. A frame fact rather than a material choice, like
+    // `inv_view_proj`, and filled by the renderer from the same `FrameView`.
+    time: f32,
+    _pad0: f32,
+    _pad1: f32,
+};
