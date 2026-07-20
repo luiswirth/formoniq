@@ -1561,9 +1561,12 @@ mod tests {
   /// sampled frames.
   #[test]
   fn heat_trajectory_decays_and_animates() {
-    let (topology, coords) = crate::gallery::MeshSource::Grid { cells_axis: 6 }
-      .build()
-      .unwrap();
+    let (topology, coords) = crate::gallery::MeshSource::Grid {
+      dim: 2,
+      cells_axis: 6,
+    }
+    .build()
+    .unwrap();
     let scene = Scene::heat(topology, coords, 20, 0.2);
 
     assert_eq!(scene.fields.len(), 1);
@@ -1611,9 +1614,12 @@ mod tests {
   /// animates without being an eigenmode.
   #[test]
   fn wave_trajectory_is_a_bounded_animating_trajectory() {
-    let (topology, coords) = crate::gallery::MeshSource::Grid { cells_axis: 6 }
-      .build()
-      .unwrap();
+    let (topology, coords) = crate::gallery::MeshSource::Grid {
+      dim: 2,
+      cells_axis: 6,
+    }
+    .build()
+    .unwrap();
     let scene = Scene::wave(topology, coords, 30, 4.0);
 
     let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
@@ -1670,9 +1676,12 @@ mod tests {
       assert!(!basis.offers(Selection::Scalar(index)).any());
     }
 
-    let (topology, coords) = crate::gallery::MeshSource::Grid { cells_axis: 4 }
-      .build()
-      .unwrap();
+    let (topology, coords) = crate::gallery::MeshSource::Grid {
+      dim: 2,
+      cells_axis: 4,
+    }
+    .build()
+    .unwrap();
     let (fields, _) = Scene::eigenmodes_grade(&topology, &coords, 0, 4);
     let scene = Scene {
       topology,
@@ -1748,7 +1757,14 @@ mod tests {
       ),
       (
         "Grid",
-        &(|| MeshSource::Grid { cells_axis: 4 }.build().unwrap()),
+        &(|| {
+          MeshSource::Grid {
+            dim: 2,
+            cells_axis: 4,
+          }
+          .build()
+          .unwrap()
+        }),
         0usize,
       ),
     ] {

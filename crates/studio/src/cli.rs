@@ -8,8 +8,10 @@ use clap::{Parser, Subcommand};
 use formoniq_studio::export::{export, ExportSpec};
 use formoniq_studio::gallery::{
   BuiltinMesh, CochainSpec, MeshSource, NamedCochain, Study, DEFAULT_NMODES,
-  DEFAULT_TRAJECTORY_STEPS, HEAT_FINAL_TIME, REFERENCE_CELL_DIM, WAVE_FINAL_TIME,
+  DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, REFERENCE_CELL_DIM,
+  REFERENCE_CELL_DIM_MAX, WAVE_FINAL_TIME,
 };
+use simplicial::Dim;
 
 #[derive(Parser)]
 #[command(about = "A viewer for FEEC solutions on simplicial manifolds")]
@@ -30,9 +32,11 @@ enum Command {
     /// decomposition.
     #[arg(long, value_parser = parse_study, default_value = "grade0")]
     study: Study,
-    /// Which mesh to run the study on: `sphere`, `grid`, `refcell`,
-    /// `triforce`, a built-in by name, or a directory holding a mesh saved by
-    /// the engine's own `topology.cbor`/`coords.cbor` pair.
+    /// Which mesh to run the study on: `sphere`, `grid[dim]`, `refcell[dim]`
+    /// (the optional trailing digit is the intrinsic dimension, 1..=3 -- e.g.
+    /// `grid3` is a cube of tetrahedra, `refcell1` a single edge), `triforce`, a
+    /// built-in by name, or a directory holding a mesh saved by the engine's own
+    /// `topology.cbor`/`coords.cbor` pair.
     #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
     mesh: MeshSource,
     /// A cochain saved by the engine (`Cochain::save`) to show, in addition
@@ -93,12 +97,37 @@ fn parse_study(s: &str) -> Result<Study, String> {
 /// loaded into the viewer is not among them -- `MeshSource::Custom` is not
 /// regenerable from its descriptor, so there is nothing here to name it by.
 fn parse_mesh(s: &str) -> Result<MeshSource, String> {
+  // `grid` and `refcell` take an optional intrinsic dimension as a trailing
+  // digit -- `grid3` is a cube of tetrahedra, `refcell1` a single edge -- so one
+  // spelling reaches every dimension the fixed ambient RR^3 embeds, no separate
+  // name per dimension.
+  let dimensioned = |stem: &str, default: Dim, max: Dim| -> Option<Result<Dim, String>> {
+    let rest = s.strip_prefix(stem)?;
+    if rest.is_empty() {
+      return Some(Ok(default));
+    }
+    Some(match rest.parse::<Dim>() {
+      Ok(d) if (1..=max).contains(&d) => Ok(d),
+      _ => Err(format!(
+        "`{stem}` dimension must be 1..={max}, got `{rest}`"
+      )),
+    })
+  };
+
+  if let Some(dim) = dimensioned("grid", GRID_DIM_DEFAULT, GRID_DIM_MAX) {
+    return dim.map(|dim| MeshSource::Grid {
+      dim,
+      cells_axis: 16,
+    });
+  }
+  if let Some(dim) = dimensioned("refcell", REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX)
+    .or_else(|| dimensioned("reference", REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX))
+  {
+    return dim.map(|dim| MeshSource::ReferenceCell { dim });
+  }
+
   match s {
     "sphere" => Ok(MeshSource::START),
-    "grid" => Ok(MeshSource::Grid { cells_axis: 16 }),
-    "refcell" | "reference" => Ok(MeshSource::ReferenceCell {
-      dim: REFERENCE_CELL_DIM,
-    }),
     "triforce" => Ok(MeshSource::Triforce),
     _ if Path::new(s).is_dir() => Ok(MeshSource::File(PathBuf::from(s))),
     _ => BuiltinMesh::from_name(s)
@@ -109,8 +138,8 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
           .collect::<Vec<_>>()
           .join("`, `");
         format!(
-          "expected `sphere`, `grid`, `refcell`, `triforce`, `{builtins}`, or a mesh directory, \
-           got `{s}`"
+          "expected `sphere`, `grid[dim]`, `refcell[dim]`, `triforce`, `{builtins}`, or a mesh \
+           directory, got `{s}`"
         )
       }),
   }
