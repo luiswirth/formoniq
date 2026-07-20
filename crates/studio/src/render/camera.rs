@@ -189,9 +189,18 @@ impl Camera {
   /// as the anchor, and `yaw` snaps to $pi/2$ so screen-right lands on world
   /// $+x$ ([`Self::right`]) and the plane keeps its own axes.
   pub fn snap_top_down(&mut self) {
+    self.snap_to(FRAC_PI_2, -FRAC_PI_2);
+  }
+
+  /// Snaps the orientation to $(psi, theta)$ while holding the pivot fixed, so
+  /// the object stays framed and only the vantage changes. The one primitive
+  /// behind every canned pose -- [`Self::snap_top_down`] and the axis-aligned
+  /// standard views are each a choice of angles fed through here, the eye
+  /// re-derived from the held pivot exactly as it is on entering the flat view.
+  pub fn snap_to(&mut self, yaw: f32, pitch: f32) {
     let pivot = self.pivot();
-    self.yaw = FRAC_PI_2;
-    self.pitch = -FRAC_PI_2;
+    self.yaw = yaw;
+    self.pitch = pitch;
     self.eye = pivot - self.forward() * self.pivot_distance;
   }
 

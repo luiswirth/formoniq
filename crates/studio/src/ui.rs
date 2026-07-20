@@ -64,6 +64,59 @@ impl Post {
   pub(crate) const ALL: [Self; 3] = [Self::Clamp, Self::Tonemap, Self::Bloom];
 }
 
+/// A canonical camera vantage: an axis-aligned standard view, each a fixed
+/// $(psi, theta)$ orientation snapped to with the pivot held (`Camera::snap_to`)
+/// and shown in parallel projection, the plan and elevation views of a
+/// draughtsman. The perspective orbit is the free vantage between them; these
+/// are the six the axes single out, offered because reading a mesh's structure
+/// wants a square-on look no free orbit lands on exactly.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum CameraView {
+  Top,
+  Bottom,
+  Front,
+  Back,
+  Right,
+  Left,
+}
+
+impl CameraView {
+  pub(crate) const ALL: [Self; 6] = [
+    Self::Top,
+    Self::Bottom,
+    Self::Front,
+    Self::Back,
+    Self::Right,
+    Self::Left,
+  ];
+
+  pub(crate) fn label(self) -> &'static str {
+    match self {
+      Self::Top => "Top",
+      Self::Bottom => "Bottom",
+      Self::Front => "Front",
+      Self::Back => "Back",
+      Self::Right => "Right",
+      Self::Left => "Left",
+    }
+  }
+
+  /// The $(psi, theta)$ the view snaps to, about [`crate::render::camera::WORLD_UP`]
+  /// ($+z$): the top/bottom look along $mp z$, the four side views along the
+  /// horizontal axes with $+z$ kept screen-up.
+  pub(crate) fn angles(self) -> (f32, f32) {
+    use std::f32::consts::{FRAC_PI_2, PI};
+    match self {
+      Self::Top => (FRAC_PI_2, -FRAC_PI_2),
+      Self::Bottom => (FRAC_PI_2, FRAC_PI_2),
+      Self::Front => (FRAC_PI_2, 0.0),
+      Self::Back => (-FRAC_PI_2, 0.0),
+      Self::Right => (PI, 0.0),
+      Self::Left => (0.0, 0.0),
+    }
+  }
+}
+
 /// How one $k$-skeleton is drawn: whether it appears, and whether it reflects
 /// the field or is the structural geometry ink. The two are independent -- hiding
 /// a skeleton and coloring it are separate choices, and coloring is a no-op while
@@ -703,6 +756,10 @@ pub(crate) struct PanelResponse {
   /// screen. Orthogonal to the shown pair, so the caller applies it
   /// unconditionally like the view toggles.
   pub(crate) reset_camera: bool,
+  /// A standard axis-aligned vantage the reader picked this frame, if any: the
+  /// caller snaps the camera to it (in parallel projection) while holding the
+  /// framing. Orthogonal to the shown pair, like [`Self::reset_camera`].
+  pub(crate) camera_view: Option<CameraView>,
   /// Whether the standing wave should be running after this frame -- the
   /// play/pause toggle. Defaults to the model's own state when the control
   /// wasn't touched, like the other fields.
@@ -765,6 +822,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut post = model.post;
   let mut orthographic = model.orthographic;
   let mut reset_camera = false;
+  let mut camera_view = None;
   let mut playing = model.playing;
   #[cfg(not(target_arch = "wasm32"))]
   let mut load_obj_clicked = false;
@@ -813,6 +871,14 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           reset_camera = true;
           ui.close();
         }
+        ui.menu_button("Standard views", |ui| {
+          for view in CameraView::ALL {
+            if ui.button(view.label()).clicked() {
+              camera_view = Some(view);
+              ui.close();
+            }
+          }
+        });
         ui.separator();
         // The display transform, a cumulative ladder rather than a set of
         // independent flags (see `Post`), so a radio and not checkboxes.
@@ -1159,6 +1225,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     post,
     orthographic,
     reset_camera,
+    camera_view,
     playing,
     #[cfg(not(target_arch = "wasm32"))]
     load_obj_clicked,
