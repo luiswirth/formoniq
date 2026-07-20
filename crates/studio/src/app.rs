@@ -311,7 +311,7 @@ impl State {
       display,
       clock: WaveClock::new(),
       steps_taken: 0,
-      mesh_view: crate::ui::MeshView::default(),
+      mesh_view: crate::ui::MeshView::for_dim(scene.topology.dim()),
       field_view: crate::ui::FieldView {
         marks: start.marks.unwrap_or_default(),
         ..Default::default()
@@ -525,6 +525,11 @@ impl State {
       }
       _ => default_selection(&scene),
     };
+    // The default coloring is the dimension's, so a mesh of a different
+    // dimension re-derives it rather than keeping a rule written for the old one.
+    if scene.topology.dim() != self.scene.topology.dim() {
+      self.mesh_view = crate::ui::MeshView::for_dim(scene.topology.dim());
+    }
     self.scene = scene;
     self.mesh_display = MeshDisplay::build(&self.ctx.device, &self.scene);
     self.apply_field(selection);
@@ -1063,6 +1068,18 @@ impl State {
       crate::welcome::mark_seen();
     }
 
+    // The two view settings are applied *before* the pair can change, for the same
+    // reason `selection` is not applied after: it describes the mesh the panel
+    // was drawn on, and a mesh of a different dimension derives its own default
+    // ([`crate::ui::MeshView::for_dim`]). Applied afterward it would write the
+    // outgoing mesh's coloring back over the incoming one's, leaving a curve
+    // with the surface's rule and so no colored skeleton at all. The field view
+    // is the same case from the other side: a preset names the marks it opens
+    // with, and applying the panel's copy afterward would drop them the frame
+    // the preset is clicked.
+    self.mesh_view = response.mesh_view;
+    self.field_view = response.field_view;
+
     // A finished file pick, a preset, a mesh-source change and a study switch
     // each replace the field set and the camera's natural orientation
     // wholesale, so the `selection`/`orthographic` picked this same frame belong to
@@ -1102,7 +1119,6 @@ impl State {
     // selection or a buffer. So they apply regardless of the branch above, where
     // being inside it would silently drop a toggle that happened to fire on the
     // same frame as a mesh or study change.
-    self.mesh_view = response.mesh_view;
     self.field_view = response.field_view;
     self.sidebars = response.sidebars;
     self.post = response.post;

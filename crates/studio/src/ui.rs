@@ -148,29 +148,28 @@ impl MeshView {
   pub(crate) fn skeleton(&self, k: usize) -> SkeletonView {
     self.skeletons[k]
   }
+
+  /// The default view of an $n$-manifold: every skeleton drawn, and exactly the
+  /// top one the bake renders ($k = min(n, 2)$, the primitive the dimension
+  /// reduces to) carrying the field. The lower skeletons frame it as structural
+  /// geometry ink. Stated in $n$ rather than fixed at $k = 2$ so a curve or a
+  /// point cloud colors its own cells instead of a skeleton it does not have.
+  /// Above $n = 2$ the top skeleton is not drawn at all, so the boundary
+  /// 2-skeleton -- what a solid actually shows -- is what carries the field.
+  pub(crate) fn for_dim(dim: Dim) -> Self {
+    let top = dim.min(2);
+    let mut skeletons = [SkeletonView {
+      visible: true,
+      colored: false,
+    }; 3];
+    skeletons[top].colored = true;
+    Self { skeletons }
+  }
 }
 
 impl Default for MeshView {
   fn default() -> Self {
-    // Faces reflect the field (the historical fill); edges and points are the
-    // structural geometry ink, so the default view is a colored surface framed
-    // by a plain graph.
-    Self {
-      skeletons: [
-        SkeletonView {
-          visible: true,
-          colored: false,
-        },
-        SkeletonView {
-          visible: true,
-          colored: false,
-        },
-        SkeletonView {
-          visible: true,
-          colored: true,
-        },
-      ],
-    }
+    Self::for_dim(2)
   }
 }
 
