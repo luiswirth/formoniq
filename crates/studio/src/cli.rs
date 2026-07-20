@@ -71,25 +71,44 @@ fn parse_study(s: &str) -> Result<Study, String> {
     "whitney" => Ok(Study::WhitneyBasis),
     "hodge" | "decomposition" => Ok(Study::HodgeDecomposition),
     "triforce-examples" => Ok(Study::Cochains(formoniq_studio::demos::triforce_examples())),
-    "heat" => Ok(Study::Heat {
+    _ => parse_graded_study(s).ok_or_else(|| {
+      format!("expected `grade<k>`, `whitney`, `hodge`, `heat[<k>]` or `wave[<k>]`, got `{s}`")
+    }),
+  }
+}
+
+/// The studies posed at a single grade, named `<study><k>` with the grade
+/// suffix optional and defaulting to 0 (`heat`, `heat2`, `wave1`). The
+/// eigenproblem's own name *is* its grade (`grade<k>`), so it carries no
+/// default.
+fn parse_graded_study(s: &str) -> Option<Study> {
+  let graded = |prefix: &str| {
+    s.strip_prefix(prefix).and_then(|g| {
+      if g.is_empty() {
+        Some(0)
+      } else {
+        g.parse().ok()
+      }
+    })
+  };
+  if let Some(grade) = s.strip_prefix("grade").and_then(|g| g.parse().ok()) {
+    return Some(Study::Eigenmodes {
+      grade,
+      nmodes: DEFAULT_NMODES,
+    });
+  }
+  if let Some(grade) = graded("heat") {
+    return Some(Study::Heat {
+      grade,
       nsteps: DEFAULT_TRAJECTORY_STEPS,
       final_time: HEAT_FINAL_TIME,
-    }),
-    "wave" => Ok(Study::Wave {
-      nsteps: DEFAULT_TRAJECTORY_STEPS,
-      final_time: WAVE_FINAL_TIME,
-    }),
-    _ => s
-      .strip_prefix("grade")
-      .and_then(|g| g.parse().ok())
-      .map(|grade| Study::Eigenmodes {
-        grade,
-        nmodes: DEFAULT_NMODES,
-      })
-      .ok_or_else(|| {
-        format!("expected `grade<k>`, `whitney`, `hodge`, `heat` or `wave`, got `{s}`")
-      }),
+    });
   }
+  graded("wave").map(|grade| Study::Wave {
+    grade,
+    nsteps: DEFAULT_TRAJECTORY_STEPS,
+    final_time: WAVE_FINAL_TIME,
+  })
 }
 
 /// The mesh names an export accepts: the generated families, the reference cell

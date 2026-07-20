@@ -313,11 +313,19 @@ pub enum Study {
   /// The heat flow $diff_t u = -Delta u$ of a localized bump, as a sampled
   /// trajectory: the parabolic smoothing of the Hodge-Laplacian shown directly
   /// rather than through its spectrum. `nsteps` samples over `final_time`.
-  Heat { nsteps: usize, final_time: f64 },
+  Heat {
+    grade: ExteriorGrade,
+    nsteps: usize,
+    final_time: f64,
+  },
   /// The wave equation $diff_(t t) u = -Delta u$ of a localized bump at rest, as
   /// a sampled trajectory: the hyperbolic counterpart of [`Self::Heat`], fronts
   /// propagating and reflecting off any boundary.
-  Wave { nsteps: usize, final_time: f64 },
+  Wave {
+    grade: ExteriorGrade,
+    nsteps: usize,
+    final_time: f64,
+  },
 }
 
 impl Study {
@@ -329,14 +337,27 @@ impl Study {
     }
   }
 
+  /// The form grade the study is posed at, for the studies that are posed at
+  /// one -- the eigenproblem and the two evolutions. `None` where the study
+  /// spans every grade at once (the Whitney basis, the Hodge decomposition) or
+  /// reads the grade off its data (an explicit cochain list).
+  pub(crate) fn grade(&self) -> Option<ExteriorGrade> {
+    match self {
+      Study::Eigenmodes { grade, .. } | Study::Heat { grade, .. } | Study::Wave { grade, .. } => {
+        Some(*grade)
+      }
+      Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => None,
+    }
+  }
+
   pub(crate) fn label(&self) -> String {
     match self {
       Study::Eigenmodes { grade, .. } => format!("Eigenmodes, grade {grade}"),
       Study::WhitneyBasis => "Whitney basis".to_string(),
       Study::Cochains(_) => "Cochains".to_string(),
       Study::HodgeDecomposition => "Hodge decomposition".to_string(),
-      Study::Heat { .. } => "Heat equation".to_string(),
-      Study::Wave { .. } => "Wave equation".to_string(),
+      Study::Heat { grade, .. } => format!("Heat equation, grade {grade}"),
+      Study::Wave { grade, .. } => format!("Wave equation, grade {grade}"),
     }
   }
 
@@ -351,12 +372,28 @@ impl Study {
       Study::WhitneyBasis => Scene::whitney_basis_mesh(topology.clone(), coords.clone()),
       Study::Cochains(specs) => Scene::cochains(topology.clone(), coords.clone(), specs),
       Study::HodgeDecomposition => Scene::hodge_decomposition(topology.clone(), coords.clone()),
-      Study::Heat { nsteps, final_time } => {
-        Scene::heat(topology.clone(), coords.clone(), *nsteps, *final_time)
-      }
-      Study::Wave { nsteps, final_time } => {
-        Scene::wave(topology.clone(), coords.clone(), *nsteps, *final_time)
-      }
+      Study::Heat {
+        grade,
+        nsteps,
+        final_time,
+      } => Scene::heat(
+        topology.clone(),
+        coords.clone(),
+        *grade,
+        *nsteps,
+        *final_time,
+      ),
+      Study::Wave {
+        grade,
+        nsteps,
+        final_time,
+      } => Scene::wave(
+        topology.clone(),
+        coords.clone(),
+        *grade,
+        *nsteps,
+        *final_time,
+      ),
     }
   }
 }
@@ -510,6 +547,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Parabolic smoothing of a localized bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::Heat {
+        grade: 0,
         nsteps: DEFAULT_TRAJECTORY_STEPS,
         final_time: HEAT_FINAL_TIME,
       },
@@ -521,6 +559,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Hyperbolic propagation and reflection of a bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::Wave {
+        grade: 0,
         nsteps: DEFAULT_TRAJECTORY_STEPS,
         final_time: WAVE_FINAL_TIME,
       },
@@ -606,10 +645,7 @@ impl Gallery {
   pub(crate) fn new(preset: &Preset) -> (Self, Scene) {
     let mesh = Arc::new(preset.mesh.build().expect("the starting mesh builds"));
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
-    let last_grade = match &preset.study {
-      Study::Eigenmodes { grade, .. } => *grade,
-      _ => 0,
-    };
+    let last_grade = preset.study.grade().unwrap_or(0);
     let mut gallery = Self {
       mesh_source: preset.mesh.clone(),
       mesh,
@@ -668,8 +704,8 @@ impl Gallery {
     if study == self.study && self.loading.is_none() {
       return None;
     }
-    if let Study::Eigenmodes { grade, .. } = &study {
-      self.last_grade = *grade;
+    if let Some(grade) = study.grade() {
+      self.last_grade = grade;
     }
     self.study = study;
     self.request()
@@ -704,8 +740,8 @@ impl Gallery {
   /// selection is the caller's to apply once the scene lands.
   pub(crate) fn select_preset(&mut self, preset: &Preset) -> Result<Option<Scene>, String> {
     let mesh = preset.mesh.build()?;
-    if let Study::Eigenmodes { grade, .. } = &preset.study {
-      self.last_grade = *grade;
+    if let Some(grade) = preset.study.grade() {
+      self.last_grade = grade;
     }
     self.study = preset.study.clone();
     Ok(self.install_mesh(preset.mesh.clone(), mesh))
