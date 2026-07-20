@@ -73,11 +73,18 @@ fn box_sweep() {
       let mut history: [Vec<Vec<f64>>; 2] = [const { Vec::new() }; 2];
       let mut rows: [Vec<String>; 2] = [const { Vec::new() }; 2];
       let mut prev_ndofs = 0;
+      // Freudenthal refinement of one coarse box generates the h-family: nested
+      // meshes, and the mesh-agnostic path rather than the structured generator.
+      // Each level refines the base $R$-fold rather than iterating the previous
+      // level, because Freudenthal children are not similar to their parent above
+      // dimension two — a single $R$-fold refinement of a Kuhn box reproduces the
+      // generator's grid cell for cell, an iterated one does not.
+      let (base_topology, base_coords) = CartesianGrid::new_unit_scaled(dim, 1, PI).triangulate();
+      let base_metric = base_coords.to_edge_lengths_sq(&base_topology);
       for irefine in 0u32..=8 {
-        let nboxes_per_dim = 2usize.pow(irefine);
-        let grid = CartesianGrid::new_unit_scaled(dim, nboxes_per_dim, PI);
-        let (topology, coords) = grid.triangulate();
-        let metric = coords.to_edge_lengths_sq(&topology);
+        let sub = base_topology.refine(2usize.pow(irefine));
+        let metric = base_metric.refine(&sub, &base_topology);
+        let topology = sub.into_complex();
         let whitney = WhitneyComplex::new(&topology, &metric);
 
         let ndofs = whitney.ndofs(grade)
