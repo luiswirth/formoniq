@@ -228,6 +228,9 @@ struct Displayed {
   mesh: MeshDisplay,
   field: FieldDisplay,
   camera: crate::render::camera::Camera,
+  /// The mesh view the dimension's own default gives ([`crate::ui::MeshView::for_dim`]),
+  /// so an export draws what the window opens on.
+  mesh_view: crate::ui::MeshView,
   /// The selected field's standing-wave frequency $omega = sqrt(lambda)$, or
   /// `None` for a field that is not an eigenmode and so has no period.
   omega: Option<f64>,
@@ -260,6 +263,7 @@ impl Displayed {
       mesh,
       field,
       camera,
+      mesh_view: crate::ui::MeshView::for_dim(scene.topology.dim()),
       omega,
     })
   }
@@ -368,7 +372,7 @@ fn render_at(
 ) -> Vec<u8> {
   let items = displayed.field.draw_list(
     &displayed.mesh,
-    crate::ui::MeshView::default(),
+    displayed.mesh_view,
     crate::ui::FieldView::default(),
   );
   let frame = FrameView {
