@@ -760,6 +760,11 @@ pub(crate) struct PanelResponse {
   /// caller snaps the camera to it (in parallel projection) while holding the
   /// framing. Orthogonal to the shown pair, like [`Self::reset_camera`].
   pub(crate) camera_view: Option<CameraView>,
+  /// A solve-time the reader scrubbed the trajectory timeline to this frame, if
+  /// any: the caller jumps its clock so the playhead lands there. `None` unless
+  /// the trajectory slider moved -- a static field and an eigenmode have no
+  /// timeline to scrub.
+  pub(crate) scrub_time: Option<f64>,
   /// Whether the standing wave should be running after this frame -- the
   /// play/pause toggle. Defaults to the model's own state when the control
   /// wasn't touched, like the other fields.
@@ -823,6 +828,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut orthographic = model.orthographic;
   let mut reset_camera = false;
   let mut camera_view = None;
+  let mut scrub_time = None;
   let mut playing = model.playing;
   #[cfg(not(target_arch = "wasm32"))]
   let mut load_obj_clicked = false;
@@ -1171,7 +1177,19 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
       ui.separator();
 
       if let Some((solve_time, duration)) = model.trajectory {
-        ui.monospace(format!("t = {solve_time:.3} / {duration:.3}"));
+        // A draggable playhead over the solve-time interval: while playing it
+        // tracks the clock (the slider reads the live position), and a drag
+        // overrides it to scrub. The value is taken as owned so binding the
+        // slider to it never writes back into the model snapshot.
+        let mut t = solve_time;
+        let response = ui.add(
+          egui::Slider::new(&mut t, 0.0..=duration.max(f64::EPSILON))
+            .text("t")
+            .fixed_decimals(3),
+        );
+        if response.dragged() || response.changed() {
+          scrub_time = Some(t);
+        }
       } else {
         match omega {
           Some(omega) if omega > 1e-9 => {
@@ -1226,6 +1244,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     orthographic,
     reset_camera,
     camera_view,
+    scrub_time,
     playing,
     #[cfg(not(target_arch = "wasm32"))]
     load_obj_clicked,
