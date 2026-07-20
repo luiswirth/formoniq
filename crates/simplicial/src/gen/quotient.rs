@@ -26,7 +26,7 @@
 //! checkable rather than merely asserted.
 
 use itertools::Itertools;
-use multiindex::cartesian::{cartesian2linear_mixed, linear2cartesian, linear2cartesian_mixed};
+use multiindex::cartesian::{cartesian2linear_mixed, linear2cartesian_mixed};
 
 use crate::{
   gen::cartesian::CartesianGrid,
@@ -89,7 +89,10 @@ pub struct FlatQuotient {
   /// The period $L_i$ of each axis: the side length of one fundamental domain.
   side_lengths: Vector,
   identifications: Vec<Identification>,
-  ncells_axis: usize,
+  /// Cells per axis, independently: the periods of a quotient are rarely equal
+  /// (a Möbius band is long and narrow), and one count over unequal periods
+  /// makes the cells as anisotropic as the fundamental domain.
+  ncells: Vec<usize>,
 }
 
 impl FlatQuotient {
@@ -104,6 +107,19 @@ impl FlatQuotient {
     ncells_axis: usize,
   ) -> Self {
     let dim = side_lengths.len();
+    Self::new_anisotropic(side_lengths, identifications, vec![ncells_axis; dim])
+  }
+
+  /// A quotient with an independent cell count per axis.
+  ///
+  /// Every *closed* axis needs at least `3` cells; an open one needs `1`.
+  pub fn new_anisotropic(
+    side_lengths: Vector,
+    identifications: Vec<Identification>,
+    ncells: Vec<usize>,
+  ) -> Self {
+    let dim = side_lengths.len();
+    assert_eq!(ncells.len(), dim, "One cell count per axis is required.");
     assert_eq!(
       identifications.len(),
       dim,
@@ -119,15 +135,44 @@ impl FlatQuotient {
         "A reflected axis must be an axis of the grid."
       );
     }
-    assert!(
-      ncells_axis >= 3 || identifications.iter().all(|id| !id.is_closed()),
-      "A closed axis needs at least 3 cells."
-    );
+    for (axis, id) in identifications.iter().enumerate() {
+      let floor = if id.is_closed() { 3 } else { 1 };
+      assert!(
+        ncells[axis] >= floor,
+        "Axis {axis} needs at least {floor} cells; a closed axis with two would \
+         glue a cell onto itself."
+      );
+    }
     Self {
       side_lengths,
       identifications,
-      ncells_axis,
+      ncells,
     }
+  }
+
+  /// A quotient whose cells are as near equilateral as the counts allow: the
+  /// count on each axis is scaled by that axis's period, so the spacing is
+  /// quasi-uniform. `ncells_longest` fixes the resolution of the longest axis.
+  ///
+  /// This is the constructor to reach for whenever the periods differ, which is
+  /// most of the family: a Möbius band is a long strip, and giving its
+  /// circumference and its width the same count meshes it into slivers whose
+  /// aspect ratio is the ratio of the two periods.
+  pub fn quasi_uniform(
+    side_lengths: Vector,
+    identifications: Vec<Identification>,
+    ncells_longest: usize,
+  ) -> Self {
+    let longest = side_lengths.iter().copied().fold(0.0_f64, f64::max);
+    let ncells = side_lengths
+      .iter()
+      .zip(&identifications)
+      .map(|(&side, id)| {
+        let floor = if id.is_closed() { 3 } else { 1 };
+        ((side / longest * ncells_longest as f64).round() as usize).max(floor)
+      })
+      .collect();
+    Self::new_anisotropic(side_lengths, identifications, ncells)
   }
 
   /// The flat torus $T^d = RR^d \/ (L_0 ZZ times dots.c times L_(d-1) ZZ)$:
@@ -153,11 +198,14 @@ impl FlatQuotient {
   ///
   /// The smallest non-orientable surface. It has a boundary -- the single
   /// circle traversing the open axis twice.
-  pub fn moebius(circumference: f64, width: f64, ncells_axis: usize) -> Self {
-    Self::new(
+  /// `ncells_longest` is the resolution of the *longer* period: the two are
+  /// discretized quasi-uniformly, so a long narrow band gets cells that are
+  /// near equilateral rather than slivers of its aspect ratio.
+  pub fn moebius(circumference: f64, width: f64, ncells_longest: usize) -> Self {
+    Self::quasi_uniform(
       Vector::from_column_slice(&[circumference, width]),
       vec![Identification::Twisted(vec![1]), Identification::Open],
-      ncells_axis,
+      ncells_longest,
     )
   }
 
@@ -179,8 +227,9 @@ impl FlatQuotient {
   pub fn dim(&self) -> Dim {
     self.side_lengths.len()
   }
-  pub fn ncells_axis(&self) -> usize {
-    self.ncells_axis
+  /// The cell count of each axis.
+  pub fn ncells_per_axis(&self) -> &[usize] {
+    &self.ncells
   }
   pub fn side_lengths(&self) -> &Vector {
     &self.side_lengths
@@ -211,11 +260,12 @@ impl FlatQuotient {
     self
       .identifications
       .iter()
-      .map(|id| {
+      .enumerate()
+      .map(|(axis, id)| {
         if id.is_closed() {
-          self.ncells_axis
+          self.ncells[axis]
         } else {
-          self.ncells_axis + 1
+          self.ncells[axis] + 1
         }
       })
       .collect()
@@ -272,20 +322,20 @@ impl FlatQuotient {
   /// The grid spans one period per axis, so each seam is crossed at most once
   /// and the wraps of distinct axes are independent.
   fn reduce_vertex(&self, grid_vertex: usize) -> usize {
-    let n = self.ncells_axis;
-    let mut cart = linear2cartesian(grid_vertex, n + 1, self.dim());
+    let grid_radices = self.ncells.iter().map(|&n| n + 1).collect_vec();
+    let mut cart = linear2cartesian_mixed(grid_vertex, &grid_radices);
 
     let wrapped = (0..self.dim())
-      .filter(|&axis| self.identifications[axis].is_closed() && cart[axis] == n)
+      .filter(|&axis| self.identifications[axis].is_closed() && cart[axis] == self.ncells[axis])
       .collect_vec();
     for &axis in &wrapped {
       for &reflected in self.identifications[axis].reflected_axes() {
-        cart[reflected] = n - cart[reflected];
+        cart[reflected] = self.ncells[reflected] - cart[reflected];
       }
     }
     for (axis, coord) in cart.iter_mut().enumerate() {
       if self.identifications[axis].is_closed() {
-        *coord %= n;
+        *coord %= self.ncells[axis];
       }
     }
     cartesian2linear_mixed(&cart, &self.radices())
@@ -296,8 +346,8 @@ impl FlatQuotient {
   /// Reduction permutes the vertices out of ascending order, which is exactly
   /// the ordering datum a colex sort would destroy.
   fn cell_words(&self) -> Vec<Vec<VertexIdx>> {
-    let grid = CartesianGrid::new_unit(self.dim(), self.ncells_axis);
-    grid
+    self
+      .grid()
       .cell_skeleton()
       .into_iter()
       .map(|simplex| {
@@ -321,18 +371,24 @@ impl FlatQuotient {
   /// edge agrees on its length is precisely the statement that the gluing was
   /// by an isometry, and it is asserted rather than assumed.
   fn edge_lengths_sq(&self, complex: &Complex) -> MeshLengthsSq {
-    let n = self.ncells_axis;
     let dim = self.dim();
-    let spacing = &self.side_lengths / n as f64;
+    let spacing = Vector::from_iterator(
+      dim,
+      self
+        .side_lengths
+        .iter()
+        .zip(&self.ncells)
+        .map(|(&side, &n)| side / n as f64),
+    );
+    let grid_radices = self.ncells.iter().map(|&n| n + 1).collect_vec();
 
     let edges = complex.skeleton_raw(1);
     let mut lengths_sq = Vector::from_element(edges.len(), f64::NAN);
 
-    let grid = CartesianGrid::new_unit(dim, n);
-    for cell in grid.cell_skeleton() {
+    for cell in self.grid().cell_skeleton() {
       for [&vi, &vj] in cell.vertices.iter().array_combinations() {
-        let ci = linear2cartesian(vi, n + 1, dim);
-        let cj = linear2cartesian(vj, n + 1, dim);
+        let ci = linear2cartesian_mixed(vi, &grid_radices);
+        let cj = linear2cartesian_mixed(vj, &grid_radices);
         let length_sq = (0..dim)
           .map(|a| {
             let step = (cj[a] as isize - ci[a] as isize) as f64 * spacing[a];
@@ -355,6 +411,16 @@ impl FlatQuotient {
       "Every quotient edge is the image of a grid edge."
     );
     MeshLengthsSq::new(lengths_sq, complex)
+  }
+
+  /// The unidentified grid the quotient is built from: the fundamental domain
+  /// as a box, at this quotient's per-axis resolution.
+  fn grid(&self) -> CartesianGrid {
+    CartesianGrid::new_anisotropic(
+      Vector::zeros(self.dim()),
+      self.side_lengths.clone(),
+      self.ncells.clone(),
+    )
   }
 
   /// The cartesian multi-index of a quotient vertex, its position in the
@@ -435,6 +501,49 @@ mod test {
         "a reflecting seam cannot be face-consistent in the Kuhn order"
       );
     }
+  }
+
+  /// Quasi-uniform resolution bounds the cell aspect ratio *independently of
+  /// the fundamental domain's own aspect ratio*, which one shared cell count
+  /// cannot: a Möbius band 16 times longer than it is wide, meshed with one
+  /// count, has edges 16 times longer one way than the other, and the shape
+  /// regularity every FEM error constant depends on degrades with it.
+  ///
+  /// The bound is on the *spacing*, so it is a statement about the geometry and
+  /// not about the counts.
+  #[test]
+  fn quasi_uniform_resolution_bounds_the_aspect_ratio() {
+    fn edge_length_spread(quotient: &FlatQuotient) -> f64 {
+      let (_, lengths) = quotient.triangulate();
+      let (mut min, mut max) = (f64::MAX, 0.0_f64);
+      for &l in lengths.iter() {
+        let l = l.sqrt();
+        min = min.min(l);
+        max = max.max(l);
+      }
+      max / min
+    }
+
+    let (circumference, width) = (16.0, 1.0);
+    let ids = || vec![Identification::Twisted(vec![1]), Identification::Open];
+    let sides = || Vector::from_column_slice(&[circumference, width]);
+
+    let uniform = FlatQuotient::new_anisotropic(sides(), ids(), vec![16, 16]);
+    let quasi = FlatQuotient::quasi_uniform(sides(), ids(), 16);
+
+    // One count over unequal periods reproduces the domain's own aspect ratio.
+    assert!(
+      edge_length_spread(&uniform) > circumference / width,
+      "a shared count meshes a long strip into slivers"
+    );
+    // Scaling the counts by the periods leaves only the Kuhn diagonal, whose
+    // length is $sqrt(2)$ times an axis step: the regular cell's own spread.
+    let spread = edge_length_spread(&quasi);
+    assert!(
+      spread < 1.5,
+      "quasi-uniform cells should differ only by the Kuhn diagonal, got {spread}"
+    );
+    assert_eq!(quasi.ncells_per_axis(), [16, 1]);
   }
 
   /// The flat torus is closed (no boundary) and carries the cohomology of

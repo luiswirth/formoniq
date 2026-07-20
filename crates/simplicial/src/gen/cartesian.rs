@@ -1,7 +1,7 @@
 use crate::linalg::{Matrix, Vector};
 use itertools::Itertools;
 use multiindex::{
-  cartesian::{corner_offset, strides},
+  cartesian::{cartesian2linear_mixed, corner_offset, linear2cartesian_mixed, mixed_strides},
   factorial, Combination,
 };
 
@@ -61,27 +61,65 @@ impl Rect {
   }
 }
 
-/// A uniform structured grid on an axis-aligned box: `ncells_axis` cells per
-/// side, $"ncells_axis"^d$ cubes in all, each Kuhn-triangulated into $d!$
-/// simplices. [`triangulate`](Self::triangulate) produces the simplicial
-/// `Complex` and its vertex `MeshCoords`.
+/// A structured grid on an axis-aligned box: a cell count *per axis*, their
+/// product many boxes in all, each Kuhn-triangulated into $d!$ simplices.
+/// [`triangulate`](Self::triangulate) produces the simplicial `Complex` and its
+/// vertex `MeshCoords`.
+///
+/// The resolution is per-axis because the box's sides are: one count over a
+/// box whose sides differ produces cells as anisotropic as the box, and the
+/// shape regularity a mesh is judged by is a property of the *spacing*, not of
+/// the count. A cube meshed with one count everywhere is the isotropic special
+/// case, and [`Self::new_unit`] and friends are that case named.
 pub struct CartesianGrid {
   rect: Rect,
-  ncells_axis: usize,
+  ncells: Vec<usize>,
 }
 // constructors
 impl CartesianGrid {
+  /// A grid with an independent cell count per axis.
+  pub fn new_anisotropic(min: Vector, max: Vector, ncells: Vec<usize>) -> Self {
+    let rect = Rect::new_min_max(min, max);
+    assert_eq!(
+      ncells.len(),
+      rect.dim(),
+      "One cell count per axis is required."
+    );
+    assert!(ncells.iter().all(|&n| n >= 1), "An axis needs a cell.");
+    Self { rect, ncells }
+  }
+  /// A grid whose cells are as near cubical as the counts allow: the count on
+  /// each axis is scaled by that axis's length, so the spacing is
+  /// quasi-uniform. `ncells_longest` fixes the resolution of the longest axis.
+  ///
+  /// This is what keeps a long, thin box from being meshed into slivers, and it
+  /// agrees with the isotropic constructors on a cube.
+  pub fn new_quasi_uniform(min: Vector, max: Vector, ncells_longest: usize) -> Self {
+    let rect = Rect::new_min_max(min, max);
+    let sides = rect.side_lengths();
+    let longest = sides.iter().copied().fold(0.0_f64, f64::max);
+    let ncells = sides
+      .iter()
+      .map(|&side| ((side / longest * ncells_longest as f64).round() as usize).max(1))
+      .collect();
+    Self { rect, ncells }
+  }
   pub fn new_min_max(min: Vector, max: Vector, ncells_axis: usize) -> Self {
     let rect = Rect::new_min_max(min, max);
-    Self { rect, ncells_axis }
+    let ncells = vec![ncells_axis; rect.dim()];
+    Self { rect, ncells }
   }
   pub fn new_unit(dim: Dim, ncells_axis: usize) -> Self {
-    let rect = Rect::new_unit_cube(dim);
-    Self { rect, ncells_axis }
+    Self {
+      rect: Rect::new_unit_cube(dim),
+      ncells: vec![ncells_axis; dim],
+    }
   }
   pub fn new_unit_scaled(dim: Dim, ncells_axis: usize, scale: f64) -> Self {
-    let rect = Rect::new_scaled_cube(dim, scale);
-    Self { rect, ncells_axis }
+    Self {
+      rect: Rect::new_scaled_cube(dim, scale),
+      ncells: vec![ncells_axis; dim],
+    }
   }
 }
 // getters
@@ -101,51 +139,49 @@ impl CartesianGrid {
   pub fn side_lengths(&self) -> Vector {
     self.rect.side_lengths()
   }
-  pub fn ncells_axis(&self) -> usize {
-    self.ncells_axis
+  /// The cell count of each axis.
+  pub fn ncells_per_axis(&self) -> &[usize] {
+    &self.ncells
   }
-  pub fn nvertices_axis(&self) -> usize {
-    self.ncells_axis + 1
+  /// The vertex count of each axis: one more than its cells.
+  pub fn nvertices_per_axis(&self) -> Vec<usize> {
+    self.ncells.iter().map(|&n| n + 1).collect()
   }
   pub fn ncells(&self) -> usize {
-    self.ncells_axis.pow(self.dim() as u32)
+    self.ncells.iter().product()
   }
   pub fn nvertices(&self) -> usize {
-    self.nvertices_axis().pow(self.dim() as u32)
+    self.nvertices_per_axis().iter().product()
   }
   pub fn vertex_cart_idx(&self, ivertex: usize) -> Vec<usize> {
-    linear2cartesian(ivertex, self.nvertices_axis(), self.dim())
+    linear2cartesian_mixed(ivertex, &self.nvertices_per_axis())
   }
   pub fn vertex_pos(&self, ivertex: usize) -> Vector {
     let cart_idx = self.vertex_cart_idx(ivertex);
-    let cart_idx = Vector::from_iterator(cart_idx.len(), cart_idx.iter().map(|&c| c as f64));
-    (cart_idx / (self.nvertices_axis() - 1) as f64).component_mul(&self.side_lengths()) + self.min()
+    let fractions = Vector::from_iterator(
+      cart_idx.len(),
+      cart_idx
+        .iter()
+        .zip(&self.ncells)
+        .map(|(&c, &n)| c as f64 / n as f64),
+    );
+    fractions.component_mul(&self.side_lengths()) + self.min()
   }
 
   pub fn is_vertex_on_boundary(&self, vertex: usize) -> bool {
-    let coords = linear2cartesian(vertex, self.nvertices_axis(), self.rect.dim());
-    coords
+    self
+      .vertex_cart_idx(vertex)
       .iter()
-      .any(|&c| c == 0 || c == self.nvertices_axis() - 1)
+      .zip(&self.ncells)
+      .any(|(&c, &n)| c == 0 || c == n)
   }
 
   pub fn boundary_vertices(&self) -> Vec<usize> {
-    let mut r = Vec::new();
-    for d in 0..self.dim() {
-      let nvertices_boundary_facet = self.nvertices_axis().pow(self.dim() as u32 - 1);
-      for ivertex in 0..nvertices_boundary_facet {
-        let vertex_icart = linear2cartesian(ivertex, self.nvertices_axis(), self.dim() - 1);
-        let mut low_boundary = vertex_icart.clone();
-        low_boundary.insert(d, 0);
-        let mut high_boundary = vertex_icart;
-        high_boundary.insert(d, self.nvertices_axis() - 1);
-        let low_boundary = cartesian2linear(&low_boundary, self.nvertices_axis());
-        let high_boundary = cartesian2linear(&high_boundary, self.nvertices_axis());
-        r.push(low_boundary);
-        r.push(high_boundary);
-      }
-    }
-    r
+    let nvertices = self.nvertices_per_axis();
+    (0..self.nvertices())
+      .filter(|&v| self.is_vertex_on_boundary(v))
+      .map(|v| cartesian2linear_mixed(&self.vertex_cart_idx(v), &nvertices))
+      .collect()
   }
 }
 
@@ -206,12 +242,13 @@ impl CartesianGrid {
   /// in this subset lattice, one per permutation of the axes.
   pub fn cell_skeleton(&self) -> Skeleton {
     let dim = self.dim();
-    let strides = strides(self.nvertices_axis(), dim);
+    let nvertices = self.nvertices_per_axis();
+    let strides = mixed_strides(&nvertices);
 
     let mut simplices: Vec<Simplex> = Vec::with_capacity(factorial(dim) * self.ncells());
     for ibox in 0..self.ncells() {
-      let box_cart = linear2cartesian(ibox, self.ncells_axis(), dim);
-      let origin = cartesian2linear(&box_cart, self.nvertices_axis());
+      let box_cart = linear2cartesian_mixed(ibox, &self.ncells);
+      let origin = cartesian2linear_mixed(&box_cart, &nvertices);
 
       for axes in (0..dim).permutations(dim) {
         let chain = axes.iter().scan(Combination::empty(), |corner, &axis| {

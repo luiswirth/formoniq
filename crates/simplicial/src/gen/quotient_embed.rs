@@ -202,7 +202,7 @@ fn reflected_parts(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> (f64, 
 ///
 /// It converges to $L \/ 2 pi$ from above as the mesh refines.
 fn radius(quotient: &FlatQuotient, axis: Dim) -> f64 {
-  let n = quotient.ncells_axis() as f64;
+  let n = quotient.ncells_per_axis()[axis] as f64;
   quotient.side_lengths()[axis] / (2.0 * n * (std::f64::consts::PI / n).sin())
 }
 
@@ -213,7 +213,7 @@ fn position(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> f64 {
 
 /// The position along an axis as a fraction of its period.
 fn fraction(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> f64 {
-  cart[axis] as f64 / quotient.ncells_axis() as f64
+  cart[axis] as f64 / quotient.ncells_per_axis()[axis] as f64
 }
 
 /// The torus of revolution in $RR^3$ -- the donut -- for a two-dimensional
