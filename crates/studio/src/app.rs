@@ -1063,6 +1063,20 @@ impl State {
     self.post = response.post;
     self.clock.set_playing(response.playing);
 
+    // A trajectory scrub sets the clock so the playhead lands on the requested
+    // solve-time. The clock runs in the playback interval the trajectory maps
+    // onto its own duration, so the target inverts that map: the first loop's
+    // fraction of `TRAJECTORY_LOOP_SECONDS`. Guarded by the field actually
+    // being a trajectory, so a stale request cannot move a static field's clock.
+    if let Some(target) = response.scrub_time {
+      if let Some(duration) = self.scene.field_time(self.selection).duration() {
+        if duration > 0.0 {
+          let clock = (target / duration) * crate::display::TRAJECTORY_LOOP_SECONDS;
+          self.clock.set_time(clock as f32);
+        }
+      }
+    }
+
     // Re-framing the scene reads only its coordinates and the current aspect,
     // touching neither the shown pair nor a buffer, so it applies here with the
     // other orthogonal view changes. It discards a fly-through's pose, which is
@@ -1304,6 +1318,15 @@ impl WaveClock {
   /// current play/pause state.
   fn restart(&mut self) {
     self.base = 0.0;
+    self.anchor = web_time::Instant::now();
+  }
+
+  /// Jumps the clock to `t` animation seconds, keeping the play/pause state: a
+  /// fresh span begins at `t`, so a paused clock holds there and a playing one
+  /// runs on from it. What a transport scrub sets, the playhead the reader
+  /// drags becoming the clock's new base.
+  fn set_time(&mut self, t: f32) {
+    self.base = t.max(0.0);
     self.anchor = web_time::Instant::now();
   }
 }
