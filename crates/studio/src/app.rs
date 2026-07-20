@@ -1070,6 +1070,15 @@ impl State {
     if response.reset_camera {
       self.camera = default_camera(&self.scene, self.camera.aspect);
     }
+    // A standard view snaps the pose (holding the framing) and commits to
+    // parallel projection, the square-on plan/elevation look the axes single
+    // out. Applied after the orthographic toggle above so the view's own
+    // projection wins the frame they might both touch.
+    if let Some(view) = response.camera_view {
+      let (yaw, pitch) = view.angles();
+      self.camera.snap_to(yaw, pitch);
+      self.camera.orthographic = true;
+    }
 
     // A finished export pick is likewise orthogonal to the shown pair: it reads
     // the current frame and writes it, changing nothing on screen.
