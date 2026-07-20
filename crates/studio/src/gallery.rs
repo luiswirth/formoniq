@@ -421,6 +421,10 @@ impl CochainSpec {
 /// a preset.
 pub(crate) struct Preset {
   pub(crate) name: &'static str,
+  /// A one-line gloss of what the preset shows, for the browser's hover. It
+  /// names the point in the product in the reader's terms -- the mathematics on
+  /// the mesh -- so the curated set is legible before it is clicked.
+  pub(crate) description: &'static str,
   pub(crate) mesh: MeshSource,
   pub(crate) study: Study,
   /// The field the preset opens on, or `None` to open on the scene's first
@@ -455,6 +459,8 @@ pub(crate) fn start_preset() -> Preset {
 fn curl_on_triforce() -> Preset {
   Preset {
     name: "Constant / curl / div",
+    description:
+      "The three grade-1 cochains on the triforce: a constant field, a pure curl, a pure divergence",
     mesh: MeshSource::Triforce,
     study: Study::Cochains(crate::demos::triforce_examples()),
     // The second of the three (constant, curl, div), all grade 1 and so all
@@ -474,6 +480,7 @@ pub(crate) fn presets() -> Vec<Preset> {
   let mut presets = vec![
     Preset {
       name: "Spherical harmonics",
+      description: "Grade-0 Hodge-Laplace eigenmodes of the sphere: the spherical-harmonic multiplets, laid out as the orbital pyramid",
       mesh: MeshSource::START,
       study: Study::start(),
       selection: None,
@@ -481,6 +488,7 @@ pub(crate) fn presets() -> Vec<Preset> {
     },
     Preset {
       name: "Whitney basis",
+      description: "The local shape functions: the Whitney basis on a single reference cell, one field per DOF simplex",
       mesh: MeshSource::ReferenceCell {
         dim: REFERENCE_CELL_DIM,
       },
@@ -490,6 +498,7 @@ pub(crate) fn presets() -> Vec<Preset> {
     },
     Preset {
       name: "Global shape functions",
+      description: "The Whitney basis on the multi-cell triforce: the global shape functions, whose support spans several cells",
       mesh: MeshSource::Triforce,
       study: Study::WhitneyBasis,
       selection: None,
@@ -498,6 +507,7 @@ pub(crate) fn presets() -> Vec<Preset> {
     curl_on_triforce(),
     Preset {
       name: "Heat equation",
+      description: "Parabolic smoothing of a localized bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::Heat {
         nsteps: DEFAULT_TRAJECTORY_STEPS,
@@ -508,6 +518,7 @@ pub(crate) fn presets() -> Vec<Preset> {
     },
     Preset {
       name: "Wave equation",
+      description: "Hyperbolic propagation and reflection of a bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::Wave {
         nsteps: DEFAULT_TRAJECTORY_STEPS,
@@ -523,6 +534,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       1,
       Preset {
         name: "Harmonic 1-forms",
+        description: "Grade-1 eigenmodes of a genus-1 surface: the harmonic 1-forms are its zero shell, and they see the hole",
         mesh: MeshSource::Builtin(bob),
         study: Study::Eigenmodes {
           grade: 1,
@@ -538,6 +550,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       // exact + coexact + harmonic, not the contractible Helmholtz special
       // case. Opens on the harmonic shell -- the component that sees the hole.
       name: "Hodge decomposition",
+      description: "A grade-1 field split into exact, coexact and harmonic parts on a genus-1 surface; opens on the harmonic shell",
       mesh: MeshSource::Builtin(bob),
       study: Study::HodgeDecomposition,
       selection: Some(Selection::Line(3)),
