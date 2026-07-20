@@ -3,7 +3,7 @@ use crate::{
   geometry::metric::{mesh::MeshLengthsSq, CellGramians},
   topology::{
     data::SkeletonData,
-    handle::KSimplexIdx,
+    handle::{KSimplexIdx, SimplexRef},
     role::{Cell, Vertex},
     {complex::Complex, simplex::Simplex, VertexIdx},
   },
@@ -44,10 +44,24 @@ impl MeshCoords {
   /// or per-cell metrics ([`Self::to_cell_gramians`]) at the boundary of the
   /// API; the core never asks an embedding for anything.
   pub fn cell_metric(&self, cell: Cell) -> Metric {
+    self.simplex_metric(cell.get())
+  }
+
+  /// The metric of any simplex -- an edge's length, a facet's area, the
+  /// flat metric of a cell -- as the Gramian of that simplex's own spanning
+  /// vectors under the ambient inner product.
+  ///
+  /// The embedding counterpart of
+  /// [`MeshLengthsSq::simplex_metric`](crate::geometry::MeshLengthsSq::simplex_metric),
+  /// and total over every grade for the same reason (invariant 2): geometry is
+  /// defined on every simplex, not only the cells, so the boundary trace and the
+  /// metric of a subskeleton simplex are well defined from the shared
+  /// coordinates with no containing cell consulted.
+  pub fn simplex_metric(&self, simplex: SimplexRef) -> Metric {
     Metric::new(
       self
         .ambient
-        .pullback(&cell.coord_simplex(self).spanning_vectors()),
+        .pullback(&simplex.coord_simplex(self).spanning_vectors()),
     )
   }
 
