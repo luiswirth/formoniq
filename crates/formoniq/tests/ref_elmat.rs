@@ -2,7 +2,7 @@ extern crate nalgebra as na;
 
 use formoniq::operators::{self, ElMatProvider};
 use simplicial::linalg::Matrix;
-use simplicial::{atlas::refsimp_vol, geometry::metric::simplex::SimplexLengthsSq, Dim};
+use simplicial::{Dim, atlas::refsimp_vol, geometry::metric::simplex::SimplexLengthsSq};
 
 use approx::assert_relative_eq;
 

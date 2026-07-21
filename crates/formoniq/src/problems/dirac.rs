@@ -100,8 +100,8 @@ use crate::{
 use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 use simplicial::{
-  linalg::{CooMatrix, CsrMatrix, Vector},
   Dim,
+  linalg::{CooMatrix, CsrMatrix, Vector},
 };
 
 /// A field on the full de Rham complex: one cochain per grade,
@@ -582,7 +582,7 @@ mod test {
   use crate::{
     linalg::faer::FaerCholesky, problems::elliptic::HodgeBlocks, whitney_complex::WhitneyComplex,
   };
-  use simplicial::gen::cartesian::CartesianGrid;
+  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 

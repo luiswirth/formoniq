@@ -11,7 +11,7 @@
 //! pass would afford -- which is what a glow is: not a halo of fixed radius, but
 //! light falling off over the whole frame.
 
-use super::{color_target, primitive, shader_module, SCENE_FORMAT};
+use super::{SCENE_FORMAT, color_target, primitive, shader_module};
 
 /// How many halvings the chain takes below the scene's own resolution.
 ///

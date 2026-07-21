@@ -17,7 +17,7 @@ mod test {
 
   use {
     simplicial::linalg::Vector,
-    simplicial::{gen::cartesian::CartesianGrid, topology::complex::Complex},
+    simplicial::{mesher::cartesian::CartesianGrid, topology::complex::Complex},
   };
 
   use approx::assert_relative_eq;

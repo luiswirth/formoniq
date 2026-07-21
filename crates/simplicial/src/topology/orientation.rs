@@ -39,7 +39,7 @@
 use super::{
   complex::Complex,
   handle::{KSimplexIdx, SimplexIdx},
-  role::{roles, Cell},
+  role::{Cell, roles},
 };
 
 use multiindex::Sign;
@@ -274,7 +274,7 @@ mod test {
   #[test]
   fn sphere_is_orientable_and_not_trivially_signed() {
     for nsubdivisions in 0..=2 {
-      let (complex, _) = crate::gen::sphere::mesh_sphere_surface(nsubdivisions);
+      let (complex, _) = crate::mesher::sphere::mesh_sphere_surface(nsubdivisions);
       assert!(complex.is_orientable());
       assert_coherent(&complex);
       let signs = complex.orientation().unwrap().signs();
@@ -326,14 +326,16 @@ mod test {
   /// Reversal is an involution and stays coherent: the other generator.
   #[test]
   fn reversal_is_an_involution() {
-    let (complex, _) = crate::gen::sphere::mesh_sphere_surface(1);
+    let (complex, _) = crate::mesher::sphere::mesh_sphere_surface(1);
     let orientation = complex.orientation().unwrap();
     assert_eq!(&orientation.reversed().reversed(), orientation);
-    assert!(orientation
-      .reversed()
-      .signs()
-      .iter()
-      .zip(orientation.signs())
-      .all(|(a, b)| a != b));
+    assert!(
+      orientation
+        .reversed()
+        .signs()
+        .iter()
+        .zip(orientation.signs())
+        .all(|(a, b)| a != b)
+    );
   }
 }

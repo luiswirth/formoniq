@@ -33,10 +33,10 @@
 use std::f64::consts::TAU;
 
 use crate::{
-  gen::quotient::{FlatQuotient, Identification},
+  Dim,
   geometry::coord::mesh::MeshCoords,
   linalg::{Matrix, Vector},
-  Dim,
+  mesher::quotient::{FlatQuotient, Identification},
 };
 
 /// The equivariant embedding of a flat quotient, the general construction.
@@ -297,8 +297,8 @@ fn revolve(quotient: &FlatQuotient, point: impl Fn(&[usize]) -> [f64; 3]) -> Mes
 mod test {
   use super::{donut_r3, equivariant, is_isometric, moebius_r3};
   use crate::{
-    gen::quotient::{FlatQuotient, Identification},
     linalg::Vector,
+    mesher::quotient::{FlatQuotient, Identification},
   };
 
   /// The Clifford embedding is an **isometry**: the edge lengths it induces are

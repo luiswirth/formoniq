@@ -6,11 +6,10 @@
 //! the discs are translucent and sit over the surface that already wrote depth.
 
 use super::{
-  color_target, depth_stencil_biased,
+  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS, color_target, depth_stencil_biased,
   item::PointBatch,
   primitive, shader_module,
   uniform::{FrameUniform, SegmentMaterial, UniformPool},
-  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS,
 };
 
 pub struct PointPass {

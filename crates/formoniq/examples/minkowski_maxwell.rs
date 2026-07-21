@@ -60,14 +60,14 @@ use formoniq::{
   assemble::assemble_galvec,
   fe::fe_l2_error,
   operators::SourceElVec,
-  problems::dirac::{solve_dirac_source, MixedField},
+  problems::dirac::{MixedField, solve_dirac_source},
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
 use gramian::Metric;
 use simplicial::{
-  atlas::SimplexQuadRule, gen::cartesian::CartesianGrid, geometry::coord::mesh::MeshCoords,
-  linalg::Vector, topology::ordering::CellOrdering,
+  atlas::SimplexQuadRule, geometry::coord::mesh::MeshCoords, linalg::Vector,
+  mesher::cartesian::CartesianGrid, topology::ordering::CellOrdering,
 };
 
 use std::f64::consts::PI;
@@ -121,7 +121,7 @@ fn convergence(dim: Dim, nsubs: &[usize]) {
   let null_norm_sq = a.inner(&a, &eta);
   println!(
     "Covariant Maxwell dif F = 0, delta F = J on [0,{:.1}] x [0,1]^{}, eta = diag(-1,+1,..): dim {dim}",
-    simplicial::gen::cartesian::CAUSAL_TIME_SCALE,
+    simplicial::mesher::cartesian::CAUSAL_TIME_SCALE,
     dim - 1
   );
   println!("  null wave covector: <a,a>_eta^-1 = {null_norm_sq:+.2e} (massless dispersion)");

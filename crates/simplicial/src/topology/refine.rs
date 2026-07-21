@@ -18,11 +18,11 @@
 //! the new cells, its manifold check standing as the conformity assertion.
 
 use super::{
-  complex::Complex, data::SkeletonVec, handle::KSimplexIdx, ordering::CellOrdering,
-  simplex::Simplex, skeleton::Skeleton, VertexIdx,
+  VertexIdx, complex::Complex, data::SkeletonVec, handle::KSimplexIdx, ordering::CellOrdering,
+  simplex::Simplex, skeleton::Skeleton,
 };
 use crate::{
-  atlas::{ref_refinement, LocalCartesian, SimplexCoords},
+  atlas::{LocalCartesian, SimplexCoords, ref_refinement},
   linalg::{Matrix, Vector},
 };
 
@@ -290,7 +290,7 @@ impl Subdivision {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianGrid;
+  use crate::mesher::cartesian::CartesianGrid;
   use crate::topology::data::SkeletonData;
 
   /// Refinement counts match the reference pattern, and the refined complex is

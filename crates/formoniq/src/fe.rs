@@ -25,7 +25,7 @@
 use {
   crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
-  exterior::{multiform_gramian, Covariant},
+  exterior::{Covariant, multiform_gramian},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::mesh::MeshLengthsSq},
@@ -103,7 +103,7 @@ mod test {
 
   use derham::section::CoordFieldExt;
   use glatt::field::DiffFormClosure;
-  use simplicial::gen::cartesian::CartesianGrid;
+  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 

@@ -141,7 +141,7 @@ pub(crate) mod worker {
 
   use wasm_bindgen::prelude::*;
 
-  use crate::solve::{decode, encode, SolveOutcome, SolveRequest};
+  use crate::solve::{SolveOutcome, SolveRequest, decode, encode};
 
   /// A build running in its own worker. The outcome lands in `slot` from the
   /// message callback; [`Self::poll`] takes it. A plain `RefCell` is sound

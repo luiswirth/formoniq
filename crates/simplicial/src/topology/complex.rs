@@ -1,7 +1,7 @@
 use super::{
   handle::{KSimplexIdx, SimplexIdx, SkeletonRef},
   orientation::Orientation,
-  role::{roles, Facet, RoledSkeleton, SimplexRole},
+  role::{Facet, RoledSkeleton, SimplexRole, roles},
   skeleton::Skeleton,
 };
 use crate::Dim;
@@ -253,7 +253,7 @@ impl Complex {
 
 #[cfg(test)]
 mod test {
-  use crate::topology::simplex::{nsubsimplices, standard_boundary_operator, Simplex};
+  use crate::topology::simplex::{Simplex, nsubsimplices, standard_boundary_operator};
 
   use super::*;
   use crate::linalg::Matrix;
@@ -264,7 +264,7 @@ mod test {
   #[cfg(feature = "serde")]
   #[test]
   fn save_load_roundtrip() {
-    use crate::gen::cartesian::CartesianGrid;
+    use crate::mesher::cartesian::CartesianGrid;
 
     let (topology, _) = CartesianGrid::new_unit(3, 2).triangulate();
 
@@ -285,7 +285,7 @@ mod test {
   /// formats and cochain indexing rely on.
   #[test]
   fn skeletons_are_colex_ordered_and_vertices_contiguous() {
-    use crate::gen::cartesian::CartesianGrid;
+    use crate::mesher::cartesian::CartesianGrid;
 
     for dim in 1..=3 {
       let (topology, _) = CartesianGrid::new_unit(dim, 3).triangulate();
@@ -311,8 +311,8 @@ mod test {
   /// $dif compose dif = 0$: the defining law of a cochain complex.
   #[test]
   fn coboundary_squares_to_zero() {
-    use crate::gen::cartesian::CartesianGrid;
     use crate::linalg::CsrMatrix;
+    use crate::mesher::cartesian::CartesianGrid;
 
     for dim in 1..=3 {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
@@ -328,7 +328,7 @@ mod test {
   #[test]
   fn boundary_simplices_facets_are_boundary_facets() {
     for dim in 1..=3 {
-      let (topology, _) = crate::gen::cartesian::CartesianGrid::new_unit(dim, 2).triangulate();
+      let (topology, _) = crate::mesher::cartesian::CartesianGrid::new_unit(dim, 2).triangulate();
       assert_eq!(topology.boundary_simplices(dim - 1), {
         let mut facets: Vec<_> = topology
           .boundary_facets()
@@ -390,7 +390,7 @@ mod test {
   /// as their topological definitions demand.
   #[test]
   fn ref_navigation() {
-    use crate::gen::cartesian::CartesianGrid;
+    use crate::mesher::cartesian::CartesianGrid;
 
     let (topology, _) = CartesianGrid::new_unit(2, 3).triangulate();
 

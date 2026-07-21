@@ -38,7 +38,7 @@ use {
   simplicial::{
     atlas::{Bary, MeshPoint},
     linalg::{Matrix, Vector},
-    topology::{complex::Complex, handle::SimplexIdx, refine::Subdivision, VertexIdx},
+    topology::{VertexIdx, complex::Complex, handle::SimplexIdx, refine::Subdivision},
   },
 };
 
@@ -155,8 +155,8 @@ mod test {
   use crate::section::{Sampler, SectionExt};
 
   use simplicial::{
-    gen::cartesian::CartesianGrid,
     geometry::coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
+    mesher::cartesian::CartesianGrid,
   };
 
   use approx::assert_relative_eq;

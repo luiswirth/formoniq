@@ -1,7 +1,7 @@
 [package]
 name = "derham"
 version = "0.2.0"
-edition = "2021"
+edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
 description = "The discrete de Rham complex: cochains, Whitney interpolation, and the de Rham map, bridging a simplicial mesh and the continuum it approximates."

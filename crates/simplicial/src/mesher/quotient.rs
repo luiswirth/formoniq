@@ -29,13 +29,13 @@ use itertools::Itertools;
 use multiindex::cartesian::{cartesian2linear_mixed, linear2cartesian_mixed};
 
 use crate::{
-  gen::cartesian::CartesianGrid,
+  Dim,
   geometry::metric::mesh::MeshLengthsSq,
   linalg::Vector,
+  mesher::cartesian::CartesianGrid,
   topology::{
-    complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton, VertexIdx,
+    VertexIdx, complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton,
   },
-  Dim,
 };
 
 /// How the two opposite faces of one axis are glued.

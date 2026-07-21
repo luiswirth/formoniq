@@ -16,7 +16,7 @@
 use std::io::Write;
 use std::path::Path;
 
-use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
+use crate::display::{FieldDisplay, MeshDisplay, default_camera, scene_extent};
 use crate::gallery::{MeshSource, Study};
 use crate::render::{FrameView, GpuContext, Renderer};
 use crate::scene::Scene;

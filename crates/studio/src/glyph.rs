@@ -46,13 +46,13 @@ use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use rayon::prelude::*;
 use simplicial::linalg::Vector;
 use simplicial::{
-  atlas::{ref_lattice_bary, MeshPoint},
+  atlas::{MeshPoint, ref_lattice_bary},
   geometry::coord::{mesh::MeshCoords, simplex::SimplexRefExt},
   topology::complex::Complex,
 };
 
 use crate::{
-  bake::{to_vec3, GlyphInstance},
+  bake::{GlyphInstance, to_vec3},
   scene::reduced_form,
 };
 
@@ -291,7 +291,7 @@ mod tests {
   fn an_arrow_is_sized_by_its_cell_at_every_refinement() {
     let mut ratios = Vec::new();
     for subdivisions in 1..=4 {
-      let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(subdivisions);
+      let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(subdivisions);
       let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
       let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
       assert!(!instances.is_empty(), "the sweep must produce glyphs");
@@ -328,7 +328,7 @@ mod tests {
   #[test]
   fn a_solids_arrows_lie_on_its_boundary_surface() {
     use crate::surface::Surface;
-    use simplicial::gen::cartesian::CartesianGrid;
+    use simplicial::mesher::cartesian::CartesianGrid;
 
     let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
     let surface = Surface::of(&topology, &coords);
@@ -368,7 +368,7 @@ mod tests {
   /// shader: the bake stores arrows, not corners.
   #[test]
   fn the_bake_emits_one_instance_per_lattice_point() {
-    let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(1);
+    let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(1);
     let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
     let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
 

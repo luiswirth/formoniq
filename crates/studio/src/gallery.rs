@@ -16,12 +16,12 @@ use std::sync::Arc;
 use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 use simplicial::{
-  geometry::coord::mesh::{standard_coord_complex, MeshCoords},
-  topology::{complex::Complex, simplex::Simplex},
   Dim,
+  geometry::coord::mesh::{MeshCoords, standard_coord_complex},
+  topology::{complex::Complex, simplex::Simplex},
 };
 
-use simplicial::gen::quotient::Identification;
+use simplicial::mesher::quotient::Identification;
 
 use crate::scene::Scene;
 use crate::ui::{Marks, Selection};
@@ -210,9 +210,9 @@ impl BuiltinMesh {
 
 /// Which flat quotient of the square, among those with an $RR^3$ realization.
 ///
-/// Both are [`simplicial::gen::quotient::FlatQuotient`]s -- one generator, two
+/// Both are [`simplicial::mesher::quotient::FlatQuotient`]s -- one generator, two
 /// per-axis identifications -- and both are drawn through the surfaces of
-/// revolution of `gen::quotient_embed`, the constructions that fit the fixed
+/// revolution of `mesher::quotient_embed`, the constructions that fit the fixed
 /// ambient $RR^3$. The rest of the family does not fit and so is not offered:
 /// the Klein bottle has no $RR^3$ embedding at all, and the isometric Clifford
 /// realization of the torus needs $RR^4$.
@@ -260,7 +260,7 @@ impl QuotientSurface {
   }
 
   fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
-    use simplicial::gen::{quotient::FlatQuotient, quotient_embed};
+    use simplicial::mesher::{quotient::FlatQuotient, quotient_embed};
     let cells_axis = cells_axis.max(QUOTIENT_CELLS_MIN);
     match self {
       Self::Donut => {
@@ -377,12 +377,12 @@ impl MeshSource {
   /// rebuilt from its descriptor.
   pub(crate) fn build(&self) -> Result<Mesh, String> {
     match self {
-      MeshSource::Sphere { subdivisions } => {
-        Ok(simplicial::gen::sphere::mesh_sphere_surface(*subdivisions))
-      }
+      MeshSource::Sphere { subdivisions } => Ok(simplicial::mesher::sphere::mesh_sphere_surface(
+        *subdivisions,
+      )),
       MeshSource::Grid { dim, cells_axis } => {
         let (topology, coords) =
-          simplicial::gen::cartesian::CartesianGrid::new_unit(*dim, *cells_axis).triangulate();
+          simplicial::mesher::cartesian::CartesianGrid::new_unit(*dim, *cells_axis).triangulate();
         // The renderer draws in 3D; a grid of intrinsic dimension below 3 lifts
         // into $RR^3$ (a curve or a $z = 0$ surface), a no-op once `dim >= 3`,
         // exactly as the flat reference-cell scenes do.
@@ -624,8 +624,7 @@ pub(crate) fn start_preset() -> Preset {
 fn curl_on_triforce() -> Preset {
   Preset {
     name: "Constant / curl / div",
-    description:
-      "The three grade-1 cochains on the triforce: a constant field, a pure curl, a pure divergence",
+    description: "The three grade-1 cochains on the triforce: a constant field, a pure curl, a pure divergence",
     mesh: MeshSource::Triforce,
     study: Study::Cochains(crate::demos::triforce_examples()),
     // The second of the three (constant, curl, div), all grade 1 and so all

@@ -1,15 +1,15 @@
 //! A point of the simplicial manifold, in the barycentric chart.
 
 use super::{
-  bary2local, barycenter_bary, face_bary_to_cell_bary, is_bary_inside, local2bary, Bary, BaryRef,
-  Chart, Local, LocalRef, Transition,
+  Bary, BaryRef, Chart, Local, LocalRef, Transition, bary2local, barycenter_bary,
+  face_bary_to_cell_bary, is_bary_inside, local2bary,
 };
 use crate::{
+  Dim,
   topology::{
     complex::Complex,
     handle::{SimplexIdx, SimplexRef},
   },
-  Dim,
 };
 
 use multiindex::Combination;

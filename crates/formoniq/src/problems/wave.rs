@@ -155,7 +155,7 @@ pub fn cfl_dt(mesh_geo: &MeshLengthsSq, vel: f64) -> f64 {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
-  use simplicial::gen::cartesian::CartesianGrid;
+  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 

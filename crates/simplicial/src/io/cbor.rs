@@ -8,7 +8,7 @@
 //! persistence and is reused, unchanged, by every serializable type above it:
 //! one small helper, not a crate's worth of concept per consumer.
 
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use std::{fs::File, io, path::Path};
 
 pub fn save_cbor<T: Serialize>(value: &T, path: impl AsRef<Path>) -> io::Result<()> {

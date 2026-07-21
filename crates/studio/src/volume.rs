@@ -20,10 +20,10 @@
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use simplicial::{
+  Dim,
   atlas::MeshPoint,
   geometry::coord::{locate::PointLocator, mesh::MeshCoords},
   topology::complex::Complex,
-  Dim,
 };
 
 use crate::scene::{reduction_sign, scalarize};
@@ -213,7 +213,7 @@ fn voxel_center(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::gen::cartesian::CartesianGrid;
+  use simplicial::mesher::cartesian::CartesianGrid;
 
   /// A constant 0-form samples to that constant everywhere *inside* the mesh
   /// and to zero outside it: the interpolation is exact on $cal(W) Lambda^0$'s
@@ -227,10 +227,12 @@ mod tests {
       let grid = VolumeGrid::sample(&topology, &coords, &cochain, &locator);
 
       assert!((grid.peak - 2.5).abs() < 1e-6, "peak {} != 2.5", grid.peak);
-      assert!(grid
-        .values
-        .iter()
-        .all(|&v| v.abs() < 1e-6 || (v - 2.5).abs() < 1e-5));
+      assert!(
+        grid
+          .values
+          .iter()
+          .all(|&v| v.abs() < 1e-6 || (v - 2.5).abs() < 1e-5)
+      );
       // A solid fills its box, so most voxels must be inside it. Below that,
       // the locator is missing cells rather than the mesh being thin.
       if dim == 3 {

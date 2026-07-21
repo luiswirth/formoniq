@@ -66,11 +66,7 @@ impl Complex {
     (0..=self.dim())
       .map(|k| {
         let n = self.nsimplices(k) as i64;
-        if k % 2 == 0 {
-          n
-        } else {
-          -n
-        }
+        if k % 2 == 0 { n } else { -n }
       })
       .sum()
   }
@@ -163,12 +159,12 @@ impl Chain {
   }
   /// The simplices carrying a nonzero coefficient, with that coefficient: the
   /// support of the chain.
-  pub fn support(&self) -> impl Iterator<Item = (KSimplexIdx, i64)> + '_ {
+  pub fn support(&self) -> impl Iterator<Item = (KSimplexIdx, i64)> {
     self
       .coeffs
       .iter()
       .enumerate()
-      .filter(|(_, &c)| c != 0)
+      .filter(|&(_, &c)| c != 0)
       .map(|(kidx, &c)| (kidx, c))
   }
 }
@@ -461,7 +457,7 @@ fn mod_inverse(a: i64, p: i64) -> i64 {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianGrid;
+  use crate::mesher::cartesian::CartesianGrid;
   use crate::topology::skeleton::Skeleton;
 
   /// A square annulus: the $3 times 3$ unit mesh with the middle cell removed,
@@ -487,7 +483,7 @@ mod test {
     let mut complexes: Vec<Complex> = (1..=3)
       .map(|dim| CartesianGrid::new_unit(dim, 2).triangulate().0)
       .collect();
-    complexes.push(crate::gen::sphere::mesh_sphere_surface(1).0);
+    complexes.push(crate::mesher::sphere::mesh_sphere_surface(1).0);
     complexes.push(annulus());
     complexes
   }
@@ -609,7 +605,7 @@ mod test {
   /// 2-sphere realizes it with Betti numbers $(1, 0, 1)$.
   #[test]
   fn sphere_poincare_duality() {
-    let (topology, _) = crate::gen::sphere::mesh_sphere_surface(1);
+    let (topology, _) = crate::mesher::sphere::mesh_sphere_surface(1);
     let betti = topology.betti_numbers();
     let n = topology.dim();
     for k in 0..=n {
@@ -648,7 +644,7 @@ mod test {
   /// complex, so relative and absolute Betti numbers coincide. The 2-sphere.
   #[test]
   fn closed_manifold_relative_equals_absolute() {
-    let (topology, _) = crate::gen::sphere::mesh_sphere_surface(1);
+    let (topology, _) = crate::mesher::sphere::mesh_sphere_surface(1);
     for k in 0..=topology.dim() {
       assert_eq!(
         topology.relative_betti_number(k),

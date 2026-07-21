@@ -99,7 +99,7 @@ mod test {
   use crate::linalg::quadratic_form_sparse;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
-  use simplicial::gen::cartesian::CartesianGrid;
+  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 

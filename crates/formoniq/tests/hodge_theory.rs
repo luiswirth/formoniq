@@ -13,8 +13,8 @@ extern crate nalgebra as na;
 use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
 use simplicial::{
-  gen::cartesian::CartesianGrid,
   linalg::{CooMatrix, CsrMatrix, Matrix},
+  mesher::cartesian::CartesianGrid,
 };
 
 use approx::assert_relative_eq;
@@ -22,11 +22,7 @@ use approx::assert_relative_eq;
 const RANK_TOL: f64 = 1e-8;
 
 fn rank(m: &Matrix) -> usize {
-  if m.is_empty() {
-    0
-  } else {
-    m.rank(RANK_TOL)
-  }
+  if m.is_empty() { 0 } else { m.rank(RANK_TOL) }
 }
 
 fn dense(csr: &CsrMatrix) -> Matrix {
@@ -92,7 +88,7 @@ fn harmonics_are_cohomology_cube() {
 /// The mesh is closed, so the relative complex coincides with the full one.
 #[test]
 fn harmonics_are_cohomology_sphere() {
-  let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(1);
+  let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(1);
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let dim = topology.dim();

@@ -11,11 +11,11 @@ use {
   coorder::Coord,
   exterior::ExteriorElement,
   glatt::field::DiffFormClosure,
-  multiindex::{binomial, Combination, Sign},
+  multiindex::{Combination, Sign, binomial},
   simplicial::{
-    gen::{cartesian::CartesianGrid, quotient::FlatQuotient},
     geometry::metric::mesh::MeshLengthsSq,
     linalg::Vector,
+    mesher::{cartesian::CartesianGrid, quotient::FlatQuotient},
     topology::{complex::Complex, ordering::CellOrdering},
   },
 };

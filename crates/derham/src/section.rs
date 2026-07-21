@@ -39,7 +39,7 @@ use {
   simplicial::{
     atlas::MeshPoint,
     geometry::{
-      coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt, CoordRef},
+      coord::{CoordRef, locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
       metric::mesh::MeshLengthsSq,
     },
     topology::complex::Complex,
@@ -470,8 +470,8 @@ mod test {
     glatt::field::DiffFormClosure,
     simplicial::linalg::Vector,
     simplicial::{
-      gen::cartesian::CartesianGrid,
-      geometry::coord::{locate::PointLocator, Coord},
+      geometry::coord::{Coord, locate::PointLocator},
+      mesher::cartesian::CartesianGrid,
     },
   };
 
@@ -589,7 +589,8 @@ mod test {
   fn composite_pullback_is_functorial() {
     use glatt::parametrization::Parametrization;
     use simplicial::{
-      atlas::MeshPoint, gen::sphere::mesh_sphere_surface, geometry::coord::simplex::SimplexRefExt,
+      atlas::MeshPoint, geometry::coord::simplex::SimplexRefExt,
+      mesher::sphere::mesh_sphere_surface,
     };
 
     let (topology, coords) = mesh_sphere_surface(2);

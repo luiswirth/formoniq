@@ -1,13 +1,13 @@
-use super::{simplex::SimplexRefExt, Coord, CoordRef};
+use super::{Coord, CoordRef, simplex::SimplexRefExt};
 use crate::{
-  geometry::metric::{mesh::MeshLengthsSq, CellGramians},
+  Dim,
+  geometry::metric::{CellGramians, mesh::MeshLengthsSq},
   topology::{
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef},
     role::{Cell, Vertex},
-    {complex::Complex, simplex::Simplex, VertexIdx},
+    {VertexIdx, complex::Complex, simplex::Simplex},
   },
-  Dim,
 };
 
 use crate::linalg::{Matrix, Vector};
@@ -298,8 +298,8 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
 mod test {
   use super::*;
   use crate::{
-    gen::cartesian::CartesianGrid,
     geometry::{cell_volume, coord::simplex::SimplexRefExt, metric::mesh::EdgeRefExt},
+    mesher::cartesian::CartesianGrid,
   };
 
   /// Geometry is defined on every simplex, not only the cells: the intrinsic

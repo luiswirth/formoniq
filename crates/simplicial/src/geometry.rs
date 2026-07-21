@@ -44,7 +44,7 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// to an $(n-2)$-dimensional hinge of an $n$-manifold needs dihedral angles
 /// between codimension-1 facets, not corner angles between edges, and this
 /// crate does not yet carry that computation -- fixed at 2D for the same
-/// reason [`crate::gen::sphere`] is: the concept itself, not a shortcut, is
+/// reason [`crate::mesher::sphere`] is: the concept itself, not a shortcut, is
 /// what is 2-dimensional here.
 ///
 /// Exact, not an approximation of the smooth quantity: this is what
@@ -98,7 +98,7 @@ mod tests {
   /// all.
   #[test]
   fn sphere_gauss_bonnet_holds_exactly() {
-    let (topology, coords) = crate::gen::sphere::mesh_sphere_surface(3);
+    let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(3);
     let lengths = coords.to_edge_lengths_sq(&topology);
     let gauss = vertex_gaussian_curvature(&topology, &lengths);
 

@@ -13,11 +13,10 @@
 //! the quad -- see the depth-bias state the pass is built with.
 
 use super::{
-  color_target, depth_stencil_biased,
+  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS, color_target, depth_stencil_biased,
   item::GlyphBatch,
   primitive, shader_module,
   uniform::{FrameUniform, GlyphMaterial, UniformBinding, UniformPool},
-  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS,
 };
 
 pub struct GlyphPass {

@@ -12,7 +12,7 @@ use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;
-use simplicial::{gen::cartesian::CartesianGrid, linalg::CsrMatrix};
+use simplicial::{linalg::CsrMatrix, mesher::cartesian::CartesianGrid};
 
 use approx::assert_relative_eq;
 

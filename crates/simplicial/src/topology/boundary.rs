@@ -16,9 +16,9 @@ use super::{
   skeleton::Skeleton,
 };
 use crate::{
+  Dim,
   geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq},
   topology::VertexIdx,
-  Dim,
 };
 
 use crate::linalg::{CooMatrix, Matrix};
@@ -179,7 +179,7 @@ impl BoundaryComplex {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianGrid;
+  use crate::mesher::cartesian::CartesianGrid;
 
   use crate::linalg::CsrMatrix;
 

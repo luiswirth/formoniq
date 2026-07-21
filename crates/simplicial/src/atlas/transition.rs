@@ -21,8 +21,8 @@
 //! related by $psi$, and the pairing with the face's tangent blade is invariant
 //! under it.
 
-use super::{ref_difbarys, Bary, Chart, MeshPoint, BARY_EPS};
-use crate::{topology::handle::SimplexIdx, Dim};
+use super::{BARY_EPS, Bary, Chart, MeshPoint, ref_difbarys};
+use crate::{Dim, topology::handle::SimplexIdx};
 
 use crate::linalg::{Matrix, Vector};
 use multiindex::Combination;
@@ -158,9 +158,9 @@ impl Transition {
 mod test {
   use super::*;
   use crate::{
-    atlas::{barycenter_bary, ChartExt, MeshPoint},
-    gen::cartesian::CartesianGrid,
+    atlas::{ChartExt, MeshPoint, barycenter_bary},
     geometry::coord::simplex::SimplexRefExt,
+    mesher::cartesian::CartesianGrid,
     topology::complex::Complex,
   };
 

@@ -2,8 +2,8 @@ use std::borrow::Cow;
 
 use glatt::field::DiffFormClosure;
 use gramian::Metric;
-use simplicial::linalg::Vector;
 use simplicial::Sign;
+use simplicial::linalg::Vector;
 
 use crate::bake::CellCorner;
 use crate::surface::Surface;
@@ -14,6 +14,7 @@ use derham::{
 };
 use exterior::{Blade, ExteriorGrade, MultiForm};
 use simplicial::{
+  Dim,
   atlas::{Bary, MeshPoint},
   geometry::coord::mesh::MeshCoords,
   topology::{
@@ -22,7 +23,6 @@ use simplicial::{
     role::Cell,
     simplex::Simplex,
   },
-  Dim,
 };
 
 /// A renderable scene: a simplicial surface together with fields on it.
@@ -411,7 +411,7 @@ impl Scene {
   /// the same code as grade 0, which is the point of the $min(k, n-k)$ dispatch
   /// (discussion #101).
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
-    use simplicial::gen::sphere::mesh_sphere_surface;
+    use simplicial::mesher::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     // Built before the fields are filed: the mark each one gets is chosen
@@ -470,7 +470,7 @@ impl Scene {
   /// actual modes in when it lands. The lone field has no eigenvalue, so it is
   /// drawn as a plain, undeformed surface.
   pub fn sphere_placeholder(nsubdivisions: usize) -> Self {
-    use simplicial::gen::sphere::mesh_sphere_surface;
+    use simplicial::mesher::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     Self::placeholder_on(topology, coords)
@@ -741,7 +741,7 @@ impl Scene {
     final_time: f64,
   ) -> Self {
     use formoniq::{
-      problems::wave::{solve_wave, WaveState},
+      problems::wave::{WaveState, solve_wave},
       whitney_complex::WhitneyComplex,
     };
 
@@ -1741,7 +1741,7 @@ mod tests {
   fn harmonic_top_form_reduces_to_a_constant_density() {
     use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
 
-    let (topology, coords) = simplicial::gen::sphere::mesh_sphere_surface(2);
+    let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(2);
     let lengths = coords.to_edge_lengths_sq(&topology);
     let (eigenvals, _, eigenfuncs) =
       solve_evp(&WhitneyComplex::new(&topology, &lengths), 2, 1).unwrap();
@@ -1825,7 +1825,7 @@ mod tests {
   /// rather than decaying to zero -- the peak drops while the total does not.
   #[test]
   fn heat_flow_is_total_on_a_closed_mesh() {
-    use simplicial::gen::sphere::mesh_sphere_surface;
+    use simplicial::mesher::sphere::mesh_sphere_surface;
     let (topology, coords) = mesh_sphere_surface(2);
     let scene = Scene::heat(topology, coords, 0, 10, 0.2);
 
@@ -2032,7 +2032,7 @@ mod tests {
   #[test]
   fn hodge_decomposition_splits_orthogonally() {
     use crate::gallery::MeshSource;
-    use crate::gallery::{QuotientSurface, QUOTIENT_CELLS_DEFAULT};
+    use crate::gallery::{QUOTIENT_CELLS_DEFAULT, QuotientSurface};
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
     use simplicial::linalg::CsrMatrix;
 

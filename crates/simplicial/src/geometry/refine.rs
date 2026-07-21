@@ -18,7 +18,7 @@
 //!   the law that ties the two.
 
 use crate::{
-  geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq, metric::CellGramians},
+  geometry::{coord::mesh::MeshCoords, metric::CellGramians, metric::mesh::MeshLengthsSq},
   linalg::Vector,
   topology::{complex::Complex, refine::Subdivision},
 };
@@ -84,7 +84,7 @@ impl MeshCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::gen::cartesian::CartesianGrid;
+  use crate::mesher::cartesian::CartesianGrid;
   use crate::topology::complex::Complex;
 
   fn signature(complex: &Complex, lengths: &MeshLengthsSq) -> Vec<Vec<u64>> {

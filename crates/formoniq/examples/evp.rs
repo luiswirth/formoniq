@@ -30,7 +30,7 @@ mod util;
 
 use {
   formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
-  util::{algebraic_convergence_rate, report, BoundaryCondition, Manifold},
+  util::{BoundaryCondition, Manifold, algebraic_convergence_rate, report},
 };
 
 use std::f64::consts::PI;

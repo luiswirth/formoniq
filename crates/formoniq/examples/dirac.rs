@@ -41,11 +41,11 @@ extern crate nalgebra as na;
 
 use derham::{project::derham_map, section::CoordFieldExt};
 use formoniq::{
-  problems::dirac::{solve_dirac, HodgeDirac, MixedField},
+  problems::dirac::{HodgeDirac, MixedField, solve_dirac},
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use simplicial::gen::cartesian::CartesianGrid;
+use simplicial::mesher::cartesian::CartesianGrid;
 
 use std::f64::consts::PI;
 

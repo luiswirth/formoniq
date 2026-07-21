@@ -19,11 +19,11 @@
 //! dimension below ambient, e.g. a surface in space) a query point is accepted
 //! only if it also lies within tolerance of the cell's affine hull.
 
-use super::{simplex::SimplexRefExt, CoordRef};
+use super::{CoordRef, simplex::SimplexRefExt};
 use crate::{
-  atlas::{local2bary, Bary, Local, MeshPoint},
-  topology::{complex::Complex, handle::SimplexIdx},
   Dim,
+  atlas::{Bary, Local, MeshPoint, local2bary},
+  topology::{complex::Complex, handle::SimplexIdx},
 };
 
 use crate::linalg::{Matrix, Vector};
@@ -284,7 +284,7 @@ fn build(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{gen::cartesian::CartesianGrid, geometry::coord::Coord};
+  use crate::{geometry::coord::Coord, mesher::cartesian::CartesianGrid};
 
   /// The BVH locator agrees with the brute-force linear scan on every query,
   /// and reports points outside the mesh as such.

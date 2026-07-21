@@ -28,8 +28,8 @@
 //! consistent for free.
 
 use super::{
-  complex::Complex, handle::KSimplexIdx, orientation::Orientation, role::Cell, simplex::Simplex,
-  VertexIdx,
+  VertexIdx, complex::Complex, handle::KSimplexIdx, orientation::Orientation, role::Cell,
+  simplex::Simplex,
 };
 use crate::Dim;
 
@@ -167,7 +167,8 @@ impl CellOrdering {
       // No facets to disagree on: a 0-complex is consistent vacuously.
       return true;
     };
-    let consistent = facets.handle_iter().all(|facet| {
+
+    facets.handle_iter().all(|facet| {
       let mut incident = facet
         .cells()
         .map(|cell| self.induced_on(cell, (*facet).simplex()));
@@ -175,15 +176,14 @@ impl CellOrdering {
         return true;
       };
       incident.all(|other| other == first)
-    });
-    consistent
+    })
   }
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianGrid;
+  use crate::mesher::cartesian::CartesianGrid;
   use multiindex::Sign;
 
   /// The colex ordering is face-consistent in every dimension: it restricts a

@@ -2,11 +2,12 @@
 //! the one `render` that records a draw list into a caller's `TextureView`.
 
 use super::{
+  DEPTH_CLEAR, DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
   advect::AdvectPass,
   bloom::{BloomChain, BloomPass},
   camera::Camera,
   context::GpuContext,
-  deposit::{dummy_read_bind_group, DepositPass},
+  deposit::{DepositPass, dummy_read_bind_group},
   downsample::{DownsamplePass, SceneColorBinding},
   fill::FillPass,
   glyph::GlyphPass,
@@ -18,7 +19,6 @@ use super::{
     UniformPool,
   },
   volume::{VolumeMaterial, VolumePass},
-  DEPTH_CLEAR, DEPTH_FORMAT, MASK_FORMAT, SCENE_FORMAT,
 };
 
 /// The background the scene is cleared to: a near-black the lit surface and the

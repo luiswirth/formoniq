@@ -31,12 +31,12 @@
 use crate::{cochain::Cochain, section::Section};
 
 use {
-  exterior::{exterior_power, Covariant, MultiVector},
+  exterior::{Covariant, MultiVector, exterior_power},
   multiindex::Combination,
   simplicial::{
-    atlas::{ref_face_spanning_vectors, refsimp_vol, MeshPoint, SimplexQuadRule},
-    topology::{complex::Complex, handle::SimplexIdx},
     Dim,
+    atlas::{MeshPoint, SimplexQuadRule, ref_face_spanning_vectors, refsimp_vol},
+    topology::{complex::Complex, handle::SimplexIdx},
   },
 };
 
@@ -120,7 +120,7 @@ mod test {
 
   use {
     coorder::Coord, exterior::ExteriorElement, glatt::field::DiffFormClosure,
-    simplicial::gen::cartesian::CartesianGrid, simplicial::linalg::Vector,
+    simplicial::linalg::Vector, simplicial::mesher::cartesian::CartesianGrid,
   };
 
   use approx::assert_relative_eq;

@@ -5,7 +5,7 @@ use crate::{
 
 use {
   crate::linalg::{
-    eigen::{sparse_shift_invert_eigen, EigenError},
+    eigen::{EigenError, sparse_shift_invert_eigen},
     faer::FaerLu,
   },
   derham::cochain::Cochain,

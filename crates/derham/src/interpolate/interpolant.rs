@@ -127,7 +127,7 @@ mod test {
   /// space and there is nothing to interpolate).
   #[test]
   fn whitney_trace_commutes() {
-    use simplicial::atlas::{ref_face_spanning_vectors, Bary};
+    use simplicial::atlas::{Bary, ref_face_spanning_vectors};
 
     for n in 1..=3 {
       let complex = Complex::standard(n);
