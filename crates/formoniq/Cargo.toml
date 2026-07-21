@@ -18,6 +18,7 @@ simplicial = { path = "../simplicial", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }
 gramian = { path = "../gramian", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
+iterative = { path = "../iterative", version = "0.2.0" }
 
 nalgebra = "0.35.0"
 nalgebra-sparse = "0.12.0"
