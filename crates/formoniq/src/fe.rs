@@ -105,6 +105,7 @@ mod test {
   use glatt::field::DiffFormClosure;
   use simplicial::mesher::cartesian::CartesianGrid;
 
+  use crate::linalg::faer::FaerCholesky;
   use approx::assert_relative_eq;
 
   /// $P_h compose W = id$: the $L^2$ projection is the identity on the Whitney
@@ -152,6 +153,80 @@ mod test {
 
       let error = fe_l2_error(&projected, &exact, &topology, &lengths);
       assert!(error < 1e-9, "dim={dim} error={error}");
+    }
+  }
+
+  /// The Whitney mass matrix is SPD on a Riemannian geometry, so the mass solve
+  /// $M c = b$ is a genuine target for conjugate gradients. This pins that the
+  /// iterative solve agrees with the direct Cholesky factorization to solver
+  /// tolerance, swept over dimension and grade --- the correctness half of
+  /// wiring `iterative` against a real FEEC operator.
+  #[test]
+  fn cg_mass_solve_matches_cholesky() {
+    use iterative::{Jacobi, StopCriterion, krylov::cg};
+
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in 0..=dim {
+        let mass = CsrMatrix::from(&whitney.mass(grade));
+        let n = mass.nrows();
+        let b = Vector::from_fn(n, |i, _| ((i % 5) as f64 - 2.0) * 0.5);
+
+        let direct = FaerCholesky::new(mass.clone()).solve(&b);
+        let (iter, report) = cg(&mass, &Jacobi::new(&mass), &b, StopCriterion::rtol(1e-12));
+
+        assert!(report.converged, "dim={dim} grade={grade} did not converge");
+        assert!(
+          (&iter - &direct).norm() < 1e-9,
+          "dim={dim} grade={grade}: cg vs cholesky differ by {}",
+          (&iter - &direct).norm()
+        );
+      }
+    }
+  }
+
+  /// Bench, not an assertion: on a well-conditioned mass matrix ($kappa = O(1)$,
+  /// mesh-independent) Jacobi-CG converges in a fixed handful of iterations, so
+  /// it competes with the direct factorizations without their fill. Run with
+  /// `cargo test -p formoniq --release bench_mass_solve -- --nocapture --ignored`.
+  #[test]
+  #[ignore = "timing bench, run explicitly with --nocapture"]
+  fn bench_mass_solve() {
+    use iterative::{Jacobi, StopCriterion, krylov::cg};
+    use std::time::Instant;
+
+    let dim = 3;
+    let (topology, coords) = CartesianGrid::new_unit(dim, 12).triangulate();
+    let lengths = coords.to_edge_lengths_sq(&topology);
+    let whitney = WhitneyComplex::new(&topology, &lengths);
+
+    for grade in 0..=dim {
+      let mass = CsrMatrix::from(&whitney.mass(grade));
+      let n = mass.nrows();
+      let b = Vector::from_fn(n, |i, _| ((i % 5) as f64 - 2.0) * 0.5);
+
+      let t = Instant::now();
+      let x_lu = FaerLu::new(mass.clone()).solve(&b);
+      let t_lu = t.elapsed();
+
+      let t = Instant::now();
+      let x_ch = FaerCholesky::new(mass.clone()).solve(&b);
+      let t_ch = t.elapsed();
+
+      let precond = Jacobi::new(&mass);
+      let t = Instant::now();
+      let (x_cg, report) = cg(&mass, &precond, &b, StopCriterion::rtol(1e-10));
+      let t_cg = t.elapsed();
+
+      eprintln!(
+        "grade {grade}: n={n:>6}  LU {t_lu:>10.2?}  Chol {t_ch:>10.2?}  \
+         CG(Jacobi) {t_cg:>10.2?} in {} iters   (agree {:.1e})",
+        report.iters,
+        (&x_cg - &x_ch).norm().max((&x_lu - &x_ch).norm()),
+      );
     }
   }
 }

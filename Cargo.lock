@@ -1227,6 +1227,7 @@ dependencies = [
  "faer",
  "glatt",
  "gramian",
+ "iterative",
  "itertools 0.15.0",
  "multiindex",
  "nalgebra",
