@@ -23,16 +23,21 @@ pub fn assemble_galmat(
   let nsimps_col = topology.skeleton(col_grade).len();
 
   let cells = topology.cells();
+  // `flat_map_iter`, not `flat_map`: the parallelism is over cells, and each
+  // cell's triplets number $binom(n+1, k)^2$ -- single digits at the grades and
+  // dimensions in reach. `flat_map` would hand every such handful back to rayon
+  // as a splittable parallel job, paying scheduler overhead per cell to divide
+  // work that fits in cache. Measured ~2x on a 64k-cell 3D grid at grade 0.
   let triplets: Vec<(usize, usize, f64)> = cells
     .handle_par_iter()
-    .flat_map(|cell| {
+    .flat_map_iter(|cell| {
       let metric = geometry.cell_metric(cell);
       let elmat = elmat.eval(&metric);
 
       let row_subs: Vec<_> = cell.faces(row_grade).collect();
       let col_subs: Vec<_> = cell.faces(col_grade).collect();
 
-      let mut local_triplets = Vec::new();
+      let mut local_triplets = Vec::with_capacity(row_subs.len() * col_subs.len());
       for (ilocal, &iglobal) in row_subs.iter().enumerate() {
         for (jlocal, &jglobal) in col_subs.iter().enumerate() {
           let val = elmat[(ilocal, jlocal)];
@@ -63,13 +68,13 @@ pub fn assemble_galvec(
   let cells = topology.cells();
   let entries: Vec<(usize, f64)> = cells
     .handle_par_iter()
-    .flat_map(|cell| {
+    .flat_map_iter(|cell| {
       let metric = geometry.cell_metric(cell);
       let elvec = elvec.eval(&metric, cell);
 
       let subs: Vec<_> = cell.faces(grade).collect();
 
-      let mut local_entries = Vec::new();
+      let mut local_entries = Vec::with_capacity(subs.len());
       for (ilocal, &iglobal) in subs.iter().enumerate() {
         if elvec[ilocal] != 0.0 {
           local_entries.push((iglobal.kidx(), elvec[ilocal]));
