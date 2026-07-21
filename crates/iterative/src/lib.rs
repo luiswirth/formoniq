@@ -5,8 +5,10 @@ extern crate nalgebra_sparse as nas;
 
 mod operator;
 mod precond;
+pub mod stationary;
 
 pub use precond::{Identity, Jacobi};
+pub use stationary::Stationary;
 
 /// A dense real vector, the currency of every apply.
 pub type Vector = na::DVector<f64>;
@@ -115,12 +117,26 @@ mod testutil {
     let lambda = DMatrix::from_diagonal(&Vector::from_column_slice(eigs));
     &q * lambda * q.transpose()
   }
+
+  /// The tridiagonal $"diag" I - "off" (L + L^T)$: SPD, and strictly diagonally
+  /// dominant for $"diag" > 2 "off"$, so a Jacobi sweep is a contraction.
+  pub fn tridiag(n: usize, diag: f64, off: f64) -> DMatrix<f64> {
+    DMatrix::from_fn(n, n, |i, j| {
+      if i == j {
+        diag
+      } else if i.abs_diff(j) == 1 {
+        -off
+      } else {
+        0.0
+      }
+    })
+  }
 }
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::testutil::{csr, spd_from_spectrum};
+  use crate::testutil::{csr, spd_from_spectrum, tridiag};
   use na::DMatrix;
 
   #[test]
@@ -167,5 +183,43 @@ mod tests {
     let r = Vector::from_column_slice(&[1.0, -2.0, 3.0, 0.5, -1.0]);
     let s = Vector::from_column_slice(&[4.0, 1.0, -1.0, 2.0, 3.0]);
     assert!((b.apply(&r).dot(&s) - r.dot(&b.apply(&s))).abs() < 1e-12);
+  }
+
+  /// Stationary Jacobi iteration converges to the true solution on a
+  /// diagonally dominant SPD system, at a rate set by $rho(I - D^(-1) A)$.
+  #[test]
+  fn stationary_converges_to_the_solution() {
+    let dense = tridiag(8, 4.0, 1.0);
+    let a = csr(&dense);
+    let x_true = Vector::from_fn(8, |i, _| (i as f64 - 3.5).sin());
+    let b = &dense * &x_true;
+
+    let (x, report) = stationary::solve(&a, &Jacobi::new(&a), &b, StopCriterion::rtol(1e-10));
+    assert!(report.converged);
+    assert!((x - x_true).norm() < 1e-8);
+
+    // The iteration count is governed by the spectral radius, not free: the
+    // predicted geometric rate bounds it (with slack for the 2-norm transient).
+    let n = dense.nrows();
+    let dinv = DMatrix::from_diagonal(&dense.diagonal().map(|d| 1.0 / d));
+    let rho = (DMatrix::identity(n, n) - dinv * &dense)
+      .complex_eigenvalues()
+      .iter()
+      .map(|c| c.norm())
+      .fold(0.0, f64::max);
+    let predicted = (1e-10_f64.ln() / rho.ln()).ceil() as usize;
+    assert!(rho < 1.0 && report.iters <= 3 * predicted + 10);
+  }
+
+  /// A fixed number of Jacobi sweeps is itself self-adjoint --- the promise the
+  /// `SelfAdjoint for Stationary` impl makes, and the basis of nesting it inside
+  /// a Krylov method.
+  #[test]
+  fn stationary_sweeps_are_self_adjoint() {
+    let a = csr(&tridiag(6, 4.0, 1.0));
+    let sweeps = Stationary::new(&a, Jacobi::new(&a), 3);
+    let r = Vector::from_fn(6, |i, _| (i as f64).cos());
+    let s = Vector::from_fn(6, |i, _| (2.0 * i as f64 + 1.0).sin());
+    assert!((sweeps.apply(&r).dot(&s) - r.dot(&sweeps.apply(&s))).abs() < 1e-12);
   }
 }
