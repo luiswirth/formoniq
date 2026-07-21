@@ -10,6 +10,7 @@ members = [
   "crates/multiindex",
   "crates/gramian",
   "crates/coorder",
+  "crates/iterative",
   "crates/studio",
 ]
 
@@ -27,6 +28,7 @@ default-members = [
   "crates/multiindex",
   "crates/gramian",
   "crates/coorder",
+  "crates/iterative",
 ]
 
 # Dependencies are compiled optimized even in a debug build. The workspace's own
