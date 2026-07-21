@@ -6,7 +6,7 @@ extern crate nalgebra_sparse as nas;
 mod operator;
 mod precond;
 
-pub use precond::Identity;
+pub use precond::{Identity, Jacobi};
 
 /// A dense real vector, the currency of every apply.
 pub type Vector = na::DVector<f64>;
@@ -121,6 +121,7 @@ mod testutil {
 mod tests {
   use super::*;
   use crate::testutil::{csr, spd_from_spectrum};
+  use na::DMatrix;
 
   #[test]
   fn csr_matvec_matches_dense() {
@@ -143,5 +144,28 @@ mod tests {
   fn identity_is_total_at_zero() {
     let id = Identity::new(0);
     assert_eq!(id.apply(&Vector::zeros(0)), Vector::zeros(0));
+  }
+
+  /// On a diagonal operator Jacobi is the exact inverse: $B A = I$.
+  #[test]
+  fn jacobi_inverts_a_diagonal_operator() {
+    let a = csr(&DMatrix::from_diagonal(&Vector::from_column_slice(&[
+      2.0, 5.0, 0.25, 8.0,
+    ])));
+    let b = Jacobi::new(&a);
+    let x = Vector::from_column_slice(&[1.0, -3.0, 4.0, 2.0]);
+    assert!((b.apply(&a.apply(&x)) - &x).norm() < 1e-12);
+  }
+
+  /// The law the `SelfAdjoint` marker promises: $angle.l B r, s angle.r =
+  /// angle.l r, B s angle.r$. Verified on a full (non-diagonal) SPD operator,
+  /// whose diagonal Jacobi reads.
+  #[test]
+  fn jacobi_is_self_adjoint() {
+    let a = csr(&spd_from_spectrum(&[1.0, 2.0, 4.0, 7.0, 9.0]));
+    let b = Jacobi::new(&a);
+    let r = Vector::from_column_slice(&[1.0, -2.0, 3.0, 0.5, -1.0]);
+    let s = Vector::from_column_slice(&[4.0, 1.0, -1.0, 2.0, 3.0]);
+    assert!((b.apply(&r).dot(&s) - r.dot(&b.apply(&s))).abs() < 1e-12);
   }
 }
