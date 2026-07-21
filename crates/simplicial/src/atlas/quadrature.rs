@@ -13,10 +13,10 @@
 //! the scalar volume factor.
 
 use super::{Bary, BaryRef, MeshPoint};
-use crate::{topology::handle::SimplexIdx, Dim};
+use crate::{Dim, topology::handle::SimplexIdx};
 
 use crate::linalg::{Vector, VectorView};
-use multiindex::{binomial, factorial_f64, Combination, Composition};
+use multiindex::{Combination, Composition, binomial, factorial_f64};
 
 /// A quadrature rule on the reference simplex, with barycentric nodes.
 pub struct SimplexQuadRule {

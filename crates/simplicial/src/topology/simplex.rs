@@ -1,5 +1,5 @@
 use crate::linalg::Matrix;
-use multiindex::{binomial, combinations, Combination, Sign};
+use multiindex::{Combination, Sign, binomial, combinations};
 
 use super::VertexIdx;
 use crate::Dim;
@@ -251,9 +251,11 @@ mod test {
         let subs = simp.subsimps(sub_dim).collect_vec();
         assert_eq!(subs.len(), nsubsimplices(dim, sub_dim));
         assert!(subs.iter().all(|sub| sub.is_subsimplex_of(&simp)));
-        assert!(subs
-          .iter()
-          .all(|sub| sub.relative_to(&simp) == Combination::from_increasing(sub.iter())));
+        assert!(
+          subs
+            .iter()
+            .all(|sub| sub.relative_to(&simp) == Combination::from_increasing(sub.iter()))
+        );
       }
     }
   }

@@ -201,11 +201,7 @@ impl<'m> Cell<'m> {
   pub fn neighbors(self) -> impl Iterator<Item = Cell<'m>> {
     self.facets().filter_map(move |facet| {
       let (a, b) = facet.adjacent_cells();
-      if a == self {
-        b
-      } else {
-        Some(a)
-      }
+      if a == self { b } else { Some(a) }
     })
   }
 }
@@ -316,10 +312,10 @@ impl<'m, R: SimplexRole> RoledSkeleton<'m, R> {
   pub fn handle_by_kidx(&self, kidx: KSimplexIdx) -> Roled<'m, R> {
     Roled::trusted(self.inner.handle_by_kidx(kidx))
   }
-  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = Roled<'m, R>> + '_ {
+  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = Roled<'m, R>> {
     self.inner.handle_iter().map(Roled::trusted)
   }
-  pub fn handle_par_iter(&self) -> impl ParallelIterator<Item = Roled<'m, R>> + '_ {
+  pub fn handle_par_iter(&self) -> impl ParallelIterator<Item = Roled<'m, R>> {
     self.inner.handle_par_iter().map(Roled::trusted)
   }
 }
@@ -333,7 +329,7 @@ impl<'m, R: SimplexRole> Deref for RoledSkeleton<'m, R> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{gen::cartesian::CartesianGrid, topology::complex::Complex};
+  use crate::{mesher::cartesian::CartesianGrid, topology::complex::Complex};
 
   /// The role predicates, swept over all dimensions and grades: a role is
   /// admitted exactly on its dimension, and roles coexist where their

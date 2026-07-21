@@ -24,14 +24,14 @@
 //! instantiation, and it is the only part that presupposes an embedding.
 
 use super::{
-  is_bary_inside, local2bary, ref_vertices, refsimp_vol, Bary, BaryRef, Local, LocalCartesian,
-  LocalRef,
+  Bary, BaryRef, Local, LocalCartesian, LocalRef, is_bary_inside, local2bary, ref_vertices,
+  refsimp_vol,
 };
+use crate::Dim;
 use crate::linalg::{Matrix, RowVector, RowVectorView, Vector, VectorView};
 use crate::topology::simplex::Simplex;
-use crate::Dim;
 
-use coorder::{affine::AffineTransform, Ambient, CoordSpace, Coords, CoordsRef};
+use coorder::{Ambient, CoordSpace, Coords, CoordsRef, affine::AffineTransform};
 use tracing::warn;
 
 use std::marker::PhantomData;

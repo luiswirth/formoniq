@@ -1,10 +1,10 @@
 use {
   exterior::{ExteriorGrade, MultiForm, MultiVector},
-  multiindex::{factorial_f64, Combination, Sign},
+  multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
-    atlas::{ref_difbarys, BaryRef},
     Dim,
+    atlas::{BaryRef, ref_difbarys},
   },
 };
 

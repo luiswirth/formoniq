@@ -36,9 +36,9 @@
 //! they are supported on: the key is what a shared point agrees on across
 //! charts.
 
-use super::{bary2local, Bary, LocalCartesian, SimplexCoords};
-use crate::linalg::{Matrix, Vector};
+use super::{Bary, LocalCartesian, SimplexCoords, bary2local};
 use crate::Dim;
+use crate::linalg::{Matrix, Vector};
 
 use itertools::Itertools;
 use multiindex::Composition;

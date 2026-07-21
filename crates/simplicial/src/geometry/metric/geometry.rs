@@ -30,12 +30,12 @@
 
 use super::{mesh::MeshLengthsSq, simplex::SimplexLengthsSq};
 use crate::{
+  Dim,
   topology::{
     complex::Complex,
     data::{SkeletonData, SkeletonVec},
     role::Cell,
   },
-  Dim,
 };
 
 use gramian::Metric;

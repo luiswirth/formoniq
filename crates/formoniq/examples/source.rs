@@ -31,8 +31,8 @@ use {
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::elliptic,
     whitney_complex::WhitneyComplex,
   },
-  simplicial::{gen::cartesian::CartesianGrid, topology::ordering::CellOrdering},
-  util::{algebraic_convergence_rate, report, BoundaryCondition, BoxEigenform},
+  simplicial::{mesher::cartesian::CartesianGrid, topology::ordering::CellOrdering},
+  util::{BoundaryCondition, BoxEigenform, algebraic_convergence_rate, report},
 };
 
 use std::f64::consts::PI;

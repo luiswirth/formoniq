@@ -5,18 +5,18 @@
 //! panel itself never touches.
 
 use exterior::ExteriorGrade;
-use simplicial::{topology::simplex::Simplex, Dim};
+use simplicial::{Dim, topology::simplex::Simplex};
 
 use crate::gallery::{
-  BuiltinMesh, MeshSource, Preset, QuotientSurface, Study, DEFAULT_NMODES,
-  DEFAULT_TRAJECTORY_STEPS, EIGENMODES_NMODES_MAX, EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT,
-  GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX,
-  HEAT_FINAL_TIME_MIN, QUOTIENT_CELLS_DEFAULT, QUOTIENT_CELLS_MAX, QUOTIENT_CELLS_MIN,
-  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX,
+  BuiltinMesh, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS, EIGENMODES_NMODES_MAX,
+  EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT, GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX,
+  HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX, HEAT_FINAL_TIME_MIN, MeshSource, Preset,
+  QUOTIENT_CELLS_DEFAULT, QUOTIENT_CELLS_MAX, QUOTIENT_CELLS_MIN, QuotientSurface,
+  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX, Study,
   TRAJECTORY_STEPS_MAX, TRAJECTORY_STEPS_MIN, WAVE_FINAL_TIME, WAVE_FINAL_TIME_MAX,
   WAVE_FINAL_TIME_MIN,
 };
-use crate::scene::{dof_label, FieldOffers};
+use crate::scene::{FieldOffers, dof_label};
 
 /// How much of the scene's light survives to the display.
 ///
@@ -366,11 +366,7 @@ const SHELL_ABS_FRAC: f64 = 1e-6;
 fn round_for_display(x: f64, decimals: i32) -> f64 {
   let scale = 10f64.powi(decimals);
   let rounded = (x * scale).round() / scale;
-  if rounded == 0.0 {
-    0.0
-  } else {
-    rounded
-  }
+  if rounded == 0.0 { 0.0 } else { rounded }
 }
 
 /// Groups a list of eigenmodes into its degeneracy shells by clustering
@@ -610,7 +606,9 @@ fn skeleton_hover(k: usize) -> &'static str {
   match k {
     0 => "The 0-skeleton: a disc at every vertex, the graph's nodes",
     1 => "The 1-skeleton: every edge, the graph's links",
-    _ => "The 2-skeleton: the filled faces. Also what writes depth -- with it off, the far side shows through",
+    _ => {
+      "The 2-skeleton: the filled faces. Also what writes depth -- with it off, the far side shows through"
+    }
   }
 }
 

@@ -51,9 +51,9 @@ pub mod simplex_coords;
 pub mod transition;
 
 pub use chart::{Chart, ChartExt};
-pub use point::{MeshPoint, BARY_EPS};
+pub use point::{BARY_EPS, MeshPoint};
 pub use quadrature::SimplexQuadRule;
-pub use refine::{ref_refinement, ReferenceRefinement};
+pub use refine::{ReferenceRefinement, ref_refinement};
 pub use simplex_coords::SimplexCoords;
 pub use transition::Transition;
 
@@ -61,7 +61,7 @@ use crate::Dim;
 
 use crate::linalg::{Matrix, RowVector, Vector};
 use coorder::{CoordSpace, Coords, CoordsRef};
-use multiindex::{factorial_f64, Combination, Composition};
+use multiindex::{Combination, Composition, factorial_f64};
 
 /// The barycentric coordinate space of a chart: the affine weights
 /// $lambda in RR^(n+1)$, $sum_i lambda_i = 1$.

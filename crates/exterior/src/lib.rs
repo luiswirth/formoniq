@@ -3,7 +3,7 @@
 extern crate nalgebra as na;
 
 use gramian::{Gramian, Metric};
-use multiindex::{binomial, combinations, Combination, Sign};
+use multiindex::{Combination, Sign, binomial, combinations};
 
 use std::marker::PhantomData;
 
@@ -182,7 +182,7 @@ impl<V: Variance> ExteriorElement<V> {
     self.coeffs
   }
 
-  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, Blade)> + '_ {
+  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, Blade)> {
     self
       .coeffs
       .iter()

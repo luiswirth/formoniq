@@ -17,13 +17,13 @@
 use crate::bake::{self, BakedMesh};
 use crate::deposit::DepositLayout;
 use crate::render::{
+  GpuContext,
   camera::Camera,
   deposit::DepositBatch,
   item::{DrawList, GlyphBatch, PointBatch, RenderItem, SegmentBatch, SurfaceBatch},
   particles::ParticleBatch,
   uniform::{GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
   volume::{VolumeBatch, VolumeMaterial},
-  GpuContext,
 };
 use crate::scene::Scene;
 use crate::ui::{FieldView, MeshView, Post, Selection};
@@ -387,7 +387,7 @@ impl MeshDisplay {
 
   /// The per-vertex displacement ceiling the bake derived from the mesh's
   /// reach: what [`safe_amplitude`] scales the field against.
-  pub(crate) fn displacement_ceilings(&self) -> impl Iterator<Item = f32> + '_ {
+  pub(crate) fn displacement_ceilings(&self) -> impl Iterator<Item = f32> {
     self.baked.positions.iter().map(|v| v.max_displacement)
   }
 
@@ -478,7 +478,7 @@ fn safe_amplitude(scene: &Scene, mesh: &MeshDisplay, selection: Selection) -> f3
 fn amplitude_bound(ceilings: impl Iterator<Item = f32>, peaks: &[f32]) -> f32 {
   ceilings
     .zip(peaks)
-    .filter(|(_, &peak)| peak > 1e-12)
+    .filter(|&(_, &peak)| peak > 1e-12)
     .map(|(ceiling, &peak)| ceiling / peak)
     .fold(f32::INFINITY, f32::min)
 }

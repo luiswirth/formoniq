@@ -236,7 +236,7 @@ fn check_manifold(triangles: &[[usize; 3]]) -> Result<(), ObjError> {
       *incidence.entry(edge).or_insert(0) += 1;
     }
   }
-  match incidence.iter().find(|(_, &count)| count > 2) {
+  match incidence.iter().find(|&(_, &count)| count > 2) {
     Some((&edge, &count)) => Err(ObjError::NonManifold { edge, count }),
     None => Ok(()),
   }

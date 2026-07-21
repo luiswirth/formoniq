@@ -7,9 +7,9 @@ pub mod atlas;
 pub mod geometry;
 pub mod topology;
 
-pub mod gen;
 pub mod io;
 pub mod linalg;
+pub mod mesher;
 
 /// [`Sign`] is re-exported because it is part of this crate's own surface: the
 /// orientation of a simplex, the coefficients of a boundary, and a cell's

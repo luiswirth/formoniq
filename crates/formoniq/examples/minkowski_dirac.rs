@@ -75,12 +75,12 @@ extern crate nalgebra as na;
 
 use coorder::Coord;
 use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
-use exterior::{exterior_bases, exterior_dim, Dim, MultiForm};
+use exterior::{Dim, MultiForm, exterior_bases, exterior_dim};
 use formoniq::{
   assemble::assemble_galvec,
   fe::fe_l2_error,
   operators::SourceElVec,
-  problems::dirac::{solve_dirac_source, MixedField},
+  problems::dirac::{MixedField, solve_dirac_source},
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
@@ -88,9 +88,9 @@ use gramian::{CausalType, Metric};
 use multiindex::Sign;
 use simplicial::{
   atlas::SimplexQuadRule,
-  gen::cartesian::{CartesianGrid, CAUSAL_TIME_SCALE},
   geometry::coord::mesh::MeshCoords,
   linalg::Vector,
+  mesher::cartesian::{CAUSAL_TIME_SCALE, CartesianGrid},
   topology::ordering::CellOrdering,
 };
 

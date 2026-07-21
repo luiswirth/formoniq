@@ -26,9 +26,9 @@ use winit::{
 use winit::event_loop::EventLoop;
 
 use crate::demos::default_selection;
-use crate::display::{default_camera, scene_extent, FieldDisplay, MeshDisplay};
-use crate::gallery::{presets, Gallery, MeshSource, Preset, Study};
-use crate::render::{camera::Camera, FrameView, GpuContext, Renderer, DEFAULT_SSAA_SCALE};
+use crate::display::{FieldDisplay, MeshDisplay, default_camera, scene_extent};
+use crate::gallery::{Gallery, MeshSource, Preset, Study, presets};
+use crate::render::{DEFAULT_SSAA_SCALE, FrameView, GpuContext, Renderer, camera::Camera};
 use crate::scene::Scene;
 use crate::ui::{Entry, PanelModel, Selection};
 
@@ -776,12 +776,13 @@ impl State {
     // The pinch rides on top of the two-finger pan: the ratio of spreads is the
     // multiplicative zoom the wheel already speaks, about the point the fingers
     // straddle.
-    if let (Some(prev), Some(now)) = (self.touch_spread, self.touch_spread_now()) {
-      if prev > f64::EPSILON && now > f64::EPSILON {
-        let e_folds = (now / prev).ln() as f32;
-        let focus = self.cursor_point();
-        self.zoom_by(e_folds, focus);
-      }
+    if let (Some(prev), Some(now)) = (self.touch_spread, self.touch_spread_now())
+      && prev > f64::EPSILON
+      && now > f64::EPSILON
+    {
+      let e_folds = (now / prev).ln() as f32;
+      let focus = self.cursor_point();
+      self.zoom_by(e_folds, focus);
     }
 
     self.touch_centroid = Some((cx, cy));
@@ -1159,13 +1160,12 @@ impl State {
     // onto its own duration, so the target inverts that map: the first loop's
     // fraction of `TRAJECTORY_LOOP_SECONDS`. Guarded by the field actually
     // being a trajectory, so a stale request cannot move a static field's clock.
-    if let Some(target) = response.scrub_time {
-      if let Some(duration) = self.scene.field_time(self.selection).duration() {
-        if duration > 0.0 {
-          let clock = (target / duration) * crate::display::TRAJECTORY_LOOP_SECONDS;
-          self.clock.set_time(clock as f32);
-        }
-      }
+    if let Some(target) = response.scrub_time
+      && let Some(duration) = self.scene.field_time(self.selection).duration()
+      && duration > 0.0
+    {
+      let clock = (target / duration) * crate::display::TRAJECTORY_LOOP_SECONDS;
+      self.clock.set_time(clock as f32);
     }
 
     // Restart returns the clock to its start and the advected population to its

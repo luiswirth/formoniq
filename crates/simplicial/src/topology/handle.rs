@@ -1,12 +1,12 @@
 use super::complex::Complex;
 use crate::{
+  Dim,
   topology::{
+    VertexIdx,
     role::{Cell, Edge, Roled, Vertex},
     simplex::Simplex,
     skeleton::Skeleton,
-    VertexIdx,
   },
-  Dim,
 };
 
 use multiindex::Sign;
@@ -263,10 +263,10 @@ impl<'m> SkeletonRef<'m> {
     let idx = self.kidx_by_simplex(simp);
     SimplexIdx::new(self.dim, idx).handle(self.complex)
   }
-  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexRef<'m>> + '_ {
+  pub fn handle_iter(&self) -> impl ExactSizeIterator<Item = SimplexRef<'m>> {
     (0..self.len()).map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))
   }
-  pub fn handle_par_iter(&self) -> impl ParallelIterator<Item = SimplexRef<'m>> + '_ {
+  pub fn handle_par_iter(&self) -> impl ParallelIterator<Item = SimplexRef<'m>> {
     (0..self.len())
       .into_par_iter()
       .map(|idx| SimplexIdx::new(self.dim, idx).handle(self.complex))

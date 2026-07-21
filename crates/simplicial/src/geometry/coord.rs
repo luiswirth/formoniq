@@ -434,7 +434,7 @@ mod tests {
   fn mean_edge_length_halves_under_subdivision() {
     let mut previous: Option<f64> = None;
     for subdivisions in 1..=4 {
-      let (topology, coords) = crate::gen::sphere::mesh_sphere_surface(subdivisions);
+      let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(subdivisions);
       let mean = mean_edge_length(&topology, &coords);
       if let Some(previous) = previous {
         let ratio = mean / previous;
@@ -462,7 +462,7 @@ mod tests {
   /// checks the estimator against its one closed form.
   #[test]
   fn sphere_reach_is_its_radius() {
-    let (topology, coords) = crate::gen::sphere::mesh_sphere_surface(3);
+    let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(3);
     let reach = vertex_reach(&topology, &coords, 10.0);
     for &r in &reach {
       assert!(r > 0.5 && r < 1.05, "expected reach ~ 1, got {r}");
@@ -574,7 +574,7 @@ mod tests {
 
   #[test]
   fn sphere_mean_curvature_and_radius_match_unit_radius() {
-    let (topology, coords) = crate::gen::sphere::mesh_sphere_surface(3);
+    let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(3);
     let mean = vertex_mean_curvature(&topology, &coords);
     let radius = vertex_curvature_radius(&topology, &coords);
     for &h in &mean {
@@ -595,7 +595,7 @@ mod tests {
   /// must never clamp displacement on a flat surface.
   #[test]
   fn flat_grid_has_unbounded_curvature_radius() {
-    let (topology, coords) = crate::gen::cartesian::CartesianGrid::new_unit(2, 4).triangulate();
+    let (topology, coords) = crate::mesher::cartesian::CartesianGrid::new_unit(2, 4).triangulate();
     let coords = coords.embed_euclidean(3);
     let boundary: std::collections::HashSet<usize> =
       topology.boundary_vertices().into_iter().collect();

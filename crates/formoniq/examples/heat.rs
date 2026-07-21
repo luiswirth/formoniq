@@ -29,8 +29,8 @@ use {
     linalg::quadratic_form_sparse, problems::heat::solve_heat, whitney_complex::WhitneyComplex,
   },
   simplicial::{
-    gen::cartesian::CartesianGrid,
     linalg::{CsrMatrix, Vector},
+    mesher::cartesian::CartesianGrid,
   },
   util::{BoundaryCondition, BoxEigenform},
 };

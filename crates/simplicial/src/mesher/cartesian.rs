@@ -1,16 +1,17 @@
 use crate::linalg::{Matrix, Vector};
 use itertools::Itertools;
 use multiindex::{
+  Combination,
   cartesian::{cartesian2linear_mixed, corner_offset, linear2cartesian_mixed, mixed_strides},
-  factorial, Combination,
+  factorial,
 };
 
 pub use multiindex::cartesian::{cartesian2linear, linear2cartesian};
 
 use crate::{
+  Dim,
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
-  Dim,
 };
 use gramian::Gramian;
 

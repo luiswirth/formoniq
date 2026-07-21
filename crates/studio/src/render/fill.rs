@@ -2,13 +2,12 @@
 //! value and normal-displaced as a standing wave. See `fill.wgsl`.
 
 use super::{
-  color_target,
+  MASK_FORMAT, color_target,
   deposit::deposit_read_layout,
   depth_stencil,
   item::SurfaceBatch,
   primitive, shader_module,
   uniform::{FrameUniform, SurfaceMaterial, UniformBinding, UniformPool},
-  MASK_FORMAT,
 };
 
 pub struct FillPass {

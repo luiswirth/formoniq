@@ -11,7 +11,7 @@
 //! the honest structural difference, not a separate code path.
 
 use crate::{
-  assemble::{assemble_galmat, GalMat},
+  assemble::{GalMat, assemble_galmat},
   operators::HodgeMassElmat,
 };
 
@@ -20,10 +20,10 @@ use {
   derham::cochain::Cochain,
   exterior::ExteriorGrade,
   simplicial::{
+    Dim,
     geometry::metric::mesh::MeshLengthsSq,
     linalg::{CooMatrix, CsrMatrix},
     topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
-    Dim,
   },
 };
 

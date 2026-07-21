@@ -18,7 +18,7 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 use super::{color_target, shader_module, uniform::UniformBinding};
-use crate::deposit::{DepositLayout, ATLAS_SIZE};
+use crate::deposit::{ATLAS_SIZE, DepositLayout};
 
 /// The WGSL `DepositParams` of `preamble.wgsl`, byte for byte.
 #[repr(C)]

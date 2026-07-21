@@ -1,10 +1,10 @@
 use {
   derham::{interpolate::form::WhitneyForm, section::Section},
-  exterior::{exterior_power, multiform_gramian, Covariant, Dim, ExteriorGrade},
+  exterior::{Covariant, Dim, ExteriorGrade, exterior_power, multiform_gramian},
   gramian::Metric,
-  multiindex::{factorial, Combination},
+  multiindex::{Combination, factorial},
   simplicial::{
-    atlas::{ref_difbarys, MeshPoint, SimplexQuadRule},
+    atlas::{MeshPoint, SimplexQuadRule, ref_difbarys},
     geometry::cell_volume,
     linalg::{Matrix, Vector},
     topology::{

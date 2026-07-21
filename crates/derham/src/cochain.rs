@@ -201,7 +201,7 @@ mod test {
   #[cfg(feature = "serde")]
   use super::*;
   #[cfg(feature = "serde")]
-  use simplicial::gen::cartesian::CartesianGrid;
+  use simplicial::mesher::cartesian::CartesianGrid;
 
   #[cfg(feature = "serde")]
   #[test]

@@ -5,11 +5,11 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use formoniq_studio::export::{export, ExportSpec};
+use formoniq_studio::export::{ExportSpec, export};
 use formoniq_studio::gallery::{
-  BuiltinMesh, CochainSpec, MeshSource, NamedCochain, QuotientSurface, Study, DEFAULT_NMODES,
-  DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME,
-  QUOTIENT_CELLS_DEFAULT, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, WAVE_FINAL_TIME,
+  BuiltinMesh, CochainSpec, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT,
+  GRID_DIM_MAX, HEAT_FINAL_TIME, MeshSource, NamedCochain, QUOTIENT_CELLS_DEFAULT, QuotientSurface,
+  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, Study, WAVE_FINAL_TIME,
 };
 use simplicial::Dim;
 

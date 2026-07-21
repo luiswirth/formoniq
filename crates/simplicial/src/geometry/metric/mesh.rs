@@ -1,12 +1,12 @@
-use super::{simplex::SimplexLengthsSq, EdgeIdx};
+use super::{EdgeIdx, simplex::SimplexLengthsSq};
 use crate::{
+  Dim,
   topology::{
     complex::Complex,
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef, SkeletonRef},
     role::{Cell, Edge},
   },
-  Dim,
 };
 
 use crate::linalg::Vector;
@@ -303,7 +303,7 @@ pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::gen::cartesian::CartesianGrid;
+  use crate::mesher::cartesian::CartesianGrid;
 
   /// Coordinates and squared edge lengths read uniformly as data on simplices:
   /// coords (grade 0) return a column view, squared lengths (grade 1) a

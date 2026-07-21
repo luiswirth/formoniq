@@ -26,9 +26,9 @@ use crate::surface::Surface;
 use bytemuck::{Pod, Zeroable};
 use simplicial::linalg::Vector;
 use simplicial::{
+  Dim,
   geometry::coord::{mesh::MeshCoords, vertex_reach},
   topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex},
-  Dim,
 };
 
 /// Fraction of the local [`reach`](vertex_reach) allowed as normal
@@ -444,11 +444,7 @@ fn index_tuple<const N: usize>(vertices: &[usize]) -> [u32; N] {
 /// A canonical undirected-edge key: the vertex pair sorted so `(a, b)` and
 /// `(b, a)` hash identically.
 fn edge_key(a: u32, b: u32) -> (u32, u32) {
-  if a < b {
-    (a, b)
-  } else {
-    (b, a)
-  }
+  if a < b { (a, b) } else { (b, a) }
 }
 
 fn directed_edges(t: [u32; 3]) -> [(u32, u32); 3] {
@@ -686,7 +682,7 @@ mod tests {
   /// collapses.
   #[test]
   fn a_solid_bakes_only_its_boundary() {
-    use simplicial::gen::cartesian::CartesianGrid;
+    use simplicial::mesher::cartesian::CartesianGrid;
     let (topology, coords) = CartesianGrid::new_unit(3, 3).triangulate();
     let coords = coords.embed_euclidean(3);
     let baked = BakedMesh::new(&topology, &coords);
@@ -731,7 +727,7 @@ mod tests {
   /// one segment height per mesh vertex.
   #[test]
   fn every_whitney_basis_field_bakes() {
-    use crate::scene::{nodal_heights, surface_corner_heights, surface_corner_values, Scene};
+    use crate::scene::{Scene, nodal_heights, surface_corner_heights, surface_corner_values};
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
       assert!(!scene.fields.is_empty());

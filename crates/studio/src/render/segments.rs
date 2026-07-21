@@ -17,11 +17,10 @@
 //! read.
 
 use super::{
-  color_target, depth_stencil_biased,
+  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS, color_target, depth_stencil_biased,
   item::SegmentBatch,
   primitive, shader_module,
   uniform::{FrameUniform, SegmentMaterial, UniformPool},
-  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS,
 };
 
 pub struct SegmentPass {

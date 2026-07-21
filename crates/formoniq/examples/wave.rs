@@ -23,11 +23,11 @@ mod util;
 use {
   derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt},
   formoniq::{
-    problems::wave::{cfl_dt, solve_wave, WaveState},
+    problems::wave::{WaveState, cfl_dt, solve_wave},
     whitney_complex::WhitneyComplex,
   },
-  simplicial::gen::cartesian::CartesianGrid,
   simplicial::linalg::Vector,
+  simplicial::mesher::cartesian::CartesianGrid,
   util::{BoundaryCondition, BoxEigenform},
 };
 

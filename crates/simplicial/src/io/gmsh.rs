@@ -1,9 +1,9 @@
 use crate::linalg::Matrix;
 
 use crate::{
-  geometry::coord::mesh::{close_vertex_gaps, MeshCoords},
+  geometry::coord::mesh::{MeshCoords, close_vertex_gaps},
   topology::{
-    complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton, VertexIdx,
+    VertexIdx, complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton,
   },
 };
 

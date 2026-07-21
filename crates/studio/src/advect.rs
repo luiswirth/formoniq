@@ -42,13 +42,13 @@
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
-use simplicial::linalg::Matrix;
 use simplicial::Sign;
+use simplicial::linalg::Matrix;
 use simplicial::{
-  atlas::{local2bary, ref_difbarys, ref_vertices, ChartExt, Local, MeshPoint},
+  Dim,
+  atlas::{ChartExt, Local, MeshPoint, local2bary, ref_difbarys, ref_vertices},
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
-  Dim,
 };
 
 use crate::scene::reduced_form;
@@ -195,11 +195,7 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     weighted += weight * reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric);
     total += weight;
   }
-  if total > 0.0 {
-    weighted / total
-  } else {
-    0.0
-  }
+  if total > 0.0 { weighted / total } else { 0.0 }
 }
 
 /// The generator $M = (dif lambda \/ dif x) hat(V)$ of one cell.

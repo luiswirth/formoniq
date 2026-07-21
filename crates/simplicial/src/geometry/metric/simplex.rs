@@ -1,9 +1,9 @@
 use super::EdgeIdx;
-use crate::{topology::simplex::nedges, Dim};
+use crate::{Dim, topology::simplex::nedges};
 
 use crate::linalg::{Matrix, Vector};
 use gramian::{CausalType, Gramian, Metric};
-use multiindex::{combinations, factorial, Combination};
+use multiindex::{Combination, combinations, factorial};
 
 /// The signed squared edge lengths of a simplex: Regge calculus, on any
 /// metric signature.

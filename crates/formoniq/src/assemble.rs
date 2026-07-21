@@ -92,7 +92,9 @@ mod test {
   use super::*;
   use crate::operators::HodgeMassElmat;
 
-  use simplicial::{gen::cartesian::CartesianGrid, geometry::metric::CellGramians, linalg::Matrix};
+  use simplicial::{
+    geometry::metric::CellGramians, linalg::Matrix, mesher::cartesian::CartesianGrid,
+  };
 
   /// Assembly consumes the edge-length primitive, so representation
   /// independence is a property of the conversions *into* it: routing a
