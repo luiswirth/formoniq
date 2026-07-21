@@ -18,19 +18,20 @@ pub fn solve<O: LinearOperator, B: ApproxInverse>(
 ) -> (Vector, Report) {
   let mut x = Vector::zeros(op.dim());
   let b_norm = b.norm().max(f64::MIN_POSITIVE);
-  let mut residual = 1.0;
-  let mut converged = b.norm() == 0.0;
+  let mut converged;
   let mut iters = 0;
-  while iters < stop.max_iters && !converged {
+  let residual = loop {
     let r = b - op.apply(&x);
-    residual = r.norm() / b_norm;
-    if residual <= stop.rtol {
-      converged = true;
-      break;
+    let residual = r.norm() / b_norm;
+    converged = residual <= stop.rtol;
+    // Residual checked after every step and the budget gates only the work, so
+    // the reported convergence reflects the final iterate, not the prior one.
+    if converged || iters >= stop.max_iters {
+      break residual;
     }
     x += precond.apply(&r);
     iters += 1;
-  }
+  };
   (
     x,
     Report {
