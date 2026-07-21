@@ -3,6 +3,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
+pub mod krylov;
 mod operator;
 mod precond;
 pub mod stationary;
@@ -221,5 +222,65 @@ mod tests {
     let r = Vector::from_fn(6, |i, _| (i as f64).cos());
     let s = Vector::from_fn(6, |i, _| (2.0 * i as f64 + 1.0).sin());
     assert!((sweeps.apply(&r).dot(&s) - r.dot(&sweeps.apply(&s))).abs() < 1e-12);
+  }
+
+  /// CG's defining theorem: on an $n times n$ SPD system it reaches the exact
+  /// solution in at most $n$ steps. Swept over orders, with the degenerate
+  /// $n = 0, 1$ included so totality holds at the boundary. The spectrum is
+  /// pinned (distinct eigenvalues), since finite termination degrades under
+  /// ill-conditioning in floating point.
+  #[test]
+  fn cg_terminates_in_at_most_n_steps() {
+    for n in 0..=8 {
+      let eigs: Vec<f64> = (0..n).map(|k| 1.0 + k as f64).collect();
+      let dense = spd_from_spectrum(&eigs);
+      let a = csr(&dense);
+      let x_true = Vector::from_fn(n, |i, _| (i as f64 + 1.0).ln());
+      let b = &dense * &x_true;
+
+      let stop = StopCriterion {
+        rtol: 1e-10,
+        max_iters: n.max(1),
+      };
+      let (x, report) = krylov::cg(&a, &Identity::new(n), &b, stop);
+      assert!(report.converged, "n = {n} did not converge in {n} steps");
+      assert!(report.iters <= n);
+      if n > 0 {
+        assert!((x - x_true).norm() < 1e-7, "n = {n}");
+      }
+    }
+  }
+
+  /// Preconditioning changes the path, never the fixed point: Jacobi-CG reaches
+  /// the same solution as unpreconditioned CG.
+  #[test]
+  fn preconditioning_preserves_the_solution() {
+    let dense = tridiag(20, 4.0, 1.0);
+    let a = csr(&dense);
+    let x_true = Vector::from_fn(20, |i, _| ((i * i) as f64).cos());
+    let b = &dense * &x_true;
+    let stop = StopCriterion::rtol(1e-12);
+
+    let (x_plain, _) = krylov::cg(&a, &Identity::new(20), &b, stop);
+    let (x_jacobi, _) = krylov::cg(&a, &Jacobi::new(&a), &b, stop);
+    assert!((&x_plain - &x_true).norm() < 1e-9);
+    assert!((&x_jacobi - &x_true).norm() < 1e-9);
+    assert!((x_plain - x_jacobi).norm() < 1e-9);
+  }
+
+  /// The composition that justifies the whole trait algebra: a consumer
+  /// (`Stationary`) used as an implementor, preconditioning another consumer
+  /// (`cg`). CG preconditioned by two Jacobi sweeps solves the system.
+  #[test]
+  fn cg_preconditioned_by_stationary_sweeps() {
+    let dense = tridiag(20, 4.0, 1.0);
+    let a = csr(&dense);
+    let x_true = Vector::from_fn(20, |i, _| (i as f64 - 10.0).tanh());
+    let b = &dense * &x_true;
+
+    let sweeps = Stationary::new(&a, Jacobi::new(&a), 2);
+    let (x, report) = krylov::cg(&a, &sweeps, &b, StopCriterion::rtol(1e-10));
+    assert!(report.converged);
+    assert!((x - x_true).norm() < 1e-7);
   }
 }
