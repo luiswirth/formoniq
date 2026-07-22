@@ -132,6 +132,18 @@ mod testutil {
       }
     })
   }
+
+  /// A symmetric *indefinite* operator: same construction as
+  /// [`spd_from_spectrum`] but with a prescribed mixed-sign spectrum, so it is
+  /// the MINRES-shaped case CG cannot handle.
+  pub fn symmetric_from_spectrum(eigs: &[f64]) -> DMatrix<f64> {
+    spd_from_spectrum(eigs)
+  }
+
+  /// Direct dense solve, the reference an iterative method must reproduce.
+  pub fn dense_solve(a: &DMatrix<f64>, b: &Vector) -> Vector {
+    a.clone().lu().solve(b).expect("nonsingular")
+  }
 }
 
 #[cfg(test)]
@@ -282,5 +294,47 @@ mod tests {
     let (x, report) = krylov::cg(&a, &sweeps, &b, StopCriterion::rtol(1e-10));
     assert!(report.converged);
     assert!((x - x_true).norm() < 1e-7);
+  }
+
+  /// MINRES solves a symmetric *indefinite* system --- the case CG cannot ---
+  /// reproducing the direct solve, swept over orders including the degenerate
+  /// $n = 0, 1$.
+  #[test]
+  fn minres_solves_symmetric_indefinite_systems() {
+    use crate::testutil::{dense_solve, symmetric_from_spectrum};
+    for n in 0..=8 {
+      // A mixed-sign spectrum bounded away from zero: symmetric, indefinite,
+      // nonsingular. Magnitudes 1, 1, 2, 2, ... with alternating sign.
+      let eigs: Vec<f64> = (0..n)
+        .map(|k| (k / 2 + 1) as f64 * if k % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
+      let dense = symmetric_from_spectrum(&eigs);
+      let a = csr(&dense);
+      let b = Vector::from_fn(n, |i, _| (i as f64 + 1.0).sqrt());
+
+      let (x, report) = krylov::minres(&a, &Identity::new(n), &b, StopCriterion::rtol(1e-11));
+      assert!(report.converged, "n = {n} did not converge");
+      if n > 0 {
+        assert!((x - dense_solve(&dense, &b)).norm() < 1e-7, "n = {n}");
+      }
+    }
+  }
+
+  /// On an SPD system MINRES and CG reach the same solution: MINRES is the
+  /// generalization, agreeing where CG applies.
+  #[test]
+  fn minres_agrees_with_cg_on_spd() {
+    let dense = tridiag(25, 4.0, 1.0);
+    let a = csr(&dense);
+    let x_true = Vector::from_fn(25, |i, _| (i as f64).sin());
+    let b = &dense * &x_true;
+    let stop = StopCriterion::rtol(1e-12);
+
+    let (x_min, report) = krylov::minres(&a, &Jacobi::new(&a), &b, stop);
+    assert!(report.converged);
+    assert!((&x_min - &x_true).norm() < 1e-8);
+
+    let (x_cg, _) = krylov::cg(&a, &Jacobi::new(&a), &b, stop);
+    assert!((x_min - x_cg).norm() < 1e-7);
   }
 }

@@ -85,3 +85,117 @@ pub fn cg<O: LinearOperator, M: SelfAdjoint>(
     },
   )
 }
+
+/// Solve $A x = b$ by preconditioned MINRES, started from zero.
+///
+/// The Krylov method for a symmetric *indefinite* operator: it minimizes the
+/// preconditioned residual norm over the Krylov subspace by a Lanczos process
+/// with coupled Givens rotations, a short recurrence that never stores the
+/// basis. Where [`cg`] needs $A$ positive-definite, MINRES needs only symmetry,
+/// which is exactly what the mixed Hodge-Laplace saddle-point system is.
+///
+/// The preconditioner $M = B^(-1)$ is still taken through [`SelfAdjoint`]: MINRES
+/// requires a symmetric positive-definite preconditioner (it defines the inner
+/// product the residual is minimized in), even though the operator itself is
+/// indefinite. In exact arithmetic it terminates in at most $n$ steps.
+///
+/// Follows the preconditioned form of Paige and Saunders' algorithm; the
+/// reported residual is the relative preconditioner-norm residual
+/// $norm(r_k)_(M^(-1)) / norm(b)_(M^(-1))$.
+pub fn minres<O: LinearOperator, M: SelfAdjoint>(
+  op: &O,
+  precond: &M,
+  b: &Vector,
+  stop: StopCriterion,
+) -> (Vector, Report) {
+  let n = op.dim();
+  let mut x = Vector::zeros(n);
+  let eps = f64::EPSILON;
+
+  // First Lanczos vector, in the M^{-1} inner product.
+  let mut r1 = b.clone();
+  let mut y = precond.apply(&r1);
+  let beta1_sq = r1.dot(&y);
+  if beta1_sq <= 0.0 {
+    // b is zero (nothing to solve); a negative value would signal a
+    // non-positive-definite preconditioner, which the SelfAdjoint bound forbids.
+    return (
+      x,
+      Report {
+        iters: 0,
+        residual: 0.0,
+        converged: true,
+      },
+    );
+  }
+  let beta1 = beta1_sq.sqrt();
+
+  let mut oldb = 0.0;
+  let mut beta = beta1;
+  let mut dbar = 0.0;
+  let mut epsln = 0.0;
+  let mut phibar = beta1;
+  let mut cs = -1.0;
+  let mut sn = 0.0;
+  let mut w = Vector::zeros(n);
+  let mut w2 = Vector::zeros(n);
+  let mut r2 = r1.clone();
+
+  let mut residual = 1.0;
+  let mut converged = false;
+  let mut iters = 0;
+  while iters < stop.max_iters {
+    iters += 1;
+
+    // Lanczos step in the M^{-1} inner product.
+    let v = &y / beta;
+    let mut y_next = op.apply(&v);
+    if iters >= 2 {
+      y_next.axpy(-beta / oldb, &r1, 1.0);
+    }
+    let alfa = v.dot(&y_next);
+    y_next.axpy(-alfa / beta, &r2, 1.0);
+    r1 = r2;
+    r2 = y_next;
+    y = precond.apply(&r2);
+    oldb = beta;
+    beta = r2.dot(&y).max(0.0).sqrt();
+
+    // Apply the previous rotation, then compute and apply the next one.
+    let oldeps = epsln;
+    let delta = cs * dbar + sn * alfa;
+    let gbar = sn * dbar - cs * alfa;
+    epsln = sn * beta;
+    dbar = -cs * beta;
+
+    let gamma = (gbar * gbar + beta * beta).sqrt().max(eps);
+    cs = gbar / gamma;
+    sn = beta / gamma;
+    let phi = cs * phibar;
+    phibar *= sn;
+
+    // Update the solution. Entering, `w` holds w_{k-1} and `w2` holds w_{k-2};
+    // oldeps multiplies the older, delta the newer.
+    let mut wnew = v;
+    wnew.axpy(-oldeps, &w2, 1.0);
+    wnew.axpy(-delta, &w, 1.0);
+    wnew /= gamma;
+    w2 = w;
+    w = wnew;
+    x.axpy(phi, &w, 1.0);
+
+    residual = phibar / beta1;
+    if residual <= stop.rtol {
+      converged = true;
+      break;
+    }
+  }
+  (
+    x,
+    Report {
+      iters,
+      residual,
+      converged,
+    },
+  )
+}
