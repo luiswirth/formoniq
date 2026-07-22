@@ -74,3 +74,46 @@ impl ApproxInverse for Jacobi {
 }
 
 impl SelfAdjoint for Jacobi {}
+
+/// A block-diagonal approximate inverse $B = "diag"(B_0, dots, B_(m-1))$: apply
+/// each block's inverse to the corresponding contiguous slice of the vector.
+///
+/// The natural preconditioner for a saddle-point system, where the theory
+/// (operator preconditioning) prescribes a norm that is block-diagonal across
+/// the spaces. Self-adjoint exactly when every block is, so it may precondition
+/// [`cg`](crate::krylov::cg) / [`minres`](crate::krylov::minres) precisely when
+/// the blocks do.
+///
+/// The blocks share one type, which is what keeps the apply monomorphized: for
+/// the mixed Hodge-Laplace system every block is the same direct SPD solve of a
+/// different Gram matrix.
+#[derive(Clone, Debug)]
+pub struct BlockDiagonal<B> {
+  blocks: Vec<B>,
+}
+
+impl<B: ApproxInverse> BlockDiagonal<B> {
+  /// The block inverses, in the order their spaces are stacked in the vector.
+  pub fn new(blocks: Vec<B>) -> Self {
+    Self { blocks }
+  }
+}
+
+impl<B: ApproxInverse> ApproxInverse for BlockDiagonal<B> {
+  fn dim(&self) -> usize {
+    self.blocks.iter().map(ApproxInverse::dim).sum()
+  }
+  fn apply(&self, r: &Vector) -> Vector {
+    let mut out = Vector::zeros(self.dim());
+    let mut offset = 0;
+    for block in &self.blocks {
+      let d = block.dim();
+      let piece = block.apply(&r.rows(offset, d).into_owned());
+      out.rows_mut(offset, d).copy_from(&piece);
+      offset += d;
+    }
+    out
+  }
+}
+
+impl<B: SelfAdjoint> SelfAdjoint for BlockDiagonal<B> {}
