@@ -219,6 +219,7 @@ impl Complex {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::topology::{simplex::Simplex, skeleton::Skeleton};
 
   fn complex_of(cells: &[&[usize]]) -> Complex {
@@ -262,7 +263,7 @@ mod test {
   /// constraint set is empty.
   #[test]
   fn standard_simplex_is_orientable() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let complex = Complex::standard(dim);
       assert!(complex.is_orientable());
       assert_coherent(&complex);

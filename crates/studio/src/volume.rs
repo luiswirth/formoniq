@@ -19,6 +19,7 @@
 
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use exterior::ExteriorGrade;
 use simplicial::{
   Dim,
   atlas::MeshPoint,
@@ -81,7 +82,7 @@ impl VolumeGrid {
     let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
     let k = cochain.grade();
     let n = topology.dim();
-    let ambient = coords.dim();
+    let ambient = coords.dim().index();
 
     let mut values = Vec::with_capacity(resolution.iter().product());
     let mut peak = 0.0f32;
@@ -117,7 +118,7 @@ fn sample_at(
   coords: &MeshCoords,
   interpolant: &WhitneyInterpolant,
   point: &MeshPoint,
-  k: usize,
+  k: ExteriorGrade,
   n: Dim,
 ) -> f64 {
   let cell = point.chart(topology);

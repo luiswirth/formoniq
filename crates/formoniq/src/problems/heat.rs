@@ -39,13 +39,14 @@ use exterior::ExteriorGrade;
 /// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
 pub fn solve_heat<C: HilbertComplex>(
   complex: &C,
-  grade: ExteriorGrade,
+  grade: impl Into<ExteriorGrade>,
   nsteps: usize,
   dt: f64,
   initial: &Cochain,
   source: &Cochain,
   diffusion_coeff: f64,
 ) -> Vec<Cochain> {
+  let grade = grade.into();
   let hb = HodgeBlocks::compute(complex, grade);
   let (ns, nu) = (hb.n_sigma, hb.n_u);
 
@@ -99,6 +100,7 @@ mod test {
   use crate::linalg::quadratic_form_sparse;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
+  use simplicial::Dim;
   use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
@@ -111,12 +113,12 @@ mod test {
   /// $k = n$ (no $omega$, $Delta = 0$, energy exactly flat).
   #[test]
   fn energy_dissipates_at_every_grade() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let mass = CsrMatrix::from(&whitney.mass(grade));
         let n = whitney.ndofs(grade);
         let u0 = Cochain::new(
@@ -149,11 +151,11 @@ mod test {
   /// pins it down.
   #[test]
   fn steady_state_matches_static_hodge_laplace() {
-    let (topology, coords) = CartesianGrid::new_unit(2, 3).triangulate();
+    let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
-    let grade = 1;
+    let grade = Dim::new(1);
     assert_eq!(relative.harmonic_dim(grade), 0);
 
     let n_rel = relative.ndofs(grade);

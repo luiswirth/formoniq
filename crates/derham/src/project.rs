@@ -115,6 +115,7 @@ pub fn integrate_face(
 #[cfg(test)]
 mod test {
   use super::*;
+  use multiindex::Dim;
 
   use crate::section::CoordFieldExt;
 
@@ -137,36 +138,44 @@ mod test {
       // 1d: omega = x^2, dif omega = 2x dx
       // (0-forms are evaluated, not integrated, so degree 2 stays exact)
       (
-        DiffFormClosure::scalar(|p| p[0] * p[0], 1),
-        DiffFormClosure::one_form(|p| Vector::from_element(1, 2.0 * p[0]), 1),
+        DiffFormClosure::scalar(|p| p[0] * p[0], Dim::new(1)),
+        DiffFormClosure::one_form(|p| Vector::from_element(1, 2.0 * p[0]), Dim::new(1)),
       ),
       // 2d: omega = x y, dif omega = y dx + x dy
       (
-        DiffFormClosure::scalar(|p| p[0] * p[1], 2),
-        DiffFormClosure::one_form(|p| na::dvector![p[1], p[0]], 2),
+        DiffFormClosure::scalar(|p| p[0] * p[1], Dim::new(2)),
+        DiffFormClosure::one_form(|p| na::dvector![p[1], p[0]], Dim::new(2)),
       ),
       // 2d: omega = y dx, dif omega = -dx wedge dy
       (
-        DiffFormClosure::one_form(|p| na::dvector![p[1], 0.0], 2),
-        DiffFormClosure::new(|_| ExteriorElement::new(na::dvector![-1.0], 2, 2), 2, 2),
+        DiffFormClosure::one_form(|p| na::dvector![p[1], 0.0], Dim::new(2)),
+        DiffFormClosure::new(
+          |_| ExteriorElement::new(na::dvector![-1.0], Dim::new(2), Dim::new(2)),
+          Dim::new(2),
+          Dim::new(2),
+        ),
       ),
       // 3d: omega = z dy, dif omega = -dy wedge dz
       (
-        DiffFormClosure::one_form(|p| na::dvector![0.0, p[2], 0.0], 3),
+        DiffFormClosure::one_form(|p| na::dvector![0.0, p[2], 0.0], Dim::new(3)),
         DiffFormClosure::new(
-          |_| ExteriorElement::new(na::dvector![0.0, 0.0, -1.0], 3, 2),
-          3,
-          2,
+          |_| ExteriorElement::new(na::dvector![0.0, 0.0, -1.0], Dim::new(3), Dim::new(2)),
+          Dim::new(3),
+          Dim::new(2),
         ),
       ),
       // 3d: omega = x dy wedge dz, dif omega = dx wedge dy wedge dz
       (
         DiffFormClosure::new(
-          |p| ExteriorElement::new(na::dvector![0.0, 0.0, p[0]], 3, 2),
-          3,
-          2,
+          |p| ExteriorElement::new(na::dvector![0.0, 0.0, p[0]], Dim::new(3), Dim::new(2)),
+          Dim::new(3),
+          Dim::new(2),
         ),
-        DiffFormClosure::new(|_| ExteriorElement::new(na::dvector![1.0], 3, 3), 3, 3),
+        DiffFormClosure::new(
+          |_| ExteriorElement::new(na::dvector![1.0], Dim::new(3), Dim::new(3)),
+          Dim::new(3),
+          Dim::new(3),
+        ),
       ),
     ];
 
@@ -195,16 +204,16 @@ mod test {
   /// the reference-frame implementation legitimate.
   #[test]
   fn derham_map_is_independent_of_supporting_cell() {
-    for dim in 2..=3 {
+    for dim in (2..=3).into_iter().map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let field = DiffFormClosure::one_form(
         |p: &Coord| Vector::from_iterator(p.dim(), p.iter().map(|x| x.sin())),
         dim,
       );
       let pulled = field.pullback_on(&topology, &coords);
-      let qr = SimplexQuadRule::degree(1, 3);
+      let qr = SimplexQuadRule::degree(Dim::ONE, 3);
 
-      for edge in topology.skeleton(1).handle_iter() {
+      for edge in topology.skeleton(Dim::ONE).handle_iter() {
         let integrals: Vec<f64> = edge
           .cells()
           .map(|cell| {
@@ -231,10 +240,10 @@ mod test {
   fn tangent_blade_transforms_by_the_transition_differential() {
     use simplicial::atlas::ChartExt;
 
-    for dim in 2..=3 {
+    for dim in (2..=3).into_iter().map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
-      for face_dim in 1..dim {
+      for face_dim in Dim::ONE.range_to_inclusive(dim - 1) {
         for face in topology.skeleton(face_dim).handle_iter() {
           let cells: Vec<_> = face.cells().collect();
           for (i, &source) in cells.iter().enumerate() {

@@ -33,7 +33,6 @@
 use std::f64::consts::TAU;
 
 use crate::{
-  Dim,
   geometry::coord::mesh::MeshCoords,
   linalg::{Matrix, Vector},
   mesher::quotient::{FlatQuotient, Identification},
@@ -66,13 +65,15 @@ pub fn equivariant(quotient: &FlatQuotient, radius_slack: f64) -> MeshCoords {
   let ids = quotient.identifications();
 
   let reflector = reflectors(quotient);
-  let emitters: Vec<Emitter> = (0..dim)
+  let emitters: Vec<Emitter> = (0..dim.index())
     .filter(|&axis| reflector[axis].is_none())
     .map(|axis| match ids[axis] {
       Identification::Open => Emitter::Line(axis),
       _ => Emitter::Circle {
         axis,
-        fiber: (0..dim).filter(|&j| reflector[j] == Some(axis)).collect(),
+        fiber: (0..dim.index())
+          .filter(|&j| reflector[j] == Some(axis))
+          .collect(),
       },
     })
     .collect();
@@ -106,8 +107,8 @@ pub fn is_isometric(quotient: &FlatQuotient) -> bool {
 }
 
 /// Which twisted axis reflects each axis, if any.
-fn reflectors(quotient: &FlatQuotient) -> Vec<Option<Dim>> {
-  let mut reflector = vec![None; quotient.dim()];
+fn reflectors(quotient: &FlatQuotient) -> Vec<Option<usize>> {
+  let mut reflector = vec![None; quotient.dim().index()];
   for (axis, id) in quotient.identifications().iter().enumerate() {
     if let Identification::Twisted(reflected) = id {
       for &j in reflected {
@@ -126,10 +127,10 @@ fn reflectors(quotient: &FlatQuotient) -> Vec<Option<Dim>> {
 /// One axis's contribution to the ambient coordinates.
 enum Emitter {
   /// An unidentified axis, carried as itself: one dimension, isometrically.
-  Line(Dim),
+  Line(usize),
   /// An identified axis as a circle, together with the fiber axes its gluing
   /// reflects. Two dimensions for the circle, two more per reflected axis.
-  Circle { axis: Dim, fiber: Vec<Dim> },
+  Circle { axis: usize, fiber: Vec<usize> },
 }
 
 impl Emitter {
@@ -177,7 +178,7 @@ impl Emitter {
 /// A periodic axis is a circle, whose reflection $theta |-> -theta$ splits it
 /// into $cos$ and $sin$; an open axis is an interval, reflected about its
 /// midpoint, so it is purely odd once centred.
-fn reflected_parts(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> (f64, f64) {
+fn reflected_parts(quotient: &FlatQuotient, cart: &[usize], axis: usize) -> (f64, f64) {
   if quotient.identifications()[axis].is_closed() {
     let angle = TAU * fraction(quotient, cart, axis);
     let radius = radius(quotient, axis);
@@ -201,18 +202,18 @@ fn reflected_parts(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> (f64, 
 /// circle factors are mutually orthogonal, so their squared chords simply add.
 ///
 /// It converges to $L \/ 2 pi$ from above as the mesh refines.
-fn radius(quotient: &FlatQuotient, axis: Dim) -> f64 {
+fn radius(quotient: &FlatQuotient, axis: usize) -> f64 {
   let n = quotient.ncells_per_axis()[axis] as f64;
   quotient.side_lengths()[axis] / (2.0 * n * (std::f64::consts::PI / n).sin())
 }
 
 /// The position along an axis within the fundamental domain.
-fn position(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> f64 {
+fn position(quotient: &FlatQuotient, cart: &[usize], axis: usize) -> f64 {
   fraction(quotient, cart, axis) * quotient.side_lengths()[axis]
 }
 
 /// The position along an axis as a fraction of its period.
-fn fraction(quotient: &FlatQuotient, cart: &[usize], axis: Dim) -> f64 {
+fn fraction(quotient: &FlatQuotient, cart: &[usize], axis: usize) -> f64 {
   cart[axis] as f64 / quotient.ncells_per_axis()[axis] as f64
 }
 
@@ -296,6 +297,7 @@ fn revolve(quotient: &FlatQuotient, point: impl Fn(&[usize]) -> [f64; 3]) -> Mes
 #[cfg(test)]
 mod test {
   use super::{donut_r3, equivariant, is_isometric, moebius_r3};
+  use crate::Dim;
   use crate::{
     linalg::Vector,
     mesher::quotient::{FlatQuotient, Identification},
@@ -309,13 +311,13 @@ mod test {
   /// bridge against each other, neither standing in for the other.
   #[test]
   fn the_clifford_embedding_is_isometric() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let quotient = FlatQuotient::unit_torus(dim, 4);
       assert!(is_isometric(&quotient));
 
       let (complex, intrinsic) = quotient.triangulate();
       let coords = equivariant(&quotient, 1.0 + f64::EPSILON);
-      assert_eq!(coords.dim(), 2 * dim);
+      assert_eq!(coords.dim().index(), 2 * dim.index());
 
       let induced = coords.to_edge_lengths_sq(&complex);
       for (a, b) in intrinsic.iter().zip(induced.iter()) {
@@ -380,7 +382,7 @@ mod test {
   #[test]
   fn the_embedding_separates_the_vertices() {
     for quotient in [
-      FlatQuotient::unit_torus(2, 4),
+      FlatQuotient::unit_torus(Dim::new(2), 4),
       FlatQuotient::moebius(1.0, 0.4, 4),
       FlatQuotient::klein(Vector::from_element(2, 1.0), 4),
     ] {
@@ -400,7 +402,7 @@ mod test {
   /// different manifold from the flat quotient that produced the topology.
   #[test]
   fn the_r3_pictures_are_curved() {
-    let torus = FlatQuotient::unit_torus(2, 4);
+    let torus = FlatQuotient::unit_torus(Dim::new(2), 4);
     let strip = FlatQuotient::moebius(1.0, 0.4, 4);
     let cases = [
       (&torus, donut_r3(&torus, 0.4)),

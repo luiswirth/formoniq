@@ -386,7 +386,7 @@ impl Scene {
       &topology,
       &surface,
       &coords,
-      0,
+      Dim::ZERO,
       nmodes,
       &mut fields,
       &mut line_fields,
@@ -419,7 +419,7 @@ impl Scene {
     let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
-    for grade in 0..=topology.dim() {
+    for grade in topology.dim().range_inclusive() {
       let (mut f, mut l) = Self::eigenmodes_grade(&topology, &coords, grade, nmodes);
       fields.append(&mut f);
       line_fields.append(&mut l);
@@ -484,8 +484,8 @@ impl Scene {
     let nvertices = topology.skeleton_raw(0).len();
     let fields = vec![ScalarField {
       name: "loading...".to_string(),
-      grade: 0,
-      cochain: Cochain::new(0, na::DVector::zeros(nvertices)),
+      grade: Dim::ZERO,
+      cochain: Cochain::new(Dim::ZERO, na::DVector::zeros(nvertices)),
       time: FieldTime::Static,
       dof: None,
     }];
@@ -521,14 +521,15 @@ impl Scene {
   /// reference cell of dimension `cell_dim` -- the single-cell case of the
   /// shared construction below, where every DOF simplex's support is the one
   /// cell itself.
-  pub fn whitney_basis(cell_dim: Dim) -> Self {
+  pub fn whitney_basis(cell_dim: impl Into<Dim>) -> Self {
     use simplicial::geometry::coord::mesh::standard_coord_complex;
 
+    let cell_dim = cell_dim.into();
     let (topology, coords) = standard_coord_complex(cell_dim);
     // The renderer is 3D-only; a reference cell of `dim < 3` embeds as
     // itself in the `z = 0` plane, same as `bake.rs` does
     // for any other flat surface. A no-op once `cell_dim >= 3`.
-    let coords = coords.embed_euclidean(cell_dim.max(3));
+    let coords = coords.embed_euclidean(cell_dim.max(Dim::new(3)));
     Self::whitney_basis_on(topology, coords)
   }
 
@@ -658,7 +659,7 @@ impl Scene {
     let surface = Surface::of(&topology, &coords);
     let mut fields = Vec::new();
     let mut line_fields = Vec::new();
-    for grade in 0..=dim {
+    for grade in dim.range_inclusive() {
       let ndofs = topology.nsimplices(grade);
       for (idof, dof_simp) in topology.skeleton_raw(grade).iter().enumerate() {
         let name = format!("W^{grade}_{{{}}}", dof_label(dof_simp));
@@ -708,10 +709,11 @@ impl Scene {
   pub fn heat(
     topology: Complex,
     coords: MeshCoords,
-    grade: ExteriorGrade,
+    grade: impl Into<ExteriorGrade>,
     nsteps: usize,
     final_time: f64,
   ) -> Self {
+    let grade = grade.into();
     use formoniq::{problems::heat::solve_heat, whitney_complex::WhitneyComplex};
 
     let metric = coords.to_edge_lengths_sq(&topology);
@@ -736,10 +738,11 @@ impl Scene {
   pub fn wave(
     topology: Complex,
     coords: MeshCoords,
-    grade: ExteriorGrade,
+    grade: impl Into<ExteriorGrade>,
     nsteps: usize,
     final_time: f64,
   ) -> Self {
+    let grade = grade.into();
     use formoniq::{
       problems::wave::{WaveState, solve_wave},
       whitney_complex::WhitneyComplex,
@@ -884,7 +887,7 @@ impl Scene {
       return;
     }
 
-    match k.min(n - k) {
+    match (k.min(n - k)).index() {
       0 => {
         // The original $k$-cochain is kept whole; the reduction to a density (a
         // pointwise Hodge star for $k = n$, the identity for $k = 0$) is read
@@ -1465,7 +1468,7 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
 /// handles sit in space, and on the Császár torus, for one, they vanish. The
 /// harmonic shell is supplied separately by [`hodge_probe_input`].
 fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
-  let n = coords.dim();
+  let n = coords.dim().index();
   let field = DiffFormClosure::one_form(
     move |p| {
       let x = p.vector();
@@ -1503,7 +1506,7 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// mesh every vertex is on the surface, so the nearest merely also works where a
 /// boundary exists.
 fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -> Cochain {
-  let n = coords.dim();
+  let n = coords.dim().index();
   let nvertices = coords.nvertices().max(1) as f64;
   let centroid = coords
     .coord_iter()
@@ -1524,7 +1527,7 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
     .map_or_else(|| centroid.clone(), |c| (*c).into_owned());
   let sigma = 0.25 * extent.max(1e-6);
 
-  let blade = MultiForm::from_blade_signed(n, Sign::Pos, Blade::from_rank(grade, 0));
+  let blade = MultiForm::from_blade_signed(n, Sign::Pos, Blade::from_rank(grade.index(), 0));
   let field = DiffFormClosure::new(
     move |p| {
       let r2 = (p.vector() - &center).norm_squared();
@@ -1897,7 +1900,7 @@ mod tests {
       times.into_iter().next().unwrap()
     };
 
-    for grade in 0..=topology.dim() {
+    for grade in topology.dim().range_inclusive() {
       let heat = Scene::heat(topology.clone(), coords.clone(), grade, 10, 0.2);
       let FieldTime::Trajectory { frames, .. } = &only_field(&heat) else {
         panic!("the heat flow is a trajectory at grade {grade}");
@@ -1969,7 +1972,7 @@ mod tests {
     }
     .build()
     .unwrap();
-    let (fields, _) = Scene::eigenmodes_grade(&topology, &coords, 0, 4);
+    let (fields, _) = Scene::eigenmodes_grade(&topology, &coords, simplicial::Dim::ZERO, 4);
     let scene = Scene {
       surface: Surface::of(&topology, &coords),
       topology,

@@ -67,7 +67,7 @@ pub struct ReferenceRefinement {
 pub fn ref_refinement(dim: Dim, refinement: usize) -> ReferenceRefinement {
   assert!(refinement >= 1, "A refinement is at least one.");
 
-  let vertices: Vec<Vec<usize>> = Composition::all(dim + 1, refinement)
+  let vertices: Vec<Vec<usize>> = Composition::all((dim + 1).index(), refinement)
     .map(Composition::into_parts)
     .collect();
   let rank: HashMap<&Vec<usize>, usize> =
@@ -89,7 +89,7 @@ pub fn ref_refinement(dim: Dim, refinement: usize) -> ReferenceRefinement {
 
   assert_eq!(
     children.len(),
-    refinement.pow(dim as u32),
+    refinement.pow(dim.index() as u32),
     "edgewise subdivision must yield R^n children"
   );
 
@@ -108,18 +108,20 @@ fn kuhn_children(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<Vec<us
   // A vertex lies in $R Delta$ iff $R >= s_1 >= ... >= s_n >= 0$.
   let in_region = move |s: &[usize]| s[0] <= r && s.windows(2).all(|w| w[0] >= w[1]);
 
-  let bases = (0..dim).map(|_| 0..=r).multi_cartesian_product();
+  let bases = (0..dim.index()).map(|_| 0..=r).multi_cartesian_product();
   bases.flat_map(move |base| {
-    (0..dim).permutations(dim).filter_map(move |perm| {
-      let mut w = base.clone();
-      let mut child = Vec::with_capacity(dim + 1);
-      child.push(w.clone());
-      for &axis in &perm {
-        w[axis] += 1;
+    (0..dim.index())
+      .permutations(dim.index())
+      .filter_map(move |perm| {
+        let mut w = base.clone();
+        let mut child = Vec::with_capacity((dim + 1).index());
         child.push(w.clone());
-      }
-      child.iter().all(|s| in_region(s)).then_some(child)
-    })
+        for &axis in &perm {
+          w[axis] += 1;
+          child.push(w.clone());
+        }
+        child.iter().all(|s| in_region(s)).then_some(child)
+      })
   })
 }
 
@@ -167,7 +169,7 @@ impl ReferenceRefinement {
   pub fn vertex_bary(&self, ivertex: usize) -> Bary {
     let scale = (self.refinement as f64).recip();
     Bary::new(Vector::from_iterator(
-      self.dim + 1,
+      (self.dim + 1).index(),
       self.vertices[ivertex].iter().map(|&k| k as f64 * scale),
     ))
   }
@@ -195,6 +197,7 @@ impl ReferenceRefinement {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::atlas::{ref_lattice, refsimp_vol};
 
   /// Freudenthal subdivision *composes*: refining an ordered simplex $R$-fold
@@ -216,7 +219,7 @@ mod test {
     /// order: the parent's vertices read through the lattice weights.
     fn refine_ordered(vertices: &[Vector], refinement: usize) -> Vec<Vec<Vector>> {
       let dim = vertices.len() - 1;
-      let pattern = ref_refinement(dim, refinement);
+      let pattern = ref_refinement(dim.into(), refinement);
       pattern
         .children()
         .iter()
@@ -254,11 +257,11 @@ mod test {
       cells
     }
 
-    for dim in 1..=4 {
+    for dim in (1..=4usize).map(Dim::from) {
       // The Kuhn simplex of the unit cube: the chain of partial sums of the axes.
-      let mut corner = Vector::zeros(dim);
+      let mut corner = Vector::zeros(dim.index());
       let mut kuhn = vec![corner.clone()];
-      for axis in 0..dim {
+      for axis in 0..dim.index() {
         corner[axis] = 1.0;
         kuhn.push(corner.clone());
       }
@@ -271,8 +274,8 @@ mod test {
         .iter()
         .map(|v| {
           let mut w = v.clone();
-          for axis in 0..dim {
-            w[axis] += 0.3 * (axis + 1) as f64 * v[(axis + 1) % dim] + 0.1 * v[axis];
+          for axis in 0..dim.index() {
+            w[axis] += 0.3 * (axis + 1) as f64 * v[(axis + 1) % dim.index()] + 0.1 * v[axis];
           }
           w
         })
@@ -299,10 +302,10 @@ mod test {
   /// lattice $L_R^n$, and every child is a nondegenerate simplex.
   #[test]
   fn children_and_vertices() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for r in 1..=3 {
         let sub = ref_refinement(dim, r);
-        assert_eq!(sub.nchildren(), r.pow(dim as u32));
+        assert_eq!(sub.nchildren(), r.pow(dim.index() as u32));
 
         let lattice: Vec<Vec<usize>> = ref_lattice(dim, r).collect();
         assert_eq!(sub.vertices(), lattice.as_slice());
@@ -323,7 +326,7 @@ mod test {
   /// order-invariant.
   #[test]
   fn volume_partition() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for r in 1..=3 {
         let sub = ref_refinement(dim, r);
         let total: f64 = (0..sub.nchildren())
@@ -333,7 +336,7 @@ mod test {
         for c in 0..sub.nchildren() {
           approx::assert_relative_eq!(
             sub.child_local_simplex(c).vol(),
-            refsimp_vol(dim) / (r.pow(dim as u32) as f64),
+            refsimp_vol(dim) / (r.pow(dim.index() as u32) as f64),
             epsilon = 1e-12
           );
         }

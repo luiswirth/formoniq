@@ -157,13 +157,13 @@ impl MeshView {
   /// point cloud colors its own cells instead of a skeleton it does not have.
   /// Above $n = 2$ the top skeleton is not drawn at all, so the boundary
   /// 2-skeleton -- what a solid actually shows -- is what carries the field.
-  pub(crate) fn for_dim(dim: Dim) -> Self {
-    let top = dim.min(2);
+  pub(crate) fn for_dim(dim: impl Into<Dim>) -> Self {
+    let top = dim.into().min(Dim::new(2));
     let mut skeletons = [SkeletonView {
       visible: true,
       colored: false,
     }; 3];
-    skeletons[top].colored = true;
+    skeletons[top.index()].colored = true;
     Self { skeletons }
   }
 }
@@ -448,11 +448,11 @@ fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
   let current_grade = entries
     .iter()
     .find(|e| e.selection == *selection)
-    .map_or(0, |e| e.grade);
+    .map_or(Dim::ZERO, |e| e.grade);
 
   let mut active_grade = current_grade;
   ui.horizontal_wrapped(|ui| {
-    for grade in 0..=n {
+    for grade in n.range_inclusive() {
       if entries.iter().any(|e| e.grade == grade)
         && ui
           .selectable_label(current_grade == grade, grade_mark_label(grade, n))
@@ -614,7 +614,7 @@ fn skeleton_hover(k: usize) -> &'static str {
 
 pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
   let reduced = grade.min(n - grade);
-  let mark = match reduced {
+  let mark = match reduced.index() {
     0 => "density",
     1 => "line field",
     _ => "sheet",
@@ -660,7 +660,7 @@ fn commit_slider<Num: egui::emath::Numeric>(
 fn grade_tabs(ui: &mut egui::Ui, grade: &mut ExteriorGrade, max_grade: Dim) -> bool {
   let mut commit = false;
   ui.horizontal_wrapped(|ui| {
-    for g in 0..=max_grade {
+    for g in max_grade.range_inclusive() {
       if ui
         .selectable_label(*grade == g, grade_mark_label(g, max_grade))
         .clicked()
@@ -1198,7 +1198,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         section(ui, "Mesh", |ui| {
           ui.weak(mesh_stats_line(&model.simplex_counts))
             .on_hover_text("Simplex count per skeleton dimension, read off the topology");
-          for k in (0..=model.scene_dim.min(2)).rev() {
+          for k in (0..=model.scene_dim.min(Dim::new(2)).index()).rev() {
             let sk = &mut mesh_view.skeletons[k];
             ui.horizontal(|ui| {
               ui.checkbox(&mut sk.visible, skeleton_label(k))

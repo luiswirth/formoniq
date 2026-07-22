@@ -14,6 +14,7 @@ mod test {
   use crate::{
     cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, project::derham_map,
   };
+  use multiindex::Dim;
 
   use {
     simplicial::linalg::Vector,
@@ -33,12 +34,12 @@ mod test {
   /// Both sides are intrinsic: no coordinates enter, only the topology.
   #[test]
   fn whitney_basis_property() {
-    let standard = (0..=4).map(Complex::standard);
+    let standard = (0..=4).map(Dim::from).map(Complex::standard);
     let cartesian = (1..=3).map(|dim| CartesianGrid::new_unit(dim, 2).triangulate().0);
 
     for topology in standard.chain(cartesian) {
       let dim = topology.dim();
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let ndofs = topology.nsimplices(grade);
         for idof in 0..ndofs {
           let mut coeffs = Vector::zeros(ndofs);

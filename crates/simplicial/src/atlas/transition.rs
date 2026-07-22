@@ -58,7 +58,7 @@ impl Transition {
     let source_vertices = &source.simplex().vertices;
     let target_vertices = &target.simplex().vertices;
 
-    let mut bary_map = Matrix::zeros(dim + 1, dim + 1);
+    let mut bary_map = Matrix::zeros((dim + 1).index(), (dim + 1).index());
     for (j, vertex) in target_vertices.iter().enumerate() {
       if let Ok(i) = source_vertices.binary_search(vertex) {
         bary_map[(j, i)] = 1.0;
@@ -90,7 +90,9 @@ impl Transition {
   /// The local vertex positions, in the *source* chart, of the vertices shared
   /// with the target: the overlap of the two charts, as a face of the source.
   pub fn overlap_positions(&self) -> Combination {
-    Combination::from_increasing((0..=self.dim()).filter(|&i| self.bary_map.column(i).sum() != 0.0))
+    Combination::from_increasing(
+      (0..=self.dim().index()).filter(|&i| self.bary_map.column(i).sum() != 0.0),
+    )
   }
 
   /// Whether the transition is the identity: source and target are the same
@@ -121,7 +123,7 @@ impl Transition {
       "Point is in the wrong chart."
     );
 
-    let discarded: f64 = (0..=self.dim())
+    let discarded: f64 = (0..=self.dim().index())
       .filter(|&i| self.bary_map.column(i).sum() == 0.0)
       .map(|i| point.bary()[i].abs())
       .sum();
@@ -157,6 +159,7 @@ impl Transition {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::{
     atlas::{ChartExt, MeshPoint, barycenter_bary},
     geometry::coord::simplex::SimplexRefExt,
@@ -169,14 +172,20 @@ mod test {
   /// The transition of a chart with itself is the identity map.
   #[test]
   fn self_transition_is_the_identity() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let complex = Complex::standard(dim);
       let cell = complex.cells().handle_iter().next().unwrap();
 
       let transition = cell.transition_to(cell);
       assert!(transition.is_identity());
-      assert_relative_eq!(transition.bary_map(), &Matrix::identity(dim + 1, dim + 1));
-      assert_relative_eq!(transition.differential(), Matrix::identity(dim, dim));
+      assert_relative_eq!(
+        transition.bary_map(),
+        &Matrix::identity((dim + 1).index(), (dim + 1).index())
+      );
+      assert_relative_eq!(
+        transition.differential(),
+        Matrix::identity(dim.index(), dim.index())
+      );
 
       let point = MeshPoint::barycenter(cell.idx());
       let mapped = transition.apply(&point).unwrap();
@@ -207,7 +216,7 @@ mod test {
   /// the overlap, and the two directions are mutually inverse.
   #[test]
   fn transition_roundtrip_on_the_overlap() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for (source, target, point) in adjacent_pairs(&complex) {
@@ -226,7 +235,7 @@ mod test {
   /// has no representation in any other chart.
   #[test]
   fn no_transition_off_the_overlap() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for (source, target, _) in adjacent_pairs(&complex) {
@@ -243,7 +252,7 @@ mod test {
   /// describe *one* manifold and not three.
   #[test]
   fn transition_cocycle() {
-    for dim in 2..=3 {
+    for dim in (2..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       // A vertex of the mesh lies in the overlap of every cell around it.
@@ -251,7 +260,7 @@ mod test {
         let cells: Vec<_> = vertex.cells().collect();
         for &first in &cells {
           let positions = vertex.simplex().relative_to(first.simplex());
-          let point = first.point_on_face(&positions, &barycenter_bary(0));
+          let point = first.point_on_face(&positions, &barycenter_bary(Dim::new(0)));
 
           for &second in &cells {
             for &third in &cells {
@@ -277,7 +286,7 @@ mod test {
   /// chart, is the same ambient vector. $A_(K') dif psi = A_K$ on $T sigma$.
   #[test]
   fn differential_is_the_change_of_frame() {
-    for dim in 2..=3 {
+    for dim in (2..=3usize).map(Dim::from) {
       let (complex, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       for facet in complex.skeleton(dim - 1).handle_iter() {

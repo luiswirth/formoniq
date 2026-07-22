@@ -12,6 +12,10 @@ categories = ["mathematics"]
 
 [dependencies]
 num-integer = "0.1.46"
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]
 
 [dev-dependencies]
 itertools = "0.15.0"

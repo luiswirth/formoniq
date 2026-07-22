@@ -41,13 +41,17 @@ impl RoleDim {
   pub const fn dim_in(self, top: Dim) -> Option<Dim> {
     match self {
       RoleDim::Dim(dim) => {
-        if dim <= top {
+        if dim.get() <= top.get() {
           Some(dim)
         } else {
           None
         }
       }
-      RoleDim::Codim(codim) => top.checked_sub(codim),
+      // Signed, so an underflow is simply a negative degree: the trivial space.
+      RoleDim::Codim(codim) => {
+        let dim = top.get() - codim.get();
+        if dim >= 0 { Some(Dim::new(dim)) } else { None }
+      }
     }
   }
 }
@@ -68,7 +72,7 @@ pub trait SimplexRole {
 
 /// The role markers: each is one [`RoleDim`], everything else is shared.
 pub mod roles {
-  use super::{RoleDim, SimplexRole};
+  use super::{Dim, RoleDim, SimplexRole};
 
   /// $dim = 0$.
   pub struct Vertex;
@@ -82,23 +86,23 @@ pub mod roles {
   pub struct Ridge;
 
   impl SimplexRole for Vertex {
-    const DIM: RoleDim = RoleDim::Dim(0);
+    const DIM: RoleDim = RoleDim::Dim(Dim::ZERO);
     const NAME: &'static str = "vertex";
   }
   impl SimplexRole for Edge {
-    const DIM: RoleDim = RoleDim::Dim(1);
+    const DIM: RoleDim = RoleDim::Dim(Dim::ONE);
     const NAME: &'static str = "edge";
   }
   impl SimplexRole for Cell {
-    const DIM: RoleDim = RoleDim::Codim(0);
+    const DIM: RoleDim = RoleDim::Codim(Dim::ZERO);
     const NAME: &'static str = "cell";
   }
   impl SimplexRole for Facet {
-    const DIM: RoleDim = RoleDim::Codim(1);
+    const DIM: RoleDim = RoleDim::Codim(Dim::ONE);
     const NAME: &'static str = "facet";
   }
   impl SimplexRole for Ridge {
-    const DIM: RoleDim = RoleDim::Codim(2);
+    const DIM: RoleDim = RoleDim::Codim(Dim::new(2));
     const NAME: &'static str = "ridge";
   }
 }
@@ -233,7 +237,7 @@ impl<'m> Edge<'m> {
   pub fn endpoints(self) -> (Vertex<'m>, Vertex<'m>) {
     let complex = self.complex();
     let vertices = &self.simplex().vertices;
-    let vertex = |v| Roled::trusted(SimplexIdx::new(0, v).handle(complex));
+    let vertex = |v| Roled::trusted(SimplexIdx::new(Dim::ZERO, v).handle(complex));
     (vertex(vertices[0]), vertex(vertices[1]))
   }
 }
@@ -329,6 +333,7 @@ impl<'m, R: SimplexRole> Deref for RoledSkeleton<'m, R> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::{mesher::cartesian::CartesianGrid, topology::complex::Complex};
 
   /// The role predicates, swept over all dimensions and grades: a role is
@@ -337,9 +342,9 @@ mod test {
   /// propositions, not a partition.
   #[test]
   fn roles_are_admitted_exactly_on_their_dimension() {
-    for top in 0..=4 {
+    for top in (0..=4usize).map(Dim::from) {
       let complex = Complex::standard(top);
-      for dim in 0..=top {
+      for dim in top.range_inclusive() {
         for simplex in complex.skeleton(dim).handle_iter() {
           assert_eq!(simplex.as_role::<roles::Vertex>().is_some(), dim == 0);
           assert_eq!(simplex.as_role::<roles::Edge>().is_some(), dim == 1);
@@ -356,8 +361,8 @@ mod test {
   #[test]
   #[should_panic(expected = "is not a cell")]
   fn a_face_is_not_a_cell() {
-    let complex = Complex::standard(2);
-    let edge = complex.skeleton(1).handle_iter().next().unwrap();
+    let complex = Complex::standard(Dim::new(2));
+    let edge = complex.skeleton(Dim::new(1)).handle_iter().next().unwrap();
     edge.role::<roles::Cell>();
   }
 
@@ -365,7 +370,7 @@ mod test {
   /// per interior facet.
   #[test]
   fn neighboring_is_symmetric_and_facet_induced() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for cell in complex.cells().handle_iter() {
         let interior = cell.facets().filter(|f| !f.is_boundary()).count();
@@ -381,7 +386,7 @@ mod test {
   /// simplices of the role's dimension, never an underflow.
   #[test]
   fn role_skeletons_exist_exactly_where_their_dimension_does() {
-    for top in 0..=4 {
+    for top in (0..=4usize).map(Dim::from) {
       let complex = Complex::standard(top);
       assert!(complex.role_skeleton::<roles::Vertex>().is_some());
       assert_eq!(complex.role_skeleton::<roles::Edge>().is_some(), top >= 1);
@@ -394,7 +399,7 @@ mod test {
   /// An edge's endpoints are its two vertices, in order, with their proofs.
   #[test]
   fn edge_endpoints_are_its_vertices() {
-    for top in 1..=4 {
+    for top in (1..=4usize).map(Dim::from) {
       let complex = Complex::standard(top);
       for edge in complex.edges().handle_iter() {
         let (a, b) = edge.endpoints();
@@ -407,7 +412,7 @@ mod test {
   /// sharing a facet containing the ridge, closed exactly on interior ridges.
   #[test]
   fn ridge_fans_walk_the_hinge() {
-    for dim in 2..=3 {
+    for dim in (2..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for ridge in complex
         .role_skeleton::<roles::Ridge>()
@@ -445,7 +450,7 @@ mod test {
   /// Every facet of the standard simplex is boundary: it bounds the one cell.
   #[test]
   fn standard_complex_is_all_boundary() {
-    for top in 1..=4 {
+    for top in (1..=4usize).map(Dim::from) {
       let complex = Complex::standard(top);
       for facet in complex.facets().handle_iter() {
         assert!(facet.is_boundary());

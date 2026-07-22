@@ -72,6 +72,7 @@ impl<'a> WhitneyInterpolant<'a> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use multiindex::Dim;
 
   use crate::{cochain::Cochain, section::Section};
 
@@ -88,11 +89,11 @@ mod test {
   /// cell: $dif (W c) = sum_sigma c_sigma dif W_sigma$ against $W (dif c)$.
   #[test]
   fn whitney_interpolation_is_cochain_map() {
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let topology = Complex::standard(dim);
       let cell = topology.cells().handle_iter().next().unwrap();
 
-      for grade in 0..dim {
+      for grade in dim.range() {
         let ndofs = topology.nsimplices(grade);
         let cochain = Cochain::new(
           grade,
@@ -129,11 +130,11 @@ mod test {
   fn whitney_trace_commutes() {
     use simplicial::atlas::{Bary, ref_face_spanning_vectors};
 
-    for n in 1..=3 {
+    for n in (1..=3).into_iter().map(Dim::from) {
       let complex = Complex::standard(n);
       let cell = complex.cells().handle_iter().next().unwrap();
 
-      for k in 0..=n {
+      for k in n.range_inclusive() {
         let ndofs = complex.nsimplices(k);
         let cochain = Cochain::new(
           k,
@@ -141,14 +142,14 @@ mod test {
         );
         let interpolant = WhitneyInterpolant::new(cochain.clone(), &complex);
 
-        for d in k..=n {
+        for d in k.range_to_inclusive(n) {
           for tau in cell.faces(d) {
             let positions = tau.simplex().relative_to(cell.simplex());
 
-            let weights: Vec<f64> = (0..=d).map(|i| (i + 2) as f64).collect();
+            let weights: Vec<f64> = (0..=d.index()).map(|i| (i + 2) as f64).collect();
             let total: f64 = weights.iter().sum();
             let face_bary = Bary::new(Vector::from_iterator(
-              d + 1,
+              d.index() + 1,
               weights.iter().map(|w| w / total),
             ));
 

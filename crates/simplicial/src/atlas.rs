@@ -90,8 +90,9 @@ pub type LocalRef<'a> = CoordsRef<'a, LocalCartesian>;
 /// A property of the chart, not of the geometry: it is the factor by which a
 /// chart integral scales, and the metric enters only through the further factor
 /// $sqrt(abs(det g))$ (see [`cell_volume`](crate::geometry::cell_volume)).
-pub fn refsimp_vol(dim: Dim) -> f64 {
-  factorial_f64(dim).recip()
+pub fn refsimp_vol(dim: impl Into<Dim>) -> f64 {
+  let dim = dim.into();
+  factorial_f64(dim.index()).recip()
 }
 
 pub fn bary2local<'a>(bary: impl Into<BaryRef<'a>>) -> Local {
@@ -120,11 +121,13 @@ pub fn is_bary_inside<'a>(bary: impl Into<BaryRef<'a>>) -> bool {
   bary.view().iter().all(|&b| b >= -BARY_EPS)
 }
 
-pub fn barycenter_bary(dim: Dim) -> Bary {
-  Bary::from_element(dim + 1, ((dim + 1) as f64).recip())
+pub fn barycenter_bary(dim: impl Into<Dim>) -> Bary {
+  let dim = dim.into();
+  Bary::from_element((dim + 1).index(), ((dim + 1).index() as f64).recip())
 }
-pub fn barycenter_local(dim: Dim) -> Local {
-  Local::from_element(dim, ((dim + 1) as f64).recip())
+pub fn barycenter_local(dim: impl Into<Dim>) -> Local {
+  let dim = dim.into();
+  Local::from_element(dim.index(), ((dim + 1).index() as f64).recip())
 }
 
 /// The $i$-th barycentric coordinate function evaluated in local coordinates.
@@ -140,12 +143,13 @@ pub fn ref_bary<'a>(ivertex: usize, local: impl Into<LocalRef<'a>>) -> f64 {
 
 /// The differential $dif lambda_i$ of a barycentric coordinate function, a
 /// constant covector in the reference frame.
-pub fn ref_difbary(dim: Dim, ivertex: usize) -> RowVector {
+pub fn ref_difbary(dim: impl Into<Dim>, ivertex: usize) -> RowVector {
+  let dim = dim.into();
   assert!(ivertex <= dim);
   if ivertex == 0 {
-    RowVector::from_element(dim, -1.0)
+    RowVector::from_element(dim.index(), -1.0)
   } else {
-    let mut v = RowVector::zeros(dim);
+    let mut v = RowVector::zeros(dim.index());
     v[ivertex - 1] = 1.0;
     v
   }
@@ -158,10 +162,11 @@ pub fn ref_difbary(dim: Dim, ivertex: usize) -> RowVector {
 /// Metric-free, and the same for every cell -- any form built from the
 /// barycentric differentials is therefore constant on the cell and evaluable
 /// intrinsically, with no geometry at all.
-pub fn ref_difbarys(dim: Dim) -> Matrix {
-  let mut difbarys = Matrix::zeros(dim + 1, dim);
+pub fn ref_difbarys(dim: impl Into<Dim>) -> Matrix {
+  let dim = dim.into();
+  let mut difbarys = Matrix::zeros((dim + 1).index(), dim.index());
   difbarys.row_mut(0).fill(-1.0);
-  for i in 0..dim {
+  for i in 0..dim.index() {
     difbarys[(i + 1, i)] = 1.0;
   }
   difbarys
@@ -169,9 +174,10 @@ pub fn ref_difbarys(dim: Dim) -> Matrix {
 
 /// The local coordinates of the vertices of the reference $n$-simplex, as the
 /// columns of $[0 | I_n]$: the origin and the standard basis.
-pub fn ref_vertices(dim: Dim) -> Matrix {
-  let mut vertices = Matrix::zeros(dim, dim + 1);
-  for i in 0..dim {
+pub fn ref_vertices(dim: impl Into<Dim>) -> Matrix {
+  let dim = dim.into();
+  let mut vertices = Matrix::zeros(dim.index(), (dim + 1).index());
+  for i in 0..dim.index() {
     vertices[(i, i + 1)] = 1.0;
   }
   vertices
@@ -205,12 +211,13 @@ pub fn ref_vertices(dim: Dim) -> Matrix {
 ///   order; $R$ refines it from there. $R = 0$ is not a refinement and admits no
 ///   point ($lambda = k \/ 0$), so $R >= 1$. The barycenter is a lattice point
 ///   only when $(n+1) | R$.
-pub fn ref_lattice(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
+pub fn ref_lattice(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
+  let dim = dim.into();
   assert!(
     refinement >= 1,
     "A lattice needs a refinement of at least one."
   );
-  Composition::all(dim + 1, refinement).map(Composition::into_parts)
+  Composition::all((dim + 1).index(), refinement).map(Composition::into_parts)
 }
 
 /// The lattice points strictly inside the reference cell: $k_i >= 1$ for every
@@ -231,16 +238,24 @@ pub fn ref_lattice(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usiz
 /// of a facet the two incident charts genuinely disagree and the value there is
 /// not the cell's to report. The open cell is where a section has a value at
 /// all.
-pub fn ref_lattice_interior(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
+pub fn ref_lattice_interior(
+  dim: impl Into<Dim>,
+  refinement: usize,
+) -> impl Iterator<Item = Vec<usize>> {
+  let dim = dim.into();
   refinement
-    .checked_sub(dim + 1)
+    .checked_sub((dim + 1).index())
     .into_iter()
-    .flat_map(move |rest| Composition::all(dim + 1, rest))
+    .flat_map(move |rest| Composition::all((dim + 1).index(), rest))
     .map(|k| k.parts().iter().map(|k| k + 1).collect())
 }
 
 /// [`ref_lattice_interior`] as barycentric weights.
-pub fn ref_lattice_interior_bary(dim: Dim, refinement: usize) -> impl Iterator<Item = Bary> {
+pub fn ref_lattice_interior_bary(
+  dim: impl Into<Dim>,
+  refinement: usize,
+) -> impl Iterator<Item = Bary> {
+  let dim = dim.into();
   let scale = (refinement as f64).recip();
   ref_lattice_interior(dim, refinement).map(move |k| {
     Bary::new(Vector::from_iterator(
@@ -251,7 +266,8 @@ pub fn ref_lattice_interior_bary(dim: Dim, refinement: usize) -> impl Iterator<I
 }
 
 /// [`ref_lattice`] as barycentric weights, $lambda = k \/ R$.
-pub fn ref_lattice_bary(dim: Dim, refinement: usize) -> impl Iterator<Item = Bary> {
+pub fn ref_lattice_bary(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Bary> {
+  let dim = dim.into();
   let scale = (refinement as f64).recip();
   ref_lattice(dim, refinement).map(move |k| {
     Bary::new(Vector::from_iterator(
@@ -267,10 +283,11 @@ pub fn ref_lattice_bary(dim: Dim, refinement: usize) -> impl Iterator<Item = Bar
 /// Pure affine combinatorics of the local vertex positions: the face of a cell
 /// needs no coordinates of its own, and on a manifold without an embedding
 /// there are none to be had.
-pub fn ref_face_spanning_vectors(cell_dim: Dim, positions: &Combination) -> Matrix {
+pub fn ref_face_spanning_vectors(cell_dim: impl Into<Dim>, positions: &Combination) -> Matrix {
+  let cell_dim = cell_dim.into();
   let vertices = ref_vertices(cell_dim);
   let base = vertices.column(positions.index_at(0));
-  let mut spanning = Matrix::zeros(cell_dim, positions.card() - 1);
+  let mut spanning = Matrix::zeros(cell_dim.index(), positions.card() - 1);
   for (i, position) in positions.iter().skip(1).enumerate() {
     spanning.set_column(i, &(vertices.column(position) - base));
   }
@@ -281,17 +298,18 @@ pub fn ref_face_spanning_vectors(cell_dim: Dim, positions: &Combination) -> Matr
 /// barycentric coordinates on a face: scatter the face's weights onto the local
 /// vertex positions of the face, zero elsewhere.
 pub fn face_bary_to_cell_bary<'a>(
-  cell_dim: Dim,
+  cell_dim: impl Into<Dim>,
   positions: &Combination,
   face_bary: impl Into<BaryRef<'a>>,
 ) -> Bary {
+  let cell_dim = cell_dim.into();
   let face_bary = face_bary.into();
   assert_eq!(
     face_bary.dim(),
     positions.card(),
     "Wrong number of weights."
   );
-  let mut bary = Vector::zeros(cell_dim + 1);
+  let mut bary = Vector::zeros((cell_dim + 1).index());
   for (i, position) in positions.iter().enumerate() {
     bary[position] = face_bary[i];
   }
@@ -301,6 +319,7 @@ pub fn face_bary_to_cell_bary<'a>(
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
 
   use approx::assert_relative_eq;
   use multiindex::binomial;
@@ -308,10 +327,13 @@ mod test {
   /// The lattice has $binom(R + n, n)$ points, each a composition of $R$.
   #[test]
   fn lattice_is_a_composition_set() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for refinement in 1..=5 {
         let lattice: Vec<_> = ref_lattice(dim, refinement).collect();
-        assert_eq!(lattice.len(), binomial(refinement + dim, dim));
+        assert_eq!(
+          lattice.len(),
+          binomial(refinement + dim.index(), dim.index())
+        );
         for point in &lattice {
           assert_eq!(point.len(), dim + 1);
           assert_eq!(point.iter().sum::<usize>(), refinement);
@@ -327,7 +349,7 @@ mod test {
   /// merely containing them.
   #[test]
   fn lattice_at_refinement_one_is_the_vertices() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let vertices = ref_vertices(dim);
       for (ivertex, bary) in ref_lattice_bary(dim, 1).enumerate() {
         assert_relative_eq!(bary2local(&bary).view(), &vertices.column(ivertex));
@@ -339,7 +361,7 @@ mod test {
   /// closed cell.
   #[test]
   fn lattice_bary_lies_in_the_cell() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for refinement in 1..=5 {
         for bary in ref_lattice_bary(dim, refinement) {
           assert_relative_eq!(bary.view().sum(), 1.0);
@@ -354,10 +376,10 @@ mod test {
   /// This is what lets two cells agree on a shared facet combinatorially.
   #[test]
   fn lattice_restricts_to_the_facet_lattice() {
-    for dim in 1..=4 {
+    for dim in (1..=4usize).map(Dim::from) {
       for refinement in 1..=5 {
         let facet: std::collections::HashSet<_> = ref_lattice(dim - 1, refinement).collect();
-        for ivertex in 0..=dim {
+        for ivertex in 0..=dim.index() {
           let restricted: std::collections::HashSet<_> = ref_lattice(dim, refinement)
             .filter(|k| k[ivertex] == 0)
             .map(|mut k| {
@@ -375,7 +397,7 @@ mod test {
   /// points, each on no face, and none of the boundary ones missed.
   #[test]
   fn lattice_interior_is_the_lattice_off_the_faces() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for refinement in 1..=6 {
         let interior: Vec<_> = ref_lattice_interior(dim, refinement).collect();
         let expected: Vec<_> = ref_lattice(dim, refinement)
@@ -384,7 +406,9 @@ mod test {
         assert_eq!(interior, expected);
         assert_eq!(
           interior.len(),
-          refinement.checked_sub(1).map_or(0, |r| binomial(r, dim))
+          refinement
+            .checked_sub(1)
+            .map_or(0, |r| binomial(r, dim.index()))
         );
       }
     }
@@ -394,11 +418,11 @@ mod test {
   /// leaves the barycenter alone, and below that there is no inside to have.
   #[test]
   fn lattice_interior_bottoms_out_at_the_barycenter() {
-    for dim in 0..=4 {
-      for refinement in 0..=dim {
+    for dim in (0..=4usize).map(Dim::from) {
+      for refinement in 0..=dim.index() {
         assert_eq!(ref_lattice_interior(dim, refinement).count(), 0);
       }
-      let base: Vec<_> = ref_lattice_interior_bary(dim, dim + 1).collect();
+      let base: Vec<_> = ref_lattice_interior_bary(dim, dim.index() + 1).collect();
       assert_eq!(base.len(), 1);
       assert_relative_eq!(base[0].view(), barycenter_bary(dim).view());
     }
@@ -407,8 +431,8 @@ mod test {
   /// The two chart coordinate systems are mutually inverse.
   #[test]
   fn bary_local_roundtrip() {
-    for dim in 0..=4 {
-      let local = Local::from_iterator(dim, (0..dim).map(|i| 0.1 * (i + 1) as f64));
+    for dim in (0..=4usize).map(Dim::from) {
+      let local = Local::from_iterator(dim.index(), (0..dim.index()).map(|i| 0.1 * (i + 1) as f64));
       let bary = local2bary(&local);
       assert_relative_eq!(bary.sum(), 1.0, epsilon = 1e-12);
       assert_relative_eq!(bary2local(&bary).vector(), local.vector(), epsilon = 1e-12);
@@ -419,15 +443,15 @@ mod test {
   /// and they sum to zero: $sum_i lambda_i = 1$ is constant.
   #[test]
   fn ref_difbarys_rows_are_difbary_and_sum_to_zero() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let difbarys = ref_difbarys(dim);
-      for ivertex in 0..=dim {
+      for ivertex in 0..=dim.index() {
         assert_relative_eq!(
           difbarys.row(ivertex).into_owned(),
           ref_difbary(dim, ivertex)
         );
       }
-      assert_relative_eq!(difbarys.row_sum(), RowVector::zeros(dim));
+      assert_relative_eq!(difbarys.row_sum(), RowVector::zeros(dim.index()));
     }
   }
 
@@ -435,11 +459,11 @@ mod test {
   /// $lambda_i (e_j) = delta_(i j)$, and the differentials are their gradients.
   #[test]
   fn ref_barys_are_dual_to_ref_vertices() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let vertices = ref_vertices(dim);
       for (j, vertex) in vertices.column_iter().enumerate() {
         let local = Local::new(vertex.into_owned());
-        for i in 0..=dim {
+        for i in 0..=dim.index() {
           let expected = f64::from(i == j);
           assert_relative_eq!(ref_bary(i, &local), expected, epsilon = 1e-12);
         }

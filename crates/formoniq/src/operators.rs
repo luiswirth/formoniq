@@ -39,10 +39,10 @@ fn scalar_mass_elmat(metric: &Metric) -> ElMat {
 pub struct ScalarLumpedMassElmat;
 impl ElMatProvider for ScalarLumpedMassElmat {
   fn row_grade(&self) -> ExteriorGrade {
-    0
+    Dim::ZERO
   }
   fn col_grade(&self) -> ExteriorGrade {
-    0
+    Dim::ZERO
   }
   fn eval(&self, metric: &Metric) -> ElMat {
     let n = metric.dim() + 1;
@@ -63,7 +63,8 @@ pub struct HodgeMassElmat {
   difbarys_power: Matrix,
 }
 impl HodgeMassElmat {
-  pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
     let simplices: Vec<_> = standard_subsimps(dim, grade).collect();
     let difbarys_power = exterior_power(&ref_difbarys(dim), grade);
 
@@ -110,7 +111,7 @@ impl ElMatProvider for HodgeMassElmat {
       }
     }
 
-    factorial(self.grade).pow(2) as f64 * elmat
+    factorial(self.grade.index()).pow(2) as f64 * elmat
   }
 }
 
@@ -122,7 +123,8 @@ pub struct DifElmat {
   dif: Matrix,
 }
 impl DifElmat {
-  pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
     let mass = HodgeMassElmat::new(dim, grade);
     let dif = standard_boundary_operator(dim, grade).transpose();
     Self { mass, dif }
@@ -150,7 +152,8 @@ pub struct CodifElmat {
   codif: Matrix,
 }
 impl CodifElmat {
-  pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
     let mass = HodgeMassElmat::new(dim, grade);
     let codif = standard_boundary_operator(dim, grade);
     Self { mass, codif }
@@ -178,7 +181,8 @@ pub struct CodifDifElmat {
   codif: Matrix,
 }
 impl CodifDifElmat {
-  pub fn new(dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
     let mass = HodgeMassElmat::new(dim, grade + 1);
     let dif = standard_boundary_operator(dim, grade + 1).transpose();
     let codif = dif.transpose();
@@ -259,6 +263,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use simplicial::Dim;
 
   use derham::interpolate::form::WhitneyForm;
   use simplicial::{
@@ -269,9 +274,9 @@ mod test {
 
   #[test]
   fn hodge_mass0_is_scalar_mass() {
-    for dim in 0..=3 {
+    for dim in (0..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::standard(dim);
-      let hodge_mass = HodgeMassElmat::new(dim, 0).eval(&geo.metric());
+      let hodge_mass = HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric());
       let scalar_mass = scalar_mass_elmat(&geo.metric());
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
@@ -279,8 +284,8 @@ mod test {
 
   #[test]
   fn hodge_mass_dim2_grade1() {
-    let dim = 2;
-    let grade = 1;
+    let dim = Dim::new(2);
+    let grade = Dim::new(1);
     let geo = SimplexLengthsSq::standard(dim);
     let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
@@ -293,8 +298,8 @@ mod test {
 
   #[test]
   fn dif_n2_k1() {
-    let dim = 2;
-    let grade = 1;
+    let dim = Dim::new(2);
+    let grade = Dim::new(1);
     let geo = SimplexLengthsSq::standard(dim);
     let computed = DifElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
@@ -307,8 +312,8 @@ mod test {
 
   #[test]
   fn codif_n2_k1() {
-    let dim = 2;
-    let grade = 1;
+    let dim = Dim::new(2);
+    let grade = Dim::new(1);
     let geo = SimplexLengthsSq::standard(dim);
     let computed = CodifElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
@@ -321,9 +326,9 @@ mod test {
 
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::standard(dim);
-      for grade in 0..dim {
+      for grade in dim.range() {
         let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric());
 
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)

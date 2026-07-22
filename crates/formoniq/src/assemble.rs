@@ -96,6 +96,7 @@ pub fn assemble_galvec(
 mod test {
   use super::*;
   use crate::operators::HodgeMassElmat;
+  use simplicial::Dim;
 
   use simplicial::{
     geometry::metric::CellGramians, linalg::Matrix, mesher::cartesian::CartesianGrid,
@@ -109,12 +110,12 @@ mod test {
   /// chain $"lengths" -> "metric" -> "lengths"$ commutes.
   #[test]
   fn cell_gramians_round_trip_assembles_identically() {
-    let dim = 3;
+    let dim = Dim::new(3);
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let lengths = coords.to_edge_lengths_sq(&topology);
     let round_trip = CellGramians::from_lengths(&topology, &lengths).to_edge_lengths_sq(&topology);
 
-    for grade in 0..=dim {
+    for grade in dim.range_inclusive() {
       let from_lengths = Matrix::from(&assemble_galmat(
         &topology,
         &lengths,
@@ -139,18 +140,18 @@ mod test {
   fn lorentzian_sources_reduce_to_the_same_regge_data() {
     use simplicial::geometry::coord::mesh::MeshCoords;
 
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let mut matrix = coords.into_matrix();
       matrix.row_mut(0).scale_mut(0.7);
-      let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(dim));
+      let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(dim.index()));
 
       let from_coords = spacetime.to_edge_lengths_sq(&topology);
       let from_gramians = spacetime
         .to_cell_gramians(&topology)
         .to_edge_lengths_sq(&topology);
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let a = Matrix::from(&assemble_galmat(
           &topology,
           &from_coords,

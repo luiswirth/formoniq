@@ -3,7 +3,7 @@ use formoniq::whitney_complex::WhitneyComplex;
 use simplicial::linalg::{Matrix, Vector};
 use simplicial::{Dim, mesher::cartesian::CartesianGrid};
 
-const DIM: Dim = 3;
+const DIM: Dim = Dim::new(3);
 
 #[test]
 fn feec_vs_fem3d() {
@@ -16,10 +16,10 @@ fn feec_vs_fem3d() {
 
 fn fem3d_galmat(nboxes_per_dim: usize) -> Matrix {
   let nvertices_per_dim = nboxes_per_dim + 1;
-  let nvertices = nvertices_per_dim.pow(DIM as u32);
+  let nvertices = nvertices_per_dim.pow(DIM.index() as u32);
 
   let h = (nboxes_per_dim as f64).recip();
-  let box_vol = h.powi(DIM as i32);
+  let box_vol = h.powi(DIM.index() as i32);
 
   let mut vertex_coords = Matrix::zeros(3, nvertices);
   for zvertex in 0..nvertices_per_dim {
@@ -107,6 +107,6 @@ fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
   let grid = CartesianGrid::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
-  let galmat = WhitneyComplex::new(&topology, &metric).codif_dif(0);
+  let galmat = WhitneyComplex::new(&topology, &metric).codif_dif(Dim::ZERO);
   (&galmat).into()
 }

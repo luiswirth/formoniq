@@ -56,7 +56,7 @@ pub struct LiftedSystem {
   inclusion: CsrMatrix,
   lift: Vector,
   cholesky: FaerCholesky,
-  grade: usize,
+  grade: ExteriorGrade,
 }
 
 impl LiftedSystem {
@@ -132,7 +132,11 @@ pub fn neumann_load(
 /// $integral_(diff K) angle.l "tr" u, "tr" v angle.r vol_(diff K)$:
 /// scaled by the impedance $alpha$ and added to the system matrix, this
 /// imposes a Robin condition.
-pub fn boundary_mass(boundary: &BoundaryWhitneyComplex, grade: ExteriorGrade) -> CsrMatrix {
+pub fn boundary_mass(
+  boundary: &BoundaryWhitneyComplex,
+  grade: impl Into<ExteriorGrade>,
+) -> CsrMatrix {
+  let grade = grade.into();
   let trace = boundary.trace(grade);
   let mass = CsrMatrix::from(&boundary.whitney_complex().mass(grade));
   trace.transpose() * mass * trace

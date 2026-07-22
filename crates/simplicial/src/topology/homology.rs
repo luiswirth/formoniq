@@ -45,16 +45,20 @@ impl Complex {
   pub fn betti_numbers(&self) -> Vec<usize> {
     // rank diff_k for k in 0..=n+1; diff_0 and diff_(n+1) map to/from the zero
     // space and so have rank 0.
-    let ranks: Vec<usize> = (0..=self.dim() + 1)
+    let ranks: Vec<usize> = (self.dim() + 1)
+      .range_inclusive()
       .map(|k| self.boundary_rank(k))
       .collect();
-    (0..=self.dim())
-      .map(|k| self.nsimplices(k) - ranks[k] - ranks[k + 1])
+    self
+      .dim()
+      .range_inclusive()
+      .map(|k| self.nsimplices(k) - ranks[k.index()] - ranks[(k + 1).index()])
       .collect()
   }
 
   /// The k-th Betti number $b_k = dim H_k (K; ZZ)$.
-  pub fn betti_number(&self, grade: Dim) -> usize {
+  pub fn betti_number(&self, grade: impl Into<Dim>) -> usize {
+    let grade = grade.into();
     self.nsimplices(grade) - self.boundary_rank(grade) - self.boundary_rank(grade + 1)
   }
 
@@ -63,10 +67,12 @@ impl Complex {
   /// The two forms agree by Euler--Poincaré; the first is what is computed, and
   /// their equality is an exact cross-check on the Betti numbers.
   pub fn euler_characteristic(&self) -> i64 {
-    (0..=self.dim())
+    self
+      .dim()
+      .range_inclusive()
       .map(|k| {
         let n = self.nsimplices(k) as i64;
-        if k % 2 == 0 { n } else { -n }
+        if k.index() % 2 == 0 { n } else { -n }
       })
       .sum()
   }
@@ -457,6 +463,7 @@ fn mod_inverse(a: i64, p: i64) -> i64 {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
   use crate::topology::skeleton::Skeleton;
 
@@ -464,7 +471,7 @@ mod test {
   /// so $b_1 = 1$ (one hole).
   fn annulus() -> Complex {
     use crate::geometry::coord::simplex::SimplexCoords;
-    let (square, coords) = CartesianGrid::new_unit(2, 3).triangulate();
+    let (square, coords) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();
     let cells: Vec<_> = square
       .cells()
       .handle_iter()
@@ -508,7 +515,7 @@ mod test {
   #[test]
   fn generators_count_matches_betti() {
     for complex in test_complexes() {
-      for k in 0..=complex.dim() {
+      for k in complex.dim().range_inclusive() {
         assert_eq!(
           complex.homology_generators(k).len(),
           complex.betti_number(k)
@@ -521,7 +528,7 @@ mod test {
   #[test]
   fn generators_are_cycles() {
     for complex in test_complexes() {
-      for k in 0..=complex.dim() {
+      for k in complex.dim().range_inclusive() {
         for generator in complex.homology_generators(k) {
           assert!(is_cycle(&complex, &generator), "grade {k}");
         }
@@ -535,7 +542,7 @@ mod test {
   #[test]
   fn generators_independent_modulo_boundaries() {
     for complex in test_complexes() {
-      for k in 0..=complex.dim() {
+      for k in complex.dim().range_inclusive() {
         let nrows = complex.nsimplices(k);
         let boundary_cols = if k < complex.dim() {
           complex.nsimplices(k + 1)
@@ -566,7 +573,7 @@ mod test {
   #[test]
   fn annulus_generator_is_a_loop() {
     let complex = annulus();
-    let generators = complex.homology_generators(1);
+    let generators = complex.homology_generators(Dim::new(1));
     assert_eq!(generators.len(), 1);
     let loop_ = &generators[0];
     assert!(is_cycle(&complex, loop_));
@@ -577,7 +584,7 @@ mod test {
   /// Betti sum. A cross-check tying the Betti numbers back to the raw counts.
   #[test]
   fn euler_poincare() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let alt_betti: i64 = topology
         .betti_numbers()
@@ -592,10 +599,10 @@ mod test {
   /// A cube is contractible: $b_0 = 1$ and all higher Betti numbers vanish.
   #[test]
   fn cube_is_contractible() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let expected: Vec<usize> = std::iter::once(1)
-        .chain(std::iter::repeat_n(0, dim))
+        .chain(std::iter::repeat_n(0, dim.index()))
         .collect();
       assert_eq!(topology.betti_numbers(), expected, "dim={dim}");
     }
@@ -608,8 +615,8 @@ mod test {
     let (topology, _) = crate::mesher::sphere::mesh_sphere_surface(1);
     let betti = topology.betti_numbers();
     let n = topology.dim();
-    for k in 0..=n {
-      assert_eq!(betti[k], betti[n - k], "k={k}");
+    for k in 0..=n.index() {
+      assert_eq!(betti[k], betti[n.index() - k], "k={k}");
     }
     assert_eq!(betti, vec![1, 0, 1]);
   }
@@ -623,9 +630,9 @@ mod test {
   /// (from the incidence), so their agreement is a real cross-check.
   #[test]
   fn box_lefschetz_duality() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
-      for k in 0..=dim {
+      for k in dim.range_inclusive() {
         assert_eq!(
           topology.relative_betti_number(k),
           topology.betti_number(dim - k),
@@ -645,7 +652,7 @@ mod test {
   #[test]
   fn closed_manifold_relative_equals_absolute() {
     let (topology, _) = crate::mesher::sphere::mesh_sphere_surface(1);
-    for k in 0..=topology.dim() {
+    for k in topology.dim().range_inclusive() {
       assert_eq!(
         topology.relative_betti_number(k),
         topology.betti_number(k),

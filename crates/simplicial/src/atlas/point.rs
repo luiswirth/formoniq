@@ -151,6 +151,7 @@ impl MeshPoint {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::topology::complex::Complex;
 
   /// The charts of the atlas are the cells: resolving a point whose simplex is a
@@ -161,8 +162,8 @@ mod test {
   #[test]
   #[should_panic(expected = "is not a cell")]
   fn a_point_of_a_face_has_no_chart() {
-    let complex = Complex::standard(2);
-    let edge = complex.skeleton(1).handle_iter().next().unwrap();
+    let complex = Complex::standard(Dim::new(2));
+    let edge = complex.skeleton(Dim::new(1)).handle_iter().next().unwrap();
     let point = MeshPoint::barycenter(edge.idx());
     point.chart(&complex);
   }
@@ -171,11 +172,11 @@ mod test {
   /// a face supports that face, and an interior point supports the whole cell.
   #[test]
   fn support_is_the_smallest_carrying_face() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let complex = Complex::standard(dim);
       let cell = complex.cells().handle_iter().next().unwrap();
 
-      for face_dim in 0..=dim {
+      for face_dim in dim.range_inclusive() {
         for face in cell.faces(face_dim) {
           let positions = face.simplex().relative_to(cell.simplex());
           let point = MeshPoint::on_face(cell.idx(), &positions, &barycenter_bary(face_dim));

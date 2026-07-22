@@ -89,7 +89,9 @@ impl Complex {
     // simplices, so the trace is the zero map into an empty codomain. Storing
     // that empty row explicitly keeps `trace_operator` total at top grade
     // rather than indexing one past the boundary dimension.
-    let parent_kidxs = (0..=self.dim())
+    let parent_kidxs = self
+      .dim()
+      .range_inclusive()
       .map(|grade| {
         if grade > complex.dim() {
           return Vec::new();
@@ -105,7 +107,11 @@ impl Complex {
           .collect()
       })
       .collect();
-    let parent_nsimplices = (0..=self.dim()).map(|k| self.nsimplices(k)).collect();
+    let parent_nsimplices = self
+      .dim()
+      .range_inclusive()
+      .map(|k| self.nsimplices(k))
+      .collect();
 
     BoundaryComplex {
       complex,
@@ -124,12 +130,12 @@ impl BoundaryComplex {
   }
   /// The parent indices of the boundary k-simplices.
   pub fn parent_kidxs(&self, grade: Dim) -> &[KSimplexIdx] {
-    &self.parent_kidxs[grade]
+    &self.parent_kidxs[grade.index()]
   }
   pub fn parent_idx(&self, boundary_idx: SimplexIdx) -> SimplexIdx {
     SimplexIdx::new(
       boundary_idx.dim,
-      self.parent_kidxs[boundary_idx.dim][boundary_idx.kidx],
+      self.parent_kidxs[boundary_idx.dim.index()][boundary_idx.kidx],
     )
   }
 
@@ -138,10 +144,10 @@ impl BoundaryComplex {
   /// and the cokernel projection of the relative inclusion.
   pub fn trace_operator(&self, grade: Dim) -> CooMatrix {
     let mut trace = CooMatrix::new(
-      self.parent_kidxs[grade].len(),
-      self.parent_nsimplices[grade],
+      self.parent_kidxs[grade.index()].len(),
+      self.parent_nsimplices[grade.index()],
     );
-    for (boundary_kidx, &parent_kidx) in self.parent_kidxs[grade].iter().enumerate() {
+    for (boundary_kidx, &parent_kidx) in self.parent_kidxs[grade.index()].iter().enumerate() {
       trace.push(boundary_kidx, parent_kidx, 1.0);
     }
     trace
@@ -157,7 +163,7 @@ impl BoundaryComplex {
       Vec::new()
     } else {
       self
-        .parent_kidxs(1)
+        .parent_kidxs(Dim::ONE)
         .iter()
         .map(|&iedge| parent[iedge])
         .collect()
@@ -168,7 +174,7 @@ impl BoundaryComplex {
   /// The vertex coordinates restricted to the boundary.
   pub fn trace_coords(&self, parent: &MeshCoords) -> MeshCoords {
     let columns: Vec<_> = self
-      .parent_kidxs(0)
+      .parent_kidxs(Dim::ZERO)
       .iter()
       .map(|&ivertex| parent.matrix().column(ivertex))
       .collect();
@@ -179,6 +185,7 @@ impl BoundaryComplex {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
 
   use crate::linalg::CsrMatrix;
@@ -187,11 +194,11 @@ mod test {
   /// the (n-1)-sphere.
   #[test]
   fn boundary_of_cube_is_sphere() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       assert!(!boundary.complex().has_boundary());
-      for k in 0..dim {
+      for k in dim.range() {
         // S^(n-1) betti numbers; the 0-sphere is two points.
         let expected = if dim == 1 {
           2
@@ -210,10 +217,10 @@ mod test {
   /// The trace is a cochain map: $"tr" compose dif = dif compose "tr"$.
   #[test]
   fn trace_is_cochain_map() {
-    for dim in 2..=3 {
+    for dim in (2..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
-      for k in 0..(dim - 1) {
+      for k in (dim - 1).range() {
         let trace_k = CsrMatrix::from(&boundary.trace_operator(k));
         let trace_kk = CsrMatrix::from(&boundary.trace_operator(k + 1));
         let dif_parent = CsrMatrix::from(&topology.coboundary_operator(k));
@@ -230,10 +237,10 @@ mod test {
   /// dimensions: interior and boundary DOFs partition the full complex.
   #[test]
   fn trace_dimensions_are_exact() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
-      for k in 0..dim {
+      for k in dim.range() {
         let nboundary = boundary.complex().nsimplices(k);
         let ninterior = topology.nsimplices(k) - topology.boundary_simplices(k).len();
         assert_eq!(nboundary + ninterior, topology.nsimplices(k));

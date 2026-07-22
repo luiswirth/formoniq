@@ -175,7 +175,7 @@ mod tests {
     let request = SolveRequest::new(
       &mesh,
       Study::Eigenmodes {
-        grade: 0,
+        grade: simplicial::Dim::ZERO,
         nmodes: 4,
       },
     );

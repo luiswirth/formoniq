@@ -45,7 +45,6 @@ use gramian::Metric;
 use simplicial::Sign;
 use simplicial::linalg::Matrix;
 use simplicial::{
-  Dim,
   atlas::{ChartExt, Local, MeshPoint, local2bary, ref_difbarys, ref_vertices},
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
@@ -102,7 +101,7 @@ impl AdvectBake {
     seed_count: usize,
   ) -> Self {
     let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-    let dim = topology.dim();
+    let dim = topology.dim().index();
     let tick = step / f64::from(1u32 << depth);
 
     let mut flows = Vec::with_capacity(topology.cells().len() * (depth as usize + 1));
@@ -210,7 +209,7 @@ fn flow_generator(
   metric: &Metric,
   sign: Sign,
 ) -> Matrix {
-  let dim = cell.dim();
+  let dim = cell.dim().index();
   let vertices = ref_vertices(dim);
   let mut vertex_field = Matrix::zeros(dim, dim + 1);
   for i in 0..=dim {
@@ -228,7 +227,7 @@ fn facet_neighbour<'a>(
   cell: SimplexIdx,
   opposite: usize,
 ) -> Option<simplicial::topology::role::Cell<'a>> {
-  let dim = cell.dim();
+  let dim = cell.dim().index();
   if dim == 0 {
     // A point has no facet to cross, so every direction is boundary. The
     // degenerate case answers itself.
@@ -261,7 +260,7 @@ fn facet_neighbour<'a>(
 /// sliver as in a large triangle, and the population would then be a picture of
 /// the triangulation.
 fn seeds(topology: &Complex, coords: &MeshCoords, seed_count: usize) -> Vec<Seed> {
-  let dim = topology.dim();
+  let dim = topology.dim().index();
   let mut cumulative = Vec::with_capacity(topology.cells().len());
   let mut total = 0.0;
   for cell in topology.cells().handle_iter() {
@@ -291,7 +290,7 @@ fn seeds(topology: &Complex, coords: &MeshCoords, seed_count: usize) -> Vec<Seed
 /// The spacings of $n$ sorted uniforms on $[0, 1]$ are a `Dirichlet(1, ..., 1)`
 /// draw, which is the uniform distribution on the simplex -- not the normalized
 /// uniforms, which crowd the barycenter.
-fn uniform_bary(dim: Dim, index: u32) -> [f32; 4] {
+fn uniform_bary(dim: usize, index: u32) -> [f32; 4] {
   let mut cuts: Vec<f64> = (0..dim)
     .map(|k| uniform_from_hash(index.wrapping_mul(0x9e37_79b9) ^ k as u32))
     .collect();

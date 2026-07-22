@@ -463,6 +463,7 @@ impl Section<Covariant> for WhitneyInterpolant<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use multiindex::Dim;
 
   use crate::project::derham_map;
 
@@ -480,10 +481,10 @@ mod test {
   /// A grid of sample points, kept off cell faces and triangulation diagonals.
   fn probe_points(dim: Dim, samples: usize) -> impl Iterator<Item = Coord> {
     let phase = [0.017, 0.113, 0.237];
-    (0..samples.pow(dim as u32)).map(move |flat| {
+    (0..samples.pow(dim.index() as u32)).map(move |flat| {
       Coord::from_iterator(
-        dim,
-        (0..dim).map(|d| {
+        dim.index(),
+        (0..dim.index()).map(|d| {
           let i = flat / samples.pow(d as u32) % samples;
           0.05 + 0.9 * (i as f64 + phase[d]) / samples as f64
         }),
@@ -495,7 +496,7 @@ mod test {
   /// fallback: same cell, same reconstructed value.
   #[test]
   fn located_sampling_matches_scan() {
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let locator = PointLocator::new(&topology, &coords);
 
@@ -524,7 +525,7 @@ mod test {
   /// manifold loses nothing.
   #[test]
   fn pullback_then_sample_is_identity() {
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let locator = PointLocator::new(&topology, &coords);
 
@@ -554,7 +555,7 @@ mod test {
     use glatt::parametrization::Parametrization;
     use simplicial::atlas::MeshPoint;
 
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
 
       let field = DiffFormClosure::one_form(
@@ -594,10 +595,11 @@ mod test {
     };
 
     let (topology, coords) = mesh_sphere_surface(2);
-    let sphere = Parametrization::sphere(2, 1.0);
+    let sphere = Parametrization::sphere(Dim::new(2), 1.0);
 
     // An arbitrary 1-form on the (theta, phi) chart domain.
-    let form = DiffFormClosure::one_form(|u| na::dvector![u[0].sin(), u[0] * u[1].cos()], 2);
+    let form =
+      DiffFormClosure::one_form(|u| na::dvector![u[0].sin(), u[0] * u[1].cos()], Dim::new(2));
     let section = form.pullback_through(&topology, &coords, &sphere);
 
     for cell in topology.cells().handle_iter() {
@@ -624,11 +626,11 @@ mod test {
     use multiindex::Sign;
     use simplicial::atlas::MeshPoint;
 
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let ndofs = topology.nsimplices(grade);
         let cochain = crate::cochain::Cochain::new(
           grade,
@@ -639,7 +641,7 @@ mod test {
           .hodge_star(&topology, &lengths)
           .hodge_star(&topology, &lengths);
 
-        let sign = Sign::from_parity(grade * (dim - grade));
+        let sign = Sign::from_parity(grade.index() * (dim - grade).index());
         for cell in topology.cells().handle_iter() {
           let point = MeshPoint::barycenter(cell.idx());
           assert_relative_eq!(

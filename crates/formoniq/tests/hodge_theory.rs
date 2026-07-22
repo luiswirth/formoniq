@@ -13,6 +13,7 @@ extern crate nalgebra as na;
 use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
 use simplicial::{
+  Dim,
   linalg::{CooMatrix, CsrMatrix, Matrix},
   mesher::cartesian::CartesianGrid,
 };
@@ -65,12 +66,12 @@ fn cohomology_dim(difs: &[Matrix], ndofs: &[usize], k: usize) -> usize {
 /// cohomology, $b^k = delta_(k 0)$.
 #[test]
 fn harmonics_are_cohomology_cube() {
-  for dim in 1..=3 {
+  for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
 
-    for k in 0..=dim {
+    for k in dim.range_inclusive() {
       let dif = (k < dim).then(|| dense(&whitney.dif(k)));
       let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
       let mass = Matrix::from(&whitney.mass(k));
@@ -94,11 +95,11 @@ fn harmonics_are_cohomology_sphere() {
   let dim = topology.dim();
 
   let relative = whitney.relative();
-  for k in 0..=dim {
+  for k in dim.range_inclusive() {
     assert_eq!(relative.ndofs(k), whitney.ndofs(k));
   }
 
-  for (k, expected) in [(0, 1), (1, 0), (2, 1)] {
+  for (k, expected) in [(0, 1), (1, 0), (2, 1)].map(|(k, e)| (Dim::new(k), e)) {
     let dif = (k < dim).then(|| dense(&whitney.dif(k)));
     let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
     let mass = Matrix::from(&whitney.mass(k));
@@ -114,30 +115,31 @@ fn harmonics_are_cohomology_sphere() {
 /// $b^k (K, diff K) = delta_(k n)$ (Lefschetz duality with $b_(n-k) = delta_(k n)$).
 #[test]
 fn relative_harmonics_are_relative_cohomology_cube() {
-  for dim in 1..=3 {
+  for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
 
-    let ndofs: Vec<_> = (0..=dim).map(|k| relative.ndofs(k)).collect();
-    let difs: Vec<Matrix> = (0..=dim)
+    let ndofs: Vec<_> = dim.range_inclusive().map(|k| relative.ndofs(k)).collect();
+    let difs: Vec<Matrix> = dim
+      .range_inclusive()
       .map(|k| {
         if k < dim {
           dense(&relative.dif(k))
         } else {
-          Matrix::zeros(0, ndofs[k])
+          Matrix::zeros(0, ndofs[k.index()])
         }
       })
       .collect();
 
-    for k in 0..=dim {
-      let dif = (k < dim).then(|| difs[k].clone());
-      let dif_prev = (k > 0).then(|| difs[k - 1].clone());
+    for k in dim.range_inclusive() {
+      let dif = (k < dim).then(|| difs[k.index()].clone());
+      let dif_prev = (k > 0).then(|| difs[k.index() - 1].clone());
       let mass = Matrix::from(&relative.mass(k));
-      let harmonic_dim = harmonic_space_dim(ndofs[k], dif, dif_prev, mass);
+      let harmonic_dim = harmonic_space_dim(ndofs[k.index()], dif, dif_prev, mass);
 
-      let betti_rel = cohomology_dim(&difs, &ndofs, k);
+      let betti_rel = cohomology_dim(&difs, &ndofs, k.index());
       let expected = usize::from(k == dim);
       assert_eq!(betti_rel, expected, "dim={dim} k={k}");
       assert_eq!(harmonic_dim, betti_rel, "dim={dim} k={k}");
@@ -149,13 +151,13 @@ fn relative_harmonics_are_relative_cohomology_cube() {
 /// $D E_k = E_(k+1) dif_k$.
 #[test]
 fn relative_inclusion_is_cochain_map() {
-  for dim in 1..=3 {
+  for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let relative = whitney.relative();
 
-    for k in 0..dim {
+    for k in dim.range() {
       let lhs = dense(&(whitney.dif(k) * relative.inclusion(k)));
       let rhs = dense(&(relative.inclusion(k + 1) * relative.dif(k)));
       assert_relative_eq!(lhs, rhs);
@@ -172,7 +174,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use glatt::field::DiffFormClosure;
   use simplicial::linalg::Vector;
 
-  let dim = 2;
+  let dim = Dim::new(2);
   let (topology, coords) = CartesianGrid::new_unit(dim, 4).triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
@@ -183,8 +185,8 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   let galvec = assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, None));
 
   // Affine-lifting path with zero boundary values.
-  let zero_values = Cochain::new(0, Vector::zeros(boundary.ndofs(0)));
-  let laplace = CsrMatrix::from(&whitney.codif_dif(0));
+  let zero_values = Cochain::new(Dim::ZERO, Vector::zeros(boundary.ndofs(Dim::ZERO)));
+  let laplace = CsrMatrix::from(&whitney.codif_dif(Dim::ZERO));
   let sol_lifted = bc::solve_with_essential_bc(
     &whitney.relative(),
     &boundary,
@@ -195,10 +197,10 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   // Direct solve on C^0(K, dK), extended by zero.
   let relative: RelativeWhitneyComplex = whitney.relative();
-  let laplace_relative = CsrMatrix::from(&relative.codif_dif(0));
-  let rhs_relative = relative.restrict(&Cochain::new(0, galvec));
+  let laplace_relative = CsrMatrix::from(&relative.codif_dif(Dim::ZERO));
+  let rhs_relative = relative.restrict(&Cochain::new(Dim::ZERO, galvec));
   let sol_relative = FaerCholesky::new(laplace_relative).solve(rhs_relative.coeffs());
-  let sol_relative = relative.extend_by_zero(&Cochain::new(0, sol_relative));
+  let sol_relative = relative.extend_by_zero(&Cochain::new(Dim::ZERO, sol_relative));
 
   assert_relative_eq!(sol_lifted.coeffs(), sol_relative.coeffs(), epsilon = 1e-10);
 }
@@ -221,7 +223,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
   };
 
   // Annulus: 3x3 boxes with the middle box removed.
-  let (square, coords) = CartesianGrid::new_unit(2, 3).triangulate();
+  let (square, coords) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();
   let cells: Vec<_> = square
     .cells()
     .handle_iter()
@@ -239,7 +241,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
 
   // Absolute cohomology and harmonics.
   let mut betti_abs = Vec::new();
-  for k in 0..=dim {
+  for k in dim.range_inclusive() {
     let betti = topology.betti_number(k);
     let dif = (k < dim).then(|| dense(&whitney.dif(k)));
     let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
@@ -255,24 +257,25 @@ fn long_exact_sequence_of_the_pair_annulus() {
 
   // Relative cohomology and harmonics.
   let relative = whitney.relative();
-  let ndofs_rel: Vec<_> = (0..=dim).map(|k| relative.ndofs(k)).collect();
-  let difs_rel: Vec<Matrix> = (0..=dim)
+  let ndofs_rel: Vec<_> = dim.range_inclusive().map(|k| relative.ndofs(k)).collect();
+  let difs_rel: Vec<Matrix> = dim
+    .range_inclusive()
     .map(|k| {
       if k < dim {
         dense(&relative.dif(k))
       } else {
-        Matrix::zeros(0, ndofs_rel[k])
+        Matrix::zeros(0, ndofs_rel[k.index()])
       }
     })
     .collect();
   let mut betti_rel = Vec::new();
-  for k in 0..=dim {
-    let betti = cohomology_dim(&difs_rel, &ndofs_rel, k);
-    let dif = (k < dim).then(|| difs_rel[k].clone());
-    let dif_prev = (k > 0).then(|| difs_rel[k - 1].clone());
+  for k in dim.range_inclusive() {
+    let betti = cohomology_dim(&difs_rel, &ndofs_rel, k.index());
+    let dif = (k < dim).then(|| difs_rel[k.index()].clone());
+    let dif_prev = (k > 0).then(|| difs_rel[k.index() - 1].clone());
     let mass = Matrix::from(&relative.mass(k));
     assert_eq!(
-      harmonic_space_dim(ndofs_rel[k], dif, dif_prev, mass),
+      harmonic_space_dim(ndofs_rel[k.index()], dif, dif_prev, mass),
       betti,
       "relative k={k}"
     );
@@ -282,7 +285,9 @@ fn long_exact_sequence_of_the_pair_annulus() {
 
   // Boundary cohomology: two circles.
   let boundary = topology.boundary_complex().unwrap();
-  let betti_bdry: Vec<_> = (0..=boundary.dim())
+  let betti_bdry: Vec<_> = boundary
+    .dim()
+    .range_inclusive()
     .map(|k| boundary.complex().betti_number(k))
     .collect();
   assert_eq!(betti_bdry, vec![2, 2]);
@@ -290,14 +295,14 @@ fn long_exact_sequence_of_the_pair_annulus() {
   // Exactness of the long exact sequence forces the alternating sum of all
   // dimensions to vanish.
   let mut alternating_sum: i64 = 0;
-  for k in 0..=dim {
+  for k in dim.range_inclusive() {
     let bdry = if k <= boundary.dim() {
-      betti_bdry[k] as i64
+      betti_bdry[k.index()] as i64
     } else {
       0
     };
-    let sign = if k % 2 == 0 { 1 } else { -1 };
-    alternating_sum += sign * (betti_rel[k] as i64 - betti_abs[k] as i64 + bdry);
+    let sign = if k.index() % 2 == 0 { 1 } else { -1 };
+    alternating_sum += sign * (betti_rel[k.index()] as i64 - betti_abs[k.index()] as i64 + bdry);
   }
   assert_eq!(alternating_sum, 0);
 }

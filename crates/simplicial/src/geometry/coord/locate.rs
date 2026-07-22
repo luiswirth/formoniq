@@ -35,7 +35,7 @@ struct Aabb {
   max: Vector,
 }
 impl Aabb {
-  fn empty(dim: Dim) -> Self {
+  fn empty(dim: usize) -> Self {
     Self {
       min: Vector::from_element(dim, f64::INFINITY),
       max: Vector::from_element(dim, f64::NEG_INFINITY),
@@ -123,10 +123,10 @@ impl PointLocator {
     let mut boxes = Vec::with_capacity(cells.capacity());
     let mut centroids = Vec::with_capacity(cells.capacity());
 
-    let mut total = Aabb::empty(ambient);
+    let mut total = Aabb::empty(ambient.index());
     for cell in topology.cells().handle_iter() {
       let simp = cell.coord_simplex(coords);
-      let mut bbox = Aabb::empty(ambient);
+      let mut bbox = Aabb::empty(ambient.index());
       for v in simp.coord_iter() {
         bbox.extend_point(&v.view().into_owned());
       }
@@ -147,7 +147,7 @@ impl PointLocator {
     let mut nodes = Vec::new();
     let root = if cells.is_empty() {
       nodes.push(BvhNode::Leaf {
-        bbox: Aabb::empty(ambient),
+        bbox: Aabb::empty(ambient.index()),
         start: 0,
         count: 0,
       });
@@ -284,13 +284,14 @@ fn build(
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::{geometry::coord::Coord, mesher::cartesian::CartesianGrid};
 
   /// The BVH locator agrees with the brute-force linear scan on every query,
   /// and reports points outside the mesh as such.
   #[test]
   fn locator_matches_brute_force() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let locator = PointLocator::new(&topology, &coords);
 
@@ -301,10 +302,10 @@ mod test {
       let samples: usize = 5;
       let phase = [0.041, 0.113, 0.237];
       let probe = |i: usize, d: usize| -0.2 + 1.4 * (i as f64 + phase[d]) / samples as f64;
-      for flat in 0..samples.pow(dim as u32) {
+      for flat in 0..samples.pow(dim.index() as u32) {
         let x = Coord::from_iterator(
-          dim,
-          (0..dim).map(|d| probe(flat / samples.pow(d as u32) % samples, d)),
+          dim.index(),
+          (0..dim.index()).map(|d| probe(flat / samples.pow(d as u32) % samples, d)),
         );
 
         let brute = coords.find_cell_containing(&topology, x.as_view());

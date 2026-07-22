@@ -378,6 +378,7 @@ fn dense_self_adjoint_eigen(m: &Matrix) -> (Vector, Matrix) {
 
 #[cfg(test)]
 mod test {
+
   use super::sparse_shift_invert_eigen;
   use simplicial::linalg::{CooMatrix, CsrMatrix, Matrix, Vector};
 

@@ -67,12 +67,12 @@ impl MeshCoords {
       "coordinates must match the coarse mesh being refined"
     );
     let ambient = self.dim();
-    let mut matrix = crate::linalg::Matrix::zeros(ambient, sub.nvertices());
+    let mut matrix = crate::linalg::Matrix::zeros(ambient.index(), sub.nvertices());
     matrix
       .view_range_mut(.., 0..sub.ncoarse_vertices())
       .copy_from(self.matrix());
     for (i, birth) in sub.new_births().iter().enumerate() {
-      let mut col = Vector::zeros(ambient);
+      let mut col = Vector::zeros(ambient.index());
       for &(v, w) in &birth.combination {
         col += w * self.matrix().column(v);
       }
@@ -84,6 +84,7 @@ impl MeshCoords {
 
 #[cfg(test)]
 mod test {
+  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
   use crate::topology::complex::Complex;
 
@@ -119,7 +120,7 @@ mod test {
   /// over cells of each cell's sorted squared edge lengths.
   #[test]
   fn refine_reproduces_the_generator_family() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       for (n, r) in [(1, 2), (2, 2), (1, 3), (2, 3), (1, 4)] {
         let (coarse, coarse_coords) = CartesianGrid::new_unit(dim, n).triangulate();
         let sub = coarse.refine(r);
@@ -148,7 +149,7 @@ mod test {
   /// exactly $1 \/ R^n$ of its parent's volume.
   #[test]
   fn measure_partition() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_g = coords.to_cell_gramians(&coarse);
       let coarse_vol: f64 = coarse_g.metrics().iter().map(cell_volume).sum();
@@ -160,7 +161,7 @@ mod test {
         approx::assert_relative_eq!(fine_vol, coarse_vol, epsilon = 1e-12);
 
         // Per child: parent volume shared equally among its R^n children.
-        let scale = (r.pow(dim as u32) as f64).recip();
+        let scale = (r.pow(dim.index() as u32) as f64).recip();
         for child in sub.children().values() {
           let child_vol = cell_volume(&coarse_g.metrics()[child.parent].pullback(&child.jacobian));
           let parent_vol = cell_volume(&coarse_g.metrics()[child.parent]);
@@ -176,7 +177,7 @@ mod test {
   /// it says the flat-cell subdivision loses nothing.
   #[test]
   fn intrinsic_equals_extrinsic() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_g = coords.to_cell_gramians(&coarse);
 
@@ -205,7 +206,7 @@ mod test {
   #[test]
   fn lengths_match_coords() {
     use crate::topology::data::SkeletonData;
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_lengths = coords.to_edge_lengths_sq(&coarse);
 
@@ -238,7 +239,7 @@ mod test {
   fn a_tower_on_the_inherited_ordering_is_the_product_refinement() {
     use crate::topology::ordering::CellOrdering;
 
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 1).triangulate();
       let lengths = coords.to_edge_lengths_sq(&coarse);
 
@@ -292,7 +293,7 @@ mod test {
       classes.len()
     }
 
-    for dim in 1..=4 {
+    for dim in (1..=4usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 1).triangulate();
       let mut lengths = coords.to_edge_lengths_sq(&coarse);
       let mut complex = coarse;

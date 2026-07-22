@@ -132,7 +132,7 @@ fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) ->
   } else {
     0
   };
-  raw.clamp(dim + 1, GLYPH_REFINEMENT_MAX)
+  raw.clamp((dim + 1).index(), GLYPH_REFINEMENT_MAX)
 }
 
 /// The glyphs of a line field, baked as flat arrow quads: one arrow per lattice

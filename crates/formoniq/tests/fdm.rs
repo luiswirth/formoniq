@@ -165,10 +165,13 @@ fn laplace_matrix_1d_interior(nvertices: usize) -> Matrix<i32> {
 #[test]
 fn feec_vs_fdm_interior() {
   for nboxes_per_dim in 1..=3 {
-    for dim in 1..=4 {
+    for dim in (1..=4).map(Dim::from) {
       let nvertices_per_dim = nboxes_per_dim + 1;
       let feec = feec_galmat_interior(dim, nboxes_per_dim);
-      let fdm = ndimensionalize_operator(laplace_matrix_1d_interior, &vec![nvertices_per_dim; dim]);
+      let fdm = ndimensionalize_operator(
+        laplace_matrix_1d_interior,
+        &vec![nvertices_per_dim; dim.index()],
+      );
       assert_eq!(feec, fdm, "dim={dim} nboxes_per_dim={nboxes_per_dim}");
     }
   }
@@ -195,8 +198,8 @@ fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> Matrix {
   let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
-  let mut galmat = Matrix::from(&whitney.codif_dif(0));
-  let mass = Matrix::from(&whitney.mass(0));
+  let mut galmat = Matrix::from(&whitney.codif_dif(Dim::ZERO));
+  let mass = Matrix::from(&whitney.mass(Dim::ZERO));
   let mut galvec = mass * Vector::from_element(topology.vertices().len(), 1.0);
   normalize_galerkin_lse(&mut galmat, &mut galvec);
   galmat

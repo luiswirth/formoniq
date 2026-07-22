@@ -75,7 +75,7 @@ extern crate nalgebra as na;
 
 use coorder::Coord;
 use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
-use exterior::{Dim, MultiForm, exterior_bases, exterior_dim};
+use exterior::{MultiForm, exterior_bases, exterior_dim};
 use formoniq::{
   assemble::assemble_galvec,
   fe::fe_l2_error,
@@ -174,14 +174,14 @@ fn clifford_dispersion() {
 
 /// The wave covector $a$ of the manufactured plane wave: timelike, generic
 /// against the mesh axes.
-fn wave_covector(dim: Dim) -> MultiForm {
+fn wave_covector(dim: usize) -> MultiForm {
   let components = [0.9, 0.5, 0.3, 0.2];
   MultiForm::line(PI * Vector::from_column_slice(&components[..dim]))
 }
 
 /// One constant blade per grade: the polarization $omega_k$ of the plane wave,
 /// deterministic and fully populated so every rung of the complex couples.
-fn polarization(dim: Dim, grade: usize) -> MultiForm {
+fn polarization(dim: usize, grade: usize) -> MultiForm {
   MultiForm::new(
     Vector::from_fn(exterior_dim(dim, grade), |i, _| {
       ((3 * i + 2 * grade) % 5) as f64 / 2.0 - 1.0
@@ -191,7 +191,7 @@ fn polarization(dim: Dim, grade: usize) -> MultiForm {
   )
 }
 
-fn convergence(dim: Dim, nsubs: &[usize]) {
+fn convergence(dim: usize, nsubs: &[usize]) {
   let eta = Metric::minkowski(dim);
   let a = wave_covector(dim);
   let a_sharp = a.sharp(&eta);

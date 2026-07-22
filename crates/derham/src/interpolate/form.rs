@@ -49,10 +49,10 @@ impl WhitneyForm {
     self.cell_dim
   }
   pub fn grade(&self) -> ExteriorGrade {
-    self.dof_simp.card() - 1
+    (self.dof_simp.card() - 1).into()
   }
   pub fn nvertices(&self) -> usize {
-    self.cell_dim + 1
+    (self.cell_dim + 1).index()
   }
 
   /// The DOF vertex set as a blade in the formal barycentric space
@@ -65,7 +65,7 @@ impl WhitneyForm {
   pub fn at_bary<'a>(&self, bary: impl Into<BaryRef<'a>>) -> MultiForm {
     let bary = MultiVector::line(bary.into().view().into_owned());
     let koszul = self.barycentric_blade().interior_product(&bary);
-    factorial_f64(self.grade()) * koszul.pullback(&self.difbarys)
+    factorial_f64(self.grade().index()) * koszul.pullback(&self.difbarys)
   }
 
   /// The constant exterior derivative
@@ -75,6 +75,6 @@ impl WhitneyForm {
   /// Vanishes automatically for the top grade, where $Lambda^(k+1) (RR^n)$
   /// is the zero space.
   pub fn dif(&self) -> MultiForm {
-    factorial_f64(self.grade() + 1) * self.barycentric_blade().pullback(&self.difbarys)
+    factorial_f64(self.grade().index() + 1) * self.barycentric_blade().pullback(&self.difbarys)
   }
 }

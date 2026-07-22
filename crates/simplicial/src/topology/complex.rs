@@ -40,20 +40,23 @@ pub struct Complex {
 
 impl Complex {
   pub fn skeletons(&self) -> impl Iterator<Item = SkeletonRef<'_>> {
-    (0..=self.dim()).map(|d| SkeletonRef::new(self, d))
+    self
+      .dim()
+      .range_inclusive()
+      .map(|d| SkeletonRef::new(self, d))
   }
-  pub fn skeleton(&self, dim: Dim) -> SkeletonRef<'_> {
-    SkeletonRef::new(self, dim)
+  pub fn skeleton(&self, dim: impl Into<Dim>) -> SkeletonRef<'_> {
+    SkeletonRef::new(self, dim.into())
   }
-  pub fn skeleton_raw(&self, dim: Dim) -> &Skeleton {
-    &self.skeletons[dim]
+  pub fn skeleton_raw(&self, dim: impl Into<Dim>) -> &Skeleton {
+    &self.skeletons[dim.into().index()]
   }
   /// The cells containing the given vertex, by kidx (sorted).
   pub fn vertex_cells(&self, vertex: KSimplexIdx) -> &[KSimplexIdx] {
     &self.vertex_cells[vertex]
   }
-  pub fn nsimplices(&self, dim: Dim) -> usize {
-    self.skeleton(dim).len()
+  pub fn nsimplices(&self, dim: impl Into<Dim>) -> usize {
+    self.skeleton(dim.into()).len()
   }
   /// The skeleton carrying role `R`, with the proofs: `None` where the
   /// complex has no simplices of that dimension (the facets of a point, the
@@ -65,7 +68,7 @@ impl Complex {
   }
 
   pub fn vertices(&self) -> RoledSkeleton<'_, roles::Vertex> {
-    RoledSkeleton::trusted(self.skeleton(0))
+    RoledSkeleton::trusted(self.skeleton(Dim::ZERO))
   }
   /// Panics on a 0-complex, which has no edges; [`Self::role_skeleton`] is
   /// the total form.
@@ -96,11 +99,12 @@ impl Complex {
 }
 
 impl Complex {
-  pub fn standard(dim: Dim) -> Self {
+  pub fn standard(dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
     Self::from_cells(Skeleton::standard(dim))
   }
   pub fn dim(&self) -> Dim {
-    self.skeletons.len() - 1
+    (self.skeletons.len() - 1).into()
   }
 
   pub fn has_boundary(&self) -> bool {
@@ -144,7 +148,7 @@ impl Complex {
   /// The vertices that lie on the boundary of the mesh.
   pub fn boundary_vertices(&self) -> Vec<usize> {
     self
-      .boundary_simplices(0)
+      .boundary_simplices(Dim::ZERO)
       .into_iter()
       .map(|idx| idx.kidx)
       .collect()
@@ -155,7 +159,7 @@ impl Complex {
   /// The chain complex extends by zero: outside $0 <= k <= n$ the operator
   /// maps to/from the zero space.
   pub fn boundary_operator(&self, dim: Dim) -> &CooMatrix {
-    self.boundary_operators[dim].get_or_init(|| self.compute_boundary_operator(dim))
+    self.boundary_operators[dim.index()].get_or_init(|| self.compute_boundary_operator(dim))
   }
 
   fn compute_boundary_operator(&self, dim: Dim) -> CooMatrix {
@@ -214,14 +218,15 @@ impl Complex {
 
     // Every skeleton, derived and canonically colex-ordered: the deduplicated
     // d-subsimplices of all cells. `Skeleton::new` sorts and dedups.
-    let skeletons: Vec<Skeleton> = (0..=dim)
+    let skeletons: Vec<Skeleton> = dim
+      .range_inclusive()
       .map(|d| Skeleton::new(cells.iter().flat_map(|cell| cell.subsimps(d)).collect()))
       .collect();
 
     // Vertex -> cells incidence, built from the final (colex) cell order, so
     // each list is sorted.
     let mut vertex_cells = vec![Vec::new(); skeletons[0].len()];
-    for (icell, cell) in skeletons[dim].iter().enumerate() {
+    for (icell, cell) in skeletons[dim.index()].iter().enumerate() {
       for v in cell.iter() {
         vertex_cells[v].push(icell);
       }
@@ -229,9 +234,9 @@ impl Complex {
 
     // Manifold check: every facet is shared by one or two cells.
     if dim >= 1 {
-      let facets = &skeletons[dim - 1];
+      let facets = &skeletons[(dim - 1).index()];
       let mut nparents = vec![0usize; facets.len()];
-      for cell in skeletons[dim].iter() {
+      for cell in skeletons[dim.index()].iter() {
         for facet in cell.subsimps(dim - 1) {
           nparents[facets.kidx_by_simplex(&facet)] += 1;
         }
@@ -245,7 +250,7 @@ impl Complex {
     Self {
       skeletons,
       vertex_cells,
-      boundary_operators: (0..dim + 2).map(|_| OnceLock::new()).collect(),
+      boundary_operators: (0..dim.index() + 2).map(|_| OnceLock::new()).collect(),
       orientation: OnceLock::new(),
     }
   }
@@ -253,6 +258,7 @@ impl Complex {
 
 #[cfg(test)]
 mod test {
+  use crate::Dim;
   use crate::topology::simplex::{Simplex, nsubsimplices, standard_boundary_operator};
 
   use super::*;
@@ -266,7 +272,7 @@ mod test {
   fn save_load_roundtrip() {
     use crate::mesher::cartesian::CartesianGrid;
 
-    let (topology, _) = CartesianGrid::new_unit(3, 2).triangulate();
+    let (topology, _) = CartesianGrid::new_unit(Dim::new(3), 2).triangulate();
 
     let path = std::env::temp_dir().join(format!("simplicial_test_{}.cbor", std::process::id()));
     topology.save(&path).unwrap();
@@ -274,7 +280,7 @@ mod test {
     std::fs::remove_file(&path).unwrap();
 
     assert_eq!(loaded.dim(), topology.dim());
-    for dim in 0..=topology.dim() {
+    for dim in topology.dim().range_inclusive() {
       assert_eq!(loaded.nsimplices(dim), topology.nsimplices(dim));
     }
     assert_eq!(loaded.betti_numbers(), topology.betti_numbers());
@@ -287,17 +293,17 @@ mod test {
   fn skeletons_are_colex_ordered_and_vertices_contiguous() {
     use crate::mesher::cartesian::CartesianGrid;
 
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 3).triangulate();
 
       // Vertices are exactly 0..nvertices, each labelled by its own kidx.
-      let vertices = topology.skeleton(0);
+      let vertices = topology.skeleton(Dim::new(0));
       for (kidx, vertex) in vertices.iter().enumerate() {
         assert_eq!(vertex.vertices, vec![kidx]);
       }
 
       // Each skeleton is strictly increasing in colex order.
-      for k in 0..=dim {
+      for k in dim.range_inclusive() {
         let skeleton = topology.skeleton(k);
         let simplices: Vec<_> = skeleton.iter().collect();
         assert!(
@@ -314,9 +320,9 @@ mod test {
     use crate::linalg::CsrMatrix;
     use crate::mesher::cartesian::CartesianGrid;
 
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
-      for k in 0..dim.saturating_sub(1) {
+      for k in (0..dim.index().saturating_sub(1)).map(Dim::from) {
         let dif_k = CsrMatrix::from(&topology.coboundary_operator(k));
         let dif_kk = CsrMatrix::from(&topology.coboundary_operator(k + 1));
         let dif_dif = dif_kk * dif_k;
@@ -327,7 +333,7 @@ mod test {
 
   #[test]
   fn boundary_simplices_facets_are_boundary_facets() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, _) = crate::mesher::cartesian::CartesianGrid::new_unit(dim, 2).triangulate();
       assert_eq!(topology.boundary_simplices(dim - 1), {
         let mut facets: Vec<_> = topology
@@ -343,9 +349,9 @@ mod test {
 
   #[test]
   fn standard_boundary_operator_agrees_with_complex() {
-    for dim in 1..=4 {
+    for dim in (1..=4usize).map(Dim::from) {
       let complex = Complex::standard(dim);
-      for k in 0..=dim {
+      for k in dim.range_inclusive() {
         let combinatorial = standard_boundary_operator(dim, k);
         let from_complex = Matrix::from(complex.boundary_operator(k));
         assert_eq!(combinatorial, from_complex);
@@ -355,12 +361,12 @@ mod test {
 
   #[test]
   fn incidence() {
-    let dim = 3;
+    let dim = Dim::new(3);
     let complex = Complex::standard(dim);
     let cell = complex.cells().handle_iter().next().unwrap();
 
     let cell_simplex = Simplex::standard(dim);
-    for dim_sub in 0..=dim {
+    for dim_sub in dim.range_inclusive() {
       let subs: Vec<_> = cell.faces(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplices(dim, dim_sub));
       let subs_vertices: Vec<_> = cell_simplex.subsimps(dim_sub).collect();
@@ -374,7 +380,7 @@ mod test {
 
       for (isub, sub) in subs.iter().enumerate() {
         let sub_vertices = &subs_vertices[isub];
-        for dim_sup in dim_sub..dim {
+        for dim_sup in (dim_sub.index()..dim.index()).map(Dim::from) {
           for sup in sub.cofaces(dim_sup) {
             assert!(
               sub_vertices.is_subsimplex_of(sup.simplex())
@@ -392,7 +398,7 @@ mod test {
   fn ref_navigation() {
     use crate::mesher::cartesian::CartesianGrid;
 
-    let (topology, _) = CartesianGrid::new_unit(2, 3).triangulate();
+    let (topology, _) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();
 
     for cell in topology.cells().handle_iter() {
       // A triangle has 3 facets (edges) and at most 3 neighbors across them.

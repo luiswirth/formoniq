@@ -36,8 +36,9 @@ impl Simplex {
     let simplex = Self::new(vertices);
     (sign, simplex)
   }
-  pub fn standard(dim: Dim) -> Self {
-    Self::new((0..=dim).collect())
+  pub fn standard(dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
+    Self::new((0..=dim.index()).collect())
   }
   pub fn single(v: usize) -> Self {
     Self::new(vec![v])
@@ -51,7 +52,7 @@ impl Simplex {
     self.vertices.len()
   }
   pub fn dim(&self) -> Dim {
-    self.nvertices() - 1
+    (self.nvertices() - 1).into()
   }
   pub fn contains(&self, ivertex: VertexIdx) -> bool {
     self.vertices.binary_search(&ivertex).is_ok()
@@ -86,7 +87,7 @@ impl Simplex {
   /// The subsimplices of the given dimension, in colexicographic order of
   /// their local positions.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = Self> + use<'_> {
-    combinations(self.nvertices(), sub_dim + 1).map(|positions| self.select(positions))
+    combinations(self.nvertices(), (sub_dim + 1).index()).map(|positions| self.select(positions))
   }
 
   /// The boundary $diff sigma = sum_i (-1)^i (sigma without v_i)$:
@@ -184,13 +185,13 @@ impl SignedSimplex {
 /// The subsimplices of the standard simplex: local vertex sets,
 /// in colexicographic order.
 pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
-  combinations(dim_cell + 1, dim_sub + 1)
+  combinations((dim_cell + 1).index(), (dim_sub + 1).index())
 }
 pub fn nsubsimplices(dim_cell: Dim, dim_sub: Dim) -> usize {
-  binomial(dim_cell + 1, dim_sub + 1)
+  binomial((dim_cell + 1).index(), (dim_sub + 1).index())
 }
 pub fn nedges(dim_cell: Dim) -> usize {
-  nsubsimplices(dim_cell, 1)
+  nsubsimplices(dim_cell, Dim::ONE)
 }
 
 /// $diff^k: Delta_k (Delta^n) -> Delta_(k-1) (Delta^n)$
@@ -202,9 +203,9 @@ pub fn nedges(dim_cell: Dim) -> usize {
 /// to the (-1)-simplex that `boundary_matrix` (below) computes.
 pub fn standard_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
   if dim_simp == 0 {
-    return Matrix::zeros(0, dim_cell + 1);
+    return Matrix::zeros(0, (dim_cell + 1).index());
   }
-  boundary_matrix(dim_cell + 1, dim_simp + 1)
+  boundary_matrix((dim_cell + 1).index(), (dim_simp + 1).index())
 }
 
 /// Matrix of the boundary operator
@@ -229,6 +230,7 @@ fn boundary_matrix(n: usize, card: usize) -> Matrix {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
 
   use itertools::Itertools;
 
@@ -245,9 +247,9 @@ mod test {
 
   #[test]
   fn subsimps() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let simp = Simplex::standard(dim);
-      for sub_dim in 0..=dim {
+      for sub_dim in dim.range_inclusive() {
         let subs = simp.subsimps(sub_dim).collect_vec();
         assert_eq!(subs.len(), nsubsimplices(dim, sub_dim));
         assert!(subs.iter().all(|sub| sub.is_subsimplex_of(&simp)));
@@ -273,7 +275,7 @@ mod test {
   #[test]
   fn boundary_of_boundary_cancels() {
     use std::collections::HashMap;
-    let simp = Simplex::standard(3);
+    let simp = Simplex::standard(Dim::new(3));
     let mut chain: HashMap<Simplex, i32> = HashMap::new();
     for face in simp.boundary() {
       for subface in face.simplex.boundary() {

@@ -183,6 +183,7 @@ impl CellOrdering {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
   use multiindex::Sign;
 
@@ -191,7 +192,7 @@ mod test {
   /// the whole structure.
   #[test]
   fn colex_ordering_is_face_consistent() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for ncells_axis in 1..=2 {
         let (complex, _) = CartesianGrid::new_unit(dim, ncells_axis).triangulate();
         let ordering = CellOrdering::colex(&complex);
@@ -206,7 +207,7 @@ mod test {
   /// colex ordering.
   #[test]
   fn words_are_matched_by_vertex_set() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let colex = CellOrdering::colex(&complex);
       let mut words: Vec<Vec<VertexIdx>> = (0..colex.ncells())
@@ -223,7 +224,7 @@ mod test {
   /// and why nothing noticed the datum was missing.
   #[test]
   fn the_kuhn_chain_ascends() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let grid = CartesianGrid::new_unit(dim, 2);
       let skeleton = grid.cell_skeleton();
       for simplex in skeleton.iter() {
@@ -239,7 +240,7 @@ mod test {
   /// would let a non-conforming refinement through.
   #[test]
   fn a_transposed_cell_is_detected() {
-    for dim in 2..=3 {
+    for dim in (2..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let mut ordering = CellOrdering::colex(&complex);
       // An interior facet, and one of the two cells meeting there. Transposing
@@ -271,7 +272,7 @@ mod test {
   /// parity of the trivial ordering is the trivial orientation.
   #[test]
   fn the_colex_ordering_winds_positively() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let ordering = CellOrdering::colex(&complex);
       let oriented = ordering.induced_orientation(&complex);
@@ -291,7 +292,7 @@ mod test {
   /// reversal is detected as a winding failure, not silently absorbed.
   #[test]
   fn winding_is_the_parity_and_nothing_more() {
-    for dim in 2..=3 {
+    for dim in (2..=3usize).map(Dim::from) {
       let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let Some(coherent) = CellOrdering::colex(&complex).induced_orientation(&complex) else {
         continue;

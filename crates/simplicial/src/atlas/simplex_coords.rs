@@ -59,11 +59,11 @@ impl<S: CoordSpace> SimplexCoords<S> {
     self.vertices.ncols()
   }
   pub fn dim_intrinsic(&self) -> Dim {
-    self.nvertices() - 1
+    (self.nvertices() - 1).into()
   }
   /// The dimension of the coordinate space `S` the simplex is realized in.
   pub fn dim_space(&self) -> Dim {
-    self.vertices.nrows()
+    self.vertices.nrows().into()
   }
   /// Whether the realization is full-dimensional: the simplex spans its space,
   /// so the parametrization is square and invertible. Always true for
@@ -91,8 +91,8 @@ impl<S: CoordSpace> SimplexCoords<S> {
   /// The spanning vectors $A$ of the parametrization, as the columns of a
   /// (space-by-intrinsic) matrix: its linear part.
   pub fn spanning_vectors(&self) -> Matrix {
-    let mut mat = Matrix::zeros(self.dim_space(), self.dim_intrinsic());
-    for i in 0..self.dim_intrinsic() {
+    let mut mat = Matrix::zeros(self.dim_space().index(), self.dim_intrinsic().index());
+    for i in 0..self.dim_intrinsic().index() {
       mat.set_column(i, &self.spanning_vector(i));
     }
     mat
@@ -181,7 +181,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
   }
 
   pub fn barycenter(&self) -> Coords<S> {
-    let mut barycenter = Vector::zeros(self.dim_space());
+    let mut barycenter = Vector::zeros(self.dim_space().index());
     self.coord_iter().for_each(|v| barycenter += v.view());
     barycenter /= self.nvertices() as f64;
     Coords::new(barycenter)
@@ -206,7 +206,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
       })
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexCoords<S>> + use<'_, S> {
-    self.subsimps(1)
+    self.subsimps(Dim::ONE)
   }
 
   pub fn swap_vertices(&mut self, icol: usize, jcol: usize) {
@@ -251,6 +251,7 @@ impl<S: CoordSpace> std::fmt::Debug for SimplexCoords<S> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::atlas::{ref_bary, ref_difbarys};
 
   use approx::assert_relative_eq;
@@ -259,7 +260,7 @@ mod test {
   /// its local coordinates *are* the barycentric-derived ones.
   #[test]
   fn standard_barys() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let simp = SimplexCoords::standard(dim);
       for pos in simp.coord_iter() {
         let local = Local::new(pos.view().into_owned());
@@ -277,7 +278,7 @@ mod test {
   /// [`ref_difbarys`] and never touch coordinates.
   #[test]
   fn standard_difbarys() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let computed = SimplexCoords::standard(dim).difbarys();
       assert_relative_eq!(computed, ref_difbarys(dim), epsilon = 1e-12);
     }
@@ -286,9 +287,9 @@ mod test {
   /// The parametrization and its inverse are mutually inverse on the chart.
   #[test]
   fn local_global_roundtrip() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let simp = SimplexCoords::standard(dim);
-      let local = Local::from_iterator(dim, (0..dim).map(|i| 0.1 * (i + 1) as f64));
+      let local = Local::from_iterator(dim.index(), (0..dim.index()).map(|i| 0.1 * (i + 1) as f64));
       let global = simp.local2global(&local);
       assert_relative_eq!(
         simp.global2local(&global).vector(),

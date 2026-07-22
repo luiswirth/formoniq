@@ -15,6 +15,7 @@ use {
 
 use iterative::{BlockDiagonal, StopCriterion, krylov::minres};
 use itertools::Itertools;
+use simplicial::Dim;
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
 use std::mem;
 
@@ -133,8 +134,9 @@ fn assemble_mixed_kkt<C: HilbertComplex>(
 pub fn solve_source<C: HilbertComplex>(
   complex: &C,
   source_galvec: GalVec,
-  grade: ExteriorGrade,
+  grade: impl Into<ExteriorGrade>,
 ) -> Result<(Cochain, Cochain, Cochain), EigenError> {
+  let grade = grade.into();
   let harmonics = solve_harmonics(complex, grade)?;
   let (system_matrix, rhs, sigma_len, u_len) =
     assemble_mixed_kkt(complex, source_galvec, grade, &harmonics);
@@ -172,7 +174,7 @@ pub fn solve_source<C: HilbertComplex>(
   let sigma = if grade > 0 {
     Cochain::new(grade - 1, complex.inclusion(grade - 1) * sigma_coeffs)
   } else {
-    Cochain::new(0, sigma_coeffs)
+    Cochain::new(Dim::ZERO, sigma_coeffs)
   };
   let u = Cochain::new(grade, complex.inclusion(grade) * u_coeffs);
   // `p` is the coefficient vector against the harmonic basis (length $b_k$), a
@@ -183,8 +185,9 @@ pub fn solve_source<C: HilbertComplex>(
 
 pub fn solve_harmonics<C: HilbertComplex>(
   complex: &C,
-  grade: ExteriorGrade,
+  grade: impl Into<ExteriorGrade>,
 ) -> Result<Matrix, EigenError> {
+  let grade = grade.into();
   // The dimension of the harmonic space is the Betti number $b_k$ (Hodge
   // theorem: $cal(H)^k tilde.equ H^k tilde.equ H_k$), an exact topological
   // invariant of the complex — not a number the caller has to know. Absolute
@@ -206,9 +209,10 @@ pub fn solve_harmonics<C: HilbertComplex>(
 /// that many.
 pub fn solve_evp<C: HilbertComplex>(
   complex: &C,
-  grade: ExteriorGrade,
+  grade: impl Into<ExteriorGrade>,
   neigenvalues: usize,
 ) -> Result<(Vector, Matrix, Matrix), EigenError> {
+  let grade = grade.into();
   let galmats = MixedGalMats::compute(complex, grade);
 
   let lhs = galmats.mixed_hodge_laplacian();
@@ -409,6 +413,7 @@ impl MixedGalMats {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
+  use simplicial::Dim;
   use simplicial::mesher::cartesian::CartesianGrid;
 
   /// Block-preconditioned MINRES solves the mixed Hodge-Laplace KKT system to
@@ -416,12 +421,12 @@ mod test {
   /// grade on a Riemannian mesh where the diagonal blocks are SPD.
   #[test]
   fn block_minres_matches_direct_on_the_mixed_system() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let relative = WhitneyComplex::new(&topology, &lengths).relative();
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let harmonics = solve_harmonics(&relative, grade).unwrap();
         let source = Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0);
         let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
@@ -451,12 +456,12 @@ mod test {
   fn bench_mixed_solve() {
     use std::time::Instant;
 
-    for (dim, refinement) in [(2usize, 24usize), (3, 8)] {
+    for (dim, refinement) in [(Dim::new(2), 24usize), (Dim::new(3), 8)] {
       let (topology, coords) = CartesianGrid::new_unit(dim, refinement).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let relative = WhitneyComplex::new(&topology, &lengths).relative();
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let harmonics = solve_harmonics(&relative, grade).unwrap();
         let source = Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0);
         let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
@@ -489,9 +494,9 @@ mod test {
   /// rather than growing like the unpreconditioned condition number.
   #[test]
   fn block_minres_iteration_count_is_mesh_independent() {
-    let grade = 1;
+    let grade = Dim::new(1);
     let iters_at = |refinement: usize| {
-      let (topology, coords) = CartesianGrid::new_unit(2, refinement).triangulate();
+      let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), refinement).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let relative = WhitneyComplex::new(&topology, &lengths).relative();
       let harmonics = solve_harmonics(&relative, grade).unwrap();
