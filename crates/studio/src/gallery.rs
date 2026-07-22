@@ -72,14 +72,14 @@ const MOEBIUS_WIDTH_RATIO: f64 = 1.5;
 // The intrinsic dimension the grid opens on, and the top of its dimension
 // slider: the same $1..=3$ the reference cell spans, since both live in the
 // fixed ambient $RR^3$. A square (dim 2) matches the historical planar grid.
-pub const GRID_DIM_DEFAULT: Dim = 2;
-pub const GRID_DIM_MAX: Dim = 3;
+pub const GRID_DIM_DEFAULT: usize = 2;
+pub const GRID_DIM_MAX: usize = 3;
 
 // The reference cell the Whitney-basis study opens on, and the top of its
 // dimension slider: the intrinsic dimensions the fixed ambient $RR^3$ embeds.
 // A triangle (dim 2) matches the historical local-shape-function gallery.
-pub const REFERENCE_CELL_DIM: Dim = 2;
-pub const REFERENCE_CELL_DIM_MAX: Dim = 3;
+pub const REFERENCE_CELL_DIM: usize = 2;
+pub const REFERENCE_CELL_DIM_MAX: usize = 3;
 
 // Hodge-Laplace modes an eigenmode study solves for by default. Chosen so both
 // low grades close on a complete degeneracy shell on the sphere: grade 0 fills
@@ -315,13 +315,13 @@ pub enum MeshSource {
   /// `dim = 2` a square of triangles, `dim = 3` a cube of tetrahedra -- one
   /// generator, no special case. `dim` ranges over $1..=3$, the intrinsic
   /// dimensions the fixed ambient $RR^3$ embeds.
-  Grid { dim: Dim, cells_axis: usize },
+  Grid { dim: usize, cells_axis: usize },
   /// The standard reference cell of the given intrinsic dimension as a one-cell
   /// mesh. The Whitney-basis study on it is the local shape functions, so
   /// "local shape functions" is that composition, not a study of its own.
   /// `dim` ranges over $1..=3$, the intrinsic dimensions the fixed ambient
   /// $RR^3$ embeds.
-  ReferenceCell { dim: Dim },
+  ReferenceCell { dim: usize },
   /// A flat quotient of the square, realized in $RR^3$ as a surface of
   /// revolution: the two members of the family that fit in the fixed ambient.
   Quotient {
@@ -460,7 +460,7 @@ impl Study {
   /// The study the viewer opens on: grade-0 eigenmodes.
   pub(crate) fn start() -> Study {
     Study::Eigenmodes {
-      grade: 0,
+      grade: Dim::ZERO,
       nmodes: DEFAULT_NMODES,
     }
   }
@@ -674,7 +674,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Parabolic smoothing of a localized bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::Heat {
-        grade: 0,
+        grade: Dim::ZERO,
         nsteps: DEFAULT_TRAJECTORY_STEPS,
         final_time: HEAT_FINAL_TIME,
       },
@@ -686,7 +686,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Hyperbolic propagation and reflection of a bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::Wave {
-        grade: 0,
+        grade: Dim::ZERO,
         nsteps: DEFAULT_TRAJECTORY_STEPS,
         final_time: WAVE_FINAL_TIME,
       },
@@ -703,7 +703,7 @@ pub(crate) fn presets() -> Vec<Preset> {
         description: "Grade-1 eigenmodes of a genus-1 surface: the harmonic 1-forms are its zero shell, and they see the hole",
         mesh: MeshSource::Builtin(bob),
         study: Study::Eigenmodes {
-          grade: 1,
+          grade: Dim::ONE,
           nmodes: DEFAULT_NMODES,
         },
         selection: None,
@@ -772,7 +772,7 @@ impl Gallery {
   pub(crate) fn new(preset: &Preset) -> (Self, Scene) {
     let mesh = Arc::new(preset.mesh.build().expect("the starting mesh builds"));
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
-    let last_grade = preset.study.grade().unwrap_or(0);
+    let last_grade = preset.study.grade().unwrap_or(Dim::ZERO);
     let mut gallery = Self {
       mesh_source: preset.mesh.clone(),
       mesh,

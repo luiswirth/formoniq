@@ -102,7 +102,7 @@ impl<'a> ProlongedWhitney<'a> {
         // (sorted) vertex. A coarse vertex keeps its label and is a corner of
         // the parent; a new vertex carries its affine birth over coarse
         // vertices, all of which are the parent's.
-        let mut bary_map = Matrix::zeros(dim + 1, dim + 1);
+        let mut bary_map = Matrix::zeros((dim + 1).index(), (dim + 1).index());
         for (i, &v) in cell.simplex().vertices.iter().enumerate() {
           if v < ncoarse {
             bary_map[(slot(v), i)] = 1.0;
@@ -151,6 +151,7 @@ impl Section<Covariant> for ProlongedWhitney<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use multiindex::Dim;
 
   use crate::section::{Sampler, SectionExt};
 
@@ -181,7 +182,7 @@ mod test {
   /// but the two share no code, so a bug in the provenance path cannot hide.
   #[test]
   fn prolongation_is_the_resampled_interpolant() {
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let (coarse, coarse_coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       for r in 1..=3 {
         let sub = coarse.refine(r);
@@ -189,7 +190,7 @@ mod test {
         let fine_coords = coarse_coords.refine(&sub);
         let locator = PointLocator::new(&coarse, &coarse_coords);
 
-        for grade in 0..=dim {
+        for grade in dim.range_inclusive() {
           let c = probe_cochain(&coarse, grade);
           let prolonged = prolongate(&c, &coarse, &sub);
 
@@ -215,10 +216,10 @@ mod test {
   /// itself, coarse vertices keeping their labels so the DOFs line up.
   #[test]
   fn identity_refinement_prolongs_trivially() {
-    for dim in 0..=3 {
+    for dim in (0..=3).into_iter().map(Dim::from) {
       let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let sub = coarse.refine(1);
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let c = probe_cochain(&coarse, grade);
         let prolonged = prolongate(&c, &coarse, &sub);
         assert_relative_eq!(prolonged.coeffs(), c.coeffs(), epsilon = 1e-10);
@@ -234,12 +235,12 @@ mod test {
   /// respects the de Rham differential, since $W$ and $R$ each do.
   #[test]
   fn prolongation_is_a_cochain_map() {
-    for dim in 1..=3 {
+    for dim in (1..=3).into_iter().map(Dim::from) {
       let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for r in 1..=3 {
         let sub = coarse.refine(r);
         let fine = sub.complex();
-        for grade in 0..dim {
+        for grade in dim.range() {
           let c = probe_cochain(&coarse, grade);
 
           let dif_then_prolong = prolongate(&c.dif(&coarse), &coarse, &sub);

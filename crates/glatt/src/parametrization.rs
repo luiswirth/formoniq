@@ -68,7 +68,7 @@ impl<S: CoordSpace> Parametrization<S> {
       jacobian: None,
       chart: None,
       dim,
-      seed: Coords::zeros(dim),
+      seed: Coords::zeros(dim.index()),
       seed_fn: None,
     }
   }
@@ -142,10 +142,10 @@ impl<S: CoordSpace> Parametrization<S> {
 
   fn finite_diff_jacobian(&self, u: &Coords<S>) -> Matrix {
     let ambient = self.forward(u).dim();
-    let mut jac = Matrix::zeros(ambient, self.dim);
+    let mut jac = Matrix::zeros(ambient, self.dim.index());
     let mut plus = u.clone();
     let mut minus = u.clone();
-    for j in 0..self.dim {
+    for j in 0..self.dim.index() {
       plus.vector_mut()[j] += FD_STEP;
       minus.vector_mut()[j] -= FD_STEP;
       let column = (self.forward(&plus).vector() - self.forward(&minus).vector()) / (2.0 * FD_STEP);
@@ -210,7 +210,7 @@ impl Parametrization<Ambient> {
   /// special case of `pullback_through`.
   pub fn identity(dim: Dim) -> Self {
     Self::new(|u: &Coord| u.clone(), dim)
-      .with_jacobian(move |_| Matrix::identity(dim, dim))
+      .with_jacobian(move |_| Matrix::identity(dim.index(), dim.index()))
       .with_chart(|p: &Coord, _| p.clone())
   }
 
@@ -249,10 +249,10 @@ impl Parametrization<Ambient> {
   /// any ambient point.
   pub fn graph(height: impl Fn(&Coord) -> f64 + Sync + 'static, dim: Dim) -> Self {
     Self::new(
-      move |u: &Coord| Coord::new(u.vector().clone().insert_row(dim, height(u))),
+      move |u: &Coord| Coord::new(u.vector().clone().insert_row(dim.index(), height(u))),
       dim,
     )
-    .with_seed_fn(move |p: &Coord| Coord::new(p.rows(0, dim).into_owned()))
+    .with_seed_fn(move |p: &Coord| Coord::new(p.rows(0, dim.index()).into_owned()))
   }
 
   /// The solid $n$-ball in spherical coordinates
@@ -276,15 +276,16 @@ impl Parametrization<Ambient> {
     Self::new(
       move |u: &Coord| {
         let r = u[0];
-        let angles = u.rows(1, dim - 1).into_owned();
+        let angles = u.rows(1, dim.index() - 1).into_owned();
         Coord::new(hyperspherical(r, &Coord::new(angles)))
       },
       dim,
     )
     .with_chart(move |p: &Coord, _| {
-      let mut u = Vector::zeros(dim);
+      let mut u = Vector::zeros(dim.index());
       u[0] = p.norm();
-      u.rows_mut(1, dim - 1).copy_from(&hyperspherical_angles(p));
+      u.rows_mut(1, dim.index() - 1)
+        .copy_from(&hyperspherical_angles(p));
       Coord::new(u)
     })
   }
@@ -306,7 +307,7 @@ impl Parametrization<Ambient> {
         let rho = major + minor * theta.cos();
         Coord::from_iterator(3, [rho * phi.cos(), rho * phi.sin(), minor * theta.sin()])
       },
-      2,
+      Dim::new(2),
     )
     .with_chart(move |p: &Coord, _| {
       let phi = p[1].atan2(p[0]);
@@ -365,7 +366,7 @@ mod test {
           ],
         )
       },
-      2,
+      Dim::new(2),
     )
   }
 
@@ -422,7 +423,7 @@ mod test {
   fn hypersphere_has_the_right_radius_and_chart() {
     for dim in 1..=4 {
       let radius = 0.5 + 0.5 * dim as f64;
-      let sphere = Parametrization::sphere(dim, radius);
+      let sphere = Parametrization::sphere(dim.into(), radius);
       // Angles strictly inside the box, where the chart is a genuine inverse.
       // The azimuth returns in $(-pi, pi]$ from `atan2`; keep it there so the
       // round-trip is exact, and the polar angles in $(0, pi)$.
@@ -456,7 +457,7 @@ mod test {
       // A genuinely curved height, so the vertical drop is only an approximate
       // seed and Gauss-Newton has to do real work.
       let height = |u: &Coord| 0.4 * u.iter().map(|x| x.sin()).sum::<f64>();
-      let graph = Parametrization::graph(height, dim);
+      let graph = Parametrization::graph(height, dim.into());
 
       for step in 0..5 {
         let u = Coord::from_iterator(dim, (0..dim).map(|k| -0.8 + 0.5 * (k + step) as f64));
@@ -476,7 +477,7 @@ mod test {
   #[test]
   fn ball_chart_inverts() {
     for dim in 2..=4 {
-      let ball = Parametrization::ball(dim);
+      let ball = Parametrization::ball(dim.into());
       let mut coords = vec![1.3]; // radius, inside (0, 2)
       coords.extend((0..dim - 1).map(|k| {
         if k + 2 == dim {
@@ -523,7 +524,7 @@ mod test {
   /// from the finite-difference Jacobian alone.
   #[test]
   fn sphere_induced_metric_is_round() {
-    let sphere = Parametrization::sphere(2, 1.0);
+    let sphere = Parametrization::sphere(Dim::new(2), 1.0);
     for &(theta, phi) in &[(0.7, 0.3), (1.2, 2.1), (2.4, 5.0)] {
       let u = Coord::from_iterator(2, [theta, phi]);
       let g = sphere.induced_metric(&u);
@@ -536,7 +537,7 @@ mod test {
   /// Jacobian, no solve involved.
   #[test]
   fn identity_is_trivial() {
-    let id = Parametrization::identity(3);
+    let id = Parametrization::identity(Dim::new(3));
     let p = Coord::from_iterator(3, [1.0, -2.0, 0.5]);
     assert_eq!(id.forward(&p).vector(), p.vector());
     assert_eq!(id.chart(&p, &Coord::zeros(3)).vector(), p.vector());

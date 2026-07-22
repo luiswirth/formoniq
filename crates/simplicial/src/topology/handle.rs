@@ -125,11 +125,11 @@ impl<'m> SimplexRef<'m> {
     self
       .simplex()
       .iter()
-      .map(move |v| Roled::trusted(SimplexIdx::new(0, v).handle(complex)))
+      .map(move |v| Roled::trusted(SimplexIdx::new(Dim::ZERO, v).handle(complex)))
   }
   /// The edges of this simplex, with their [`Edge`] proofs by construction.
   pub fn edges(self) -> impl Iterator<Item = Edge<'m>> {
-    self.faces(1).map(Roled::trusted)
+    self.faces(Dim::ONE).map(Roled::trusted)
   }
   /// The `dim`-dimensional faces (subsimplices) of this simplex.
   pub fn faces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
@@ -141,13 +141,16 @@ impl<'m> SimplexRef<'m> {
   }
   /// The facets: the codimension-1 faces. Empty for a vertex.
   pub fn facets(self) -> impl Iterator<Item = SimplexRef<'m>> {
-    let below = self.idx.dim.checked_sub(1);
-    below.into_iter().flat_map(move |d| self.faces(d))
+    let below = self.idx.dim - 1;
+    (below >= 0)
+      .then_some(below)
+      .into_iter()
+      .flat_map(move |d| self.faces(d))
   }
   /// The signed boundary $diff sigma$: each facet with its incidence sign.
   pub fn boundary(self) -> impl Iterator<Item = (Sign, SimplexRef<'m>)> {
     let complex = self.complex;
-    let below = self.idx.dim.wrapping_sub(1);
+    let below = self.idx.dim - 1;
     let has_boundary = self.idx.dim >= 1;
     self
       .simplex()
@@ -204,7 +207,11 @@ impl<'m> SimplexRef<'m> {
 
   /// The open star: every coface of every dimension (this simplex included).
   pub fn star(self) -> impl Iterator<Item = SimplexRef<'m>> {
-    (self.idx.dim..=self.complex.dim()).flat_map(move |d| self.cofaces(d).collect::<Vec<_>>())
+    self
+      .idx
+      .dim
+      .range_to_inclusive(self.complex.dim())
+      .flat_map(move |d| self.cofaces(d).collect::<Vec<_>>())
   }
   /// The link: the faces opposite this simplex across the cells containing it
   /// (the boundary of the star). For a vertex of a triangulation, the
@@ -216,7 +223,7 @@ impl<'m> SimplexRef<'m> {
     for cell in self.cells() {
       let opposite: Vec<VertexIdx> = cell.simplex().iter().filter(|v| !own.contains(v)).collect();
       let opposite = Simplex::new(opposite);
-      for d in 0..opposite.nvertices() {
+      for d in (0..opposite.nvertices()).map(Dim::from) {
         for face in opposite.subsimps(d) {
           result.insert(complex.skeleton(d).handle_by_simplex(&face).idx());
         }

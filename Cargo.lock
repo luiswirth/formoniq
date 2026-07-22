@@ -2192,6 +2192,7 @@ version = "0.2.0"
 dependencies = [
  "itertools 0.15.0",
  "num-integer",
+ "serde",
 ]
 
 [[package]]

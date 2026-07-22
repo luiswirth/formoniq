@@ -23,7 +23,7 @@
 
 use coorder::{Ambient, CoordSpace, Coords, Vector};
 
-use exterior::{Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, Variance};
+use exterior::{Contravariant, Covariant, Degree, Dim, ExteriorElement, ExteriorGrade, Variance};
 
 /// A field of exterior elements over a coordinate domain $Omega subset RR^m$,
 /// of the given [`Variance`]: a differential form when covariant, a
@@ -59,35 +59,41 @@ pub type MultiVectorFieldClosure<S = Ambient> = FieldClosure<Contravariant, S>;
 impl<V: Variance, S: CoordSpace> FieldClosure<V, S> {
   pub fn new(
     closure: impl Fn(&Coords<S>) -> ExteriorElement<V> + Sync + 'static,
-    dim: Dim,
-    grade: ExteriorGrade,
+    dim: impl Into<Dim>,
+    grade: impl Into<ExteriorGrade>,
   ) -> Self {
     Self {
       closure: Box::new(closure),
-      dim,
-      grade,
+      dim: dim.into(),
+      grade: grade.into(),
     }
   }
 
   /// A scalar field: grade 0, where the two variances coincide.
-  pub fn scalar(f: impl Fn(&Coords<S>) -> f64 + Sync + 'static, dim: Dim) -> Self {
-    Self::new(move |x| ExteriorElement::scalar(f(x), dim), dim, 0)
+  pub fn scalar(f: impl Fn(&Coords<S>) -> f64 + Sync + 'static, dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
+    Self::new(
+      move |x| ExteriorElement::scalar(f(x), dim),
+      dim,
+      Degree::ZERO,
+    )
   }
   /// A grade-1 field, from its coefficients in the standard basis.
-  pub fn line(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: Dim) -> Self {
-    Self::new(move |x| ExteriorElement::line(f(x)), dim, 1)
+  pub fn line(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: impl Into<Dim>) -> Self {
+    Self::new(move |x| ExteriorElement::line(f(x)), dim, Degree::ONE)
   }
 
-  pub fn constant_scalar(value: f64, dim: Dim) -> Self {
+  pub fn constant_scalar(value: f64, dim: impl Into<Dim>) -> Self {
     Self::scalar(move |_| value, dim)
   }
   /// The scalar field extracting one coordinate component, $x |-> x_i$.
-  pub fn coord_component(icomp: usize, dim: Dim) -> Self {
+  pub fn coord_component(icomp: usize, dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
     assert!(icomp < dim, "Component index out of bounds");
     Self::scalar(move |x| x[icomp], dim)
   }
   /// The scalar field of the radial distance from a center point.
-  pub fn radial_scalar(center: Coords<S>, dim: Dim) -> Self {
+  pub fn radial_scalar(center: Coords<S>, dim: impl Into<Dim>) -> Self {
     let center = center.into_vector();
     Self::scalar(move |x| (&center - x.vector()).norm(), dim)
   }
@@ -95,13 +101,16 @@ impl<V: Variance, S: CoordSpace> FieldClosure<V, S> {
 
 impl<S: CoordSpace> DiffFormClosure<S> {
   /// A covector field $omega = sum_i omega_i dif x^i$.
-  pub fn one_form(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: Dim) -> Self {
+  pub fn one_form(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: impl Into<Dim>) -> Self {
     Self::line(f, dim)
   }
 }
 impl<S: CoordSpace> MultiVectorFieldClosure<S> {
   /// A vector field $v = sum_i v^i diff_i$.
-  pub fn vector_field(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: Dim) -> Self {
+  pub fn vector_field(
+    f: impl Fn(&Coords<S>) -> Vector + Sync + 'static,
+    dim: impl Into<Dim>,
+  ) -> Self {
     Self::line(f, dim)
   }
 }

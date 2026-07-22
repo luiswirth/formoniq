@@ -12,7 +12,7 @@ where
   F: Fn(Dim) -> Option<Matrix>,
   G: Fn(Dim) -> E,
 {
-  for dim in 1..=10 {
+  for dim in (1..=10).map(Dim::from) {
     let Some(expected_elmat) = ref_elmat(dim) else {
       continue;
     };
@@ -27,12 +27,15 @@ where
 
 #[test]
 fn laplacian_refcell() {
-  check_ref_elmat(|dim| operators::CodifDifElmat::new(dim, 0), ref_laplacian);
+  check_ref_elmat(
+    |dim| operators::CodifDifElmat::new(dim, Dim::ZERO),
+    ref_laplacian,
+  );
 }
 fn ref_laplacian(dim: Dim) -> Option<Matrix> {
-  let ndofs = dim + 1;
+  let ndofs = (dim + 1).index();
   let mut expected_elmat = Matrix::zeros(ndofs, ndofs);
-  expected_elmat[(0, 0)] = dim as i32;
+  expected_elmat[(0, 0)] = dim.index() as i32;
   for i in 1..ndofs {
     expected_elmat[(i, 0)] = -1;
     expected_elmat[(0, i)] = -1;
@@ -44,7 +47,10 @@ fn ref_laplacian(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn mass_refcell() {
-  check_ref_elmat(|dim| operators::HodgeMassElmat::new(dim, 0), ref_mass);
+  check_ref_elmat(
+    |dim| operators::HodgeMassElmat::new(dim, Dim::ZERO),
+    ref_mass,
+  );
 }
 fn ref_mass(dim: Dim) -> Option<Matrix> {
   #[rustfmt::skip]
@@ -66,7 +72,7 @@ fn ref_mass(dim: Dim) -> Option<Matrix> {
       1.0/120.0, 1.0/120.0, 1.0/120.0, 1.0/60.0;
     ],
   ];
-  mats.get(dim).cloned()
+  mats.get(dim.index()).cloned()
 }
 
 #[test]
@@ -74,7 +80,7 @@ fn lumped_mass_refcell() {
   check_ref_elmat(|_| operators::ScalarLumpedMassElmat, ref_lumped_mass);
 }
 fn ref_lumped_mass(dim: Dim) -> Option<Matrix> {
-  let nvertices = dim + 1;
+  let nvertices = (dim + 1).index();
   let ndofs = nvertices;
   Some(refsimp_vol(dim) / ndofs as f64 * Matrix::identity(ndofs, ndofs))
 }

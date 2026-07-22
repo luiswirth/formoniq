@@ -143,7 +143,10 @@ impl Surface {
   /// the baked vertex table is the parent's, so a datum computed on the
   /// surface has to be scattered back into it.
   pub(crate) fn vertex_to_parent(&self) -> Option<&[KSimplexIdx]> {
-    self.boundary.as_ref().map(|b| b.parent_kidxs(0))
+    self
+      .boundary
+      .as_ref()
+      .map(|b| b.parent_kidxs(simplicial::Dim::ZERO))
   }
 }
 
@@ -201,7 +204,7 @@ mod tests {
     let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
     let surface = Surface::of(&topology, &coords);
 
-    for grade in 0..=surface.dim(&topology) {
+    for grade in surface.dim(&topology).range_inclusive() {
       let cochain = Cochain::from_function(|s| s.kidx() as f64, grade, &topology);
       let traced = surface.trace(&topology, &cochain).expect("grade traces");
 
@@ -225,7 +228,7 @@ mod tests {
     let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
     let surface = Surface::of(&topology, &coords);
 
-    for grade in 0..topology.dim() {
+    for grade in topology.dim().range() {
       assert!(surface.traces(&topology, grade), "grade {grade} traces");
     }
     assert!(!surface.traces(&topology, topology.dim()));

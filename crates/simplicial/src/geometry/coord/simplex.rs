@@ -30,7 +30,7 @@ pub use crate::atlas::SimplexCoords;
 
 impl SimplexCoords<Ambient> {
   pub fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
-    let mut vert_coords = Matrix::zeros(coords.dim(), simp.nvertices());
+    let mut vert_coords = Matrix::zeros(coords.dim().index(), simp.nvertices());
     for (i, v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &coords.coord(v).view());
     }
@@ -71,6 +71,7 @@ impl SimplexRefExt for SimplexRef<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::atlas::ref_vertices;
   use crate::geometry::metric::simplex::SimplexLengthsSq;
   use crate::linalg::Vector;
@@ -82,7 +83,7 @@ mod test {
   /// and intrinsic.
   #[test]
   fn ref_coords_realize_ref_lengths() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       let coords: SimplexCoords = SimplexCoords::new(ref_vertices(dim));
       let lengths_sq = coords.to_lengths_sq();
       assert_relative_eq!(
@@ -97,9 +98,12 @@ mod test {
   /// vectors are the orthonormal standard basis.
   #[test]
   fn ref_metric_is_identity() {
-    for dim in 1..=4 {
+    for dim in (1..=4usize).map(Dim::from) {
       let coords: SimplexCoords = SimplexCoords::new(ref_vertices(dim));
-      assert_relative_eq!(coords.metric_tensor().matrix(), &Matrix::identity(dim, dim));
+      assert_relative_eq!(
+        coords.metric_tensor().matrix(),
+        &Matrix::identity(dim.index(), dim.index())
+      );
     }
   }
 

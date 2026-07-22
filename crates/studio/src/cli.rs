@@ -86,7 +86,7 @@ fn parse_graded_study(s: &str) -> Option<Study> {
   let graded = |prefix: &str| {
     s.strip_prefix(prefix).and_then(|g| {
       if g.is_empty() {
-        Some(0)
+        Some(Dim::ZERO)
       } else {
         g.parse().ok()
       }
@@ -121,12 +121,12 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
   // digit -- `grid3` is a cube of tetrahedra, `refcell1` a single edge -- so one
   // spelling reaches every dimension the fixed ambient RR^3 embeds, no separate
   // name per dimension.
-  let dimensioned = |stem: &str, default: Dim, max: Dim| -> Option<Result<Dim, String>> {
+  let dimensioned = |stem: &str, default: usize, max: usize| -> Option<Result<usize, String>> {
     let rest = s.strip_prefix(stem)?;
     if rest.is_empty() {
       return Some(Ok(default));
     }
-    Some(match rest.parse::<Dim>() {
+    Some(match rest.parse::<usize>() {
       Ok(d) if (1..=max).contains(&d) => Ok(d),
       _ => Err(format!(
         "`{stem}` dimension must be 1..={max}, got `{rest}`"

@@ -15,4 +15,4 @@ pub mod mesher;
 /// orientation of a simplex, the coefficients of a boundary, and a cell's
 /// coherent orientation are all values of it, and a consumer must be able to
 /// name what those methods return without depending on `multiindex` directly.
-pub use multiindex::{Dim, Sign};
+pub use multiindex::{Degree, Dim, Sign};

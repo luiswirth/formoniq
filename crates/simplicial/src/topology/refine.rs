@@ -187,7 +187,7 @@ impl Complex {
           .map(|&pv| {
             let global = resolve(pv, &mut new_index, &mut new_births);
             let weights = &pattern.vertices()[pv];
-            let mut local = Vector::zeros(dim);
+            let mut local = Vector::zeros(dim.index());
             let scale = (refinement as f64).recip();
             for (i, &weight) in weights.iter().enumerate() {
               // Barycentric weight on sorted vertex `slot[i]`; the reference
@@ -290,6 +290,7 @@ impl Subdivision {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
   use crate::topology::data::SkeletonData;
 
@@ -299,7 +300,7 @@ mod test {
   /// deduplicated across shared faces.
   #[test]
   fn refine_counts_and_conformity() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       for r in 1..=3 {
         let sub = coarse.refine(r);
@@ -308,7 +309,7 @@ mod test {
         // R^n children per coarse cell.
         assert_eq!(
           fine.nsimplices(dim),
-          coarse.nsimplices(dim) * r.pow(dim as u32)
+          coarse.nsimplices(dim) * r.pow(dim.index() as u32)
         );
         // Coarse vertices keep their labels; refinement only adds vertices.
         assert!(sub.nvertices() >= coarse.vertices().len());
@@ -316,7 +317,7 @@ mod test {
         // The child provenance covers every refined cell.
         assert_eq!(sub.children().len(), fine.nsimplices(dim));
         // Boundary of the boundary vanishes: a valid chain complex was built.
-        for k in 1..dim {
+        for k in (1..dim.index()).map(Dim::from) {
           use crate::linalg::CsrMatrix;
           let d0 = CsrMatrix::from(&fine.coboundary_operator(k - 1));
           let d1 = CsrMatrix::from(&fine.coboundary_operator(k));
@@ -330,12 +331,12 @@ mod test {
   /// tetrahedron into 8 over 10. The classical Bank/Bey counts.
   #[test]
   fn red_refinement_classical_counts() {
-    let tri = Complex::standard(2).refine(2);
-    assert_eq!(tri.complex().nsimplices(2), 4);
+    let tri = Complex::standard(Dim::new(2)).refine(2);
+    assert_eq!(tri.complex().nsimplices(Dim::new(2)), 4);
     assert_eq!(tri.nvertices(), 6);
 
-    let tet = Complex::standard(3).refine(2);
-    assert_eq!(tet.complex().nsimplices(3), 8);
+    let tet = Complex::standard(Dim::new(3)).refine(2);
+    assert_eq!(tet.complex().nsimplices(Dim::new(3)), 8);
     assert_eq!(tet.nvertices(), 10);
   }
 
@@ -343,11 +344,11 @@ mod test {
   /// the cell count for every dimension.
   #[test]
   fn refine_degenerate_and_identity() {
-    let points = Complex::standard(0).refine(3);
-    assert_eq!(points.complex().nsimplices(0), 1);
+    let points = Complex::standard(Dim::new(0)).refine(3);
+    assert_eq!(points.complex().nsimplices(Dim::new(0)), 1);
     assert_eq!(points.nvertices(), 1);
 
-    for dim in 0..=3 {
+    for dim in (0..=3usize).map(Dim::from) {
       let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
       let identity = coarse.refine(1);
       assert_eq!(identity.complex().nsimplices(dim), coarse.nsimplices(dim));

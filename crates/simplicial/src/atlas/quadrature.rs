@@ -36,7 +36,7 @@ impl SimplexQuadRule {
   /// over barycentric lattice points $beta in NN_0^(n+1)$, with
   /// $w_i = (-1)^i 2^(-2s) (d + n - 2i)^d \/ (i! (d + n - i)!)$.
   pub fn grundmann_moeller(dim: Dim, s: usize) -> Self {
-    let n = dim;
+    let n = dim.index();
     let d = 2 * s + 1;
 
     let npoints: usize = (0..=s).map(|i| binomial(s - i + n, n)).sum();
@@ -76,8 +76,8 @@ impl SimplexQuadRule {
 
   /// The (minimal-index) Grundmann-Möller rule exact for polynomials of the
   /// given degree.
-  pub fn degree(dim: Dim, degree: usize) -> Self {
-    Self::grundmann_moeller(dim, degree / 2)
+  pub fn degree(dim: impl Into<Dim>, degree: usize) -> Self {
+    Self::grundmann_moeller(dim.into(), degree / 2)
   }
 }
 
@@ -156,6 +156,7 @@ impl SimplexQuadRule {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::Dim;
   use crate::atlas::refsimp_vol;
 
   use approx::assert_abs_diff_eq;
@@ -176,14 +177,14 @@ mod tests {
   /// <= 2s + 1 exactly, in every dimension.
   #[test]
   fn grundmann_moeller_is_exact_on_polynomials() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for s in 0..=3 {
         let quadrule = SimplexQuadRule::grundmann_moeller(dim, s);
         let max_degree = 2 * s + 1;
         for degree in 0..=max_degree {
-          for alpha in Composition::all(dim + 1, degree) {
+          for alpha in Composition::all((dim + 1).index(), degree) {
             let monomial = |bary: BaryRef| -> f64 {
-              (0..=dim)
+              (0..=dim.index())
                 .map(|i| bary[i].powi(alpha.parts()[i] as i32))
                 .product()
             };
@@ -200,7 +201,7 @@ mod tests {
   /// quadrature weights.
   #[test]
   fn nodes_and_weights_are_barycentric() {
-    for dim in 0..=4 {
+    for dim in (0..=4usize).map(Dim::from) {
       for s in 0..=3 {
         let quadrule = SimplexQuadRule::grundmann_moeller(dim, s);
         assert_abs_diff_eq!(quadrule.weights().sum(), 1.0, epsilon = 1e-12);
@@ -214,13 +215,13 @@ mod tests {
   /// The degree constructor guarantees the requested exactness.
   #[test]
   fn degree_constructor_is_exact() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       for degree in 0..=5 {
         let quadrule = SimplexQuadRule::degree(dim, degree);
         let monomial = |bary: BaryRef| bary[1].powi(degree as i32);
         let alpha: Vec<usize> = std::iter::once(0)
           .chain(std::iter::once(degree))
-          .chain(std::iter::repeat_n(0, dim - 1))
+          .chain(std::iter::repeat_n(0, dim.index() - 1))
           .collect_vec();
         let computed = quadrule.integrate_ref(&monomial, refsimp_vol(dim));
         let exact = exact_barycentric_monomial(&alpha);

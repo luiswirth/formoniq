@@ -188,7 +188,7 @@ impl BakedMesh {
       .fold(0.0, f64::max)
       .max(1e-6);
 
-    let (cells, edges, normals, reach) = match topology.dim() {
+    let (cells, edges, normals, reach) = match topology.dim().index() {
       0 => (
         PrimBatch::Points((0..nvertices as u32).collect()),
         Vec::new(),
@@ -205,7 +205,7 @@ impl BakedMesh {
         let (triangles, normals) = oriented_surface(topology, &ambient);
         (
           PrimBatch::Triangles(triangles),
-          skeleton_indices(topology, 1),
+          skeleton_indices(topology, Dim::ONE),
           normals,
           vertex_reach(topology, coords, extent),
         )
@@ -254,7 +254,7 @@ impl BakedMesh {
 
         (
           PrimBatch::Triangles(triangles),
-          skeleton_indices(topology, 1),
+          skeleton_indices(topology, Dim::ONE),
           normals,
           reach,
         )
@@ -701,7 +701,7 @@ mod tests {
     // positive component along the ray from it.
     let centroid = na::Vector3::repeat(0.5);
     let boundary = topology.boundary_complex().unwrap();
-    for &v in boundary.parent_kidxs(0) {
+    for &v in boundary.parent_kidxs(simplicial::Dim::ZERO) {
       let p = &baked.positions[v];
       let n = na::Vector3::new(p.normal[0] as f64, p.normal[1] as f64, p.normal[2] as f64);
       assert!(

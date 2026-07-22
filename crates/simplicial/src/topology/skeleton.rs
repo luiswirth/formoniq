@@ -71,7 +71,8 @@ impl Skeleton {
     }
   }
 
-  pub fn standard(dim: Dim) -> Skeleton {
+  pub fn standard(dim: impl Into<Dim>) -> Skeleton {
+    let dim = dim.into();
     Self::new(vec![Simplex::standard(dim)])
   }
 

@@ -77,8 +77,8 @@ impl MeshCoords {
 }
 
 impl MeshCoords {
-  pub fn standard(ndim: Dim) -> Self {
-    Self::new(crate::atlas::ref_vertices(ndim))
+  pub fn standard(ndim: impl Into<Dim>) -> Self {
+    Self::new(crate::atlas::ref_vertices(ndim.into()))
   }
   /// Vertices of an embedding into Euclidean space: the ambient inner product
   /// is the standard one.
@@ -139,7 +139,7 @@ impl MeshCoords {
 impl SkeletonData for MeshCoords {
   type Item<'a> = CoordRef<'a>;
   fn grade(&self) -> Dim {
-    0
+    Dim::ZERO
   }
   fn len(&self) -> usize {
     self.nvertices()
@@ -164,7 +164,7 @@ impl From<&[Coord]> for MeshCoords {
 
 impl MeshCoords {
   pub fn dim(&self) -> Dim {
-    self.matrix.nrows()
+    self.matrix.nrows().into()
   }
   pub fn nvertices(&self) -> usize {
     self.matrix.ncols()
@@ -209,9 +209,10 @@ impl MeshCoords {
 impl MeshCoords {
   /// Pad the ambient space with additional Euclidean axes: the vertices gain
   /// zero coordinates, the ambient inner product an identity block.
-  pub fn embed_euclidean(mut self, dim: Dim) -> MeshCoords {
+  pub fn embed_euclidean(mut self, dim: impl Into<Dim>) -> MeshCoords {
+    let dim = dim.into();
     let old_dim = self.matrix.nrows();
-    let extra = dim - old_dim;
+    let extra = (dim - old_dim).index();
     self.matrix = self.matrix.insert_rows(old_dim, extra, 0.0);
     let mut ambient = self
       .ambient
@@ -219,7 +220,7 @@ impl MeshCoords {
       .clone()
       .insert_rows(old_dim, extra, 0.0)
       .insert_columns(old_dim, extra, 0.0);
-    for i in old_dim..dim {
+    for i in old_dim..dim.index() {
       ambient[(i, i)] = 1.0;
     }
     self.ambient = Gramian::new_unchecked(ambient);
@@ -273,7 +274,8 @@ pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simpl
   (cells, coords)
 }
 
-pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
+pub fn standard_coord_complex(dim: impl Into<Dim>) -> (Complex, MeshCoords) {
+  let dim = dim.into();
   let topology = Complex::standard(dim);
 
   let coords = topology
@@ -281,7 +283,7 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
     .handle_iter()
     .map(|v| v.kidx())
     .map(|v| {
-      let mut vec = Vector::zeros(dim);
+      let mut vec = Vector::zeros(dim.index());
       if v > 0 {
         vec[v - 1] = 1.0;
       }
@@ -297,6 +299,7 @@ pub fn standard_coord_complex(dim: Dim) -> (Complex, MeshCoords) {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::{
     geometry::{cell_volume, coord::simplex::SimplexRefExt, metric::mesh::EdgeRefExt},
     mesher::cartesian::CartesianGrid,
@@ -310,10 +313,10 @@ mod test {
   /// edge data alone -- no containing cell is consulted.
   #[test]
   fn simplex_metric_matches_induced_at_every_grade() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
-      for grade in 1..=dim {
+      for grade in (1..=dim.index()).map(Dim::from) {
         for simp in topology.skeleton(grade).handle_iter() {
           let from_lengths = lengths.simplex_metric(simp);
           let induced = Metric::new(
@@ -343,7 +346,7 @@ mod test {
   /// inducing embedding.
   #[test]
   fn edge_length_is_endpoint_distance() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths_sq = coords.to_edge_lengths_sq(&topology);
       for edge in topology.edges().handle_iter() {
@@ -362,13 +365,15 @@ mod test {
   /// ambient, one signature among all.
   #[test]
   fn minkowski_ambient_induces_lorentzian_cell_metrics() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-      let spacetime =
-        MeshCoords::with_ambient(coords.matrix().clone(), gramian::Gramian::minkowski(dim));
+      let spacetime = MeshCoords::with_ambient(
+        coords.matrix().clone(),
+        gramian::Gramian::minkowski(dim.index()),
+      );
       for cell in topology.cells().handle_iter() {
         let metric = spacetime.cell_metric(cell);
-        assert_eq!(metric.signature(), (dim - 1, 1));
+        assert_eq!(metric.signature(), (dim.index() - 1, 1));
         assert!(!metric.is_riemannian());
       }
     }
@@ -382,7 +387,7 @@ mod test {
   #[test]
   fn lorentzian_ambient_realizes_lorentzian_regge_data() {
     use gramian::CausalType;
-    let (topology, coords) = CartesianGrid::new_unit(2, 1).triangulate();
+    let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), 1).triangulate();
     let mut matrix = coords.matrix().clone();
     matrix.row_mut(0).scale_mut(0.7);
     let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(2));

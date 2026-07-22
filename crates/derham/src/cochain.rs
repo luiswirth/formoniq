@@ -25,8 +25,11 @@ pub struct Cochain {
   grade: ExteriorGrade,
 }
 impl Cochain {
-  pub fn new(grade: ExteriorGrade, coeffs: Vector) -> Self {
-    Self { coeffs, grade }
+  pub fn new(grade: impl Into<ExteriorGrade>, coeffs: Vector) -> Self {
+    Self {
+      coeffs,
+      grade: grade.into(),
+    }
   }
   pub fn constant(value: f64, skeleton: &Skeleton) -> Self {
     let ncoeffs = skeleton.len();
@@ -35,10 +38,11 @@ impl Cochain {
   pub fn zero(skeleton: &Skeleton) -> Self {
     Self::constant(0.0, skeleton)
   }
-  pub fn from_function<F>(f: F, grade: ExteriorGrade, topology: &Complex) -> Self
+  pub fn from_function<F>(f: F, grade: impl Into<ExteriorGrade>, topology: &Complex) -> Self
   where
     F: FnMut(SimplexRef) -> f64,
   {
+    let grade = grade.into();
     let skeleton = topology.skeleton(grade);
     let coeffs = Vector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
     Self::new(grade, coeffs)
@@ -198,6 +202,7 @@ impl std::ops::Sub for Cochain {
 
 #[cfg(test)]
 mod test {
+
   #[cfg(feature = "serde")]
   use super::*;
   #[cfg(feature = "serde")]

@@ -38,13 +38,13 @@ impl Rect {
     Self { min, max }
   }
   pub fn new_unit_cube(dim: Dim) -> Self {
-    let min = Vector::zeros(dim);
-    let max = Vector::from_element(dim, 1.0);
+    let min = Vector::zeros(dim.index());
+    let max = Vector::from_element(dim.index(), 1.0);
     Self { min, max }
   }
   pub fn new_scaled_cube(dim: Dim, scale: f64) -> Self {
-    let min = Vector::zeros(dim);
-    let max = Vector::from_element(dim, scale);
+    let min = Vector::zeros(dim.index());
+    let max = Vector::from_element(dim.index(), scale);
     Self { min, max }
   }
 
@@ -110,16 +110,18 @@ impl CartesianGrid {
     let ncells = vec![ncells_axis; rect.dim()];
     Self { rect, ncells }
   }
-  pub fn new_unit(dim: Dim, ncells_axis: usize) -> Self {
+  pub fn new_unit(dim: impl Into<Dim>, ncells_axis: usize) -> Self {
+    let dim = dim.into();
     Self {
       rect: Rect::new_unit_cube(dim),
-      ncells: vec![ncells_axis; dim],
+      ncells: vec![ncells_axis; dim.index()],
     }
   }
-  pub fn new_unit_scaled(dim: Dim, ncells_axis: usize, scale: f64) -> Self {
+  pub fn new_unit_scaled(dim: impl Into<Dim>, ncells_axis: usize, scale: f64) -> Self {
+    let dim = dim.into();
     Self {
       rect: Rect::new_scaled_cube(dim, scale),
-      ncells: vec![ncells_axis; dim],
+      ncells: vec![ncells_axis; dim.index()],
     }
   }
 }
@@ -199,14 +201,15 @@ impl CartesianGrid {
   /// [`MeshCoords::to_edge_lengths_sq`] yields the signed Regge geometry
   /// directly; a Euclidean comparison view (to norm errors, which the indefinite
   /// pairing cannot) is [`MeshCoords::new`] on the same vertex matrix.
-  pub fn minkowski(dim: Dim, ncells_axis: usize) -> (Complex, MeshCoords) {
-    let mut max = Vector::from_element(dim, 1.0);
+  pub fn minkowski(dim: impl Into<Dim>, ncells_axis: usize) -> (Complex, MeshCoords) {
+    let dim = dim.into();
+    let mut max = Vector::from_element(dim.index(), 1.0);
     if dim > 0 {
       max[0] = CAUSAL_TIME_SCALE;
     }
-    let grid = Self::new_min_max(Vector::zeros(dim), max, ncells_axis);
+    let grid = Self::new_min_max(Vector::zeros(dim.index()), max, ncells_axis);
     let (complex, coords) = grid.triangulate();
-    let coords = MeshCoords::with_ambient(coords.into_matrix(), Gramian::minkowski(dim));
+    let coords = MeshCoords::with_ambient(coords.into_matrix(), Gramian::minkowski(dim.index()));
     debug_assert!(
       coords
         .to_edge_lengths_sq(&complex)
@@ -270,11 +273,12 @@ impl CartesianGrid {
 #[cfg(test)]
 mod test {
   use super::CartesianGrid;
+  use crate::Dim;
   use crate::linalg::Matrix;
 
   #[test]
   fn unit_cube_mesh() {
-    let (mesh, coords) = CartesianGrid::new_unit(3, 1).triangulate_cells();
+    let (mesh, coords) = CartesianGrid::new_unit(Dim::new(3), 1).triangulate_cells();
 
     #[rustfmt::skip]
     let expected_coords = Matrix::from_column_slice(3, 8, &[
@@ -304,7 +308,7 @@ mod test {
 
   #[test]
   fn unit_square_mesh() {
-    let (mesh, coords) = CartesianGrid::new_unit(2, 2).triangulate_cells();
+    let (mesh, coords) = CartesianGrid::new_unit(Dim::new(2), 2).triangulate_cells();
 
     #[rustfmt::skip]
     let expected_coords = Matrix::from_column_slice(2, 9, &[

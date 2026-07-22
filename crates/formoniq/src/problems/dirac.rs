@@ -127,7 +127,9 @@ impl MixedField {
 
   /// The zero field with the DOF layout of `complex`.
   pub fn zeros<C: HilbertComplex>(complex: &C) -> Self {
-    let grades = (0..=complex.dim())
+    let grades = complex
+      .dim()
+      .range_inclusive()
       .map(|k| Cochain::new(k, Vector::zeros(complex.ndofs(k))))
       .collect();
     Self { grades }
@@ -140,15 +142,15 @@ impl MixedField {
     let k = u.grade();
     assert_eq!(u.len(), complex.ndofs(k), "grade k cochain has wrong ndofs");
     let mut field = Self::zeros(complex);
-    field.grades[k] = u;
+    field.grades[k.index()] = u;
     field
   }
 
   pub fn dim(&self) -> Dim {
-    self.grades.len() - 1
+    (self.grades.len() - 1).into()
   }
-  pub fn grade(&self, k: ExteriorGrade) -> &Cochain {
-    &self.grades[k]
+  pub fn grade(&self, k: impl Into<ExteriorGrade>) -> &Cochain {
+    &self.grades[k.into().index()]
   }
   pub fn into_grades(self) -> Vec<Cochain> {
     self.grades
@@ -210,13 +212,14 @@ impl HodgeDirac {
   fn assemble_signed<C: HilbertComplex>(complex: &C, delta_sign: f64) -> Self {
     let dim = complex.dim();
 
-    let masses: Vec<CsrMatrix> = (0..=dim)
+    let masses: Vec<CsrMatrix> = dim
+      .range_inclusive()
       .map(|k| CsrMatrix::from(&complex.mass(k)))
       .collect();
     // The coboundaries $D_k: C^k -> C^(k+1)$, one per interior coupling.
-    let difs: Vec<CsrMatrix> = (0..dim).map(|k| complex.dif(k)).collect();
+    let difs: Vec<CsrMatrix> = dim.range().map(|k| complex.dif(k)).collect();
 
-    let mut offsets = Vec::with_capacity(dim + 2);
+    let mut offsets = Vec::with_capacity(dim.index() + 2);
     let mut acc = 0;
     for mass in &masses {
       offsets.push(acc);
@@ -239,9 +242,9 @@ impl HodgeDirac {
     // $U_k^T = D_(k-1)^T M_k$ (weak $delta$). Emitting both from the same
     // triplet makes the symmetry class exact by construction.
     let mut op = CooMatrix::new(total, total);
-    for k in 1..=dim {
-      let u_k = &masses[k] * &difs[k - 1];
-      let (row, col) = (offsets[k], offsets[k - 1]);
+    for k in Dim::ONE.range_to_inclusive(dim) {
+      let u_k = &masses[k.index()] * &difs[(k - 1).index()];
+      let (row, col) = (offsets[k.index()], offsets[(k - 1).index()]);
       for (r, c, &v) in u_k.triplet_iter() {
         op.push(row + r, col + c, v);
         op.push(col + c, row + r, delta_sign * v);
@@ -257,7 +260,7 @@ impl HodgeDirac {
   }
 
   pub fn dim(&self) -> Dim {
-    self.offsets.len() - 2
+    (self.offsets.len() - 2).into()
   }
   pub fn ndofs_total(&self) -> usize {
     *self.offsets.last().unwrap()
@@ -277,8 +280,11 @@ impl HodgeDirac {
   /// The field must already live in this complex's DOFs.
   pub fn flatten(&self, field: &MixedField) -> Vector {
     let mut y = Vector::zeros(self.ndofs_total());
-    for k in 0..=self.dim() {
-      let (off, n) = (self.offsets[k], self.offsets[k + 1] - self.offsets[k]);
+    for k in self.dim().range_inclusive() {
+      let (off, n) = (
+        self.offsets[k.index()],
+        self.offsets[(k + 1).index()] - self.offsets[k.index()],
+      );
       y.rows_mut(off, n).copy_from(field.grade(k).coeffs());
     }
     y
@@ -286,9 +292,14 @@ impl HodgeDirac {
 
   /// Unpack the flat vector back into a per-grade field.
   pub fn unflatten(&self, y: &Vector) -> MixedField {
-    let grades = (0..=self.dim())
+    let grades = self
+      .dim()
+      .range_inclusive()
       .map(|k| {
-        let (off, n) = (self.offsets[k], self.offsets[k + 1] - self.offsets[k]);
+        let (off, n) = (
+          self.offsets[k.index()],
+          self.offsets[(k + 1).index()] - self.offsets[k.index()],
+        );
         Cochain::new(k, y.rows(off, n).into_owned())
       })
       .collect();
@@ -307,8 +318,9 @@ impl HodgeDirac {
   /// single grade. In the Maxwell reading this is the electric energy at
   /// $k = 1$, the magnetic at $k = 2$, and the Gauss-constraint residuals at the
   /// extremal grades.
-  pub fn grade_energy(&self, field: &MixedField, grade: ExteriorGrade) -> f64 {
-    0.5 * quadratic_form_sparse(&self.masses[grade], field.grade(grade).coeffs())
+  pub fn grade_energy(&self, field: &MixedField, grade: impl Into<ExteriorGrade>) -> f64 {
+    let grade = grade.into();
+    0.5 * quadratic_form_sparse(&self.masses[grade.index()], field.grade(grade).coeffs())
   }
 
   /// The grade-parity 2-coloring of the DOFs (`true` on odd grades): the
@@ -317,8 +329,8 @@ impl HodgeDirac {
   /// is the coloring [`Leapfrog`] consumes to run the explicit Yee-style split.
   pub fn grade_parity_coloring(&self) -> Vec<bool> {
     let mut color = vec![false; self.ndofs_total()];
-    for k in (1..=self.dim()).step_by(2) {
-      color[self.offsets[k]..self.offsets[k + 1]].fill(true);
+    for k in (1..=self.dim().index()).step_by(2).map(Dim::from) {
+      color[self.offsets[k.index()]..self.offsets[(k + 1).index()]].fill(true);
     }
     color
   }
@@ -329,7 +341,9 @@ impl HodgeDirac {
 /// one.
 fn restrict_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField {
   MixedField::new(
-    (0..=complex.dim())
+    complex
+      .dim()
+      .range_inclusive()
       .map(|k| Cochain::new(k, complex.inclusion(k).transpose() * f.grade(k).coeffs()))
       .collect(),
   )
@@ -339,7 +353,9 @@ fn restrict_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField 
 /// grade ($E_k$), by zero on the constrained boundary.
 fn extend_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField {
   MixedField::new(
-    (0..=complex.dim())
+    complex
+      .dim()
+      .range_inclusive()
       .map(|k| Cochain::new(k, &complex.inclusion(k) * f.grade(k).coeffs()))
       .collect(),
   )
@@ -477,13 +493,17 @@ pub fn solve_dirac_source(
 
   // The block inclusion $E = plus.circle.big_k E_k$ of the relative DOFs into
   // the flat ambient layout.
-  let n_relative: usize = (0..=relative.dim()).map(|k| relative.ndofs(k)).sum();
+  let n_relative: usize = relative
+    .dim()
+    .range_inclusive()
+    .map(|k| relative.ndofs(k))
+    .sum();
   let mut inclusion = CooMatrix::new(n_full, n_relative);
   let mut col_offset = 0;
-  for k in 0..=relative.dim() {
+  for k in relative.dim().range_inclusive() {
     let e_k = relative.inclusion(k);
     for (r, c, &v) in e_k.triplet_iter() {
-      inclusion.push(dirac.offsets[k] + r, col_offset + c, v);
+      inclusion.push(dirac.offsets[k.index()] + r, col_offset + c, v);
     }
     col_offset += relative.ndofs(k);
   }
@@ -539,10 +559,10 @@ pub fn top_harmonic(relative: &RelativeWhitneyComplex) -> Option<Vector> {
   );
   let h_n = FaerLu::new(CsrMatrix::from(&relative.mass(dim))).solve(&z);
 
-  let ndofs: Vec<usize> = (0..=dim).map(|k| relative.ndofs(k)).collect();
+  let ndofs: Vec<usize> = dim.range_inclusive().map(|k| relative.ndofs(k)).collect();
   let mut h = Vector::zeros(ndofs.iter().sum());
-  let offset: usize = ndofs[..dim].iter().sum();
-  h.rows_mut(offset, ndofs[dim]).copy_from(&h_n);
+  let offset: usize = ndofs[..dim.index()].iter().sum();
+  h.rows_mut(offset, ndofs[dim.index()]).copy_from(&h_n);
   Some(h)
 }
 
@@ -582,6 +602,7 @@ mod test {
   use crate::{
     linalg::faer::FaerCholesky, problems::elliptic::HodgeBlocks, whitney_complex::WhitneyComplex,
   };
+  use simplicial::Dim;
   use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
@@ -589,12 +610,14 @@ mod test {
   /// A deterministic full field: every grade populated with a reproducible
   /// pattern, enough to couple all rungs of the complex.
   fn seed_field(dirac: &HodgeDirac) -> MixedField {
-    let grades = (0..=dirac.dim())
+    let grades = dirac
+      .dim()
+      .range_inclusive()
       .map(|k| {
-        let n = dirac.offsets[k + 1] - dirac.offsets[k];
+        let n = dirac.offsets[(k + 1).index()] - dirac.offsets[k.index()];
         Cochain::new(
           k,
-          Vector::from_fn(n, |i, _| ((7 * i + 3 * k + 1) % 11) as f64 - 5.0),
+          Vector::from_fn(n, |i, _| ((7 * i + 3 * k.index() + 1) % 11) as f64 - 5.0),
         )
       })
       .collect();
@@ -612,7 +635,7 @@ mod test {
   /// exactly on the nose by the fundamental class, with no eigensolve.
   #[test]
   fn top_harmonic_is_annihilated() {
-    for dim in 1..=4 {
+    for dim in (1..=4).map(Dim::from) {
       for minkowski in [false, true] {
         let (topology, coords) = if minkowski {
           CartesianGrid::minkowski(dim, 2)
@@ -638,7 +661,7 @@ mod test {
   /// sub-diagonal ones by construction --- and it is what conserves energy.
   #[test]
   fn operator_is_skew_symmetric() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
@@ -660,23 +683,28 @@ mod test {
   /// assembled up/down Laplacian blocks of [`HodgeBlocks`], at every grade.
   #[test]
   fn dirac_squared_is_negative_hodge_laplacian() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
       let dirac = HodgeDirac::assemble(&whitney);
 
       // Mass solves for $M^(-1)$, one factorization per grade.
-      let chol: Vec<_> = (0..=dim)
-        .map(|k| FaerCholesky::new(dirac.masses[k].clone()))
+      let chol: Vec<_> = dim
+        .range_inclusive()
+        .map(|k| FaerCholesky::new(dirac.masses[k.index()].clone()))
         .collect();
       // The strong Hodge–Dirac action $v = (dif - delta_h) u$, from $M v = A u$.
       let apply_dirac = |u: &MixedField| {
         let mv = &dirac.op * dirac.flatten(u);
-        let grades = (0..=dim)
+        let grades = dim
+          .range_inclusive()
           .map(|k| {
-            let (off, n) = (dirac.offsets[k], dirac.offsets[k + 1] - dirac.offsets[k]);
-            Cochain::new(k, chol[k].solve(&mv.rows(off, n).into_owned()))
+            let (off, n) = (
+              dirac.offsets[k.index()],
+              dirac.offsets[(k + 1).index()] - dirac.offsets[k.index()],
+            );
+            Cochain::new(k, chol[k.index()].solve(&mv.rows(off, n).into_owned()))
           })
           .collect();
         MixedField::new(grades)
@@ -686,7 +714,7 @@ mod test {
       let d2u = apply_dirac(&apply_dirac(&u));
 
       #[allow(clippy::needless_range_loop)] // grade is the mathematical index
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         // The Hodge–Laplacian $Delta_h u|_k = M_k^(-1)(K^"up" + K^"dn") u_k$.
         let hb = HodgeBlocks::compute(&whitney, grade);
         let uk = u.grade(grade).coeffs();
@@ -697,7 +725,7 @@ mod test {
         } else {
           Vector::zeros(hb.n_u)
         };
-        let lap = chol[grade].solve(&(up + dn));
+        let lap = chol[grade.index()].solve(&(up + dn));
 
         let lhs = d2u.grade(grade).coeffs();
         assert_relative_eq!(
@@ -716,7 +744,7 @@ mod test {
   /// at once.
   #[test]
   fn energy_conserved_at_every_dimension() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
@@ -744,7 +772,7 @@ mod test {
   /// grades of the same parity.
   #[test]
   fn leapfrog_conserves_staggered_energy_at_every_dimension() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
@@ -770,7 +798,7 @@ mod test {
   /// counterpart of [`operator_is_skew_symmetric`], the one sign flipped.
   #[test]
   fn selfadjoint_operator_is_symmetric() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let (_, spacetime) = CartesianGrid::minkowski(dim, 2);
       let riemannian = coords.to_edge_lengths_sq(&topology);
@@ -804,21 +832,26 @@ mod test {
   /// are symmetric indefinite, not s.p.d.
   #[test]
   fn selfadjoint_dirac_squares_to_hodge_laplacian_on_minkowski() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, spacetime) = CartesianGrid::minkowski(dim, 2);
       let regge = spacetime.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &regge);
       let dirac = HodgeDirac::assemble_selfadjoint(&whitney);
 
-      let lu: Vec<_> = (0..=dim)
-        .map(|k| crate::linalg::faer::FaerLu::new(dirac.masses[k].clone()))
+      let lu: Vec<_> = dim
+        .range_inclusive()
+        .map(|k| crate::linalg::faer::FaerLu::new(dirac.masses[k.index()].clone()))
         .collect();
       let apply_dirac = |u: &MixedField| {
         let mv = &dirac.op * dirac.flatten(u);
-        let grades = (0..=dim)
+        let grades = dim
+          .range_inclusive()
           .map(|k| {
-            let (off, n) = (dirac.offsets[k], dirac.offsets[k + 1] - dirac.offsets[k]);
-            Cochain::new(k, lu[k].solve(&mv.rows(off, n).into_owned()))
+            let (off, n) = (
+              dirac.offsets[k.index()],
+              dirac.offsets[(k + 1).index()] - dirac.offsets[k.index()],
+            );
+            Cochain::new(k, lu[k.index()].solve(&mv.rows(off, n).into_owned()))
           })
           .collect();
         MixedField::new(grades)
@@ -828,7 +861,7 @@ mod test {
       let d2u = apply_dirac(&apply_dirac(&u));
 
       #[allow(clippy::needless_range_loop)] // grade is the mathematical index
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let hb = HodgeBlocks::compute(&whitney, grade);
         let uk = u.grade(grade).coeffs();
         let up = hb.stiff() * uk;
@@ -839,7 +872,7 @@ mod test {
         } else {
           Vector::zeros(hb.n_u)
         };
-        let lap = lu[grade].solve(&(up + dn));
+        let lap = lu[grade.index()].solve(&(up + dn));
 
         let lhs = d2u.grade(grade).coeffs();
         assert_relative_eq!(
@@ -872,7 +905,8 @@ mod test {
       // The de Rham coefficients of the constant form with every component
       // 1 on every grade: integrals of $sum_I dif x^I$ over the simplices.
       let exact = MixedField::new(
-        (0..=dim)
+        dim
+          .range_inclusive()
           .map(|k| {
             let form = glatt::field::DiffFormClosure::new(
               move |_: &coorder::Coord| {
@@ -895,7 +929,7 @@ mod test {
       let load = dirac.unflatten(&(&dirac.mass_block * dirac.flatten(&exact) * mass_term));
       let solution = solve_dirac_source(&relative, mass_term, &load, &exact);
 
-      for k in 0..=dim {
+      for k in dim.range_inclusive() {
         assert_relative_eq!(
           solution.grade(k).coeffs(),
           exact.grade(k).coeffs(),
@@ -904,7 +938,7 @@ mod test {
       }
     }
 
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let riemannian = coords.to_edge_lengths_sq(&topology);
       run(&topology, &coords, &riemannian);
@@ -927,7 +961,7 @@ mod test {
   /// grade-parity coloring) against the trusted Gauss–Legendre [`solve_dirac`].
   #[test]
   fn leapfrog_agrees_with_gauss_legendre() {
-    let (topology, coords) = CartesianGrid::new_unit(2, 2).triangulate();
+    let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
     let dirac = HodgeDirac::assemble(&whitney);

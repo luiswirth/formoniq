@@ -7,8 +7,9 @@ use multiindex::{Combination, Sign, binomial, combinations};
 
 use std::marker::PhantomData;
 
-pub use multiindex::Dim;
-pub type ExteriorGrade = usize;
+pub use multiindex::{Degree, Dim};
+/// The grade of an exterior form: the [`Degree`] under its exterior-algebra name.
+pub type ExteriorGrade = Degree;
 
 pub type Vector<T = f64> = na::DVector<T>;
 pub type Matrix<T = f64> = na::DMatrix<T>;
@@ -17,14 +18,17 @@ pub type Matrix<T = f64> = na::DMatrix<T>;
 /// algebra: a strictly increasing multi-index.
 pub type Blade = Combination;
 
-pub fn exterior_dim(dim: Dim, grade: ExteriorGrade) -> usize {
-  binomial(dim, grade)
+pub fn exterior_dim(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> usize {
+  binomial(dim.into().index(), grade.into().index())
 }
 
 /// The basis blades of $Lambda^k (RR^n)$ in colexicographic order:
 /// the order of the coefficients of an [`ExteriorElement`].
-pub fn exterior_bases(dim: Dim, grade: ExteriorGrade) -> impl Iterator<Item = Blade> {
-  combinations(dim, grade)
+pub fn exterior_bases(
+  dim: impl Into<Dim>,
+  grade: impl Into<ExteriorGrade>,
+) -> impl Iterator<Item = Blade> {
+  combinations(dim.into().index(), grade.into().index())
 }
 
 /// The variance of an exterior element: whether it lives in $Lambda^k V$
@@ -76,12 +80,13 @@ pub type MultiForm = ExteriorElement<Covariant>;
 ///
 /// Functoriality $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$ is the
 /// Cauchy-Binet formula.
-pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
+pub fn exterior_power(linear_map: &Matrix, grade: impl Into<ExteriorGrade>) -> Matrix {
+  let grade = grade.into();
   let nrows = exterior_dim(linear_map.nrows(), grade);
   let ncols = exterior_dim(linear_map.ncols(), grade);
 
   let mut power = Matrix::zeros(nrows, ncols);
-  let mut minor = Matrix::zeros(grade, grade);
+  let mut minor = Matrix::zeros(grade.index(), grade.index());
   for (i, row_basis) in exterior_bases(linear_map.nrows(), grade).enumerate() {
     for (j, col_basis) in exterior_bases(linear_map.ncols(), grade).enumerate() {
       for (ii, row) in row_basis.iter().enumerate() {
@@ -100,7 +105,8 @@ pub fn exterior_power(linear_map: &Matrix, grade: ExteriorGrade) -> Matrix {
 ///
 /// The inner product on $Lambda^k$ is the exterior power of the inner product,
 /// $inner(e_I, e_J)_(Lambda^k) = det [inner(e_i, e_j)]_(i in I, j in J)$.
-pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian {
+pub fn multi_gramian(single_gramian: &Gramian, grade: impl Into<ExteriorGrade>) -> Gramian {
+  let grade = grade.into();
   Gramian::new_unchecked(exterior_power(single_gramian.matrix(), grade))
 }
 
@@ -108,7 +114,8 @@ pub fn multi_gramian(single_gramian: &Gramian, grade: ExteriorGrade) -> Gramian 
 ///
 /// The variance-correct counterpart of [`multiform_gramian`]; the single
 /// source of truth for which metric Gramian measures multivectors.
-pub fn multivector_gramian(metric: &Metric, grade: ExteriorGrade) -> Gramian {
+pub fn multivector_gramian(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
+  let grade = grade.into();
   multi_gramian(metric.vector_gramian(), grade)
 }
 
@@ -116,7 +123,8 @@ pub fn multivector_gramian(metric: &Metric, grade: ExteriorGrade) -> Gramian {
 ///
 /// The variance-correct counterpart of [`multivector_gramian`]; the single
 /// source of truth for which metric Gramian measures multiforms.
-pub fn multiform_gramian(metric: &Metric, grade: ExteriorGrade) -> Gramian {
+pub fn multiform_gramian(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
+  let grade = grade.into();
   multi_gramian(metric.covector_gramian(), grade)
 }
 
@@ -132,7 +140,8 @@ pub struct ExteriorElement<V: Variance> {
 }
 
 impl<V: Variance> ExteriorElement<V> {
-  pub fn new(coeffs: Vector, dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn new(coeffs: Vector, dim: impl Into<Degree>, grade: impl Into<Degree>) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
     assert_eq!(coeffs.len(), exterior_dim(dim, grade));
     Self {
       coeffs,
@@ -142,23 +151,24 @@ impl<V: Variance> ExteriorElement<V> {
     }
   }
 
-  pub fn scalar(v: f64, dim: Dim) -> Self {
-    Self::new(na::dvector![v], dim, 0)
+  pub fn scalar(v: f64, dim: impl Into<Degree>) -> Self {
+    Self::new(na::dvector![v], dim, Degree::ZERO)
   }
   pub fn line(coeffs: Vector) -> Self {
     let dim = coeffs.len();
-    Self::new(coeffs, dim, 1)
+    Self::new(coeffs, dim, Degree::ONE)
   }
 
-  pub fn zero(dim: Dim, grade: ExteriorGrade) -> Self {
+  pub fn zero(dim: impl Into<Degree>, grade: impl Into<Degree>) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
     Self::new(Vector::zeros(exterior_dim(dim, grade)), dim, grade)
   }
-  pub fn one(dim: Dim) -> Self {
+  pub fn one(dim: impl Into<Degree>) -> Self {
     Self::scalar(1.0, dim)
   }
 
   /// A single basis blade with the given sign.
-  pub fn from_blade_signed(dim: Dim, sign: Sign, blade: Blade) -> Self {
+  pub fn from_blade_signed(dim: impl Into<Degree>, sign: Sign, blade: Blade) -> Self {
     let mut element = Self::zero(dim, blade.card());
     element[blade] = sign.as_f64();
     element
@@ -289,7 +299,7 @@ impl<V: Variance> ExteriorElement<V> {
 
     let mut star = Self::zero(dim, dim - self.grade);
     for (blade, &coeff) in exterior_bases(dim, self.grade).zip(weighted.iter()) {
-      let (sign, complement) = blade.complement_signed(dim);
+      let (sign, complement) = blade.complement_signed(dim.index());
       star.coeffs[complement.rank()] = sign.as_f64() * coeff;
     }
     star
@@ -441,7 +451,7 @@ mod tests {
       ((seed + 3 * i + 7 * j) % 5) as f64 / 5.0 + if i == j { 1.0 } else { 0.0 }
     })
   }
-  fn test_element<V: Variance>(dim: Dim, grade: ExteriorGrade, seed: usize) -> ExteriorElement<V> {
+  fn test_element<V: Variance>(dim: usize, grade: usize, seed: usize) -> ExteriorElement<V> {
     ExteriorElement::new(
       Vector::from_fn(exterior_dim(dim, grade), |i, _| {
         ((seed + 5 * i) % 7) as f64 - 3.0
@@ -451,14 +461,14 @@ mod tests {
     )
   }
   /// A non-trivial Riemannian metric.
-  fn test_metric(dim: Dim) -> Metric {
+  fn test_metric(dim: usize) -> Metric {
     let a = test_matrix(dim, dim, 5);
     Metric::new(Gramian::new(a.transpose() * a + Matrix::identity(dim, dim)))
   }
   /// A non-diagonal metric of signature $(dim - q, q)$: the flat model pulled
   /// back along an invertible map, which preserves the signature (Sylvester)
   /// while filling in off-diagonal entries.
-  fn test_pseudo_metric(dim: Dim, q: usize) -> Metric {
+  fn test_pseudo_metric(dim: usize, q: usize) -> Metric {
     let j = Matrix::from_fn(dim, dim, |i, jj| {
       if i == jj {
         1.0
@@ -777,18 +787,19 @@ mod tests {
 
   #[test]
   fn compute_wedge() {
-    let a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
-    let b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
+    let a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], Degree::new(3), Degree::ONE);
+    let b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], Degree::new(3), Degree::ONE);
 
     let computed_ab = a.wedge(&b);
-    let expected_ab = MultiForm::from_blade_signed(3, Sign::Pos, Blade::from_increasing([0, 1]));
+    let expected_ab =
+      MultiForm::from_blade_signed(Degree::new(3), Sign::Pos, Blade::from_increasing([0, 1]));
     assert_eq!(computed_ab.coeffs, expected_ab.coeffs);
   }
 
   #[test]
   fn wedge_antisymmetry() {
-    let form_a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], 3, 1);
-    let form_b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], 3, 1);
+    let form_a = MultiForm::new(na::dvector![1.0, 0.0, 0.0], Degree::new(3), Degree::ONE);
+    let form_b = MultiForm::new(na::dvector![0.0, 1.0, 0.0], Degree::new(3), Degree::ONE);
 
     let ab = form_a.wedge(&form_b);
     let ba = form_b.wedge(&form_a);
@@ -799,7 +810,7 @@ mod tests {
   #[test]
   fn canonical_conversion() {
     let dim = 4;
-    let mut e0 = MultiForm::zero(dim, 3);
+    let mut e0 = MultiForm::zero(dim, Degree::new(3));
     for (coeff, word) in [
       (1.0, vec![2, 0, 1]),
       (3.0, vec![1, 3, 2]),
@@ -810,7 +821,7 @@ mod tests {
       e0[blade] += sign.as_f64() * coeff;
     }
 
-    let mut e1 = MultiForm::zero(dim, 3);
+    let mut e1 = MultiForm::zero(dim, Degree::new(3));
     e1[Blade::from_increasing([0, 1, 2])] = 6.0;
     e1[Blade::from_increasing([1, 2, 3])] = -3.0;
 

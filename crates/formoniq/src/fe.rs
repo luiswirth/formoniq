@@ -122,6 +122,7 @@ pub fn l2_projection<F: Sync + Section<Covariant>>(
 #[cfg(test)]
 mod test {
   use super::*;
+  use simplicial::Dim;
 
   use derham::section::CoordFieldExt;
   use glatt::field::DiffFormClosure;
@@ -137,12 +138,12 @@ mod test {
   /// load are the same bilinear form seen from two sides.
   #[test]
   fn l2_projection_reproduces_whitney_forms() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let ndofs = topology.nsimplices(grade);
         let cochain = Cochain::new(
           grade,
@@ -163,7 +164,7 @@ mod test {
   /// agree wherever both are exact.
   #[test]
   fn l2_error_vanishes_on_the_discrete_space() {
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
@@ -187,12 +188,12 @@ mod test {
   fn cg_mass_solve_matches_cholesky() {
     use iterative::{Jacobi, StopCriterion, krylov::cg};
 
-    for dim in 1..=3 {
+    for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let mass = CsrMatrix::from(&whitney.mass(grade));
         let n = mass.nrows();
         let b = Vector::from_fn(n, |i, _| ((i % 5) as f64 - 2.0) * 0.5);
@@ -220,12 +221,12 @@ mod test {
     use iterative::{Jacobi, StopCriterion, krylov::cg};
     use std::time::Instant;
 
-    let dim = 3;
+    let dim = Dim::new(3);
     let (topology, coords) = CartesianGrid::new_unit(dim, 12).triangulate();
     let lengths = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &lengths);
 
-    for grade in 0..=dim {
+    for grade in dim.range_inclusive() {
       let mass = CsrMatrix::from(&whitney.mass(grade));
       let n = mass.nrows();
       let b = Vector::from_fn(n, |i, _| ((i % 5) as f64 - 2.0) * 0.5);

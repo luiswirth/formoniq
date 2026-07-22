@@ -57,7 +57,7 @@ pub enum Identification {
   /// odd number of reflections has determinant $-1$, so the quotient is
   /// non-orientable (Möbius band, Klein bottle); an even number is a rotation
   /// and the quotient stays orientable (a twisted torus).
-  Twisted(Vec<Dim>),
+  Twisted(Vec<usize>),
 }
 
 impl Identification {
@@ -66,7 +66,7 @@ impl Identification {
   pub fn is_closed(&self) -> bool {
     !matches!(self, Self::Open)
   }
-  fn reflected_axes(&self) -> &[Dim] {
+  fn reflected_axes(&self) -> &[usize] {
     match self {
       Self::Twisted(axes) => axes,
       _ => &[],
@@ -191,7 +191,7 @@ impl FlatQuotient {
 
   /// The unit torus $[0, 1)^d$ with equal periods.
   pub fn unit_torus(dim: Dim, ncells_axis: usize) -> Self {
-    Self::torus(Vector::from_element(dim, 1.0), ncells_axis)
+    Self::torus(Vector::from_element(dim.index(), 1.0), ncells_axis)
   }
 
   /// The Möbius band: axis 0 twisted, reflecting the *open* fiber axis 1.
@@ -225,7 +225,7 @@ impl FlatQuotient {
   }
 
   pub fn dim(&self) -> Dim {
-    self.side_lengths.len()
+    self.side_lengths.len().into()
   }
   /// The cell count of each axis.
   pub fn ncells_per_axis(&self) -> &[usize] {
@@ -325,7 +325,7 @@ impl FlatQuotient {
     let grid_radices = self.ncells.iter().map(|&n| n + 1).collect_vec();
     let mut cart = linear2cartesian_mixed(grid_vertex, &grid_radices);
 
-    let wrapped = (0..self.dim())
+    let wrapped = (0..self.dim().index())
       .filter(|&axis| self.identifications[axis].is_closed() && cart[axis] == self.ncells[axis])
       .collect_vec();
     for &axis in &wrapped {
@@ -373,7 +373,7 @@ impl FlatQuotient {
   fn edge_lengths_sq(&self, complex: &Complex) -> MeshLengthsSq {
     let dim = self.dim();
     let spacing = Vector::from_iterator(
-      dim,
+      dim.index(),
       self
         .side_lengths
         .iter()
@@ -382,14 +382,14 @@ impl FlatQuotient {
     );
     let grid_radices = self.ncells.iter().map(|&n| n + 1).collect_vec();
 
-    let edges = complex.skeleton_raw(1);
+    let edges = complex.skeleton_raw(Dim::ONE);
     let mut lengths_sq = Vector::from_element(edges.len(), f64::NAN);
 
     for cell in self.grid().cell_skeleton() {
       for [&vi, &vj] in cell.vertices.iter().array_combinations() {
         let ci = linear2cartesian_mixed(vi, &grid_radices);
         let cj = linear2cartesian_mixed(vj, &grid_radices);
-        let length_sq = (0..dim)
+        let length_sq = (0..dim.index())
           .map(|a| {
             let step = (cj[a] as isize - ci[a] as isize) as f64 * spacing[a];
             step * step
@@ -417,7 +417,7 @@ impl FlatQuotient {
   /// as a box, at this quotient's per-axis resolution.
   fn grid(&self) -> CartesianGrid {
     CartesianGrid::new_anisotropic(
-      Vector::zeros(self.dim()),
+      Vector::zeros(self.dim().index()),
       self.side_lengths.clone(),
       self.ncells.clone(),
     )
@@ -433,6 +433,7 @@ impl FlatQuotient {
 #[cfg(test)]
 mod test {
   use super::{FlatQuotient, Identification};
+  use crate::Dim;
   use crate::{geometry::metric::mesh::MeshLengthsSq, linalg::Vector, topology::complex::Complex};
   use multiindex::binomial;
 
@@ -464,7 +465,7 @@ mod test {
   /// indistinguishable from the interior.
   #[test]
   fn the_chain_order_survives_a_translational_identification() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, lengths, ordering) = FlatQuotient::unit_torus(dim, 3).triangulate_ordered();
       let ordering = ordering.expect("the tiling matches across the seam");
       assert_eq!(shape_classes(&complex, &lengths), 1);
@@ -551,14 +552,19 @@ mod test {
   /// every dimension.
   #[test]
   fn torus_topology() {
-    for dim in 1..=3 {
+    for dim in (1..=3usize).map(Dim::from) {
       let (complex, lengths) = FlatQuotient::unit_torus(dim, 3).triangulate();
 
       assert!(!complex.has_boundary(), "dim {dim}: torus is boundaryless");
-      assert_eq!(complex.nsimplices(0), 3usize.pow(dim as u32));
+      assert_eq!(
+        complex.nsimplices(Dim::new(0)),
+        3usize.pow(dim.index() as u32)
+      );
 
       let betti = complex.betti_numbers();
-      let expected = (0..=dim).map(|k| binomial(dim, k)).collect::<Vec<_>>();
+      let expected = (0..=dim.index())
+        .map(|k| binomial(dim.index(), k))
+        .collect::<Vec<_>>();
       assert_eq!(betti, expected, "dim {dim}: Betti numbers of T^d");
       assert_eq!(complex.euler_characteristic(), 0);
       assert!(
@@ -577,7 +583,7 @@ mod test {
   /// closed and carries the same cohomology as the coarse one.
   #[test]
   fn torus_refined_topology() {
-    let (coarse, _) = FlatQuotient::unit_torus(2, 3).triangulate();
+    let (coarse, _) = FlatQuotient::unit_torus(Dim::new(2), 3).triangulate();
     for refinement in 1..=2 {
       let fine = coarse.refine(refinement).into_complex();
       assert!(!fine.has_boundary());
@@ -667,7 +673,7 @@ mod test {
       ls
     };
     for quotient in [
-      FlatQuotient::unit_torus(2, 4),
+      FlatQuotient::unit_torus(Dim::new(2), 4),
       FlatQuotient::moebius(1.0, 1.0, 4),
       FlatQuotient::klein(Vector::from_element(2, 1.0), 4),
     ] {

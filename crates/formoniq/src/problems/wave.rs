@@ -30,7 +30,8 @@ impl WaveState {
   /// [`solve_wave`] conserves. The down-part $norm(delta u)^2$ needs the
   /// codifferential $sigma = delta u$, recovered by the same $M_sigma$ solve
   /// the solver uses.
-  pub fn energy<C: HilbertComplex>(&self, complex: &C, grade: ExteriorGrade) -> f64 {
+  pub fn energy<C: HilbertComplex>(&self, complex: &C, grade: impl Into<ExteriorGrade>) -> f64 {
+    let grade = grade.into();
     let hb = HodgeBlocks::compute(complex, grade);
     let inclusion = complex.inclusion(grade);
     let u = inclusion.transpose() * &self.pos;
@@ -78,11 +79,12 @@ impl WaveState {
 /// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
 pub fn solve_wave<C: HilbertComplex>(
   complex: &C,
-  grade: ExteriorGrade,
+  grade: impl Into<ExteriorGrade>,
   times: &[f64],
   initial: WaveState,
   force_data: Cochain,
 ) -> Vec<WaveState> {
+  let grade = grade.into();
   let hb = HodgeBlocks::compute(complex, grade);
   let (ns, nu) = (hb.n_sigma, hb.n_u);
 
@@ -155,6 +157,7 @@ pub fn cfl_dt(mesh_geo: &MeshLengthsSq, vel: f64) -> f64 {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
+  use simplicial::Dim;
   use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
@@ -166,12 +169,12 @@ mod test {
   /// $sigma$; $k = n$: $dif u = 0$, energy is pure kinetic).
   #[test]
   fn energy_conserved_at_every_grade() {
-    for dim in 2..=3 {
+    for dim in (2..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let metric = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &metric);
 
-      for grade in 0..=dim {
+      for grade in dim.range_inclusive() {
         let n = whitney.ndofs(grade);
         let pos = Vector::from_fn(n, |i, _| ((7 * i + 3) % 11) as f64 - 5.0);
         let vel = Vector::from_fn(n, |i, _| ((4 * i + 1) % 9) as f64 - 4.0);

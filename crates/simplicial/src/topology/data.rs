@@ -166,10 +166,10 @@ impl<T> ComplexVec<T> {
     Self { grades }
   }
   pub fn grade(&self, dim: Dim) -> &SkeletonVec<T> {
-    &self.grades[dim]
+    &self.grades[dim.index()]
   }
   pub fn grade_mut(&mut self, dim: Dim) -> &mut SkeletonVec<T> {
-    &mut self.grades[dim]
+    &mut self.grades[dim.index()]
   }
   pub fn grades(&self) -> impl Iterator<Item = &SkeletonVec<T>> {
     self.grades.iter()
@@ -181,21 +181,21 @@ impl<T> ComplexData for ComplexVec<T> {
   where
     Self: 'a;
   fn dim(&self) -> Dim {
-    self.grades.len() - 1
+    (self.grades.len() - 1).into()
   }
   fn at(&self, id: SimplexIdx) -> &T {
-    &self.grades[id.dim][id.kidx]
+    &self.grades[id.dim.index()][id.kidx]
   }
 }
 impl<T> Index<SimplexIdx> for ComplexVec<T> {
   type Output = T;
   fn index(&self, id: SimplexIdx) -> &T {
-    &self.grades[id.dim][id.kidx]
+    &self.grades[id.dim.index()][id.kidx]
   }
 }
 impl<T> IndexMut<SimplexIdx> for ComplexVec<T> {
   fn index_mut(&mut self, id: SimplexIdx) -> &mut T {
-    &mut self.grades[id.dim][id.kidx]
+    &mut self.grades[id.dim.index()][id.kidx]
   }
 }
 impl<T> Index<SimplexRef<'_>> for ComplexVec<T> {
@@ -208,13 +208,14 @@ impl<T> Index<SimplexRef<'_>> for ComplexVec<T> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
 
   #[test]
   fn skeleton_vec_indexing() {
-    let edges = SkeletonVec::new(1, vec![10.0, 20.0, 30.0]);
+    let edges = SkeletonVec::new(Dim::new(1), vec![10.0, 20.0, 30.0]);
     assert_eq!(edges[2usize], 30.0);
-    assert_eq!(edges[SimplexIdx::new(1, 1)], 20.0);
-    assert_eq!(edges.at_id(SimplexIdx::new(1, 0)), &10.0);
+    assert_eq!(edges[SimplexIdx::new(Dim::new(1), 1)], 20.0);
+    assert_eq!(edges.at_id(SimplexIdx::new(Dim::new(1), 0)), &10.0);
     assert_eq!(edges.grade(), 1);
     assert_eq!(edges.len(), 3);
   }
@@ -222,12 +223,12 @@ mod test {
   #[test]
   fn complex_vec_indexing() {
     let data = ComplexVec::new(vec![
-      SkeletonVec::new(0, vec![1, 2, 3]),
-      SkeletonVec::new(1, vec![4, 5]),
+      SkeletonVec::new(Dim::new(0), vec![1, 2, 3]),
+      SkeletonVec::new(Dim::new(1), vec![4, 5]),
     ]);
-    assert_eq!(data[SimplexIdx::new(0, 2)], 3);
-    assert_eq!(data[SimplexIdx::new(1, 0)], 4);
-    assert_eq!(data.at(SimplexIdx::new(1, 1)), &5);
+    assert_eq!(data[SimplexIdx::new(Dim::new(0), 2)], 3);
+    assert_eq!(data[SimplexIdx::new(Dim::new(1), 0)], 4);
+    assert_eq!(data.at(SimplexIdx::new(Dim::new(1), 1)), &5);
     assert_eq!(data.dim(), 1);
   }
 }

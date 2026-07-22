@@ -39,7 +39,7 @@ pub struct MeshLengthsSq {
 impl SkeletonData for MeshLengthsSq {
   type Item<'a> = &'a f64;
   fn grade(&self) -> Dim {
-    1
+    Dim::ONE
   }
   fn len(&self) -> usize {
     self.vector.len()
@@ -66,7 +66,8 @@ impl MeshLengthsSq {
   pub fn new_unchecked(vector: Vector) -> Self {
     Self { vector }
   }
-  pub fn standard(dim: usize) -> MeshLengthsSq {
+  pub fn standard(dim: impl Into<Dim>) -> MeshLengthsSq {
+    let dim = dim.into();
     let vector = SimplexLengthsSq::standard(dim).into_vector();
     Self::new_unchecked(vector)
   }
@@ -303,6 +304,7 @@ pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
 
   /// Coordinates and squared edge lengths read uniformly as data on simplices:
@@ -310,7 +312,7 @@ mod test {
   /// scalar ref.
   #[test]
   fn geometry_as_simplex_data() {
-    let (topology, coords) = CartesianGrid::new_unit(2, 2).triangulate();
+    let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), 2).triangulate();
     let lengths_sq = coords.to_edge_lengths_sq(&topology);
 
     assert_eq!(SkeletonData::grade(&coords), 0);

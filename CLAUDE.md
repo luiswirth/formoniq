@@ -17,8 +17,23 @@ commentary on them. Code should read the way a mathematician would write.
   one pseudo-Riemannian metric of signature $(p, q)$, the Hodge star reading the
   signature off the metric itself. Never re-introduce the special cases.
 - **Arbitrary dimension, always.** Nothing is hardcoded to 2D or 3D. Dimension
-  is a runtime value `Dim`, grade a runtime value `ExteriorGrade`. If you find
-  yourself writing `if dim == 3`, the abstraction is wrong.
+  and grade are one runtime value, the `Degree` newtype in `multiindex` (`Dim`
+  and `ExteriorGrade` are aliases naming the role). If you find yourself writing
+  `if dim == 3`, the abstraction is wrong. `Degree` follows one pattern worth
+  naming, *totalize the arithmetic, relationize the bound, trivialize the
+  out-of-range*: it is a signed $ZZ$ index so a computation may pass through $-1$
+  or $n+1$ with no special case, validity is checked *relationally* against a
+  supplied top degree at the point of use (`index_in`, `None` off range) rather
+  than baked into the representation as an unsigned type would, and a degree off
+  $[0, n]$ *denotes* the trivial space $Lambda^(-1) = Lambda^(n+1) = 0$ instead
+  of trapping. `usize` is the boundary lingua franca and `Degree` the internal
+  currency: public grade/dim APIs take `impl Into<Degree>` (any integer lifts,
+  literals included, via `From`), so a caller writes `mass(0)` and a sweep stays
+  `for k in 0..=n`; construction is one-directional (an integer lifts *into* a
+  `Degree`, never the reverse — no `Deref`), so the signed logic stays sealed.
+  Graded containers expose `Degree`-typed accessors (`ComplexVec::grade`,
+  `Complex::skeleton`) that pay the `.index()` once inside, so the raw index
+  never surfaces at a call site.
 - **Total on the degenerate boundary.** Dimensional agnosticism is the interior
   claim; the stronger one is that the range is closed at its extremes. The base
   dimension, the extremal grades, an empty skeleton, a one-element system — these

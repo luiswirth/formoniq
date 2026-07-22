@@ -12,7 +12,7 @@ use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;
-use simplicial::{linalg::CsrMatrix, mesher::cartesian::CartesianGrid};
+use simplicial::{Dim, linalg::CsrMatrix, mesher::cartesian::CartesianGrid};
 
 use approx::assert_relative_eq;
 
@@ -21,7 +21,7 @@ use approx::assert_relative_eq;
 /// solution $u = x_1$, which lies in the FE space.
 #[test]
 fn inhomogeneous_dirichlet_reproduces_linear_solution() {
-  for dim in 1..=3 {
+  for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
@@ -31,8 +31,8 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
-    let laplace = CsrMatrix::from(&whitney.codif_dif(0));
-    let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(0));
+    let laplace = CsrMatrix::from(&whitney.codif_dif(Dim::ZERO));
+    let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(Dim::ZERO));
 
     let solution = bc::solve_with_essential_bc(
       &whitney.relative(),
@@ -52,7 +52,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
 /// exact solution $u = x_1$, which lies in the FE space.
 #[test]
 fn inhomogeneous_neumann_reproduces_linear_solution() {
-  for dim in 1..=3 {
+  for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
@@ -62,7 +62,8 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     // System: (grad u, grad v) + (u, v).
-    let system = CsrMatrix::from(&whitney.codif_dif(0)) + CsrMatrix::from(&whitney.mass(0));
+    let system =
+      CsrMatrix::from(&whitney.codif_dif(Dim::ZERO)) + CsrMatrix::from(&whitney.mass(Dim::ZERO));
 
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
@@ -106,7 +107,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 fn mixed_dirichlet_neumann_reproduces_linear_solution() {
   use simplicial::geometry::coord::simplex::SimplexCoords;
 
-  for dim in 2..=3 {
+  for dim in (2..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
@@ -127,8 +128,8 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
-    let laplace = CsrMatrix::from(&whitney.codif_dif(0));
-    let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(0));
+    let laplace = CsrMatrix::from(&whitney.codif_dif(Dim::ZERO));
+    let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(Dim::ZERO));
 
     let solution = bc::solve_with_essential_bc(
       &whitney.relative_to(&gamma_dirichlet),
@@ -152,7 +153,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
 fn robin_reproduces_linear_solution() {
   use simplicial::geometry::coord::simplex::SimplexCoords;
 
-  for dim in 1..=3 {
+  for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
@@ -182,15 +183,15 @@ fn robin_reproduces_linear_solution() {
       topology.boundary_facets().into_iter().partition(is_x_facet);
 
     let gamma_robin = whitney.boundary_part(robin_facets);
-    let system =
-      CsrMatrix::from(&whitney.codif_dif(0)) + alpha * bc::boundary_mass(&gamma_robin, 0);
+    let system = CsrMatrix::from(&whitney.codif_dif(Dim::ZERO))
+      + alpha * bc::boundary_mass(&gamma_robin, Dim::ZERO);
     let boundary_coords = gamma_robin.boundary_complex().trace_coords(&coords);
     let robin_data = robin_data.pullback_on(gamma_robin.topology(), &boundary_coords);
     let rhs = bc::neumann_load(&gamma_robin, &robin_data, None);
 
     let solution = if dirichlet_facets.is_empty() {
       // 1d: pure Robin.
-      Cochain::new(0, FaerCholesky::new(system).solve(&rhs))
+      Cochain::new(Dim::ZERO, FaerCholesky::new(system).solve(&rhs))
     } else {
       let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
       let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);

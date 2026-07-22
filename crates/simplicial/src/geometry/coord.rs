@@ -21,7 +21,7 @@ use crate::linalg::{RowVector, RowVectorView, Vector, VectorView};
 
 use self::mesh::MeshCoords;
 use super::cell_volume;
-use crate::topology::complex::Complex;
+use crate::{Dim, topology::complex::Complex};
 
 pub type TangentVector = Vector;
 pub type TangentVectorRef<'a> = VectorView<'a>;
@@ -66,10 +66,10 @@ pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64
     2,
     "Mean curvature is a 2D-surface quantity."
   );
-  let nvertices = topology.skeleton_raw(0).len();
+  let nvertices = topology.skeleton_raw(Dim::ZERO).len();
 
   let mut areas = vec![0.0; nvertices];
-  let mut laplacian = vec![Vector::zeros(coords.dim()); nvertices];
+  let mut laplacian = vec![Vector::zeros(coords.dim().index()); nvertices];
   for cell in topology.cells().handle_iter() {
     let verts = &cell.simplex().vertices;
     let p = [
@@ -237,7 +237,7 @@ const REACH_SEARCH_EDGES: i32 = 8;
 pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> Vec<f64> {
   use rayon::prelude::*;
 
-  let nvertices = topology.nsimplices(0);
+  let nvertices = topology.nsimplices(Dim::ZERO);
   let unbounded = vec![f64::INFINITY; nvertices];
   if topology.dim() != 2 || !topology.is_orientable() {
     return unbounded;
@@ -413,6 +413,7 @@ impl PointGrid {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::Dim;
 
   /// The unit sphere has constant curvature $K = H^2 = 1$ and curvature
   /// radius $1$ everywhere. The discrete estimators recover $|H|$ to within
@@ -451,8 +452,8 @@ mod tests {
   /// rather than dividing by a count of zero.
   #[test]
   fn a_complex_without_edges_has_no_local_length() {
-    let complex = Complex::standard(0);
-    let coords = MeshCoords::standard(0);
+    let complex = Complex::standard(Dim::new(0));
+    let coords = MeshCoords::standard(Dim::new(0));
     assert_eq!(mean_edge_length(&complex, &coords), 0.0);
   }
 
@@ -595,8 +596,9 @@ mod tests {
   /// must never clamp displacement on a flat surface.
   #[test]
   fn flat_grid_has_unbounded_curvature_radius() {
-    let (topology, coords) = crate::mesher::cartesian::CartesianGrid::new_unit(2, 4).triangulate();
-    let coords = coords.embed_euclidean(3);
+    let (topology, coords) =
+      crate::mesher::cartesian::CartesianGrid::new_unit(Dim::new(2), 4).triangulate();
+    let coords = coords.embed_euclidean(Dim::new(3));
     let boundary: std::collections::HashSet<usize> =
       topology.boundary_vertices().into_iter().collect();
     let mean = vertex_mean_curvature(&topology, &coords);
