@@ -26,6 +26,7 @@ use {
   crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
   exterior::{Covariant, multiform_gramian},
+  iterative::{Jacobi, StopCriterion, krylov::cg},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::mesh::MeshLengthsSq},
@@ -92,9 +93,30 @@ pub fn l2_projection<F: Sync + Section<Covariant>>(
     whitney.geometry(),
     SourceElVec::new(field, qr),
   );
-  // The mass is s.p.d. only on a Riemannian geometry; on an indefinite one it
-  // is symmetric non-degenerate, so LU covers every signature uniformly.
-  Cochain::new(grade, FaerLu::new(mass).solve(&load))
+
+  // The mass is SPD only on a Riemannian geometry. There conjugate gradients
+  // solves it far faster than a factorization -- the mass is well conditioned
+  // ($kappa = O(1)$, mesh-independent), so a fixed handful of Jacobi-CG
+  // iterations suffices, with no fill. On an indefinite signature the mass is
+  // symmetric non-degenerate but not definite, where CG does not apply and LU
+  // carries the solve, keeping the projection total over every signature.
+  let riemannian = whitney
+    .topology()
+    .cells()
+    .handle_iter()
+    .all(|cell| whitney.geometry().cell_metric(cell).is_riemannian());
+  let coeffs = if riemannian {
+    cg(
+      &mass,
+      &Jacobi::new(&mass),
+      &load,
+      StopCriterion::rtol(1e-12),
+    )
+    .0
+  } else {
+    FaerLu::new(mass).solve(&load)
+  };
+  Cochain::new(grade, coeffs)
 }
 
 #[cfg(test)]
