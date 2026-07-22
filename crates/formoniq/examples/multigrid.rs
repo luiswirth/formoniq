@@ -1,5 +1,5 @@
 //! Multigrid against the naive solvers, on the grade-0 Hodge-Laplace system
-//! $M_0 + D_0^T M_1 D_0$ over a refinement tower of the 2D unit square.
+//! $M_0 + D_0^T M_1 D_0$ over a refinement tower, in 2D and 3D.
 //!
 //! Three solvers on the same finest-level system, timed as the mesh refines:
 //!
@@ -9,20 +9,25 @@
 //!   count grows with the $O(h^(-2))$ condition number;
 //! - V-cycle-preconditioned CG, whose iteration count is mesh-independent.
 //!
-//! Two things the numbers make concrete. MG-CG decisively beats the naive
-//! iterative solver: at the finest level its solve is more than an order of
-//! magnitude faster than Jacobi-CG, whose iteration count has grown into the
-//! thousands. Against the *direct* solve it has not yet won in wall clock: in 2D
-//! the sparse Cholesky is very strong (near-linear fill under nested dissection,
-//! a tiny back-solve), so the crossover sits beyond these sizes -- it is in 3D,
-//! where the direct factorization is $O(N^2)$, or under many right-hand sides,
-//! that MG's $O(N)$ solve pays off. What the run does show is the scaling that
-//! guarantees the crossover exists: the MG-CG iteration count is flat.
+//! MG-CG decisively beats the naive iterative solver in every case: its solve is
+//! more than an order of magnitude faster than Jacobi-CG, whose iteration count
+//! has grown into the thousands while MG-CG's stays flat.
 //!
-//! The setup is now linear in the DOF count (the Whitney prolongation is
-//! assembled in one pass, #118); what remains of it is the finest-level operator
-//! assembly, which the direct solve reuses for free, so the setup column
-//! overstates MG's true marginal cost. Run by hand:
+//! Against the *direct* solve the dimension is the whole story. In 2D the sparse
+//! Cholesky is very strong (near-linear fill under nested dissection, a tiny
+//! back-solve), and MG-CG does not overtake it at these sizes. In 3D the
+//! factorization is $O(N^2)$ in time and its fill superlinear in memory, while
+//! MG-CG stays $O(N)$: at equal DOF counts the 3D factorization already costs an
+//! order of magnitude more than in 2D and climbs far faster, while the MG-CG
+//! solve stays flat and cheap. That divergence is the crossover taking shape;
+//! reaching it outright needs meshes an order of magnitude larger still, where
+//! faer's sparse Cholesky currently loses accuracy (`DirectInverse` falls back to
+//! LU there, and the 3D sweep is capped just below that regime).
+//!
+//! The setup is linear in the DOF count (the Whitney prolongation is assembled in
+//! one pass, #118); what remains of it is the finest-level operator assembly,
+//! which the direct solve reuses for free, so the setup column overstates MG's
+//! true marginal cost. Run by hand:
 //!
 //! ```sh
 //! cargo run --release --example multigrid
@@ -39,12 +44,11 @@ use simplicial::{
   topology::complex::Complex,
 };
 
-const BASE_CELLS_PER_AXIS: usize = 4;
 const SMOOTHING_SWEEPS: usize = 2;
 const RTOL: f64 = 1e-10;
 
-fn unit_square() -> (Complex, MeshLengthsSq) {
-  let (topology, coords) = CartesianGrid::new_unit(2, BASE_CELLS_PER_AXIS).triangulate();
+fn unit_cube(dim: usize, base_cells: usize) -> (Complex, MeshLengthsSq) {
+  let (topology, coords) = CartesianGrid::new_unit(dim, base_cells).triangulate();
   let geometry = coords.to_edge_lengths_sq(&topology);
   (topology, geometry)
 }
@@ -59,16 +63,35 @@ fn timed<T>(f: impl FnOnce() -> T) -> (T, f64) {
 fn main() {
   tracing_subscriber::fmt::init();
 
-  println!(
-    "{:>6}  |  {:>10} {:>10}  |  {:>4} {:>10} {:>10}  |  {:>4} {:>10} {:>10}",
-    "dofs", "chol fac", "chol sol", "it", "jac setup", "jac sol", "it", "mg setup", "mg sol"
-  );
-  println!("{}", "-".repeat(96));
+  // 2D: the direct sparse Cholesky is very strong, so MG-CG does not overtake it
+  // in wall clock here; watch the iteration counts instead. 3D: the direct
+  // factorization is O(N^2) in time and its fill superlinear in memory, so the
+  // crossover where MG-CG's O(N) solve wins is reachable.
+  // A single coarse cell per box (base 1): a Kuhn-triangulated unit cube whose
+  // colex ordering is its Freudenthal ordering, so the refinement tower stays
+  // self-similar (invariant 7). Multiple coarse cells would glue Kuhn boxes along
+  // reflecting seams, and colex refinement there drifts off the self-similar
+  // family, breeding sliver cells that wreck the conditioning above 2D.
+  println!("=== 2D unit square ===");
+  bench(2, 1, 9);
+  println!("\n=== 3D unit cube ===");
+  bench(3, 1, 5);
+}
 
+/// Time the three solvers on the grade-0 system over a `dim`-dimensional tower,
+/// starting from `base_cells` per axis and refining up to `max_refinements`
+/// times.
+fn bench(dim: usize, base_cells: usize, max_refinements: usize) {
   let stop = StopCriterion::rtol(RTOL);
 
-  for refinements in 1..=7 {
-    let (topology, geometry) = unit_square();
+  println!(
+    "{:>8}  |  {:>10} {:>10}  |  {:>4} {:>10} {:>10}  |  {:>4} {:>10} {:>10}",
+    "dofs", "chol fac", "chol sol", "it", "jac setup", "jac sol", "it", "mg setup", "mg sol"
+  );
+  println!("{}", "-".repeat(98));
+
+  for refinements in 1..=max_refinements {
+    let (topology, geometry) = unit_cube(dim, base_cells);
 
     // The multigrid solver owns the tower; its finest operator is the shared
     // system every method solves, so the comparison is apples to apples.
@@ -90,30 +113,32 @@ fn main() {
 
     let ((x_mg, mg_report), mg_sol) = timed(|| mg.solve(&b, stop));
 
-    // A residual tolerance does not tightly bound the solution error on an
-    // ill-conditioned system, so the iterative solvers are held to a looser
-    // relative error than the direct solve; all three must still reproduce the
-    // manufactured solution.
-    let rel = |x: &Vector| (x - &x_true).norm() / x_true.norm();
-    assert!(rel(&x_direct) < 1e-9, "direct solution wrong at n = {n}");
-    for (name, x) in [("jac-cg", &x_jac), ("mg-cg", &x_mg)] {
+    // Correctness is checked by the residual (backward error), not the forward
+    // error against `x_true`: the latter is bounded by the condition number, which
+    // grows like $h^{-2}$ and inflates even the exact solve's forward error at the
+    // finest 3D levels. The residual is conditioning-free -- did we solve the
+    // system? -- and all three must drive it to zero.
+    // Correctness by the residual (backward error), not the forward error against
+    // `x_true`: the latter is bounded by the condition number, which grows like
+    // $h^{-2}$. All three must drive the residual to zero. (`DirectInverse` guards
+    // itself against faer's large-system sparse-Cholesky accuracy failure by
+    // falling back to LU, so it stays accurate here too.)
+    let residual = |x: &Vector| (a * x - &b).norm() / b.norm();
+    for (name, x) in [("direct", &x_direct), ("jac-cg", &x_jac), ("mg-cg", &x_mg)] {
       assert!(
-        rel(x) < 1e-4,
-        "{name} solution wrong at n = {n}: rel {}",
-        rel(x)
+        residual(x) < 1e-8,
+        "{name} did not solve the system at n = {n}: residual {}",
+        residual(x)
       );
     }
 
     println!(
-      "{n:>6}  |  {chol_fac:>10.4} {chol_sol:>10.4}  |  \
+      "{n:>8}  |  {chol_fac:>10.4} {chol_sol:>10.4}  |  \
        {:>4} {jac_setup:>10.4} {jac_sol:>10.4}  |  \
        {:>4} {mg_setup:>10.4} {mg_sol:>10.4}",
       jac_report.iters, mg_report.iters,
     );
   }
 
-  println!("\ntimes in seconds; 'it' is the CG iteration count to rtol {RTOL:e}.");
-  println!("mg-cg iterations stay flat while jac-cg climbs with 1/h; mg-cg's solve");
-  println!("beats jac-cg by an order of magnitude. the 2D direct solve is still");
-  println!("faster in wall clock here -- the crossover is in 3D or under many rhs.");
+  println!("times in seconds; 'it' is the CG iteration count to rtol {RTOL:e}.");
 }
