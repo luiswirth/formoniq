@@ -47,6 +47,19 @@ impl Jacobi {
   /// Panics on a zero diagonal entry: $D^(-1)$ does not exist, and a
   /// positive-definite operator has none.
   pub fn new(a: &CsrMatrix) -> Self {
+    Self::weighted(a, 1.0)
+  }
+
+  /// The weighted (damped) Jacobi inverse $B = omega D^(-1)$.
+  ///
+  /// Unit weight is the plain Jacobi inverse, exact on a diagonal operator. A
+  /// sub-unit weight is what makes Jacobi a *smoother*: undamped Jacobi barely
+  /// touches the highest-frequency error of a second-order operator (its
+  /// iteration matrix has eigenvalue near $-1$ there), while $omega approx 2\/3$
+  /// damps the whole upper half of the spectrum, which is exactly the error a
+  /// multigrid level must remove before coarsening. Self-adjoint for any
+  /// $omega > 0$ on a positive diagonal.
+  pub fn weighted(a: &CsrMatrix, omega: f64) -> Self {
     let n = a.nrows();
     let mut diag = Vector::zeros(n);
     for (i, j, &v) in a.triplet_iter() {
@@ -59,7 +72,7 @@ impl Jacobi {
       "Jacobi needs a nonzero diagonal"
     );
     Self {
-      inv_diag: diag.map(|d| 1.0 / d),
+      inv_diag: diag.map(|d| omega / d),
     }
   }
 }
