@@ -40,8 +40,7 @@ use super::{Bary, LocalCartesian, SimplexCoords, bary2local};
 use crate::Dim;
 use crate::linalg::{Matrix, Vector};
 
-use itertools::Itertools;
-use multiindex::Composition;
+use multiindex::{Composition, Permutation, cartesian};
 
 use std::collections::HashMap;
 
@@ -108,20 +107,18 @@ fn kuhn_children(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<Vec<us
   // A vertex lies in $R Delta$ iff $R >= s_1 >= ... >= s_n >= 0$.
   let in_region = move |s: &[usize]| s[0] <= r && s.windows(2).all(|w| w[0] >= w[1]);
 
-  let bases = (0..dim.index()).map(|_| 0..=r).multi_cartesian_product();
-  bases.flat_map(move |base| {
-    (0..dim.index())
-      .permutations(dim.index())
-      .filter_map(move |perm| {
-        let mut w = base.clone();
-        let mut child = Vec::with_capacity((dim + 1).index());
+  let n = dim.index();
+  cartesian::grid(r + 1, n).flat_map(move |base| {
+    Permutation::all(n).filter_map(move |perm| {
+      let mut w = base.clone();
+      let mut child = Vec::with_capacity((dim + 1).index());
+      child.push(w.clone());
+      for axis in perm.iter() {
+        w[axis] += 1;
         child.push(w.clone());
-        for &axis in &perm {
-          w[axis] += 1;
-          child.push(w.clone());
-        }
-        child.iter().all(|s| in_region(s)).then_some(child)
-      })
+      }
+      child.iter().all(|s| in_region(s)).then_some(child)
+    })
   })
 }
 
@@ -312,7 +309,10 @@ mod test {
 
         for child in sub.children() {
           assert_eq!(child.len(), dim + 1);
-          assert!(child.iter().all_unique());
+          let mut corners = child.to_vec();
+          corners.sort_unstable();
+          corners.dedup();
+          assert_eq!(corners.len(), child.len(), "corners must be distinct");
         }
       }
     }

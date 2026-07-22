@@ -1,7 +1,6 @@
 use crate::linalg::{Matrix, Vector};
-use itertools::Itertools;
 use multiindex::{
-  Combination,
+  Combination, Permutation,
   cartesian::{cartesian2linear_mixed, corner_offset, linear2cartesian_mixed, mixed_strides},
   factorial,
 };
@@ -254,8 +253,8 @@ impl CartesianGrid {
       let box_cart = linear2cartesian_mixed(ibox, &self.ncells);
       let origin = cartesian2linear_mixed(&box_cart, &nvertices);
 
-      for axes in (0..dim).permutations(dim) {
-        let chain = axes.iter().scan(Combination::empty(), |corner, &axis| {
+      for axes in Permutation::all(dim) {
+        let chain = axes.iter().scan(Combination::empty(), |corner, axis| {
           *corner = corner.inserted(axis);
           Some(*corner)
         });
