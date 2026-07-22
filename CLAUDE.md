@@ -54,7 +54,10 @@ commentary on them. Code should read the way a mathematician would write.
 Crate ladder, each layer adding exactly one thing —
 `{ multiindex, gramian, coorder } → exterior → { simplicial, glatt } →
 derham → formoniq → studio`, where `multiindex`/`gramian`/`coorder` are
-foundational siblings and `simplicial`/`glatt` are siblings one level up:
+foundational siblings and `simplicial`/`glatt` are siblings one level up.
+`iterative` is off to the side: a standalone Krylov/preconditioner crate
+depending on nothing but `nalgebra-sparse`, joining the ladder only where
+`formoniq` consumes it.
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
@@ -65,7 +68,8 @@ foundational siblings and `simplicial`/`glatt` are siblings one level up:
 | `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
-| `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge and shift-invert eigensolving -- the one crate that actually solves anything), `problems::` (elliptic, dirac, heat, wave, ...) |
+| `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner; backend is `nalgebra-sparse` alone, no faer |
+| `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving -- the one crate carrying a *direct* solver and an eigensolver), `problems::` (elliptic, dirac, heat, wave, ...) |
 | `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
 
 No crate exists solely to hold a shared type alias. `Vector`/`Matrix` (dense
@@ -77,8 +81,11 @@ where `CsrMatrix`/`CooMatrix` and the extension traits built on them
 (`CooMatrixExt`) live, reused downward by `derham`, `formoniq` and `studio`
 because they already depend on `simplicial` for real reasons. `faer` and the
 eigensolver go one further: they are needed only in `formoniq`, the one crate
-that solves a linear system, so they live there rather than in a shared base
-every leaf would then compile for nothing.
+that runs a *direct* solve or an eigenproblem, so they live there rather than in
+a shared base every leaf would then compile for nothing. *Iterative* solving is
+the exception that proves the rule: it needs nothing but `nalgebra-sparse`, so
+it lives in its own standalone `iterative` crate rather than in `formoniq`, and
+`formoniq` depends on it like any other building block.
 
 Dependencies flow strictly downward. A lower crate never learns about a higher
 one: `exterior` must never hear about meshes, `simplicial` never about forms.
@@ -396,11 +403,14 @@ just as well and silently means something else. A new ordered structure is colex
 
 **Linalg backends by role.** nalgebra dense (`Matrix`/`Vector`) for element-local
 math (Gramians, element matrices, exterior powers); `nalgebra-sparse` (`CooMatrix`)
-for globally assembled operators, aliased in `simplicial::linalg`; faer for
-solves and eigenproblems (sparse LU and Cholesky, and a self-adjoint dense
-eigensolve for the projected subspace), confined to `formoniq::linalg` since
-`formoniq` is the only crate that solves anything. The workspace is pure Rust,
-with no external solver toolchain.
+for globally assembled operators, aliased in `simplicial::linalg`, and the
+matrix representation the `iterative` crate's Krylov methods (`CG`, `MINRES`)
+and preconditioners run on; faer for *direct* solves and eigenproblems (sparse
+LU and Cholesky, and a self-adjoint dense eigensolve for the projected
+subspace), confined to `formoniq::linalg` since `formoniq` is the only crate
+carrying a direct solve. Iterative solving needs no such backend, so it stays
+in the standalone `iterative` crate on `nalgebra-sparse` alone. The workspace is
+pure Rust, with no external solver toolchain.
 
 **Naming reflects the mathematics.** `SimplexRef`, `Cochain`, `MultiForm`,
 `CellGramians` — a reader who knows the math should recognize every type
