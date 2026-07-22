@@ -60,6 +60,17 @@ pub trait HilbertComplex {
   /// into the ambient Whitney space, extending by zero on the constrained
   /// boundary. The identity on the full complex.
   fn inclusion(&self, grade: ExteriorGrade) -> CsrMatrix;
+
+  /// Gram matrix of the full $H Lambda^k (dif)$ inner product,
+  /// $M_k + D^T M_(k+1) D$: the $L^2$ mass plus the up-stiffness.
+  ///
+  /// SPD on a Riemannian geometry, and the diagonal block of the stable mixed
+  /// Hodge-Laplace preconditioner on the space $Lambda^k$
+  /// (Arnold-Falk-Winther): the norm the formulation is well-posed in. Sparse,
+  /// since $dif$ is metric-free and no mass inverse enters.
+  fn hdif_gram(&self, grade: ExteriorGrade) -> CsrMatrix {
+    &CsrMatrix::from(&self.mass(grade)) + &CsrMatrix::from(&self.codif_dif(grade))
+  }
 }
 
 /// The discrete Hilbert complex of Whitney forms,
@@ -141,7 +152,25 @@ impl<'a> WhitneyComplex<'a> {
 
   /// $H Lambda^k (dif)$ seminorm: the $L^2$ norm of the exterior derivative.
   pub fn seminorm_hdif(&self, u: &Cochain) -> f64 {
+    // At top grade $dif$ maps into the zero space $Lambda^(n+1)$, so the
+    // seminorm is $0$ and there is no $(n+1)$-skeleton to assemble a mass over
+    // (cf. [`Self::codif_dif`]): total at the degenerate top grade rather than
+    // indexing past the skeleton.
+    if u.grade() == self.dim() {
+      return 0.0;
+    }
     self.norm_l2(&u.dif(self.topology))
+  }
+
+  /// The full $H Lambda^k (dif)$ (graph) norm
+  /// $norm(u)_(H Lambda(dif))^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2$.
+  ///
+  /// The norm the mixed Hodge-Laplacian is well-posed in (Arnold-Falk-Winther),
+  /// hence the one its stable block preconditioner is built from. Unlike the
+  /// $H^*(delta)$ norm it is sparse: $dif$ is metric-free, so no mass inverse
+  /// enters. Its Gram matrix is [`Self::hdif_gram`].
+  pub fn norm_hdif(&self, u: &Cochain) -> f64 {
+    (self.norm_l2(u).powi(2) + self.seminorm_hdif(u).powi(2)).sqrt()
   }
 
   /// The relative complex of the pair $(K, diff K)$.
@@ -412,5 +441,47 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
   }
   fn inclusion(&self, grade: ExteriorGrade) -> CsrMatrix {
     RelativeWhitneyComplex::inclusion(self, grade)
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use derham::cochain::Cochain;
+  use simplicial::linalg::Vector;
+  use simplicial::mesher::cartesian::CartesianGrid;
+
+  /// The full $H Lambda(dif)$ norm is the Pythagorean sum of the $L^2$ norm and
+  /// the $dif$ seminorm, and its Gram matrix [`HilbertComplex::hdif_gram`]
+  /// realizes it as a quadratic form: two views of one inner product.
+  #[test]
+  fn hdif_norm_and_gram_agree() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in 0..=dim {
+        let ndofs = topology.nsimplices(grade);
+        let u = Cochain::new(
+          grade,
+          Vector::from_iterator(ndofs, (0..ndofs).map(|i| ((i % 5) as f64) - 2.0)),
+        );
+
+        let full = whitney.norm_hdif(&u);
+        let pythag = (whitney.norm_l2(&u).powi(2) + whitney.seminorm_hdif(&u).powi(2)).sqrt();
+        let gram = quadratic_form_sparse(&whitney.hdif_gram(grade), u.coeffs()).sqrt();
+
+        assert!((full - pythag).abs() < 1e-12, "dim={dim} grade={grade}");
+        assert!(
+          (full - gram).abs() < 1e-10,
+          "dim={dim} grade={grade}: {full} vs {gram}"
+        );
+        assert!(
+          full >= whitney.seminorm_hdif(&u) - 1e-12,
+          "full norm dominates seminorm"
+        );
+      }
+    }
   }
 }
