@@ -12,6 +12,7 @@
 
 use crate::{
   assemble::{GalMat, assemble_galmat},
+  linalg::faer::FaerLu,
   operators::HodgeMassElmat,
 };
 
@@ -70,6 +71,28 @@ pub trait HilbertComplex {
   /// since $dif$ is metric-free and no mass inverse enters.
   fn hdif_gram(&self, grade: ExteriorGrade) -> CsrMatrix {
     &CsrMatrix::from(&self.mass(grade)) + &CsrMatrix::from(&self.codif_dif(grade))
+  }
+
+  /// The discrete codifferential $delta: Lambda^k -> Lambda^(k-1)$, the
+  /// $L^2$-adjoint of $dif$. $sigma = delta u$ is characterized weakly by
+  /// $angle.l sigma, tau angle.r = angle.l u, dif tau angle.r$ for all $tau$,
+  /// i.e. the mass solve $M_(k-1) sigma = (D^(k-1))^T M_k u$.
+  ///
+  /// `None` at grade $0$: $delta$ maps $Lambda^0$ into the trivial space
+  /// $Lambda^(-1)$, which the current $usize$ grade cannot name (a total
+  /// $Lambda^(-1) = 0$ cochain awaits the $ZZ$-graded degree). Unlike $dif$,
+  /// $delta$ is *not* metric-free (invariant 5): it carries the mass inverse,
+  /// realized here as a solve --- well conditioned, since the mass is. Total
+  /// over signature (the solve is an LU).
+  fn codif(&self, u: &Cochain) -> Option<Cochain> {
+    let grade = u.grade();
+    if grade == 0 {
+      return None;
+    }
+    let mass_lower = CsrMatrix::from(&self.mass(grade - 1));
+    let coupling = self.dif(grade - 1).transpose() * &CsrMatrix::from(&self.mass(grade));
+    let sigma = FaerLu::new(mass_lower).solve(&(coupling * u.coeffs()));
+    Some(Cochain::new(grade - 1, sigma))
   }
 }
 
@@ -171,6 +194,42 @@ impl<'a> WhitneyComplex<'a> {
   /// enters. Its Gram matrix is [`Self::hdif_gram`].
   pub fn norm_hdif(&self, u: &Cochain) -> f64 {
     (self.norm_l2(u).powi(2) + self.seminorm_hdif(u).powi(2)).sqrt()
+  }
+
+  /// $H^* Lambda^k (delta)$ seminorm: the $L^2$ norm of the codifferential,
+  /// $norm(delta u)_(L^2 Lambda^(k-1))$.
+  ///
+  /// $0$ at grade $0$ ($delta$ maps into the trivial space). Unlike
+  /// [`Self::seminorm_hdif`] it costs a mass solve, since $delta$ carries the
+  /// mass inverse.
+  pub fn seminorm_hcodif(&self, u: &Cochain) -> f64 {
+    match self.codif(u) {
+      Some(sigma) => self.norm_l2(&sigma),
+      None => 0.0,
+    }
+  }
+
+  /// The full $H^* Lambda^k (delta)$ norm
+  /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(delta u)_(L^2)^2$.
+  pub fn norm_hcodif(&self, u: &Cochain) -> f64 {
+    (self.norm_l2(u).powi(2) + self.seminorm_hcodif(u).powi(2)).sqrt()
+  }
+
+  /// The Hodge-Laplace *energy* seminorm
+  /// $abs(u)^2 = norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2 =
+  /// angle.l Delta u, u angle.r$: the form the Hodge-Laplacian is coercive in
+  /// (modulo harmonics). The norm convergence rates are naturally measured in.
+  pub fn seminorm_energy(&self, u: &Cochain) -> f64 {
+    (self.seminorm_hdif(u).powi(2) + self.seminorm_hcodif(u).powi(2)).sqrt()
+  }
+
+  /// The full $H Lambda^k$ (Hodge-Dirac graph) norm
+  /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2$:
+  /// the graph norm of $D = dif + delta$, the complete energy space of the de
+  /// Rham complex, $H Lambda(dif) sect H^* Lambda(delta)$.
+  pub fn norm_full(&self, u: &Cochain) -> f64 {
+    (self.norm_l2(u).powi(2) + self.seminorm_hdif(u).powi(2) + self.seminorm_hcodif(u).powi(2))
+      .sqrt()
   }
 
   /// The relative complex of the pair $(K, diff K)$.
@@ -481,6 +540,88 @@ mod test {
           full >= whitney.seminorm_hdif(&u) - 1e-12,
           "full norm dominates seminorm"
         );
+      }
+    }
+  }
+
+  fn sample(grade: ExteriorGrade, topology: &Complex) -> Cochain {
+    let ndofs = topology.nsimplices(grade);
+    Cochain::new(
+      grade,
+      Vector::from_iterator(ndofs, (0..ndofs).map(|i| ((i * 3 % 7) as f64) - 3.0)),
+    )
+  }
+
+  /// The defining law of the codifferential: it is the $L^2$-adjoint of $dif$,
+  /// $angle.l delta u, tau angle.r_(k-1) = angle.l u, dif tau angle.r_k$ for
+  /// every $tau in Lambda^(k-1)$. Swept over dimension and grade.
+  #[test]
+  fn codif_is_the_adjoint_of_dif() {
+    use crate::linalg::bilinear_form_sparse;
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in 1..=dim {
+        let u = sample(grade, &topology);
+        let tau = sample(grade - 1, &topology);
+        let sigma = whitney.codif(&u).expect("grade >= 1");
+
+        let mass_lower = CsrMatrix::from(&whitney.mass(grade - 1));
+        let mass_k = CsrMatrix::from(&whitney.mass(grade));
+        let lhs = bilinear_form_sparse(&mass_lower, sigma.coeffs(), tau.coeffs());
+        let rhs = bilinear_form_sparse(&mass_k, u.coeffs(), tau.dif(&topology).coeffs());
+
+        assert!(
+          (lhs - rhs).abs() < 1e-9,
+          "dim={dim} grade={grade}: {lhs} vs {rhs}"
+        );
+      }
+    }
+  }
+
+  /// $delta compose delta = 0$: the codifferential is nilpotent, dual to
+  /// $dif compose dif = 0$. Needs grade $>= 2$ so both codifferentials land in a
+  /// real space.
+  #[test]
+  fn codif_is_nilpotent() {
+    for dim in 2..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in 2..=dim {
+        let u = sample(grade, &topology);
+        let ddu = whitney.codif(&whitney.codif(&u).unwrap()).unwrap();
+        assert!(whitney.norm_l2(&ddu) < 1e-9, "dim={dim} grade={grade}");
+      }
+    }
+  }
+
+  /// The energy and full Hodge-Dirac norms decompose as the Pythagorean sums
+  /// they are defined to be, total over every grade including the degenerate
+  /// $0$ and $n$ where a seminorm vanishes.
+  #[test]
+  fn delta_norms_are_total_and_pythagorean() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in 0..=dim {
+        let u = sample(grade, &topology);
+        let (l2, hd, hcd) = (
+          whitney.norm_l2(&u),
+          whitney.seminorm_hdif(&u),
+          whitney.seminorm_hcodif(&u),
+        );
+        assert!((whitney.seminorm_energy(&u) - (hd * hd + hcd * hcd).sqrt()).abs() < 1e-12);
+        assert!((whitney.norm_full(&u) - (l2 * l2 + hd * hd + hcd * hcd).sqrt()).abs() < 1e-12);
+        if grade == 0 {
+          assert_eq!(whitney.seminorm_hcodif(&u), 0.0, "delta = 0 at grade 0");
+          assert!(whitney.codif(&u).is_none());
+        }
       }
     }
   }
