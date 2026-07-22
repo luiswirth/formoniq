@@ -23,7 +23,7 @@ use {
   simplicial::{
     Dim,
     geometry::metric::mesh::MeshLengthsSq,
-    linalg::{CooMatrix, CsrMatrix},
+    linalg::{CooMatrix, CsrMatrix, Vector},
     topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
   },
 };
@@ -79,21 +79,25 @@ pub trait HilbertComplex {
   /// $angle.l sigma, tau angle.r = angle.l u, dif tau angle.r$ for all $tau$,
   /// i.e. the mass solve $M_(k-1) sigma = (D^(k-1))^T M_k u$.
   ///
-  /// `None` at grade $0$: $delta$ maps $Lambda^0$ into the trivial space
-  /// $Lambda^(-1) = 0$, so the only codomain element is the zero cochain, which
-  /// `None` names without materializing an empty space. Unlike $dif$, $delta$ is
-  /// *not* metric-free (invariant 5): it carries the mass inverse, realized here
-  /// as a solve --- well conditioned, since the mass is. Total over signature
-  /// (the solve is an LU).
-  fn codif(&self, u: &Cochain) -> Option<Cochain> {
+  /// Total in grade: $delta$ maps $C^k$ into $C^(k-1)$, and where that codomain
+  /// is trivial --- at grade $0$, where it is $Lambda^(-1) = 0$, or past either
+  /// end of the complex --- the only element is the zero cochain, returned
+  /// directly rather than through a degenerate empty solve. This is the
+  /// $Z$-graded degree at work: $delta$ of a $0$-form is the empty cochain of
+  /// $Lambda^(-1)$, not a missing value. Unlike $dif$, $delta$ is *not*
+  /// metric-free (invariant 5): it carries the mass inverse, realized here as a
+  /// solve --- well conditioned, since the mass is. Total over signature (the
+  /// solve is an LU).
+  fn codif(&self, u: &Cochain) -> Cochain {
     let grade = u.grade();
-    if grade == 0 {
-      return None;
+    let lower = grade - 1;
+    if self.ndofs(lower) == 0 {
+      return Cochain::new(lower, Vector::zeros(0));
     }
-    let mass_lower = CsrMatrix::from(&self.mass(grade - 1));
-    let coupling = self.dif(grade - 1).transpose() * &CsrMatrix::from(&self.mass(grade));
+    let mass_lower = CsrMatrix::from(&self.mass(lower));
+    let coupling = self.dif(lower).transpose() * &CsrMatrix::from(&self.mass(grade));
     let sigma = FaerLu::new(mass_lower).solve(&(coupling * u.coeffs()));
-    Some(Cochain::new(grade - 1, sigma))
+    Cochain::new(lower, sigma)
   }
 }
 
@@ -130,16 +134,29 @@ impl<'a> WhitneyComplex<'a> {
   }
 
   /// $dim cal(W) Lambda^k$: one DOF per $k$-simplex.
+  ///
+  /// Total in grade: $0$ outside $[0, n]$, where the space $Lambda^k$ is trivial
+  /// and there are no $k$-simplices to carry a DOF.
   pub fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    self.topology.nsimplices(grade)
+    if grade.in_range(self.dim()) {
+      self.topology.nsimplices(grade)
+    } else {
+      0
+    }
   }
 
   /// Galerkin mass matrix of the $L^2 Lambda^k$ inner product,
   ///
   /// $M = [inner(lambda_tau, lambda_sigma)_(L^2 Lambda^k)]_(sigma tau)$
+  ///
+  /// Total in grade: the $0 times 0$ empty matrix outside $[0, n]$, the mass on
+  /// the trivial space $Lambda^k = 0$.
   pub fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
+    if !grade.in_range(self.dim()) {
+      return GalMat::new(0, 0);
+    }
     assemble_galmat(
       self.topology,
       self.geometry,
@@ -149,24 +166,28 @@ impl<'a> WhitneyComplex<'a> {
 
   /// Exterior derivative $dif: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$.
   ///
-  /// Purely topological: the coboundary operator on cochains.
+  /// Purely topological: the coboundary operator on cochains. Total in grade:
+  /// the zero map of shape $"ndofs"(k+1) times "ndofs"(k)$ outside $[0, n]$,
+  /// where one of $Lambda^k$, $Lambda^(k+1)$ is trivial (the interior top-grade
+  /// case $k = n$ is the coboundary's own, already zero-columned codomain).
   pub fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
+    if !grade.in_range(self.dim()) {
+      return CsrMatrix::zeros(self.ndofs(grade + 1), self.ndofs(grade));
+    }
     CsrMatrix::from(&self.topology.coboundary_operator(grade))
   }
 
   /// Galerkin matrix of the bilinear form $(dif u, dif v)_(L^2 Lambda^(k+1))$,
   ///
   /// the stiffness matrix $D^T M_(k+1) D$ of the up-part of the Hodge-Laplacian.
+  ///
+  /// Total in grade with no special case: at the top grade $dif: Lambda^n ->
+  /// Lambda^(n+1)$ has a trivial codomain, so $M_(n+1)$ is $0 times 0$ and the
+  /// product is the honest $"ndofs"(n)^2$ zero; the same falls out past either
+  /// end from the total [`Self::dif`] and [`Self::mass`].
   pub fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    // At top grade $dif: Lambda^n -> Lambda^(n+1)$ maps into the zero space, so
-    // $delta dif$ is the zero operator; there is no $(n+1)$-skeleton to assemble
-    // a mass over. Return it explicitly, sized $"ndofs"^2$, keeping the operator
-    // total at the degenerate top grade rather than indexing past the skeleton.
-    if grade == self.dim() {
-      return GalMat::new(self.ndofs(grade), self.ndofs(grade));
-    }
     let dif = self.dif(grade);
     let mass = CsrMatrix::from(&self.mass(grade + 1));
     GalMat::from(&(dif.transpose() * mass * dif))
@@ -179,14 +200,11 @@ impl<'a> WhitneyComplex<'a> {
   }
 
   /// $H Lambda^k (dif)$ seminorm: the $L^2$ norm of the exterior derivative.
+  ///
+  /// Total at the top grade with no guard: $dif u$ there is the empty cochain of
+  /// $Lambda^(n+1) = 0$, and its $L^2$ norm against the total $0 times 0$ mass is
+  /// $0$.
   pub fn seminorm_hdif(&self, u: &Cochain) -> f64 {
-    // At top grade $dif$ maps into the zero space $Lambda^(n+1)$, so the
-    // seminorm is $0$ and there is no $(n+1)$-skeleton to assemble a mass over
-    // (cf. [`Self::codif_dif`]): total at the degenerate top grade rather than
-    // indexing past the skeleton.
-    if u.grade() == self.dim() {
-      return 0.0;
-    }
     self.norm_l2(&u.dif(self.topology))
   }
 
@@ -204,14 +222,12 @@ impl<'a> WhitneyComplex<'a> {
   /// $H^* Lambda^k (delta)$ seminorm: the $L^2$ norm of the codifferential,
   /// $norm(delta u)_(L^2 Lambda^(k-1))$.
   ///
-  /// $0$ at grade $0$ ($delta$ maps into the trivial space). Unlike
+  /// $0$ at grade $0$ ($delta$ maps into the trivial space, so $delta u$ is the
+  /// empty cochain and its norm is $0$ with no guard). Unlike
   /// [`Self::seminorm_hdif`] it costs a mass solve, since $delta$ carries the
   /// mass inverse.
   pub fn seminorm_hcodif(&self, u: &Cochain) -> f64 {
-    match self.codif(u) {
-      Some(sigma) => self.norm_l2(&sigma),
-      None => 0.0,
-    }
+    self.norm_l2(&self.codif(u))
   }
 
   /// The full $H^* Lambda^k (delta)$ norm
@@ -306,9 +322,14 @@ impl HilbertComplex for WhitneyComplex<'_> {
     WhitneyComplex::codif_dif(self, grade)
   }
   /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.
+  /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    self.topology.betti_number(grade)
+    if grade.in_range(self.dim()) {
+      self.topology.betti_number(grade)
+    } else {
+      0
+    }
   }
   /// No boundary is constrained, so the inclusion is the identity.
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
@@ -343,9 +364,16 @@ impl BoundaryWhitneyComplex {
   pub fn boundary_complex(&self) -> &BoundaryComplex {
     &self.boundary
   }
+  /// Total in grade: $0$ outside $[0, dim diff K]$, where $diff K$ carries no
+  /// simplices of that grade.
   pub fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    self.boundary.complex().nsimplices(grade)
+    let boundary = self.boundary.complex();
+    if grade.in_range(boundary.dim()) {
+      boundary.nsimplices(grade)
+    } else {
+      0
+    }
   }
 
   /// The trace $"tr": C^k (K) -> C^k (diff K)$, a cochain map.
@@ -432,21 +460,29 @@ impl<'a> RelativeWhitneyComplex<'a> {
   pub fn dim(&self) -> Dim {
     self.full.dim()
   }
+  /// Total in grade: $0$ outside $[0, n]$, where the relative complex is trivial.
   pub fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    self.interior_simps[grade.index()].len()
+    if grade.in_range(self.dim()) {
+      self.interior_simps[grade.index()].len()
+    } else {
+      0
+    }
   }
 
   /// The inclusion $E: C^k (K, diff K) arrow.hook C^k (K)$,
   /// extending interior cochains by zero onto the boundary.
   ///
   /// A cochain map: $D E_k = E_(k+1) dif_k$. Its transpose restricts
-  /// cochains to the interior DOFs.
+  /// cochains to the interior DOFs. Total in grade: the $0$-columned (or empty)
+  /// matrix outside $[0, n]$, since both DOF counts vanish there.
   pub fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
     let mut coo = CooMatrix::new(self.full.ndofs(grade), self.ndofs(grade));
-    for (relative, &full) in self.interior_simps[grade.index()].iter().enumerate() {
-      coo.push(full, relative, 1.0);
+    if grade.in_range(self.dim()) {
+      for (relative, &full) in self.interior_simps[grade.index()].iter().enumerate() {
+        coo.push(full, relative, 1.0);
+      }
     }
     CsrMatrix::from(&coo)
   }
@@ -470,15 +506,12 @@ impl<'a> RelativeWhitneyComplex<'a> {
 
   /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^(k+1))$ on the
   /// relative complex.
+  ///
+  /// Total in grade with no special case, exactly as [`WhitneyComplex::codif_dif`]:
+  /// the top-grade and out-of-range zeros fall out of the total [`Self::dif`] and
+  /// [`Self::mass`].
   pub fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    // At top grade $dif: Lambda^n -> Lambda^(n+1)$ maps into the zero space, so
-    // $delta dif$ is the zero operator; there is no $(n+1)$-skeleton to assemble
-    // a mass over. Return it explicitly, sized $"ndofs"^2$, keeping the operator
-    // total at the degenerate top grade rather than indexing past the skeleton.
-    if grade == self.dim() {
-      return GalMat::new(self.ndofs(grade), self.ndofs(grade));
-    }
     let dif = self.dif(grade);
     let mass = CsrMatrix::from(&self.mass(grade + 1));
     GalMat::from(&(dif.transpose() * mass * dif))
@@ -519,9 +552,14 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
     RelativeWhitneyComplex::codif_dif(self, grade)
   }
   /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
+  /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    self.full.topology().relative_betti_number(grade)
+    if grade.in_range(self.dim()) {
+      self.full.topology().relative_betti_number(grade)
+    } else {
+      0
+    }
   }
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
@@ -593,7 +631,7 @@ mod test {
       for grade in Dim::ONE.range_to_inclusive(dim) {
         let u = sample(grade, &topology);
         let tau = sample(grade - 1, &topology);
-        let sigma = whitney.codif(&u).expect("grade >= 1");
+        let sigma = whitney.codif(&u);
 
         let mass_lower = CsrMatrix::from(&whitney.mass(grade - 1));
         let mass_k = CsrMatrix::from(&whitney.mass(grade));
@@ -620,7 +658,7 @@ mod test {
 
       for grade in Dim::new(2).range_to_inclusive(dim) {
         let u = sample(grade, &topology);
-        let ddu = whitney.codif(&whitney.codif(&u).unwrap()).unwrap();
+        let ddu = whitney.codif(&whitney.codif(&u));
         assert!(whitney.norm_l2(&ddu) < 1e-9, "dim={dim} grade={grade}");
       }
     }
@@ -647,9 +685,59 @@ mod test {
         assert!((whitney.norm_full(&u) - (l2 * l2 + hd * hd + hcd * hcd).sqrt()).abs() < 1e-12);
         if grade == 0 {
           assert_eq!(whitney.seminorm_hcodif(&u), 0.0, "delta = 0 at grade 0");
-          assert!(whitney.codif(&u).is_none());
+          // delta u is the empty cochain of the trivial space Lambda^(-1) = 0,
+          // not a missing value.
+          let du = whitney.codif(&u);
+          assert_eq!(du.grade(), Dim::new(-1));
+          assert_eq!(du.coeffs().len(), 0);
         }
       }
+    }
+  }
+
+  /// The de Rham operators are total at the trivial ends: a degree past either
+  /// end of the complex names the zero space $Lambda^k = 0$ ($k in.not [0, n]$),
+  /// so every accessor returns the correctly-shaped empty object rather than
+  /// panicking. This is the $Z$-graded degree cashed out --- one step past each
+  /// end runs the *same* code and returns the mathematically trivial answer.
+  #[test]
+  fn operators_are_total_at_the_trivial_ends() {
+    for dim in (1..=3).map(Dim::from) {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      let ndofs0 = whitney.ndofs(Dim::ZERO);
+      let ndofs_top = whitney.ndofs(dim);
+
+      for ghost in [Dim::new(-1), dim + 1] {
+        assert_eq!(whitney.ndofs(ghost), 0, "dim={dim} ghost={ghost}");
+        assert_eq!(whitney.harmonic_dim(ghost), 0);
+
+        let mass = whitney.mass(ghost);
+        assert_eq!((mass.nrows(), mass.ncols()), (0, 0));
+
+        let ldd = whitney.codif_dif(ghost);
+        assert_eq!((ldd.nrows(), ldd.ncols()), (0, 0));
+
+        let incl = HilbertComplex::inclusion(&whitney, ghost);
+        assert_eq!((incl.nrows(), incl.ncols()), (0, 0));
+      }
+
+      // $dif$ at each end keeps one honest zero dimension: $dif^(-1): 0 ->
+      // Lambda^0$ is $"ndofs"(0) times 0$, the top $dif^n: Lambda^n -> 0$ is
+      // $0 times "ndofs"(n)$.
+      let d_below = whitney.dif(Dim::new(-1));
+      assert_eq!((d_below.nrows(), d_below.ncols()), (ndofs0, 0));
+      let d_top = whitney.dif(dim);
+      assert_eq!((d_top.nrows(), d_top.ncols()), (0, ndofs_top));
+
+      // The top-grade stiffness is the honest $"ndofs"(n)^2$ zero operator, from
+      // the general formula with no special case.
+      let ldd_top = whitney.codif_dif(dim);
+      assert_eq!((ldd_top.nrows(), ldd_top.ncols()), (ndofs_top, ndofs_top));
+      let ldd_top = CsrMatrix::from(&ldd_top);
+      assert!(ldd_top.values().iter().all(|&v| v == 0.0), "dim={dim}");
     }
   }
 }
