@@ -2,8 +2,10 @@
 
 pub mod cartesian;
 pub mod composition;
+pub mod permutation;
 
 pub use composition::Composition;
+pub use permutation::Permutation;
 
 /// The degree of a graded structure: the dimension of a simplex, the grade of an
 /// exterior form, the degree of a cochain --- one $ZZ$-grading index. The de

@@ -61,7 +61,7 @@ depending on nothing but `nalgebra-sparse`, joining the ladder only where
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
-| `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `cartesian::` (radix multi-indices) |
+| `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature; Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
@@ -391,8 +391,17 @@ A `Composition` is an exponent vector, the basis of $"Sym"^d$: the graded monoid
 $x^k x^(k') = x^(k + k')$, no sign. Stars and bars bijects them and is kept as a
 theorem, never as a representation — it is not natural in the ambient size,
 absorbing an unbounded *degree* into an index count a combination bounds by the
-dimension, which is how a bitset ceiling leaks into a refinement level. Each
-owns its representation.
+dimension, which is how a bitset ceiling leaks into a refinement level. A
+`Permutation` is a bijection, the group $S_n$: the one of the three carrying
+$"sgn"$ as a homomorphism rather than as the sign of a reordering. Each owns its
+representation.
+
+**The combinatorics is the library's own.** The enumeration order of these
+objects is load-bearing — it fixes basis indices, and through the Kuhn and
+Freudenthal constructions it fixes which child of a refinement gets which cell
+index. So it is defined, documented and tested here, never inherited from a
+dependency's unspecified iteration order. An external crate may still be a
+convenience adapter over an iterator; it may not be the definition of an index.
 
 **Colexicographic order is the one indexing convention.** Basis blades,
 combinations, simplex vertices and the simplices within a skeleton are all
@@ -400,6 +409,13 @@ colex-ordered, with `Combination::rank()` as the canonical index — that shared
 order is what lines up the coefficients of an `ExteriorElement`, the local faces
 of a cell, and global position in a `Skeleton`. Lexicographic order compiles
 just as well and silently means something else. A new ordered structure is colex.
+
+The convention earns its keep by making a rank independent of the ambient size,
+so growing the ambient never renumbers what is already there. `Combination::rank`
+is the combinatorial number system $sum_i binom(c_i, i+1)$ and `Permutation::rank`
+the factorial number system $sum_j d_j dot j!$ with
+$d_j = \#{i < j : p_i < p_j}$ — neither formula mentions $n$. `cartesian::grid`
+is the same order on radix digits, least significant axis fastest.
 
 **Linalg backends by role.** nalgebra dense (`Matrix`/`Vector`) for element-local
 math (Gramians, element matrices, exterior powers); `nalgebra-sparse` (`CooMatrix`)

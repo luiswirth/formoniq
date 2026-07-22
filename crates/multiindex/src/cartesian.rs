@@ -20,6 +20,19 @@ pub fn linear2cartesian(mut lin_idx: usize, radix: usize, dim: usize) -> Vec<usi
   cart_idx
 }
 
+/// The whole grid ${0, dots, "radix"-1}^"dim"$, in linear-index order.
+///
+/// Colexicographic on the digits, the crate-wide convention: the least
+/// significant axis varies fastest. The $i$-th item is
+/// [`linear2cartesian`]`(i, radix, dim)`.
+///
+/// Total at the degenerate ends: dimension $0$ yields the one empty index (the
+/// single point of a $0$-fold product), radix $0$ in positive dimension yields
+/// nothing.
+pub fn grid(radix: usize, dim: usize) -> impl Iterator<Item = Vec<usize>> {
+  (0..radix.pow(dim as u32)).map(move |i| linear2cartesian(i, radix, dim))
+}
+
 /// Converts a cartesian multi-index in ${0, dots, "radix"-1}^"dim"$ to a
 /// linear index in `0..radix^dim`.
 pub fn cartesian2linear(cart_idx: &[usize], radix: usize) -> usize {
@@ -96,6 +109,27 @@ mod tests {
   use super::*;
   use crate::combinations;
   use itertools::Itertools;
+
+  /// The grid enumerates every multi-index exactly once, in linear-index
+  /// order, and is total at the degenerate ends.
+  #[test]
+  fn grid_enumerates_the_product() {
+    for radix in 0usize..=4 {
+      for dim in 0..=4 {
+        let all: Vec<Vec<usize>> = grid(radix, dim).collect();
+        assert_eq!(all.len(), radix.pow(dim as u32), "radix {radix}, dim {dim}");
+        for (i, cart) in all.iter().enumerate() {
+          assert_eq!(cart.len(), dim);
+          assert_eq!(cartesian2linear(cart, radix), i);
+        }
+        let mut distinct = all.clone();
+        distinct.sort();
+        distinct.dedup();
+        assert_eq!(distinct.len(), all.len());
+      }
+    }
+    assert_eq!(grid(0, 0).collect::<Vec<_>>(), vec![Vec::<usize>::new()]);
+  }
 
   /// Linear and cartesian indexing are mutually inverse over the whole grid
   /// $0.."radix"^"dim"$, and every cartesian component stays in
