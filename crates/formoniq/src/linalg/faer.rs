@@ -44,8 +44,14 @@ pub struct FaerCholesky {
 }
 impl FaerCholesky {
   pub fn new(a: CsrMatrix) -> Self {
-    let raw = nalgebra2faer(a).sp_cholesky(faer::Side::Upper).unwrap();
-    Self { raw }
+    Self::try_new(a).expect("sparse Cholesky factorization failed")
+  }
+  /// Fallible variant: `None` when the matrix is not positive definite (an
+  /// indefinite mass on a Lorentzian geometry, say), for callers that fall back
+  /// to an indefinite solver rather than panic.
+  pub fn try_new(a: CsrMatrix) -> Option<Self> {
+    let raw = nalgebra2faer(a).sp_cholesky(faer::Side::Upper).ok()?;
+    Some(Self { raw })
   }
 
   pub fn solve(&self, b: &Vector) -> Vector {
