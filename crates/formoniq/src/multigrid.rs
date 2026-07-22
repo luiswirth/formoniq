@@ -20,7 +20,7 @@
 //! symmetric and the two-grid analysis clean. That the two agree at grade 0 is a
 //! test, not an assumption.
 
-use derham::{cochain::Cochain, prolongate::prolongate};
+use derham::prolongate::prolongation_matrix;
 use iterative::{
   Jacobi, Level, VCycle,
   krylov::cg,
@@ -28,8 +28,8 @@ use iterative::{
 };
 use simplicial::{
   geometry::metric::mesh::MeshLengthsSq,
-  linalg::{CooMatrix, CsrMatrix, Vector},
-  topology::{complex::Complex, ordering::CellOrdering, refine::Subdivision},
+  linalg::{CsrMatrix, Vector},
+  topology::{complex::Complex, ordering::CellOrdering},
 };
 
 use crate::{
@@ -61,7 +61,7 @@ impl Grade0Multigrid {
   /// `sweeps` pre- and post-smoothing steps.
   ///
   /// The base ordering is colex; each refined level inherits the ordering the
-  /// [`Subdivision`] carries, so the tower composes (invariant 7). Refinement is
+  /// `Subdivision` carries, so the tower composes (invariant 7). Refinement is
   /// metric-free and exact --- a flat cell subdivided stays flat --- so the
   /// tower introduces no geometric error of its own.
   ///
@@ -84,7 +84,7 @@ impl Grade0Multigrid {
       let coarse = complexes.last().unwrap();
       let sub = coarse.refine_with(&ordering, 2);
       let fine_geometry = geometries.last().unwrap().refine(&sub, coarse);
-      let prolongation = prolongation_matrix(coarse, &sub);
+      let prolongation = prolongation_matrix(0, coarse, &sub);
       ordering = sub.ordering().clone();
       let fine = sub.into_complex();
       prolongations.push(prolongation);
@@ -147,30 +147,6 @@ impl Grade0Multigrid {
   }
 }
 
-/// The Whitney prolongation $P: C^0("coarse") -> C^0("fine")$ as a sparse matrix,
-/// column $j$ being the prolongation of the coarse unit cochain $e_j$.
-///
-/// Metric-free and exact (degree-1 quadrature integrates the affine coarse
-/// Whitney forms without error), inheriting both from [`prolongate`]. Built one
-/// column at a time: correct and simple, at a setup cost quadratic in the coarse
-/// DOF count that a direct assembly from the subdivision provenance would remove.
-fn prolongation_matrix(coarse: &Complex, sub: &Subdivision) -> CsrMatrix {
-  let ncoarse = coarse.nsimplices(0);
-  let nfine = sub.complex().nsimplices(0);
-  let mut coo = CooMatrix::new(nfine, ncoarse);
-  for j in 0..ncoarse {
-    let mut unit = Vector::zeros(ncoarse);
-    unit[j] = 1.0;
-    let column = prolongate(&Cochain::new(0, unit), coarse, sub);
-    for (i, &value) in column.coeffs().iter().enumerate() {
-      if value != 0.0 {
-        coo.push(i, j, value);
-      }
-    }
-  }
-  CsrMatrix::from(&coo)
-}
-
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -221,7 +197,7 @@ mod tests {
     let ordering = CellOrdering::colex(&topology);
     let sub = topology.refine_with(&ordering, 2);
     let fine_geometry = geometry.refine(&sub, &topology);
-    let p = prolongation_matrix(&topology, &sub);
+    let p = prolongation_matrix(0, &topology, &sub);
 
     let a_fine = WhitneyComplex::new(sub.complex(), &fine_geometry).hdif_gram(0);
     let galerkin = &p.transpose() * &(&a_fine * &p);
