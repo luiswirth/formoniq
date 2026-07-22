@@ -9,18 +9,20 @@
 //!   count grows with the $O(h^(-2))$ condition number;
 //! - V-cycle-preconditioned CG, whose iteration count is mesh-independent.
 //!
-//! What the run shows is the *scaling*, not a headline speedup at small $N$: the
-//! MG-CG iteration count is flat under refinement while Jacobi-CG's grows with
-//! $O(h^(-1))$ and the direct factorization's cost climbs superlinearly. The
-//! V-cycle *solve* is cheap and competitive per right-hand side.
+//! Two things the numbers make concrete. MG-CG decisively beats the naive
+//! iterative solver: at the finest level its solve is more than an order of
+//! magnitude faster than Jacobi-CG, whose iteration count has grown into the
+//! thousands. Against the *direct* solve it has not yet won in wall clock: in 2D
+//! the sparse Cholesky is very strong (near-linear fill under nested dissection,
+//! a tiny back-solve), so the crossover sits beyond these sizes -- it is in 3D,
+//! where the direct factorization is $O(N^2)$, or under many right-hand sides,
+//! that MG's $O(N)$ solve pays off. What the run does show is the scaling that
+//! guarantees the crossover exists: the MG-CG iteration count is flat.
 //!
-//! The honest caveat is the setup. This minimal version builds the Whitney
-//! prolongation column by column (see `multigrid::prolongation_matrix`), an
-//! $O(N^2)$ cost that dominates the whole run and is what stops the sweep short
-//! of the DOF count where MG's $O(N)$ solve overtakes the direct solve. A
-//! linear-time prolongation assembled from the subdivision provenance would
-//! remove it; until then the crossover is out of reach here, and the takeaway is
-//! the iteration-count scaling, not the wall-clock crossover. Run by hand:
+//! The setup is now linear in the DOF count (the Whitney prolongation is
+//! assembled in one pass, #118); what remains of it is the finest-level operator
+//! assembly, which the direct solve reuses for free, so the setup column
+//! overstates MG's true marginal cost. Run by hand:
 //!
 //! ```sh
 //! cargo run --release --example multigrid
@@ -65,9 +67,7 @@ fn main() {
 
   let stop = StopCriterion::rtol(RTOL);
 
-  // Capped at 4: the O(N^2) prolongation setup, not the solve, is what bounds the
-  // sweep. See the module docs.
-  for refinements in 1..=4 {
+  for refinements in 1..=7 {
     let (topology, geometry) = unit_square();
 
     // The multigrid solver owns the tower; its finest operator is the shared
@@ -90,9 +90,18 @@ fn main() {
 
     let ((x_mg, mg_report), mg_sol) = timed(|| mg.solve(&b, stop));
 
-    for (name, x) in [("direct", &x_direct), ("jac-cg", &x_jac), ("mg-cg", &x_mg)] {
-      let err = (x - &x_true).norm();
-      assert!(err < 1e-6, "{name} solution wrong at n = {n}: err {err}");
+    // A residual tolerance does not tightly bound the solution error on an
+    // ill-conditioned system, so the iterative solvers are held to a looser
+    // relative error than the direct solve; all three must still reproduce the
+    // manufactured solution.
+    let rel = |x: &Vector| (x - &x_true).norm() / x_true.norm();
+    assert!(rel(&x_direct) < 1e-9, "direct solution wrong at n = {n}");
+    for (name, x) in [("jac-cg", &x_jac), ("mg-cg", &x_mg)] {
+      assert!(
+        rel(x) < 1e-4,
+        "{name} solution wrong at n = {n}: rel {}",
+        rel(x)
+      );
     }
 
     println!(
@@ -104,7 +113,7 @@ fn main() {
   }
 
   println!("\ntimes in seconds; 'it' is the CG iteration count to rtol {RTOL:e}.");
-  println!("the mg-cg iteration count stays flat while jac-cg climbs with 1/h and");
-  println!("the direct factorization grows superlinearly. the mg setup is O(N^2)");
-  println!("here (column-by-column prolongation) and is the current bottleneck.");
+  println!("mg-cg iterations stay flat while jac-cg climbs with 1/h; mg-cg's solve");
+  println!("beats jac-cg by an order of magnitude. the 2D direct solve is still");
+  println!("faster in wall clock here -- the crossover is in 3D or under many rhs.");
 }
