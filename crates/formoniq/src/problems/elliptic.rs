@@ -441,6 +441,49 @@ mod test {
     }
   }
 
+  /// Bench, not an assertion: block-preconditioned MINRES against the direct LU
+  /// on the mixed Hodge-Laplace system. Both are timed end to end --- the
+  /// iterative side pays for factoring its SPD blocks, the direct side for
+  /// factoring the whole indefinite system. Run with
+  /// `cargo test -p formoniq --release bench_mixed_solve -- --nocapture --ignored`.
+  #[test]
+  #[ignore = "timing bench, run explicitly with --nocapture"]
+  fn bench_mixed_solve() {
+    use std::time::Instant;
+
+    for (dim, refinement) in [(2usize, 24usize), (3, 8)] {
+      let (topology, coords) = CartesianGrid::new_unit(dim, refinement).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let relative = WhitneyComplex::new(&topology, &lengths).relative();
+
+      for grade in 0..=dim {
+        let harmonics = solve_harmonics(&relative, grade).unwrap();
+        let source = Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0);
+        let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
+        let n = a.nrows();
+
+        let t = Instant::now();
+        let x_lu = FaerLu::new(a.clone()).solve(&b);
+        let t_lu = t.elapsed();
+
+        let t = Instant::now();
+        let precond = mixed_block_preconditioner(&relative, grade, harmonics.ncols()).unwrap();
+        let t_setup = t.elapsed();
+        let t = Instant::now();
+        let (x_min, report) = minres(&a, &precond, &b, StopCriterion::rtol(1e-10));
+        let t_iter = t.elapsed();
+
+        eprintln!(
+          "dim {dim} grade {grade}: n={n:>7}  LU {t_lu:>10.2?}  \
+           block-MINRES {:>10.2?} (setup {t_setup:>9.2?} + {t_iter:>9.2?}, {} iters)  agree {:.1e}",
+          t_setup + t_iter,
+          report.iters,
+          (&x_min - &x_lu).norm() / x_lu.norm().max(1.0),
+        );
+      }
+    }
+  }
+
   /// The point of the block preconditioner: the MINRES iteration count stays
   /// bounded under mesh refinement (Arnold-Falk-Winther norm equivalence),
   /// rather than growing like the unpreconditioned condition number.
