@@ -5,6 +5,7 @@ use crate::{
 
 use {
   crate::linalg::{
+    DirectInverse,
     eigen::{EigenError, sparse_shift_invert_eigen},
     faer::FaerLu,
   },
@@ -12,37 +13,56 @@ use {
   exterior::ExteriorGrade,
 };
 
+use iterative::{BlockDiagonal, StopCriterion, krylov::minres};
 use itertools::Itertools;
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
 use std::mem;
 
-/// The mixed Hodge-Laplace source problem $Delta u = f$ on any discrete Hilbert
-/// complex: absolute (natural / Neumann) boundary conditions on the full
-/// [`WhitneyComplex`], essential (homogeneous Dirichlet) on the
-/// [`RelativeWhitneyComplex`] --- the same code either way.
+/// The stable block-diagonal preconditioner for the mixed Hodge-Laplace
+/// saddle point: the full $H Lambda(dif)$ inner product on each of the
+/// $sigma$- and $u$-spaces (Arnold-Falk-Winther), the identity on the tiny
+/// harmonic multiplier (the harmonics are mass-orthonormal). Each block is a
+/// direct SPD solve.
 ///
-/// The right-hand side `source_galvec` is assembled in the ambient
-/// $cal(W) Lambda^k$; it is restricted to this complex's DOFs internally, and
-/// the returned $(sigma, u, p)$ cochains are extended back to the ambient space,
-/// so the caller is oblivious to the boundary condition. `p` is the harmonic
-/// component of $u$, fixed to zero against the harmonic space $cal(H)^k$.
-///
-/// Fails only where [`solve_harmonics`] does: the harmonic basis
-/// is an eigensolve.
-///
-/// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
-/// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
-pub fn solve_source<C: HilbertComplex>(
+/// `None` when a block is not positive definite --- an indefinite mass on a
+/// Lorentzian geometry --- signalling the caller to fall back to a whole-system
+/// indefinite factorization. This is the signature guard, read off the
+/// factorization itself rather than a separate metric test.
+fn mixed_block_preconditioner<C: HilbertComplex>(
+  complex: &C,
+  grade: ExteriorGrade,
+  harmonic_len: usize,
+) -> Option<BlockDiagonal<DirectInverse>> {
+  let mut blocks = Vec::new();
+  if grade > 0 {
+    blocks.push(DirectInverse::try_new(complex.hdif_gram(grade - 1))?);
+  }
+  blocks.push(DirectInverse::try_new(complex.hdif_gram(grade))?);
+  if harmonic_len > 0 {
+    let mut identity = CooMatrix::zeros(harmonic_len, harmonic_len);
+    for i in 0..harmonic_len {
+      identity.push(i, i, 1.0);
+    }
+    blocks.push(DirectInverse::try_new(CsrMatrix::from(&identity))?);
+  }
+  Some(BlockDiagonal::new(blocks))
+}
+
+/// Assemble the augmented mixed Hodge-Laplace KKT system $(sigma, u, p)$ and its
+/// right-hand side: the saddle point of the mixed formulation, bordered by the
+/// harmonic constraint $angle.l u, M h angle.r = 0$ that fixes the solution
+/// against the harmonic space. Returns the system matrix, the right-hand side,
+/// and the $sigma$/$u$ block lengths.
+fn assemble_mixed_kkt<C: HilbertComplex>(
   complex: &C,
   source_galvec: GalVec,
   grade: ExteriorGrade,
-) -> Result<(Cochain, Cochain, Cochain), EigenError> {
-  let harmonics = solve_harmonics(complex, grade)?;
-
+  harmonics: &Matrix,
+) -> (CsrMatrix, Vector, usize, usize) {
   let galmats = MixedGalMats::compute(complex, grade);
 
   let mass_u = CsrMatrix::from(&galmats.mass_u);
-  let mass_harmonics = &mass_u * &harmonics;
+  let mass_harmonics = &mass_u * harmonics;
 
   let sigma_len = galmats.sigma_len();
   let u_len = galmats.u_len();
@@ -80,10 +100,64 @@ pub fn solve_source<C: HilbertComplex>(
     Vector::zeros(harmonics.ncols());
   ];
 
-  // The KKT system is symmetric indefinite, so Cholesky is out; sparse LU
-  // solves it directly. Unsymmetric LU forfeits the ~2x a symmetric
-  // $L D L^top$ would save on an indefinite system, nothing more.
-  let galsol = FaerLu::new(system_matrix).solve(&rhs);
+  // Symmetrize the saddle point by negating the $sigma$ equations. The mixed
+  // form assembles the antisymmetric $sigma$-$u$ coupling ($-B^T$ above, $B$
+  // below); negating the $sigma$ block-row turns it into the symmetric
+  // $mat(-M, B^T; B, K)$. The $sigma$ right-hand side is zero, so the solution
+  // is unchanged --- and the symmetry is what lets MINRES solve it, while the
+  // direct factorization is indifferent to it.
+  let mut sign = CooMatrix::zeros(system_matrix.nrows(), system_matrix.nrows());
+  for i in 0..system_matrix.nrows() {
+    sign.push(i, i, if i < sigma_len { -1.0 } else { 1.0 });
+  }
+  let sign = CsrMatrix::from(&sign);
+  (&sign * &system_matrix, &sign * &rhs, sigma_len, u_len)
+}
+
+/// The mixed Hodge-Laplace source problem $Delta u = f$ on any discrete Hilbert
+/// complex: absolute (natural / Neumann) boundary conditions on the full
+/// [`WhitneyComplex`], essential (homogeneous Dirichlet) on the
+/// [`RelativeWhitneyComplex`] --- the same code either way.
+///
+/// The right-hand side `source_galvec` is assembled in the ambient
+/// $cal(W) Lambda^k$; it is restricted to this complex's DOFs internally, and
+/// the returned $(sigma, u, p)$ cochains are extended back to the ambient space,
+/// so the caller is oblivious to the boundary condition. `p` is the harmonic
+/// component of $u$, fixed to zero against the harmonic space $cal(H)^k$.
+///
+/// Fails only where [`solve_harmonics`] does: the harmonic basis
+/// is an eigensolve.
+///
+/// [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
+/// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
+pub fn solve_source<C: HilbertComplex>(
+  complex: &C,
+  source_galvec: GalVec,
+  grade: ExteriorGrade,
+) -> Result<(Cochain, Cochain, Cochain), EigenError> {
+  let harmonics = solve_harmonics(complex, grade)?;
+  let (system_matrix, rhs, sigma_len, u_len) =
+    assemble_mixed_kkt(complex, source_galvec, grade, &harmonics);
+
+  // The KKT system is symmetric indefinite. On a Riemannian geometry its
+  // diagonal blocks are SPD, so a block-diagonal-preconditioned MINRES solves
+  // it in an iteration count bounded independently of the mesh (the
+  // Arnold-Falk-Winther norm equivalence), beating a direct factorization at
+  // scale and avoiding its fill. On a Lorentzian geometry a block is indefinite,
+  // the preconditioner cannot be built, and sparse LU carries the solve --- so
+  // the method stays total over signature. LU also catches the rare
+  // non-convergence of the iterative path.
+  let galsol = match mixed_block_preconditioner(complex, grade, harmonics.ncols()) {
+    Some(precond) => {
+      let (sol, report) = minres(&system_matrix, &precond, &rhs, StopCriterion::rtol(1e-10));
+      if report.converged {
+        sol
+      } else {
+        FaerLu::new(system_matrix).solve(&rhs)
+      }
+    }
+    None => FaerLu::new(system_matrix).solve(&rhs),
+  };
 
   // Extend the solution back to the ambient $cal(W) Lambda^k$ by zero on the
   // constrained boundary, $E u$, so callers see full cochains regardless of BC.
@@ -328,5 +402,73 @@ impl MixedGalMats {
     } = self;
     let codif_u = codif_u.clone();
     CooMatrix::block(&[&[mass_sigma, &(codif_u.neg())], &[dif_sigma, codifdif_u]])
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use crate::whitney_complex::WhitneyComplex;
+  use simplicial::mesher::cartesian::CartesianGrid;
+
+  /// Block-preconditioned MINRES solves the mixed Hodge-Laplace KKT system to
+  /// the same solution as the direct LU factorization, swept over dimension and
+  /// grade on a Riemannian mesh where the diagonal blocks are SPD.
+  #[test]
+  fn block_minres_matches_direct_on_the_mixed_system() {
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let relative = WhitneyComplex::new(&topology, &lengths).relative();
+
+      for grade in 0..=dim {
+        let harmonics = solve_harmonics(&relative, grade).unwrap();
+        let source = Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0);
+        let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
+
+        let precond = mixed_block_preconditioner(&relative, grade, harmonics.ncols())
+          .expect("SPD blocks on a Riemannian geometry");
+        let (x_min, report) = minres(&a, &precond, &b, StopCriterion::rtol(1e-11));
+        assert!(report.converged, "dim={dim} grade={grade} did not converge");
+
+        let x_lu = FaerLu::new(a.clone()).solve(&b);
+        let err = (&x_min - &x_lu).norm() / x_lu.norm().max(1.0);
+        assert!(
+          err < 1e-7,
+          "dim={dim} grade={grade}: block-MINRES vs LU {err:.1e}"
+        );
+      }
+    }
+  }
+
+  /// The point of the block preconditioner: the MINRES iteration count stays
+  /// bounded under mesh refinement (Arnold-Falk-Winther norm equivalence),
+  /// rather than growing like the unpreconditioned condition number.
+  #[test]
+  fn block_minres_iteration_count_is_mesh_independent() {
+    let grade = 1;
+    let iters_at = |refinement: usize| {
+      let (topology, coords) = CartesianGrid::new_unit(2, refinement).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let relative = WhitneyComplex::new(&topology, &lengths).relative();
+      let harmonics = solve_harmonics(&relative, grade).unwrap();
+      let source = Vector::from_fn(topology.nsimplices(grade), |i, _| {
+        ((i % 5) as f64 - 2.0) * 0.3
+      });
+      let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
+      let precond = mixed_block_preconditioner(&relative, grade, harmonics.ncols()).unwrap();
+      let (_, report) = minres(&a, &precond, &b, StopCriterion::rtol(1e-10));
+      assert!(report.converged);
+      report.iters
+    };
+
+    let coarse = iters_at(4);
+    let fine = iters_at(8); // 4x the DOFs
+    // Bounded, not growing with h: the unpreconditioned count would roughly
+    // double. A small additive slack absorbs discretization variation.
+    assert!(
+      fine <= coarse + 8,
+      "coarse={coarse} fine={fine}: not mesh-independent"
+    );
   }
 }
