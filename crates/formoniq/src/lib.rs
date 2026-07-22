@@ -7,6 +7,7 @@ pub mod assemble;
 pub mod bc;
 pub mod fe;
 pub mod linalg;
+pub mod multigrid;
 pub mod operators;
 pub mod problems;
 pub mod time;
