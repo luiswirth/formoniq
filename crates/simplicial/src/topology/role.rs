@@ -254,6 +254,18 @@ impl<'m> Ridge<'m> {
       .filter(move |facet| self.simplex().is_subsimplex_of(facet.simplex()))
   }
 
+  /// Whether the hinge lies on the boundary: one of the facets containing it
+  /// bounds a single cell, so its [`fan`](Self::fan) is open rather than
+  /// closed. The codimension-2 reading of [`Facet::is_boundary`], and the
+  /// condition under which there is no loop around the hinge to transport
+  /// along.
+  pub fn is_boundary(self) -> bool {
+    self
+      .get()
+      .cells()
+      .any(|cell| self.hinge_facets(cell).any(Facet::is_boundary))
+  }
+
   /// The fan of the hinge: the incident cells in adjacency order around the
   /// ridge, consecutive ones sharing a facet that contains it. Closed (the
   /// last cell neighboring the first) iff the ridge is interior; an open fan

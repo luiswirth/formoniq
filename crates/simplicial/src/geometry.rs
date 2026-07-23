@@ -10,7 +10,11 @@ pub mod coord;
 pub mod metric;
 pub mod refine;
 
-use crate::{Dim, atlas::refsimp_vol, topology::complex::Complex};
+use crate::{
+  Dim,
+  atlas::refsimp_vol,
+  topology::{complex::Complex, role::roles},
+};
 
 use gramian::Metric;
 
@@ -27,25 +31,20 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 }
 
 /// Discrete Gaussian curvature at every vertex of a 2-dimensional simplicial
-/// manifold, by the angle defect: $K(v) = (2 pi - sum_(f ni v) theta_f (v)) \/
-/// A(v)$ at an interior vertex, or $(pi - sum_f theta_f (v)) \/ A(v)$ at a
-/// boundary one -- the standard convention when a mesh has a rim, folding the
-/// boundary's own geodesic curvature into $K$ rather than tracking it apart.
-/// $A(v)$ is the barycentric lumped area $sum_(K ni v) "vol"(K) \/ 3$, the
-/// standard mass-lumping convention.
+/// manifold: the Regge deficit angle divided by the area it is spread over,
+/// $K(v) = epsilon_v \/ A(v)$.
 ///
-/// Intrinsic: reads the Regge edge lengths, not an embedding, since
-/// [`Gramian::vertex_angle`](gramian::Gramian::vertex_angle) needs no
-/// coordinates -- a Regge manifold given only as [`MeshLengthsSq`] has a
-/// Gaussian curvature exactly as well as an embedded one, which is why the
-/// primitive is what this consumes. This
-/// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the
-/// hinges are vertices, which is the one case implemented here. Generalizing
-/// to an $(n-2)$-dimensional hinge of an $n$-manifold needs dihedral angles
-/// between codimension-1 facets, not corner angles between edges, and this
-/// crate does not yet carry that computation -- fixed at 2D for the same
-/// reason [`crate::mesher::sphere`] is: the concept itself, not a shortcut, is
-/// what is 2-dimensional here.
+/// Nothing here is 2-dimensional except the packaging. The deficit angle
+/// ([`MeshLengthsSq::deficit_angle`]) is Regge curvature at a hinge in any
+/// dimension, and a vertex is what a hinge is when $n = 2$; what this adds is
+/// the density, $A(v) = sum_(K in v) vol(K) \/ 3$, the barycentric lumped area
+/// under the standard mass-lumping convention. Gaussian curvature is a
+/// *scalar field*, so it needs that division, and only in 2D is the deficit's
+/// hinge a point for the density to sit at.
+///
+/// Intrinsic: reads the Regge edge lengths, not an embedding -- a Regge
+/// manifold given only as [`MeshLengthsSq`] has a Gaussian curvature exactly as
+/// well as an embedded one, which is why the primitive is what this consumes.
 ///
 /// Exact, not an approximation of the smooth quantity: this is what
 /// Gauss-Bonnet defines discrete curvature to be, with
@@ -58,30 +57,25 @@ pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -
     "Gaussian curvature is a 2D-surface quantity."
   );
   let nvertices = topology.skeleton_raw(Dim::ZERO).len();
-  let boundary: std::collections::HashSet<usize> =
-    topology.boundary_vertices().into_iter().collect();
 
-  let mut angle_sum = vec![0.0; nvertices];
   let mut areas = vec![0.0; nvertices];
   for cell in topology.cells().handle_iter() {
-    let metric = geometry.cell_metric(cell);
-    let vol = cell_volume(&metric);
-    let verts = &cell.simplex().vertices;
-    for m in 0..3 {
-      let (a, b) = ((m + 1) % 3, (m + 2) % 3);
-      angle_sum[verts[m]] += metric.vector_gramian().vertex_angle(m, a, b);
-      areas[verts[m]] += vol / 3.0;
+    let vol = cell_volume(&geometry.cell_metric(cell));
+    for &vertex in &cell.simplex().vertices {
+      areas[vertex] += vol / 3.0;
     }
   }
 
-  (0..nvertices)
-    .map(|v| {
-      let target = if boundary.contains(&v) {
-        std::f64::consts::PI
-      } else {
-        std::f64::consts::TAU
-      };
-      (target - angle_sum[v]) / areas[v]
+  let hinges = topology
+    .role_skeleton::<roles::Ridge>()
+    .expect("a 2-complex has ridges");
+  hinges
+    .handle_iter()
+    .map(|hinge| {
+      let deficit = geometry
+        .deficit_angle(hinge)
+        .expect("a Riemannian surface has dihedral angles");
+      deficit / areas[hinge.kidx()]
     })
     .collect()
 }
