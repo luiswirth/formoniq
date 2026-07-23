@@ -1,16 +1,23 @@
 //! The native CLI: the interactive viewer by default, a headless render with
-//! `export`. Native only -- the web build enters through the `cdylib` and
-//! `formoniq_studio::web`, never this binary.
+//! `export`, and the data itself with `vtu`. Native only -- the web build
+//! enters through the `cdylib` and `formoniq_studio::web`, never this binary.
+//!
+//! The two headless subcommands are the same scene asked for two ways. `export`
+//! renders it, so it needs an adapter; `vtu` writes it, so it needs nothing.
+//! They share the study and mesh axes verbatim, which is what makes a picture
+//! and a file comparable.
 
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
+use derham::cochain::Cochain;
 use formoniq_studio::export::{ExportSpec, export};
 use formoniq_studio::gallery::{
   BuiltinMesh, CochainSpec, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT,
   GRID_DIM_MAX, HEAT_FINAL_TIME, MeshSource, NamedCochain, QUOTIENT_CELLS_DEFAULT, QuotientSurface,
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, Study, WAVE_FINAL_TIME,
 };
+use formoniq_studio::io::vtu;
 use simplicial::Dim;
 
 #[derive(Parser)]
@@ -65,6 +72,74 @@ enum Command {
     #[arg(long, default_value_t = 60)]
     fps: u32,
   },
+  /// Write a scene's mesh and every field on it to a `.vtu`, for ParaView or
+  /// PyVista. No window and no GPU: the study is solved and the data written,
+  /// with nothing rasterized.
+  Vtu {
+    /// Destination `.vtu`.
+    out: PathBuf,
+    /// Which study to run. Same names as `export`.
+    #[arg(long, value_parser = parse_study, default_value = "grade0")]
+    study: Study,
+    /// Which mesh to run it on. Same names as `export`.
+    #[arg(long, value_parser = parse_mesh, default_value = "sphere")]
+    mesh: MeshSource,
+    /// A cochain saved by the engine (`Cochain::save`) to write, in addition to
+    /// `--study`'s own. Repeatable; each is named for its file stem. Given at
+    /// least one, exactly these are written rather than `--study`'s fields.
+    #[arg(long = "cochain")]
+    cochains: Vec<PathBuf>,
+  },
+}
+
+/// Resolves the two axes of a scene the way both subcommands mean them: an
+/// explicit cochain list, given one, otherwise the named study's own fields.
+fn resolve_study(study: Study, cochains: Vec<PathBuf>) -> Study {
+  if cochains.is_empty() {
+    return study;
+  }
+  Study::Cochains(
+    cochains
+      .into_iter()
+      .map(|path| NamedCochain {
+        name: path
+          .file_stem()
+          .map(|n| n.to_string_lossy().into_owned())
+          .unwrap_or_else(|| path.to_string_lossy().into_owned()),
+        spec: CochainSpec::File(path),
+      })
+      .collect(),
+  )
+}
+
+/// Solves the study and writes its scene as VTU.
+///
+/// Every field of the scene goes into the one file, scalar and line fields
+/// alike: VTU carries named arrays and ParaView picks among them, so the
+/// analogue of the viewer's field picker is the reader's own, and nothing has
+/// to be chosen here. A field on a clock is written at its own stored instant,
+/// the file being a still.
+fn write_vtu(study: Study, mesh_source: MeshSource, out: &Path) -> Result<(), String> {
+  let mesh = mesh_source.build()?;
+  let scene = study.build(&mesh);
+
+  let named: Vec<(String, &Cochain)> = scene
+    .fields
+    .iter()
+    .map(|field| (field.name.clone(), &field.cochain))
+    .chain(
+      scene
+        .line_fields
+        .iter()
+        .map(|field| (field.name.clone(), &field.cochain)),
+    )
+    .collect();
+  let fields: Vec<vtu::NamedCochain> = named
+    .iter()
+    .map(|(name, cochain)| vtu::NamedCochain::new(name, cochain))
+    .collect();
+
+  vtu::write(out, &scene.topology, &scene.coords, &fields).map_err(|error| error.to_string())
 }
 
 fn parse_study(s: &str) -> Result<Study, String> {
@@ -197,24 +272,8 @@ pub fn main() {
       fps,
     }) => {
       let _ = env_logger::try_init();
-      let study = if cochains.is_empty() {
-        study
-      } else {
-        Study::Cochains(
-          cochains
-            .into_iter()
-            .map(|path| NamedCochain {
-              name: path
-                .file_stem()
-                .map(|n| n.to_string_lossy().into_owned())
-                .unwrap_or_else(|| path.to_string_lossy().into_owned()),
-              spec: CochainSpec::File(path),
-            })
-            .collect(),
-        )
-      };
       let spec = ExportSpec {
-        study,
+        study: resolve_study(study, cochains),
         mesh_source: mesh,
         field,
         size,
@@ -223,6 +282,19 @@ pub fn main() {
       };
       if let Err(error) = export(&spec, &out) {
         eprintln!("export failed: {error}");
+        std::process::exit(1);
+      }
+      println!("wrote {}", out.display());
+    }
+    Some(Command::Vtu {
+      out,
+      study,
+      mesh,
+      cochains,
+    }) => {
+      let _ = env_logger::try_init();
+      if let Err(error) = write_vtu(resolve_study(study, cochains), mesh, &out) {
+        eprintln!("vtu export failed: {error}");
         std::process::exit(1);
       }
       println!("wrote {}", out.display());
