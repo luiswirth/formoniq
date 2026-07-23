@@ -53,7 +53,7 @@ use simplicial::{
 
 use crate::{
   bake::{GlyphInstance, to_vec3},
-  scene::reduced_form,
+  reduce::reduced_form,
 };
 
 /// The refinement is capped, not left to grow with the cell: an unbounded
@@ -62,14 +62,14 @@ use crate::{
 /// is a worst-case bound on a per-cell count, not a global density control --
 /// it never fires on a mesh whose cells are already commensurate with the
 /// target spacing.
-const GLYPH_REFINEMENT_MAX: usize = 8;
+pub const GLYPH_REFINEMENT_MAX: usize = 8;
 
 /// The arrow's length as a fraction of its lattice's realized spacing. Less than
 /// one so neighbouring arrows keep a gap rather than meeting tip-to-tail: at 2/3
 /// the space between two collinear samples is a third empty, enough to read each
 /// arrow as its own mark while still filling most of the room the lattice gives
 /// it.
-const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
+pub const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
 
 /// The world-space diameter of a cell (greatest inter-vertex distance) and its
 /// shortest edge (least). Cheap, since a cell has only `dim + 1` vertices.
@@ -86,7 +86,9 @@ const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
 ///
 /// A `dim == 0` cell has no edge, so the shortest is `0.0` -- no lattice to
 /// space and no arrow to draw.
-fn cell_extent(coord_simplex: &simplicial::geometry::coord::simplex::SimplexCoords) -> (f64, f64) {
+pub fn cell_extent(
+  coord_simplex: &simplicial::geometry::coord::simplex::SimplexCoords,
+) -> (f64, f64) {
   let vertices: Vec<_> = coord_simplex.coord_iter().collect();
   let (min, max) = vertices
     .iter()
@@ -126,7 +128,7 @@ fn bary_clip4(bary: &Vector) -> [f32; 4] {
 /// every other mark uses, so it tracks the mesh's own detail (a coarse mesh's
 /// big cells get many glyphs, a fine mesh's small cells collapse back to the
 /// $n+1$ floor) without depending on the camera at all.
-fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) -> usize {
+pub fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) -> usize {
   let raw = if target_spacing > 0.0 {
     (diameter / target_spacing).round() as usize
   } else {
@@ -163,7 +165,7 @@ fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64) ->
 /// axis, and no side for the depth bias to lean toward -- the frame built below
 /// is well posed exactly because `cell` is at most a triangle. A volume glyph
 /// is a different mark with a camera-facing frame, not this one run on tets.
-pub(crate) fn bake_glyphs(
+pub fn bake_glyphs(
   topology: &Complex,
   coords: &MeshCoords,
   cochain: &Cochain,
@@ -181,7 +183,7 @@ pub(crate) fn bake_glyphs(
     .into_par_iter()
     .flat_map_iter(|cell| {
       let metric = coords.cell_metric(cell);
-      let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+      let sign = crate::reduce::reduction_sign(topology, cell, cochain.grade());
       // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential
       // pushes the sharped field out of the cell's tangent frame into the
       // ambient one, and `global2bary` reads a point back to the weights the

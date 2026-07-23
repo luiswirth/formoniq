@@ -16,7 +16,7 @@ use wgpu::util::DeviceExt;
 
 use super::particles::ParticleBatch;
 use super::uniform::{GlyphMaterial, SegmentMaterial, SurfaceMaterial};
-use crate::bake::{BakedMesh, BakedVertex, GlyphInstance, PrimBatch, SegmentVertex};
+use realize::bake::{BakedMesh, BakedVertex, GlyphInstance, PrimBatch, SegmentVertex};
 
 /// A `VERTEX` buffer holding `data`, never empty: a zero-length
 /// `create_buffer_init` is rejected, and an empty batch (a field with no

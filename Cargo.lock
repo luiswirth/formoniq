@@ -1240,6 +1240,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "formoniq-realize"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "coorder",
+ "derham",
+ "exterior",
+ "formoniq",
+ "glatt",
+ "gramian",
+ "nalgebra",
+ "rayon",
+ "simplicial",
+]
+
+[[package]]
 name = "formoniq-studio"
 version = "0.1.0"
 dependencies = [
@@ -1258,6 +1274,7 @@ dependencies = [
  "env_logger",
  "exterior",
  "formoniq",
+ "formoniq-realize",
  "getrandom 0.3.4",
  "glatt",
  "gramian",

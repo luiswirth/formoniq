@@ -81,7 +81,7 @@ impl SolveOutcome {
   /// The scene this outcome and the mesh it was solved on make together.
   pub(crate) fn into_scene(self, mesh: &Mesh) -> Scene {
     Scene {
-      surface: crate::surface::Surface::of(&mesh.0, &mesh.1),
+      surface: realize::surface::Surface::of(&mesh.0, &mesh.1),
       topology: mesh.0.clone(),
       coords: mesh.1.clone(),
       fields: self.fields,

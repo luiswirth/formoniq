@@ -27,7 +27,7 @@ use simplicial::{
   topology::complex::Complex,
 };
 
-use crate::scene::{reduction_sign, scalarize};
+use crate::reduce::{reduction_sign, scalarize};
 
 /// Voxels per axis, chosen so one voxel is about the mesh's own mean edge
 /// length and clamped to what a texture upload should carry. Derived from the

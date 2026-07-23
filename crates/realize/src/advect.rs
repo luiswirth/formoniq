@@ -50,7 +50,7 @@ use simplicial::{
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
 };
 
-use crate::scene::reduced_form;
+use crate::reduce::reduced_form;
 
 /// The ambient dimension's own bound on the intrinsic one, and hence on the
 /// barycentric weights: a `vec4` holds the weights of any cell an observer in
@@ -110,7 +110,7 @@ impl AdvectBake {
 
     for cell in topology.cells().handle_iter() {
       let metric = coords.cell_metric(cell);
-      let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+      let sign = crate::reduce::reduction_sign(topology, cell, cochain.grade());
       let generator = flow_generator(&interpolant, cell.idx(), &metric, sign);
 
       // One exponential, then `depth` squarings: level $k$ is $(e^(M h))^(2^k)$
@@ -169,7 +169,7 @@ pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     .map(|cell| {
       let metric = coords.cell_metric(cell);
       let point = MeshPoint::barycenter(cell.idx());
-      let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+      let sign = crate::reduce::reduction_sign(topology, cell, cochain.grade());
       reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric)
     })
     .fold(0.0, f64::max)
@@ -190,7 +190,7 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     let metric = coords.cell_metric(cell);
     let weight = metric.det_sqrt();
     let point = MeshPoint::barycenter(cell.idx());
-    let sign = crate::scene::reduction_sign(topology, cell, cochain.grade());
+    let sign = crate::reduce::reduction_sign(topology, cell, cochain.grade());
     weighted += weight * reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric);
     total += weight;
   }

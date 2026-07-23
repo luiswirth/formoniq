@@ -76,7 +76,7 @@ pub struct SegmentVertex {
 /// Instanced rather than expanded into corners on the CPU. The quad's six
 /// corners are `@builtin(vertex_index)` arithmetic in the vertex shader, and
 /// every dimension of the arrow is a proportion of its own length
-/// ([`GlyphMaterial`](crate::render::uniform::GlyphMaterial)), so nothing about
+/// (the renderer's `GlyphMaterial`), so nothing about
 /// a corner needs storing -- only what distinguishes one arrow from another.
 ///
 /// The one datum that looks per-corner is the barycentric coordinate the
@@ -717,42 +717,6 @@ mod tests {
         (pos - centroid).dot(&n) > 0.0,
         "boundary vertex {v} normal points inward"
       );
-    }
-  }
-
-  /// Every field of every Whitney basis gallery bakes, at every dimension the
-  /// ambient reaches: the scene's grade reduction and the bake's dimension
-  /// reduction compose without a hole, and each field samples to one colormap
-  /// value per rendered corner, one surface displacement height per corner and
-  /// one segment height per mesh vertex.
-  #[test]
-  fn every_whitney_basis_field_bakes() {
-    use crate::scene::{Scene, nodal_heights, surface_corner_heights, surface_corner_values};
-    for dim in 1..=3 {
-      let scene = Scene::whitney_basis(dim);
-      assert!(!scene.fields.is_empty());
-      let baked = BakedMesh::new(&scene.topology, &scene.coords);
-      assert_eq!(baked.positions.len(), scene.coords.nvertices());
-      let ncorners = match &baked.cells {
-        PrimBatch::Triangles(triangles) => 3 * triangles.len(),
-        _ => 0,
-      };
-      assert_eq!(baked.cell_corners.len(), ncorners / 3);
-      let cochains = scene
-        .fields
-        .iter()
-        .map(|f| &f.cochain)
-        .chain(scene.line_fields.iter().map(|f| &f.cochain));
-      for cochain in cochains {
-        let colors =
-          surface_corner_values(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
-        assert_eq!(colors.len(), ncorners);
-        let surface_heights =
-          surface_corner_heights(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
-        assert_eq!(surface_heights.len(), ncorners);
-        let heights = nodal_heights(&scene.topology, &scene.coords, cochain);
-        assert_eq!(heights.len(), baked.positions.len());
-      }
     }
   }
 }

@@ -62,7 +62,7 @@ Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing:
-`{ multiindex, gramian, coorder } → exterior → { simplicial, glatt } → derham → formoniq → studio`,
+`{ multiindex, gramian, coorder } → exterior → { simplicial, glatt } → derham → formoniq → realize → studio`,
 where `multiindex`/`gramian`/`coorder` are foundational siblings
 and `simplicial`/`glatt` are siblings one level up.
 `iterative` is off to the side:
@@ -80,7 +80,8 @@ joining the ladder only where `formoniq` consumes it.
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner. Backend is `nalgebra-sparse` alone, no faer |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver), `problems::` (elliptic, dirac, heat, wave, ...) |
-| `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), `BakedMesh` (the $RR^3$ bake, dimension reduced to a render primitive), reduced-grade render marks (scalar density, glyph/particle line field), a wgpu/winit/egui renderer, native and wasm |
+| `realize`    | intrinsic data made extrinsic       | `reduce::` (the grade reduction, a $k$-form to the scalar or vector of grade $min(k, n-k)$), `Surface`/`BakedMesh` (the dimension reduction to a render primitive and its $RR^3$ bake), the mark bakes (`glyph`, `advect`, `deposit`, `volume`), `io::` (the `.vtu`/`.obj`/`.mdd` exporters and readers). No graphics dependency |
+| `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), the gallery's `MeshSource × Study` product, a wgpu/winit/egui renderer over `realize`'s primitives, native and wasm |
 
 No crate exists solely to hold a shared type alias.
 `Vector`/`Matrix` (dense nalgebra) are trivial aliases with no nominal identity to share,
@@ -106,13 +107,28 @@ are independent objects, so neither depends on the other.
 Their one relation, pulling continuum data onto the mesh and the error that costs,
 is the join, and it lives in `derham`, the crate above both.
 
-`studio` sits at the top as the visual counterpart to the engine,
-the one consumer of the I/O-and-visualization carve-out invariant 2 draws.
-Visualization needs an embedding,
-so `studio` is extrinsic by necessity where the core is intrinsic by discipline.
-It depends downward on `formoniq` and below, nothing depends on it,
-and it carries its own `crates/studio/CLAUDE.md` for what that inversion means.
-The parent's invariants still bind it, they are only read from the extrinsic side.
+`realize` and `studio` sit at the top as the I/O-and-visualization carve-out invariant 2 draws,
+and they are two crates rather than one because the carve-out has two halves
+that need different things.
+`realize` is where intrinsic data *becomes* extrinsic:
+it spends the embedding, reduces the dimension to a drawable primitive
+and the grade to a scalar or a vector,
+and it is a pure data transformation with no GPU, no window and no rasterizer.
+`studio` is the renderer, and only it needs those.
+
+The split is what lets a headless run write a solution to disk
+with no graphics stack in the build,
+and it is why a `.vtu` for ParaView is not reached through the viewer.
+The reductions are *shared*, never duplicated:
+a mark the viewer draws and an array an exporter writes
+are the same reading of the same field,
+which is exactly what makes a disagreement between the viewer and an external tool
+a bug in one place instead of a drift between two.
+
+Both are extrinsic by necessity where the core is intrinsic by discipline,
+they depend downward on `formoniq` and below, nothing depends on them,
+and `crates/studio/CLAUDE.md` carries what that inversion means.
+The parent's invariants still bind them, they are only read from the extrinsic side.
 
 **Concepts float up.**
 A concept belongs in the lowest crate (or module) that can express it

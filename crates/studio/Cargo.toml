@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 # Internal workspace dependencies
 formoniq = { path = "../formoniq" }
+formoniq-realize = { path = "../realize" }
 derham = { path = "../derham", features = ["serde"] }
 glatt = { path = "../glatt" }
 simplicial = { path = "../simplicial", features = ["serde"] }
