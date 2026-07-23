@@ -1,9 +1,8 @@
 # formoniq
 
-A Finite Element Exterior Calculus (FEEC) library in Rust:
-PDEs formulated with differential forms,
-solved on simplicial pseudo-Riemannian manifolds of arbitrary dimension,
-intrinsically and coordinate-free.
+`README.md` says what the library is and does.
+This file is the design doc:
+the invariants, conventions and house style an agent must uphold, and the reasons behind them.
 
 The mathematics is the design.
 Differential geometry, algebraic topology, functional analysis and category theory
@@ -490,10 +489,8 @@ aliased in `simplicial::linalg`,
 and the matrix representation the `iterative` crate's Krylov methods (`CG`, `MINRES`)
 and preconditioners run on.
 faer for *direct* solves and eigenproblems
-(sparse LU and Cholesky, and a self-adjoint dense eigensolve for the projected subspace),
-confined to `formoniq::linalg` since `formoniq` is the only crate carrying a direct solve.
-Iterative solving needs no such backend,
-so it stays in the standalone `iterative` crate on `nalgebra-sparse` alone.
+(sparse LU and Cholesky, and a self-adjoint dense eigensolve for the projected subspace).
+Which crate each backend lives in, and why, is the Architecture section above.
 The workspace is pure Rust, with no external solver toolchain.
 
 **Naming reflects the mathematics.**

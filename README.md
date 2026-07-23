@@ -66,31 +66,31 @@ Dependencies flow strictly downward,
 and the separation of topology from geometry, and of intrinsic geometry from any embedding,
 is enforced by the crate boundaries rather than by convention.
 
-- **`multiindex`**:
+- **[`multiindex`](crates/multiindex/README.md)**:
   colexicographic combinatorics of finite index sets,
   with ranked combinations, signed index algebra and radix multi-indices.
-- **`gramian`**:
+- **[`gramian`](crates/gramian/README.md)**:
   inner-product and metric structure in a basis,
   with Gram matrices, pseudo-Riemannian metrics of arbitrary signature
   and the induced distance geometry.
-- **`coorder`**:
+- **[`coorder`](crates/coorder/README.md)**:
   affine coordinates tagged by the space they live in,
   so the maps between coordinate spaces are explicit and their confusion does not compile.
-- **`exterior`**:
+- **[`exterior`](crates/exterior/README.md)**:
   the exterior algebra, with variance (forms versus vectors) tracked at the type level,
   so pullback, the musical isomorphisms and the Hodge star
   take their direction and metric from the type rather than from a convention.
-- **`simplicial`**:
+- **[`simplicial`](crates/simplicial/README.md)**:
   the simplicial manifold, keeping pure-combinatorial topology separate from geometry,
   which enters intrinsically as signed squared edge lengths,
   with coordinates and per-cell metrics as sources converting into them.
-- **`glatt`**:
+- **[`glatt`](crates/glatt/README.md)**:
   the continuum manifold that the simplicial one approximates,
   with parametrizations and analytic differential-form data on them.
-- **`derham`**:
+- **[`derham`](crates/derham/README.md)**:
   discrete differential forms, where the exterior algebra, the mesh and the continuum meet.
   The home of cochains, Whitney interpolation and the de Rham map.
-- **`formoniq`**:
+- **[`formoniq`](crates/formoniq/README.md)**:
   the FEM engine, holding assembly, boundary conditions, time integration,
   the solvers and the problem formulations.
 
