@@ -65,7 +65,7 @@ depending on nothing but `nalgebra-sparse`, joining the ladder only where
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature; Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it, `connection::Transport` the Levi-Civita connection and the hinge deficit angle) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner; backend is `nalgebra-sparse` alone, no faer |
@@ -190,6 +190,20 @@ and passes tests.
    *chart*, by contrast, exists only on a top-dimensional simplex (invariant 3):
    pinning a metric accessor to the `Cell` witness would conflate *has a metric*
    (all simplices) with *carries a frame* (cells only).
+
+   This is also what makes the manifold have a **connection** at all. Two cells
+   sharing a facet read that facet's metric off the *same* edge lengths, so their
+   restrictions agree, and there is a unique isometry of their frames fixing the
+   facet and putting the two on opposite sides of it — the unfolding,
+   `MeshLengthsSq::transport`. A bag of unrelated `CellGramians` would admit no
+   such gluing, so the Levi-Civita connection is a *derived* quantity of the
+   Regge primitive and never an input. Being piecewise flat, the connection has
+   no degrees of freedom inside a cell and none across a contractible dual loop:
+   all of it lives on the facets, and all of its curvature on the codimension-2
+   hinges, where the holonomy is a rotation by the deficit angle
+   (`Ridge::fan`, `deficit_angle`, `holonomy`). Curvature is a 2-form, hence
+   measured against area, which is *why* the hinges are codimension 2 — vertices
+   in 2D, edges in 3D, triangles in 4D, one mechanism and no special case.
 
    A **point of the simplicial manifold** is therefore `MeshPoint` — a `Chart`
    plus barycentric coordinates — never a global coordinate, which on a Regge
