@@ -375,7 +375,7 @@ impl MeshSource {
   ///
   /// Panics on [`Self::Custom`]: a loaded mesh is installed directly and never
   /// rebuilt from its descriptor.
-  pub(crate) fn build(&self) -> Result<Mesh, String> {
+  pub fn build(&self) -> Result<Mesh, String> {
     match self {
       MeshSource::Sphere { subdivisions } => Ok(simplicial::mesher::sphere::mesh_sphere_surface(
         *subdivisions,
@@ -493,7 +493,7 @@ impl Study {
   /// grade's dense eigensolve -- the expensive path the caller runs on a
   /// background thread and memoizes; the Whitney basis and the explicit
   /// cochains are cheap.
-  pub(crate) fn build(&self, mesh: &Mesh) -> Scene {
+  pub fn build(&self, mesh: &Mesh) -> Scene {
     let (topology, coords) = mesh;
     match self {
       Study::Eigenmodes { grade, nmodes } => Scene::mesh_grade(topology, coords, *grade, *nmodes),
