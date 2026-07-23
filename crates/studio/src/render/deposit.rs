@@ -1,6 +1,6 @@
 //! The deposit atlas on the GPU: the ping-pong texture pair holding the
 //! trails, and the fade + splat pipelines that step it. See `deposit.wgsl`,
-//! and `crate::deposit` for the layout.
+//! and `realize::deposit` for the layout.
 //!
 //! The state-on-the-manifold invariant is enforced structurally here: the
 //! atlas is the *only* texture in the renderer that survives a frame, and it
@@ -18,7 +18,7 @@ use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
 use super::{color_target, shader_module, uniform::UniformBinding};
-use crate::deposit::{ATLAS_SIZE, DepositLayout};
+use realize::deposit::{ATLAS_SIZE, DepositLayout};
 
 /// The WGSL `DepositParams` of `preamble.wgsl`, byte for byte.
 #[repr(C)]

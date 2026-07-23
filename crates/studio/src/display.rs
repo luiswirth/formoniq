@@ -14,8 +14,6 @@
 //! what one field decides -- its materials, its own geometry, its attribute
 //! stream. Switching modes rewrites the second alone.
 
-use crate::bake::{self, BakedMesh};
-use crate::deposit::DepositLayout;
 use crate::render::{
   GpuContext,
   camera::Camera,
@@ -27,6 +25,8 @@ use crate::render::{
 };
 use crate::scene::Scene;
 use crate::ui::{FieldView, MeshView, Post, Selection};
+use realize::bake::{self, BakedMesh};
+use realize::deposit::DepositLayout;
 use simplicial::geometry::coord::locate::PointLocator;
 
 /// The exposure the scene's radiance is read at, before the display transform.
@@ -102,7 +102,7 @@ const SKELETON_WIDTH_FRACTION: f32 = 0.012;
 /// The world-space spacing the glyph lattice aims for within a cell, on the
 /// same object-intrinsic scale as every other mark's: not a fixed sample
 /// count, but a target density, so a coarse mesh's large cells earn several
-/// glyphs (see [`crate::glyph::glyph_refinement`]) and a fine mesh's small
+/// glyphs (see [`realize::glyph::glyph_refinement`]) and a fine mesh's small
 /// ones collapse back to one without either being tuned by hand. Also the
 /// glyph's own length -- each arrow is centered on its sample and sized to its
 /// lattice's realized spacing, so neighbouring arrows meet rather than
@@ -339,7 +339,7 @@ impl MeshDisplay {
     let locator =
       (scene.topology.dim() >= 3).then(|| PointLocator::new(&scene.topology, &scene.coords));
     let deposit_uvs = match &baked.cells {
-      crate::bake::PrimBatch::Triangles(triangles) => {
+      realize::bake::PrimBatch::Triangles(triangles) => {
         deposit_layout.corner_uvs(&scene.topology, triangles)
       }
       _ => Vec::new(),
@@ -347,7 +347,7 @@ impl MeshDisplay {
     let vertices = baked.segment_vertices();
     let heights = vec![0.0; vertices.len()];
     let segments = match &baked.cells {
-      crate::bake::PrimBatch::Segments(cells) => cells.as_slice(),
+      realize::bake::PrimBatch::Segments(cells) => cells.as_slice(),
       _ => &baked.edges,
     };
     let seg_zeros = vec![0.0f32; segments.len()];
@@ -373,7 +373,7 @@ impl MeshDisplay {
   /// and what their per-edge trace colors are read on.
   pub(crate) fn segments(&self) -> &[[u32; 2]] {
     match &self.baked.cells {
-      crate::bake::PrimBatch::Segments(cells) => cells,
+      realize::bake::PrimBatch::Segments(cells) => cells,
       _ => &self.baked.edges,
     }
   }
@@ -392,8 +392,8 @@ impl MeshDisplay {
   }
 
   /// The rendered triangles' cell-corner map, for reading a field per corner in
-  /// its own cell (see [`crate::scene::surface_corner_values`]).
-  pub(crate) fn cell_corners(&self) -> &[crate::bake::CellCorner] {
+  /// its own cell (see [`realize::reduce::surface_corner_values`]).
+  pub(crate) fn cell_corners(&self) -> &[realize::bake::CellCorner] {
     &self.baked.cell_corners
   }
 
@@ -425,16 +425,16 @@ pub(crate) struct FieldAttributes {
   pub(crate) color: Vec<f32>,
   /// Per rendered corner, in the same order as [`Self::color`]: continuous
   /// where the field is, constant per cell where it is not
-  /// ([`crate::scene::surface_corner_heights`]).
+  /// ([`realize::reduce::surface_corner_heights`]).
   pub(crate) surface_height: Vec<f32>,
   /// Per mesh vertex, for the segment marks: the 1-skeleton is shared and
   /// cannot tear, so it rides the continuous nodal recovery at every grade.
   pub(crate) wire_height: Vec<f32>,
   /// Per segment endpoint (two parallel arrays), for the 1-skeleton's colormap:
-  /// the trace of the field on each edge ([`crate::scene::segment_colors`]).
+  /// the trace of the field on each edge ([`realize::reduce::segment_colors`]).
   pub(crate) segment_colors: [Vec<f32>; 2],
   /// Per mesh vertex, for the 0-skeleton's colormap: the field's value there
-  /// ([`crate::scene::point_colors`]).
+  /// ([`realize::reduce::point_colors`]).
   pub(crate) point_colors: Vec<f32>,
 }
 
@@ -492,7 +492,7 @@ fn peak_heights(scene: &Scene, selection: Selection) -> Vec<f32> {
   let cochain = scene.field_cochain(selection);
   let mut peaks = vec![0.0f32; nvertices];
   let mut absorb = |cochain: &derham::cochain::Cochain| {
-    let heights = crate::scene::nodal_heights(&scene.topology, &scene.coords, cochain);
+    let heights = realize::reduce::nodal_heights(&scene.topology, &scene.coords, cochain);
     for (peak, h) in peaks.iter_mut().zip(heights) {
       *peak = peak.max(h.abs() as f32);
     }
@@ -519,22 +519,23 @@ pub(crate) fn field_attributes(
   topology: &simplicial::topology::complex::Complex,
   coords: &simplicial::geometry::coord::mesh::MeshCoords,
   cochain: &derham::cochain::Cochain,
-  cell_corners: &[crate::bake::CellCorner],
+  cell_corners: &[realize::bake::CellCorner],
   segments: &[[u32; 2]],
 ) -> (FieldAttributes, FieldRanges) {
-  let colors = crate::scene::surface_corner_values(topology, coords, cochain, cell_corners);
+  let colors = realize::reduce::surface_corner_values(topology, coords, cochain, cell_corners);
   let surface_heights =
-    crate::scene::surface_corner_heights(topology, coords, cochain, cell_corners);
-  let wire_heights = crate::scene::nodal_heights(topology, coords, cochain);
-  let segment_colors = crate::scene::segment_colors(topology, coords, cochain, segments);
-  let point_colors = crate::scene::point_colors(topology, coords, cochain);
+    realize::reduce::surface_corner_heights(topology, coords, cochain, cell_corners);
+  let wire_heights = realize::reduce::nodal_heights(topology, coords, cochain);
+  let segment_colors = realize::reduce::segment_colors(topology, coords, cochain, segments);
+  let point_colors = realize::reduce::point_colors(topology, coords, cochain);
   // Each skeleton normalizes against its own values: a k-skeleton traces a
   // different-grade density on a different scale, so a shared range would
   // flatten one to read the other.
-  let fill = crate::scene::corner_bounds(&colors);
-  let segment =
-    crate::scene::corner_bounds(&[segment_colors[0].clone(), segment_colors[1].clone()].concat());
-  let point = crate::scene::corner_bounds(&point_colors);
+  let fill = realize::reduce::corner_bounds(&colors);
+  let segment = realize::reduce::corner_bounds(
+    &[segment_colors[0].clone(), segment_colors[1].clone()].concat(),
+  );
+  let point = realize::reduce::corner_bounds(&point_colors);
   (
     FieldAttributes {
       color: bake::attributes(&colors),
@@ -575,7 +576,7 @@ pub(crate) struct FieldRanges {
 pub(crate) struct FieldDisplay {
   /// The arrow glyphs of a line field, `None` for a scalar field: the field
   /// evaluated -- at points the atlas places (the barycentric lattice of each
-  /// cell, boundary included: see [`crate::glyph`]) rather than a tracer's
+  /// cell, boundary included: see [`realize::glyph`]) rather than a tracer's
   /// seeding or a population's respawn.
   glyphs: Option<GlyphBatch>,
   /// The advected particles of a line field, absent for a scalar field and for
@@ -731,7 +732,7 @@ impl FieldDisplay {
         // covers `PARTICLE_SPEED_FRACTION` of the object's radius each second
         // whatever the cochain's units. A field that vanishes everywhere has no
         // scale to divide by and simply does not move.
-        let peak = crate::advect::peak_speed(&scene.topology, &scene.coords, &field.cochain);
+        let peak = realize::advect::peak_speed(&scene.topology, &scene.coords, &field.cochain);
 
         // The same peak the advection normalizes by, read as the glyph fade's
         // reference: a glyph's opacity is its own magnitude against the field's
@@ -749,7 +750,7 @@ impl FieldDisplay {
           .surface
           .trace(&scene.topology, &field.cochain)
           .map(|traced| {
-            crate::glyph::bake_glyphs(
+            realize::glyph::bake_glyphs(
               surface_topology,
               surface_coords,
               &traced,
@@ -765,7 +766,7 @@ impl FieldDisplay {
             let step = PARTICLE_SPEED_FRACTION * f64::from(amplitude_scale)
               / peak
               / f64::from(STEPS_PER_SECOND);
-            let bake = crate::advect::AdvectBake::new(
+            let bake = realize::advect::AdvectBake::new(
               &scene.topology,
               &scene.coords,
               &field.cochain,
@@ -782,7 +783,7 @@ impl FieldDisplay {
         // equilibrium trail brightness actually scales with, and it is an
         // exact area-weighted quantity of the field, not a tuned ratio.
         let speed_ratio = if peak > 0.0 {
-          crate::advect::mean_speed(&scene.topology, &scene.coords, &field.cochain) / peak
+          realize::advect::mean_speed(&scene.topology, &scene.coords, &field.cochain) / peak
         } else {
           0.0
         };
@@ -881,7 +882,8 @@ impl FieldDisplay {
       // exterior derivative, so this is $dif omega$ and not a difference
       // quotient of the interpolant.
       let read = scalarization.apply(cochain, &scene.topology);
-      let grid = crate::volume::VolumeGrid::sample(&scene.topology, &scene.coords, &read, locator);
+      let grid =
+        realize::volume::VolumeGrid::sample(&scene.topology, &scene.coords, &read, locator);
       let batch = VolumeBatch::new(&ctx.device, &ctx.queue, &grid);
       // The colormap is the surface's only where the medium draws the *same*
       // field. Read through an operator it is a different one, with its own
@@ -1079,7 +1081,7 @@ mod tests {
         ((i as f64) * 0.7).sin()
       }),
     );
-    let heights = crate::scene::nodal_heights(&topology, &coords, &cochain);
+    let heights = realize::reduce::nodal_heights(&topology, &coords, &cochain);
     let peaks: Vec<f32> = heights.iter().map(|h| h.abs() as f32).collect();
 
     let extent = 1.0;

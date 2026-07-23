@@ -508,7 +508,7 @@ impl State {
     );
     let loaded = std::fs::read_to_string(&path)
       .map_err(|e| e.to_string())
-      .and_then(|obj| crate::io::obj::parse(&obj).map_err(|e| e.to_string()));
+      .and_then(|obj| realize::io::obj::parse(&obj).map_err(|e| e.to_string()));
     match loaded {
       Ok(mesh) => {
         if let Some(scene) = self.gallery.load_custom(name, mesh) {

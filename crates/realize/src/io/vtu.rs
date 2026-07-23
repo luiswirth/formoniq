@@ -42,7 +42,7 @@ use simplicial::{
   topology::{complex::Complex, role::Cell},
 };
 
-use crate::scene::{reduced_form, scalarize};
+use crate::reduce::{reduced_form, scalarize};
 
 /// The largest dimension VTU can encode, intrinsic and ambient alike: its cell
 /// zoo stops at the tetrahedron and its points are 3-tuples.
@@ -659,7 +659,7 @@ mod tests {
     let interpolant = WhitneyInterpolant::new(cochain.clone(), &topology);
     for (cell, ambient) in topology.cells().handle_iter().zip(written) {
       let metric = coords.cell_metric(cell);
-      let sign = crate::scene::reduction_sign(&topology, cell, cochain.grade());
+      let sign = crate::reduce::reduction_sign(&topology, cell, cochain.grade());
       let form = interpolant.eval(&MeshPoint::barycenter(cell.idx()));
       let expected = cell
         .coord_simplex(&coords)

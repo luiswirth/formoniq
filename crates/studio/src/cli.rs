@@ -17,7 +17,7 @@ use formoniq_studio::gallery::{
   GRID_DIM_MAX, HEAT_FINAL_TIME, MeshSource, NamedCochain, QUOTIENT_CELLS_DEFAULT, QuotientSurface,
   REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, Study, WAVE_FINAL_TIME,
 };
-use formoniq_studio::io::vtu;
+use realize::io::vtu;
 use simplicial::Dim;
 
 #[derive(Parser)]

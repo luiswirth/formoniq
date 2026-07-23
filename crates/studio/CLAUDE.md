@@ -1,6 +1,14 @@
-# formoniq-studio
+# formoniq-realize and formoniq-studio
 
-The visual, interactive counterpart to `formoniq`:
+One file for both crates on the extrinsic side of the engine,
+because they are one subject: the vantage point the parent's invariants are read from.
+`realize` is where intrinsic data becomes extrinsic
+(the two reductions, the bake, the exporters),
+`studio` is the renderer over it,
+and "The two seams" below is the boundary between them,
+so splitting the file would cut the argument in half at its own hinge.
+
+`formoniq-studio` is the visual, interactive counterpart to `formoniq`:
 a viewer for inspecting PDE solutions, meshes and simplicial manifolds, cochains,
 and the differential geometry underneath them.
 It is meant to be both an instrument for a mathematician or engineer
@@ -35,6 +43,15 @@ The embedding is not assumed diffusely throughout the viewer.
 It lives between two named boundaries,
 and intrinsic structure is carried as far toward the screen as it can go before either one commits.
 
+**Both seams live in `realize`, and the renderer is above them.**
+That is the crate split, and it follows from what the seams already are:
+everything between them is a pure data transformation
+and nothing in it needs a GPU or a window.
+So an exporter and the viewer are *peers* consuming the same reduction,
+rather than the exporter living inside the viewer,
+which is what makes an external tool and the viewer agree about what a field looks like.
+A reduction that only one consumer can reach has been put in the wrong crate.
+
 - **`Scene` is the seam in:**
   It carries the engine's own types (`Complex`, `MeshCoords`, `Cochain`)
   rather than a lossy export format,
@@ -46,6 +63,11 @@ and intrinsic structure is carried as far toward the screen as it can go before 
   the two things the core keeps out,
   because a graphics API and an interchange file both need them.
   Downstream of the bake there are no FEEC types, only ambient geometry.
+  The interchange file is the reason to say "both" rather than "the renderer":
+  `.vtu` for ParaView, `.obj`/`.mdd` for a mesh,
+  each a leaf that consumes the bake and commits further
+  (VTU's points are 3-tuples and its cells stop at the tetrahedron,
+  so a mesh above three dimensions is *its* refusal, not the bake's).
 
   The bake's vertex table splits by what a datum depends on:
   the static half is a function of the mesh and its embedding alone

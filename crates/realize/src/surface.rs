@@ -41,7 +41,7 @@ use simplicial::{
 /// Holds only what the reduction *adds*: the parent it reduces is passed back
 /// in at each access, so the identity case stores nothing and copies nothing.
 #[derive(Debug, Clone)]
-pub(crate) struct Surface {
+pub struct Surface {
   /// `None` exactly when the mesh is already its own render surface: either
   /// $n <= 2$, or a closed solid, which has no boundary to draw at all.
   boundary: Option<BoundaryComplex>,
@@ -58,7 +58,7 @@ impl Surface {
   /// the honest response is to leave the parent in place and let the marks
   /// find nothing of dimension $<= 2$ to draw. Panicking on a manifold with no
   /// boundary would make closedness an error, which it is not.
-  pub(crate) fn of(topology: &Complex, coords: &MeshCoords) -> Self {
+  pub fn of(topology: &Complex, coords: &MeshCoords) -> Self {
     let boundary = (topology.dim() > 2)
       .then(|| topology.boundary_complex())
       .flatten();
@@ -71,7 +71,7 @@ impl Surface {
 
   /// The surface's own complex. A proper manifold in its own right, whichever
   /// branch the reduction took.
-  pub(crate) fn complex<'a>(&'a self, parent: &'a Complex) -> &'a Complex {
+  pub fn complex<'a>(&'a self, parent: &'a Complex) -> &'a Complex {
     self
       .boundary
       .as_ref()
@@ -79,7 +79,7 @@ impl Surface {
   }
 
   /// The surface's own vertex coordinates.
-  pub(crate) fn coords<'a>(&'a self, parent: &'a MeshCoords) -> &'a MeshCoords {
+  pub fn coords<'a>(&'a self, parent: &'a MeshCoords) -> &'a MeshCoords {
     self.coords.as_ref().unwrap_or(parent)
   }
 
@@ -91,7 +91,7 @@ impl Surface {
   /// boundary (a density), because $2$ is the boundary's *top* grade. Reading
   /// the parent's $n$ here would draw arrows for a flux that has no direction
   /// on the surface it is shown on.
-  pub(crate) fn dim(&self, parent: &Complex) -> simplicial::Dim {
+  pub fn dim(&self, parent: &Complex) -> simplicial::Dim {
     self.complex(parent).dim()
   }
 
@@ -100,7 +100,7 @@ impl Surface {
   /// False exactly at the parent's top grade, where $C^k (diff M) = 0$. A
   /// caller that gets `false` is holding a volume quantity and must reach for
   /// a volume mark, not trace it to zero.
-  pub(crate) fn traces(&self, parent: &Complex, grade: ExteriorGrade) -> bool {
+  pub fn traces(&self, parent: &Complex, grade: ExteriorGrade) -> bool {
     grade <= self.dim(parent)
   }
 
@@ -114,11 +114,7 @@ impl Surface {
   /// product.
   ///
   /// Returns `None` when the grade does not trace (see [`Self::traces`]).
-  pub(crate) fn trace<'a>(
-    &self,
-    parent: &Complex,
-    cochain: &'a Cochain,
-  ) -> Option<Cow<'a, Cochain>> {
+  pub fn trace<'a>(&self, parent: &Complex, cochain: &'a Cochain) -> Option<Cow<'a, Cochain>> {
     let grade = cochain.grade();
     if !self.traces(parent, grade) {
       return None;
@@ -142,7 +138,7 @@ impl Surface {
   /// The one place the reduction leaks, and it leaks for a concrete reason:
   /// the baked vertex table is the parent's, so a datum computed on the
   /// surface has to be scattered back into it.
-  pub(crate) fn vertex_to_parent(&self) -> Option<&[KSimplexIdx]> {
+  pub fn vertex_to_parent(&self) -> Option<&[KSimplexIdx]> {
     self
       .boundary
       .as_ref()

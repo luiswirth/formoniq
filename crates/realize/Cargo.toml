@@ -1,0 +1,30 @@
+[package]
+name = "formoniq-realize"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# The package is namespaced to the engine it belongs to; the crate a consumer
+# writes is not, so a path reads `realize::bake` rather than restating the
+# namespace at every use.
+[lib]
+name = "realize"
+
+[dependencies]
+formoniq = { path = "../formoniq" }
+derham = { path = "../derham" }
+glatt = { path = "../glatt" }
+simplicial = { path = "../simplicial" }
+coorder = { path = "../coorder" }
+gramian = { path = "../gramian" }
+exterior = { path = "../exterior" }
+nalgebra = "0.35.0"
+# The bake's vertex records are laid out for a GPU upload, so they carry `Pod`
+# and `Zeroable`. `bytemuck` is the layout vocabulary alone -- a pure-Rust
+# derive with no graphics stack behind it -- which is what lets the seam out be
+# described here without a renderer.
+bytemuck = { version = "1.25.1", features = ["derive"] }
+# The mark bakes are per cell and the cells are independent. Builds for wasm the
+# same way it does for `simplicial`, where it runs sequentially: the plain
+# `wasm32` target has no threads to spread over.
+rayon = "1.12.0"

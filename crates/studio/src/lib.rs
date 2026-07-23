@@ -6,25 +6,18 @@
 
 extern crate nalgebra as na;
 
-pub mod advect;
 pub mod app;
-pub mod bake;
 pub mod demos;
-pub(crate) mod deposit;
 pub(crate) mod display;
 /// Headless PNG/MP4 rendering. Native only: it writes files and pipes to
 /// `ffmpeg`, neither of which the browser offers.
 #[cfg(not(target_arch = "wasm32"))]
 pub mod export;
 pub mod gallery;
-pub(crate) mod glyph;
-pub mod io;
 pub mod render;
 pub mod scene;
 pub(crate) mod solve;
-pub(crate) mod surface;
 pub mod ui;
-pub mod volume;
 pub(crate) mod welcome;
 
 /// The web entry point and its platform glue (canvas mount, async device
