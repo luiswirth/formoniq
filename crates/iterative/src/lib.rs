@@ -3,12 +3,14 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
+pub mod aux_space;
 pub mod krylov;
 pub mod multigrid;
 mod operator;
 mod precond;
 pub mod stationary;
 
+pub use aux_space::AuxiliarySpace;
 pub use multigrid::{Level, VCycle};
 pub use precond::{BlockDiagonal, Identity, Jacobi};
 pub use stationary::Stationary;

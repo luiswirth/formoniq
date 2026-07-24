@@ -32,9 +32,13 @@ Entry-needing preconditioners (a diagonal, a triangular sweep)
 take the assembled sparse matrix at construction.
 Everything else is matrix-free.
 Consumers are generic over the operator and the preconditioner, monomorphized,
-with no dynamic dispatch on the apply path.
+with no dynamic dispatch on the assembly-driven apply path.
 
-The crate is discretization-agnostic:
-it knows nothing of meshes or differential forms.
-A geometric multigrid hierarchy, or a structure-preserving (auxiliary-space) preconditioner,
-is supplied from above as an implementor of these traits.
+Two composition objects build a strong preconditioner from these pieces:
+`VCycle`, a geometric multigrid hierarchy that coarsens in space,
+and `AuxiliarySpace`, an additive auxiliary-space preconditioner that coarsens in structure
+(the abstract form of Hiptmair–Xu).
+Both are discretization-agnostic:
+they know nothing of meshes or differential forms,
+and take their transfers as plain sparse matrices supplied from above.
+They compose, an auxiliary space whose blocks are themselves multigrid.
