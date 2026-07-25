@@ -1,18 +1,21 @@
-//! Geometric multigrid for the grade-0 Hodge-Laplace problem.
+//! Geometric multigrid for the grade-$k$ Hodge-Laplace problem.
 //!
-//! The FEEC wiring of the generic [`iterative::VCycle`]: a refinement tower of
-//! Whitney complexes supplies the levels, the operator on each is the grade-0
-//! Hilbert-space Gram matrix $M_0 + D_0^T M_1 D_0$ (the mass plus the up-stiffness
-//! of the scalar Hodge-Laplacian, SPD on a Riemannian geometry), and the
-//! intergrid transfer is the Whitney prolongation $P$ of [`derham::prolongate`]
-//! with restriction $R = P^T$. The coarse solver is the direct faer
-//! factorization ([`crate::linalg::DirectInverse`]).
+//! The FEEC wiring of the generic [`iterative::VCycle`]: a [`RefinementTower`] of
+//! Whitney complexes supplies the levels, the operator on each is the
+//! Hilbert-space Gram matrix $A_k = M_k + D_k^T M_(k+1) D_k$ (the mass plus the
+//! up-stiffness of the Hodge-Laplacian, [`HilbertComplex::hdif_gram`], SPD on a
+//! Riemannian geometry), and the intergrid transfer is the Whitney prolongation
+//! $P$ of [`derham::prolongate`] with restriction $R = P^T$. The coarse solver is
+//! the direct faer factorization ([`crate::linalg::DirectInverse`]).
 //!
-//! This is the minimal, nodal case: a pointwise (Jacobi) smoother already damps
-//! the high-frequency error, since grade 0 has no large near-kernel of $dif$ to
-//! confound it. Higher grades need the auxiliary-space / regular-decomposition
-//! smoother the grade-mixed near-kernel calls for; that is deliberately out of
-//! scope here, and the cycle machinery it will reuse is exactly this one.
+//! At grade $0$ this is the minimal, nodal case: a pointwise (Jacobi) smoother
+//! already damps the high-frequency error, since grade 0 has no large near-kernel
+//! of $dif$ to confound it, and [`Grade0Multigrid`] is exactly that. At grade
+//! $>= 1$ the same V-cycle is no longer enough on its own --- the near-kernel of
+//! $dif$ needs the auxiliary-space smoother of [`crate::hx`] --- but the cycle is
+//! the same object at every grade, and the tower builds it uniformly through
+//! [`RefinementTower::grade_vcycle`], which the auxiliary-space preconditioner
+//! reuses for its blocks.
 //!
 //! The coarse operators are formed by the Galerkin triple product
 //! $A_c = P^T A_f P$ rather than reassembled on the coarse mesh: it is defined by
@@ -21,6 +24,7 @@
 //! test, not an assumption.
 
 use derham::prolongate::prolongation_matrix;
+use exterior::ExteriorGrade;
 use iterative::{
   Jacobi, Level, VCycle,
   krylov::cg,
@@ -29,7 +33,7 @@ use iterative::{
 use simplicial::{
   geometry::metric::mesh::MeshLengthsSq,
   linalg::{CsrMatrix, Vector},
-  topology::{complex::Complex, ordering::CellOrdering},
+  topology::{complex::Complex, ordering::CellOrdering, refine::Subdivision},
 };
 
 use crate::{
@@ -42,28 +46,135 @@ use crate::{
 /// spectrum, which is the error a coarser level cannot represent.
 const SMOOTHER_WEIGHT: f64 = 2.0 / 3.0;
 
-/// A grade-0 multigrid solver built on a refinement tower.
+/// A refinement tower of Whitney complexes: a base mesh and `refinements`
+/// successive uniform subdivisions of it, coarse to fine, with the intrinsic
+/// geometry carried on every level.
 ///
-/// Owns the tower (complexes and geometries, coarse to fine) so a right-hand
-/// side can be assembled on the finest level, the finest operator, and the
-/// V-cycle preconditioner. [`solve`](Self::solve) runs V-cycle-preconditioned CG
-/// on the finest level.
-pub struct Grade0Multigrid {
+/// It is the intrinsic (metric, not coordinate) backbone the multigrid V-cycle
+/// and the auxiliary-space preconditioner both run on: it holds the complexes,
+/// their [`MeshLengthsSq`] geometries and the [`Subdivision`]s linking successive
+/// levels, and builds a grade-$k$ V-cycle over the whole tower on demand through
+/// [`grade_vcycle`](Self::grade_vcycle). No coordinates: the tower is a source of
+/// operators and transfers, both of which are metric facts, so an embedding never
+/// enters here (invariant 2).
+pub struct RefinementTower {
   complexes: Vec<Complex>,
   geometries: Vec<MeshLengthsSq>,
+  /// `subdivisions[d]` links level `d` (coarse) to level `d + 1` (fine).
+  subdivisions: Vec<Subdivision>,
+}
+
+impl RefinementTower {
+  /// Build the tower by refining `base_topology`/`base_geometry` `refinements`
+  /// times, halving the mesh each step.
+  ///
+  /// The base ordering is colex; each refined level inherits the ordering the
+  /// [`Subdivision`] carries, so the tower composes (invariant 7). Refinement is
+  /// metric-free and exact --- a flat cell subdivided stays flat --- so the tower
+  /// introduces no geometric error of its own.
+  pub fn new(base_topology: Complex, base_geometry: MeshLengthsSq, refinements: usize) -> Self {
+    let mut complexes = vec![base_topology];
+    let mut geometries = vec![base_geometry];
+    let mut subdivisions = Vec::new();
+    let mut ordering = CellOrdering::colex(&complexes[0]);
+
+    for _ in 0..refinements {
+      let coarse = complexes.last().unwrap();
+      let sub = coarse.refine_with(&ordering, 2);
+      let fine_geometry = geometries.last().unwrap().refine(&sub, coarse);
+      ordering = sub.ordering().clone();
+      complexes.push(sub.complex().clone());
+      geometries.push(fine_geometry);
+      subdivisions.push(sub);
+    }
+
+    Self {
+      complexes,
+      geometries,
+      subdivisions,
+    }
+  }
+
+  /// The number of levels, base plus refinements.
+  pub fn levels(&self) -> usize {
+    self.complexes.len()
+  }
+
+  /// The index of the finest level.
+  pub fn finest(&self) -> usize {
+    self.complexes.len() - 1
+  }
+
+  /// The Whitney complex on level `level`.
+  pub fn whitney(&self, level: usize) -> WhitneyComplex<'_> {
+    WhitneyComplex::new(&self.complexes[level], &self.geometries[level])
+  }
+
+  /// The Whitney complex on the finest level, for assembling a right-hand side.
+  pub fn finest_whitney(&self) -> WhitneyComplex<'_> {
+    self.whitney(self.finest())
+  }
+
+  /// The subdivisions linking successive levels, exposed so an embedding can be
+  /// refined alongside the tower where the extrinsic frame is needed
+  /// ([`crate::hx`]).
+  pub fn subdivisions(&self) -> &[Subdivision] {
+    &self.subdivisions
+  }
+
+  /// The grade-`grade` multigrid V-cycle over the whole tower, with `sweeps` pre-
+  /// and post-smoothing steps: reassembled operators, Whitney prolongation
+  /// transfers, a damped-Jacobi smoother and a direct coarse solve.
+  ///
+  /// # Panics
+  /// If a level's operator is not positive definite (a non-Riemannian geometry),
+  /// which the direct coarse solve requires.
+  pub fn grade_vcycle(
+    &self,
+    grade: impl Into<ExteriorGrade>,
+    sweeps: usize,
+  ) -> VCycle<Jacobi, DirectInverse> {
+    let grade = grade.into();
+    let operators: Vec<CsrMatrix> = (0..self.levels())
+      .map(|l| self.whitney(l).hdif_gram(grade))
+      .collect();
+
+    // Levels finest first: for each fine level f, the transfer is the grade-k
+    // Whitney prolongation of subdivisions[f - 1] and its transpose.
+    let levels: Vec<Level<Jacobi>> = (1..operators.len())
+      .rev()
+      .map(|f| {
+        let prolong = prolongation_matrix(grade, &self.complexes[f - 1], &self.subdivisions[f - 1]);
+        let restrict = prolong.transpose();
+        let smoother = Jacobi::weighted(&operators[f], SMOOTHER_WEIGHT);
+        Level::new(operators[f].clone(), smoother, prolong, restrict)
+      })
+      .collect();
+
+    let coarse =
+      DirectInverse::try_new(operators[0].clone()).expect("coarsest operator must be SPD");
+    VCycle::symmetric(levels, coarse, sweeps)
+  }
+}
+
+/// A grade-0 multigrid solver built on a refinement tower.
+///
+/// Owns the [`RefinementTower`] so a right-hand side can be assembled on the
+/// finest level, the finest operator, and the grade-0 V-cycle preconditioner.
+/// [`solve`](Self::solve) runs V-cycle-preconditioned CG on the finest level. It
+/// is the grade-0 specialization of the tower's general
+/// [`grade_vcycle`](RefinementTower::grade_vcycle), where a plain V-cycle already
+/// suffices.
+pub struct Grade0Multigrid {
+  tower: RefinementTower,
   fine_operator: CsrMatrix,
   cycle: VCycle<Jacobi, DirectInverse>,
 }
 
 impl Grade0Multigrid {
   /// Build the tower by refining `base_topology`/`base_geometry` `refinements`
-  /// times (halving the mesh each step), and assemble the V-cycle over it with
-  /// `sweeps` pre- and post-smoothing steps.
-  ///
-  /// The base ordering is colex; each refined level inherits the ordering the
-  /// `Subdivision` carries, so the tower composes (invariant 7). Refinement is
-  /// metric-free and exact --- a flat cell subdivided stays flat --- so the
-  /// tower introduces no geometric error of its own.
+  /// times (halving the mesh each step), and assemble the grade-0 V-cycle over it
+  /// with `sweeps` pre- and post-smoothing steps.
   ///
   /// # Panics
   /// If a level's operator is not positive definite (a non-Riemannian geometry),
@@ -74,59 +185,19 @@ impl Grade0Multigrid {
     refinements: usize,
     sweeps: usize,
   ) -> Self {
-    let mut complexes = vec![base_topology];
-    let mut geometries = vec![base_geometry];
-    // prolongations[d] transfers level d (coarse) into level d + 1 (fine).
-    let mut prolongations: Vec<CsrMatrix> = Vec::new();
-    let mut ordering = CellOrdering::colex(&complexes[0]);
-
-    for _ in 0..refinements {
-      let coarse = complexes.last().unwrap();
-      let sub = coarse.refine_with(&ordering, 2);
-      let fine_geometry = geometries.last().unwrap().refine(&sub, coarse);
-      let prolongation = prolongation_matrix(0, coarse, &sub);
-      ordering = sub.ordering().clone();
-      let fine = sub.into_complex();
-      prolongations.push(prolongation);
-      complexes.push(fine);
-      geometries.push(fine_geometry);
-    }
-
-    let operators: Vec<CsrMatrix> = complexes
-      .iter()
-      .zip(&geometries)
-      .map(|(topology, geometry)| WhitneyComplex::new(topology, geometry).hdif_gram(0))
-      .collect();
-
-    // Levels finest first: for each fine level f, the transfer is prolongations
-    // [f - 1] and its transpose.
-    let n = operators.len();
-    let levels: Vec<Level<Jacobi>> = (1..n)
-      .rev()
-      .map(|f| {
-        let prolong = prolongations[f - 1].clone();
-        let restrict = prolong.transpose();
-        let smoother = Jacobi::weighted(&operators[f], SMOOTHER_WEIGHT);
-        Level::new(operators[f].clone(), smoother, prolong, restrict)
-      })
-      .collect();
-
-    let coarse =
-      DirectInverse::try_new(operators[0].clone()).expect("coarsest grade-0 operator must be SPD");
-    let cycle = VCycle::symmetric(levels, coarse, sweeps);
-
+    let tower = RefinementTower::new(base_topology, base_geometry, refinements);
+    let fine_operator = tower.finest_whitney().hdif_gram(0);
+    let cycle = tower.grade_vcycle(0, sweeps);
     Self {
-      fine_operator: operators.into_iter().next_back().unwrap(),
-      complexes,
-      geometries,
+      tower,
+      fine_operator,
       cycle,
     }
   }
 
   /// The finest Whitney complex, for assembling a right-hand side.
   pub fn fine_complex(&self) -> WhitneyComplex<'_> {
-    let last = self.complexes.len() - 1;
-    WhitneyComplex::new(&self.complexes[last], &self.geometries[last])
+    self.tower.finest_whitney()
   }
 
   /// The finest-level operator $M_0 + D_0^T M_1 D_0$.
