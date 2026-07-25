@@ -58,6 +58,7 @@ use simplicial::{
 
 use crate::{
   linalg::DirectInverse,
+  multigrid::RefinementTower,
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 
@@ -135,12 +136,23 @@ fn num_minors(ambient: usize, k: usize) -> usize {
 }
 
 /// A grade-$k$ Hodge-Laplace solver preconditioned by the Hiptmair-Xu
-/// auxiliary-space preconditioner, on a single mesh (no refinement tower).
+/// auxiliary-space preconditioner.
 ///
-/// Owns the operator $A_k$ and the preconditioner $B$; [`solve`](Self::solve)
-/// runs $B$-preconditioned CG. The auxiliary blocks are direct faer solves here,
-/// which validates the HX structure and its iteration-count reduction; recursive
-/// multigrid on the blocks is what makes it scale, and is the benchmark's job.
+/// Owns the finest-level operator $A_k$ and the preconditioner $B$;
+/// [`solve`](Self::solve) runs $B$-preconditioned CG. The two constructors differ
+/// only in how they invert the auxiliary operators:
+///
+/// - [`new`](Self::new) inverts each auxiliary block by a direct faer solve on a
+///   single mesh. This isolates the HX *structure* --- the iteration count it
+///   buys --- and is what the correctness tests check, but the direct blocks
+///   dominate the wall time as the mesh grows.
+/// - [`with_multigrid`](Self::with_multigrid) replaces each direct block by a
+///   V-cycle over a [`RefinementTower`], the recursion that makes the whole
+///   preconditioner scale: mesh-independent iteration counts at asymptotically
+///   optimal cost per iteration.
+///
+/// Both produce the same additive preconditioner and the same fixed point; only
+/// the inner solves, hence the wall time, differ.
 pub struct GradeKHodgeHx {
   operator: CsrMatrix,
   preconditioner: AuxiliarySpace<Jacobi>,
@@ -192,6 +204,47 @@ impl GradeKHodgeHx {
     }
   }
 
+  /// The same preconditioner as [`new`](Self::new), but with every auxiliary block
+  /// solved by multigrid over `tower` instead of a direct factor, with `sweeps`
+  /// pre- and post-smoothing steps.
+  ///
+  /// The gradient block is the crux. Its operator is the grade-$(k-1)$ problem,
+  /// which for $k >= 2$ has the *same* $dif$ near-kernel that made the grade-$k$
+  /// problem hard, so a plain grade-$(k-1)$ V-cycle stalls on it exactly as the
+  /// point smoother did. The block therefore has to be HX again: the preconditioner
+  /// *recurses in grade*, the gradient block one grade down being itself a
+  /// [`with_multigrid`](Self::with_multigrid) preconditioner, until grade $0$,
+  /// where there is no gradient space and a nodal V-cycle suffices. This is the
+  /// same totality as everywhere else, grade $0$ the base case reached with no
+  /// special-casing, and it is what keeps the iteration count flat at every grade
+  /// rather than only at $k = 1$.
+  ///
+  /// The vector-nodal blocks are grade $0$ by construction and stay plain grade-$0$
+  /// V-cycles, one cycle shared across the $binom(N,k)$ identical copies. The main
+  /// operator and the transfers are read off the tower's finest level, so it must
+  /// be the mesh `coords` describes. Recursion is what turns the mesh-independent
+  /// iteration count into a mesh-independent solve *cost*: each block is inverted
+  /// in work linear in its size.
+  ///
+  /// # Panics
+  /// If `coords` does not describe the tower's finest complex (mismatched vertex
+  /// count in [`vector_nodal_prolongation`]), or if an auxiliary operator on any
+  /// level is not SPD (a non-Riemannian geometry).
+  pub fn with_multigrid(
+    tower: &RefinementTower,
+    coords: &MeshCoords,
+    grade: impl Into<ExteriorGrade>,
+    sweeps: usize,
+  ) -> Self {
+    let grade = grade.into();
+    let operator = tower.finest_whitney().hdif_gram(grade);
+    let preconditioner = hx_preconditioner(tower, coords, grade, sweeps);
+    Self {
+      operator,
+      preconditioner,
+    }
+  }
+
   /// The assembled operator $A_k$.
   pub fn operator(&self) -> &CsrMatrix {
     &self.operator
@@ -214,22 +267,64 @@ fn direct(operator: CsrMatrix) -> DirectInverse {
   DirectInverse::try_new(operator).expect("auxiliary operator must be SPD")
 }
 
-/// One factorization applied to each of `count` contiguous blocks of equal size:
-/// the block-diagonal inverse of `count` identical copies of an operator,
-/// sharing a single factor. The vector-nodal auxiliary operator is exactly this,
-/// $binom(N,k)$ copies of the scalar nodal problem in a fixed frame.
-struct ReplicatedBlock {
-  inverse: DirectInverse,
+/// The grade-`grade` HX auxiliary-space preconditioner over `tower`, with
+/// multigrid-inverted blocks, recursing in grade on the gradient block.
+///
+/// At grade $0$ there is no gradient space and this is the nodal V-cycle wrapped
+/// as an auxiliary-space smoother; at grade $k$ the gradient block is this same
+/// function at grade $k - 1$, so the recursion bottoms out at grade $0$ with no
+/// special case. Returns `AuxiliarySpace<Jacobi>` uniformly, boxable as the
+/// gradient block of the grade above.
+fn hx_preconditioner(
+  tower: &RefinementTower,
+  coords: &MeshCoords,
+  grade: ExteriorGrade,
+  sweeps: usize,
+) -> AuxiliarySpace<Jacobi> {
+  let complex = tower.finest_whitney();
+  let operator = complex.hdif_gram(grade);
+  let smoother = Jacobi::weighted(&operator, SMOOTHER_WEIGHT);
+  let mut preconditioner = AuxiliarySpace::new(smoother);
+
+  // Gradient block: HX one grade down, so its own dif near-kernel is handled
+  // recursively rather than left to a stalling plain V-cycle. Absent at grade 0.
+  let lower = grade - 1;
+  if complex.ndofs(lower) > 0 {
+    let prolong = complex.dif(lower);
+    let block = hx_preconditioner(tower, coords, lower, sweeps);
+    preconditioner = preconditioner.with_correction(prolong, Box::new(block));
+  }
+
+  // Vector-nodal blocks: grade 0 by construction, so a plain nodal V-cycle,
+  // shared across the C(N,k) identical copies.
+  let prolong = vector_nodal_prolongation(complex.topology(), coords, grade);
+  if prolong.ncols() > 0 {
+    let ncovectors = prolong.ncols() / coords.nvertices();
+    let blocks = ReplicatedBlock::new(tower.grade_vcycle(0, sweeps), ncovectors);
+    preconditioner = preconditioner.with_correction(prolong, Box::new(blocks));
+  }
+
+  preconditioner
+}
+
+/// One approximate inverse applied to each of `count` contiguous blocks of equal
+/// size: the block-diagonal inverse of `count` identical copies of an operator,
+/// sharing a single inner solver. The vector-nodal auxiliary operator is exactly
+/// this, $binom(N,k)$ copies of the scalar nodal problem in a fixed frame; the
+/// shared inner solver is a direct factor ([`GradeKHodgeHx::new`]) or a grade-$0$
+/// V-cycle ([`GradeKHodgeHx::with_multigrid`]).
+struct ReplicatedBlock<B> {
+  inverse: B,
   count: usize,
 }
 
-impl ReplicatedBlock {
-  fn new(inverse: DirectInverse, count: usize) -> Self {
+impl<B> ReplicatedBlock<B> {
+  fn new(inverse: B, count: usize) -> Self {
     Self { inverse, count }
   }
 }
 
-impl ApproxInverse for ReplicatedBlock {
+impl<B: ApproxInverse> ApproxInverse for ReplicatedBlock<B> {
   fn dim(&self) -> usize {
     self.inverse.dim() * self.count
   }
@@ -244,7 +339,7 @@ impl ApproxInverse for ReplicatedBlock {
   }
 }
 
-impl SelfAdjoint for ReplicatedBlock {}
+impl<B: SelfAdjoint> SelfAdjoint for ReplicatedBlock<B> {}
 
 #[cfg(test)]
 mod tests {
@@ -299,6 +394,41 @@ mod tests {
     let mut v = Vector::zeros(n);
     v[i] = 1.0;
     v
+  }
+
+  /// The multigrid-block preconditioner reaches the same fixed point as the
+  /// direct-block one: swapping a direct auxiliary solve for a V-cycle changes the
+  /// solve path and its cost, never the operator or its solution. Swept over the
+  /// grades of a 2D and a 3D refinement tower.
+  #[test]
+  fn hx_multigrid_matches_the_direct_solve() {
+    use crate::multigrid::RefinementTower;
+    use iterative::StopCriterion;
+    for dim in 2..=3 {
+      let (base_topology, base_coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let base_geometry = base_coords.to_edge_lengths_sq(&base_topology);
+      let tower = RefinementTower::new(base_topology, base_geometry, 2);
+      let coords = tower
+        .subdivisions()
+        .iter()
+        .fold(base_coords, |c, sub| c.refine(sub));
+      for grade in 1..=dim {
+        let hx = GradeKHodgeHx::with_multigrid(&tower, &coords, grade, 2);
+        let n = hx.operator().nrows();
+        let rhs = Vector::from_fn(n, |i, _| ((i * i + 1) as f64).cos());
+        let (x, report) = hx.solve(&rhs, StopCriterion::rtol(1e-10));
+        assert!(
+          report.converged,
+          "dim {dim} grade {grade}: HX-MG-CG did not converge"
+        );
+        let direct = DirectInverse::try_new(hx.operator().clone()).unwrap();
+        let err = (&x - direct.apply(&rhs)).norm();
+        assert!(
+          err < 1e-7,
+          "dim {dim} grade {grade}: HX-MG-CG disagrees with direct, err {err}"
+        );
+      }
+    }
   }
 
   /// HX-preconditioned CG reaches the same solution as the direct solve of the
