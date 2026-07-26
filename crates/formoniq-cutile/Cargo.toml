@@ -1,0 +1,34 @@
+[package]
+name = "formoniq-cutile"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+description = "Tile-based GPU kernels for the formoniq FEEC engine, written in cuTile Rust."
+repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
+keywords = ["feec", "finite-element", "gpu", "cuda", "cutile"]
+categories = ["mathematics", "science"]
+
+[features]
+# Off by default, and deliberately: the cuTile stack needs the CUDA toolkit at
+# build time (bindgen runs against the CUDA headers), so a machine without it
+# still compiles and tests everything in `spec`, which is where the mathematics
+# lives.
+default = []
+cuda = ["dep:cutile", "dep:cuda-core", "dep:cuda-async"]
+
+[dependencies]
+formoniq = { path = "../formoniq", version = "0.2.0" }
+simplicial = { path = "../simplicial", version = "0.2.0" }
+exterior = { path = "../exterior", version = "0.2.0" }
+iterative = { path = "../iterative", version = "0.2.0" }
+
+nalgebra = "0.35.0"
+
+cutile = { version = "0.2.0", optional = true }
+cuda-core = { version = "0.2.0", optional = true }
+cuda-async = { version = "0.2.0", optional = true }
+
+[dev-dependencies]
+approx = "0.5"
