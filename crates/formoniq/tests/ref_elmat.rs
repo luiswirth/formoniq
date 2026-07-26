@@ -77,7 +77,10 @@ fn ref_mass(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn lumped_mass_refcell() {
-  check_ref_elmat(|_| operators::ScalarLumpedMassElmat, ref_lumped_mass);
+  check_ref_elmat(
+    operators::ScalarLumpedMassElmat::new,
+    ref_lumped_mass,
+  );
 }
 fn ref_lumped_mass(dim: Dim) -> Option<Matrix> {
   let nvertices = (dim + 1).index();
