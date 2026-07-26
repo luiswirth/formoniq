@@ -292,11 +292,14 @@ Breaking one is a bug even if it compiles and passes tests.
    `Pullback` implements `Section` only for `Covariant`,
    so the type system, not a convention, is what stops a multivector field from being pulled back.
 
-5. **Metric-free stays metric-free.**
+5. **Depend on the weakest structure that determines the concept.**
    The exterior derivative, the boundary operator, the wedge, the interior product,
    the duality pairing and the de Rham map involve *no* metric.
    Only the Hodge star, the musicals and inner products do.
    Do not let a `Metric` leak into a signature that does not mathematically need one.
+   Metric-free is the sharpest instance, not the only one:
+   orientation, volume and the connection are each a weaker datum than the metric,
+   and a concept resting on one of them says so.
 
 6. **Orientation is a gauge inside the complex and a datum outside it.**
    A `Skeleton` stores every simplex in colex vertex order,
