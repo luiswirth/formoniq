@@ -21,22 +21,67 @@ pub trait ElMatProvider: Sync {
   fn eval(&self, metric: &Metric) -> ElMat;
 }
 
-/// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
+/// The scalar mass element matrix $[integral_K lambda_i lambda_j]$ at unit
+/// volume, $[(1 + delta_(i j)) / ((n+1)(n+2))]$.
 ///
-/// Exact closed form: $vol(K) (1 + delta_(i j)) / ((n+1)(n+2))$.
+/// Exact, and metric-free: the whole geometry of the scalar mass bilinear form
+/// is the scalar $vol(K)$ multiplying this constant, which is the grade-0 case
+/// of what makes every Whitney element matrix linear in the cell's multiform
+/// Gramian (see [`GramianLinearElMat`]).
 /// The barycentric building block of the Hodge mass matrix.
-fn scalar_mass_elmat(metric: &Metric) -> ElMat {
-  let dim = metric.dim();
+fn ref_scalar_mass(dim: Dim) -> ElMat {
+  let dim = dim.index();
   let ndofs = dim + 1;
-  let v = cell_volume(metric) / ((dim + 1) * (dim + 2)) as f64;
+  let v = 1.0 / ((dim + 1) * (dim + 2)) as f64;
   let mut elmat = Matrix::from_element(ndofs, ndofs, v);
   elmat.fill_diagonal(2.0 * v);
   elmat
 }
 
+/// An element matrix that reads the cell's geometry only through the volume
+/// $vol(K)$ and the multiform Gramian $Lambda^k (g^(-1))$, and depends on the
+/// latter *linearly*:
+///
+/// $
+///   M(g) = vol(K) dot L(Lambda^k (g^(-1))).
+/// $
+///
+/// Every element matrix built from Whitney forms factors this way, because the
+/// Whitney basis is affine: the shape functions are the same on every cell, so
+/// the only place a metric can enter an integral of their pointwise inner
+/// products is the constant inner product $Lambda^k (g^(-1))$ itself and the
+/// volume the integral carries.
+///
+/// The factorization is what [`ElMatKernel`](kernel::ElMatKernel) exists to
+/// exploit: $L$ is a constant tensor, computed once per $(n, k)$, and the whole
+/// element matrix collapses to a single matrix product with the per-cell
+/// Gramian.
+pub trait GramianLinearElMat: ElMatProvider {
+  /// The dimension of the cells this operator is defined on.
+  fn dim(&self) -> Dim;
+  /// The grade $k$ of the multiform Gramian $Lambda^k (g^(-1))$ read.
+  ///
+  /// Not in general the row or column grade: the $(dif u, dif v)$ form reads
+  /// the Gramian one grade *above* the grade of its own degrees of freedom.
+  fn form_grade(&self) -> ExteriorGrade;
+  /// $L(Lambda^k (g^(-1)))$: the element matrix at unit volume.
+  ///
+  /// Linear in its argument, which is a contract, not an observation: the
+  /// kernel construction probes it on a basis and would silently produce a
+  /// wrong operator for a nonlinear implementation.
+  fn eval_linear(&self, form_gramian: &Matrix) -> ElMat;
+}
+
 /// Approximated Element Matrix Provider for scalar mass bilinear form,
 /// obtained through trapezoidal quadrature rule.
-pub struct ScalarLumpedMassElmat;
+pub struct ScalarLumpedMassElmat {
+  dim: Dim,
+}
+impl ScalarLumpedMassElmat {
+  pub fn new(dim: impl Into<Dim>) -> Self {
+    Self { dim: dim.into() }
+  }
+}
 impl ElMatProvider for ScalarLumpedMassElmat {
   fn row_grade(&self) -> ExteriorGrade {
     Dim::ZERO
@@ -48,6 +93,22 @@ impl ElMatProvider for ScalarLumpedMassElmat {
     let n = metric.dim() + 1;
     let v = cell_volume(metric) / n as f64;
     Matrix::from_diagonal_element(n, n, v)
+  }
+}
+
+impl GramianLinearElMat for ScalarLumpedMassElmat {
+  fn dim(&self) -> Dim {
+    self.dim
+  }
+  fn form_grade(&self) -> ExteriorGrade {
+    Dim::ZERO
+  }
+  /// The degenerate base case of the factorization, and it holds:
+  /// $Lambda^0 (g^(-1))$ is the $1 times 1$ identity, so the volume-only
+  /// element matrix is the linear function reading that single entry.
+  fn eval_linear(&self, form_gramian: &Matrix) -> ElMat {
+    let n = self.dim.index() + 1;
+    Matrix::from_diagonal_element(n, n, form_gramian[(0, 0)] / n as f64)
   }
 }
 
@@ -86,15 +147,26 @@ impl ElMatProvider for HodgeMassElmat {
 
   fn eval(&self, metric: &Metric) -> Matrix {
     assert_eq!(self.dim, metric.dim());
-
-    let scalar_mass = scalar_mass_elmat(metric);
     let form_gramian = multiform_gramian(metric, self.grade);
+    cell_volume(metric) * self.eval_linear(form_gramian.matrix())
+  }
+}
+
+impl GramianLinearElMat for HodgeMassElmat {
+  fn dim(&self) -> Dim {
+    self.dim
+  }
+  fn form_grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+
+  fn eval_linear(&self, form_gramian: &Matrix) -> ElMat {
+    let scalar_mass = ref_scalar_mass(self.dim);
 
     // Inner products of the pulled-back barycentric k-blades
     // $lambda^* (e_I)$: one Cauchy-Binet sandwich for all Whitney wedge
     // terms at once.
-    let blade_inners =
-      &self.difbarys_power * form_gramian.matrix() * self.difbarys_power.transpose();
+    let blade_inners = &self.difbarys_power * form_gramian * self.difbarys_power.transpose();
 
     let mut elmat = Matrix::zeros(self.simplices.len(), self.simplices.len());
     for (i, asimp) in self.simplices.iter().enumerate() {
@@ -144,6 +216,18 @@ impl ElMatProvider for DifElmat {
   }
 }
 
+impl GramianLinearElMat for DifElmat {
+  fn dim(&self) -> Dim {
+    self.mass.dim
+  }
+  fn form_grade(&self) -> ExteriorGrade {
+    self.mass.grade
+  }
+  fn eval_linear(&self, form_gramian: &Matrix) -> ElMat {
+    self.mass.eval_linear(form_gramian) * &self.dif
+  }
+}
+
 /// Element Matrix Provider for the weak mixed codifferential $(u, dif tau)$.
 ///
 /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
@@ -169,6 +253,18 @@ impl ElMatProvider for CodifElmat {
   fn eval(&self, metric: &Metric) -> Matrix {
     let mass = self.mass.eval(metric);
     &self.codif * mass
+  }
+}
+
+impl GramianLinearElMat for CodifElmat {
+  fn dim(&self) -> Dim {
+    self.mass.dim
+  }
+  fn form_grade(&self) -> ExteriorGrade {
+    self.mass.grade
+  }
+  fn eval_linear(&self, form_gramian: &Matrix) -> ElMat {
+    &self.codif * self.mass.eval_linear(form_gramian)
   }
 }
 
@@ -201,6 +297,18 @@ impl ElMatProvider for CodifDifElmat {
   fn eval(&self, metric: &Metric) -> Matrix {
     let mass = self.mass.eval(metric);
     &self.codif * mass * &self.dif
+  }
+}
+
+impl GramianLinearElMat for CodifDifElmat {
+  fn dim(&self) -> Dim {
+    self.mass.dim
+  }
+  fn form_grade(&self) -> ExteriorGrade {
+    self.mass.grade
+  }
+  fn eval_linear(&self, form_gramian: &Matrix) -> ElMat {
+    &self.codif * self.mass.eval_linear(form_gramian) * &self.dif
   }
 }
 
@@ -277,7 +385,7 @@ mod test {
     for dim in (0..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::standard(dim);
       let hodge_mass = HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric());
-      let scalar_mass = scalar_mass_elmat(&geo.metric());
+      let scalar_mass = cell_volume(&geo.metric()) * ref_scalar_mass(dim);
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }
@@ -346,3 +454,6 @@ mod test {
     }
   }
 }
+
+/// Element matrices factored into a constant tensor and the cell geometry.
+pub mod kernel;
