@@ -1,4 +1,6 @@
-use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
+use crate::{ApproxInverse, CsrMatrix, InnerProductSpace, SelfAdjoint, Vector};
+
+use std::marker::PhantomData;
 
 /// The trivial approximate inverse $B = I$: apply is the identity.
 ///
@@ -7,26 +9,31 @@ use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
 /// separate code path. Self-adjoint by construction, and the totality base case
 /// (it is defined at every order, including zero).
 #[derive(Clone, Copy, Debug)]
-pub struct Identity {
+pub struct Identity<S = Vector> {
   dim: usize,
+  space: PhantomData<S>,
 }
 
-impl Identity {
+impl<S: InnerProductSpace> Identity<S> {
   pub fn new(dim: usize) -> Self {
-    Self { dim }
+    Self {
+      dim,
+      space: PhantomData,
+    }
   }
 }
 
-impl ApproxInverse for Identity {
+impl<S: InnerProductSpace> ApproxInverse for Identity<S> {
+  type Space = S;
   fn dim(&self) -> usize {
     self.dim
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &S) -> S {
     r.clone()
   }
 }
 
-impl SelfAdjoint for Identity {}
+impl<S: InnerProductSpace> SelfAdjoint for Identity<S> {}
 
 /// The Jacobi approximate inverse $B = D^(-1)$, the reciprocal of the diagonal.
 ///
@@ -78,6 +85,7 @@ impl Jacobi {
 }
 
 impl ApproxInverse for Jacobi {
+  type Space = Vector;
   fn dim(&self) -> usize {
     self.inv_diag.len()
   }
@@ -105,14 +113,15 @@ pub struct BlockDiagonal<B> {
   blocks: Vec<B>,
 }
 
-impl<B: ApproxInverse> BlockDiagonal<B> {
+impl<B: ApproxInverse<Space = Vector>> BlockDiagonal<B> {
   /// The block inverses, in the order their spaces are stacked in the vector.
   pub fn new(blocks: Vec<B>) -> Self {
     Self { blocks }
   }
 }
 
-impl<B: ApproxInverse> ApproxInverse for BlockDiagonal<B> {
+impl<B: ApproxInverse<Space = Vector>> ApproxInverse for BlockDiagonal<B> {
+  type Space = Vector;
   fn dim(&self) -> usize {
     self.blocks.iter().map(ApproxInverse::dim).sum()
   }
@@ -129,4 +138,4 @@ impl<B: ApproxInverse> ApproxInverse for BlockDiagonal<B> {
   }
 }
 
-impl<B: SelfAdjoint> SelfAdjoint for BlockDiagonal<B> {}
+impl<B: SelfAdjoint<Space = Vector>> SelfAdjoint for BlockDiagonal<B> {}
