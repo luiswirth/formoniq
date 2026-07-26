@@ -11,6 +11,7 @@ members = [
   "crates/gramian",
   "crates/coorder",
   "crates/iterative",
+  "crates/formoniq-cutile",
   "crates/realize",
   "crates/studio",
 ]
