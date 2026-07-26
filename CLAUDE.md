@@ -68,6 +68,11 @@ and `simplicial`/`glatt` are siblings one level up.
 `iterative` is off to the side:
 a standalone Krylov/preconditioner crate depending on nothing but `nalgebra-sparse`,
 joining the ladder only where `formoniq` consumes it.
+`formoniq-cutile` hangs off `formoniq` the way `realize` does,
+a backend rather than a rung:
+it carries the CUDA toolchain, so nothing may depend on it,
+and its `cuda` feature is off by default
+so a machine or a CI runner without CUDA still builds and tests the workspace.
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
@@ -78,9 +83,10 @@ joining the ladder only where `formoniq` consumes it.
 | `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
-| `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner. Backend is `nalgebra-sparse` alone, no faer |
+| `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner. `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Backend is `nalgebra-sparse` alone, no faer |
 | `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver), `problems::` (elliptic, dirac, heat, wave, ...) |
 | `realize`    | intrinsic data made extrinsic       | `reduce::` (the grade reduction, a $k$-form to the scalar or vector of grade $min(k, n-k)$), `Surface`/`BakedMesh` (the dimension reduction to a render primitive and its $RR^3$ bake), the mark bakes (`glyph`, `advect`, `deposit`, `volume`), `io::` (the `.vtu`/`.obj`/`.mdd` exporters and readers). No graphics dependency |
+| `formoniq-cutile` | the tile-based GPU backend     | `spec` (what each kernel computes, as host Rust: the contract, tested everywhere), `kernels` (the cuTile kernels), `device` (the device-resident vector and operator). Behind an off-by-default `cuda` feature, since the cuTile stack needs the CUDA toolkit to build |
 | `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), the gallery's `MeshSource × Study` product, a wgpu/winit/egui renderer over `realize`'s primitives, native and wasm |
 
 No crate exists solely to hold a shared type alias.
@@ -496,6 +502,15 @@ so growing the ambient never renumbers what is already there.
 and `Permutation::rank` the factorial number system $sum_j d_j dot j!$
 with $d_j = \#{i < j : p_i < p_j}$, neither formula mentions $n$.
 `cartesian::grid` is the same order on radix digits, least significant axis fastest.
+
+**An accelerator backend states its kernels in host code first.**
+Every device kernel has one function saying what it computes,
+on the flat buffers the device reads, compiled and tested everywhere,
+and the pipeline built from those is checked against the engine's own operator.
+The device kernel is then a transcription with a reference to diff against,
+which is what keeps the mathematics falsifiable
+on a machine that has no such hardware,
+and confines a hardware run to the question hardware can actually answer.
 
 **Linalg backends by role.**
 nalgebra dense (`Matrix`/`Vector`) for element-local math
