@@ -1,4 +1,4 @@
-use crate::{ApproxInverse, LinearOperator, Report, SelfAdjoint, StopCriterion, Vector};
+use crate::{ApproxInverse, InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterion};
 
 /// Solve $A x = b$ by the stationary (preconditioned Richardson) iteration
 /// $x_(k+1) = x_k + B(b - A x_k)$, started from zero.
@@ -10,18 +10,19 @@ use crate::{ApproxInverse, LinearOperator, Report, SelfAdjoint, StopCriterion, V
 /// affine structure paying off. As a standalone solver it is weak (that rate is
 /// mesh-dependent); its role is as the smoother and preconditioner other methods
 /// wrap.
-pub fn solve<O: LinearOperator, B: ApproxInverse>(
+pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   op: &O,
   precond: &B,
-  b: &Vector,
+  b: &O::Space,
   stop: StopCriterion,
-) -> (Vector, Report) {
-  let mut x = Vector::zeros(op.dim());
+) -> (O::Space, Report) {
+  let mut x = O::Space::zeros(op.dim());
   let b_norm = b.norm().max(f64::MIN_POSITIVE);
   let mut converged;
   let mut iters = 0;
   let residual = loop {
-    let r = b - op.apply(&x);
+    let mut r = b.clone();
+    r.axpby(-1.0, &op.apply(&x), 1.0);
     let residual = r.norm() / b_norm;
     converged = residual <= stop.rtol;
     // Residual checked after every step and the budget gates only the work, so
@@ -29,7 +30,7 @@ pub fn solve<O: LinearOperator, B: ApproxInverse>(
     if converged || iters >= stop.max_iters {
       break residual;
     }
-    x += precond.apply(&r);
+    x.axpby(1.0, &precond.apply(&r), 1.0);
     iters += 1;
   };
   (
@@ -67,15 +68,17 @@ impl<'a, O: LinearOperator, B: ApproxInverse> Stationary<'a, O, B> {
   }
 }
 
-impl<O: LinearOperator, B: ApproxInverse> ApproxInverse for Stationary<'_, O, B> {
+impl<O: LinearOperator, B: ApproxInverse<Space = O::Space>> ApproxInverse for Stationary<'_, O, B> {
+  type Space = O::Space;
   fn dim(&self) -> usize {
     self.op.dim()
   }
-  fn apply(&self, r: &Vector) -> Vector {
-    let mut x = Vector::zeros(self.op.dim());
+  fn apply(&self, r: &Self::Space) -> Self::Space {
+    let mut x = O::Space::zeros(self.op.dim());
     for _ in 0..self.sweeps {
-      let resid = r - self.op.apply(&x);
-      x += self.precond.apply(&resid);
+      let mut resid = r.clone();
+      resid.axpby(-1.0, &self.op.apply(&x), 1.0);
+      x.axpby(1.0, &self.precond.apply(&resid), 1.0);
     }
     x
   }
@@ -85,4 +88,4 @@ impl<O: LinearOperator, B: ApproxInverse> ApproxInverse for Stationary<'_, O, B>
 /// symmetric): each sweep is $B sum_(j<k) (I - B A)^j$, symmetric term by term
 /// since $(I - B A)^j B = B (I - A B)^j$. Positive-definiteness additionally
 /// needs the sweeps to converge, the constructor's promise as everywhere.
-impl<O: LinearOperator, B: SelfAdjoint> SelfAdjoint for Stationary<'_, O, B> {}
+impl<O: LinearOperator, B: SelfAdjoint<Space = O::Space>> SelfAdjoint for Stationary<'_, O, B> {}

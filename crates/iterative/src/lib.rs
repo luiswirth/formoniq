@@ -21,18 +21,79 @@ pub type Vector = na::DVector<f64>;
 /// the source a diagonal or triangular preconditioner reads its entries from.
 pub type CsrMatrix = nas::CsrMatrix<f64>;
 
-/// A linear operator $A: RR^n -> RR^n$, applied as $x |-> A x$ --- the only
+/// A finite-dimensional real inner product space: everything a short-recurrence
+/// Krylov method asks of the vectors it iterates on, and nothing more.
+///
+/// Conjugate gradients and MINRES build their iterates from linear combinations
+/// and inner products alone --- they never index an entry, never slice, and
+/// never look at a basis. Naming that structure is what lets one implementation
+/// of each method serve a vector wherever it lives: the host [`Vector`] is the
+/// instance the assembled path uses, and a device-resident vector is another,
+/// which is what keeps a GPU solve from copying its iterates across the bus
+/// every step.
+///
+/// The operations mutate in place because an implementation may not be able to
+/// allocate cheaply; that is a matter of how the space is realized, not of what
+/// it is.
+pub trait InnerProductSpace: Clone {
+  /// The zero vector of the given dimension: the additive identity, and the
+  /// only element a Krylov method can name without being handed one.
+  fn zeros(dim: usize) -> Self;
+  /// The dimension $n$ of the space.
+  fn dim(&self) -> usize;
+  /// The inner product $angle.l x, y angle.r$.
+  fn dot(&self, other: &Self) -> f64;
+  /// $y <- alpha x + beta y$, the one linear combination every update is an
+  /// instance of.
+  ///
+  /// `x` is a distinct vector from `self`; scaling in place is
+  /// [`Self::scale`].
+  fn axpby(&mut self, alpha: f64, x: &Self, beta: f64);
+  /// $x <- alpha x$.
+  fn scale(&mut self, alpha: f64);
+  /// The induced norm $norm(x) = sqrt(angle.l x, x angle.r)$.
+  fn norm(&self) -> f64 {
+    self.dot(self).sqrt()
+  }
+}
+
+impl InnerProductSpace for Vector {
+  fn zeros(dim: usize) -> Self {
+    Vector::zeros(dim)
+  }
+  fn dim(&self) -> usize {
+    self.len()
+  }
+  fn dot(&self, other: &Self) -> f64 {
+    na::DVector::dot(self, other)
+  }
+  fn axpby(&mut self, alpha: f64, x: &Self, beta: f64) {
+    self.axpy(alpha, x, beta);
+  }
+  fn scale(&mut self, alpha: f64) {
+    *self *= alpha;
+  }
+}
+
+/// A linear operator $A: V -> V$, applied as $x |-> A x$ --- the only
 /// thing a Krylov method asks of its system matrix.
 ///
 /// Distinct from [`ApproxInverse`] by intent, not by shape: this is $A$, that is
 /// $B approx A^(-1)$. Entry-needing preconditioners (a diagonal, a triangular
 /// sweep) take the assembled [`CsrMatrix`] at construction instead, which keeps
 /// this interface at the matrix-free minimum a matvec needs.
+///
+/// The space is an associated type rather than a parameter: an operator acts on
+/// one space, and pinning it there is what keeps the apply monomorphized and
+/// makes pairing an operator with a preconditioner living somewhere else a
+/// compile error rather than an implicit transfer.
 pub trait LinearOperator {
+  /// The space the operator acts on.
+  type Space: InnerProductSpace;
   /// The order $n$ of the square operator.
   fn dim(&self) -> usize;
   /// Apply the operator: $x |-> A x$.
-  fn apply(&self, x: &Vector) -> Vector;
+  fn apply(&self, x: &Self::Space) -> Self::Space;
 }
 
 /// A cheap approximate inverse $B approx A^(-1)$, applied as $r |-> B r$.
@@ -43,10 +104,12 @@ pub trait LinearOperator {
 /// inverse $B = A^(-1)$ (a factorization) is the perfect special case, and the
 /// identity $B = I$ the trivial one.
 pub trait ApproxInverse {
+  /// The space the approximate inverse acts on.
+  type Space: InnerProductSpace;
   /// The order $n$ of the square operator approximated.
   fn dim(&self) -> usize;
   /// Apply the approximate inverse: $r |-> B r$.
-  fn apply(&self, r: &Vector) -> Vector;
+  fn apply(&self, r: &Self::Space) -> Self::Space;
 }
 
 /// Marker: [`ApproxInverse::apply`] is a fixed self-adjoint positive-definite
@@ -387,6 +450,7 @@ mod tests {
     }
   }
   impl ApproxInverse for DenseInverse {
+    type Space = Vector;
     fn dim(&self) -> usize {
       self.inv.nrows()
     }
@@ -546,5 +610,133 @@ mod tests {
     let r = Vector::from_fn(5, |i, _| (i as f64 + 1.0).ln());
     let s = Vector::from_fn(5, |i, _| (2.0 * i as f64).cos());
     assert!((precond.apply(&r).dot(&s) - r.dot(&precond.apply(&s))).abs() < 1e-12);
+  }
+}
+
+/// The Krylov methods are generic over [`InnerProductSpace`], and this is the
+/// proof rather than the claim: a second, unrelated realization of the space,
+/// sharing no code and no storage layout with [`Vector`], solves the same
+/// system to the same answer through the same [`krylov::cg`].
+///
+/// The point is not the plain vector: it stands in for a vector that does not
+/// live in host memory at all. A solve that never leaves a device is this test
+/// with a different implementation of the same five operations, so the
+/// correctness of the method there is settled here.
+#[cfg(test)]
+mod foreign_space {
+  use super::*;
+  use crate::testutil::{dense_solve, spd_from_spectrum};
+  use na::DMatrix;
+
+  /// A vector realized as a plain slice of scalars, with none of nalgebra's
+  /// structure: the minimum an implementation can be.
+  #[derive(Clone, Debug, PartialEq)]
+  struct Coords(Vec<f64>);
+
+  impl InnerProductSpace for Coords {
+    fn zeros(dim: usize) -> Self {
+      Coords(vec![0.0; dim])
+    }
+    fn dim(&self) -> usize {
+      self.0.len()
+    }
+    fn dot(&self, other: &Self) -> f64 {
+      self.0.iter().zip(&other.0).map(|(a, b)| a * b).sum()
+    }
+    fn axpby(&mut self, alpha: f64, x: &Self, beta: f64) {
+      for (y, x) in self.0.iter_mut().zip(&x.0) {
+        *y = alpha * x + beta * *y;
+      }
+    }
+    fn scale(&mut self, alpha: f64) {
+      for y in &mut self.0 {
+        *y *= alpha;
+      }
+    }
+  }
+
+  /// A dense operator acting on [`Coords`]: the apply is the only place the
+  /// operator's own representation shows through.
+  struct DenseOp(DMatrix<f64>);
+
+  impl LinearOperator for DenseOp {
+    type Space = Coords;
+    fn dim(&self) -> usize {
+      self.0.nrows()
+    }
+    fn apply(&self, x: &Coords) -> Coords {
+      Coords(
+        (0..self.0.nrows())
+          .map(|i| (0..self.0.ncols()).map(|j| self.0[(i, j)] * x.0[j]).sum())
+          .collect(),
+      )
+    }
+  }
+
+  /// Conjugate gradients on the foreign space reproduces the direct solve, so
+  /// the method depends on the inner-product structure alone.
+  #[test]
+  fn cg_solves_on_a_foreign_space() {
+    let dense = spd_from_spectrum(&[1.0, 2.0, 3.5, 6.0, 11.0]);
+    let rhs: Vec<f64> = vec![1.0, -2.0, 0.5, 3.0, -1.5];
+
+    let (x, report) = krylov::cg(
+      &DenseOp(dense.clone()),
+      &Identity::<Coords>::new(5),
+      &Coords(rhs.clone()),
+      StopCriterion::rtol(1e-12),
+    );
+
+    let expected = dense_solve(&dense, &Vector::from_column_slice(&rhs));
+    assert!(report.converged);
+    for (got, want) in x.0.iter().zip(expected.iter()) {
+      assert!((got - want).abs() < 1e-9, "{got} vs {want}");
+    }
+  }
+
+  /// The same system solved through the host [`Vector`] instance agrees
+  /// entry by entry: one method, two spaces, one answer.
+  #[test]
+  fn both_spaces_agree() {
+    let dense = spd_from_spectrum(&[1.0, 2.0, 3.5, 6.0, 11.0]);
+    let rhs = vec![1.0, -2.0, 0.5, 3.0, -1.5];
+    let stop = StopCriterion::rtol(1e-12);
+
+    let (foreign, _) = krylov::cg(
+      &DenseOp(dense.clone()),
+      &Identity::<Coords>::new(5),
+      &Coords(rhs.clone()),
+      stop,
+    );
+    let (host, _) = krylov::cg(
+      &crate::testutil::csr(&dense),
+      &Identity::<Vector>::new(5),
+      &Vector::from_column_slice(&rhs),
+      stop,
+    );
+
+    for (got, want) in foreign.0.iter().zip(host.iter()) {
+      assert!((got - want).abs() < 1e-9);
+    }
+  }
+
+  /// MINRES too, on the symmetric indefinite case that is its reason to exist.
+  #[test]
+  fn minres_solves_on_a_foreign_space() {
+    let dense = spd_from_spectrum(&[-3.0, -1.0, 1.0, 2.0, 5.0]);
+    let rhs: Vec<f64> = vec![0.5, 1.0, -2.0, 1.5, 3.0];
+
+    let (x, report) = krylov::minres(
+      &DenseOp(dense.clone()),
+      &Identity::<Coords>::new(5),
+      &Coords(rhs.clone()),
+      StopCriterion::rtol(1e-12),
+    );
+
+    let expected = dense_solve(&dense, &Vector::from_column_slice(&rhs));
+    assert!(report.converged);
+    for (got, want) in x.0.iter().zip(expected.iter()) {
+      assert!((got - want).abs() < 1e-8, "{got} vs {want}");
+    }
   }
 }

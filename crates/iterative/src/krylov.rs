@@ -1,4 +1,4 @@
-use crate::{LinearOperator, Report, SelfAdjoint, StopCriterion, Vector};
+use crate::{InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterion};
 
 /// Solve $A x = b$ by preconditioned conjugate gradients, started from zero.
 ///
@@ -31,13 +31,13 @@ use crate::{LinearOperator, Report, SelfAdjoint, StopCriterion, Vector};
 /// The operator's own positive-definiteness is the caller's promise, as
 /// everywhere; passing an indefinite operator breaks the method (use a
 /// symmetric-indefinite Krylov method for those).
-pub fn cg<O: LinearOperator, M: SelfAdjoint>(
+pub fn cg<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   op: &O,
   precond: &M,
-  b: &Vector,
+  b: &O::Space,
   stop: StopCriterion,
-) -> (Vector, Report) {
-  let mut x = Vector::zeros(op.dim());
+) -> (O::Space, Report) {
+  let mut x = O::Space::zeros(op.dim());
   let b_norm = b.norm();
   if b_norm == 0.0 {
     return (
@@ -67,12 +67,12 @@ pub fn cg<O: LinearOperator, M: SelfAdjoint>(
     }
     let ap = op.apply(&p);
     let alpha = rz / p.dot(&ap);
-    x.axpy(alpha, &p, 1.0);
-    r.axpy(-alpha, &ap, 1.0);
+    x.axpby(alpha, &p, 1.0);
+    r.axpby(-alpha, &ap, 1.0);
     z = precond.apply(&r);
     let rz_next = r.dot(&z);
     let beta = rz_next / rz;
-    p = &z + beta * &p;
+    p.axpby(1.0, &z, beta);
     rz = rz_next;
     iters += 1;
   };
@@ -102,14 +102,14 @@ pub fn cg<O: LinearOperator, M: SelfAdjoint>(
 /// Follows the preconditioned form of Paige and Saunders' algorithm; the
 /// reported residual is the relative preconditioner-norm residual
 /// $norm(r_k)_(M^(-1)) / norm(b)_(M^(-1))$.
-pub fn minres<O: LinearOperator, M: SelfAdjoint>(
+pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   op: &O,
   precond: &M,
-  b: &Vector,
+  b: &O::Space,
   stop: StopCriterion,
-) -> (Vector, Report) {
+) -> (O::Space, Report) {
   let n = op.dim();
-  let mut x = Vector::zeros(n);
+  let mut x = O::Space::zeros(n);
   let eps = f64::EPSILON;
 
   // First Lanczos vector, in the M^{-1} inner product.
@@ -137,8 +137,8 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint>(
   let mut phibar = beta1;
   let mut cs = -1.0;
   let mut sn = 0.0;
-  let mut w = Vector::zeros(n);
-  let mut w2 = Vector::zeros(n);
+  let mut w = O::Space::zeros(n);
+  let mut w2 = O::Space::zeros(n);
   let mut r2 = r1.clone();
 
   let mut residual = 1.0;
@@ -148,13 +148,14 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint>(
     iters += 1;
 
     // Lanczos step in the M^{-1} inner product.
-    let v = &y / beta;
+    let mut v = y.clone();
+    v.scale(1.0 / beta);
     let mut y_next = op.apply(&v);
     if iters >= 2 {
-      y_next.axpy(-beta / oldb, &r1, 1.0);
+      y_next.axpby(-beta / oldb, &r1, 1.0);
     }
     let alfa = v.dot(&y_next);
-    y_next.axpy(-alfa / beta, &r2, 1.0);
+    y_next.axpby(-alfa / beta, &r2, 1.0);
     r1 = r2;
     r2 = y_next;
     y = precond.apply(&r2);
@@ -177,12 +178,12 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint>(
     // Update the solution. Entering, `w` holds w_{k-1} and `w2` holds w_{k-2};
     // oldeps multiplies the older, delta the newer.
     let mut wnew = v;
-    wnew.axpy(-oldeps, &w2, 1.0);
-    wnew.axpy(-delta, &w, 1.0);
-    wnew /= gamma;
+    wnew.axpby(-oldeps, &w2, 1.0);
+    wnew.axpby(-delta, &w, 1.0);
+    wnew.scale(1.0 / gamma);
     w2 = w;
     w = wnew;
-    x.axpy(phi, &w, 1.0);
+    x.axpby(phi, &w, 1.0);
 
     residual = phibar / beta1;
     if residual <= stop.rtol {

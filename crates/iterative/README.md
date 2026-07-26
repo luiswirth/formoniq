@@ -15,6 +15,13 @@ one fact (it damps high-frequency error and only that) read against three job de
 
 ## Interfaces
 
+- `InnerProductSpace`:
+  the vectors themselves.
+  A short-recurrence Krylov method builds its iterates from linear combinations
+  and inner products alone: it never indexes an entry, never slices, never looks at a basis.
+  Asking only for that structure is what lets one implementation of each method
+  serve a vector wherever it lives,
+  including one that never leaves an accelerator.
 - `LinearOperator`:
   apply `A`, the only thing a Krylov method asks of its system matrix.
   Matrix-free by default.
