@@ -169,7 +169,7 @@ mod test {
   fn meshes() -> impl Iterator<Item = (String, Complex)> {
     let single = (0..=3).map(|dim| (format!("unit {dim}"), Complex::unit(dim)));
     let refined = (1..=3).flat_map(|dim| {
-      (1..=2).map(move |refinement| {
+      (2..=3).map(move |refinement| {
         (
           format!("dim {dim} refined {refinement}"),
           Complex::unit(dim).refine(refinement).into_complex(),

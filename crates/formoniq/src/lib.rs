@@ -8,6 +8,7 @@ pub mod bc;
 pub mod fe;
 pub mod hx;
 pub mod linalg;
+pub mod matfree;
 pub mod multigrid;
 pub mod operators;
 pub mod problems;
