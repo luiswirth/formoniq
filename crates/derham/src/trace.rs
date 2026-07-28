@@ -11,26 +11,16 @@ use {
 /// pullback along the inclusion, hence $Lambda^k$ of the face's spanning
 /// vectors.
 ///
-/// Metric-free, being a pullback, and covariant-only for the same reason a
-/// [`Pullback`](crate::section::Pullback) is: a form pulls back along an
-/// inclusion where a multivector pushes forward along it. The vector-side
-/// counterpart is
-/// [`face_tangent_blade`](crate::project::face_tangent_blade), and the two are
-/// adjoint under the duality pairing.
+/// Metric-free, being a pullback, and covariant-only for the reason a
+/// [`Pullback`](crate::section::Pullback) is. The vector-side counterpart is
+/// [`face_tangent_blade`](crate::project::face_tangent_blade).
 ///
-/// The result lives on the face's *own* tangent space, of dimension
-/// $d = dim tau$, so the normal components are not discarded but **absent**:
-/// there is no longer a space for them to inhabit. That is what "only the
-/// tangential part of a form is chart-independent" says as a type rather than
-/// as a caveat, and why the de Rham map is well defined on a face while a
-/// pointwise value is not.
+/// The result lives on the face's own tangent space, so the normal components
+/// are not discarded but **absent**: there is no space left for them. Trivial
+/// below the grade, where $Lambda^k (T^* tau) = 0$.
 ///
-/// Trivial below the grade: a face of dimension $d < k$ has $Lambda^k (T^* tau)
-/// = 0$, and the trace lands in that zero space rather than failing.
-///
-/// The trace is a linear map, materialized once and applied at every point,
-/// because $Lambda^k$ of the inclusion is reference data of the cell dimension
-/// and the face's positions alone.
+/// Materialized once and applied at every point, $Lambda^k$ of the inclusion
+/// being reference data.
 #[derive(Debug, Clone)]
 pub struct FaceTrace {
   /// $Lambda^k (iota_tau)^T$, of shape $binom(d, k) times binom(n, k)$.

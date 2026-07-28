@@ -10,18 +10,13 @@ use {
 /// The values of a DOF-indexed family of shape forms at a sequence of points,
 /// indexed `[node][dof]`.
 ///
-/// **Reference data.** The shape functions and the sample points are both
-/// functions of the cell dimension, the grade and the rule alone, so this table
-/// is built once and read on every cell of the mesh -- the same reason a
-/// closed-form element matrix is computed once on the reference cell.
+/// Reference data: the shape functions and the sample points depend on the cell
+/// dimension, the grade and the rule alone, so the table is built once and read
+/// on every cell. Not an evaluation *at* the degrees of freedom -- a node is
+/// where a quadrature asks, a DOF is which shape function answers.
 ///
-/// Not an evaluation *at* the degrees of freedom. The two index sets are the
-/// DOFs and the nodes, and they are unrelated: a node is where a quadrature
-/// asks, a DOF is which shape function answers.
-///
-/// A family that is constant over the nodes, such as the differentials
-/// [`WhitneyLsf::dif`], is the degenerate member rather than a special case,
-/// which is what lets one integration routine consume both and why an integrand
+/// A family constant over the nodes, such as [`WhitneyLsf::dif`], is the
+/// degenerate member rather than a special case, which is why an integrand
 /// never has to reach a DOF index to find a precomputed constant.
 #[derive(Debug, Clone)]
 pub struct LsfSamples {
