@@ -15,9 +15,17 @@ one fact (it damps high-frequency error and only that) read against three job de
 
 ## Interfaces
 
+- `InnerProductSpace`:
+  linear combinations, an inner product, and a zero taken from a vector you already hold.
+  That is everything conjugate gradients and MINRES read about their vectors:
+  they never index an entry, never slice and never name a basis,
+  so a method written against it runs wherever its vectors live.
+  The dense host vector is one instance, and a vector that never enters host memory is the reason to want another.
 - `LinearOperator`:
   apply `A`, the only thing a Krylov method asks of its system matrix.
   Matrix-free by default.
+  Carries its space, so pairing an operator with a preconditioner living somewhere else
+  is a compile error rather than an implicit transfer.
 - `ApproxInverse`:
   apply `B ≈ A⁻¹`.
   The central trait.
@@ -29,7 +37,8 @@ one fact (it damps high-frequency error and only that) read against three job de
   rather than silently breaking convergence.
 
 Entry-needing preconditioners (a diagonal, a triangular sweep)
-take the assembled sparse matrix at construction.
+take the assembled sparse matrix at construction,
+and say so by pinning their space to the host vector.
 Everything else is matrix-free.
 Consumers are generic over the operator and the preconditioner, monomorphized,
 with no dynamic dispatch on the assembly-driven apply path.
