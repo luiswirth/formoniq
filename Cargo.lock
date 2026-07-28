@@ -2204,6 +2204,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "multialgebra"
+version = "0.2.0"
+dependencies = [
+ "approx",
+ "multiindex",
+ "nalgebra",
+]
+
+[[package]]
 name = "multiindex"
 version = "0.2.0"
 dependencies = [

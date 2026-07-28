@@ -32,7 +32,7 @@ pub fn exterior_dim(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> usi
 }
 
 /// The basis blades of $Lambda^k (RR^n)$ in colexicographic order:
-/// the order of the coefficients of an [`ExteriorElement`].
+/// the order of the components of an [`ExteriorElement`].
 ///
 /// Empty off $[0, n]$, matching [`exterior_dim`].
 pub fn exterior_bases(
@@ -145,21 +145,21 @@ pub fn multiform_gramian(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Gr
 
 /// An element of an exterior algebra, of the given [`Variance`].
 ///
-/// Coefficients on the colexicographically ordered basis blades.
+/// Components on the colexicographically ordered basis blades.
 #[derive(Debug, Clone)]
 pub struct ExteriorElement<V: Variance> {
-  coeffs: Vector,
+  components: Vector,
   dim: Dim,
   grade: ExteriorGrade,
   variance: PhantomData<V>,
 }
 
 impl<V: Variance> ExteriorElement<V> {
-  pub fn new(coeffs: Vector, dim: impl Into<Degree>, grade: impl Into<Degree>) -> Self {
+  pub fn new(components: Vector, dim: impl Into<Degree>, grade: impl Into<Degree>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    assert_eq!(coeffs.len(), exterior_dim(dim, grade));
+    assert_eq!(components.len(), exterior_dim(dim, grade));
     Self {
-      coeffs,
+      components,
       dim,
       grade,
       variance: PhantomData,
@@ -169,9 +169,9 @@ impl<V: Variance> ExteriorElement<V> {
   pub fn scalar(v: f64, dim: impl Into<Degree>) -> Self {
     Self::new(na::dvector![v], dim, Degree::ZERO)
   }
-  pub fn line(coeffs: Vector) -> Self {
-    let dim = coeffs.len();
-    Self::new(coeffs, dim, Degree::ONE)
+  pub fn line(components: Vector) -> Self {
+    let dim = components.len();
+    Self::new(components, dim, Degree::ONE)
   }
 
   pub fn zero(dim: impl Into<Degree>, grade: impl Into<Degree>) -> Self {
@@ -191,7 +191,7 @@ impl<V: Variance> ExteriorElement<V> {
 
   pub fn into_grade1(self) -> Vector {
     assert_eq!(self.grade, 1);
-    self.coeffs
+    self.components
   }
 
   pub fn dim(&self) -> Dim {
@@ -200,16 +200,16 @@ impl<V: Variance> ExteriorElement<V> {
   pub fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  pub fn coeffs(&self) -> &Vector {
-    &self.coeffs
+  pub fn components(&self) -> &Vector {
+    &self.components
   }
-  pub fn into_coeffs(self) -> Vector {
-    self.coeffs
+  pub fn into_components(self) -> Vector {
+    self.components
   }
 
   pub fn basis_iter(&self) -> impl Iterator<Item = (f64, Blade)> {
     self
-      .coeffs
+      .components
       .iter()
       .copied()
       .zip(exterior_bases(self.dim, self.grade))
@@ -222,20 +222,20 @@ impl<V: Variance> ExteriorElement<V> {
     let new_grade = self.grade + other.grade;
     assert!(new_grade <= dim, "Wedge grade exceeds dimension.");
 
-    let mut new_coeffs = Vector::zeros(exterior_dim(dim, new_grade));
+    let mut new_components = Vector::zeros(exterior_dim(dim, new_grade));
 
-    for (self_coeff, self_blade) in self.basis_iter() {
-      if self_coeff == 0.0 {
+    for (self_component, self_blade) in self.basis_iter() {
+      if self_component == 0.0 {
         continue;
       }
-      for (other_coeff, other_blade) in other.basis_iter() {
+      for (other_component, other_blade) in other.basis_iter() {
         if let Some((sign, merged)) = self_blade.union_signed(other_blade) {
-          new_coeffs[merged.rank()] += sign.as_f64() * self_coeff * other_coeff;
+          new_components[merged.rank()] += sign.as_f64() * self_component * other_component;
         }
       }
     }
 
-    Self::new(new_coeffs, dim, new_grade)
+    Self::new(new_components, dim, new_grade)
   }
 
   pub fn wedge_big(factors: impl IntoIterator<Item = Self>) -> Option<Self> {
@@ -249,7 +249,7 @@ impl<V: Variance> ExteriorElement<V> {
   /// $angle.l dot, dot angle.r: Lambda^k V^* times Lambda^k V -> RR$.
   pub fn pairing(&self, dual: &ExteriorElement<V::Dual>) -> f64 {
     assert!(self.dim == dual.dim && self.grade == dual.grade);
-    self.coeffs.dot(&dual.coeffs)
+    self.components.dot(&dual.components)
   }
 
   /// The interior product (contraction)
@@ -269,12 +269,13 @@ impl<V: Variance> ExteriorElement<V> {
     assert_eq!(dual.grade, 1, "Contraction is with a grade-1 element.");
 
     let mut contraction = Self::zero(self.dim, self.grade - 1);
-    for (coeff, blade) in self.basis_iter() {
-      if coeff == 0.0 {
+    for (component, blade) in self.basis_iter() {
+      if component == 0.0 {
         continue;
       }
       for (sign, index, deleted) in blade.deletions() {
-        contraction.coeffs[deleted.rank()] += sign.as_f64() * dual.coeffs[index] * coeff;
+        contraction.components[deleted.rank()] +=
+          sign.as_f64() * dual.components[index] * component;
       }
     }
     contraction
@@ -285,7 +286,7 @@ impl<V: Variance> ExteriorElement<V> {
   /// Indefinite whenever the metric is: the sign is information, not error.
   pub fn inner(&self, other: &Self, metric: &Metric) -> f64 {
     assert!(self.dim == other.dim && self.grade == other.grade);
-    multi_gramian(V::gramian(metric), self.grade).inner(&self.coeffs, &other.coeffs)
+    multi_gramian(V::gramian(metric), self.grade).inner(&self.components, &other.components)
   }
   /// Magnitude $sqrt(abs(inner(v, v)))$. On an indefinite metric the sign of
   /// [`Self::inner`] carries the causal character separately; this is never
@@ -318,13 +319,13 @@ impl<V: Variance> ExteriorElement<V> {
     assert_eq!(metric.dim(), dim);
 
     let gramian = V::gramian(metric);
-    let weighted = (exterior_power(gramian.matrix(), self.grade) * &self.coeffs)
+    let weighted = (exterior_power(gramian.matrix(), self.grade) * &self.components)
       / multi_gramian(gramian, dim).det_sqrt();
 
     let mut star = Self::zero(dim, dim - self.grade);
-    for (blade, &coeff) in exterior_bases(dim, self.grade).zip(weighted.iter()) {
+    for (blade, &component) in exterior_bases(dim, self.grade).zip(weighted.iter()) {
       let (sign, complement) = blade.complement_signed(dim.index());
-      star.coeffs[complement.rank()] = orientation.as_f64() * sign.as_f64() * coeff;
+      star.components[complement.rank()] = orientation.as_f64() * sign.as_f64() * component;
     }
     star
   }
@@ -332,13 +333,13 @@ impl<V: Variance> ExteriorElement<V> {
   pub fn eq_epsilon(&self, other: &Self, eps: f64) -> bool {
     self.dim == other.dim
       && self.grade == other.grade
-      && (&self.coeffs - &other.coeffs).norm_squared() <= eps.powi(2)
+      && (&self.components - &other.components).norm_squared() <= eps.powi(2)
   }
 }
 
 impl MultiVector {
   /// Pushforward along a linear map $A: V -> W$: the covariant action of
-  /// the exterior power functor, $Lambda^k A$ on coefficients.
+  /// the exterior power functor, $Lambda^k A$ on components.
   ///
   /// Adjoint to [`MultiForm::pullback`] under the duality [`pairing`]:
   /// $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$.
@@ -346,21 +347,22 @@ impl MultiVector {
   /// [`pairing`]: ExteriorElement::pairing
   pub fn pushforward(&self, linear_map: &Matrix) -> MultiVector {
     assert_eq!(self.dim, linear_map.ncols());
-    let coeffs = exterior_power(linear_map, self.grade) * &self.coeffs;
-    Self::new(coeffs, linear_map.nrows(), self.grade)
+    let components = exterior_power(linear_map, self.grade) * &self.components;
+    Self::new(components, linear_map.nrows(), self.grade)
   }
 
   /// The musical isomorphism $flat: Lambda^k V -> Lambda^k V^*$,
   /// lowering indices with $Lambda^k g$.
   pub fn flat(&self, metric: &Metric) -> MultiForm {
-    let coeffs = exterior_power(metric.vector_gramian().matrix(), self.grade) * &self.coeffs;
-    MultiForm::new(coeffs, self.dim, self.grade)
+    let components =
+      exterior_power(metric.vector_gramian().matrix(), self.grade) * &self.components;
+    MultiForm::new(components, self.dim, self.grade)
   }
 }
 
 impl MultiForm {
   /// Pullback along a linear map $A: V -> W$: the contravariant action of
-  /// the exterior power functor, $(Lambda^k A)^T$ on coefficients.
+  /// the exterior power functor, $(Lambda^k A)^T$ on components.
   ///
   /// Adjoint to [`MultiVector::pushforward`] under the duality [`pairing`]:
   /// $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$.
@@ -368,16 +370,17 @@ impl MultiForm {
   /// [`pairing`]: ExteriorElement::pairing
   pub fn pullback(&self, linear_map: &Matrix) -> MultiForm {
     assert_eq!(self.dim, linear_map.nrows());
-    let coeffs = exterior_power(linear_map, self.grade).transpose() * &self.coeffs;
-    Self::new(coeffs, linear_map.ncols(), self.grade)
+    let components = exterior_power(linear_map, self.grade).transpose() * &self.components;
+    Self::new(components, linear_map.ncols(), self.grade)
   }
 
   /// The musical isomorphism $sharp: Lambda^k V^* -> Lambda^k V$,
   /// raising indices with $Lambda^k g^(-1)$. Inverse of
   /// [`MultiVector::flat`].
   pub fn sharp(&self, metric: &Metric) -> MultiVector {
-    let coeffs = exterior_power(metric.covector_gramian().matrix(), self.grade) * &self.coeffs;
-    MultiVector::new(coeffs, self.dim, self.grade)
+    let components =
+      exterior_power(metric.covector_gramian().matrix(), self.grade) * &self.components;
+    MultiVector::new(components, self.dim, self.grade)
   }
 }
 
@@ -392,7 +395,7 @@ impl<V: Variance> std::ops::AddAssign for ExteriorElement<V> {
   fn add_assign(&mut self, other: Self) {
     assert_eq!(self.dim, other.dim);
     assert_eq!(self.grade, other.grade);
-    self.coeffs += other.coeffs;
+    self.components += other.components;
   }
 }
 
@@ -407,7 +410,7 @@ impl<V: Variance> std::ops::SubAssign for ExteriorElement<V> {
   fn sub_assign(&mut self, other: Self) {
     assert_eq!(self.dim, other.dim);
     assert_eq!(self.grade, other.grade);
-    self.coeffs -= other.coeffs;
+    self.components -= other.components;
   }
 }
 
@@ -420,7 +423,7 @@ impl<V: Variance> std::ops::Mul<f64> for ExteriorElement<V> {
 }
 impl<V: Variance> std::ops::MulAssign<f64> for ExteriorElement<V> {
   fn mul_assign(&mut self, scalar: f64) {
-    self.coeffs *= scalar;
+    self.components *= scalar;
   }
 }
 impl<V: Variance> std::ops::Mul<ExteriorElement<V>> for f64 {
@@ -435,20 +438,20 @@ impl<V: Variance> std::ops::Index<Blade> for ExteriorElement<V> {
   fn index(&self, blade: Blade) -> &Self::Output {
     assert_eq!(blade.card(), self.grade);
     assert!(blade.iter().all(|i| i < self.dim));
-    &self.coeffs[blade.rank()]
+    &self.components[blade.rank()]
   }
 }
 impl<V: Variance> std::ops::IndexMut<Blade> for ExteriorElement<V> {
   fn index_mut(&mut self, blade: Blade) -> &mut Self::Output {
     assert_eq!(blade.card(), self.grade);
     assert!(blade.iter().all(|i| i < self.dim));
-    &mut self.coeffs[blade.rank()]
+    &mut self.components[blade.rank()]
   }
 }
 impl<V: Variance> std::ops::Index<usize> for ExteriorElement<V> {
   type Output = f64;
   fn index(&self, index: usize) -> &Self::Output {
-    &self.coeffs[index]
+    &self.components[index]
   }
 }
 
@@ -518,7 +521,7 @@ mod tests {
 
       let contracted = scalar.interior_product(&vector);
       assert_eq!(contracted.grade(), ExteriorGrade::new(-1));
-      assert_eq!(contracted.coeffs().len(), 0);
+      assert_eq!(contracted.components().len(), 0);
     }
   }
 
@@ -533,7 +536,7 @@ mod tests {
         assert_eq!(exterior_bases(dim, grade).count(), 0);
 
         let zero: MultiForm = ExteriorElement::zero(dim, grade);
-        assert_eq!(zero.coeffs().len(), 0);
+        assert_eq!(zero.components().len(), 0);
       }
     }
   }
@@ -597,13 +600,17 @@ mod tests {
         let computed = form.pullback(&a);
         let expected: MultiForm = form
           .basis_iter()
-          .map(|(coeff, blade)| {
-            coeff
+          .map(|(component, blade)| {
+            component
               * MultiForm::wedge_big(blade.iter().map(|i| MultiForm::line(a.row(i).transpose())))
                 .unwrap_or(MultiForm::one(m))
           })
           .sum();
-        assert_relative_eq!(computed.coeffs(), expected.coeffs(), epsilon = 1e-12);
+        assert_relative_eq!(
+          computed.components(),
+          expected.components(),
+          epsilon = 1e-12
+        );
       }
     }
   }
@@ -619,7 +626,7 @@ mod tests {
         let w: MultiVector = test_element(dim, grade, 2);
 
         let roundtrip = v.flat(&metric).sharp(&metric);
-        assert_relative_eq!(roundtrip.coeffs(), v.coeffs(), epsilon = 1e-12);
+        assert_relative_eq!(roundtrip.components(), v.components(), epsilon = 1e-12);
 
         assert_relative_eq!(
           v.flat(&metric).pairing(&w),
@@ -650,7 +657,7 @@ mod tests {
           let star = element.hodge_star(&euclidean, Sign::Pos);
           let (sign, complement) = blade.complement_signed(dim);
           let expected = MultiForm::from_blade_signed(dim, sign, complement);
-          assert_relative_eq!(star.coeffs(), expected.coeffs());
+          assert_relative_eq!(star.components(), expected.components());
         }
       }
     }
@@ -675,8 +682,8 @@ mod tests {
               .hodge_star(&metric, Sign::Pos)
               .hodge_star(&metric, Sign::Pos);
             assert_relative_eq!(
-              star_star.coeffs(),
-              &(sign.as_f64() * form).coeffs(),
+              star_star.components(),
+              &(sign.as_f64() * form).components(),
               epsilon = 1e-12
             );
 
@@ -685,8 +692,8 @@ mod tests {
               .hodge_star(&metric, Sign::Pos)
               .hodge_star(&metric, Sign::Pos);
             assert_relative_eq!(
-              star_star.coeffs(),
-              &(sign.as_f64() * vector).coeffs(),
+              star_star.components(),
+              &(sign.as_f64() * vector).components(),
               epsilon = 1e-12
             );
           }
@@ -713,7 +720,7 @@ mod tests {
             let wedge = alpha.wedge(&beta.hodge_star(&metric, Sign::Pos));
 
             let inner = alpha.inner(&beta, &metric);
-            // The volume form has coefficient sqrt(|det g|).
+            // The volume form has component sqrt(|det g|).
             let volume = metric.det_sqrt();
 
             assert_eq!(wedge.grade(), dim);
@@ -760,7 +767,7 @@ mod tests {
           let squared = -1.0 * wedge_then_contract - contract_then_wedge;
 
           let expected = -a_norm_sq * omega;
-          assert_relative_eq!(squared.coeffs(), expected.coeffs(), epsilon = 1e-9);
+          assert_relative_eq!(squared.components(), expected.components(), epsilon = 1e-9);
         }
       }
     }
@@ -784,7 +791,7 @@ mod tests {
           let eta_sign = Sign::from_parity(blade.contains(0) as usize);
           let (complement_sign, complement) = blade.complement_signed(dim);
           let expected = MultiForm::from_blade_signed(dim, eta_sign * complement_sign, complement);
-          assert_relative_eq!(star.coeffs(), expected.coeffs());
+          assert_relative_eq!(star.components(), expected.components());
         }
       }
     }
@@ -806,7 +813,7 @@ mod tests {
           let sign = Sign::from_parity(grade_a);
           let rhs = alpha.interior_product(&vector).wedge(&beta)
             + sign.as_f64() * alpha.wedge(&beta.interior_product(&vector));
-          assert_relative_eq!(lhs.coeffs(), rhs.coeffs(), epsilon = 1e-12);
+          assert_relative_eq!(lhs.components(), rhs.components(), epsilon = 1e-12);
         }
       }
     }
@@ -820,7 +827,7 @@ mod tests {
       for grade in 2..=dim {
         let element: MultiForm = test_element(dim, grade, 7);
         let twice = element.interior_product(&vector).interior_product(&vector);
-        assert_relative_eq!(twice.coeffs().norm(), 0.0);
+        assert_relative_eq!(twice.components().norm(), 0.0);
       }
     }
   }
@@ -852,7 +859,7 @@ mod tests {
     let computed_ab = a.wedge(&b);
     let expected_ab =
       MultiForm::from_blade_signed(Degree::new(3), Sign::Pos, Blade::from_increasing([0, 1]));
-    assert_eq!(computed_ab.coeffs, expected_ab.coeffs);
+    assert_eq!(computed_ab.components, expected_ab.components);
   }
 
   #[test]
@@ -862,7 +869,7 @@ mod tests {
 
     let ab = form_a.wedge(&form_b);
     let ba = form_b.wedge(&form_a);
-    assert_eq!(ab.coeffs, -ba.coeffs);
+    assert_eq!(ab.components, -ba.components);
   }
 
   /// Signed sums of arbitrarily ordered wedge words canonicalize correctly.
@@ -870,14 +877,14 @@ mod tests {
   fn canonical_conversion() {
     let dim = 4;
     let mut e0 = MultiForm::zero(dim, Degree::new(3));
-    for (coeff, word) in [
+    for (component, word) in [
       (1.0, vec![2, 0, 1]),
       (3.0, vec![1, 3, 2]),
       (-2.0, vec![0, 2, 1]),
       (3.0, vec![0, 1, 2]),
     ] {
       let (sign, blade) = Blade::from_word(word).unwrap();
-      e0[blade] += sign.as_f64() * coeff;
+      e0[blade] += sign.as_f64() * component;
     }
 
     let mut e1 = MultiForm::zero(dim, Degree::new(3));

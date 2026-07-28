@@ -257,7 +257,7 @@ mod test {
               let there = face_tangent_blade(dim, &face.simplex().relative_to(target.simplex()));
 
               let pushed = here.pushforward(&differential);
-              assert_relative_eq!(pushed.coeffs(), there.coeffs(), epsilon = 1e-12);
+              assert_relative_eq!(pushed.components(), there.components(), epsilon = 1e-12);
             }
           }
         }

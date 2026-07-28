@@ -108,7 +108,7 @@ fn convergence(dim: usize, nsubs: &[usize]) {
   let eta = Metric::minkowski(dim);
   let a = wave_covector(dim);
   let a_sharp = a.sharp(&eta);
-  let a_vec = a.coeffs().clone();
+  let a_vec = a.components().clone();
 
   // The constant field bivector $Phi = a wedge omega$ and the current bivector
   // $-iota_(a^sharp) Phi$. Faraday: $dif F = cos(dot) thin a wedge Phi = 0$ since

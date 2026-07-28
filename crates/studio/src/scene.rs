@@ -1346,7 +1346,7 @@ fn mean_speed_flux(
   let cells = topology.cells();
   let mean: f64 = cells
     .handle_iter()
-    .map(|cell| probe.at(&ChartExt::barycenter(cell)).coeffs().norm())
+    .map(|cell| probe.at(&ChartExt::barycenter(cell)).components().norm())
     .sum::<f64>()
     / cells.len().max(1) as f64;
 

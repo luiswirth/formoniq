@@ -101,10 +101,10 @@ pub fn reduced_form(form: MultiForm, metric: &Metric, sign: Sign) -> MultiForm {
 /// face while carrying no global sign). `None` is the honest magnitude.
 pub fn scalarize(form: MultiForm, metric: &Metric, signed: Option<Sign>) -> f64 {
   if form.grade() == 0 {
-    return form.coeffs()[0];
+    return form.components()[0];
   }
   match signed {
-    Some(sign) => form.hodge_star(metric, sign).coeffs()[0],
+    Some(sign) => form.hodge_star(metric, sign).components()[0],
     None => form.norm(metric),
   }
 }
@@ -407,7 +407,7 @@ mod tests {
     for dim in 2..=4 {
       let metric = Metric::euclidean(dim);
       for grade in 1..dim {
-        let ncoeffs = MultiForm::zero(dim, grade).coeffs().len();
+        let ncoeffs = MultiForm::zero(dim, grade).components().len();
         for i in 0..ncoeffs {
           let mut coeffs = na::DVector::zeros(ncoeffs);
           coeffs[i] = 2.0;

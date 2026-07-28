@@ -94,7 +94,7 @@ impl WhitneyLsf {
 
 /// The whole Whitney basis of one grade as a single linear map
 /// $C: RR^(Delta_k) -> Lambda^k (RR^(n+1)) times.circle RR^(n+1)$, sending a
-/// degree of freedom to the coefficients of $W_sigma$ on the products
+/// degree of freedom to the components of $W_sigma$ on the products
 /// $dif lambda_I lambda_v$.
 ///
 /// The deletion formula read as a matrix: column $sigma$ carries exactly $k+1$
@@ -108,12 +108,12 @@ impl WhitneyLsf {
 /// pulled back from ([`pullback`](Self::pullback)). A higher-order trimmed
 /// space $P^-_r Lambda^k$ enlarges this map and changes nothing else.
 #[derive(Debug, Clone)]
-pub struct WhitneyCoeffs {
+pub struct WhitneyExpansion {
   cell_dim: Dim,
   grade: ExteriorGrade,
   dofs: Vec<Combination>,
 }
-impl WhitneyCoeffs {
+impl WhitneyExpansion {
   pub fn new(cell_dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (cell_dim, grade) = (cell_dim.into(), grade.into());
     let dofs = unit_subsimps(cell_dim, grade).collect();
@@ -217,15 +217,15 @@ mod test {
     for dim in (0..=4).map(Dim::from) {
       let nvertices = (dim + 1).index();
       for grade in 0..=dim.index() {
-        let coeffs = WhitneyCoeffs::new(dim, grade);
+        let expansion = WhitneyExpansion::new(dim, grade);
         let nblades = binomial(nvertices, grade);
         let entry = |i: usize, j: usize| ((7 * i + 3 * j + 1) % 11) as f64 - 5.0;
         let blade = Matrix::from_fn(nblades, nblades, entry);
         let bary = Matrix::from_fn(nvertices, nvertices, entry);
 
-        let matrix = coeffs.matrix();
+        let matrix = expansion.matrix();
         let expected = matrix.transpose() * blade.kronecker(&bary) * &matrix;
-        assert_relative_eq!(coeffs.pullback(&blade, &bary), expected);
+        assert_relative_eq!(expansion.pullback(&blade, &bary), expected);
       }
     }
   }
@@ -273,7 +273,7 @@ mod test {
               let integral = qr.integrate_unit(
                 &|bary: BaryRef| {
                   let dif_phi = bubble_dif(bary).wedge(&c);
-                  inner.inner(dif_phi.coeffs(), whitney.at_bary(bary).coeffs())
+                  inner.inner(dif_phi.components(), whitney.at_bary(bary).components())
                 },
                 unit_simplex_volume(dim),
               );

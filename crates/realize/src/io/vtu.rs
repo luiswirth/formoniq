@@ -355,7 +355,7 @@ fn cell_vectors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> V
     let field = reduced_form(form, metric, sign.unwrap_or(Sign::Pos)).sharp(metric);
     let ambient = cell
       .coord_simplex(coords)
-      .pushforward_vector(field.coeffs());
+      .pushforward_vector(field.components());
     let mut padded = [0.0; 3];
     for (slot, value) in padded.iter_mut().zip(ambient.iter()) {
       *slot = *value;
@@ -661,9 +661,11 @@ mod tests {
       let metric = coords.cell_metric(cell);
       let sign = crate::reduce::reduction_sign(&topology, cell, cochain.grade());
       let form = interpolant.eval(&MeshPoint::barycenter(cell.idx()));
-      let expected = cell
-        .coord_simplex(&coords)
-        .pushforward_vector(reduced_form(form, &metric, sign).sharp(&metric).coeffs());
+      let expected = cell.coord_simplex(&coords).pushforward_vector(
+        reduced_form(form, &metric, sign)
+          .sharp(&metric)
+          .components(),
+      );
       for (icomponent, &value) in ambient.iter().enumerate() {
         let expected = expected.get(icomponent).copied().unwrap_or(0.0);
         assert!((value - expected).abs() < 1e-12);

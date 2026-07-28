@@ -153,7 +153,7 @@ mod tests {
       let x = point(&vec![1.5; dim]);
       let value = f.at(&x);
       assert_eq!(value.grade(), 0);
-      assert_relative_eq!(value.coeffs()[0], 1.5 * dim as f64);
+      assert_relative_eq!(value.components()[0], 1.5 * dim as f64);
     }
   }
 
@@ -165,10 +165,10 @@ mod tests {
     let x = point(&[2.0, -1.0, 4.0]);
     for i in 0..dim {
       let f = DiffFormClosure::coord_component(i, dim);
-      assert_relative_eq!(f.at(&x).coeffs()[0], x[i]);
+      assert_relative_eq!(f.at(&x).components()[0], x[i]);
     }
     let c = DiffFormClosure::constant_scalar(7.0, dim);
-    assert_relative_eq!(c.at(&x).coeffs()[0], 7.0);
+    assert_relative_eq!(c.at(&x).components()[0], 7.0);
   }
 
   /// The radial field is the Euclidean distance to its center.
@@ -178,8 +178,8 @@ mod tests {
     let center = point(&[1.0, 1.0]);
     let f = DiffFormClosure::radial_scalar(center.clone(), dim);
     let x = point(&[4.0, 5.0]);
-    assert_relative_eq!(f.at(&x).coeffs()[0], 5.0); // 3-4-5 triangle
-    assert_relative_eq!(f.at(&center).coeffs()[0], 0.0);
+    assert_relative_eq!(f.at(&x).components()[0], 5.0); // 3-4-5 triangle
+    assert_relative_eq!(f.at(&center).components()[0], 0.0);
   }
 
   /// A grade-1 field carries its coefficient vector verbatim, at either
@@ -198,7 +198,7 @@ mod tests {
       dim,
     );
     assert_eq!(omega.grade(), 1);
-    assert_eq!(omega.at(&x).coeffs(), &coeffs);
+    assert_eq!(omega.at(&x).components(), &coeffs);
 
     let v = MultiVectorFieldClosure::vector_field(
       {
@@ -208,6 +208,6 @@ mod tests {
       dim,
     );
     assert_eq!(v.grade(), 1);
-    assert_eq!(v.at(&x).coeffs(), &coeffs);
+    assert_eq!(v.at(&x).components(), &coeffs);
   }
 }

@@ -59,7 +59,7 @@ impl FaceTrace {
       self.grade,
       "Trace applied at the wrong grade."
     );
-    MultiForm::new(&self.map * form.coeffs(), self.face_dim, self.grade)
+    MultiForm::new(&self.map * form.components(), self.face_dim, self.grade)
   }
 
   /// The single coefficient of a trace at the face's *top* grade, $k = d$,
@@ -74,7 +74,7 @@ impl FaceTrace {
       self.grade, self.face_dim,
       "The top coefficient exists only at the face's own dimension."
     );
-    self.apply(form).coeffs()[0]
+    self.apply(form).components()[0]
   }
 }
 
@@ -143,7 +143,7 @@ mod test {
               .apply(&FaceTrace::new(dim, &tau_positions, grade).apply(&form));
             let direct = FaceTrace::new(dim, &direct_positions, grade).apply(&form);
 
-            assert_relative_eq!(stepwise.coeffs(), direct.coeffs(), epsilon = 1e-12);
+            assert_relative_eq!(stepwise.components(), direct.components(), epsilon = 1e-12);
           }
         }
       }

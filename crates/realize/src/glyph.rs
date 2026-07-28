@@ -206,7 +206,7 @@ pub fn bake_glyphs(
         .map(|bary| {
           let point = MeshPoint::new(cell.idx(), bary);
           let field = reduced_form(interpolant.eval(&point), &metric, sign).sharp(&metric);
-          let ambient: Vector = coord_simplex.pushforward_vector(field.coeffs());
+          let ambient: Vector = coord_simplex.pushforward_vector(field.components());
           let magnitude = ambient.norm();
           let opacity = if peak > 0.0 {
             (magnitude / peak).clamp(0.0, 1.0)
