@@ -18,17 +18,32 @@ pub type Matrix<T = f64> = na::DMatrix<T>;
 /// algebra: a strictly increasing multi-index.
 pub type Blade = Combination;
 
+/// $dim Lambda^k (RR^n) = binom(n, k)$, and $0$ off $[0, n]$, where the space is
+/// trivial.
+///
+/// Total at both trivial ends, not only the top one: $Lambda^(n+1) = 0$ falls
+/// out of the binomial, but $Lambda^(-1) = 0$ has to be read off the degree
+/// relationally, which is what [`Degree::index_in`] is for.
 pub fn exterior_dim(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> usize {
-  binomial(dim.into().index(), grade.into().index())
+  let (dim, grade) = (dim.into(), grade.into());
+  grade
+    .index_in(dim)
+    .map_or(0, |grade| binomial(dim.index(), grade))
 }
 
 /// The basis blades of $Lambda^k (RR^n)$ in colexicographic order:
 /// the order of the coefficients of an [`ExteriorElement`].
+///
+/// Empty off $[0, n]$, matching [`exterior_dim`].
 pub fn exterior_bases(
   dim: impl Into<Dim>,
   grade: impl Into<ExteriorGrade>,
 ) -> impl Iterator<Item = Blade> {
-  combinations(dim.into().index(), grade.into().index())
+  let (dim, grade) = (dim.into(), grade.into());
+  grade
+    .index_in(dim)
+    .into_iter()
+    .flat_map(move |grade| combinations(dim.index(), grade))
 }
 
 /// The variance of an exterior element: whether it lives in $Lambda^k V$
@@ -483,6 +498,22 @@ mod tests {
 
   /// Functoriality of the exterior power: the Cauchy-Binet formula
   /// $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$.
+  /// The exterior algebra is trivial off $[0, n]$ at *both* ends, not only the
+  /// top one, and the accessors say so rather than trapping.
+  #[test]
+  fn grades_off_the_range_are_the_trivial_space() {
+    for dim in 0..=4 {
+      for grade in [-2, -1, dim as i64 + 1, dim as i64 + 2] {
+        let grade = ExteriorGrade::new(grade);
+        assert_eq!(exterior_dim(dim, grade), 0);
+        assert_eq!(exterior_bases(dim, grade).count(), 0);
+
+        let zero: MultiForm = ExteriorElement::zero(dim, grade);
+        assert_eq!(zero.coeffs().len(), 0);
+      }
+    }
+  }
+
   #[test]
   fn exterior_power_functoriality() {
     for (n, m) in [(2, 2), (3, 3), (4, 4), (2, 3), (3, 2), (2, 4)] {
