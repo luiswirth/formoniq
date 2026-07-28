@@ -6,7 +6,8 @@ use {
     topology::skeleton::Skeleton,
     topology::{
       complex::Complex,
-      handle::{SimplexIdx, SimplexRef},
+      data::SkeletonData,
+      handle::{KSimplexIdx, SimplexIdx, SimplexRef},
     },
   },
 };
@@ -114,6 +115,38 @@ impl Cochain {
   }
 }
 
+/// A cochain is columnar data over one grade, read like any other: the
+/// coefficient of a $k$-simplex, keyed by its id.
+///
+/// The storage stays an algebraic [`Vector`], not a
+/// [`SkeletonVec`](simplicial::topology::data::SkeletonVec), because a cochain
+/// *is* a vector: the coboundary multiplies it and the mass matrices pair it.
+/// The trait carries the reading, the type keeps its own representation.
+///
+/// Shape alone does not make two such columns the same object. Signed squared
+/// edge lengths
+/// ([`MeshLengthsSq`](simplicial::geometry::metric::mesh::MeshLengthsSq)) are
+/// grade-1 columns too, but their datum $g(t_e, t_e)$ is *quadratic* in the
+/// edge tangent and so blind to its reversal, while a cochain's $integral_e
+/// omega$ is linear and changes sign with it. They sit on the two sides of
+/// $Lambda^1 times.circle Lambda^1 = Lambda^2 plus.circle "Sym"^2$: the
+/// coboundary acts on this one, and not on that one.
+impl SkeletonData for Cochain {
+  type Item<'a>
+    = &'a f64
+  where
+    Self: 'a;
+  fn grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+  fn len(&self) -> usize {
+    self.coeffs.len()
+  }
+  fn at(&self, kidx: KSimplexIdx) -> &f64 {
+    &self.coeffs[kidx]
+  }
+}
+
 impl std::ops::Index<SimplexIdx> for Cochain {
   type Output = f64;
   fn index(&self, idx: SimplexIdx) -> &Self::Output {
@@ -203,9 +236,7 @@ impl std::ops::Sub for Cochain {
 #[cfg(test)]
 mod test {
 
-  #[cfg(feature = "serde")]
   use super::*;
-  #[cfg(feature = "serde")]
   use simplicial::mesher::cartesian::CartesianGrid;
 
   #[cfg(feature = "serde")]
@@ -225,5 +256,26 @@ mod test {
 
     let other = CartesianGrid::new_unit(2, 5).triangulate().0;
     assert!(!loaded.is_compatible_with(&other));
+  }
+
+  /// A cochain read as columnar data over its grade agrees with reading it as
+  /// a cochain, at every grade of every dimension: the two are one column, not
+  /// two views that could drift.
+  #[test]
+  fn skeleton_data_reading_agrees_with_cochain_indexing() {
+    for dim in 1..=3 {
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      for grade in 0..=dim {
+        let cochain = Cochain::from_function(|s| s.kidx() as f64 + 0.5, grade, &topology);
+        let skeleton = topology.skeleton(grade);
+
+        assert_eq!(SkeletonData::grade(&cochain), skeleton.dim());
+        assert_eq!(SkeletonData::len(&cochain), skeleton.len());
+
+        for simplex in skeleton.handle_iter() {
+          assert_eq!(*cochain.at_ref(simplex), cochain[simplex.idx()]);
+        }
+      }
+    }
   }
 }
