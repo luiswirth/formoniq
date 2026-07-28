@@ -128,7 +128,8 @@ mod test {
   /// space and there is nothing to interpolate).
   #[test]
   fn whitney_trace_commutes() {
-    use simplicial::atlas::{Bary, ref_face_spanning_vectors};
+    use crate::trace::FaceTrace;
+    use simplicial::atlas::Bary;
 
     for n in (1..=3).into_iter().map(Dim::from) {
       let complex = Complex::standard(n);
@@ -155,7 +156,7 @@ mod test {
 
             // tr_tau (W c): the ambient field pulled back along iota_tau.
             let ambient = interpolant.eval(&MeshPoint::on_face(cell.idx(), &positions, &face_bary));
-            let traced_field = ambient.pullback(&ref_face_spanning_vectors(n, &positions));
+            let traced_field = FaceTrace::new(n, &positions, k).apply(&ambient);
 
             // W_tau (tr_tau c): the traced cochain interpolated on tau's own cell.
             let sub = Complex::standard(d);

@@ -8,6 +8,7 @@ pub mod io;
 pub mod project;
 pub mod prolongate;
 pub mod section;
+pub mod trace;
 
 #[cfg(test)]
 mod test {
