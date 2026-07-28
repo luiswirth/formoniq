@@ -738,6 +738,45 @@ impl Scene {
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
 
+  /// Linear advection $diff_t omega + cal(L)_v omega = 0$ of a localized bump
+  /// along a rotational velocity field, as a sampled trajectory: the transport
+  /// counterpart of [`Self::heat`] and [`Self::wave`], on the same initial data
+  /// and the same mesh-agnostic footing.
+  ///
+  /// The velocity is a rigid rotation about the mesh's centroid, tangent to a
+  /// sphere by construction and Killing on flat domains, so the bump is carried
+  /// without being stretched. The scheme is central and dispersive
+  /// ([`LieDerivativeElmat`](formoniq::operators::LieDerivativeElmat)), so what
+  /// the trajectory shows next to the transport is the oscillation that costs.
+  pub fn advection(
+    topology: Complex,
+    coords: MeshCoords,
+    grade: impl Into<ExteriorGrade>,
+    nsteps: usize,
+    final_time: f64,
+  ) -> Self {
+    let grade = grade.into();
+    use derham::section::SharpOp;
+    use formoniq::problems::advection::{Transport, solve_transport};
+
+    let metric = coords.to_edge_lengths_sq(&topology);
+    let rotation = ambient_rotation(&coords);
+    let velocity = rotation
+      .pullback_on(&topology, &coords)
+      .sharp(&topology, &metric);
+
+    let initial = ambient_bump(&topology, &coords, grade);
+    let dt = final_time / nsteps.max(1) as f64;
+    let transport = Transport {
+      grade,
+      velocity: &velocity,
+      quad_degree: 2,
+    };
+    let frames = solve_transport(&topology, &metric, &transport, nsteps, dt, &initial);
+
+    Self::trajectory_scene(topology, coords, initial, dt, frames)
+  }
+
   /// Files a solved trajectory of any grade into a scene through the same `field`
   /// dispatch every other field goes through: the trajectory's first frame is
   /// its spatial representative, the sampled family its [`FieldTime`].
@@ -1149,6 +1188,51 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// interior, so its boundary trace is near zero and the flow is free. On a closed
 /// mesh every vertex is on the surface, so the nearest merely also works where a
 /// boundary exists.
+/// The $1$-form of a rigid rotation about the mesh's centroid, in the plane of
+/// the first two ambient axes: $alpha = (A (x - c)) dot dif x$ with $A$ skew.
+///
+/// One formula for every ambient dimension $N >= 2$, and the generality is the
+/// point. A skew $A$ gives $inner(A x, x) = 0$, so the field is tangent to any
+/// sphere centered at $c$ without projecting, and it is Killing there and on a
+/// flat domain alike -- a transported bump is carried, not stretched. On any
+/// other mesh the pullback keeps its tangential part, which is a velocity field
+/// but need not be divergence-free.
+///
+/// The hairy ball theorem forbids a nonvanishing field on an even sphere, so
+/// the two fixed points on the rotation axis are not a defect of this choice
+/// but the only shape a sphere velocity can have. In one dimension there is no
+/// rotation and the field is the unit translation, the only Killing field a
+/// $1$-manifold has.
+fn ambient_rotation(coords: &MeshCoords) -> DiffFormClosure {
+  let n = coords.dim().index();
+  let nvertices = coords.nvertices().max(1) as f64;
+  let centroid = coords
+    .coord_iter()
+    .fold(Vector::zeros(n), |acc, c| acc + *c)
+    / nvertices;
+  let extent = coords
+    .coord_iter()
+    .map(|c| (*c - &centroid).norm())
+    .fold(0.0, f64::max)
+    .max(1e-6);
+
+  DiffFormClosure::new(
+    move |p| {
+      let mut v = Vector::zeros(n);
+      if n == 1 {
+        v[0] = 1.0;
+      } else {
+        let r = p.vector() - &centroid;
+        v[0] = -r[1] / extent;
+        v[1] = r[0] / extent;
+      }
+      MultiForm::line(v)
+    },
+    n,
+    Dim::ONE,
+  )
+}
+
 fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -> Cochain {
   let n = coords.dim().index();
   let nvertices = coords.nvertices().max(1) as f64;
@@ -1213,6 +1297,32 @@ mod tests {
       }
       assert!(asked > 0, "dimension {dim} produced no field to ask about");
     }
+  }
+
+  /// Advection transports: the trajectory moves the bump without losing or
+  /// gaining it. On the sphere the velocity is a rotation, which is Killing
+  /// there, so the field is carried around rather than diffused, and the
+  /// central scheme neither damps nor blows up.
+  #[test]
+  fn advection_carries_the_bump_without_losing_it() {
+    let seed = Scene::spherical_harmonics(2, 1);
+    let scene = Scene::advection(seed.topology, seed.coords, Dim::ZERO, 16, 3.0);
+
+    let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
+      panic!("advection must produce a sampled trajectory");
+    };
+    let norm = |c: &Cochain| c.coeffs().norm();
+    let (first, last) = (&frames[0], frames.last().unwrap());
+
+    assert!(
+      (last.coeffs() - first.coeffs()).norm() > 0.1 * norm(first),
+      "the bump did not move"
+    );
+    let ratio = norm(last) / norm(first);
+    assert!(
+      (0.5..2.0).contains(&ratio),
+      "transport lost or gained the bump: ratio {ratio}"
+    );
   }
 
   /// A top-grade field displaces its cells *rigidly*: the height is constant
