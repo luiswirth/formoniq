@@ -1,0 +1,19 @@
+[package]
+name = "multialgebra"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT OR Apache-2.0"
+description = "Exterior and symmetric powers of a vector space, and their tensor products."
+repository = "https://github.com/luiswirth/formoniq"
+readme = "README.md"
+keywords = ["exterior-algebra", "symmetric-algebra", "multilinear", "tensor"]
+categories = ["mathematics"]
+
+[dependencies]
+multiindex = { path = "../multiindex", version = "0.2.0" }
+
+nalgebra = "0.35.0"
+
+[dev-dependencies]
+approx = "0.5.1"
