@@ -10,13 +10,13 @@ use crate::{ApproxInverse, InnerProductSpace, LinearOperator, Report, SelfAdjoin
 /// affine structure paying off. As a standalone solver it is weak (that rate is
 /// mesh-dependent); its role is as the smoother and preconditioner other methods
 /// wrap.
-pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
+pub fn solve<S: InnerProductSpace, O: LinearOperator<S>, B: ApproxInverse<S>>(
   op: &O,
   precond: &B,
-  b: &O::Space,
+  b: &S,
   stop: StopCriterion,
-) -> (O::Space, Report) {
-  let mut x = O::Space::zeros(op.dim());
+) -> (S, Report) {
+  let mut x = S::zeros(op.dim());
   let b_norm = b.norm().max(f64::MIN_POSITIVE);
   let mut converged;
   let mut iters = 0;
@@ -68,13 +68,14 @@ impl<'a, O: LinearOperator, B: ApproxInverse> Stationary<'a, O, B> {
   }
 }
 
-impl<O: LinearOperator, B: ApproxInverse<Space = O::Space>> ApproxInverse for Stationary<'_, O, B> {
-  type Space = O::Space;
+impl<S: InnerProductSpace, O: LinearOperator<S>, B: ApproxInverse<S>> ApproxInverse<S>
+  for Stationary<'_, O, B>
+{
   fn dim(&self) -> usize {
     self.op.dim()
   }
-  fn apply(&self, r: &Self::Space) -> Self::Space {
-    let mut x = O::Space::zeros(self.op.dim());
+  fn apply(&self, r: &S) -> S {
+    let mut x = S::zeros(self.op.dim());
     for _ in 0..self.sweeps {
       let mut resid = r.clone();
       resid.axpby(-1.0, &self.op.apply(&x), 1.0);
@@ -88,4 +89,7 @@ impl<O: LinearOperator, B: ApproxInverse<Space = O::Space>> ApproxInverse for St
 /// symmetric): each sweep is $B sum_(j<k) (I - B A)^j$, symmetric term by term
 /// since $(I - B A)^j B = B (I - A B)^j$. Positive-definiteness additionally
 /// needs the sweeps to converge, the constructor's promise as everywhere.
-impl<O: LinearOperator, B: SelfAdjoint<Space = O::Space>> SelfAdjoint for Stationary<'_, O, B> {}
+impl<S: InnerProductSpace, O: LinearOperator<S>, B: SelfAdjoint<S>> SelfAdjoint<S>
+  for Stationary<'_, O, B>
+{
+}

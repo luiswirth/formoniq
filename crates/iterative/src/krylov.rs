@@ -31,13 +31,13 @@ use crate::{InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterio
 /// The operator's own positive-definiteness is the caller's promise, as
 /// everywhere; passing an indefinite operator breaks the method (use a
 /// symmetric-indefinite Krylov method for those).
-pub fn cg<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
+pub fn cg<S: InnerProductSpace, O: LinearOperator<S>, M: SelfAdjoint<S>>(
   op: &O,
   precond: &M,
-  b: &O::Space,
+  b: &S,
   stop: StopCriterion,
-) -> (O::Space, Report) {
-  let mut x = O::Space::zeros(op.dim());
+) -> (S, Report) {
+  let mut x = S::zeros(op.dim());
   let b_norm = b.norm();
   if b_norm == 0.0 {
     return (
@@ -102,14 +102,14 @@ pub fn cg<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
 /// Follows the preconditioned form of Paige and Saunders' algorithm; the
 /// reported residual is the relative preconditioner-norm residual
 /// $norm(r_k)_(M^(-1)) / norm(b)_(M^(-1))$.
-pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
+pub fn minres<S: InnerProductSpace, O: LinearOperator<S>, M: SelfAdjoint<S>>(
   op: &O,
   precond: &M,
-  b: &O::Space,
+  b: &S,
   stop: StopCriterion,
-) -> (O::Space, Report) {
+) -> (S, Report) {
   let n = op.dim();
-  let mut x = O::Space::zeros(n);
+  let mut x = S::zeros(n);
   let eps = f64::EPSILON;
 
   // First Lanczos vector, in the M^{-1} inner product.
@@ -137,8 +137,8 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   let mut phibar = beta1;
   let mut cs = -1.0;
   let mut sn = 0.0;
-  let mut w = O::Space::zeros(n);
-  let mut w2 = O::Space::zeros(n);
+  let mut w = S::zeros(n);
+  let mut w2 = S::zeros(n);
   let mut r2 = r1.clone();
 
   let mut residual = 1.0;

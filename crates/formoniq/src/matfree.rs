@@ -173,8 +173,6 @@ impl ElementOperator {
 /// The square case is what a Krylov method consumes, and it is the one whose
 /// row and column spaces coincide.
 impl iterative::LinearOperator for ElementOperator {
-  type Space = Vector;
-
   fn dim(&self) -> usize {
     debug_assert_eq!(
       self.ndofs_row, self.ndofs_col,
@@ -245,8 +243,8 @@ mod test {
     let b = Vector::from_fn(ndofs, |i, _| ((i * 5 + 1) % 11) as f64 - 5.0);
     let stop = StopCriterion::rtol(1e-10);
 
-    let (x_free, report_free) = cg(&matfree, &Identity::<Vector>::new(ndofs), &b, stop);
-    let (x_assembled, report_assembled) = cg(&assembled, &Identity::<Vector>::new(ndofs), &b, stop);
+    let (x_free, report_free) = cg(&matfree, &Identity::new(ndofs), &b, stop);
+    let (x_assembled, report_assembled) = cg(&assembled, &Identity::new(ndofs), &b, stop);
 
     assert!(report_free.converged && report_assembled.converged);
     assert_eq!(report_free.iters, report_assembled.iters);

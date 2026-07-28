@@ -324,8 +324,7 @@ impl<B> ReplicatedBlock<B> {
   }
 }
 
-impl<B: ApproxInverse<Space = Vector>> ApproxInverse for ReplicatedBlock<B> {
-  type Space = Vector;
+impl<B: ApproxInverse> ApproxInverse for ReplicatedBlock<B> {
   fn dim(&self) -> usize {
     self.inverse.dim() * self.count
   }
@@ -340,7 +339,7 @@ impl<B: ApproxInverse<Space = Vector>> ApproxInverse for ReplicatedBlock<B> {
   }
 }
 
-impl<B: SelfAdjoint<Space = Vector>> SelfAdjoint for ReplicatedBlock<B> {}
+impl<B: SelfAdjoint> SelfAdjoint for ReplicatedBlock<B> {}
 
 #[cfg(test)]
 mod tests {
