@@ -1,16 +1,13 @@
 use {
   derham::{interpolate::form::WhitneyForm, section::Section},
-  exterior::{Covariant, Dim, ExteriorGrade, exterior_power, multiform_gramian},
+  exterior::{Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian},
   gramian::Metric,
   multiindex::{Combination, factorial},
   simplicial::{
-    atlas::{MeshPoint, SimplexQuadRule, ref_difbarys},
+    atlas::{Chart, MeshPoint, SimplexQuadRule, ref_difbarys},
     geometry::cell_volume,
     linalg::{Matrix, Vector},
-    topology::{
-      role::Cell,
-      simplex::{standard_boundary_operator, standard_subsimps},
-    },
+    topology::simplex::{standard_boundary_operator, standard_subsimps},
   },
 };
 
@@ -18,7 +15,7 @@ pub type ElMat = Matrix;
 pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &Metric) -> ElMat;
+  fn eval(&self, metric: &Metric, chart: Chart) -> ElMat;
 }
 
 /// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
@@ -44,7 +41,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   fn col_grade(&self) -> ExteriorGrade {
     Dim::ZERO
   }
-  fn eval(&self, metric: &Metric) -> ElMat {
+  fn eval(&self, metric: &Metric, _chart: Chart) -> ElMat {
     let n = metric.dim() + 1;
     let v = cell_volume(metric) / n as f64;
     Matrix::from_diagonal_element(n, n, v)
@@ -84,7 +81,7 @@ impl ElMatProvider for HodgeMassElmat {
     self.grade
   }
 
-  fn eval(&self, metric: &Metric) -> Matrix {
+  fn eval(&self, metric: &Metric, _chart: Chart) -> Matrix {
     assert_eq!(self.dim, metric.dim());
 
     let scalar_mass = scalar_mass_elmat(metric);
@@ -138,8 +135,8 @@ impl ElMatProvider for DifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade - 1
   }
-  fn eval(&self, metric: &Metric) -> Matrix {
-    let mass = self.mass.eval(metric);
+  fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
+    let mass = self.mass.eval(metric, chart);
     mass * &self.dif
   }
 }
@@ -166,8 +163,8 @@ impl ElMatProvider for CodifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade
   }
-  fn eval(&self, metric: &Metric) -> Matrix {
-    let mass = self.mass.eval(metric);
+  fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
+    let mass = self.mass.eval(metric, chart);
     &self.codif * mass
   }
 }
@@ -198,16 +195,160 @@ impl ElMatProvider for CodifDifElmat {
   fn col_grade(&self) -> ExteriorGrade {
     self.mass.grade - 1
   }
-  fn eval(&self, metric: &Metric) -> Matrix {
-    let mass = self.mass.eval(metric);
+  fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
+    let mass = self.mass.eval(metric, chart);
     &self.codif * mass * &self.dif
+  }
+}
+
+/// The reference scaffolding of an element integral: the Whitney basis of a
+/// grade, and a rule to integrate against it.
+///
+/// A function of $(n, k)$ alone. Every chart of the atlas is the same chart up
+/// to the labelling of its vertices, so the shape functions and the quadrature
+/// nodes are reference data and a cell enters only to say *where* on the
+/// manifold a node lies, i.e. to make a [`MeshPoint`].
+///
+/// This is what an element integral with a varying coefficient needs and a
+/// closed-form one does not: a coefficient is a [`Section`], evaluated
+/// pointwise at those mesh points. Whether that section is analytic data pulled
+/// back from a continuum or the interpolation of a cochain is invisible here,
+/// which is what keeps the path intrinsic -- a discrete coefficient never
+/// touches an embedding at all.
+pub struct WhitneyQuadrature {
+  grade: ExteriorGrade,
+  qr: SimplexQuadRule,
+  whitneys: Vec<WhitneyForm>,
+}
+impl WhitneyQuadrature {
+  /// `qr` defaults to the degree-1 Grundmann-Möller rule, the cheapest rule
+  /// that is exact on affine integrands.
+  pub fn new(
+    dim: impl Into<Dim>,
+    grade: impl Into<ExteriorGrade>,
+    qr: Option<SimplexQuadRule>,
+  ) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
+    let qr = qr.unwrap_or(SimplexQuadRule::degree(dim, 1));
+    let whitneys = standard_subsimps(dim, grade)
+      .map(|dof_simp| WhitneyForm::standard(dim, dof_simp))
+      .collect();
+    Self {
+      grade,
+      qr,
+      whitneys,
+    }
+  }
+
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+  pub fn ndofs(&self) -> usize {
+    self.whitneys.len()
+  }
+
+  /// The shape functions at every quadrature node, paired with the mesh point
+  /// the node sits at in `chart`.
+  fn nodes(&self, chart: Chart) -> impl Iterator<Item = (MeshPoint, Vec<MultiForm>)> + use<'_> {
+    let cell = chart.get().idx();
+    self.qr.points().map(move |bary| {
+      let values = self.whitneys.iter().map(|w| w.at_bary(bary)).collect();
+      (MeshPoint::new(cell, bary.to_coords()), values)
+    })
+  }
+
+  /// $[integral_K f(x, W_sigma (x)) vol]_sigma$: the element vector of a
+  /// pointwise integrand read against each shape function.
+  pub fn integrate<F>(&self, chart: Chart, vol: f64, f: F) -> ElVec
+  where
+    F: Fn(&MeshPoint, &MultiForm) -> f64,
+  {
+    let mut elvec = ElVec::zeros(self.ndofs());
+    for ((point, values), weight) in self.nodes(chart).zip(self.qr.weights().iter()) {
+      for (i, value) in values.iter().enumerate() {
+        elvec[i] += weight * f(&point, value);
+      }
+    }
+    vol * elvec
+  }
+
+  /// $[integral_K f(x, W_sigma (x), W'_tau (x)) vol]_(sigma tau)$: the element
+  /// matrix of a pointwise integrand read against this basis in the rows and
+  /// `cols`'s in the columns.
+  ///
+  /// The two bases may sit at different grades, which is what a mixed block
+  /// needs. Shape functions are evaluated once per node, not once per entry.
+  pub fn integrate_pair<F>(&self, cols: &Self, chart: Chart, vol: f64, f: F) -> ElMat
+  where
+    F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> f64,
+  {
+    let mut elmat = ElMat::zeros(self.ndofs(), cols.ndofs());
+    let col_nodes = cols.nodes(chart);
+    for (((point, rows), (_, cols)), weight) in self
+      .nodes(chart)
+      .zip(col_nodes)
+      .zip(self.qr.weights().iter())
+    {
+      for (i, row) in rows.iter().enumerate() {
+        for (j, col) in cols.iter().enumerate() {
+          elmat[(i, j)] += weight * f(&point, row, col);
+        }
+      }
+    }
+    vol * elmat
+  }
+}
+
+/// Element matrix of the Hodge mass bilinear form weighted by a scalar
+/// coefficient field,
+/// $[integral_K alpha inner(W_sigma, W_tau)_(Lambda^k) vol]_(sigma tau)$.
+///
+/// The varying-coefficient counterpart of [`HodgeMassElmat`], which is exact
+/// where this is a quadrature: with $alpha equiv 1$ the two agree to the
+/// accuracy of the rule. Intrinsic, like every element integral here -- the
+/// coefficient is a grade-0 section of the manifold, so a metric never enters
+/// through it, only through the inner product on $Lambda^k$.
+pub struct WeightedHodgeMassElmat<'a, F> {
+  coefficient: &'a F,
+  quad: WhitneyQuadrature,
+}
+impl<'a, F: Section<Covariant>> WeightedHodgeMassElmat<'a, F> {
+  /// Panics unless the coefficient is a grade-0 section: a weight is a scalar.
+  pub fn new(
+    coefficient: &'a F,
+    grade: impl Into<ExteriorGrade>,
+    qr: Option<SimplexQuadRule>,
+  ) -> Self {
+    assert_eq!(
+      coefficient.grade(),
+      Dim::ZERO,
+      "A scalar coefficient must be a grade-0 section."
+    );
+    let quad = WhitneyQuadrature::new(coefficient.dim(), grade, qr);
+    Self { coefficient, quad }
+  }
+}
+impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
+  fn row_grade(&self) -> ExteriorGrade {
+    self.quad.grade()
+  }
+  fn col_grade(&self) -> ExteriorGrade {
+    self.quad.grade()
+  }
+  fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
+    let inner = multiform_gramian(metric, self.quad.grade());
+    self
+      .quad
+      .integrate_pair(&self.quad, chart, cell_volume(metric), |point, row, col| {
+        self.coefficient.at(point).coeffs()[0] * inner.inner(row.coeffs(), col.coeffs())
+      })
   }
 }
 
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &Metric, cell: Cell) -> ElVec;
+  fn eval(&self, metric: &Metric, chart: Chart) -> ElVec;
 }
 
 /// Element vector of the source load
@@ -220,43 +361,25 @@ pub trait ElVecProvider: Sync {
 /// coordinates in sight.
 pub struct SourceElVec<'a, F> {
   source: &'a F,
-  qr: SimplexQuadRule,
-  whitneys: Vec<WhitneyForm>,
+  quad: WhitneyQuadrature,
 }
 impl<'a, F: Section<Covariant>> SourceElVec<'a, F> {
   pub fn new(source: &'a F, qr: Option<SimplexQuadRule>) -> Self {
-    let dim = source.dim();
-    let qr = qr.unwrap_or(SimplexQuadRule::degree(dim, 1));
-    let whitneys = standard_subsimps(dim, source.grade())
-      .map(|dof_simp| WhitneyForm::standard(dim, dof_simp))
-      .collect();
-    Self {
-      source,
-      qr,
-      whitneys,
-    }
+    let quad = WhitneyQuadrature::new(source.dim(), source.grade(), qr);
+    Self { source, quad }
   }
 }
 impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, metric: &Metric, cell: Cell) -> ElVec {
+  fn eval(&self, metric: &Metric, chart: Chart) -> ElVec {
     let inner = multiform_gramian(metric, self.grade());
-
-    let mut elvec = ElVec::zeros(self.whitneys.len());
-    for (iwhitney, whitney) in self.whitneys.iter().enumerate() {
-      let inner_pointwise = |point: &MeshPoint| {
-        inner.inner(
-          self.source.at(point).coeffs(),
-          whitney.at_bary(point.bary()).coeffs(),
-        )
-      };
-      elvec[iwhitney] = self
-        .qr
-        .integrate_cell(cell.idx(), &inner_pointwise, cell_volume(metric));
-    }
-    elvec
+    self
+      .quad
+      .integrate(chart, cell_volume(metric), |point, whitney| {
+        inner.inner(self.source.at(point).coeffs(), whitney.coeffs())
+      })
   }
 }
 
@@ -264,19 +387,63 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 mod test {
   use super::*;
   use simplicial::Dim;
+  use simplicial::topology::complex::Complex;
 
-  use derham::interpolate::form::WhitneyForm;
+  use derham::{
+    cochain::Cochain,
+    interpolate::{form::WhitneyForm, interpolant::WhitneyInterpolant},
+  };
   use simplicial::{
     geometry::metric::simplex::SimplexLengthsSq, topology::simplex::standard_subsimps,
   };
 
   use approx::assert_relative_eq;
 
+  /// The single cell of the standard complex, read as a chart: what a
+  /// closed-form element matrix is evaluated on when there is no mesh in sight.
+  fn refchart(complex: &Complex) -> Chart<'_> {
+    complex.cells().handle_iter().next().unwrap()
+  }
+
+  /// The varying-coefficient path against the closed form it generalizes: on a
+  /// constant $alpha equiv c$ the quadrature must return $c$ times the exact
+  /// [`HodgeMassElmat`], at every dimension and grade.
+  ///
+  /// The coefficient is a [`WhitneyInterpolant`], so nothing in this test has
+  /// an embedding: the section is the interpolation of a cochain on a Regge
+  /// mesh, evaluated at mesh points of the chart. Constant $c$ is what makes
+  /// the closed form an oracle, and taking $c != 1$ is what catches a
+  /// coefficient that is never read.
+  #[test]
+  fn weighted_hodge_mass_on_a_constant_is_the_closed_form() {
+    for dim in (0..=3).map(Dim::from) {
+      let complex = Complex::standard(dim);
+      let geo = SimplexLengthsSq::standard(dim);
+      let metric = geo.metric();
+      let chart = refchart(&complex);
+
+      for c in [1.0, 2.5] {
+        let cochain = Cochain::constant(c, complex.skeleton_raw(Dim::ZERO));
+        let coefficient = WhitneyInterpolant::new(cochain, &complex);
+
+        for grade in dim.range_inclusive() {
+          let exact = HodgeMassElmat::new(dim, grade).eval(&metric, chart);
+          let quadrature =
+            WeightedHodgeMassElmat::new(&coefficient, grade, Some(SimplexQuadRule::degree(dim, 2)))
+              .eval(&metric, chart);
+          assert_relative_eq!(&quadrature, &(c * exact), epsilon = 1e-12);
+        }
+      }
+    }
+  }
+
   #[test]
   fn hodge_mass0_is_scalar_mass() {
     for dim in (0..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::standard(dim);
-      let hodge_mass = HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric());
+      let refcomplex = Complex::standard(dim);
+      let hodge_mass =
+        HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric(), refchart(&refcomplex));
       let scalar_mass = scalar_mass_elmat(&geo.metric());
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
@@ -287,7 +454,8 @@ mod test {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::standard(dim);
-    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric());
+    let refcomplex = Complex::standard(dim);
+    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
       1./6.,1./3.,0.   ;
@@ -301,7 +469,8 @@ mod test {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::standard(dim);
-    let computed = DifElmat::new(dim, grade).eval(&geo.metric());
+    let refcomplex = Complex::standard(dim);
+    let computed = DifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
@@ -315,7 +484,8 @@ mod test {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::standard(dim);
-    let computed = CodifElmat::new(dim, grade).eval(&geo.metric());
+    let refcomplex = Complex::standard(dim);
+    let computed = CodifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
@@ -328,8 +498,9 @@ mod test {
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in (1..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::standard(dim);
+      let refcomplex = Complex::standard(dim);
       for grade in dim.range() {
-        let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric());
+        let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
 
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
           .map(|simp| WhitneyForm::standard(dim, simp).dif())
