@@ -1,48 +1,28 @@
-//! Linear advection $diff_t omega + cal(L)_v omega = 0$ on the flat box, run
-//! with the *central* (unstabilized) discretization, to measure what it does
-//! wrong.
+//! Linear advection $diff_t omega + cal(L)_v omega = 0$ on the flat box, with
+//! the *central* discretization, to measure what it does wrong.
 //!
-//! Cartan's formula $cal(L)_v = iota_v dif + dif iota_v$ makes one operator out
-//! of the classical pair: at $k = 0$ it is the advective form $v dot nabla f$,
-//! at $k = n$ the conservation form $nabla dot (v rho)$, and in between the
-//! transport of circulation and of flux. The loop below runs every grade of
-//! every dimension through the same code.
+//! Cartan's $cal(L)_v = iota_v dif + dif iota_v$ makes one operator out of the
+//! classical pair: advective form at $k = 0$, conservation form at $k = n$, the
+//! transport of circulation and flux between. Every grade of every dimension
+//! runs through the same code.
 //!
-//! Two things are read off, and neither is a convergence rate, because a smooth
-//! resolved solution converges perfectly well here and would say nothing:
+//! Not a convergence rate, which a smooth resolved solution passes while
+//! oscillating. Instead the $L^2$ drift, zero under exact transport of a
+//! divergence-free field and left alone by non-dissipative Gauss-Legendre, and
+//! the range violation at grade 0, which transport cannot produce.
 //!
-//! - **$L^2$ history.** A constant $v$ on a flat domain is divergence-free and
-//!   Killing, so exact transport conserves $norm(omega)_(L^2)$. Gauss-Legendre
-//!   is non-dissipative, so any drift is the space discretization's: growth is
-//!   instability, decay is numerical diffusion.
-//! - **Range violation at grade 0.** Transport moves values around and creates
-//!   none, so $max omega_h$ must not exceed $max omega_0$. The overshoot is the
-//!   oscillation, in the units of the transported quantity.
+//! The velocity is a genuine constant field, the sharp of a constant $1$-form
+//! pulled back onto the mesh; constant *components in every reference frame*
+//! would be a different and discontinuous field. No boundary condition is
+//! imposed, so the bump stops short of the boundary.
 //!
-//! The velocity is a genuine constant field: the sharp of a constant $1$-form
-//! pulled back onto the mesh, so the metric enters at the musical isomorphism
-//! where it belongs and $iota_v$ stays metric-free. Constant *components in
-//! every reference frame* would be a different and discontinuous field.
-//!
-//! No boundary condition is imposed, so the run stops before the bump reaches
-//! the boundary; the reported window is transport in the interior alone.
-//!
-//! What comes out is that the drift is *structural in the grade*, and the
-//! antisymmetry defect $integral_(diff K) inner(omega, eta) iota_v vol$ says
-//! why. It vanishes wherever the facet terms of neighboring cells cancel, and
-//! that happens at both ends of the grade range and nowhere between:
-//!
-//! - At $k = 0$ the Whitney forms are the continuous hat functions, so
-//!   $inner(omega, eta)$ is single-valued on a facet and the two sides cancel.
-//! - At $k = n$ they are constant per cell, so $inner(omega, eta)$ comes out of
-//!   the integral and what is left is $integral_(diff K) iota_v vol =
-//!   integral_K div v = 0$.
-//! - In between only the *tangential* part is single-valued, the normal part
-//!   jumps, and nothing cancels.
-//!
-//! So the classical two, advective and conservation form, are the two grades
-//! that are stable for free, and the transport of circulation and flux between
-//! them is where an unstabilized scheme actually fails.
+//! The drift turns out to be structural in the grade. The antisymmetry defect
+//! $integral_(diff K) inner(omega, eta) iota_v vol$ vanishes wherever
+//! neighboring facet terms cancel, which happens at both ends and nowhere
+//! between: the shape functions are continuous at $k = 0$, and constant per
+//! cell at $k = n$, where what is left is $integral_K div v$. So the classical
+//! two are stable for free, and the transport of circulation and flux between
+//! them is where an unstabilized scheme fails.
 
 use {
   derham::{

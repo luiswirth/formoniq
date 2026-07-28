@@ -209,16 +209,11 @@ impl ElMatProvider for CodifDifElmat {
 /// An element integral over a cell: a quadrature rule and the mesh points its
 /// nodes sit at.
 ///
-/// The shape functions are *not* held here. They arrive as [`LsfSamples`] built
-/// against this rule's [`nodes`](Self::nodes), which is what lets one routine
-/// integrate against the Whitney basis, against its differentials, or against
-/// two different grades at once.
-///
-/// What stays per-cell is only the chart, the metric and the volume. A
-/// coefficient is a [`Section`] evaluated at the [`MeshPoint`]s, and whether it
-/// is analytic data pulled back from a continuum or the interpolation of a
-/// cochain is invisible here -- which is what keeps the path intrinsic, since a
-/// discrete coefficient never touches an embedding at all.
+/// The shape functions are not held here; they arrive as [`LsfSamples`] built
+/// against this rule's [`nodes`](Self::nodes), so one routine serves the
+/// Whitney basis, its differentials, or two grades at once. What stays per-cell
+/// is the chart, the metric and the volume, a coefficient being a [`Section`]
+/// evaluated at the [`MeshPoint`]s.
 pub struct CellQuadrature {
   qr: SimplexQuadRule,
   nodes: Vec<Bary>,
@@ -306,24 +301,14 @@ struct BoundaryFacet {
 /// integrated in the cell's chart and weighted by the sign the boundary
 /// operator induces.
 ///
-/// **Metric-free**, and the integrand's type is why. Over a cell one integrates
-/// a *scalar* against $vol$, which is where a metric enters; over the boundary
-/// one integrates an $(n-1)$-*form* directly, and a form over a simplex of its
-/// own grade needs no metric, the geometry riding in the form's own values. So
-/// the measure here is the reference one and whatever metric an integrand wants
-/// -- a Hodge star, an inner product -- it reads for itself.
+/// **Metric-free**, because the integrand is an $(n-1)$-*form* rather than a
+/// scalar against $vol$: a form over a simplex of its own grade carries its own
+/// geometry. An integrand reads whatever metric it wants for itself.
 ///
-/// The integrand is an $(n-1)$-form and the quadrature takes its
-/// [`FaceTrace`] onto each facet, so a caller cannot forget that only the
-/// tangential part of a form is integrable over a face.
-///
-/// This is what a weak Lie derivative needs and a volume quadrature cannot
-/// supply. Whitney shape functions are coclosed on a cell, so integrating
-/// $dif iota_v omega$ by parts leaves nothing in the interior and the whole of
-/// Cartan's second term on $diff K$. The facets are the cell's own, using the
-/// cell's own DOFs, so the result is still an element matrix and ordinary
-/// assembly scatters it; the coupling between neighbors appears because the two
-/// sides of a shared facet disagree on the trace.
+/// The quadrature applies the [`FaceTrace`] onto each facet, so a caller cannot
+/// forget that only the tangential part of a form is integrable over a face.
+/// The facets are the cell's own and carry the cell's own DOFs, so the result
+/// is an element matrix and ordinary assembly scatters it.
 pub struct BoundaryQuadrature {
   dim: Dim,
   /// Facet-major: node `f * npoints + q` lies on facet `f`.
