@@ -537,12 +537,15 @@ pub struct LieDerivativeElmat<'a, V> {
 }
 
 impl<'a, V: Section<Contravariant>> LieDerivativeElmat<'a, V> {
+  /// One `quad_degree` serves both integrals, at their own dimensions.
+  ///
+  /// Degree $2 + p$ is exact for a velocity of polynomial degree $p$: the
+  /// interior integrand pairs a constant $dif W$ against an affine $W$, the
+  /// boundary one two affine shape functions, so the boundary is the binding
+  /// side and $2$ suffices for a constant velocity.
+  ///
   /// Panics unless the velocity is a grade-1 section: a vector field.
-  pub fn new(
-    velocity: &'a V,
-    grade: impl Into<ExteriorGrade>,
-    qr: Option<SimplexQuadRule>,
-  ) -> Self {
+  pub fn new(velocity: &'a V, grade: impl Into<ExteriorGrade>, quad_degree: usize) -> Self {
     assert_eq!(
       velocity.grade(),
       Dim::ONE,
@@ -550,8 +553,9 @@ impl<'a, V: Section<Contravariant>> LieDerivativeElmat<'a, V> {
     );
     let (dim, grade) = (velocity.dim(), grade.into());
 
-    let volume = CellQuadrature::new(dim, qr);
-    let boundary = BoundaryQuadrature::new(dim, None);
+    let volume = CellQuadrature::new(dim, Some(SimplexQuadRule::degree(dim, quad_degree)));
+    let boundary =
+      BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, quad_degree)));
     Self {
       velocity,
       grade,
@@ -823,11 +827,70 @@ mod test {
         )),
       };
 
-      let elmat = LieDerivativeElmat::new(&velocity, Dim::ZERO, None).eval(&metric, chart);
+      let elmat = LieDerivativeElmat::new(&velocity, Dim::ZERO, 2).eval(&metric, chart);
       let constant = Vector::from_element(elmat.ncols(), 1.0);
 
       assert_relative_eq!((elmat * constant).norm(), 0.0, epsilon = 1e-12);
     }
+  }
+
+  /// The exact antisymmetry defect of the Lie derivative element matrix,
+  /// $a_K (omega, eta) + a_K (eta, omega) = integral_(diff K) inner(omega, eta)
+  /// iota_v vol$.
+  ///
+  /// For a constant $v$ on a flat cell $cal(L)_v$ is a derivation of the inner
+  /// product and annihilates $vol$, so $inner(cal(L)_v omega, eta) +
+  /// inner(omega, cal(L)_v eta) = iota_v dif inner(omega, eta)$, which Cartan
+  /// and Stokes carry to the boundary. The operator is therefore skew *up to
+  /// exactly this*, and on a closed manifold with a Killing field the term
+  /// telescopes away and the spectrum is imaginary.
+  ///
+  /// This is the statement worth asserting rather than the spectrum itself: it
+  /// is exact at every grade and dimension, it needs no mesh, and it says *why*
+  /// the eigenvalues leave the imaginary axis instead of measuring by how much.
+  #[test]
+  fn the_lie_derivative_is_skew_up_to_its_boundary_term() {
+    // The identity is satisfied vacuously wherever both sides vanish, as they
+    // do at the top grade in one dimension, where the only Whitney 1-form is
+    // constant and the two endpoints of the boundary cancel. Somewhere in the
+    // sweep the defect has to be real.
+    let mut largest_defect: f64 = 0.0;
+
+    for dim in (1..=3).map(Dim::from) {
+      let refcomplex = Complex::standard(dim);
+      let chart = refchart(&refcomplex);
+      let metric = SimplexLengthsSq::standard(dim).metric();
+
+      let velocity = ConstantVelocity {
+        dim,
+        value: MultiVector::line(Vector::from_iterator(
+          dim.index(),
+          (0..dim.index()).map(|i| 0.8 - 0.3 * (i as f64)),
+        )),
+      };
+      // $iota_v vol$, the flux form the defect integrates.
+      let flux = MultiForm::one(dim)
+        .hodge_star(&metric)
+        .interior_product(&velocity.value);
+
+      let boundary = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));
+
+      for grade in dim.range_inclusive() {
+        let elmat = LieDerivativeElmat::new(&velocity, grade, 2).eval(&metric, chart);
+        let symmetric_part = &elmat + elmat.transpose();
+
+        let inner = multiform_gramian(&metric, grade);
+        let shapes = LsfSamples::whitney(dim, grade, boundary.nodes());
+        let defect = boundary.integrate_pair(&shapes, &shapes, chart, |_point, row, col| {
+          inner.inner(row.coeffs(), col.coeffs()) * flux.clone()
+        });
+
+        largest_defect = largest_defect.max(defect.norm());
+        assert_relative_eq!(&symmetric_part, &defect, epsilon = 1e-12);
+      }
+    }
+
+    assert!(largest_defect > 1e-6, "the operator is not skew on a cell");
   }
 
   /// The varying-coefficient path against the closed form it generalizes: on a
