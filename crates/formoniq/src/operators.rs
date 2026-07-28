@@ -1,10 +1,10 @@
 use {
-  derham::{interpolate::form::WhitneyLsf, section::Section},
+  derham::{interpolate::form::WhitneyLsf, section::Section, trace::FaceTrace},
   exterior::{Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian},
   gramian::Metric,
   multiindex::{Combination, factorial},
   simplicial::{
-    atlas::{Chart, MeshPoint, SimplexQuadRule, ref_difbarys},
+    atlas::{Chart, ChartExt, MeshPoint, SimplexQuadRule, ref_difbarys, refsimp_vol},
     geometry::cell_volume,
     linalg::{Matrix, Vector},
     topology::simplex::{standard_boundary_operator, standard_subsimps},
@@ -299,6 +299,121 @@ impl WhitneyQuadrature {
   }
 }
 
+/// A facet of the reference cell, as $diff K$ presents it.
+struct BoundaryFacet {
+  /// The sign the boundary operator induces, $(-1)^i$ for the facet omitting
+  /// the $i$-th vertex.
+  sign: f64,
+  /// The facet's local vertex positions within the cell.
+  positions: Combination,
+  /// The trace onto this facet at its own top grade $n-1$, where the
+  /// $(n-1)$-form integrand becomes a scalar.
+  trace: FaceTrace,
+}
+
+/// Quadrature over $diff K$ for an element integral: the cell's facets, each
+/// integrated in the cell's chart and weighted by the sign the boundary
+/// operator induces.
+///
+/// **Metric-free.** An $(n-1)$-form integrated over an $(n-1)$-simplex needs no
+/// metric, the geometry riding in the form's own values, so the measure here is
+/// the reference one. Whatever metric an integrand needs -- a Hodge star, an
+/// inner product -- it reads for itself.
+///
+/// The integrand is an $(n-1)$-form and the quadrature takes its
+/// [`FaceTrace`] onto each facet, so a caller cannot forget that only the
+/// tangential part of a form is integrable over a face.
+///
+/// This is what a weak Lie derivative needs and a volume quadrature cannot
+/// supply. Whitney shape functions are coclosed on a cell, so integrating
+/// $dif iota_v omega$ by parts leaves nothing in the interior and the whole of
+/// Cartan's second term on $diff K$. The facets are the cell's own, using the
+/// cell's own DOFs, so the result is still an element matrix and ordinary
+/// assembly scatters it; the coupling between neighbors appears because the two
+/// sides of a shared facet disagree on the trace.
+pub struct BoundaryQuadrature {
+  dim: Dim,
+  qr: SimplexQuadRule,
+  facets: Vec<BoundaryFacet>,
+  rows: Vec<WhitneyLsf>,
+  cols: Vec<WhitneyLsf>,
+}
+
+impl BoundaryQuadrature {
+  pub fn new(
+    dim: impl Into<Dim>,
+    row_grade: impl Into<ExteriorGrade>,
+    col_grade: impl Into<ExteriorGrade>,
+    qr: Option<SimplexQuadRule>,
+  ) -> Self {
+    let dim = dim.into();
+    let facet_dim = dim - 1;
+    let qr = qr.unwrap_or(SimplexQuadRule::degree(facet_dim, 1));
+
+    let facets = Combination::full((dim + 1).index())
+      .deletions()
+      .map(|(sign, _, positions)| BoundaryFacet {
+        sign: sign.as_f64(),
+        positions,
+        trace: FaceTrace::new(dim, &positions, facet_dim),
+      })
+      .collect();
+
+    let shape = |grade| {
+      standard_subsimps(dim, grade)
+        .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
+        .collect()
+    };
+    Self {
+      dim,
+      qr,
+      facets,
+      rows: shape(row_grade.into()),
+      cols: shape(col_grade.into()),
+    }
+  }
+
+  /// $integral_(diff K) omega$ of an $(n-1)$-form field expressed in the cell's
+  /// reference frame.
+  pub fn integrate_form<F>(&self, chart: Chart, form: F) -> f64
+  where
+    F: Fn(&MeshPoint) -> MultiForm,
+  {
+    let mut integral = 0.0;
+    for facet in &self.facets {
+      for (bary, weight) in self.qr.points().zip(self.qr.weights().iter()) {
+        let point = chart.point_on_face(&facet.positions, bary);
+        integral += facet.sign * weight * facet.trace.top_coefficient(&form(&point));
+      }
+    }
+    refsimp_vol(self.dim - 1) * integral
+  }
+
+  /// $[integral_(diff K) f(x, W_sigma, W'_tau)]_(sigma tau)$, the integrand
+  /// being the $(n-1)$-form the two shape functions build at a point.
+  pub fn integrate_pair<F>(&self, chart: Chart, f: F) -> ElMat
+  where
+    F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> MultiForm,
+  {
+    let mut elmat = ElMat::zeros(self.rows.len(), self.cols.len());
+    for facet in &self.facets {
+      for (bary, weight) in self.qr.points().zip(self.qr.weights().iter()) {
+        let point = chart.point_on_face(&facet.positions, bary);
+        let rows: Vec<_> = self.rows.iter().map(|w| w.at_bary(point.bary())).collect();
+        let cols: Vec<_> = self.cols.iter().map(|w| w.at_bary(point.bary())).collect();
+
+        for (i, row) in rows.iter().enumerate() {
+          for (j, col) in cols.iter().enumerate() {
+            elmat[(i, j)] +=
+              facet.sign * weight * facet.trace.top_coefficient(&f(&point, row, col));
+          }
+        }
+      }
+    }
+    refsimp_vol(self.dim - 1) * elmat
+  }
+}
+
 /// Element matrix of the Hodge mass bilinear form weighted by a scalar
 /// coefficient field,
 /// $[integral_K alpha inner(W_sigma, W_tau)_(Lambda^k) vol]_(sigma tau)$.
@@ -403,6 +518,34 @@ mod test {
   /// closed-form element matrix is evaluated on when there is no mesh in sight.
   fn refchart(complex: &Complex) -> Chart<'_> {
     complex.cells().handle_iter().next().unwrap()
+  }
+
+  /// Stokes' theorem on a single cell, $integral_K dif omega = integral_(diff
+  /// K) omega$, which is what the boundary quadrature has to reproduce and the
+  /// only check that pins its induced signs.
+  ///
+  /// Metric-free on both sides: $dif$ needs none and an $(n-1)$-form over an
+  /// $(n-1)$-simplex needs none either. Taking $omega$ a Whitney shape function
+  /// makes the left side exact, since its differential is constant, so the
+  /// identity is read against a closed form rather than a second quadrature.
+  #[test]
+  fn boundary_quadrature_satisfies_stokes_on_a_cell() {
+    for dim in (1..=4).map(Dim::from) {
+      let refcomplex = Complex::standard(dim);
+      let chart = refchart(&refcomplex);
+      let grade = dim - 1;
+      let quadrature =
+        BoundaryQuadrature::new(dim, grade, grade, Some(SimplexQuadRule::degree(dim - 1, 2)));
+
+      for dof_simp in standard_subsimps(dim, grade) {
+        let whitney = WhitneyLsf::standard(dim, dof_simp);
+
+        let interior = whitney.dif().coeffs()[0] * refsimp_vol(dim);
+        let boundary = quadrature.integrate_form(chart, |point| whitney.at_bary(point.bary()));
+
+        assert_relative_eq!(boundary, interior, epsilon = 1e-12);
+      }
+    }
   }
 
   /// The varying-coefficient path against the closed form it generalizes: on a
