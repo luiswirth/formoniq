@@ -1,10 +1,11 @@
 use {
   exterior::{ExteriorGrade, MultiForm, MultiVector},
-  multiindex::{Combination, Sign, factorial_f64},
+  multiindex::{Combination, Sign, binomial, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
     Dim,
     atlas::{BaryRef, ref_difbarys},
+    topology::simplex::standard_subsimps,
   },
 };
 
@@ -91,9 +92,103 @@ impl WhitneyLsf {
   }
 }
 
+/// The whole Whitney basis of one grade as a single linear map
+/// $C: RR^(Delta_k) -> Lambda^k (RR^(n+1)) times.circle RR^(n+1)$, sending a
+/// degree of freedom to the coefficients of $W_sigma$ on the products
+/// $dif lambda_I lambda_v$.
+///
+/// The deletion formula read as a matrix: column $sigma$ carries exactly $k+1$
+/// nonzeros, the entry $(-1)^i k!$ at the row $(sigma without sigma_i, sigma_i)$.
+/// It is the matrix of the Koszul contraction $kappa$ on blades, and summing its
+/// blocks over the vertex index collapses $kappa$ to $iota_bb(1)$, giving $k!$
+/// times the transposed boundary operator.
+///
+/// Combinatorial, and by [`WhitneyLsf`] the entire cell-independent content of
+/// the basis: a metric reaches an $L^2$ product only through the form it is
+/// pulled back from ([`pullback`](Self::pullback)). A higher-order trimmed
+/// space $P^-_r Lambda^k$ enlarges this map and changes nothing else.
+#[derive(Debug, Clone)]
+pub struct WhitneyCoeffs {
+  cell_dim: Dim,
+  grade: ExteriorGrade,
+  dofs: Vec<Combination>,
+}
+impl WhitneyCoeffs {
+  pub fn new(cell_dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    let (cell_dim, grade) = (cell_dim.into(), grade.into());
+    let dofs = standard_subsimps(cell_dim, grade).collect();
+    Self {
+      cell_dim,
+      grade,
+      dofs,
+    }
+  }
+
+  pub fn cell_dim(&self) -> Dim {
+    self.cell_dim
+  }
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+  /// The degrees of freedom, in colex order: the columns of the map.
+  pub fn dofs(&self) -> &[Combination] {
+    &self.dofs
+  }
+
+  /// The pullback $C^top (H times.circle Q) C$ along the basis of a bilinear
+  /// form that factors into a part $H$ on the barycentric $k$-blades and a part
+  /// $Q$ on the barycentric coordinates.
+  ///
+  /// Every $L^2$ product of Whitney forms on an affine cell has this shape,
+  /// because the integrand does: the blades are constant and the coordinates
+  /// carry the whole $x$-dependence. With $H = Lambda^k (dif lambda)
+  /// (Lambda^k g^(-1)) Lambda^k (dif lambda)^top$ and $Q$ the barycentric
+  /// [`ref_bary_gramian`](simplicial::atlas::ref_bary_gramian), the result is
+  /// the Hodge mass matrix at unit volume.
+  ///
+  /// The factors are taken apart because their tensor product is the one thing
+  /// worth not forming: $C$ has $k+1$ nonzeros per column, so the sum here runs
+  /// over $(k+1)^2$ terms per entry, where the product has
+  /// $(n+1)^2 binom(n+1,k)^2$.
+  pub fn pullback(&self, blade: &Matrix, bary: &Matrix) -> Matrix {
+    let mut pullback = Matrix::zeros(self.dofs.len(), self.dofs.len());
+    for (i, asimp) in self.dofs.iter().enumerate() {
+      for (j, bsimp) in self.dofs.iter().enumerate() {
+        pullback[(i, j)] = asimp
+          .deletions()
+          .flat_map(|a| bsimp.deletions().map(move |b| (a, b)))
+          .map(|((asign, avertex, ablade), (bsign, bvertex, bblade))| {
+            (asign * bsign).as_f64()
+              * blade[(ablade.rank(), bblade.rank())]
+              * bary[(avertex, bvertex)]
+          })
+          .sum();
+      }
+    }
+    factorial_f64(self.grade.index()).powi(2) * pullback
+  }
+
+  /// The map written out, with the blade index in colex order and the vertex
+  /// index running fastest: the row order of the tensor product
+  /// [`pullback`](Self::pullback) takes apart.
+  pub fn matrix(&self) -> Matrix {
+    let nvertices = (self.cell_dim + 1).index();
+    let nblades = binomial(nvertices, self.grade.index());
+    let scale = factorial_f64(self.grade.index());
+    let mut coeffs = Matrix::zeros(nblades * nvertices, self.dofs.len());
+    for (j, dof) in self.dofs.iter().enumerate() {
+      for (sign, vertex, blade) in dof.deletions() {
+        coeffs[(blade.rank() * nvertices + vertex, j)] = sign.as_f64() * scale;
+      }
+    }
+    coeffs
+  }
+}
+
 #[cfg(test)]
 mod test {
   use super::*;
+  use approx::assert_relative_eq;
   use exterior::{exterior_bases, multiform_gramian};
   use gramian::{Gramian, Metric};
   use multiindex::combinations;
@@ -109,6 +204,30 @@ mod test {
       std::cmp::Ordering::Less => 0.0,
     });
     Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
+  }
+
+  /// $C^top (H times.circle Q) C$ computed on the factors agrees with the same
+  /// pullback formed through the explicit map and the explicit tensor product.
+  ///
+  /// The two sides are different objects, not two spellings of one: the right
+  /// is the definition, the left the evaluation that never leaves the factors.
+  /// Random asymmetric factors, so a transposed index is not invisible.
+  #[test]
+  fn whitney_pullback_is_the_kronecker_sandwich() {
+    for dim in (0..=4).map(Dim::from) {
+      let nvertices = (dim + 1).index();
+      for grade in 0..=dim.index() {
+        let coeffs = WhitneyCoeffs::new(dim, grade);
+        let nblades = binomial(nvertices, grade);
+        let entry = |i: usize, j: usize| ((7 * i + 3 * j + 1) % 11) as f64 - 5.0;
+        let blade = Matrix::from_fn(nblades, nblades, entry);
+        let bary = Matrix::from_fn(nvertices, nvertices, entry);
+
+        let matrix = coeffs.matrix();
+        let expected = matrix.transpose() * blade.kronecker(&bary) * &matrix;
+        assert_relative_eq!(coeffs.pullback(&blade, &bary), expected);
+      }
+    }
   }
 
   /// A corollary of $delta compose kappa = 0$ on constant forms, since

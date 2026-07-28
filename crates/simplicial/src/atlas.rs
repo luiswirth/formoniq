@@ -61,6 +61,7 @@ use crate::Dim;
 
 use crate::linalg::{Matrix, RowVector, Vector};
 use coorder::{CoordSpace, Coords, CoordsRef};
+use gramian::Gramian;
 use multiindex::{Combination, Composition, factorial_f64};
 
 /// The barycentric coordinate space of a chart: the affine weights
@@ -170,6 +171,24 @@ pub fn ref_difbarys(dim: impl Into<Dim>) -> Matrix {
     difbarys[(i + 1, i)] = 1.0;
   }
   difbarys
+}
+
+/// The Gramian of the barycentric coordinate functions in $L^2(hat(K))$, at
+/// unit volume:
+/// $Q_(v w) = 1 \/ vol(hat(K)) integral_(hat(K)) lambda_v lambda_w
+/// = (1 + delta_(v w)) \/ ((n+1)(n+2))$.
+///
+/// Identity plus rank one, $Q = (I + bb(1) bb(1)^top) \/ ((n+1)(n+2))$, hence
+/// positive definite. Metric-free like every reference datum: this is the whole
+/// polynomial content of the affine chart, the factor a mass matrix carries
+/// alongside the inner product on $Lambda^k$, and the one a higher-order space
+/// replaces by the barycentric moments of higher degree.
+pub fn ref_bary_gramian(dim: impl Into<Dim>) -> Gramian {
+  let nvertices = (dim.into() + 1).index();
+  let scale = ((nvertices * (nvertices + 1)) as f64).recip();
+  let mut gramian = Matrix::from_element(nvertices, nvertices, scale);
+  gramian.fill_diagonal(2.0 * scale);
+  Gramian::new_unchecked(gramian)
 }
 
 /// The local coordinates of the vertices of the reference $n$-simplex, as the
