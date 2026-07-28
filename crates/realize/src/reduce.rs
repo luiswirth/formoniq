@@ -82,7 +82,7 @@ pub fn reduced_form(form: MultiForm, metric: &Metric, sign: Sign) -> MultiForm {
   if k <= n - k {
     form
   } else {
-    form.hodge_star(metric) * sign.as_f64()
+    form.hodge_star(metric, sign)
   }
 }
 
@@ -104,7 +104,7 @@ pub fn scalarize(form: MultiForm, metric: &Metric, signed: Option<Sign>) -> f64 
     return form.coeffs()[0];
   }
   match signed {
-    Some(sign) => form.hodge_star(metric).coeffs()[0] * sign.as_f64(),
+    Some(sign) => form.hodge_star(metric, sign).coeffs()[0],
     None => form.norm(metric),
   }
 }
@@ -412,7 +412,7 @@ mod tests {
           let mut coeffs = na::DVector::zeros(ncoeffs);
           coeffs[i] = 2.0;
           let form = MultiForm::new(coeffs, dim, grade);
-          let starred = form.clone().hodge_star(&metric);
+          let starred = form.clone().hodge_star(&metric, Sign::Pos);
           let (direct, reduced) = (
             scalarize(form, &metric, None),
             scalarize(starred, &metric, None),
