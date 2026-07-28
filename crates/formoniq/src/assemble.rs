@@ -32,7 +32,7 @@ pub fn assemble_galmat(
     .handle_par_iter()
     .flat_map_iter(|cell| {
       let metric = geometry.cell_metric(cell);
-      let elmat = elmat.eval(&metric);
+      let elmat = elmat.eval(&metric, cell);
 
       let row_subs: Vec<_> = cell.faces(row_grade).collect();
       let col_subs: Vec<_> = cell.faces(col_grade).collect();
