@@ -27,12 +27,8 @@ use simplicial::{
 /// The mass matrix and the discrete Lie derivative of the semidiscrete
 /// transport system $M dot(u) = -A u$.
 ///
-/// $A$ is the *central* discretization: each cell integrates its own trace over
-/// a shared facet, no numerical flux is chosen, and the neighbors' disagreement
-/// is the whole of the coupling. It is consistent and nonsymmetric, and like
-/// every unstabilized Galerkin advection it is prone to oscillation on features
-/// the mesh does not resolve. See
-/// [`LieDerivativeElmat`].
+/// $A$ is the *central* discretization: conservative, and dispersive for it.
+/// See [`LieDerivativeElmat`].
 pub fn assemble_transport<V: Sync + Section<Contravariant>>(
   topology: &Complex,
   geometry: &MeshLengthsSq,
