@@ -1,6 +1,5 @@
 use {
   exterior::{ExteriorGrade, MultiForm, MultiVector},
-  gramian::Metric,
   multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
@@ -90,62 +89,13 @@ impl WhitneyLsf {
   pub fn dif(&self) -> MultiForm {
     factorial_f64(self.grade().index() + 1) * self.barycentric_blade().pullback(&self.difbarys)
   }
-
-  /// The codifferential $delta W_sigma = (-1)^(n(k+1)+1) (-1)^q star dif star
-  /// W_sigma$, exact on the cell and constant like [`Self::dif`], because the
-  /// shape function's coefficients are affine.
-  ///
-  /// Unlike the differential this is *not* metric-free: $delta$ is the formal
-  /// adjoint of $dif$, so it reads the metric through the star, and the
-  /// signature enters through $(-1)^q$ exactly as the star's involution does.
-  ///
-  /// It vanishes identically. Writing $W_sigma = k! sum_i (-1)^i
-  /// lambda_(sigma_i) beta_i$ with $beta_i$ the constant blade that omits
-  /// $dif lambda_(sigma_i)$,
-  ///
-  /// $$ delta W_sigma = -k! sum_i (-1)^i iota_((dif lambda_(sigma_i))^sharp)
-  ///    beta_i, $$
-  ///
-  /// and contracting $beta_i$ produces the inner products $inner(dif
-  /// lambda_(sigma_i), dif lambda_(sigma_m))$, symmetric in $(i, m)$, against a
-  /// sign structure antisymmetric in $(i, m)$: the unordered pairs cancel. So
-  /// the lowest-order Whitney forms are coclosed on every cell, of any
-  /// dimension, grade and signature.
-  ///
-  /// That is not a curiosity but the shape of the weak Lie derivative on this
-  /// space. Integrating $dif iota_v omega$ by parts over a cell moves the
-  /// differential onto the test function, and this being zero leaves the whole
-  /// of Cartan's second term supported on $diff K$: in the interior only
-  /// $iota_v dif$ survives.
-  pub fn codif(&self, metric: &Metric) -> MultiForm {
-    let (dim, grade) = (self.cell_dim, self.grade());
-    if grade == 0 {
-      return MultiForm::zero(dim, grade - 1);
-    }
-
-    let dif_star = self
-      .dof_simp
-      .deletions()
-      .map(|(sign, vertex, rest)| {
-        let blade = |c| MultiForm::from_blade_signed(self.nvertices(), Sign::Pos, c);
-        let difbary = blade(Combination::single(vertex)).pullback(&self.difbarys);
-        let beta = blade(rest).pullback(&self.difbarys);
-        sign.as_f64() * difbary.wedge(&beta.hodge_star(metric))
-      })
-      .reduce(|a, b| a + b)
-      .expect("A positive grade has at least one deletion.");
-
-    let parity = dim.index() * (grade.index() + 1) + 1 + metric.signature().1;
-    (factorial_f64(grade.index()) * Sign::from_parity(parity).as_f64())
-      * dif_star.hodge_star(metric)
-  }
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
   use exterior::{exterior_bases, multiform_gramian};
-  use gramian::Gramian;
+  use gramian::{Gramian, Metric};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, refsimp_vol};
   use simplicial::linalg::Vector;
@@ -161,17 +111,42 @@ mod test {
     Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
   }
 
-  /// The same law read off the *definition* of $delta$ instead of the formula
-  /// $star dif star$ that [`WhitneyLsf::codif`] computes.
+  /// On a flat cell $delta compose kappa = 0$ on constant forms, of which the
+  /// coclosedness of the Whitney forms is the corollary.
   ///
-  /// $delta omega = 0$ exactly when $integral_K inner(dif phi, omega) = 0$ for
-  /// every test form $phi$ vanishing on $diff K$, since that is adjointness
-  /// with the boundary term killed. Take $phi = b c$ with $b = product_i
-  /// lambda_i$ the bubble, which vanishes on every facet because each facet
-  /// kills one barycentric coordinate, and $c$ a constant blade; then $dif phi
-  /// = dif b wedge c$ and the check never touches a Hodge star.
+  /// For constant $omega in Lambda^(k+1)$ the Koszul contraction has
+  /// $(kappa omega)_(j_1 dots j_k) = x^i omega_(i j_1 dots j_k)$, so
+  /// $diff_i (kappa omega)_(j_1 dots j_k) = omega_(i j_1 dots j_k)$ and
+  ///
+  /// $$ (delta kappa omega)_(j_2 dots j_k)
+  ///    = -g^(i j_1) omega_(i j_1 j_2 dots j_k) = 0, $$
+  ///
+  /// the metric symmetric in $(i, j_1)$ where the form alternates:
+  /// differentiating undoes the insertion, leaving the symmetric metric
+  /// contracted into two slots of an alternating form. Whitney forms follow
+  /// because $W_sigma = k! lambda^* (kappa e_sigma)$ and $lambda^*$ is a
+  /// constant pullback, which preserves the antisymmetry. The classical cases
+  /// are this at $n = 3$: the Nedelec edge elements $a + b times x$ are
+  /// divergence-free, the Raviart-Thomas ones $c(x - x_i)$ radial hence
+  /// curl-free.
+  ///
+  /// The property is *not* what makes the family work -- that is the
+  /// subcomplex property, unisolvence and the commuting projection, all of
+  /// them statements about $dif$ -- and it does not survive past lowest order,
+  /// where $kappa$ meets non-constant polynomials and $diff kappa != id$. What
+  /// it settles here is the weak Lie derivative: integrating $dif iota_v
+  /// omega$ by parts over a cell moves the differential onto the test
+  /// function, so this leaves Cartan's second term supported entirely on
+  /// $diff K$, and in the interior only $iota_v dif$ survives.
+  ///
+  /// Read off the *definition* of $delta$, never a formula for it: $delta
+  /// omega = 0$ exactly when $integral_K inner(dif phi, omega) = 0$ for every
+  /// $phi$ vanishing on $diff K$, which is adjointness with the boundary term
+  /// killed. The bubble $b = product_i lambda_i$ supplies such $phi = b c$,
+  /// vanishing on every facet because each facet kills one barycentric
+  /// coordinate, and then $dif phi = dif b wedge c$ touches no Hodge star.
   #[test]
-  fn whitney_forms_annihilate_the_differentials_of_interior_test_forms() {
+  fn whitney_forms_are_coclosed() {
     for dim in (1..=3).map(Dim::from) {
       let difbarys = ref_difbarys(dim);
       let nvertices = (dim + 1).index();
@@ -208,34 +183,6 @@ mod test {
               assert!(
                 integral.abs() < 1e-12,
                 "dim {dim:?} grade {grade} q {q} dof {dof_simp:?} blade {blade:?}: {integral}"
-              );
-            }
-          }
-        }
-      }
-    }
-  }
-
-  /// The lowest-order Whitney forms are coclosed: $delta W_sigma = 0$ on every
-  /// cell, at every dimension, grade and signature.
-  ///
-  /// The cancellation is between the symmetry of $inner(dif lambda_i, dif
-  /// lambda_j)$ and the antisymmetry of the deletion signs, so it must survive
-  /// an indefinite metric and a non-orthogonal frame, and both are swept.
-  #[test]
-  fn whitney_forms_are_coclosed() {
-    for dim in (1..=4).map(Dim::from) {
-      for q in 0..=dim.index() {
-        for metric in [
-          Metric::new(Gramian::pseudo_euclidean(dim.index() - q, q)),
-          skewed_metric(dim.index(), q),
-        ] {
-          for grade in dim.range_inclusive() {
-            for dof_simp in combinations(dim.index() + 1, (grade + 1).index()) {
-              let codif = WhitneyLsf::standard(dim, dof_simp).codif(&metric);
-              assert!(
-                codif.coeffs().iter().all(|c| c.abs() < 1e-12),
-                "dim {dim:?} grade {grade:?} q {q} dof {dof_simp:?}: {codif:?}"
               );
             }
           }
