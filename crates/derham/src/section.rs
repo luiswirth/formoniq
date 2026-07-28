@@ -42,7 +42,7 @@ use {
       coord::{CoordRef, locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
       metric::mesh::MeshLengthsSq,
     },
-    topology::complex::Complex,
+    topology::{complex::Complex, orientation::Orientation},
   },
 };
 
@@ -392,20 +392,32 @@ impl<F: Section<Contravariant>> Section<Covariant> for Flat<'_, F> {
 
 /// The Hodge star $star: Lambda^k -> Lambda^(n-k)$ applied pointwise,
 /// preserving the variance.
-pub struct HodgeStar<'a, F>(MetricOp<'a, F>);
+///
+/// Takes the coherent [`Orientation`], and must. The star is defined against a
+/// volume form, so a cell-by-cell star reads each cell's *colex* orientation,
+/// which is a gauge unrelated to its neighbors': the field it builds flips sign
+/// across every facet where colex disagrees with the manifold. Holding an
+/// `&Orientation` is the proof the mesh is orientable at all, so a caller that
+/// cannot get one has no star to apply.
+pub struct HodgeStar<'a, F> {
+  op: MetricOp<'a, F>,
+  orientation: &'a Orientation,
+}
 impl<V: Variance, F: Section<V>> Section<V> for HodgeStar<'_, F> {
   fn dim(&self) -> Dim {
-    self.0.field.dim()
+    self.op.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
-    self.0.field.dim() - self.0.field.grade()
+    self.op.field.dim() - self.op.field.grade()
   }
   fn at(&self, point: &MeshPoint) -> ExteriorElement<V> {
-    self
-      .0
+    let chart = point.chart(self.op.topology);
+    let star = self
+      .op
       .field
       .at(point)
-      .hodge_star(&self.0.cell_metric(point))
+      .hodge_star(&self.op.cell_metric(point));
+    self.orientation.sign(chart).as_f64() * star
   }
 }
 
@@ -418,12 +430,16 @@ pub trait SectionOps<V: Variance>: Sized + Section<V> {
     self,
     topology: &'a Complex,
     geometry: &'a MeshLengthsSq,
+    orientation: &'a Orientation,
   ) -> HodgeStar<'a, Self> {
-    HodgeStar(MetricOp {
-      field: self,
-      topology,
-      geometry,
-    })
+    HodgeStar {
+      op: MetricOp {
+        field: self,
+        topology,
+        geometry,
+      },
+      orientation,
+    }
   }
 }
 impl<V: Variance, F: Section<V>> SectionOps<V> for F {}
@@ -641,10 +657,11 @@ mod test {
           grade,
           Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i % 5) as f64 - 2.0)),
         );
+        let orientation = topology.orientation().unwrap();
         let whitney = WhitneyInterpolant::new(cochain, &topology);
         let star_star = WhitneyInterpolant::new(whitney.cochain().clone(), &topology)
-          .hodge_star(&topology, &lengths)
-          .hodge_star(&topology, &lengths);
+          .hodge_star(&topology, &lengths, orientation)
+          .hodge_star(&topology, &lengths, orientation);
 
         let sign = Sign::from_parity(grade.index() * (dim - grade).index());
         for cell in topology.cells().handle_iter() {
