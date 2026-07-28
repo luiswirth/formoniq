@@ -38,7 +38,7 @@
 //! $O(N^2)$.
 
 use crate::{
-  cochain::Cochain, interpolate::form::WhitneyForm, project::integrate_face, section::Section,
+  cochain::Cochain, interpolate::form::WhitneyLsf, project::integrate_face, section::Section,
 };
 
 use {
@@ -78,8 +78,8 @@ pub fn prolongation_matrix(
 
   // The coarse cell's Whitney basis forms, standard on the reference cell, in
   // the colex order its faces come in -- so they zip against `faces(grade)`.
-  let basis_forms: Vec<WhitneyForm> = standard_subsimps(dim, grade)
-    .map(|dof_simp| WhitneyForm::standard(dim, dof_simp))
+  let basis_forms: Vec<WhitneyLsf> = standard_subsimps(dim, grade)
+    .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
     .collect();
   let qr = SimplexQuadRule::degree(grade, 1);
 
@@ -179,7 +179,7 @@ fn cell_provenance(
 /// Whitney interpolant is the $c$-weighted sum of these, which is why the matrix
 /// and the cochain action ([`prolongate`]) share this one kernel.
 struct ProlongedBasisForm<'a> {
-  form: &'a WhitneyForm,
+  form: &'a WhitneyLsf,
   /// `parent_bary = bary_map * fine_bary`; see [`cell_provenance`].
   bary_map: &'a Matrix,
   /// The child's affine Jacobian into the parent chart.

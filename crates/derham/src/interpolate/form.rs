@@ -8,9 +8,21 @@ use {
   },
 };
 
-/// The Whitney form $W_sigma$ of a DOF subsimplex, on the reference cell: the
-/// basis of the lowest-order trimmed space $P^-_1 Lambda^k$, dual to the
-/// degrees of freedom, $integral_tau W_sigma = delta_(sigma tau)$.
+/// The *local* shape function of the Whitney form $W_sigma$: its restriction to
+/// one cell, indexed by the DOF subsimplex's local vertex positions and written
+/// in the reference barycentric frame. The basis of the lowest-order trimmed
+/// space $P^-_1 Lambda^k$, dual to the degrees of freedom,
+/// $integral_tau W_sigma = delta_(sigma tau)$.
+///
+/// The Whitney form itself is *global*: the $lambda_i$ of Whitney's
+/// construction are the barycentric coordinates of the whole complex, so
+/// $W_sigma$ is indexed by a simplex of the mesh and supported on its star.
+/// That object gets no type of its own because it is the special case of
+/// [`WhitneyInterpolant`](super::interpolant::WhitneyInterpolant) at a cochain
+/// with a single unit degree of freedom. What lives here is the piece an
+/// element integral consumes, and the distinction is load-bearing: the local
+/// shape function of a fixed grade is reference data, one object for the whole
+/// mesh, while the global form is one object per simplex.
 ///
 /// Work in the formal barycentric space $Lambda(RR^(n+1))$, where the
 /// vertex set $sigma$ is a blade $e_sigma$ and the barycentric coordinates
@@ -28,7 +40,7 @@ use {
 /// the cell dimension and the DOF vertex set -- no coordinates, no metric.
 /// This is what lets them live on a bare Regge manifold.
 #[derive(Debug, Clone)]
-pub struct WhitneyForm {
+pub struct WhitneyLsf {
   cell_dim: Dim,
   /// The local vertex set of the DOF subsimplex.
   dof_simp: Combination,
@@ -36,7 +48,7 @@ pub struct WhitneyForm {
   /// $lambda: RR^n -> RR^(n+1)$: the rows are the $dif lambda_i$.
   difbarys: Matrix,
 }
-impl WhitneyForm {
+impl WhitneyLsf {
   pub fn standard(cell_dim: Dim, dof_simp: Combination) -> Self {
     Self {
       cell_dim,
