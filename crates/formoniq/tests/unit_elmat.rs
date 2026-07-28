@@ -3,25 +3,26 @@ extern crate nalgebra as na;
 use formoniq::operators::{self, ElMatProvider};
 use simplicial::linalg::Matrix;
 use simplicial::{
-  Dim, atlas::refsimp_vol, geometry::metric::simplex::SimplexLengthsSq, topology::complex::Complex,
+  Dim, atlas::unit_simplex_volume, geometry::metric::simplex::SimplexLengthsSq,
+  topology::complex::Complex,
 };
 
 use approx::assert_relative_eq;
 
-fn check_ref_elmat<F, G, E>(elmat: G, ref_elmat: F)
+fn check_ref_elmat<F, G, E>(elmat: G, unit_elmat: F)
 where
   E: ElMatProvider,
   F: Fn(Dim) -> Option<Matrix>,
   G: Fn(Dim) -> E,
 {
   for dim in (1..=10).map(Dim::from) {
-    let Some(expected_elmat) = ref_elmat(dim) else {
+    let Some(expected_elmat) = unit_elmat(dim) else {
       continue;
     };
     let elmat = elmat(dim);
 
-    let refcell = SimplexLengthsSq::standard(dim);
-    let refcomplex = Complex::standard(dim);
+    let refcell = SimplexLengthsSq::unit(dim);
+    let refcomplex = Complex::unit(dim);
     let refchart = refcomplex.cells().handle_iter().next().unwrap();
     let computed_elmat = elmat.eval(&refcell.metric(), refchart);
 
@@ -33,10 +34,10 @@ where
 fn laplacian_refcell() {
   check_ref_elmat(
     |dim| operators::CodifDifElmat::new(dim, Dim::ZERO),
-    ref_laplacian,
+    unit_laplacian,
   );
 }
-fn ref_laplacian(dim: Dim) -> Option<Matrix> {
+fn unit_laplacian(dim: Dim) -> Option<Matrix> {
   let ndofs = (dim + 1).index();
   let mut expected_elmat = Matrix::zeros(ndofs, ndofs);
   expected_elmat[(0, 0)] = dim.index() as i32;
@@ -46,17 +47,17 @@ fn ref_laplacian(dim: Dim) -> Option<Matrix> {
     expected_elmat[(i, i)] = 1;
   }
 
-  Some(expected_elmat.cast::<f64>() * refsimp_vol(dim))
+  Some(expected_elmat.cast::<f64>() * unit_simplex_volume(dim))
 }
 
 #[test]
 fn mass_refcell() {
   check_ref_elmat(
     |dim| operators::HodgeMassElmat::new(dim, Dim::ZERO),
-    ref_mass,
+    unit_mass,
   );
 }
-fn ref_mass(dim: Dim) -> Option<Matrix> {
+fn unit_mass(dim: Dim) -> Option<Matrix> {
   #[rustfmt::skip]
   let mats = [
     na::dmatrix![1.0],
@@ -81,10 +82,10 @@ fn ref_mass(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn lumped_mass_refcell() {
-  check_ref_elmat(|_| operators::ScalarLumpedMassElmat, ref_lumped_mass);
+  check_ref_elmat(|_| operators::ScalarLumpedMassElmat, unit_lumped_mass);
 }
-fn ref_lumped_mass(dim: Dim) -> Option<Matrix> {
+fn unit_lumped_mass(dim: Dim) -> Option<Matrix> {
   let nvertices = (dim + 1).index();
   let ndofs = nvertices;
-  Some(refsimp_vol(dim) / ndofs as f64 * Matrix::identity(ndofs, ndofs))
+  Some(unit_simplex_volume(dim) / ndofs as f64 * Matrix::identity(ndofs, ndofs))
 }

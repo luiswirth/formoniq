@@ -66,9 +66,9 @@ impl MeshLengthsSq {
   pub fn new_unchecked(vector: Vector) -> Self {
     Self { vector }
   }
-  pub fn standard(dim: impl Into<Dim>) -> MeshLengthsSq {
+  pub fn unit(dim: impl Into<Dim>) -> MeshLengthsSq {
     let dim = dim.into();
-    let vector = SimplexLengthsSq::standard(dim).into_vector();
+    let vector = SimplexLengthsSq::unit(dim).into_vector();
     Self::new_unchecked(vector)
   }
 
@@ -295,9 +295,9 @@ impl EdgeRefExt for Edge<'_> {
 }
 
 pub type MetricComplex = (Complex, MeshLengthsSq);
-pub fn standard_metric_complex(dim: Dim) -> MetricComplex {
-  let topology = Complex::standard(dim);
-  let lengths_sq = MeshLengthsSq::standard(dim);
+pub fn unit_metric_complex(dim: Dim) -> MetricComplex {
+  let topology = Complex::unit(dim);
+  let lengths_sq = MeshLengthsSq::unit(dim);
   (topology, lengths_sq)
 }
 

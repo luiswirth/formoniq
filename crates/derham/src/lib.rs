@@ -35,7 +35,7 @@ mod test {
   /// Both sides are intrinsic: no coordinates enter, only the topology.
   #[test]
   fn whitney_basis_property() {
-    let standard = (0..=4).map(Dim::from).map(Complex::standard);
+    let standard = (0..=4).map(Dim::from).map(Complex::unit);
     let cartesian = (1..=3).map(|dim| CartesianGrid::new_unit(dim, 2).triangulate().0);
 
     for topology in standard.chain(cartesian) {

@@ -263,7 +263,7 @@ Breaking one is a bug even if it compiles and passes tests.
    Anything claiming chart-independence owes a `Transition` argument.
 
    The chart's own structure (reference vertices, barycentric differentials, volume, quadrature)
-   is a function of `Dim` alone (the `ref_*` functions), and deliberately so:
+   is a function of `Dim` alone (the `unit_*` functions), and deliberately so:
    **every chart of the atlas is the same chart up to the labelling of its vertices.**
    That is exactly why element matrices are computed once on the reference cell
    and reused on every cell of the mesh.

@@ -596,15 +596,15 @@ pub fn vertex_normals(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::geometry::coord::mesh::standard_coord_complex;
+  use simplicial::geometry::coord::mesh::unit_coord_complex;
 
-  /// The standard cell of every dimension the ambient reaches bakes, and bakes
+  /// The unit cell of every dimension the ambient reaches bakes, and bakes
   /// to the primitive $min(n, 2)$ names: a segment, a triangle, and a
   /// tetrahedron's four boundary triangles.
   #[test]
-  fn standard_cell_bakes_at_every_dimension() {
+  fn unit_cell_bakes_at_every_dimension() {
     for dim in 0..=3 {
-      let (topology, coords) = standard_coord_complex(dim);
+      let (topology, coords) = unit_coord_complex(dim);
       let coords = coords.embed_euclidean(3);
       let nvertices = topology.nsimplices(0);
       let baked = BakedMesh::new(&topology, &coords);
@@ -632,7 +632,7 @@ mod tests {
   #[test]
   fn edges_are_the_overlay_only_where_there_is_a_fill() {
     for dim in 0..=2 {
-      let (topology, coords) = standard_coord_complex(dim);
+      let (topology, coords) = unit_coord_complex(dim);
       let coords = coords.embed_euclidean(3);
       let baked = BakedMesh::new(&topology, &coords);
       let expected = if dim == 2 { topology.nsimplices(1) } else { 0 };
@@ -647,7 +647,7 @@ mod tests {
   /// nothing.
   #[test]
   fn baked_triangles_are_consistently_wound() {
-    let (tet, tet_coords) = standard_coord_complex(3);
+    let (tet, tet_coords) = unit_coord_complex(3);
     let cases = [
       (tet.clone(), tet_coords.embed_euclidean(3)),
       crate::demos::triforce(),

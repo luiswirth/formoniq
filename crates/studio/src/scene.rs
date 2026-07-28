@@ -497,10 +497,10 @@ impl Scene {
   /// shared construction below, where every DOF simplex's support is the one
   /// cell itself.
   pub fn whitney_basis(cell_dim: impl Into<Dim>) -> Self {
-    use simplicial::geometry::coord::mesh::standard_coord_complex;
+    use simplicial::geometry::coord::mesh::unit_coord_complex;
 
     let cell_dim = cell_dim.into();
-    let (topology, coords) = standard_coord_complex(cell_dim);
+    let (topology, coords) = unit_coord_complex(cell_dim);
     // The renderer is 3D-only; a reference cell of `dim < 3` embeds as
     // itself in the `z = 0` plane, same as `bake.rs` does
     // for any other flat surface. A no-op once `cell_dim >= 3`.
@@ -626,7 +626,7 @@ impl Scene {
   /// eigenmode, or a future loaded cochain) goes through too. DOF simplices
   /// are named by their vertex tuple straight off `topology`'s own
   /// colexicographic skeleton order, which coincides with
-  /// `standard_subsimps` on the single-cell reference complex.
+  /// `unit_subsimps` on the single-cell reference complex.
   fn whitney_basis_on(topology: Complex, coords: MeshCoords) -> Self {
     let dim = topology.dim();
     // Built before the fields are filed: the mark each one gets is chosen

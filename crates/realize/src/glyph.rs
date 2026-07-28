@@ -10,7 +10,7 @@
 //! chart alone.
 //!
 //! **The sample set is the full lattice**
-//! ([`simplicial::atlas::ref_lattice_bary`]), boundary included. The lattice
+//! ([`simplicial::atlas::unit_lattice_bary`]), boundary included. The lattice
 //! closes on the faces: a point on a shared facet has the same ambient position
 //! from either incident cell (the two agree combinatorially, up to the
 //! [`Transition`]'s vertex relabelling), so a glyph there is drawn twice at one
@@ -46,7 +46,7 @@ use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use rayon::prelude::*;
 use simplicial::linalg::Vector;
 use simplicial::{
-  atlas::{MeshPoint, ref_lattice_bary},
+  atlas::{MeshPoint, unit_lattice_bary},
   geometry::coord::{mesh::MeshCoords, simplex::SimplexRefExt},
   topology::complex::Complex,
 };
@@ -202,7 +202,7 @@ pub fn bake_glyphs(
         .map(|v| v.view().into_owned())
         .collect();
 
-      ref_lattice_bary(cell.dim(), refinement)
+      unit_lattice_bary(cell.dim(), refinement)
         .map(|bary| {
           let point = MeshPoint::new(cell.idx(), bary);
           let field = reduced_form(interpolant.eval(&point), &metric, sign).sharp(&metric);
@@ -379,7 +379,7 @@ mod tests {
       .handle_iter()
       .map(|cell| {
         let (_, diameter) = cell_extent(&cell.coord_simplex(&coords));
-        ref_lattice_bary(cell.dim(), glyph_refinement(cell.dim(), diameter, 0.06)).count()
+        unit_lattice_bary(cell.dim(), glyph_refinement(cell.dim(), diameter, 0.06)).count()
       })
       .sum();
     assert_eq!(instances.len(), expected);

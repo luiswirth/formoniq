@@ -72,7 +72,7 @@ impl SimplexRefExt for SimplexRef<'_> {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::atlas::ref_vertices;
+  use crate::atlas::unit_vertices;
   use crate::geometry::metric::simplex::SimplexLengthsSq;
   use crate::linalg::Vector;
 
@@ -82,14 +82,11 @@ mod test {
   /// lengths: the two descriptions of the reference cell agree, extrinsic
   /// and intrinsic.
   #[test]
-  fn ref_coords_realize_ref_lengths() {
+  fn unit_coords_realize_unit_lengths() {
     for dim in (0..=4usize).map(Dim::from) {
-      let coords: SimplexCoords = SimplexCoords::new(ref_vertices(dim));
+      let coords: SimplexCoords = SimplexCoords::new(unit_vertices(dim));
       let lengths_sq = coords.to_lengths_sq();
-      assert_relative_eq!(
-        lengths_sq.vector(),
-        SimplexLengthsSq::standard(dim).vector()
-      );
+      assert_relative_eq!(lengths_sq.vector(), SimplexLengthsSq::unit(dim).vector());
       assert_relative_eq!(coords.vol(), lengths_sq.vol());
     }
   }
@@ -97,9 +94,9 @@ mod test {
   /// The induced metric of the reference cell is the identity: its spanning
   /// vectors are the orthonormal standard basis.
   #[test]
-  fn ref_metric_is_identity() {
+  fn unit_metric_is_identity() {
     for dim in (1..=4usize).map(Dim::from) {
-      let coords: SimplexCoords = SimplexCoords::new(ref_vertices(dim));
+      let coords: SimplexCoords = SimplexCoords::new(unit_vertices(dim));
       assert_relative_eq!(
         coords.metric_tensor().matrix(),
         &Matrix::identity(dim.index(), dim.index())

@@ -382,7 +382,7 @@ pub fn trace_value(
   if k > d {
     return 0.0;
   }
-  let sub = Complex::standard(d);
+  let sub = Complex::unit(d);
   let interpolant = WhitneyInterpolant::new(cochain.trace(simplex), &sub);
   let cell = sub.cells().handle_iter().next().unwrap();
   let form = interpolant.eval(&MeshPoint::new(cell.idx(), bary.clone()));
@@ -450,9 +450,9 @@ mod tests {
   /// own DOF.
   #[test]
   fn trace_diagonal_is_cochain_density() {
-    use simplicial::geometry::{cell_volume, coord::mesh::standard_coord_complex};
+    use simplicial::geometry::{cell_volume, coord::mesh::unit_coord_complex};
     for n in 1..=3 {
-      let (topology, coords) = standard_coord_complex(n);
+      let (topology, coords) = unit_coord_complex(n);
       for k in 1..=n {
         let ndofs = topology.nsimplices(k);
         let cochain = Cochain::new(

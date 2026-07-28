@@ -75,7 +75,7 @@ use exterior::ExteriorGrade;
 /// own barycentric coordinate (zero unless $a in sigma$) and $e_I$ is constant,
 /// this is $1/(k+1)! angle.l e_I, tau_sigma angle.r$ with $tau_sigma$ the ambient
 /// tangent $k$-blade of $sigma$ in colex vertex order: the tangent blade carries
-/// the cell Jacobian, and $integral phi_a$ over the standard $k$-simplex is its
+/// the cell Jacobian, and $integral phi_a$ over the unit $k$-simplex is its
 /// volume $1/k!$ times $1/(k+1)$. The map is thus assembled per $k$-simplex, no
 /// containing cell consulted.
 ///

@@ -452,8 +452,8 @@ mod tests {
   /// rather than dividing by a count of zero.
   #[test]
   fn a_complex_without_edges_has_no_local_length() {
-    let complex = Complex::standard(Dim::new(0));
-    let coords = MeshCoords::standard(Dim::new(0));
+    let complex = Complex::unit(Dim::new(0));
+    let coords = MeshCoords::unit(Dim::new(0));
     assert_eq!(mean_edge_length(&complex, &coords), 0.0);
   }
 

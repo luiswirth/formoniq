@@ -5,7 +5,7 @@ use {
   exterior::MultiForm,
   simplicial::{
     atlas::MeshPoint,
-    topology::{complex::Complex, simplex::standard_subsimps},
+    topology::{complex::Complex, simplex::unit_subsimps},
   },
 };
 
@@ -35,8 +35,8 @@ impl<'a> WhitneyInterpolant<'a> {
       cochain.is_compatible_with(complex),
       "Cochain is not a cochain on this complex."
     );
-    let forms = standard_subsimps(complex.dim(), cochain.grade())
-      .map(|dof_simp| WhitneyLsf::standard(complex.dim(), dof_simp))
+    let forms = unit_subsimps(complex.dim(), cochain.grade())
+      .map(|dof_simp| WhitneyLsf::unit(complex.dim(), dof_simp))
       .collect();
     Self {
       cochain,
@@ -90,7 +90,7 @@ mod test {
   #[test]
   fn whitney_interpolation_is_cochain_map() {
     for dim in (1..=3).into_iter().map(Dim::from) {
-      let topology = Complex::standard(dim);
+      let topology = Complex::unit(dim);
       let cell = topology.cells().handle_iter().next().unwrap();
 
       for grade in dim.range() {
@@ -103,7 +103,7 @@ mod test {
         // dif(W c) = sum_sigma c_sigma dif(W_sigma): elementwise constant.
         let mut dif_of_interpolation = MultiForm::zero(dim, grade + 1);
         for dof_simp in cell.faces(grade) {
-          let form = WhitneyLsf::standard(dim, dof_simp.simplex().relative_to(cell.simplex()));
+          let form = WhitneyLsf::unit(dim, dof_simp.simplex().relative_to(cell.simplex()));
           dif_of_interpolation += cochain[dof_simp] * form.dif();
         }
 
@@ -121,7 +121,7 @@ mod test {
   /// with the trace onto a subsimplex.
   ///
   /// Pulling the reconstructed field back onto a face equals reconstructing, on
-  /// that face as its own standard cell, the traced (restricted) cochain -- so
+  /// that face as its own reference cell, the traced (restricted) cochain -- so
   /// the trace of a Whitney form is the Whitney form of the trace. Swept over
   /// every cell dimension, every grade, and every subsimplex whose dimension can
   /// still carry the grade ($d >= k$; below it the trace is the zero of the empty
@@ -132,7 +132,7 @@ mod test {
     use simplicial::atlas::Bary;
 
     for n in (1..=3).into_iter().map(Dim::from) {
-      let complex = Complex::standard(n);
+      let complex = Complex::unit(n);
       let cell = complex.cells().handle_iter().next().unwrap();
 
       for k in n.range_inclusive() {
@@ -159,7 +159,7 @@ mod test {
             let traced_field = FaceTrace::new(n, &positions, k).apply(&ambient);
 
             // W_tau (tr_tau c): the traced cochain interpolated on tau's own cell.
-            let sub = Complex::standard(d);
+            let sub = Complex::unit(d);
             let sub_cell = sub.cells().handle_iter().next().unwrap();
             let field_of_trace = WhitneyInterpolant::new(cochain.trace(tau), &sub)
               .eval(&MeshPoint::new(sub_cell.idx(), face_bary.clone()));

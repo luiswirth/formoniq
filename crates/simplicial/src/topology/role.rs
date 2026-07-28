@@ -343,7 +343,7 @@ mod test {
   #[test]
   fn roles_are_admitted_exactly_on_their_dimension() {
     for top in (0..=4usize).map(Dim::from) {
-      let complex = Complex::standard(top);
+      let complex = Complex::unit(top);
       for dim in top.range_inclusive() {
         for simplex in complex.skeleton(dim).handle_iter() {
           assert_eq!(simplex.as_role::<roles::Vertex>().is_some(), dim == 0);
@@ -361,7 +361,7 @@ mod test {
   #[test]
   #[should_panic(expected = "is not a cell")]
   fn a_face_is_not_a_cell() {
-    let complex = Complex::standard(Dim::new(2));
+    let complex = Complex::unit(Dim::new(2));
     let edge = complex.skeleton(Dim::new(1)).handle_iter().next().unwrap();
     edge.role::<roles::Cell>();
   }
@@ -387,7 +387,7 @@ mod test {
   #[test]
   fn role_skeletons_exist_exactly_where_their_dimension_does() {
     for top in (0..=4usize).map(Dim::from) {
-      let complex = Complex::standard(top);
+      let complex = Complex::unit(top);
       assert!(complex.role_skeleton::<roles::Vertex>().is_some());
       assert_eq!(complex.role_skeleton::<roles::Edge>().is_some(), top >= 1);
       assert!(complex.role_skeleton::<roles::Cell>().is_some());
@@ -400,7 +400,7 @@ mod test {
   #[test]
   fn edge_endpoints_are_its_vertices() {
     for top in (1..=4usize).map(Dim::from) {
-      let complex = Complex::standard(top);
+      let complex = Complex::unit(top);
       for edge in complex.edges().handle_iter() {
         let (a, b) = edge.endpoints();
         assert_eq!(vec![a.kidx(), b.kidx()], edge.simplex().vertices);
@@ -447,11 +447,11 @@ mod test {
     }
   }
 
-  /// Every facet of the standard simplex is boundary: it bounds the one cell.
+  /// Every facet of the unit simplex is boundary: it bounds the one cell.
   #[test]
-  fn standard_complex_is_all_boundary() {
+  fn unit_complex_is_all_boundary() {
     for top in (1..=4usize).map(Dim::from) {
-      let complex = Complex::standard(top);
+      let complex = Complex::unit(top);
       for facet in complex.facets().handle_iter() {
         assert!(facet.is_boundary());
         let (cell, other) = facet.adjacent_cells();

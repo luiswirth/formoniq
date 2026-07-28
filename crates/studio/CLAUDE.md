@@ -395,7 +395,7 @@ A preset is therefore a *configuration*, never a code path:
 the moment a curated example would need its own branch to build or display,
 it has stopped being a preset and the generalization has a hole.
 This is the same dissolution the parent's invariants demand, one level up:
-the reference cell is the mesh whose only cell is the standard simplex,
+the reference cell is the mesh whose only cell is the unit simplex,
 so the local shape functions are the Whitney study on it, not a study of their own.
 The global shape functions are that study on the triforce.
 The spherical harmonics are the eigenmode study on the sphere.

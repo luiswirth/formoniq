@@ -17,7 +17,7 @@
 //! The chart's own structure -- the reference vertices, the barycentric
 //! differentials, the volume -- depends on the dimension alone and not on the
 //! cell: every chart of the atlas is the *same* chart up to the labelling of its
-//! vertices. That is why the `ref_*` functions below take a [`Dim`] and no cell,
+//! vertices. That is why the `unit_*` functions below take a [`Dim`] and no cell,
 //! and it is why any per-cell quantity fixed by the reference chart is computed
 //! once on the reference cell and reused on every cell of the mesh. What differs
 //! between charts is the labelling, and the labelling is exactly what a
@@ -25,7 +25,7 @@
 //!
 //! Barycentric is the right chart: it is symmetric in the vertices, affine, and
 //! needs neither a metric nor an embedding. Everything in this module is pure
-//! affine combinatorics of the reference simplex, which is why it sits below
+//! affine combinatorics of the unit simplex, which is why it sits below
 //! both the coordinate (extrinsic) and the metric layer, not inside either.
 //!
 //! # The two coordinate systems of a chart
@@ -53,7 +53,7 @@ pub mod transition;
 pub use chart::{Chart, ChartExt};
 pub use point::{BARY_EPS, MeshPoint};
 pub use quadrature::SimplexQuadRule;
-pub use refine::{ReferenceRefinement, ref_refinement};
+pub use refine::{UnitRefinement, unit_refinement};
 pub use simplex_coords::SimplexCoords;
 pub use transition::Transition;
 
@@ -86,12 +86,12 @@ pub type BaryRef<'a> = CoordsRef<'a, Barycentric>;
 pub type Local = Coords<LocalCartesian>;
 pub type LocalRef<'a> = CoordsRef<'a, LocalCartesian>;
 
-/// The volume of the reference $n$-simplex, $1 \/ n!$.
+/// The volume of the unit $n$-simplex, $1 \/ n!$.
 ///
 /// A property of the chart, not of the geometry: it is the factor by which a
 /// chart integral scales, and the metric enters only through the further factor
 /// $sqrt(abs(det g))$ (see [`cell_volume`](crate::geometry::cell_volume)).
-pub fn refsimp_vol(dim: impl Into<Dim>) -> f64 {
+pub fn unit_simplex_volume(dim: impl Into<Dim>) -> f64 {
   let dim = dim.into();
   factorial_f64(dim.index()).recip()
 }
@@ -132,7 +132,7 @@ pub fn barycenter_local(dim: impl Into<Dim>) -> Local {
 }
 
 /// The $i$-th barycentric coordinate function evaluated in local coordinates.
-pub fn ref_bary<'a>(ivertex: usize, local: impl Into<LocalRef<'a>>) -> f64 {
+pub fn unit_bary<'a>(ivertex: usize, local: impl Into<LocalRef<'a>>) -> f64 {
   let local = local.into();
   assert!(ivertex <= local.dim());
   if ivertex == 0 {
@@ -144,7 +144,7 @@ pub fn ref_bary<'a>(ivertex: usize, local: impl Into<LocalRef<'a>>) -> f64 {
 
 /// The differential $dif lambda_i$ of a barycentric coordinate function, a
 /// constant covector in the reference frame.
-pub fn ref_difbary(dim: impl Into<Dim>, ivertex: usize) -> RowVector {
+pub fn unit_difbary(dim: impl Into<Dim>, ivertex: usize) -> RowVector {
   let dim = dim.into();
   assert!(ivertex <= dim);
   if ivertex == 0 {
@@ -157,13 +157,13 @@ pub fn ref_difbary(dim: impl Into<Dim>, ivertex: usize) -> RowVector {
 }
 
 /// The differential of the barycentric coordinate map
-/// $lambda: RR^n -> RR^(n+1)$ of the reference simplex: the rows are the
+/// $lambda: RR^n -> RR^(n+1)$ of the unit simplex: the rows are the
 /// constant covectors $dif lambda_i$.
 ///
 /// Metric-free, and the same for every cell -- any form built from the
 /// barycentric differentials is therefore constant on the cell and evaluable
 /// intrinsically, with no geometry at all.
-pub fn ref_difbarys(dim: impl Into<Dim>) -> Matrix {
+pub fn unit_difbarys(dim: impl Into<Dim>) -> Matrix {
   let dim = dim.into();
   let mut difbarys = Matrix::zeros((dim + 1).index(), dim.index());
   difbarys.row_mut(0).fill(-1.0);
@@ -183,7 +183,7 @@ pub fn ref_difbarys(dim: impl Into<Dim>) -> Matrix {
 /// polynomial content of the affine chart, the factor a mass matrix carries
 /// alongside the inner product on $Lambda^k$, and the one a higher-order space
 /// replaces by the barycentric moments of higher degree.
-pub fn ref_bary_gramian(dim: impl Into<Dim>) -> Gramian {
+pub fn unit_bary_gramian(dim: impl Into<Dim>) -> Gramian {
   let nvertices = (dim.into() + 1).index();
   let scale = ((nvertices * (nvertices + 1)) as f64).recip();
   let mut gramian = Matrix::from_element(nvertices, nvertices, scale);
@@ -191,9 +191,9 @@ pub fn ref_bary_gramian(dim: impl Into<Dim>) -> Gramian {
   Gramian::new_unchecked(gramian)
 }
 
-/// The local coordinates of the vertices of the reference $n$-simplex, as the
+/// The local coordinates of the vertices of the unit $n$-simplex, as the
 /// columns of $[0 | I_n]$: the origin and the standard basis.
-pub fn ref_vertices(dim: impl Into<Dim>) -> Matrix {
+pub fn unit_vertices(dim: impl Into<Dim>) -> Matrix {
   let dim = dim.into();
   let mut vertices = Matrix::zeros(dim.index(), (dim + 1).index());
   for i in 0..dim.index() {
@@ -202,14 +202,14 @@ pub fn ref_vertices(dim: impl Into<Dim>) -> Matrix {
   vertices
 }
 
-/// The barycentric lattice of the reference $n$-simplex at refinement $R$: the
+/// The barycentric lattice of the unit $n$-simplex at refinement $R$: the
 /// weights whose parts are whole multiples of $1 \/ R$, as integer numerators.
 ///
 /// $ L_R^n = { k in NN_0^(n+1) : sum_i k_i = R }, quad lambda = k \/ R $
 ///
 /// The compositions of $R$ into $n + 1$ parts, hence $binom(R + n, n)$ points,
 /// in the colex order of [`Composition::all`](multiindex::Composition::all). The integers are the primitive and
-/// the weights the wrapper ([`ref_lattice_bary`]): a lattice point is an exact
+/// the weights the wrapper ([`unit_lattice_bary`]): a lattice point is an exact
 /// combinatorial object, and the two properties below are identities on the
 /// integers that would only be approximate equalities on the weights.
 ///
@@ -226,11 +226,11 @@ pub fn ref_vertices(dim: impl Into<Dim>) -> Matrix {
 ///   $R$. Two cells sharing a facet therefore agree on the lattice points of it
 ///   up to the vertex labelling -- which is exactly a [`Transition`] -- so the
 ///   agreement is combinatorial and needs no spatial tolerance.
-/// - **It extends [`ref_vertices`].** $R = 1$ *is* the vertex set, in the same
+/// - **It extends [`unit_vertices`].** $R = 1$ *is* the vertex set, in the same
 ///   order; $R$ refines it from there. $R = 0$ is not a refinement and admits no
 ///   point ($lambda = k \/ 0$), so $R >= 1$. The barycenter is a lattice point
 ///   only when $(n+1) | R$.
-pub fn ref_lattice(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
+pub fn unit_lattice(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Vec<usize>> {
   let dim = dim.into();
   assert!(
     refinement >= 1,
@@ -251,13 +251,13 @@ pub fn ref_lattice(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item
 /// answer rather than an error: a refinement too coarse to have an inside has
 /// none.
 ///
-/// This, not [`ref_lattice`], is what a per-cell sample set wants, and for a
+/// This, not [`unit_lattice`], is what a per-cell sample set wants, and for a
 /// mathematical reason rather than to dodge the double-count on a shared facet:
 /// a section is only chart-independent in its *tangential* part, so at a point
 /// of a facet the two incident charts genuinely disagree and the value there is
 /// not the cell's to report. The open cell is where a section has a value at
 /// all.
-pub fn ref_lattice_interior(
+pub fn unit_lattice_interior(
   dim: impl Into<Dim>,
   refinement: usize,
 ) -> impl Iterator<Item = Vec<usize>> {
@@ -269,14 +269,14 @@ pub fn ref_lattice_interior(
     .map(|k| k.parts().iter().map(|k| k + 1).collect())
 }
 
-/// [`ref_lattice_interior`] as barycentric weights.
-pub fn ref_lattice_interior_bary(
+/// [`unit_lattice_interior`] as barycentric weights.
+pub fn unit_lattice_interior_bary(
   dim: impl Into<Dim>,
   refinement: usize,
 ) -> impl Iterator<Item = Bary> {
   let dim = dim.into();
   let scale = (refinement as f64).recip();
-  ref_lattice_interior(dim, refinement).map(move |k| {
+  unit_lattice_interior(dim, refinement).map(move |k| {
     Bary::new(Vector::from_iterator(
       k.len(),
       k.into_iter().map(|k| k as f64 * scale),
@@ -284,11 +284,11 @@ pub fn ref_lattice_interior_bary(
   })
 }
 
-/// [`ref_lattice`] as barycentric weights, $lambda = k \/ R$.
-pub fn ref_lattice_bary(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Bary> {
+/// [`unit_lattice`] as barycentric weights, $lambda = k \/ R$.
+pub fn unit_lattice_bary(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Bary> {
   let dim = dim.into();
   let scale = (refinement as f64).recip();
-  ref_lattice(dim, refinement).map(move |k| {
+  unit_lattice(dim, refinement).map(move |k| {
     Bary::new(Vector::from_iterator(
       k.len(),
       k.into_iter().map(|k| k as f64 * scale),
@@ -302,9 +302,9 @@ pub fn ref_lattice_bary(dim: impl Into<Dim>, refinement: usize) -> impl Iterator
 /// Pure affine combinatorics of the local vertex positions: the face of a cell
 /// needs no coordinates of its own, and on a manifold without an embedding
 /// there are none to be had.
-pub fn ref_face_spanning_vectors(cell_dim: impl Into<Dim>, positions: &Combination) -> Matrix {
+pub fn unit_face_spanning_vectors(cell_dim: impl Into<Dim>, positions: &Combination) -> Matrix {
   let cell_dim = cell_dim.into();
-  let vertices = ref_vertices(cell_dim);
+  let vertices = unit_vertices(cell_dim);
   let base = vertices.column(positions.index_at(0));
   let mut spanning = Matrix::zeros(cell_dim.index(), positions.card() - 1);
   for (i, position) in positions.iter().skip(1).enumerate() {
@@ -348,7 +348,7 @@ mod test {
   fn lattice_is_a_composition_set() {
     for dim in (0..=4usize).map(Dim::from) {
       for refinement in 1..=5 {
-        let lattice: Vec<_> = ref_lattice(dim, refinement).collect();
+        let lattice: Vec<_> = unit_lattice(dim, refinement).collect();
         assert_eq!(
           lattice.len(),
           binomial(refinement + dim.index(), dim.index())
@@ -364,13 +364,13 @@ mod test {
   }
 
   /// $L_1^n$ *is* the vertex set of the reference cell, in the order
-  /// [`ref_vertices`] places it: the lattice extends the vertices rather than
+  /// [`unit_vertices`] places it: the lattice extends the vertices rather than
   /// merely containing them.
   #[test]
   fn lattice_at_refinement_one_is_the_vertices() {
     for dim in (0..=4usize).map(Dim::from) {
-      let vertices = ref_vertices(dim);
-      for (ivertex, bary) in ref_lattice_bary(dim, 1).enumerate() {
+      let vertices = unit_vertices(dim);
+      for (ivertex, bary) in unit_lattice_bary(dim, 1).enumerate() {
         assert_relative_eq!(bary2local(&bary).view(), &vertices.column(ivertex));
       }
     }
@@ -382,7 +382,7 @@ mod test {
   fn lattice_bary_lies_in_the_cell() {
     for dim in (0..=4usize).map(Dim::from) {
       for refinement in 1..=5 {
-        for bary in ref_lattice_bary(dim, refinement) {
+        for bary in unit_lattice_bary(dim, refinement) {
           assert_relative_eq!(bary.view().sum(), 1.0);
           assert!(is_bary_inside(&bary));
         }
@@ -397,9 +397,9 @@ mod test {
   fn lattice_restricts_to_the_facet_lattice() {
     for dim in (1..=4usize).map(Dim::from) {
       for refinement in 1..=5 {
-        let facet: std::collections::HashSet<_> = ref_lattice(dim - 1, refinement).collect();
+        let facet: std::collections::HashSet<_> = unit_lattice(dim - 1, refinement).collect();
         for ivertex in 0..=dim.index() {
-          let restricted: std::collections::HashSet<_> = ref_lattice(dim, refinement)
+          let restricted: std::collections::HashSet<_> = unit_lattice(dim, refinement)
             .filter(|k| k[ivertex] == 0)
             .map(|mut k| {
               k.remove(ivertex);
@@ -418,8 +418,8 @@ mod test {
   fn lattice_interior_is_the_lattice_off_the_faces() {
     for dim in (0..=4usize).map(Dim::from) {
       for refinement in 1..=6 {
-        let interior: Vec<_> = ref_lattice_interior(dim, refinement).collect();
-        let expected: Vec<_> = ref_lattice(dim, refinement)
+        let interior: Vec<_> = unit_lattice_interior(dim, refinement).collect();
+        let expected: Vec<_> = unit_lattice(dim, refinement)
           .filter(|k| k.iter().all(|&k| k >= 1))
           .collect();
         assert_eq!(interior, expected);
@@ -439,9 +439,9 @@ mod test {
   fn lattice_interior_bottoms_out_at_the_barycenter() {
     for dim in (0..=4usize).map(Dim::from) {
       for refinement in 0..=dim.index() {
-        assert_eq!(ref_lattice_interior(dim, refinement).count(), 0);
+        assert_eq!(unit_lattice_interior(dim, refinement).count(), 0);
       }
-      let base: Vec<_> = ref_lattice_interior_bary(dim, dim.index() + 1).collect();
+      let base: Vec<_> = unit_lattice_interior_bary(dim, dim.index() + 1).collect();
       assert_eq!(base.len(), 1);
       assert_relative_eq!(base[0].view(), barycenter_bary(dim).view());
     }
@@ -461,13 +461,13 @@ mod test {
   /// The rows of the barycentric differential are the individual $dif lambda_i$,
   /// and they sum to zero: $sum_i lambda_i = 1$ is constant.
   #[test]
-  fn ref_difbarys_rows_are_difbary_and_sum_to_zero() {
+  fn unit_difbarys_rows_are_difbary_and_sum_to_zero() {
     for dim in (0..=4usize).map(Dim::from) {
-      let difbarys = ref_difbarys(dim);
+      let difbarys = unit_difbarys(dim);
       for ivertex in 0..=dim.index() {
         assert_relative_eq!(
           difbarys.row(ivertex).into_owned(),
-          ref_difbary(dim, ivertex)
+          unit_difbary(dim, ivertex)
         );
       }
       assert_relative_eq!(difbarys.row_sum(), RowVector::zeros(dim.index()));
@@ -477,14 +477,14 @@ mod test {
   /// The barycentric coordinate functions are dual to the reference vertices,
   /// $lambda_i (e_j) = delta_(i j)$, and the differentials are their gradients.
   #[test]
-  fn ref_barys_are_dual_to_ref_vertices() {
+  fn unit_barys_are_dual_to_unit_vertices() {
     for dim in (0..=4usize).map(Dim::from) {
-      let vertices = ref_vertices(dim);
+      let vertices = unit_vertices(dim);
       for (j, vertex) in vertices.column_iter().enumerate() {
         let local = Local::new(vertex.into_owned());
         for i in 0..=dim.index() {
           let expected = f64::from(i == j);
-          assert_relative_eq!(ref_bary(i, &local), expected, epsilon = 1e-12);
+          assert_relative_eq!(unit_bary(i, &local), expected, epsilon = 1e-12);
         }
       }
     }
@@ -508,8 +508,8 @@ mod test {
 
         // The face's barycenter, expressed in the cell chart, is the mean of the
         // reference vertices the face selects.
-        let vertices = ref_vertices(cell_dim);
-        let spanning = ref_face_spanning_vectors(cell_dim, &positions);
+        let vertices = unit_vertices(cell_dim);
+        let spanning = unit_face_spanning_vectors(cell_dim, &positions);
         assert_eq!(spanning.ncols(), face_dim);
         let mean = positions
           .iter()

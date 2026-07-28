@@ -15,7 +15,7 @@
 //!
 //! # Construction
 //!
-//! The reference simplex maps affinely and bijectively onto the *order simplex*
+//! The unit simplex maps affinely and bijectively onto the *order simplex*
 //! $Delta = { t in RR^n : 1 >= t_1 >= dots.h.c >= t_n >= 0 }$ by the cumulative
 //! barycentric coordinates $t_j = sum_(i >= j) lambda_i$ -- itself a Kuhn
 //! simplex of the unit cube. Scaling by $R$ and intersecting the integer
@@ -48,10 +48,10 @@ use std::collections::HashMap;
 /// as combinatorics on the barycentric lattice $L_R^n$.
 ///
 /// A function of `(dim, refinement)` alone. Its vertices are exactly the
-/// lattice points [`ref_lattice`](super::ref_lattice) produces, and a child is
+/// lattice points [`unit_lattice`](super::unit_lattice) produces, and a child is
 /// the list of colex ranks of its $n+1$ corners among them.
 #[derive(Debug, Clone)]
-pub struct ReferenceRefinement {
+pub struct UnitRefinement {
   dim: Dim,
   refinement: usize,
   /// Every lattice point of $L_R^n$, colex-ordered: each an integer
@@ -63,7 +63,7 @@ pub struct ReferenceRefinement {
 }
 
 /// The reference edgewise subdivision of the $n$-simplex at refinement $R >= 1$.
-pub fn ref_refinement(dim: Dim, refinement: usize) -> ReferenceRefinement {
+pub fn unit_refinement(dim: Dim, refinement: usize) -> UnitRefinement {
   assert!(refinement >= 1, "A refinement is at least one.");
 
   let vertices: Vec<Vec<usize>> = Composition::all((dim + 1).index(), refinement)
@@ -92,7 +92,7 @@ pub fn ref_refinement(dim: Dim, refinement: usize) -> ReferenceRefinement {
     "edgewise subdivision must yield R^n children"
   );
 
-  ReferenceRefinement {
+  UnitRefinement {
     dim,
     refinement,
     vertices,
@@ -136,7 +136,7 @@ fn cube_to_lattice(s: &[usize], refinement: usize) -> Vec<usize> {
   k
 }
 
-impl ReferenceRefinement {
+impl UnitRefinement {
   pub fn dim(&self) -> Dim {
     self.dim
   }
@@ -195,7 +195,7 @@ impl ReferenceRefinement {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::atlas::{ref_lattice, refsimp_vol};
+  use crate::atlas::{unit_lattice, unit_simplex_volume};
 
   /// Freudenthal subdivision *composes*: refining an ordered simplex $R$-fold
   /// and then $R'$-fold again is the $R R'$-fold refinement, cell for cell.
@@ -216,7 +216,7 @@ mod test {
     /// order: the parent's vertices read through the lattice weights.
     fn refine_ordered(vertices: &[Vector], refinement: usize) -> Vec<Vec<Vector>> {
       let dim = vertices.len() - 1;
-      let pattern = ref_refinement(dim.into(), refinement);
+      let pattern = unit_refinement(dim.into(), refinement);
       pattern
         .children()
         .iter()
@@ -301,10 +301,10 @@ mod test {
   fn children_and_vertices() {
     for dim in (0..=4usize).map(Dim::from) {
       for r in 1..=3 {
-        let sub = ref_refinement(dim, r);
+        let sub = unit_refinement(dim, r);
         assert_eq!(sub.nchildren(), r.pow(dim.index() as u32));
 
-        let lattice: Vec<Vec<usize>> = ref_lattice(dim, r).collect();
+        let lattice: Vec<Vec<usize>> = unit_lattice(dim, r).collect();
         assert_eq!(sub.vertices(), lattice.as_slice());
 
         for child in sub.children() {
@@ -328,15 +328,15 @@ mod test {
   fn volume_partition() {
     for dim in (0..=4usize).map(Dim::from) {
       for r in 1..=3 {
-        let sub = ref_refinement(dim, r);
+        let sub = unit_refinement(dim, r);
         let total: f64 = (0..sub.nchildren())
           .map(|c| sub.child_local_simplex(c).vol())
           .sum();
-        approx::assert_relative_eq!(total, refsimp_vol(dim), epsilon = 1e-12);
+        approx::assert_relative_eq!(total, unit_simplex_volume(dim), epsilon = 1e-12);
         for c in 0..sub.nchildren() {
           approx::assert_relative_eq!(
             sub.child_local_simplex(c).vol(),
-            refsimp_vol(dim) / (r.pow(dim.index() as u32) as f64),
+            unit_simplex_volume(dim) / (r.pow(dim.index() as u32) as f64),
             epsilon = 1e-12
           );
         }

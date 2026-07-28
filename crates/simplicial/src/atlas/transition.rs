@@ -21,7 +21,7 @@
 //! related by $psi$, and the pairing with the face's tangent blade is invariant
 //! under it.
 
-use super::{BARY_EPS, Bary, Chart, MeshPoint, ref_difbarys};
+use super::{BARY_EPS, Bary, Chart, MeshPoint, unit_difbarys};
 use crate::{Dim, topology::handle::SimplexIdx};
 
 use crate::linalg::{Matrix, Vector};
@@ -140,7 +140,7 @@ impl Transition {
   ///
   /// Constant -- the transition is affine -- and metric-free. It is
   /// $dif psi = S P Lambda$, where $Lambda$ is the barycentric differential
-  /// [`ref_difbarys`] of the source and $S$ drops the redundant zeroth weight of
+  /// [`unit_difbarys`] of the source and $S$ drops the redundant zeroth weight of
   /// the target.
   ///
   /// **It is the differential of $psi$ only on the tangent space of the
@@ -152,7 +152,7 @@ impl Transition {
   pub fn differential(&self) -> Matrix {
     let dim = self.dim();
     let drop_zeroth = self.bary_map.view_range(1.., ..);
-    drop_zeroth * ref_difbarys(dim)
+    drop_zeroth * unit_difbarys(dim)
   }
 }
 
@@ -173,7 +173,7 @@ mod test {
   #[test]
   fn self_transition_is_the_identity() {
     for dim in (1..=3usize).map(Dim::from) {
-      let complex = Complex::standard(dim);
+      let complex = Complex::unit(dim);
       let cell = complex.cells().handle_iter().next().unwrap();
 
       let transition = cell.transition_to(cell);
@@ -297,7 +297,7 @@ mod test {
 
             // The tangent space of the shared facet, in the source chart.
             let positions = facet.simplex().relative_to(source.simplex());
-            let tangents = crate::atlas::ref_face_spanning_vectors(dim, &positions);
+            let tangents = crate::atlas::unit_face_spanning_vectors(dim, &positions);
 
             let source_frame = source.coord_simplex(&coords).linear_transform();
             let target_frame = target.coord_simplex(&coords).linear_transform();
