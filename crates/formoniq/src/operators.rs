@@ -1,6 +1,8 @@
 use {
   derham::{interpolate::samples::LsfSamples, section::Section, trace::FaceTrace},
-  exterior::{Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian},
+  exterior::{
+    Contravariant, Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian,
+  },
   gramian::Metric,
   multiindex::{Combination, factorial},
   simplicial::{
@@ -490,6 +492,116 @@ impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, 
   }
 }
 
+/// Element matrix of the weak Lie derivative $cal(L)_v$ along a prescribed
+/// vector field, at any grade,
+///
+/// $$ a_K (omega, eta) = integral_K inner(iota_v dif omega, eta) vol
+///    + integral_(diff K) (iota_v omega) wedge star eta. $$
+///
+/// Cartan's formula $cal(L)_v = iota_v dif + dif iota_v$ gives the two terms,
+/// and the second is a boundary integral rather than a volume one because the
+/// shape functions are coclosed on a cell: integrating $dif iota_v omega$ by
+/// parts moves the differential onto the test function, and $delta eta = 0$
+/// leaves only $diff K$. So the second term is *entirely* facet-supported, and
+/// only $iota_v dif$ survives in the interior.
+///
+/// One operator covers the classical pair, the two Cartan terms being exactly
+/// the two degenerate grades: at $k = 0$ it is $iota_v dif f$, advective form,
+/// and at $k = n$ it is $dif iota_v mu$, conservation form.
+///
+/// `velocity` is a **vector field**, not a 1-form: $cal(L)_v$ differentiates
+/// along $v$'s flow and $iota_v$ contracts with a vector, so the argument is
+/// contravariant and nothing is sharped here. A caller holding a 1-form sharps
+/// it first, where the metric dependence is visible; $iota_v$ and $dif$ stay
+/// metric-free, and the metric enters only through the $L^2$ pairing and the
+/// star.
+///
+/// **Unstabilized.** Each cell integrates its own trace over a shared facet, so
+/// no numerical flux is chosen and the neighbors' disagreement is the whole of
+/// the coupling. The operator is nonsymmetric and, as plain Galerkin advection
+/// always is, prone to oscillation; upwinding would replace the own-side trace
+/// with one selected from the inflow side, which is the only part of this that
+/// needs to see a neighbor.
+pub struct LieDerivativeElmat<'a, V> {
+  velocity: &'a V,
+  grade: ExteriorGrade,
+  volume: CellQuadrature,
+  boundary: BoundaryQuadrature,
+  /// $W_sigma$ at the volume nodes: the test functions.
+  test: LsfSamples,
+  /// $dif W_tau$ at the volume nodes, of grade $k+1$.
+  trial_dif: LsfSamples,
+  /// $W_sigma$ and $W_tau$ at the boundary nodes.
+  boundary_test: LsfSamples,
+  boundary_trial: LsfSamples,
+}
+
+impl<'a, V: Section<Contravariant>> LieDerivativeElmat<'a, V> {
+  /// Panics unless the velocity is a grade-1 section: a vector field.
+  pub fn new(
+    velocity: &'a V,
+    grade: impl Into<ExteriorGrade>,
+    qr: Option<SimplexQuadRule>,
+  ) -> Self {
+    assert_eq!(
+      velocity.grade(),
+      Dim::ONE,
+      "A velocity is a grade-1 section, a vector field."
+    );
+    let (dim, grade) = (velocity.dim(), grade.into());
+
+    let volume = CellQuadrature::new(dim, qr);
+    let boundary = BoundaryQuadrature::new(dim, None);
+    Self {
+      velocity,
+      grade,
+      test: LsfSamples::whitney(dim, grade, volume.nodes()),
+      trial_dif: LsfSamples::whitney_dif(dim, grade, volume.nodes().len()),
+      boundary_test: LsfSamples::whitney(dim, grade, boundary.nodes()),
+      boundary_trial: LsfSamples::whitney(dim, grade, boundary.nodes()),
+      volume,
+      boundary,
+    }
+  }
+}
+
+impl<V: Sync + Section<Contravariant>> ElMatProvider for LieDerivativeElmat<'_, V> {
+  fn row_grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+  fn col_grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+
+  fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
+    let inner = multiform_gramian(metric, self.grade);
+
+    let interior = self.volume.integrate_pair(
+      &self.test,
+      &self.trial_dif,
+      chart,
+      cell_volume(metric),
+      |point, test, trial_dif| {
+        let advected = trial_dif.interior_product(&self.velocity.at(point));
+        inner.inner(advected.coeffs(), test.coeffs())
+      },
+    );
+
+    let boundary = self.boundary.integrate_pair(
+      &self.boundary_test,
+      &self.boundary_trial,
+      chart,
+      |point, test, trial| {
+        trial
+          .interior_product(&self.velocity.at(point))
+          .wedge(&test.hodge_star(metric))
+      },
+    );
+
+    interior + boundary
+  }
+}
+
 pub type ElVec = Vector;
 pub trait ElVecProvider: Sync {
   fn grade(&self) -> ExteriorGrade;
@@ -545,6 +657,7 @@ mod test {
     cochain::Cochain,
     interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
+  use exterior::MultiVector;
   use simplicial::{
     geometry::metric::simplex::SimplexLengthsSq, topology::simplex::standard_subsimps,
   };
@@ -586,6 +699,134 @@ mod test {
 
         assert_relative_eq!(boundary, interior, epsilon = 1e-12);
       }
+    }
+  }
+
+  /// A constant vector field in the cell's reference frame.
+  struct ConstantVelocity {
+    dim: Dim,
+    value: MultiVector,
+  }
+  impl Section<Contravariant> for ConstantVelocity {
+    fn dim(&self) -> Dim {
+      self.dim
+    }
+    fn grade(&self) -> ExteriorGrade {
+      Dim::ONE
+    }
+    fn at(&self, _point: &MeshPoint) -> MultiVector {
+      self.value.clone()
+    }
+  }
+
+  /// $dif iota_v W_tau$ for a **constant** $v$: with $W_tau = k! sum_j (-1)^j
+  /// lambda_(tau_j) beta_j$ and both $v$ and the blades $beta_j$ constant,
+  /// $dif iota_v W_tau = k! sum_j (-1)^j dif lambda_(tau_j) wedge iota_v
+  /// beta_j$.
+  fn dif_interior_of(dim: Dim, dof_simp: Combination, v: &MultiVector) -> MultiForm {
+    let nvertices = (dim + 1).index();
+    let difbarys = ref_difbarys(dim);
+    let grade = Dim::from(dof_simp.card() - 1);
+
+    let blade = |c| MultiForm::from_blade_signed(nvertices, multiindex::Sign::Pos, c);
+    dof_simp
+      .deletions()
+      .map(|(sign, vertex, rest)| {
+        let difbary = blade(Combination::single(vertex)).pullback(&difbarys);
+        let beta = blade(rest).pullback(&difbarys);
+        sign.as_f64() * difbary.wedge(&beta.interior_product(v))
+      })
+      .reduce(|a, b| a + b)
+      .map(|form| factorial(grade.index()) as f64 * form)
+      .unwrap_or_else(|| MultiForm::zero(dim, grade))
+  }
+
+  /// The identity the Lie derivative element matrix rests on: with the shape
+  /// functions coclosed, integrating Cartan's second term by parts leaves it
+  /// wholly on the boundary,
+  /// $integral_K inner(dif iota_v omega, eta) = integral_(diff K) (iota_v
+  /// omega) wedge star eta$.
+  ///
+  /// The left side is computed from a closed form for $dif iota_v W_tau$ at
+  /// constant $v$, so the two sides share no code, and a wrong induced sign or
+  /// a wrong star convention on the right cannot hide.
+  #[test]
+  fn cartans_second_term_is_wholly_on_the_boundary() {
+    for dim in (1..=3).map(Dim::from) {
+      let refcomplex = Complex::standard(dim);
+      let chart = refchart(&refcomplex);
+      let geo = SimplexLengthsSq::standard(dim);
+      let metric = geo.metric();
+
+      let velocity = ConstantVelocity {
+        dim,
+        value: MultiVector::line(Vector::from_iterator(
+          dim.index(),
+          (0..dim.index()).map(|i| 0.4 * (i as f64) + 0.9),
+        )),
+      };
+
+      let volume = CellQuadrature::new(dim, Some(SimplexQuadRule::degree(dim, 2)));
+      let boundary = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));
+
+      for grade in dim.range_inclusive() {
+        let test = LsfSamples::whitney(dim, grade, volume.nodes());
+        let inner = multiform_gramian(&metric, grade);
+
+        let boundary_test = LsfSamples::whitney(dim, grade, boundary.nodes());
+        let boundary_trial = LsfSamples::whitney(dim, grade, boundary.nodes());
+        let by_parts = boundary.integrate_pair(
+          &boundary_test,
+          &boundary_trial,
+          chart,
+          |point, test, trial| {
+            trial
+              .interior_product(&velocity.at(point))
+              .wedge(&test.hodge_star(&metric))
+          },
+        );
+
+        for (jdof, dof_simp) in standard_subsimps(dim, grade).enumerate() {
+          let dif_interior = dif_interior_of(dim, dof_simp, &velocity.value);
+          let direct = volume.integrate(&test, chart, cell_volume(&metric), |_point, test| {
+            inner.inner(dif_interior.coeffs(), test.coeffs())
+          });
+
+          for idof in 0..direct.len() {
+            assert_relative_eq!(by_parts[(idof, jdof)], direct[idof], epsilon = 1e-12);
+          }
+        }
+      }
+    }
+  }
+
+  /// $cal(L)_v$ annihilates a constant function: the element matrix at grade 0
+  /// sends the all-ones degrees of freedom, which interpolate the constant $1$,
+  /// to zero.
+  ///
+  /// The degenerate grade is the point. Cartan's second term vanishes there
+  /// because $iota_v$ maps $Lambda^0$ into the trivial $Lambda^(-1)$, so the
+  /// whole operator is $iota_v dif$ and the law reads the coboundary of a
+  /// partition of unity, on the same code path every other grade takes.
+  #[test]
+  fn the_lie_derivative_annihilates_a_constant() {
+    for dim in (1..=3).map(Dim::from) {
+      let refcomplex = Complex::standard(dim);
+      let chart = refchart(&refcomplex);
+      let metric = SimplexLengthsSq::standard(dim).metric();
+
+      let velocity = ConstantVelocity {
+        dim,
+        value: MultiVector::line(Vector::from_iterator(
+          dim.index(),
+          (0..dim.index()).map(|i| 1.3 - 0.6 * (i as f64)),
+        )),
+      };
+
+      let elmat = LieDerivativeElmat::new(&velocity, Dim::ZERO, None).eval(&metric, chart);
+      let constant = Vector::from_element(elmat.ncols(), 1.0);
+
+      assert_relative_eq!((elmat * constant).norm(), 0.0, epsilon = 1e-12);
     }
   }
 
