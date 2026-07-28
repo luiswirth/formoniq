@@ -101,7 +101,7 @@ impl WhitneyLsf {
 /// nonzeros, the entry $(-1)^i k!$ at the row $(sigma without sigma_i, sigma_i)$.
 /// It is the matrix of the Koszul contraction $kappa$ on blades, and summing its
 /// blocks over the vertex index collapses $kappa$ to $iota_bb(1)$, giving $k!$
-/// times the transposed boundary operator.
+/// times the boundary operator (test `koszul_collapses_to_the_boundary_operator`).
 ///
 /// Combinatorial, and by [`WhitneyLsf`] the entire cell-independent content of
 /// the basis: a metric reaches an $L^2$ product only through the form it is
@@ -194,6 +194,7 @@ mod test {
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
   use simplicial::linalg::Vector;
+  use simplicial::topology::simplex::unit_boundary_operator;
 
   /// A non-diagonal metric of signature $(n - q, q)$, so the law is not read on
   /// an orthonormal frame where terms cancel for the wrong reason.
@@ -226,6 +227,47 @@ mod test {
         let matrix = expansion.matrix();
         let expected = matrix.transpose() * blade.kronecker(&bary) * &matrix;
         assert_relative_eq!(expansion.pullback(&blade, &bary), expected);
+      }
+    }
+  }
+
+  /// Summing the blocks of $C$ over the vertex index collapses the Koszul
+  /// contraction $kappa$ to $iota_bb(1)$, and $iota_bb(1)$ is the simplicial
+  /// boundary: the result is $k!$ times $diff$.
+  ///
+  /// This is the $kappa$ half of a correspondence whose $dif$ half is Stokes,
+  /// $R compose dif = dif compose R$. The two operators of the exterior
+  /// algebra have the two operators of the chain complex as their shadows,
+  /// and forgetting the vertex weights is the map that takes one to the
+  /// other. It is why the deletion formula of a Whitney form and the boundary
+  /// of a simplex are the same combinatorics rather than an analogy.
+  ///
+  /// At grade 0 the collapse is the *augmentation* onto the empty simplex,
+  /// which [`unit_boundary_operator`] deliberately drops, so the law is read
+  /// there against the all-ones row it must be.
+  #[test]
+  fn koszul_collapses_to_the_boundary_operator() {
+    for dim in (0..=4).map(Dim::from) {
+      let nvertices = (dim + 1).index();
+      for grade in 0..=dim.index() {
+        let expansion = WhitneyExpansion::new(dim, grade);
+        let matrix = expansion.matrix();
+        let ndofs = expansion.dofs().len();
+        let nblades = binomial(nvertices, grade);
+
+        let collapsed = Matrix::from_fn(nblades, ndofs, |blade, dof| {
+          (0..nvertices)
+            .map(|vertex| matrix[(blade * nvertices + vertex, dof)])
+            .sum()
+        });
+
+        let scale = factorial_f64(grade);
+        let expected = if grade == 0 {
+          Matrix::from_element(1, ndofs, scale)
+        } else {
+          scale * unit_boundary_operator(dim, grade.into())
+        };
+        assert_relative_eq!(collapsed, expected);
       }
     }
   }
