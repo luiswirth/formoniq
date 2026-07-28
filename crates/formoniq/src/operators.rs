@@ -546,7 +546,7 @@ mod test {
   /// makes the left side exact, since its differential is constant, so the
   /// identity is read against a closed form rather than a second quadrature.
   #[test]
-  fn boundary_quadrature_satisfies_stokes_on_a_cell() {
+  fn boundary_quadrature_satisfies_stokes_theorem_on_a_cell() {
     for dim in (1..=4).map(Dim::from) {
       let refcomplex = Complex::standard(dim);
       let chart = refchart(&refcomplex);
