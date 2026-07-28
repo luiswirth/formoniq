@@ -260,10 +260,13 @@ impl<V: Variance> ExteriorElement<V> {
   /// dual of the wedge. On blades it is the alternating-deletion pattern of
   /// the simplicial boundary -- with the all-ones vector it IS the boundary
   /// operator, $diff = iota_bb(1)$.
+  ///
+  /// Total at the trivial end: on a scalar it is the zero map into
+  /// $Lambda^(-1) = 0$, which needs no case of its own, the empty blade having
+  /// no deletions.
   pub fn interior_product(&self, dual: &ExteriorElement<V::Dual>) -> Self {
     assert_eq!(dual.dim, self.dim);
     assert_eq!(dual.grade, 1, "Contraction is with a grade-1 element.");
-    assert!(self.grade >= 1, "Interior product needs grade >= 1.");
 
     let mut contraction = Self::zero(self.dim, self.grade - 1);
     for (coeff, blade) in self.basis_iter() {
@@ -498,6 +501,21 @@ mod tests {
 
   /// Functoriality of the exterior power: the Cauchy-Binet formula
   /// $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$.
+  /// $iota_v$ out of $Lambda^0$ lands in $Lambda^(-1) = 0$ rather than
+  /// trapping, so the antiderivation is total at the bottom of the range as
+  /// the wedge is at the top.
+  #[test]
+  fn interior_product_out_of_grade_zero_is_the_trivial_space() {
+    for dim in 1..=4 {
+      let scalar: MultiForm = ExteriorElement::scalar(2.5, dim);
+      let vector: MultiVector = ExteriorElement::line(Vector::from_element(dim, 1.5));
+
+      let contracted = scalar.interior_product(&vector);
+      assert_eq!(contracted.grade(), ExteriorGrade::new(-1));
+      assert_eq!(contracted.coeffs().len(), 0);
+    }
+  }
+
   /// The exterior algebra is trivial off $[0, n]$ at *both* ends, not only the
   /// top one, and the accessors say so rather than trapping.
   #[test]
