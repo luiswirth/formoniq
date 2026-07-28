@@ -99,11 +99,16 @@ pub struct Pullback<'a, F, S: CoordSpace = Ambient> {
   field: &'a F,
   topology: &'a Complex,
   coords: &'a MeshCoords,
-  chart: Chart<'a, S>,
+  chart_map: ContinuumChartMap<'a, S>,
 }
 
-/// How a mesh point reaches the continuum chart domain $Omega$.
-enum Chart<'a, S: CoordSpace> {
+/// The chart map $chi$ of the *continuum* $M$: how a mesh point reaches the
+/// chart domain $Omega$.
+///
+/// Not a [`Chart`](simplicial::atlas::Chart), which is a cell of the simplicial
+/// manifold $M_h$. Both are charts, of the two manifolds the
+/// [`Pullback`] spans, and the name says which.
+enum ContinuumChartMap<'a, S: CoordSpace> {
   /// The flat case: $Omega = RR^N$, $phi = id$, so $chi = id$ and the ambient
   /// image of the mesh point *is* the domain point. No chart solve.
   Identity,
@@ -129,7 +134,7 @@ impl<'a, F: CoordField<Covariant, Ambient>> Pullback<'a, F, Ambient> {
       field,
       topology,
       coords,
-      chart: Chart::Identity,
+      chart_map: ContinuumChartMap::Identity,
     }
   }
 }
@@ -158,7 +163,7 @@ impl<'a, S: CoordSpace, F: CoordField<Covariant, S>> Pullback<'a, F, S> {
       field,
       topology,
       coords,
-      chart: Chart::Through {
+      chart_map: ContinuumChartMap::Through {
         param,
         vertex_omega,
       },
@@ -177,17 +182,17 @@ impl<S: CoordSpace, F: CoordField<Covariant, S>> Section<Covariant> for Pullback
     let cell = point.chart(self.topology);
     let parametrization = cell.coord_simplex(self.coords);
     let global = parametrization.bary2global(point.bary());
-    match &self.chart {
+    match &self.chart_map {
       // `Identity` is only ever built at `S = Ambient`, where the ambient image
       // *is* the domain point; the relabel is the sanctioned unchecked entry.
-      Chart::Identity => {
+      ContinuumChartMap::Identity => {
         let u = Coords::<S>::new(global.into_vector());
         self
           .field
           .at(&u)
           .pullback(&parametrization.linear_transform())
       }
-      Chart::Through {
+      ContinuumChartMap::Through {
         param,
         vertex_omega,
       } => {
