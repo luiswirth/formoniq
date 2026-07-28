@@ -12,22 +12,24 @@
 //! $x^k x^(k') = x^(k + k')$ -- where combinations instead carry the wedge,
 //! which is partial and signed.
 //!
-//! Stars and bars is a bijection onto the $(p-1)$-subsets of $d + p - 1$ slots,
-//! and it is proved as a theorem here rather than used as the representation.
-//! It is not natural in the ambient size: it absorbs the *degree* $d$, which is
-//! unbounded (a refinement level, a polynomial order), into the *index count* of
-//! a combination, which is bounded by a dimension. Enumerating compositions
+//! Stars and bars bijects with the subsets of $d + p - 1$ slots in two
+//! complementary readings, the bars giving the $(p-1)$-subsets and the stars
+//! the $d$-subsets. Only the latter preserves colex, and both are proved as
+//! theorems here rather than used as the representation. Neither is natural in
+//! the ambient size: each absorbs the *degree* $d$, which is unbounded (a
+//! refinement level, a polynomial order), into the *index count* of a
+//! combination, which is bounded by a dimension. Enumerating compositions
 //! directly is what keeps the degree free.
 
-use crate::binomial;
+use crate::{Repetition, binomial};
 
 /// A weak composition $k in NN_0^p$ of degree $d = sum_i k_i$: the exponent
 /// vector of the monomial $x^k$, a basis element of $"Sym"^d (RR^p)$.
 ///
 /// The degree is unbounded. Order among compositions of a fixed shape is
-/// reverse-lexicographic on the parts (see [`Composition::all`]), which is the
-/// colex order of the corresponding bar sets and hence the crate's one
-/// indexing convention.
+/// colexicographic on the [word](Composition::word), the crate's one indexing
+/// convention, shared with [`Combination`](crate::Combination) and decided
+/// between them by [`Repetition`].
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Composition {
   /// The parts. Their sum is the degree; the length is the number of parts.
@@ -71,42 +73,52 @@ impl Composition {
     }
   }
 
-  /// Every composition of degree `degree` into `nparts` parts, in
-  /// reverse-lexicographic order on the parts: the leading part descends from
-  /// `degree` to $0$, each block ordered the same way in the parts that remain.
+  /// The monotone word of this composition: each symbol repeated with the
+  /// multiplicity of its part, ascending.
   ///
-  /// This is the colex order of the bar sets under stars and bars, so it agrees
-  /// with [`Combination`](crate::Combination)'s convention; at degree one it
-  /// lists $e_0, e_1, dots$, the order the standard basis places them in.
-  /// Enumerated by successor on the parts, so nothing bounds the degree.
-  pub fn all(nparts: usize, degree: usize) -> impl Iterator<Item = Composition> {
-    Compositions {
-      current: (nparts > 0 || degree == 0).then(|| {
-        let mut parts = vec![0; nparts];
-        if nparts > 0 {
-          parts[0] = degree;
-        }
-        Composition::new(parts)
-      }),
-      degree,
+  /// The multiset reading of the exponent vector, and the shape it shares with
+  /// [`Combination`](crate::Combination). Ordering is defined on it, so the two
+  /// families are enumerated and ranked by one implementation.
+  pub fn word(&self) -> Vec<usize> {
+    self
+      .parts
+      .iter()
+      .enumerate()
+      .flat_map(|(symbol, &multiplicity)| std::iter::repeat_n(symbol, multiplicity))
+      .collect()
+  }
+
+  /// The composition whose [`Composition::word`] is `word`: the multiplicity of
+  /// each symbol.
+  pub fn from_word(nparts: usize, word: &[usize]) -> Self {
+    let mut parts = vec![0; nparts];
+    for &symbol in word {
+      parts[symbol] += 1;
     }
+    Self::new(parts)
+  }
+
+  /// Every composition of degree `degree` into `nparts` parts, in the
+  /// colexicographic order of their [words](Composition::word).
+  ///
+  /// The same convention [`Combination`](crate::Combination) uses, on the same
+  /// object: the two differ only in whether a symbol may repeat, and
+  /// [`Repetition`] is where that is decided. Colex earns
+  /// its keep by making a rank independent of the alphabet, so adding parts
+  /// leaves every existing composition where it was.
+  pub fn all(nparts: usize, degree: usize) -> impl Iterator<Item = Composition> {
+    Repetition::Allowed
+      .words(nparts, degree)
+      .map(move |word| Self::from_word(nparts, &word))
   }
 
   /// The position of this composition in [`Composition::all`], its canonical
   /// index. Inverse to [`Composition::from_rank`].
+  ///
+  /// $sum_i binom(w_i + i, i + 1)$ on the word: the combinatorial number
+  /// system, which never mentions the number of parts.
   pub fn rank(&self) -> usize {
-    let mut rank = 0;
-    let mut remaining = self.degree();
-    for (i, &part) in self.parts.iter().enumerate() {
-      let rest = self.nparts() - i - 1;
-      // The blocks skipped by taking this part rather than a larger one: every
-      // leading part above `part` heads a full block of the shorter shape.
-      for larger in (part + 1)..=remaining {
-        rank += Self::count(rest, remaining - larger);
-      }
-      remaining -= part;
-    }
-    rank
+    Repetition::Allowed.rank(&self.word())
   }
 
   /// The composition of degree `degree` into `nparts` parts at position `rank`
@@ -115,56 +127,10 @@ impl Composition {
   /// # Panics
   /// If `rank` is not below [`Composition::count`].
   pub fn from_rank(nparts: usize, degree: usize, rank: usize) -> Self {
-    assert!(rank < Self::count(nparts, degree), "rank out of range");
-    let mut rank = rank;
-    let mut remaining = degree;
-    let mut parts = Vec::with_capacity(nparts);
-    for i in 0..nparts {
-      let rest = nparts - i - 1;
-      let mut part = remaining;
-      loop {
-        let block = Self::count(rest, remaining - part);
-        if rank < block {
-          break;
-        }
-        rank -= block;
-        part -= 1;
-      }
-      parts.push(part);
-      remaining -= part;
-    }
-    Self::new(parts)
-  }
-}
-
-/// Successor enumeration of [`Composition::all`].
-struct Compositions {
-  current: Option<Composition>,
-  degree: usize,
-}
-
-impl Iterator for Compositions {
-  type Item = Composition;
-  fn next(&mut self) -> Option<Composition> {
-    let current = self.current.take()?;
-    // The successor moves one unit from the last nonzero part that is not the
-    // final one, and sweeps everything past it into the part just after --
-    // reverse-lexicographic descent. The final part holding the whole degree is
-    // the last composition.
-    let parts = current.parts();
-    let last = parts.len().checked_sub(1);
-    self.current = last
-      .filter(|&last| parts[last] != self.degree)
-      .and_then(|last| {
-        let pivot = parts[..last].iter().rposition(|&part| part > 0)?;
-        let mut next = parts.to_vec();
-        let carry = next[last] + 1;
-        next[last] = 0;
-        next[pivot] -= 1;
-        next[pivot + 1] += carry;
-        Some(Composition::new(next))
-      });
-    Some(current)
+    Self::from_word(
+      nparts,
+      &Repetition::Allowed.word_from_rank(nparts, degree, rank),
+    )
   }
 }
 
@@ -236,47 +202,77 @@ mod test {
     }
   }
 
-  /// The enumeration descends reverse-lexicographically on the parts.
+  /// The enumeration is colexicographic on the word: compare the largest
+  /// symbol first, and the smallest last.
   #[test]
-  fn order_is_reverse_lexicographic() {
+  fn order_is_colexicographic_on_the_word() {
+    let colex_key = |composition: &Composition| {
+      let mut word = composition.word();
+      word.reverse();
+      word
+    };
     for nparts in 0..=5 {
       for degree in 0..=6 {
         let all: Vec<_> = Composition::all(nparts, degree).collect();
         for pair in all.windows(2) {
-          assert!(pair[0].parts() > pair[1].parts());
+          assert!(colex_key(&pair[0]) < colex_key(&pair[1]));
+        }
+      }
+    }
+  }
+
+  /// A rank is independent of the number of parts: adding parts leaves every
+  /// existing composition where it was.
+  ///
+  /// This is what colex is for, and it is what the previous
+  /// reverse-lexicographic order did not have -- a word's position drifted
+  /// upward as parts were appended, so widening the alphabet renumbered the
+  /// basis. The formula makes it plain: the sum runs over the word and never
+  /// mentions `nparts`.
+  #[test]
+  fn rank_does_not_depend_on_the_number_of_parts() {
+    for degree in 0..=4 {
+      for nparts in 1..=4 {
+        for composition in Composition::all(nparts, degree) {
+          for wider in nparts..=6 {
+            let widened = Composition::from_word(wider, &composition.word());
+            assert_eq!(widened.rank(), composition.rank());
+          }
         }
       }
     }
   }
 
   /// Stars and bars: compositions of degree $d$ into $p$ parts biject with the
-  /// $(p-1)$-subsets of $d + p - 1$, order for order. A theorem about the two
-  /// index sets, not the way either is built -- which is what leaves the degree
-  /// unbounded here while a combination's index count stays bounded.
+  /// $d$-subsets of $d + p - 1$, order for order, by the shift
+  /// $w_i |-> w_i + i$ on the word.
+  ///
+  /// The *stars* are the subset here, not the bars. Both readings biject, and
+  /// they are complementary, but only this one is order-preserving under the
+  /// shared colex convention: a bar set has $p - 1$ elements, so its rank
+  /// depends on the number of parts, while the word has $d$ and its rank does
+  /// not.
+  ///
+  /// A theorem about the two index sets, not the way either is built -- which
+  /// is what leaves the degree unbounded here while a combination's index
+  /// count stays bounded.
   #[test]
   fn stars_and_bars_bijects_with_combinations() {
     for nparts in 1..=5 {
       for degree in 0..=6 {
-        let bars = nparts - 1;
-        let slots = degree + bars;
-        let via_bars: Vec<Composition> = combinations(slots, bars)
-          .take(binomial(slots, bars))
-          .map(|bar_set| {
-            // The gaps the bars cut the slots into, reversed: the leading part
-            // is the last gap.
-            let mut parts = Vec::with_capacity(nparts);
-            let mut previous = None;
-            for bar in bar_set.iter() {
-              parts.push(bar - previous.map_or(0, |p| p + 1));
-              previous = Some(bar);
-            }
-            parts.push(slots - previous.map_or(0, |p| p + 1));
-            parts.reverse();
-            Composition::new(parts)
+        let slots = degree + nparts - 1;
+        let via_stars: Vec<Composition> = combinations(slots, degree)
+          .map(|star_set| {
+            let word: Vec<usize> = star_set
+              .iter()
+              .enumerate()
+              .map(|(position, symbol)| symbol - position)
+              .collect();
+            Composition::from_word(nparts, &word)
           })
           .collect();
         assert_eq!(
-          via_bars,
+          via_stars,
           Composition::all(nparts, degree).collect::<Vec<_>>()
         );
       }
