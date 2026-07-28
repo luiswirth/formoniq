@@ -4,7 +4,7 @@ use {
     Contravariant, Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian,
   },
   gramian::Metric,
-  multiindex::{Combination, factorial},
+  multiindex::{Combination, Sign, factorial},
   simplicial::{
     atlas::{
       Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, ref_difbarys,
@@ -489,6 +489,12 @@ impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, 
 /// terms are the two degenerate grades, and so cover the classical pair:
 /// advective form at $k = 0$, conservation form at $k = n$.
 ///
+/// The boundary term's star is taken in the cell's *reference* frame, and needs
+/// no coherent orientation: flipping that frame flips both the star and the
+/// induced orientation of $diff K$, and the product is what the term is. So
+/// assembly stays independent of a gauge it must not depend on, and the
+/// operator exists on a non-orientable mesh.
+///
 /// `velocity` is a **vector field**, not a 1-form, and nothing is sharped here:
 /// $iota_v$ and $dif$ are metric-free, and the metric enters only through the
 /// $L^2$ pairing and the star.
@@ -576,7 +582,7 @@ impl<V: Sync + Section<Contravariant>> ElMatProvider for LieDerivativeElmat<'_, 
       |point, test, trial| {
         trial
           .interior_product(&self.velocity.at(point))
-          .wedge(&test.hodge_star(metric))
+          .wedge(&test.hodge_star(metric, Sign::Pos))
       },
     );
 
@@ -764,7 +770,7 @@ mod test {
           |point, test, trial| {
             trial
               .interior_product(&velocity.at(point))
-              .wedge(&test.hodge_star(&metric))
+              .wedge(&test.hodge_star(&metric, multiindex::Sign::Pos))
           },
         );
 
@@ -848,7 +854,7 @@ mod test {
       };
       // $iota_v vol$, the flux form the defect integrates.
       let flux = MultiForm::one(dim)
-        .hodge_star(&metric)
+        .hodge_star(&metric, multiindex::Sign::Pos)
         .interior_product(&velocity.value);
 
       let boundary = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));

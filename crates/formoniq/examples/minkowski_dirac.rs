@@ -139,8 +139,8 @@ fn lorentzian_star_table() {
   println!("Lorentzian Hodge star on 2-forms of Minkowski R^(1,3) (mostly-plus):");
   for blade in exterior_bases(dim, 2) {
     let form = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
-    let star = form.hodge_star(&eta);
-    let star_star = star.hodge_star(&eta);
+    let star = form.hodge_star(&eta, Sign::Pos);
+    let star_star = star.hodge_star(&eta, Sign::Pos);
 
     let (coeff, star_blade) = star
       .basis_iter()

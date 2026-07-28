@@ -304,10 +304,16 @@ impl<V: Variance> ExteriorElement<V> {
   /// fact separating Riemannian from Lorentzian Hodge theory, read off the
   /// metric's own signature rather than assumed.
   ///
-  /// Assumes the positively oriented standard basis. For the Euclidean metric
-  /// the star is exactly the signed complement of each basis blade
-  /// ([`Combination::complement_signed`]).
-  pub fn hodge_star(&self, metric: &Metric) -> Self {
+  /// `orientation` is the handedness of this basis against the one the volume
+  /// form is meant to be taken in, and it is *required* because a metric alone
+  /// does not determine a star: $vol$ carries a sign. `Sign::Pos` is right for
+  /// a standalone vector space, where the standard basis is positively oriented
+  /// by definition, and wrong for a mesh read cell by cell, where each cell's
+  /// frame is a gauge unrelated to its neighbors'.
+  ///
+  /// For the Euclidean metric and `Sign::Pos` the star is exactly the signed
+  /// complement of each basis blade ([`Combination::complement_signed`]).
+  pub fn hodge_star(&self, metric: &Metric, orientation: Sign) -> Self {
     let dim = self.dim;
     assert_eq!(metric.dim(), dim);
 
@@ -318,7 +324,7 @@ impl<V: Variance> ExteriorElement<V> {
     let mut star = Self::zero(dim, dim - self.grade);
     for (blade, &coeff) in exterior_bases(dim, self.grade).zip(weighted.iter()) {
       let (sign, complement) = blade.complement_signed(dim.index());
-      star.coeffs[complement.rank()] = sign.as_f64() * coeff;
+      star.coeffs[complement.rank()] = orientation.as_f64() * sign.as_f64() * coeff;
     }
     star
   }
@@ -641,7 +647,7 @@ mod tests {
       for grade in 0..=dim {
         for blade in exterior_bases(dim, grade) {
           let element = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
-          let star = element.hodge_star(&euclidean);
+          let star = element.hodge_star(&euclidean, Sign::Pos);
           let (sign, complement) = blade.complement_signed(dim);
           let expected = MultiForm::from_blade_signed(dim, sign, complement);
           assert_relative_eq!(star.coeffs(), expected.coeffs());
@@ -665,7 +671,9 @@ mod tests {
             let sign = Sign::from_parity(grade * (dim - grade)) * Sign::from_parity(q);
 
             let form: MultiForm = test_element(dim, grade, 2);
-            let star_star = form.hodge_star(&metric).hodge_star(&metric);
+            let star_star = form
+              .hodge_star(&metric, Sign::Pos)
+              .hodge_star(&metric, Sign::Pos);
             assert_relative_eq!(
               star_star.coeffs(),
               &(sign.as_f64() * form).coeffs(),
@@ -673,7 +681,9 @@ mod tests {
             );
 
             let vector: MultiVector = test_element(dim, grade, 3);
-            let star_star = vector.hodge_star(&metric).hodge_star(&metric);
+            let star_star = vector
+              .hodge_star(&metric, Sign::Pos)
+              .hodge_star(&metric, Sign::Pos);
             assert_relative_eq!(
               star_star.coeffs(),
               &(sign.as_f64() * vector).coeffs(),
@@ -700,7 +710,7 @@ mod tests {
             let alpha: MultiForm = test_element(dim, grade, 3);
             let beta: MultiForm = test_element(dim, grade, 4);
 
-            let wedge = alpha.wedge(&beta.hodge_star(&metric));
+            let wedge = alpha.wedge(&beta.hodge_star(&metric, Sign::Pos));
 
             let inner = alpha.inner(&beta, &metric);
             // The volume form has coefficient sqrt(|det g|).
@@ -768,7 +778,7 @@ mod tests {
       for grade in 0..=dim {
         for blade in exterior_bases(dim, grade) {
           let element = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
-          let star = element.hodge_star(&eta);
+          let star = element.hodge_star(&eta, Sign::Pos);
 
           // One sign flip per timelike ($eta^(0 0) = -1$) factor of the blade.
           let eta_sign = Sign::from_parity(blade.contains(0) as usize);

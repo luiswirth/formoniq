@@ -412,12 +412,11 @@ impl<V: Variance, F: Section<V>> Section<V> for HodgeStar<'_, F> {
   }
   fn at(&self, point: &MeshPoint) -> ExteriorElement<V> {
     let chart = point.chart(self.op.topology);
-    let star = self
+    self
       .op
       .field
       .at(point)
-      .hodge_star(&self.op.cell_metric(point));
-    self.orientation.sign(chart).as_f64() * star
+      .hodge_star(&self.op.cell_metric(point), self.orientation.sign(chart))
   }
 }
 
