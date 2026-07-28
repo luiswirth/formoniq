@@ -1,10 +1,13 @@
 use {
-  derham::{interpolate::form::WhitneyLsf, section::Section, trace::FaceTrace},
+  derham::{interpolate::samples::LsfSamples, section::Section, trace::FaceTrace},
   exterior::{Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian},
   gramian::Metric,
   multiindex::{Combination, factorial},
   simplicial::{
-    atlas::{Chart, ChartExt, MeshPoint, SimplexQuadRule, ref_difbarys, refsimp_vol},
+    atlas::{
+      Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, ref_difbarys,
+      refsimp_vol,
+    },
     geometry::cell_volume,
     linalg::{Matrix, Vector},
     topology::simplex::{standard_boundary_operator, standard_subsimps},
@@ -201,96 +204,82 @@ impl ElMatProvider for CodifDifElmat {
   }
 }
 
-/// The reference scaffolding of an element integral: the Whitney basis of a
-/// grade, and a rule to integrate against it.
+/// An element integral over a cell: a quadrature rule and the mesh points its
+/// nodes sit at.
 ///
-/// A function of $(n, k)$ alone. Every chart of the atlas is the same chart up
-/// to the labelling of its vertices, so the shape functions and the quadrature
-/// nodes are reference data and a cell enters only to say *where* on the
-/// manifold a node lies, i.e. to make a [`MeshPoint`].
+/// The shape functions are *not* held here. They arrive as [`LsfSamples`] built
+/// against this rule's [`nodes`](Self::nodes), which is what lets one routine
+/// integrate against the Whitney basis, against its differentials, or against
+/// two different grades at once.
 ///
-/// This is what an element integral with a varying coefficient needs and a
-/// closed-form one does not: a coefficient is a [`Section`], evaluated
-/// pointwise at those mesh points. Whether that section is analytic data pulled
-/// back from a continuum or the interpolation of a cochain is invisible here,
-/// which is what keeps the path intrinsic -- a discrete coefficient never
-/// touches an embedding at all.
-pub struct WhitneyQuadrature {
-  grade: ExteriorGrade,
+/// What stays per-cell is only the chart, the metric and the volume. A
+/// coefficient is a [`Section`] evaluated at the [`MeshPoint`]s, and whether it
+/// is analytic data pulled back from a continuum or the interpolation of a
+/// cochain is invisible here -- which is what keeps the path intrinsic, since a
+/// discrete coefficient never touches an embedding at all.
+pub struct CellQuadrature {
   qr: SimplexQuadRule,
-  whitneys: Vec<WhitneyLsf>,
+  nodes: Vec<Bary>,
 }
-impl WhitneyQuadrature {
+impl CellQuadrature {
   /// `qr` defaults to the degree-1 Grundmann-Möller rule, the cheapest rule
   /// that is exact on affine integrands.
-  pub fn new(
-    dim: impl Into<Dim>,
-    grade: impl Into<ExteriorGrade>,
-    qr: Option<SimplexQuadRule>,
-  ) -> Self {
-    let (dim, grade) = (dim.into(), grade.into());
+  pub fn new(dim: impl Into<Dim>, qr: Option<SimplexQuadRule>) -> Self {
+    let dim = dim.into();
     let qr = qr.unwrap_or(SimplexQuadRule::degree(dim, 1));
-    let whitneys = standard_subsimps(dim, grade)
-      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
-      .collect();
-    Self {
-      grade,
-      qr,
-      whitneys,
-    }
+    let nodes = qr.points().map(|bary| bary.to_coords()).collect();
+    Self { qr, nodes }
   }
 
-  pub fn grade(&self) -> ExteriorGrade {
-    self.grade
-  }
-  pub fn ndofs(&self) -> usize {
-    self.whitneys.len()
-  }
-
-  /// The shape functions at every quadrature node, paired with the mesh point
-  /// the node sits at in `chart`.
-  fn nodes(&self, chart: Chart) -> impl Iterator<Item = (MeshPoint, Vec<MultiForm>)> + use<'_> {
-    let cell = chart.get().idx();
-    self.qr.points().map(move |bary| {
-      let values = self.whitneys.iter().map(|w| w.at_bary(bary)).collect();
-      (MeshPoint::new(cell, bary.to_coords()), values)
-    })
+  /// The nodes in barycentric coordinates: what an [`LsfSamples`] table is
+  /// built against.
+  pub fn nodes(&self) -> &[Bary] {
+    &self.nodes
   }
 
-  /// $[integral_K f(x, W_sigma (x)) vol]_sigma$: the element vector of a
-  /// pointwise integrand read against each shape function.
-  pub fn integrate<F>(&self, chart: Chart, vol: f64, f: F) -> ElVec
+  fn point(&self, chart: Chart, inode: usize) -> MeshPoint {
+    chart.point(self.nodes[inode].clone())
+  }
+
+  /// $[integral_K f(x, W_sigma (x)) vol]_sigma$.
+  pub fn integrate<F>(&self, shapes: &LsfSamples, chart: Chart, vol: f64, f: F) -> ElVec
   where
     F: Fn(&MeshPoint, &MultiForm) -> f64,
   {
-    let mut elvec = ElVec::zeros(self.ndofs());
-    for ((point, values), weight) in self.nodes(chart).zip(self.qr.weights().iter()) {
-      for (i, value) in values.iter().enumerate() {
+    assert_eq!(shapes.nnodes(), self.nodes.len());
+
+    let mut elvec = ElVec::zeros(shapes.ndofs());
+    for (inode, weight) in self.qr.weights().iter().enumerate() {
+      let point = self.point(chart, inode);
+      for (i, value) in shapes.at_node(inode).iter().enumerate() {
         elvec[i] += weight * f(&point, value);
       }
     }
     vol * elvec
   }
 
-  /// $[integral_K f(x, W_sigma (x), W'_tau (x)) vol]_(sigma tau)$: the element
-  /// matrix of a pointwise integrand read against this basis in the rows and
-  /// `cols`'s in the columns.
-  ///
-  /// The two bases may sit at different grades, which is what a mixed block
-  /// needs. Shape functions are evaluated once per node, not once per entry.
-  pub fn integrate_pair<F>(&self, cols: &Self, chart: Chart, vol: f64, f: F) -> ElMat
+  /// $[integral_K f(x, W_sigma (x), W'_tau (x)) vol]_(sigma tau)$, the two
+  /// families being free to sit at different grades, which is what a mixed
+  /// block needs.
+  pub fn integrate_pair<F>(
+    &self,
+    rows: &LsfSamples,
+    cols: &LsfSamples,
+    chart: Chart,
+    vol: f64,
+    f: F,
+  ) -> ElMat
   where
     F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> f64,
   {
-    let mut elmat = ElMat::zeros(self.ndofs(), cols.ndofs());
-    let col_nodes = cols.nodes(chart);
-    for (((point, rows), (_, cols)), weight) in self
-      .nodes(chart)
-      .zip(col_nodes)
-      .zip(self.qr.weights().iter())
-    {
-      for (i, row) in rows.iter().enumerate() {
-        for (j, col) in cols.iter().enumerate() {
+    assert_eq!(rows.nnodes(), self.nodes.len());
+    assert_eq!(cols.nnodes(), self.nodes.len());
+
+    let mut elmat = ElMat::zeros(rows.ndofs(), cols.ndofs());
+    for (inode, weight) in self.qr.weights().iter().enumerate() {
+      let point = self.point(chart, inode);
+      for (i, row) in rows.at_node(inode).iter().enumerate() {
+        for (j, col) in cols.at_node(inode).iter().enumerate() {
           elmat[(i, j)] += weight * f(&point, row, col);
         }
       }
@@ -335,24 +324,20 @@ struct BoundaryFacet {
 /// sides of a shared facet disagree on the trace.
 pub struct BoundaryQuadrature {
   dim: Dim,
-  qr: SimplexQuadRule,
+  /// Facet-major: node `f * npoints + q` lies on facet `f`.
+  nodes: Vec<Bary>,
+  weights: Vec<f64>,
+  npoints: usize,
   facets: Vec<BoundaryFacet>,
-  rows: Vec<WhitneyLsf>,
-  cols: Vec<WhitneyLsf>,
 }
 
 impl BoundaryQuadrature {
-  pub fn new(
-    dim: impl Into<Dim>,
-    row_grade: impl Into<ExteriorGrade>,
-    col_grade: impl Into<ExteriorGrade>,
-    qr: Option<SimplexQuadRule>,
-  ) -> Self {
+  pub fn new(dim: impl Into<Dim>, qr: Option<SimplexQuadRule>) -> Self {
     let dim = dim.into();
     let facet_dim = dim - 1;
     let qr = qr.unwrap_or(SimplexQuadRule::degree(facet_dim, 1));
 
-    let facets = Combination::full((dim + 1).index())
+    let facets: Vec<_> = Combination::full((dim + 1).index())
       .deletions()
       .map(|(sign, _, positions)| BoundaryFacet {
         sign: sign.as_f64(),
@@ -361,18 +346,34 @@ impl BoundaryQuadrature {
       })
       .collect();
 
-    let shape = |grade| {
-      standard_subsimps(dim, grade)
-        .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
-        .collect()
-    };
+    // The facets' nodes, scattered into the cell's barycentric coordinates so
+    // that one shape-function table covers the whole boundary.
+    let nodes = facets
+      .iter()
+      .flat_map(|facet| {
+        qr.points()
+          .map(|bary| face_bary_to_cell_bary(dim, &facet.positions, bary))
+          .collect::<Vec<_>>()
+      })
+      .collect();
+    let weights = facets
+      .iter()
+      .flat_map(|_| qr.weights().iter().copied().collect::<Vec<_>>())
+      .collect();
+
     Self {
       dim,
-      qr,
+      nodes,
+      weights,
+      npoints: qr.npoints(),
       facets,
-      rows: shape(row_grade.into()),
-      cols: shape(col_grade.into()),
     }
+  }
+
+  /// The nodes of the whole boundary, in the cell's barycentric coordinates:
+  /// what an [`LsfSamples`] table is built against.
+  pub fn nodes(&self) -> &[Bary] {
+    &self.nodes
   }
 
   /// $integral_(diff K) omega$ of a section of grade $n-1$.
@@ -390,11 +391,10 @@ impl BoundaryQuadrature {
     );
 
     let mut integral = 0.0;
-    for facet in &self.facets {
-      for (bary, weight) in self.qr.points().zip(self.qr.weights().iter()) {
-        let point = chart.point_on_face(&facet.positions, bary);
-        integral += facet.sign * weight * facet.trace.top_coefficient(&form.at(&point));
-      }
+    for (inode, bary) in self.nodes.iter().enumerate() {
+      let facet = &self.facets[inode / self.npoints];
+      let point = chart.point(bary.clone());
+      integral += facet.sign * self.weights[inode] * facet.trace.top_coefficient(&form.at(&point));
     }
     refsimp_vol(self.dim - 1) * integral
   }
@@ -408,22 +408,22 @@ impl BoundaryQuadrature {
   /// It is a family indexed by pairs of degrees of freedom, so it cannot be one
   /// [`Section`]; that is the whole difference between this and
   /// [`Self::integrate_form`].
-  pub fn integrate_pair<F>(&self, chart: Chart, f: F) -> ElMat
+  pub fn integrate_pair<F>(&self, rows: &LsfSamples, cols: &LsfSamples, chart: Chart, f: F) -> ElMat
   where
     F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> MultiForm,
   {
-    let mut elmat = ElMat::zeros(self.rows.len(), self.cols.len());
-    for facet in &self.facets {
-      for (bary, weight) in self.qr.points().zip(self.qr.weights().iter()) {
-        let point = chart.point_on_face(&facet.positions, bary);
-        let rows: Vec<_> = self.rows.iter().map(|w| w.at_bary(point.bary())).collect();
-        let cols: Vec<_> = self.cols.iter().map(|w| w.at_bary(point.bary())).collect();
+    assert_eq!(rows.nnodes(), self.nodes.len());
+    assert_eq!(cols.nnodes(), self.nodes.len());
 
-        for (i, row) in rows.iter().enumerate() {
-          for (j, col) in cols.iter().enumerate() {
-            elmat[(i, j)] +=
-              facet.sign * weight * facet.trace.top_coefficient(&f(&point, row, col));
-          }
+    let mut elmat = ElMat::zeros(rows.ndofs(), cols.ndofs());
+    for (inode, bary) in self.nodes.iter().enumerate() {
+      let facet = &self.facets[inode / self.npoints];
+      let point = chart.point(bary.clone());
+      let weight = facet.sign * self.weights[inode];
+
+      for (i, row) in rows.at_node(inode).iter().enumerate() {
+        for (j, col) in cols.at_node(inode).iter().enumerate() {
+          elmat[(i, j)] += weight * facet.trace.top_coefficient(&f(&point, row, col));
         }
       }
     }
@@ -442,7 +442,9 @@ impl BoundaryQuadrature {
 /// through it, only through the inner product on $Lambda^k$.
 pub struct WeightedHodgeMassElmat<'a, F> {
   coefficient: &'a F,
-  quad: WhitneyQuadrature,
+  grade: ExteriorGrade,
+  quad: CellQuadrature,
+  shapes: LsfSamples,
 }
 impl<'a, F: Section<Covariant>> WeightedHodgeMassElmat<'a, F> {
   /// Panics unless the coefficient is a grade-0 section: a weight is a scalar.
@@ -456,24 +458,35 @@ impl<'a, F: Section<Covariant>> WeightedHodgeMassElmat<'a, F> {
       Dim::ZERO,
       "A scalar coefficient must be a grade-0 section."
     );
-    let quad = WhitneyQuadrature::new(coefficient.dim(), grade, qr);
-    Self { coefficient, quad }
+    let grade = grade.into();
+    let quad = CellQuadrature::new(coefficient.dim(), qr);
+    let shapes = LsfSamples::whitney(coefficient.dim(), grade, quad.nodes());
+    Self {
+      coefficient,
+      grade,
+      quad,
+      shapes,
+    }
   }
 }
 impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
   fn row_grade(&self) -> ExteriorGrade {
-    self.quad.grade()
+    self.grade
   }
   fn col_grade(&self) -> ExteriorGrade {
-    self.quad.grade()
+    self.grade
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
-    let inner = multiform_gramian(metric, self.quad.grade());
-    self
-      .quad
-      .integrate_pair(&self.quad, chart, cell_volume(metric), |point, row, col| {
+    let inner = multiform_gramian(metric, self.grade);
+    self.quad.integrate_pair(
+      &self.shapes,
+      &self.shapes,
+      chart,
+      cell_volume(metric),
+      |point, row, col| {
         self.coefficient.at(point).coeffs()[0] * inner.inner(row.coeffs(), col.coeffs())
-      })
+      },
+    )
   }
 }
 
@@ -493,12 +506,18 @@ pub trait ElVecProvider: Sync {
 /// coordinates in sight.
 pub struct SourceElVec<'a, F> {
   source: &'a F,
-  quad: WhitneyQuadrature,
+  quad: CellQuadrature,
+  shapes: LsfSamples,
 }
 impl<'a, F: Section<Covariant>> SourceElVec<'a, F> {
   pub fn new(source: &'a F, qr: Option<SimplexQuadRule>) -> Self {
-    let quad = WhitneyQuadrature::new(source.dim(), source.grade(), qr);
-    Self { source, quad }
+    let quad = CellQuadrature::new(source.dim(), qr);
+    let shapes = LsfSamples::whitney(source.dim(), source.grade(), quad.nodes());
+    Self {
+      source,
+      quad,
+      shapes,
+    }
   }
 }
 impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
@@ -507,11 +526,12 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> ElVec {
     let inner = multiform_gramian(metric, self.grade());
-    self
-      .quad
-      .integrate(chart, cell_volume(metric), |point, whitney| {
-        inner.inner(self.source.at(point).coeffs(), whitney.coeffs())
-      })
+    self.quad.integrate(
+      &self.shapes,
+      chart,
+      cell_volume(metric),
+      |point, whitney| inner.inner(self.source.at(point).coeffs(), whitney.coeffs()),
+    )
   }
 }
 
@@ -551,8 +571,7 @@ mod test {
       let refcomplex = Complex::standard(dim);
       let chart = refchart(&refcomplex);
       let grade = dim - 1;
-      let quadrature =
-        BoundaryQuadrature::new(dim, grade, grade, Some(SimplexQuadRule::degree(dim - 1, 2)));
+      let quadrature = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));
 
       let ndofs = refcomplex.nsimplices(grade);
       for (idof, dof_simp) in standard_subsimps(dim, grade).enumerate() {

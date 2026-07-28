@@ -16,3 +16,4 @@
 
 pub mod form;
 pub mod interpolant;
+pub mod samples;
