@@ -315,10 +315,12 @@ struct BoundaryFacet {
 /// integrated in the cell's chart and weighted by the sign the boundary
 /// operator induces.
 ///
-/// **Metric-free.** An $(n-1)$-form integrated over an $(n-1)$-simplex needs no
-/// metric, the geometry riding in the form's own values, so the measure here is
-/// the reference one. Whatever metric an integrand needs -- a Hodge star, an
-/// inner product -- it reads for itself.
+/// **Metric-free**, and the integrand's type is why. Over a cell one integrates
+/// a *scalar* against $vol$, which is where a metric enters; over the boundary
+/// one integrates an $(n-1)$-*form* directly, and a form over a simplex of its
+/// own grade needs no metric, the geometry riding in the form's own values. So
+/// the measure here is the reference one and whatever metric an integrand wants
+/// -- a Hodge star, an inner product -- it reads for itself.
 ///
 /// The integrand is an $(n-1)$-form and the quadrature takes its
 /// [`FaceTrace`] onto each facet, so a caller cannot forget that only the
@@ -373,24 +375,39 @@ impl BoundaryQuadrature {
     }
   }
 
-  /// $integral_(diff K) omega$ of an $(n-1)$-form field expressed in the cell's
-  /// reference frame.
-  pub fn integrate_form<F>(&self, chart: Chart, form: F) -> f64
-  where
-    F: Fn(&MeshPoint) -> MultiForm,
-  {
+  /// $integral_(diff K) omega$ of a section of grade $n-1$.
+  ///
+  /// A field, not a closure: whether it is analytic data pulled back from a
+  /// continuum, the interpolation of a cochain, or a combinator over either is
+  /// invisible here, which is what makes natural boundary data intrinsic by the
+  /// same code path that serves an embedded source.
+  pub fn integrate_form(&self, chart: Chart, form: &impl Section<Covariant>) -> f64 {
+    assert_eq!(form.dim(), self.dim);
+    assert_eq!(
+      form.grade(),
+      self.dim - 1,
+      "A boundary integrand is a form of grade n-1."
+    );
+
     let mut integral = 0.0;
     for facet in &self.facets {
       for (bary, weight) in self.qr.points().zip(self.qr.weights().iter()) {
         let point = chart.point_on_face(&facet.positions, bary);
-        integral += facet.sign * weight * facet.trace.top_coefficient(&form(&point));
+        integral += facet.sign * weight * facet.trace.top_coefficient(&form.at(&point));
       }
     }
     refsimp_vol(self.dim - 1) * integral
   }
 
-  /// $[integral_(diff K) f(x, W_sigma, W'_tau)]_(sigma tau)$, the integrand
-  /// being the $(n-1)$-form the two shape functions build at a point.
+  /// $[integral_(diff K) f(x, W_sigma, W'_tau)]_(sigma tau)$, where `f` is the
+  /// pointwise integrand of the bilinear form: at each point a bilinear map
+  /// $Lambda^(k_r) times Lambda^(k_c) -> Lambda^(n-1)$, hence a section of
+  /// $"Hom"(Lambda^(k_r) times.circle Lambda^(k_c), Lambda^(n-1))$ evaluated
+  /// against the two shape functions.
+  ///
+  /// It is a family indexed by pairs of degrees of freedom, so it cannot be one
+  /// [`Section`]; that is the whole difference between this and
+  /// [`Self::integrate_form`].
   pub fn integrate_pair<F>(&self, chart: Chart, f: F) -> ElMat
   where
     F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> MultiForm,
@@ -537,11 +554,16 @@ mod test {
       let quadrature =
         BoundaryQuadrature::new(dim, grade, grade, Some(SimplexQuadRule::degree(dim - 1, 2)));
 
-      for dof_simp in standard_subsimps(dim, grade) {
-        let whitney = WhitneyLsf::standard(dim, dof_simp);
+      let ndofs = refcomplex.nsimplices(grade);
+      for (idof, dof_simp) in standard_subsimps(dim, grade).enumerate() {
+        // The global Whitney form of this DOF: the interpolant of the cochain
+        // that is one there and zero elsewhere.
+        let mut coeffs = Vector::zeros(ndofs);
+        coeffs[idof] = 1.0;
+        let field = WhitneyInterpolant::new(Cochain::new(grade, coeffs), &refcomplex);
 
-        let interior = whitney.dif().coeffs()[0] * refsimp_vol(dim);
-        let boundary = quadrature.integrate_form(chart, |point| whitney.at_bary(point.bary()));
+        let interior = WhitneyLsf::standard(dim, dof_simp).dif().coeffs()[0] * refsimp_vol(dim);
+        let boundary = quadrature.integrate_form(chart, &field);
 
         assert_relative_eq!(boundary, interior, epsilon = 1e-12);
       }
