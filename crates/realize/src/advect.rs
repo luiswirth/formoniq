@@ -16,7 +16,7 @@
 //! the $n times (n+1)$ matrix of those values in the chart's local frame. The
 //! weights move with it, $dot(lambda) = (dif lambda \/ dif x) V$, and
 //! $dif lambda \/ dif x$ is the reference chart's own constant
-//! [`ref_difbarys`]. So the whole per-cell dynamic is the linear generator
+//! [`unit_difbarys`]. So the whole per-cell dynamic is the linear generator
 //!
 //! $ M = (dif lambda \/ dif x) hat(V), quad dot(lambda) = M lambda. $
 //!
@@ -45,7 +45,7 @@ use gramian::Metric;
 use simplicial::Sign;
 use simplicial::linalg::Matrix;
 use simplicial::{
-  atlas::{ChartExt, Local, MeshPoint, local2bary, ref_difbarys, ref_vertices},
+  atlas::{ChartExt, Local, MeshPoint, local2bary, unit_difbarys, unit_vertices},
   geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
 };
@@ -210,7 +210,7 @@ fn flow_generator(
   sign: Sign,
 ) -> Matrix {
   let dim = cell.dim().index();
-  let vertices = ref_vertices(dim);
+  let vertices = unit_vertices(dim);
   let mut vertex_field = Matrix::zeros(dim, dim + 1);
   for i in 0..=dim {
     let local = Local::new(vertices.column(i).into_owned());
@@ -218,7 +218,7 @@ fn flow_generator(
     let form = reduced_form(interpolant.eval(&point), metric, sign);
     vertex_field.set_column(i, form.sharp(metric).coeffs());
   }
-  ref_difbarys(dim) * vertex_field
+  unit_difbarys(dim) * vertex_field
 }
 
 /// The cell across the facet opposite local vertex `opposite`, if any.
@@ -285,7 +285,7 @@ fn seeds(topology: &Complex, coords: &MeshCoords, seed_count: usize) -> Vec<Seed
     .collect()
 }
 
-/// A point drawn uniformly from the reference simplex, as barycentric weights.
+/// A point drawn uniformly from the unit simplex, as barycentric weights.
 ///
 /// The spacings of $n$ sorted uniforms on $[0, 1]$ are a `Dirichlet(1, ..., 1)`
 /// draw, which is the uniform distribution on the simplex -- not the normalized
@@ -345,8 +345,8 @@ mod tests {
   #[test]
   fn generator_columns_sum_to_zero() {
     for dim in 1..=3 {
-      let topology = Complex::standard(dim);
-      let coords = MeshCoords::standard(dim);
+      let topology = Complex::unit(dim);
+      let coords = MeshCoords::unit(dim);
       let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
       let interpolant = WhitneyInterpolant::new(cochain, &topology);
       for cell in topology.cells().handle_iter() {

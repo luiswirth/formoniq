@@ -36,7 +36,7 @@ impl Simplex {
     let simplex = Self::new(vertices);
     (sign, simplex)
   }
-  pub fn standard(dim: impl Into<Dim>) -> Self {
+  pub fn unit(dim: impl Into<Dim>) -> Self {
     let dim = dim.into();
     Self::new((0..=dim.index()).collect())
   }
@@ -182,9 +182,9 @@ impl SignedSimplex {
   }
 }
 
-/// The subsimplices of the standard simplex: local vertex sets,
+/// The subsimplices of the unit simplex: local vertex sets,
 /// in colexicographic order.
-pub fn standard_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
+pub fn unit_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
   combinations((dim_cell + 1).index(), (dim_sub + 1).index())
 }
 pub fn nsubsimplices(dim_cell: Dim, dim_sub: Dim) -> usize {
@@ -197,11 +197,11 @@ pub fn nedges(dim_cell: Dim) -> usize {
 /// $diff^k: Delta_k (Delta^n) -> Delta_(k-1) (Delta^n)$
 ///
 /// Matrix of the boundary operator between the colexicographically ordered
-/// subsimplices of the standard `dim_cell`-simplex.
+/// subsimplices of the unit `dim_cell`-simplex.
 ///
 /// Unaugmented: the boundary of vertices is zero, not the augmentation map
 /// to the (-1)-simplex that `boundary_matrix` (below) computes.
-pub fn standard_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
+pub fn unit_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
   if dim_simp == 0 {
     return Matrix::zeros(0, (dim_cell + 1).index());
   }
@@ -248,7 +248,7 @@ mod test {
   #[test]
   fn subsimps() {
     for dim in (0..=4usize).map(Dim::from) {
-      let simp = Simplex::standard(dim);
+      let simp = Simplex::unit(dim);
       for sub_dim in dim.range_inclusive() {
         let subs = simp.subsimps(sub_dim).collect_vec();
         assert_eq!(subs.len(), nsubsimplices(dim, sub_dim));
@@ -275,7 +275,7 @@ mod test {
   #[test]
   fn boundary_of_boundary_cancels() {
     use std::collections::HashMap;
-    let simp = Simplex::standard(Dim::new(3));
+    let simp = Simplex::unit(Dim::new(3));
     let mut chain: HashMap<Simplex, i32> = HashMap::new();
     for face in simp.boundary() {
       for subface in face.simplex.boundary() {

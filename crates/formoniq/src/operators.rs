@@ -11,12 +11,12 @@ use {
   multiindex::{Combination, Sign},
   simplicial::{
     atlas::{
-      Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, ref_bary_gramian,
-      ref_difbarys, refsimp_vol,
+      Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, unit_bary_gramian,
+      unit_difbarys, unit_simplex_volume,
     },
     geometry::cell_volume,
     linalg::{Matrix, Vector},
-    topology::simplex::standard_boundary_operator,
+    topology::simplex::unit_boundary_operator,
   },
 };
 
@@ -73,8 +73,8 @@ impl HodgeMassElmat {
       dim,
       grade,
       coeffs: WhitneyCoeffs::new(dim, grade),
-      difbarys_power: exterior_power(&ref_difbarys(dim), grade),
-      bary_gramian: ref_bary_gramian(dim),
+      difbarys_power: exterior_power(&unit_difbarys(dim), grade),
+      bary_gramian: unit_bary_gramian(dim),
     }
   }
 }
@@ -113,7 +113,7 @@ impl DifElmat {
   pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
     let mass = HodgeMassElmat::new(dim, grade);
-    let dif = standard_boundary_operator(dim, grade).transpose();
+    let dif = unit_boundary_operator(dim, grade).transpose();
     Self { mass, dif }
   }
 }
@@ -142,7 +142,7 @@ impl CodifElmat {
   pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
     let mass = HodgeMassElmat::new(dim, grade);
-    let codif = standard_boundary_operator(dim, grade);
+    let codif = unit_boundary_operator(dim, grade);
     Self { mass, codif }
   }
 }
@@ -171,7 +171,7 @@ impl CodifDifElmat {
   pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
     let mass = HodgeMassElmat::new(dim, grade + 1);
-    let dif = standard_boundary_operator(dim, grade + 1).transpose();
+    let dif = unit_boundary_operator(dim, grade + 1).transpose();
     let codif = dif.transpose();
 
     Self { mass, dif, codif }
@@ -368,7 +368,7 @@ impl BoundaryQuadrature {
       let point = chart.point(bary.clone());
       integral += facet.sign * self.weights[inode] * facet.trace.top_coefficient(&form.at(&point));
     }
-    refsimp_vol(self.dim - 1) * integral
+    unit_simplex_volume(self.dim - 1) * integral
   }
 
   /// $[integral_(diff K) f(x, W_sigma, W'_tau)]_(sigma tau)$, where `f` is the
@@ -399,7 +399,7 @@ impl BoundaryQuadrature {
         }
       }
     }
-    refsimp_vol(self.dim - 1) * elmat
+    unit_simplex_volume(self.dim - 1) * elmat
   }
 }
 
@@ -632,9 +632,7 @@ mod test {
     interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
   use exterior::MultiVector;
-  use simplicial::{
-    geometry::metric::simplex::SimplexLengthsSq, topology::simplex::standard_subsimps,
-  };
+  use simplicial::{geometry::metric::simplex::SimplexLengthsSq, topology::simplex::unit_subsimps};
 
   use approx::assert_relative_eq;
 
@@ -655,20 +653,20 @@ mod test {
   #[test]
   fn boundary_quadrature_satisfies_stokes_theorem_on_a_cell() {
     for dim in (1..=4).map(Dim::from) {
-      let refcomplex = Complex::standard(dim);
+      let refcomplex = Complex::unit(dim);
       let chart = refchart(&refcomplex);
       let grade = dim - 1;
       let quadrature = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));
 
       let ndofs = refcomplex.nsimplices(grade);
-      for (idof, dof_simp) in standard_subsimps(dim, grade).enumerate() {
+      for (idof, dof_simp) in unit_subsimps(dim, grade).enumerate() {
         // The global Whitney form of this DOF: the interpolant of the cochain
         // that is one there and zero elsewhere.
         let mut coeffs = Vector::zeros(ndofs);
         coeffs[idof] = 1.0;
         let field = WhitneyInterpolant::new(Cochain::new(grade, coeffs), &refcomplex);
 
-        let interior = WhitneyLsf::standard(dim, dof_simp).dif().coeffs()[0] * refsimp_vol(dim);
+        let interior = WhitneyLsf::unit(dim, dof_simp).dif().coeffs()[0] * unit_simplex_volume(dim);
         let boundary = quadrature.integrate_form(chart, &field);
 
         assert_relative_eq!(boundary, interior, epsilon = 1e-12);
@@ -699,7 +697,7 @@ mod test {
   /// beta_j$.
   fn dif_interior_of(dim: Dim, dof_simp: Combination, v: &MultiVector) -> MultiForm {
     let nvertices = (dim + 1).index();
-    let difbarys = ref_difbarys(dim);
+    let difbarys = unit_difbarys(dim);
     let grade = Dim::from(dof_simp.card() - 1);
 
     let blade = |c| MultiForm::from_blade_signed(nvertices, multiindex::Sign::Pos, c);
@@ -727,9 +725,9 @@ mod test {
   #[test]
   fn cartans_second_term_is_wholly_on_the_boundary() {
     for dim in (1..=3).map(Dim::from) {
-      let refcomplex = Complex::standard(dim);
+      let refcomplex = Complex::unit(dim);
       let chart = refchart(&refcomplex);
-      let geo = SimplexLengthsSq::standard(dim);
+      let geo = SimplexLengthsSq::unit(dim);
       let metric = geo.metric();
 
       let velocity = ConstantVelocity {
@@ -760,7 +758,7 @@ mod test {
           },
         );
 
-        for (jdof, dof_simp) in standard_subsimps(dim, grade).enumerate() {
+        for (jdof, dof_simp) in unit_subsimps(dim, grade).enumerate() {
           let dif_interior = dif_interior_of(dim, dof_simp, &velocity.value);
           let direct = volume.integrate(&test, chart, cell_volume(&metric), |_point, test| {
             inner.inner(dif_interior.coeffs(), test.coeffs())
@@ -785,9 +783,9 @@ mod test {
   #[test]
   fn the_lie_derivative_annihilates_a_constant() {
     for dim in (1..=3).map(Dim::from) {
-      let refcomplex = Complex::standard(dim);
+      let refcomplex = Complex::unit(dim);
       let chart = refchart(&refcomplex);
-      let metric = SimplexLengthsSq::standard(dim).metric();
+      let metric = SimplexLengthsSq::unit(dim).metric();
 
       let velocity = ConstantVelocity {
         dim,
@@ -827,9 +825,9 @@ mod test {
     let mut largest_defect: f64 = 0.0;
 
     for dim in (1..=3).map(Dim::from) {
-      let refcomplex = Complex::standard(dim);
+      let refcomplex = Complex::unit(dim);
       let chart = refchart(&refcomplex);
-      let metric = SimplexLengthsSq::standard(dim).metric();
+      let metric = SimplexLengthsSq::unit(dim).metric();
 
       let velocity = ConstantVelocity {
         dim,
@@ -875,8 +873,8 @@ mod test {
   #[test]
   fn weighted_hodge_mass_on_a_constant_is_the_closed_form() {
     for dim in (0..=3).map(Dim::from) {
-      let complex = Complex::standard(dim);
-      let geo = SimplexLengthsSq::standard(dim);
+      let complex = Complex::unit(dim);
+      let geo = SimplexLengthsSq::unit(dim);
       let metric = geo.metric();
       let chart = refchart(&complex);
 
@@ -898,12 +896,12 @@ mod test {
   #[test]
   fn hodge_mass0_is_scalar_mass() {
     for dim in (0..=3).map(Dim::from) {
-      let geo = SimplexLengthsSq::standard(dim);
-      let refcomplex = Complex::standard(dim);
+      let geo = SimplexLengthsSq::unit(dim);
+      let refcomplex = Complex::unit(dim);
       let hodge_mass =
         HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric(), refchart(&refcomplex));
       let metric = geo.metric();
-      let scalar_mass = cell_volume(&metric) * ref_bary_gramian(dim).matrix();
+      let scalar_mass = cell_volume(&metric) * unit_bary_gramian(dim).matrix();
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }
@@ -912,8 +910,8 @@ mod test {
   fn hodge_mass_dim2_grade1() {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
-    let geo = SimplexLengthsSq::standard(dim);
-    let refcomplex = Complex::standard(dim);
+    let geo = SimplexLengthsSq::unit(dim);
+    let refcomplex = Complex::unit(dim);
     let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
@@ -927,8 +925,8 @@ mod test {
   fn dif_n2_k1() {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
-    let geo = SimplexLengthsSq::standard(dim);
-    let refcomplex = Complex::standard(dim);
+    let geo = SimplexLengthsSq::unit(dim);
+    let refcomplex = Complex::unit(dim);
     let computed = DifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
@@ -942,8 +940,8 @@ mod test {
   fn codif_n2_k1() {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
-    let geo = SimplexLengthsSq::standard(dim);
-    let refcomplex = Complex::standard(dim);
+    let geo = SimplexLengthsSq::unit(dim);
+    let refcomplex = Complex::unit(dim);
     let computed = CodifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
@@ -956,13 +954,13 @@ mod test {
   #[test]
   fn dif_dif_is_norm_of_difwhitneys() {
     for dim in (1..=3).map(Dim::from) {
-      let geo = SimplexLengthsSq::standard(dim);
-      let refcomplex = Complex::standard(dim);
+      let geo = SimplexLengthsSq::unit(dim);
+      let refcomplex = Complex::unit(dim);
       for grade in dim.range() {
         let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
 
-        let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
-          .map(|simp| WhitneyLsf::standard(dim, simp).dif())
+        let difwhitneys: Vec<_> = unit_subsimps(dim, grade)
+          .map(|simp| WhitneyLsf::unit(dim, simp).dif())
           .collect();
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {

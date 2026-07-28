@@ -77,13 +77,13 @@ impl Cochain {
 
   /// The trace onto a subsimplex: the pullback of the discrete form along the
   /// inclusion $iota_tau: tau arrow.r.hook M$, as a cochain on `simplex`
-  /// regarded as its own standard cell
-  /// ([`Complex::standard`](simplicial::topology::complex::Complex::standard)).
+  /// regarded as its own reference cell
+  /// ([`Complex::unit`](simplicial::topology::complex::Complex::unit)).
   ///
   /// Metric-free (invariant 5: the trace is a pullback). Combinatorially it is
   /// the restriction of the cochain to the subsimplices of `simplex`: the
   /// [`faces`](SimplexRef::faces) come in the colex order of their local vertex
-  /// positions, the same order the DOFs of the standard cell take, and colex is
+  /// positions, the same order the DOFs of the reference cell take, and colex is
   /// preserved under passing to a subset, so each face's coefficient is read off
   /// with no sign. A grade exceeding `simplex.dim()` has no faces of that grade
   /// and traces to the empty cochain -- the zero of $Lambda^k(tau) = 0$ -- which

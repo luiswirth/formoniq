@@ -4,8 +4,8 @@ use {
   simplicial::linalg::Matrix,
   simplicial::{
     Dim,
-    atlas::{BaryRef, ref_difbarys},
-    topology::simplex::standard_subsimps,
+    atlas::{BaryRef, unit_difbarys},
+    topology::simplex::unit_subsimps,
   },
 };
 
@@ -37,7 +37,7 @@ use {
 /// The contraction $iota_lambda$ is the Koszul operator $kappa$ of FEEC.
 ///
 /// Purely combinatorial: the barycentric differentials of the reference cell
-/// are the constant [`ref_difbarys`], so a Whitney form depends on nothing but
+/// are the constant [`unit_difbarys`], so a Whitney form depends on nothing but
 /// the cell dimension and the DOF vertex set -- no coordinates, no metric.
 /// This is what lets them live on a bare Regge manifold.
 #[derive(Debug, Clone)]
@@ -50,11 +50,11 @@ pub struct WhitneyLsf {
   difbarys: Matrix,
 }
 impl WhitneyLsf {
-  pub fn standard(cell_dim: Dim, dof_simp: Combination) -> Self {
+  pub fn unit(cell_dim: Dim, dof_simp: Combination) -> Self {
     Self {
       cell_dim,
       dof_simp,
-      difbarys: ref_difbarys(cell_dim),
+      difbarys: unit_difbarys(cell_dim),
     }
   }
 
@@ -116,7 +116,7 @@ pub struct WhitneyCoeffs {
 impl WhitneyCoeffs {
   pub fn new(cell_dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (cell_dim, grade) = (cell_dim.into(), grade.into());
-    let dofs = standard_subsimps(cell_dim, grade).collect();
+    let dofs = unit_subsimps(cell_dim, grade).collect();
     Self {
       cell_dim,
       grade,
@@ -143,7 +143,7 @@ impl WhitneyCoeffs {
   /// because the integrand does: the blades are constant and the coordinates
   /// carry the whole $x$-dependence. With $H = Lambda^k (dif lambda)
   /// (Lambda^k g^(-1)) Lambda^k (dif lambda)^top$ and $Q$ the barycentric
-  /// [`ref_bary_gramian`](simplicial::atlas::ref_bary_gramian), the result is
+  /// [`unit_bary_gramian`](simplicial::atlas::unit_bary_gramian), the result is
   /// the Hodge mass matrix at unit volume.
   ///
   /// The factors are taken apart because their tensor product is the one thing
@@ -192,7 +192,7 @@ mod test {
   use exterior::{exterior_bases, multiform_gramian};
   use gramian::{Gramian, Metric};
   use multiindex::combinations;
-  use simplicial::atlas::{SimplexQuadRule, refsimp_vol};
+  use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
   use simplicial::linalg::Vector;
 
   /// A non-diagonal metric of signature $(n - q, q)$, so the law is not read on
@@ -245,7 +245,7 @@ mod test {
   #[test]
   fn whitney_forms_are_coclosed() {
     for dim in (1..=3).map(Dim::from) {
-      let difbarys = ref_difbarys(dim);
+      let difbarys = unit_difbarys(dim);
       let nvertices = (dim + 1).index();
       let qr = SimplexQuadRule::degree(dim, nvertices + 1);
 
@@ -267,15 +267,15 @@ mod test {
         for grade in 1..=dim.index() {
           let inner = multiform_gramian(&metric, grade);
           for dof_simp in combinations(nvertices, grade + 1) {
-            let whitney = WhitneyLsf::standard(dim, dof_simp);
+            let whitney = WhitneyLsf::unit(dim, dof_simp);
             for blade in exterior_bases(dim, grade - 1) {
               let c = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
-              let integral = qr.integrate_ref(
+              let integral = qr.integrate_unit(
                 &|bary: BaryRef| {
                   let dif_phi = bubble_dif(bary).wedge(&c);
                   inner.inner(dif_phi.coeffs(), whitney.at_bary(bary).coeffs())
                 },
-                refsimp_vol(dim),
+                unit_simplex_volume(dim),
               );
               assert!(
                 integral.abs() < 1e-12,

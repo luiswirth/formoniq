@@ -13,7 +13,7 @@
 //!   realization, whose induced metric and edge lengths (`geometry::coord`) are
 //!   the bridges down into the intrinsic layer.
 //! - `SimplexCoords<LocalCartesian>` is a simplex realized in a chart's own
-//!   cartesian frame $RR^n$. [`standard`](SimplexCoords::standard) is the
+//!   cartesian frame $RR^n$. [`unit`](SimplexCoords::unit) is the
 //!   reference cell itself ("its ambient coordinates *are* its local
 //!   coordinates"), and a sub-simplex of a refinement is the child realized in
 //!   its parent's frame -- the map its metric is pulled back along.
@@ -24,8 +24,8 @@
 //! instantiation, and it is the only part that presupposes an embedding.
 
 use super::{
-  Bary, BaryRef, Local, LocalCartesian, LocalRef, is_bary_inside, local2bary, ref_vertices,
-  refsimp_vol,
+  Bary, BaryRef, Local, LocalCartesian, LocalRef, is_bary_inside, local2bary, unit_simplex_volume,
+  unit_vertices,
 };
 use crate::Dim;
 use crate::linalg::{Matrix, RowVector, RowVectorView, Vector, VectorView};
@@ -108,7 +108,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
     } else {
       (a.transpose() * &a).determinant().sqrt()
     };
-    refsimp_vol(self.dim_intrinsic()) * factor
+    unit_simplex_volume(self.dim_intrinsic()) * factor
   }
   pub fn vol(&self) -> f64 {
     self.det().abs()
@@ -193,7 +193,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
   /// Coordinate subsimplices: each face of the simplex, realized in the same
   /// space by selecting its vertices' columns.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords<S>> + use<'_, S> {
-    Simplex::standard(self.dim_intrinsic())
+    Simplex::unit(self.dim_intrinsic())
       .subsimps(sub_dim)
       .collect::<Vec<_>>()
       .into_iter()
@@ -226,10 +226,10 @@ impl<S: CoordSpace> SimplexCoords<S> {
 }
 
 impl SimplexCoords<LocalCartesian> {
-  /// The standard simplex: the coordinate realization of the reference cell,
+  /// The unit simplex: the coordinate realization of the reference cell,
   /// whose local coordinates *are* the cartesian coordinates of its own chart.
-  pub fn standard(ndim: Dim) -> Self {
-    Self::new(ref_vertices(ndim))
+  pub fn unit(ndim: Dim) -> Self {
+    Self::new(unit_vertices(ndim))
   }
 }
 
@@ -252,35 +252,35 @@ impl<S: CoordSpace> std::fmt::Debug for SimplexCoords<S> {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::atlas::{ref_bary, ref_difbarys};
+  use crate::atlas::{unit_bary, unit_difbarys};
 
   use approx::assert_relative_eq;
 
-  /// The standard simplex is the coordinate realization of the reference chart:
+  /// The unit simplex is the coordinate realization of the reference chart:
   /// its local coordinates *are* the barycentric-derived ones.
   #[test]
-  fn standard_barys() {
+  fn unit_barys() {
     for dim in (0..=4usize).map(Dim::from) {
-      let simp = SimplexCoords::standard(dim);
+      let simp = SimplexCoords::unit(dim);
       for pos in simp.coord_iter() {
         let local = Local::new(pos.view().into_owned());
         let computed = simp.global2bary(pos);
         for ibary in 0..simp.nvertices() {
-          let expected = ref_bary(ibary, &local);
+          let expected = unit_bary(ibary, &local);
           assert_eq!(computed[ibary], expected);
         }
       }
     }
   }
 
-  /// The barycentric differentials of the standard simplex are the metric-free
+  /// The barycentric differentials of the unit simplex are the metric-free
   /// reference ones -- which is what lets any form built from them use
-  /// [`ref_difbarys`] and never touch coordinates.
+  /// [`unit_difbarys`] and never touch coordinates.
   #[test]
-  fn standard_difbarys() {
+  fn unit_difbarys_agree() {
     for dim in (0..=4usize).map(Dim::from) {
-      let computed = SimplexCoords::standard(dim).difbarys();
-      assert_relative_eq!(computed, ref_difbarys(dim), epsilon = 1e-12);
+      let computed = SimplexCoords::unit(dim).difbarys();
+      assert_relative_eq!(computed, unit_difbarys(dim), epsilon = 1e-12);
     }
   }
 
@@ -288,7 +288,7 @@ mod test {
   #[test]
   fn local_global_roundtrip() {
     for dim in (1..=3usize).map(Dim::from) {
-      let simp = SimplexCoords::standard(dim);
+      let simp = SimplexCoords::unit(dim);
       let local = Local::from_iterator(dim.index(), (0..dim.index()).map(|i| 0.1 * (i + 1) as f64));
       let global = simp.local2global(&local);
       assert_relative_eq!(

@@ -52,9 +52,9 @@ impl SimplexLengthsSq {
       Self { lengths_sq, dim }
     }
   }
-  /// The reference simplex: edges at the origin vertex are unit, all others
+  /// The unit simplex: edges at the origin vertex are unit, all others
   /// connect two standard basis vertices with squared length $2$.
-  pub fn standard(dim: impl Into<Dim>) -> SimplexLengthsSq {
+  pub fn unit(dim: impl Into<Dim>) -> SimplexLengthsSq {
     let dim = dim.into();
     let lengths_sq: Vec<f64> = combinations((dim + 1).index(), 2)
       .map(|edge| if edge.contains(0) { 1.0 } else { 2.0 })
@@ -185,7 +185,7 @@ pub fn cayley_menger_factor(dim: Dim) -> f64 {
 
 impl SimplexLengthsSq {
   /// Regge calculus: the squared lengths a metric tensor induces on the
-  /// edges of the reference simplex, on any signature.
+  /// edges of the unit simplex, on any signature.
   ///
   /// The spanning (basis) vector $e_i$ points from vertex $0$ to vertex
   /// $i + 1$, so edges from the origin are signed squared basis norms and
@@ -254,7 +254,7 @@ mod test {
   #[test]
   fn metric_tensor_roundtrip() {
     for dim in (1..=4usize).map(Dim::from) {
-      let lengths_sq = SimplexLengthsSq::standard(dim);
+      let lengths_sq = SimplexLengthsSq::unit(dim);
       let roundtrip = SimplexLengthsSq::from_metric_tensor(&lengths_sq.to_metric_tensor());
       assert_relative_eq!(lengths_sq.vector(), roundtrip.vector(), epsilon = 1e-12);
 
@@ -297,7 +297,7 @@ mod test {
       assert!(!regge.is_coordinate_realizable());
       assert_relative_eq!(
         regge.vol(),
-        SimplexLengthsSq::standard(dim).vol(),
+        SimplexLengthsSq::unit(dim).vol(),
         epsilon = 1e-12
       );
     }

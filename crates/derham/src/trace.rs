@@ -3,7 +3,7 @@
 use {
   exterior::{Dim, ExteriorGrade, MultiForm, exterior_power},
   multiindex::Combination,
-  simplicial::{atlas::ref_face_spanning_vectors, linalg::Matrix},
+  simplicial::{atlas::unit_face_spanning_vectors, linalg::Matrix},
 };
 
 /// The trace $tr_tau = iota_tau^*: Lambda^k (T^* K) -> Lambda^k (T^* tau)$ onto
@@ -37,7 +37,7 @@ impl FaceTrace {
   ) -> Self {
     let (cell_dim, grade) = (cell_dim.into(), grade.into());
     let face_dim = Dim::from(positions.card() - 1);
-    let inclusion = ref_face_spanning_vectors(cell_dim, positions);
+    let inclusion = unit_face_spanning_vectors(cell_dim, positions);
     Self {
       map: exterior_power(&inclusion, grade).transpose(),
       face_dim,
@@ -128,7 +128,7 @@ mod test {
   #[test]
   fn traces_compose_along_a_chain_of_faces() {
     for dim in (0..=4).map(Dim::from) {
-      let cell = Simplex::standard(dim);
+      let cell = Simplex::unit(dim);
       for tau_positions in combinations(dim.index() + 1, dim.index().max(1)) {
         let tau = cell.select(tau_positions);
         for rho_positions in combinations(tau.nvertices(), tau.nvertices().div_ceil(2)) {

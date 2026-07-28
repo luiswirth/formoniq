@@ -9,7 +9,7 @@
 //! `geometry::refine`), keyed off the same [`Subdivision`].
 //!
 //! Every cell is subdivided by the one reference pattern
-//! ([`ReferenceRefinement`](crate::atlas::refine::ReferenceRefinement)),
+//! ([`UnitRefinement`](crate::atlas::refine::UnitRefinement)),
 //! relabelled onto the cell's vertices. New vertices
 //! shared between cells are identified by the coarse simplex they are supported
 //! on together with their barycentric weights there -- a key both incident
@@ -22,7 +22,7 @@ use super::{
   simplex::Simplex, skeleton::Skeleton,
 };
 use crate::{
-  atlas::{LocalCartesian, SimplexCoords, ref_refinement},
+  atlas::{LocalCartesian, SimplexCoords, unit_refinement},
   linalg::{Matrix, Vector},
 };
 
@@ -113,7 +113,7 @@ impl Complex {
       "an ordering must cover exactly this complex's cells"
     );
     let dim = self.dim();
-    let pattern = ref_refinement(dim, refinement);
+    let pattern = unit_refinement(dim, refinement);
     let ncoarse_vertices = self.vertices().len();
 
     // Global labels for the new (non-coarse) vertices, keyed by the coarse
@@ -331,11 +331,11 @@ mod test {
   /// tetrahedron into 8 over 10. The classical Bank/Bey counts.
   #[test]
   fn red_refinement_classical_counts() {
-    let tri = Complex::standard(Dim::new(2)).refine(2);
+    let tri = Complex::unit(Dim::new(2)).refine(2);
     assert_eq!(tri.complex().nsimplices(Dim::new(2)), 4);
     assert_eq!(tri.nvertices(), 6);
 
-    let tet = Complex::standard(Dim::new(3)).refine(2);
+    let tet = Complex::unit(Dim::new(3)).refine(2);
     assert_eq!(tet.complex().nsimplices(Dim::new(3)), 8);
     assert_eq!(tet.nvertices(), 10);
   }
@@ -344,7 +344,7 @@ mod test {
   /// the cell count for every dimension.
   #[test]
   fn refine_degenerate_and_identity() {
-    let points = Complex::standard(Dim::new(0)).refine(3);
+    let points = Complex::unit(Dim::new(0)).refine(3);
     assert_eq!(points.complex().nsimplices(Dim::new(0)), 1);
     assert_eq!(points.nvertices(), 1);
 

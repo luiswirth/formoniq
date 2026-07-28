@@ -162,7 +162,7 @@ mod test {
   #[test]
   #[should_panic(expected = "is not a cell")]
   fn a_point_of_a_face_has_no_chart() {
-    let complex = Complex::standard(Dim::new(2));
+    let complex = Complex::unit(Dim::new(2));
     let edge = complex.skeleton(Dim::new(1)).handle_iter().next().unwrap();
     let point = MeshPoint::barycenter(edge.idx());
     point.chart(&complex);
@@ -173,7 +173,7 @@ mod test {
   #[test]
   fn support_is_the_smallest_carrying_face() {
     for dim in (1..=3usize).map(Dim::from) {
-      let complex = Complex::standard(dim);
+      let complex = Complex::unit(dim);
       let cell = complex.cells().handle_iter().next().unwrap();
 
       for face_dim in dim.range_inclusive() {

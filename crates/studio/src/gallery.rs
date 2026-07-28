@@ -17,7 +17,7 @@ use derham::cochain::Cochain;
 use exterior::ExteriorGrade;
 use simplicial::{
   Dim,
-  geometry::coord::mesh::{MeshCoords, standard_coord_complex},
+  geometry::coord::mesh::{MeshCoords, unit_coord_complex},
   topology::{complex::Complex, simplex::Simplex},
 };
 
@@ -401,7 +401,7 @@ impl MeshSource {
         Ok((topology, coords.embed_euclidean((*dim).max(3))))
       }
       MeshSource::ReferenceCell { dim } => {
-        let (topology, coords) = standard_coord_complex(*dim);
+        let (topology, coords) = unit_coord_complex(*dim);
         // A reference cell of `dim < 3` embeds as itself in the `z = 0` plane;
         // a no-op once `dim >= 3`.
         Ok((topology, coords.embed_euclidean((*dim).max(3))))

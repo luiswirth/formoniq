@@ -259,12 +259,12 @@ mod test {
     }
   }
 
-  /// The standard simplex, at every dimension including the 0-complex whose
+  /// The unit simplex, at every dimension including the 0-complex whose
   /// constraint set is empty.
   #[test]
-  fn standard_simplex_is_orientable() {
+  fn unit_simplex_is_orientable() {
     for dim in (0..=4usize).map(Dim::from) {
-      let complex = Complex::standard(dim);
+      let complex = Complex::unit(dim);
       assert!(complex.is_orientable());
       assert_coherent(&complex);
     }

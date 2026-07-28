@@ -35,7 +35,7 @@ use {
   multiindex::Combination,
   simplicial::{
     Dim,
-    atlas::{Chart, MeshPoint, SimplexQuadRule, ref_face_spanning_vectors, refsimp_vol},
+    atlas::{Chart, MeshPoint, SimplexQuadRule, unit_face_spanning_vectors, unit_simplex_volume},
     topology::complex::Complex,
   },
 };
@@ -84,7 +84,7 @@ pub fn derham_map(
 /// carries, and none at all if it carries none.
 pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> MultiVector {
   let grade = positions.card() - 1;
-  let spanning = ref_face_spanning_vectors(cell_dim, positions);
+  let spanning = unit_face_spanning_vectors(cell_dim, positions);
   let coeffs = exterior_power(&spanning, grade).column(0).into_owned();
   MultiVector::new(coeffs, cell_dim, grade)
 }
@@ -112,7 +112,7 @@ pub fn integrate_face(
   // does not depend on the supporting cell.
   let trace = FaceTrace::new(chart.dim(), positions, grade);
   let integrand = |point: &MeshPoint| trace.top_coefficient(&field.at(point));
-  qr.integrate_face(chart, positions, &integrand, refsimp_vol(grade))
+  qr.integrate_face(chart, positions, &integrand, unit_simplex_volume(grade))
 }
 
 #[cfg(test)]

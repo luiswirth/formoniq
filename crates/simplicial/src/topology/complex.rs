@@ -99,9 +99,9 @@ impl Complex {
 }
 
 impl Complex {
-  pub fn standard(dim: impl Into<Dim>) -> Self {
+  pub fn unit(dim: impl Into<Dim>) -> Self {
     let dim = dim.into();
-    Self::from_cells(Skeleton::standard(dim))
+    Self::from_cells(Skeleton::unit(dim))
   }
   pub fn dim(&self) -> Dim {
     (self.skeletons.len() - 1).into()
@@ -259,7 +259,7 @@ impl Complex {
 #[cfg(test)]
 mod test {
   use crate::Dim;
-  use crate::topology::simplex::{Simplex, nsubsimplices, standard_boundary_operator};
+  use crate::topology::simplex::{Simplex, nsubsimplices, unit_boundary_operator};
 
   use super::*;
   use crate::linalg::Matrix;
@@ -348,11 +348,11 @@ mod test {
   }
 
   #[test]
-  fn standard_boundary_operator_agrees_with_complex() {
+  fn unit_boundary_operator_agrees_with_complex() {
     for dim in (1..=4usize).map(Dim::from) {
-      let complex = Complex::standard(dim);
+      let complex = Complex::unit(dim);
       for k in dim.range_inclusive() {
-        let combinatorial = standard_boundary_operator(dim, k);
+        let combinatorial = unit_boundary_operator(dim, k);
         let from_complex = Matrix::from(complex.boundary_operator(k));
         assert_eq!(combinatorial, from_complex);
       }
@@ -362,10 +362,10 @@ mod test {
   #[test]
   fn incidence() {
     let dim = Dim::new(3);
-    let complex = Complex::standard(dim);
+    let complex = Complex::unit(dim);
     let cell = complex.cells().handle_iter().next().unwrap();
 
-    let cell_simplex = Simplex::standard(dim);
+    let cell_simplex = Simplex::unit(dim);
     for dim_sub in dim.range_inclusive() {
       let subs: Vec<_> = cell.faces(dim_sub).collect();
       assert_eq!(subs.len(), nsubsimplices(dim, dim_sub));
@@ -395,7 +395,7 @@ mod test {
   /// Navigation on a triangulation: facets, neighbors, star and link behave
   /// as their topological definitions demand.
   #[test]
-  fn ref_navigation() {
+  fn unit_navigation() {
     use crate::mesher::cartesian::CartesianGrid;
 
     let (topology, _) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();

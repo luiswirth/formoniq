@@ -10,7 +10,7 @@ pub mod coord;
 pub mod metric;
 pub mod refine;
 
-use crate::{Dim, atlas::refsimp_vol, topology::complex::Complex};
+use crate::{Dim, atlas::unit_simplex_volume, topology::complex::Complex};
 
 use gramian::Metric;
 
@@ -19,11 +19,11 @@ use self::metric::mesh::MeshLengthsSq;
 /// The volume of a cell carrying the given metric tensor,
 /// $vol(K) = vol(hat(K)) sqrt(abs(det g))$.
 ///
-/// The chart contributes [`refsimp_vol`], the metric the factor
+/// The chart contributes [`unit_simplex_volume`], the metric the factor
 /// $sqrt(abs(det g))$ -- the whole of the geometry, in one scalar: the same
 /// formula on any signature, the absolute value doing nothing Riemannian-side.
 pub fn cell_volume(metric: &Metric) -> f64 {
-  refsimp_vol(metric.dim()) * metric.det_sqrt()
+  unit_simplex_volume(metric.dim()) * metric.det_sqrt()
 }
 
 /// Discrete Gaussian curvature at every vertex of a 2-dimensional simplicial

@@ -77,8 +77,8 @@ impl MeshCoords {
 }
 
 impl MeshCoords {
-  pub fn standard(ndim: impl Into<Dim>) -> Self {
-    Self::new(crate::atlas::ref_vertices(ndim.into()))
+  pub fn unit(ndim: impl Into<Dim>) -> Self {
+    Self::new(crate::atlas::unit_vertices(ndim.into()))
   }
   /// Vertices of an embedding into Euclidean space: the ambient inner product
   /// is the standard one.
@@ -274,9 +274,9 @@ pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simpl
   (cells, coords)
 }
 
-pub fn standard_coord_complex(dim: impl Into<Dim>) -> (Complex, MeshCoords) {
+pub fn unit_coord_complex(dim: impl Into<Dim>) -> (Complex, MeshCoords) {
   let dim = dim.into();
-  let topology = Complex::standard(dim);
+  let topology = Complex::unit(dim);
 
   let coords = topology
     .vertices()

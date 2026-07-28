@@ -18,7 +18,7 @@ use crate::Dim;
 use crate::linalg::{Vector, VectorView};
 use multiindex::{Combination, Composition, binomial, factorial_f64};
 
-/// A quadrature rule on the reference simplex, with barycentric nodes.
+/// A quadrature rule on the unit simplex, with barycentric nodes.
 pub struct SimplexQuadRule {
   dim: Dim,
   /// The nodes, in barycentric coordinates.
@@ -63,7 +63,7 @@ impl SimplexQuadRule {
       }
     }
 
-    // The formula integrates over the unnormalized reference simplex of
+    // The formula integrates over the unit simplex of
     // volume 1/n!; normalize the weights to sum to 1.
     weights /= weights.sum();
 
@@ -103,7 +103,7 @@ impl SimplexQuadRule {
   ///
   /// The one place the weights are actually summed; every other method here is
   /// this one with the nodes placed somewhere.
-  pub fn integrate_ref<F>(&self, f: &F, vol: f64) -> f64
+  pub fn integrate_unit<F>(&self, f: &F, vol: f64) -> f64
   where
     F: Fn(BaryRef) -> f64,
   {
@@ -124,7 +124,7 @@ impl SimplexQuadRule {
   ///
   /// The volume of the cell is the only thing the geometry contributes -- for a
   /// metric $g$ it is `cell_volume(g)`, and for the chart alone it is
-  /// [`refsimp_vol`](super::refsimp_vol).
+  /// [`unit_simplex_volume`](super::unit_simplex_volume).
   pub fn integrate_cell<F>(&self, chart: Chart, f: &F, vol: f64) -> f64
   where
     F: Fn(&MeshPoint) -> f64,
@@ -134,7 +134,7 @@ impl SimplexQuadRule {
       chart.dim(),
       "Quadrature rule of the wrong dimension."
     );
-    self.integrate_ref(&|bary| f(&chart.point(bary.to_coords())), vol)
+    self.integrate_unit(&|bary| f(&chart.point(bary.to_coords())), vol)
   }
 
   /// $integral_sigma f$ over a face of a cell, of a function of the points of
@@ -153,7 +153,7 @@ impl SimplexQuadRule {
       positions.card(),
       "Face of the wrong dimension."
     );
-    self.integrate_ref(&|bary| f(&chart.point_on_face(positions, bary)), vol)
+    self.integrate_unit(&|bary| f(&chart.point_on_face(positions, bary)), vol)
   }
 }
 
@@ -161,12 +161,12 @@ impl SimplexQuadRule {
 mod tests {
   use super::*;
   use crate::Dim;
-  use crate::atlas::refsimp_vol;
+  use crate::atlas::unit_simplex_volume;
 
   use approx::assert_abs_diff_eq;
   use itertools::Itertools;
 
-  /// The exact integral of a barycentric monomial over the reference simplex:
+  /// The exact integral of a barycentric monomial over the unit simplex:
   /// $integral_Delta lambda^alpha = n! alpha_0 ! dots.c alpha_n ! /
   /// (n + |alpha|)! dot vol$.
   fn exact_barycentric_monomial(alpha: &[usize]) -> f64 {
@@ -174,7 +174,7 @@ mod tests {
     let total: usize = alpha.iter().sum();
     let numerator: f64 =
       factorial_f64(n) * alpha.iter().map(|&a| factorial_f64(a)).product::<f64>();
-    numerator / factorial_f64(n + total) * refsimp_vol(n)
+    numerator / factorial_f64(n + total) * unit_simplex_volume(n)
   }
 
   /// Grundmann-Möller integrates every barycentric monomial of degree
@@ -192,7 +192,7 @@ mod tests {
                 .map(|i| bary[i].powi(alpha.parts()[i] as i32))
                 .product()
             };
-            let computed = quadrule.integrate_ref(&monomial, refsimp_vol(dim));
+            let computed = quadrule.integrate_unit(&monomial, unit_simplex_volume(dim));
             let exact = exact_barycentric_monomial(alpha.parts());
             assert_abs_diff_eq!(computed, exact, epsilon = 1e-12);
           }
@@ -227,7 +227,7 @@ mod tests {
           .chain(std::iter::once(degree))
           .chain(std::iter::repeat_n(0, dim.index() - 1))
           .collect_vec();
-        let computed = quadrule.integrate_ref(&monomial, refsimp_vol(dim));
+        let computed = quadrule.integrate_unit(&monomial, unit_simplex_volume(dim));
         let exact = exact_barycentric_monomial(&alpha);
         assert_abs_diff_eq!(computed, exact, epsilon = 1e-12);
       }
