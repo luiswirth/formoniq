@@ -28,7 +28,7 @@
 //! $sigma$, on which the two charts agree by exactly that map. The law is
 //! `derham_map_is_independent_of_supporting_cell` below.
 
-use crate::{cochain::Cochain, section::Section};
+use crate::{cochain::Cochain, section::Section, trace::FaceTrace};
 
 use {
   exterior::{Covariant, MultiVector, exterior_power},
@@ -107,8 +107,11 @@ pub fn integrate_face(
   assert_eq!(qr.dim(), grade);
   assert_eq!(field.grade(), grade);
 
-  let tangent_blade = face_tangent_blade(chart.dim(), positions);
-  let integrand = |point: &MeshPoint| field.at(point).pairing(&tangent_blade);
+  // The integrand is the trace at the face's own grade: integrating a k-form
+  // over a k-simplex sees only its tangential part, which is why the answer
+  // does not depend on the supporting cell.
+  let trace = FaceTrace::new(chart.dim(), positions, grade);
+  let integrand = |point: &MeshPoint| trace.top_coefficient(&field.at(point));
   qr.integrate_face(chart, positions, &integrand, refsimp_vol(grade))
 }
 
