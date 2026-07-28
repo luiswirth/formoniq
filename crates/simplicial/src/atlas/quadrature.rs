@@ -12,8 +12,8 @@
 //! manifold, in that cell's chart -- and the geometry enters through nothing but
 //! the scalar volume factor.
 
-use super::{Bary, BaryRef, MeshPoint};
-use crate::{Dim, topology::handle::SimplexIdx};
+use super::{Bary, BaryRef, Chart, ChartExt, MeshPoint};
+use crate::Dim;
 
 use crate::linalg::{Vector, VectorView};
 use multiindex::{Combination, Composition, binomial, factorial_f64};
@@ -118,19 +118,23 @@ impl SimplexQuadRule {
   /// $integral_K f$ over a cell of the manifold, of a function of the points of
   /// the manifold: the nodes are [`MeshPoint`]s in the chart of that cell.
   ///
+  /// Takes the [`Chart`], not a bare index: what integrating over a cell needs
+  /// is the frame that turns the reference nodes into points of the manifold,
+  /// and the witness is what says the simplex has one.
+  ///
   /// The volume of the cell is the only thing the geometry contributes -- for a
   /// metric $g$ it is `cell_volume(g)`, and for the chart alone it is
   /// [`refsimp_vol`](super::refsimp_vol).
-  pub fn integrate_cell<F>(&self, cell: SimplexIdx, f: &F, vol: f64) -> f64
+  pub fn integrate_cell<F>(&self, chart: Chart, f: &F, vol: f64) -> f64
   where
     F: Fn(&MeshPoint) -> f64,
   {
     assert_eq!(
       self.dim,
-      cell.dim(),
+      chart.dim(),
       "Quadrature rule of the wrong dimension."
     );
-    self.integrate_ref(&|bary| f(&MeshPoint::new(cell, bary.to_coords())), vol)
+    self.integrate_ref(&|bary| f(&chart.point(bary.to_coords())), vol)
   }
 
   /// $integral_sigma f$ over a face of a cell, of a function of the points of
@@ -140,7 +144,7 @@ impl SimplexQuadRule {
   /// A face carries no chart of its own, so this is the only way to integrate
   /// over one -- and the answer does not depend on which supporting cell is
   /// used, because the two differ by a [`Transition`](super::Transition).
-  pub fn integrate_face<F>(&self, cell: SimplexIdx, positions: &Combination, f: &F, vol: f64) -> f64
+  pub fn integrate_face<F>(&self, chart: Chart, positions: &Combination, f: &F, vol: f64) -> f64
   where
     F: Fn(&MeshPoint) -> f64,
   {
@@ -149,7 +153,7 @@ impl SimplexQuadRule {
       positions.card(),
       "Face of the wrong dimension."
     );
-    self.integrate_ref(&|bary| f(&MeshPoint::on_face(cell, positions, bary)), vol)
+    self.integrate_ref(&|bary| f(&chart.point_on_face(positions, bary)), vol)
   }
 }
 

@@ -35,8 +35,8 @@ use {
   multiindex::Combination,
   simplicial::{
     Dim,
-    atlas::{MeshPoint, SimplexQuadRule, ref_face_spanning_vectors, refsimp_vol},
-    topology::{complex::Complex, handle::SimplexIdx},
+    atlas::{Chart, MeshPoint, SimplexQuadRule, ref_face_spanning_vectors, refsimp_vol},
+    topology::complex::Complex,
   },
 };
 
@@ -65,7 +65,7 @@ pub fn derham_map(
     .map(|simp| {
       let cell = simp.cells().next().expect("Every simplex has a cell.");
       let positions = simp.simplex().relative_to(cell.simplex());
-      integrate_face(field, cell.idx(), &positions, &qr)
+      integrate_face(field, cell, &positions, &qr)
     })
     .collect::<Vec<_>>()
     .into();
@@ -99,7 +99,7 @@ pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> MultiVector
 /// no metric anywhere.
 pub fn integrate_face(
   field: &impl Section<Covariant>,
-  cell: SimplexIdx,
+  chart: Chart,
   positions: &Combination,
   qr: &SimplexQuadRule,
 ) -> f64 {
@@ -107,9 +107,9 @@ pub fn integrate_face(
   assert_eq!(qr.dim(), grade);
   assert_eq!(field.grade(), grade);
 
-  let tangent_blade = face_tangent_blade(cell.dim(), positions);
+  let tangent_blade = face_tangent_blade(chart.dim(), positions);
   let integrand = |point: &MeshPoint| field.at(point).pairing(&tangent_blade);
-  qr.integrate_face(cell, positions, &integrand, refsimp_vol(grade))
+  qr.integrate_face(chart, positions, &integrand, refsimp_vol(grade))
 }
 
 #[cfg(test)]
@@ -218,7 +218,7 @@ mod test {
           .cells()
           .map(|cell| {
             let positions = edge.simplex().relative_to(cell.simplex());
-            integrate_face(&pulled, cell.idx(), &positions, &qr)
+            integrate_face(&pulled, cell, &positions, &qr)
           })
           .collect();
 

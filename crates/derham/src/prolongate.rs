@@ -101,7 +101,7 @@ pub fn prolongation_matrix(
         dim,
         grade,
       };
-      let entry = integrate_face(&block, cell.idx(), &positions, &qr);
+      let entry = integrate_face(&block, cell, &positions, &qr);
       if entry != 0.0 {
         coo.push(row, tau.kidx(), entry);
       }
