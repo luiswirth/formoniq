@@ -498,41 +498,23 @@ impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, 
 /// $$ a_K (omega, eta) = integral_K inner(iota_v dif omega, eta) vol
 ///    + integral_(diff K) (iota_v omega) wedge star eta. $$
 ///
-/// Cartan's formula $cal(L)_v = iota_v dif + dif iota_v$ gives the two terms,
-/// and the second is a boundary integral rather than a volume one because the
-/// shape functions are coclosed on a cell: integrating $dif iota_v omega$ by
-/// parts moves the differential onto the test function, and $delta eta = 0$
-/// leaves only $diff K$. So the second term is *entirely* facet-supported, and
-/// only $iota_v dif$ survives in the interior.
+/// Cartan's $cal(L)_v = iota_v dif + dif iota_v$ gives the two terms. The
+/// second is a boundary integral because the shape functions are coclosed on a
+/// cell, so integrating it by parts leaves nothing in the interior. The two
+/// terms are the two degenerate grades, and so cover the classical pair:
+/// advective form at $k = 0$, conservation form at $k = n$.
 ///
-/// One operator covers the classical pair, the two Cartan terms being exactly
-/// the two degenerate grades: at $k = 0$ it is $iota_v dif f$, advective form,
-/// and at $k = n$ it is $dif iota_v mu$, conservation form.
+/// `velocity` is a **vector field**, not a 1-form, and nothing is sharped here:
+/// $iota_v$ and $dif$ are metric-free, and the metric enters only through the
+/// $L^2$ pairing and the star.
 ///
-/// `velocity` is a **vector field**, not a 1-form: $cal(L)_v$ differentiates
-/// along $v$'s flow and $iota_v$ contracts with a vector, so the argument is
-/// contravariant and nothing is sharped here. A caller holding a 1-form sharps
-/// it first, where the metric dependence is visible; $iota_v$ and $dif$ stay
-/// metric-free, and the metric enters only through the $L^2$ pairing and the
-/// star.
-///
-/// **Central and unstabilized**: each cell integrates its own trace over a
-/// shared facet, so no numerical flux is chosen and the neighbors' disagreement
-/// is the whole of the coupling.
-///
-/// Conservative, exactly so at the ends of the grade range. The antisymmetry
-/// defect is $integral_(diff K) inner(omega, eta) iota_v vol$, and it vanishes
-/// wherever neighboring facet terms cancel: at $k = 0$ the shape functions are
-/// continuous, at $k = n$ they are constant per cell and what is left is
-/// $integral_K div v$. There the operator is skew and the $L^2$ norm is
-/// preserved exactly; between the two ends it is not.
-///
-/// The price is *dispersion*. Carrying no dissipation it damps nothing, so the
-/// phase error of the modes the mesh barely resolves persists as oscillation.
-/// Conservation is silent about this: skewness pins the spectrum to the
-/// imaginary axis and says nothing about where along it each mode sits, which
-/// is precisely what dispersion is. Upwinding buys monotonicity by paying that
-/// conservation away, and is the only part of this that needs a neighbor.
+/// **Central and unstabilized**: each cell integrates its own trace of a shared
+/// facet, so no numerical flux is chosen. Conservative at both ends of the
+/// grade range, where the defect $integral_(diff K) inner(omega, eta) iota_v
+/// vol$ vanishes: the shape functions are continuous at $k = 0$ and constant
+/// per cell at $k = n$. Dispersive throughout -- it damps nothing, so the phase
+/// error of barely resolved modes persists as oscillation, which conservation
+/// does not see.
 pub struct LieDerivativeElmat<'a, V> {
   velocity: &'a V,
   grade: ExteriorGrade,
