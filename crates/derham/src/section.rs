@@ -532,7 +532,7 @@ mod test {
       for x in probe_points(dim, 4) {
         let a = scan.at_global(&x).unwrap();
         let b = fast.at_global(&x).unwrap();
-        assert_relative_eq!(a.coeffs(), b.coeffs(), epsilon = 1e-12);
+        assert_relative_eq!(a.components(), b.components(), epsilon = 1e-12);
       }
     }
   }
@@ -558,8 +558,8 @@ mod test {
 
       for x in probe_points(dim, 4) {
         assert_relative_eq!(
-          sampled.at_global(&x).unwrap().coeffs(),
-          field.at(&x).coeffs(),
+          sampled.at_global(&x).unwrap().components(),
+          field.at(&x).components(),
           epsilon = 1e-12
         );
       }
@@ -590,8 +590,8 @@ mod test {
       for cell in topology.cells().handle_iter() {
         let point = MeshPoint::barycenter(cell.idx());
         assert_relative_eq!(
-          flat.at(&point).coeffs(),
-          through.at(&point).coeffs(),
+          flat.at(&point).components(),
+          through.at(&point).components(),
           epsilon = 1e-12
         );
       }
@@ -632,8 +632,8 @@ mod test {
 
       let staged = form.at(&u).pullback(&dchi).pullback(&dpsi);
       assert_relative_eq!(
-        section.at(&point).coeffs(),
-        staged.coeffs(),
+        section.at(&point).components(),
+        staged.components(),
         epsilon = 1e-12
       );
     }
@@ -666,8 +666,8 @@ mod test {
         for cell in topology.cells().handle_iter() {
           let point = MeshPoint::barycenter(cell.idx());
           assert_relative_eq!(
-            star_star.at(&point).coeffs(),
-            &(sign.as_f64() * whitney.at(&point)).coeffs(),
+            star_star.at(&point).components(),
+            &(sign.as_f64() * whitney.at(&point)).components(),
             epsilon = 1e-12
           );
         }

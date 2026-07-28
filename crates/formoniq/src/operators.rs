@@ -1,6 +1,6 @@
 use {
   derham::{
-    interpolate::{form::WhitneyCoeffs, samples::LsfSamples},
+    interpolate::{form::WhitneyExpansion, samples::LsfSamples},
     section::Section,
     trace::FaceTrace,
   },
@@ -59,7 +59,7 @@ pub struct HodgeMassElmat {
   dim: Dim,
   grade: ExteriorGrade,
   /// $C$, the Whitney basis as a map into blades times coordinates.
-  coeffs: WhitneyCoeffs,
+  expansion: WhitneyExpansion,
   /// $Lambda^k$ of the reference barycentric differentials: the pullback
   /// matrix taking formal barycentric $k$-blades to reference $k$-forms.
   difbarys_power: Matrix,
@@ -72,7 +72,7 @@ impl HodgeMassElmat {
     Self {
       dim,
       grade,
-      coeffs: WhitneyCoeffs::new(dim, grade),
+      expansion: WhitneyExpansion::new(dim, grade),
       difbarys_power: exterior_power(&unit_difbarys(dim), grade),
       bary_gramian: unit_bary_gramian(dim),
     }
@@ -97,7 +97,7 @@ impl ElMatProvider for HodgeMassElmat {
 
     cell_volume(metric)
       * self
-        .coeffs
+        .expansion
         .pullback(&blade_gramian, self.bary_gramian.matrix())
   }
 }
@@ -456,7 +456,7 @@ impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, 
       chart,
       cell_volume(metric),
       |point, row, col| {
-        self.coefficient.at(point).coeffs()[0] * inner.inner(row.coeffs(), col.coeffs())
+        self.coefficient.at(point).components()[0] * inner.inner(row.components(), col.components())
       },
     )
   }
@@ -556,7 +556,7 @@ impl<V: Sync + Section<Contravariant>> ElMatProvider for LieDerivativeElmat<'_, 
       cell_volume(metric),
       |point, test, trial_dif| {
         let advected = trial_dif.interior_product(&self.velocity.at(point));
-        inner.inner(advected.coeffs(), test.coeffs())
+        inner.inner(advected.components(), test.components())
       },
     );
 
@@ -615,7 +615,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
       &self.shapes,
       chart,
       cell_volume(metric),
-      |point, whitney| inner.inner(self.source.at(point).coeffs(), whitney.coeffs()),
+      |point, whitney| inner.inner(self.source.at(point).components(), whitney.components()),
     )
   }
 }
@@ -666,7 +666,8 @@ mod test {
         coeffs[idof] = 1.0;
         let field = WhitneyInterpolant::new(Cochain::new(grade, coeffs), &refcomplex);
 
-        let interior = WhitneyLsf::unit(dim, dof_simp).dif().coeffs()[0] * unit_simplex_volume(dim);
+        let interior =
+          WhitneyLsf::unit(dim, dof_simp).dif().components()[0] * unit_simplex_volume(dim);
         let boundary = quadrature.integrate_form(chart, &field);
 
         assert_relative_eq!(boundary, interior, epsilon = 1e-12);
@@ -761,7 +762,7 @@ mod test {
         for (jdof, dof_simp) in unit_subsimps(dim, grade).enumerate() {
           let dif_interior = dif_interior_of(dim, dof_simp, &velocity.value);
           let direct = volume.integrate(&test, chart, cell_volume(&metric), |_point, test| {
-            inner.inner(dif_interior.coeffs(), test.coeffs())
+            inner.inner(dif_interior.components(), test.components())
           });
 
           for idof in 0..direct.len() {
@@ -850,7 +851,7 @@ mod test {
         let inner = multiform_gramian(&metric, grade);
         let shapes = LsfSamples::whitney(dim, grade, boundary.nodes());
         let defect = boundary.integrate_pair(&shapes, &shapes, chart, |_point, row, col| {
-          inner.inner(row.coeffs(), col.coeffs()) * flux.clone()
+          inner.inner(row.components(), col.components()) * flux.clone()
         });
 
         largest_defect = largest_defect.max(defect.norm());

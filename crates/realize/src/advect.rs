@@ -216,7 +216,7 @@ fn flow_generator(
     let local = Local::new(vertices.column(i).into_owned());
     let point = MeshPoint::new(cell, local2bary(&local));
     let form = reduced_form(interpolant.eval(&point), metric, sign);
-    vertex_field.set_column(i, form.sharp(metric).coeffs());
+    vertex_field.set_column(i, form.sharp(metric).components());
   }
   unit_difbarys(dim) * vertex_field
 }

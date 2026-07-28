@@ -7,7 +7,7 @@ Dimension and grade are runtime values, nothing is specialized to 2D or 3D.
 ## What it provides
 
 - `ExteriorElement<V: Variance>`:
-  an element of the exterior power Λ^k, as coefficients on colexicographically ordered basis blades.
+  an element of the exterior power Λ^k, as components on colexicographically ordered basis blades.
   The variance is a type parameter:
   `MultiVector` (contravariant, Λ^k V) and `MultiForm` (covariant, Λ^k V*), each the other's dual.
   It fixes the functorial direction, the duality pairing and the choice of g vs. g⁻¹ at the type level:

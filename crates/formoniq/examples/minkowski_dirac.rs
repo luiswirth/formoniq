@@ -147,7 +147,7 @@ fn lorentzian_star_table() {
       .find(|(c, _)| *c != 0.0)
       .expect("star of a blade is a blade");
     let sign = if coeff > 0.0 { '+' } else { '-' };
-    let involution = star_star.coeffs()[blade.rank()];
+    let involution = star_star.components()[blade.rank()];
     println!(
       "  *({:>5}) = {sign}{:<5}   ** = {involution:+.0}",
       blade_name(&blade),
@@ -195,7 +195,7 @@ fn convergence(dim: usize, nsubs: &[usize]) {
   let eta = Metric::minkowski(dim);
   let a = wave_covector(dim);
   let a_sharp = a.sharp(&eta);
-  let a_vec = a.coeffs().clone();
+  let a_vec = a.components().clone();
 
   // The grade-k component of the Clifford action $c_a omega = a wedge omega -
   // iota_(a^sharp) omega$ on the mixed-grade polarization: the wedge raises
