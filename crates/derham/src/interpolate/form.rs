@@ -111,40 +111,18 @@ mod test {
     Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
   }
 
-  /// On a flat cell $delta compose kappa = 0$ on constant forms, of which the
-  /// coclosedness of the Whitney forms is the corollary.
+  /// A corollary of $delta compose kappa = 0$ on constant forms, since
+  /// $W_sigma = k! lambda^* (kappa e_sigma)$: on a constant form
+  /// $diff_i (kappa omega)_(j_1 dots j_k) = omega_(i j_1 dots j_k)$, so
+  /// $delta kappa omega$ contracts the symmetric $g^(i j_1)$ into two
+  /// alternating slots. Lowest order only, where $diff kappa = id$.
   ///
-  /// For constant $omega in Lambda^(k+1)$ the Koszul contraction has
-  /// $(kappa omega)_(j_1 dots j_k) = x^i omega_(i j_1 dots j_k)$, so
-  /// $diff_i (kappa omega)_(j_1 dots j_k) = omega_(i j_1 dots j_k)$ and
+  /// This is why the weak Lie derivative has no volume contribution from
+  /// $dif iota_v$: Cartan's second term is supported on $diff K$ alone.
   ///
-  /// $$ (delta kappa omega)_(j_2 dots j_k)
-  ///    = -g^(i j_1) omega_(i j_1 j_2 dots j_k) = 0, $$
-  ///
-  /// the metric symmetric in $(i, j_1)$ where the form alternates:
-  /// differentiating undoes the insertion, leaving the symmetric metric
-  /// contracted into two slots of an alternating form. Whitney forms follow
-  /// because $W_sigma = k! lambda^* (kappa e_sigma)$ and $lambda^*$ is a
-  /// constant pullback, which preserves the antisymmetry. The classical cases
-  /// are this at $n = 3$: the Nedelec edge elements $a + b times x$ are
-  /// divergence-free, the Raviart-Thomas ones $c(x - x_i)$ radial hence
-  /// curl-free.
-  ///
-  /// The property is *not* what makes the family work -- that is the
-  /// subcomplex property, unisolvence and the commuting projection, all of
-  /// them statements about $dif$ -- and it does not survive past lowest order,
-  /// where $kappa$ meets non-constant polynomials and $diff kappa != id$. What
-  /// it settles here is the weak Lie derivative: integrating $dif iota_v
-  /// omega$ by parts over a cell moves the differential onto the test
-  /// function, so this leaves Cartan's second term supported entirely on
-  /// $diff K$, and in the interior only $iota_v dif$ survives.
-  ///
-  /// Read off the *definition* of $delta$, never a formula for it: $delta
-  /// omega = 0$ exactly when $integral_K inner(dif phi, omega) = 0$ for every
-  /// $phi$ vanishing on $diff K$, which is adjointness with the boundary term
-  /// killed. The bubble $b = product_i lambda_i$ supplies such $phi = b c$,
-  /// vanishing on every facet because each facet kills one barycentric
-  /// coordinate, and then $dif phi = dif b wedge c$ touches no Hodge star.
+  /// Tested by adjointness rather than through a formula for $delta$. The
+  /// bubble $b = product_i lambda_i$ vanishes on every facet, so $phi = b c$
+  /// kills the boundary term and $dif phi = dif b wedge c$ needs no star.
   #[test]
   fn whitney_forms_are_coclosed() {
     for dim in (1..=3).map(Dim::from) {
