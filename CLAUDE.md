@@ -79,7 +79,7 @@ joining the ladder only where `formoniq` consumes it.
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner. `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Backend is `nalgebra-sparse` alone, no faer |
-| `formoniq`   | the FEM engine                      | `assemble`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver), `problems::` (elliptic, dirac, heat, wave, ...) |
+| `formoniq`   | the FEM engine                      | `assemble` and its matrix-free peer `matfree::ElementOperator`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver), `problems::` (elliptic, dirac, heat, wave, ...) |
 | `realize`    | intrinsic data made extrinsic       | `reduce::` (the grade reduction, a $k$-form to the scalar or vector of grade $min(k, n-k)$), `Surface`/`BakedMesh` (the dimension reduction to a render primitive and its $RR^3$ bake), the mark bakes (`glyph`, `advect`, `deposit`, `volume`), `io::` (the `.vtu`/`.obj`/`.mdd` exporters and readers). No graphics dependency |
 | `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), the gallery's `MeshSource × Study` product, a wgpu/winit/egui renderer over `realize`'s primitives, native and wasm |
 
@@ -508,6 +508,17 @@ so growing the ambient never renumbers what is already there.
 and `Permutation::rank` the factorial number system $sum_j d_j dot j!$
 with $d_j = \#{i < j : p_i < p_j}$, neither formula mentions $n$.
 `cartesian::grid` is the same order on radix digits, least significant axis fastest.
+
+**Assembled and matrix-free are peers; scatter and gather are the other axis.**
+$A = sum_K P_K^top M_K P_K$ can be summed once and stored, or summed on every apply,
+and either way the sum can be performed by visiting cells and pushing into shared faces
+or by visiting faces and pulling from the cells at each.
+The two axes are independent, and only the second decides whether a race exists.
+Both directions are readings of one `FaceIncidence`, so a traversal picks the direction
+rather than the algorithm.
+Peers as operators, not as objects:
+a direct factorization and an eigensolve need entries,
+so the assembled form is strictly the more capable one.
 
 **Linalg backends by role.**
 nalgebra dense (`Matrix`/`Vector`) for element-local math
