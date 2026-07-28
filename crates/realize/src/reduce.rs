@@ -405,7 +405,7 @@ mod tests {
   #[test]
   fn scalarize_is_hodge_invariant_off_the_extremal_grades() {
     for dim in 2..=4 {
-      let metric = Metric::standard(dim);
+      let metric = Metric::euclidean(dim);
       for grade in 1..dim {
         let ncoeffs = MultiForm::zero(dim, grade).coeffs().len();
         for i in 0..ncoeffs {
@@ -431,7 +431,7 @@ mod tests {
   #[test]
   fn scalarize_is_signed_at_the_extremal_grades() {
     for dim in 1..=4 {
-      let metric = Metric::standard(dim);
+      let metric = Metric::euclidean(dim);
       let zero_form = MultiForm::new(na::dvector![-1.0], dim, 0);
       assert!((scalarize(zero_form, &metric, None) + 1.0).abs() < 1e-12);
 

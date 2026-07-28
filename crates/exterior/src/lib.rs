@@ -643,7 +643,7 @@ mod tests {
   #[test]
   fn hodge_star_euclidean_is_signed_complement() {
     for dim in 1..=4 {
-      let euclidean = Metric::standard(dim);
+      let euclidean = Metric::euclidean(dim);
       for grade in 0..=dim {
         for blade in exterior_bases(dim, grade) {
           let element = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
@@ -830,7 +830,7 @@ mod tests {
   #[test]
   fn interior_product_adjoint_to_wedge() {
     for dim in 2..=4 {
-      let euclidean = Metric::standard(dim);
+      let euclidean = Metric::euclidean(dim);
       let vector = MultiVector::line(Vector::from_fn(dim, |i, _| (i + 2) as f64));
       let vector_flat = vector.flat(&euclidean);
       for grade in 1..=dim {
@@ -890,9 +890,9 @@ mod tests {
   #[test]
   fn multi_gramian_euclidean() {
     for n in 0..=3 {
-      let gramian = Gramian::standard(n);
+      let gramian = Gramian::euclidean(n);
       for k in 0..=n {
-        let expected_gram = Gramian::standard(binomial(n, k));
+        let expected_gram = Gramian::euclidean(binomial(n, k));
         let computed_gram = multi_gramian(&gramian, k);
         assert_relative_eq!(computed_gram.matrix(), expected_gram.matrix());
       }

@@ -92,13 +92,13 @@ impl Gramian {
     Self::new_unchecked(matrix)
   }
   /// Orthonormal euclidean metric.
-  pub fn standard(dim: Dim) -> Self {
+  pub fn euclidean(dim: Dim) -> Self {
     let matrix = Matrix::identity(dim, dim);
     Self::new_unchecked(matrix)
   }
   /// The flat pseudo-Euclidean form of signature $(p, q)$:
   /// $"diag"(+1, dots.c, +1, -1, dots.c, -1)$ with $p$ pluses followed by $q$
-  /// minuses. `standard` is the case $q = 0$.
+  /// minuses. `euclidean` is the case $q = 0$.
   pub fn pseudo_euclidean(p: usize, q: usize) -> Self {
     let dim = p + q;
     let mut matrix = Matrix::identity(dim, dim);
@@ -110,7 +110,7 @@ impl Gramian {
   /// The Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$ in the mostly-plus
   /// convention: the timelike direction is basis vector $0$, the remaining
   /// $n - 1$ are spacelike, signature $(n - 1, 1)$. The flat model of a
-  /// Lorentzian manifold; its spatial block is exactly `standard(n - 1)`, which
+  /// Lorentzian manifold; its spatial block is exactly `euclidean(n - 1)`, which
   /// is how the Riemannian world sits inside the Lorentzian one.
   pub fn minkowski(dim: Dim) -> Self {
     assert!(dim >= 1, "Minkowski space has at least the time axis.");
@@ -274,10 +274,10 @@ impl Metric {
     }
   }
   /// Orthonormal euclidean metric.
-  pub fn standard(dim: Dim) -> Self {
+  pub fn euclidean(dim: Dim) -> Self {
     Self {
-      vector_gramian: Gramian::standard(dim),
-      covector_gramian: Gramian::standard(dim),
+      vector_gramian: Gramian::euclidean(dim),
+      covector_gramian: Gramian::euclidean(dim),
     }
   }
   /// The Minkowski metric $eta$ (mostly-plus, time along basis vector $0$):
@@ -420,7 +420,7 @@ mod tests {
 
   #[test]
   fn euclidean_angles_and_norms() {
-    let g = Gramian::standard(2);
+    let g = Gramian::euclidean(2);
     let e0 = Vector::from_column_slice(&[1.0, 0.0]);
     let e1 = Vector::from_column_slice(&[0.0, 1.0]);
 
