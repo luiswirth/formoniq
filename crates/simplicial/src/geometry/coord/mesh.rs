@@ -83,7 +83,7 @@ impl MeshCoords {
   /// Vertices of an embedding into Euclidean space: the ambient inner product
   /// is the standard one.
   pub fn new(matrix: Matrix) -> Self {
-    let ambient = Gramian::standard(matrix.nrows());
+    let ambient = Gramian::euclidean(matrix.nrows());
     Self::with_ambient(matrix, ambient)
   }
   /// Vertices of an embedding into the flat pseudo-Euclidean space the given
