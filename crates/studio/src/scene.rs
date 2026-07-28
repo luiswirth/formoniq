@@ -768,7 +768,7 @@ impl Scene {
     let Some(orientation) = topology.orientation().cloned() else {
       return Self::placeholder_on(topology, coords);
     };
-    let flux = unit_speed_flux(&topology, &coords, &metric, &orientation);
+    let flux = mean_speed_flux(&topology, &coords, &metric, &orientation);
     let velocity = WhitneyInterpolant::new(flux, &topology)
       .hodge_star(&topology, &metric, &orientation)
       .sharp(&topology, &metric);
@@ -1217,15 +1217,19 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// normal to $z$ kills $dif z$. On a flat domain the result is a uniform
 /// translation, on a sphere a rigid rotation about the diagonal axis -- with
 /// the two fixed points the hairy ball theorem demands.
-/// [`solenoidal_flux`] scaled to unit peak speed, so a unit of solve time is a
-/// unit of distance and the final time reads as a travel length.
+/// [`solenoidal_flux`] scaled to unit *mean* speed, so a unit of solve time is
+/// a unit of distance travelled and the final time reads as a path length.
+///
+/// The mean and not the peak: a peak is one cell's outlier, and normalizing
+/// against it leaves the field as a whole moving slower than the final time
+/// says.
 ///
 /// The construction fixes the field's *shape* and says nothing about its
 /// magnitude, which comes out of the mesh's edge lengths and would otherwise
 /// vary by a factor of several between meshes -- enough to turn a resolved
 /// transport into an unresolved one at the same final time. Scaling a cochain
 /// is linear all the way to the velocity and leaves the cocycle a cocycle.
-fn unit_speed_flux(
+fn mean_speed_flux(
   topology: &Complex,
   coords: &MeshCoords,
   metric: &simplicial::geometry::metric::mesh::MeshLengthsSq,
@@ -1242,14 +1246,15 @@ fn unit_speed_flux(
     .hodge_star(topology, metric, orientation)
     .sharp(topology, metric);
 
-  let peak = topology
-    .cells()
+  let cells = topology.cells();
+  let mean: f64 = cells
     .handle_iter()
     .map(|cell| probe.at(&ChartExt::barycenter(cell)).coeffs().norm())
-    .fold(0.0, f64::max);
+    .sum::<f64>()
+    / cells.len().max(1) as f64;
 
-  if peak > 0.0 {
-    Cochain::new(flux.grade(), flux.coeffs() / peak)
+  if mean > 0.0 {
+    Cochain::new(flux.grade(), flux.coeffs() / mean)
   } else {
     flux
   }
