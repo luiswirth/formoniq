@@ -1234,6 +1234,7 @@ fn ambient_rotation(coords: &MeshCoords) -> DiffFormClosure {
 }
 
 fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -> Cochain {
+  let geometry = coords.to_edge_lengths_sq(topology);
   let n = coords.dim().index();
   let nvertices = coords.nvertices().max(1) as f64;
   let centroid = coords
@@ -1255,15 +1256,38 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
     .map_or_else(|| centroid.clone(), |c| (*c).into_owned());
   let sigma = 0.25 * extent.max(1e-6);
 
+  let bump = move |x: &Vector| {
+    let r2 = (x - &center).norm_squared();
+    (-r2 / (2.0 * sigma * sigma)).exp()
+  };
+
+  // At top grade the bump is a *density* $f vol$, and the volume form is the
+  // manifold's own, not an ambient blade's pullback. The two agree where the
+  // mesh fills its ambient space, and on a submanifold only this one is right:
+  // the pullback of a fixed ambient $n$-blade is the projection of the tangent
+  // multivector onto it, which changes sign over a curved surface.
+  //
+  // The cochain of an $n$-form is its integral over each cell, so the density
+  // is written directly rather than through a section.
+  if grade == topology.dim() {
+    let coeffs = topology
+      .cells()
+      .handle_iter()
+      .map(|cell| {
+        let vertices = cell.get().simplex().clone();
+        let barycenter: Vector = vertices
+          .iter()
+          .map(|v| coords.coord(v).into_owned())
+          .fold(Vector::zeros(n), |acc, c| acc + c)
+          / vertices.nvertices() as f64;
+        bump(&barycenter) * simplicial::geometry::cell_volume(&geometry.cell_metric(cell))
+      })
+      .collect::<Vec<_>>();
+    return Cochain::new(grade, Vector::from_vec(coeffs));
+  }
+
   let blade = MultiForm::from_blade_signed(n, Sign::Pos, Blade::from_rank(grade.index(), 0));
-  let field = DiffFormClosure::new(
-    move |p| {
-      let r2 = (p.vector() - &center).norm_squared();
-      blade.clone() * (-r2 / (2.0 * sigma * sigma)).exp()
-    },
-    n,
-    grade,
-  );
+  let field = DiffFormClosure::new(move |p| blade.clone() * bump(p.vector()), n, grade);
   let pulled = field.pullback_on(topology, coords);
   derham_map(&pulled, topology, 2)
 }
@@ -1297,6 +1321,24 @@ mod tests {
       }
       assert!(asked > 0, "dimension {dim} produced no field to ask about");
     }
+  }
+
+  /// The top-grade bump is a density, so it is positive everywhere on a
+  /// submanifold too.
+  ///
+  /// Read through a fixed ambient $n$-blade instead, its pullback is the
+  /// projection of the tangent multivector onto that blade, which changes sign
+  /// over a curved surface and vanishes along a whole curve. The sphere is the
+  /// case that catches it; a full-dimensional mesh cannot.
+  #[test]
+  fn the_top_grade_bump_is_a_positive_density() {
+    let seed = Scene::spherical_harmonics(2, 1);
+    let top = ambient_bump(&seed.topology, &seed.coords, seed.topology.dim());
+
+    assert!(
+      top.coeffs().iter().all(|c| *c > 0.0),
+      "the density changes sign"
+    );
   }
 
   /// Advection transports: the trajectory moves the bump without losing or
