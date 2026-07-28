@@ -743,9 +743,9 @@ impl Scene {
   /// counterpart of [`Self::heat`] and [`Self::wave`], on the same initial data
   /// and the same mesh-agnostic footing.
   ///
-  /// The velocity is a rigid rotation about the mesh's centroid, tangent to a
-  /// sphere by construction and Killing on flat domains, so the bump is carried
-  /// without being stretched. The scheme is central and dispersive
+  /// The velocity is exactly divergence-free with
+  /// single-valued facet flux, so grade 0 and top grade are conservative on any
+  /// mesh. The scheme is central and dispersive
   /// ([`LieDerivativeElmat`](formoniq::operators::LieDerivativeElmat)), so what
   /// the trajectory shows next to the transport is the oscillation that costs.
   pub fn advection(
@@ -756,13 +756,21 @@ impl Scene {
     final_time: f64,
   ) -> Self {
     let grade = grade.into();
-    use derham::section::SharpOp;
+    use derham::{
+      interpolate::interpolant::WhitneyInterpolant,
+      section::{SectionOps, SharpOp},
+    };
     use formoniq::problems::advection::{Transport, solve_transport};
 
     let metric = coords.to_edge_lengths_sq(&topology);
-    let rotation = ambient_rotation(&coords);
-    let velocity = rotation
-      .pullback_on(&topology, &coords)
+    let flux = solenoidal_flux(&topology, &coords);
+    // The star reads an orientation, so a non-orientable mesh has no velocity
+    // to build and the field stands still rather than flipping across facets.
+    let Some(orientation) = topology.orientation().cloned() else {
+      return Self::placeholder_on(topology, coords);
+    };
+    let velocity = WhitneyInterpolant::new(flux, &topology)
+      .hodge_star(&topology, &metric, &orientation)
       .sharp(&topology, &metric);
 
     let initial = ambient_bump(&topology, &coords, grade);
@@ -1188,49 +1196,38 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// interior, so its boundary trace is near zero and the flow is free. On a closed
 /// mesh every vertex is on the surface, so the nearest merely also works where a
 /// boundary exists.
-/// The $1$-form of a rigid rotation about the mesh's centroid, in the plane of
-/// the first two ambient axes: $alpha = (A (x - c)) dot dif x$ with $A$ skew.
+/// A discretely divergence-free velocity's flux, as an $(n-1)$-cochain: the de
+/// Rham map of the constant ambient $(n-1)$-form summing every blade.
 ///
-/// One formula for every ambient dimension $N >= 2$, and the generality is the
-/// point. A skew $A$ gives $inner(A x, x) = 0$, so the field is tangent to any
-/// sphere centered at $c$ without projecting, and it is Killing there and on a
-/// flat domain alike -- a transported bump is carried, not stretched. On any
-/// other mesh the pullback keeps its tangential part, which is a velocity field
-/// but need not be divergence-free.
+/// A constant form is closed, pullback and the de Rham map both commute with
+/// $dif$, so the cochain is a *cocycle* exactly: $dif sigma = 0$ is the
+/// discrete divergence, and it vanishes to the digit rather than to the
+/// discretization. Reading the velocity off an $(n-1)$-form is the other half:
+/// the tangential part of one on a facet *is* its flux, so the Whitney space's
+/// conformity makes that flux single-valued between neighbors.
 ///
-/// The hairy ball theorem forbids a nonvanishing field on an even sphere, so
-/// the two fixed points on the rotation axis are not a defect of this choice
-/// but the only shape a sphere velocity can have. In one dimension there is no
-/// rotation and the field is the unit translation, the only Killing field a
-/// $1$-manifold has.
-fn ambient_rotation(coords: &MeshCoords) -> DiffFormClosure {
-  let n = coords.dim().index();
-  let nvertices = coords.nvertices().max(1) as f64;
-  let centroid = coords
-    .coord_iter()
-    .fold(Vector::zeros(n), |acc, c| acc + *c)
-    / nvertices;
-  let extent = coords
-    .coord_iter()
-    .map(|c| (*c - &centroid).norm())
-    .fold(0.0, f64::max)
-    .max(1e-6);
+/// Those are exactly the two conditions the antisymmetry defect needs at the
+/// ends of the grade range, so transport is conservative there on any mesh. In
+/// between it needs a Killing field, which a piecewise-flat manifold generally
+/// does not have -- one would have to fix every hinge of nonzero angle defect
+/// -- and that is what stabilization is for.
+///
+/// Summing every blade rather than picking one keeps the field from vanishing
+/// on a mesh whose tangent planes happen to annihilate that blade: a plane
+/// normal to $z$ kills $dif z$. On a flat domain the result is a uniform
+/// translation, on a sphere a rigid rotation about the diagonal axis -- with
+/// the two fixed points the hairy ball theorem demands.
+fn solenoidal_flux(topology: &Complex, coords: &MeshCoords) -> Cochain {
+  let ambient = coords.dim();
+  let flux_grade = topology.dim() - 1;
+  let coeffs = Vector::from_element(exterior::exterior_dim(ambient, flux_grade), 1.0);
 
-  DiffFormClosure::new(
-    move |p| {
-      let mut v = Vector::zeros(n);
-      if n == 1 {
-        v[0] = 1.0;
-      } else {
-        let r = p.vector() - &centroid;
-        v[0] = -r[1] / extent;
-        v[1] = r[0] / extent;
-      }
-      MultiForm::line(v)
-    },
-    n,
-    Dim::ONE,
-  )
+  let form = DiffFormClosure::new(
+    move |_| MultiForm::new(coeffs.clone(), ambient, flux_grade),
+    ambient,
+    flux_grade,
+  );
+  derham_map(&form.pullback_on(topology, coords), topology, 1)
 }
 
 fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -> Cochain {
@@ -1295,6 +1292,10 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
 #[cfg(test)]
 mod tests {
   use super::*;
+  use derham::{
+    interpolate::interpolant::WhitneyInterpolant,
+    section::{SectionOps, SharpOp},
+  };
   use realize::reduce::{nodal_heights, surface_corner_heights, surface_corner_values};
   use simplicial::topology::handle::SimplexIdx;
 
@@ -1321,6 +1322,44 @@ mod tests {
       }
       assert!(asked > 0, "dimension {dim} produced no field to ask about");
     }
+  }
+
+  /// Grade-0 transport conserves $L^2$ *exactly* on a closed mesh, which is
+  /// what the solenoidal velocity is for.
+  ///
+  /// The antisymmetry defect needs the facet terms of neighboring cells to
+  /// cancel, and at grade 0 that asks two things: $inner(omega, eta)$
+  /// single-valued, which the continuous shape functions give, and the flux
+  /// $iota_v vol$ single-valued, which reading the velocity off an
+  /// $(n-1)$-cochain gives. Exact, not approximate -- and a per-cell star
+  /// without the coherent orientation breaks it, since the field then reverses
+  /// across every facet where colex disagrees with the manifold.
+  #[test]
+  fn grade_zero_transport_conserves_on_a_closed_mesh() {
+    use formoniq::problems::advection::{Transport, assemble_transport, solve_transport};
+
+    let seed = Scene::spherical_harmonics(2, 1);
+    let (topology, coords) = (seed.topology, seed.coords);
+    let metric = coords.to_edge_lengths_sq(&topology);
+    let velocity = WhitneyInterpolant::new(solenoidal_flux(&topology, &coords), &topology)
+      .hodge_star(&topology, &metric, topology.orientation().unwrap())
+      .sharp(&topology, &metric);
+
+    let transport = Transport {
+      grade: Dim::ZERO,
+      velocity: &velocity,
+      quad_degree: 2,
+    };
+    let (mass, _) = assemble_transport(&topology, &metric, &transport);
+    let initial = ambient_bump(&topology, &coords, Dim::ZERO);
+    let frames = solve_transport(&topology, &metric, &transport, 40, 0.01, &initial);
+
+    let l2 = |c: &Cochain| formoniq::linalg::quadratic_form_sparse(&mass, c.coeffs()).sqrt();
+    let drift = (l2(frames.last().unwrap()) - l2(&frames[0])) / l2(&frames[0]);
+    assert!(
+      drift.abs() < 1e-10,
+      "grade-0 transport drifted by {drift:e}"
+    );
   }
 
   /// The top-grade bump is a density, so it is positive everywhere on a
