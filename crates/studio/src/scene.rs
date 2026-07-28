@@ -3,15 +3,11 @@ use std::borrow::Cow;
 use glatt::field::DiffFormClosure;
 use simplicial::Sign;
 use simplicial::geometry::metric::mesh::MeshLengthsSq;
-use simplicial::linalg::Vector;
+use simplicial::linalg::{Matrix, Vector};
 use simplicial::topology::orientation::Orientation;
 
 use crate::ui::Selection;
-use derham::{
-  cochain::Cochain,
-  project::derham_map,
-  section::{CoordFieldExt, SectionOps},
-};
+use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use exterior::{Blade, ExteriorGrade, MultiForm};
 use realize::surface::Surface;
 use simplicial::{
@@ -1202,88 +1198,127 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// interior, so its boundary trace is near zero and the flow is free. On a closed
 /// mesh every vertex is on the surface, so the nearest merely also works where a
 /// boundary exists.
-/// A discretely divergence-free velocity's flux, as an $(n-1)$-cochain.
+/// How many of the lowest eigenmodes to ask for: enough to cover the
+/// degeneracy of the bottom eigenspace, which is the ambient dimension's worth
+/// of rotations on a sphere and rarely more elsewhere. The zero shell is
+/// separated by its eigenvalue rather than by counting.
+const LOWEST_MODES: usize = 4;
+const HARMONIC_EIGENVALUE: f64 = 1e-8;
+
+/// A discretely divergence-free velocity's flux, as an $(n-1)$-cochain: the
+/// smoothest closed one the mesh admits.
 ///
-/// Two constructions, and the first is preferred wherever the mesh earns it.
-///
-/// A **rigid rotation** about the mesh's centroid is Killing wherever it is an
-/// isometry, and then it carries a bump without stretching it. A mesh with that
-/// symmetry says so by making the flux closed: a surface of revolution meshed
-/// on a structured quotient is symmetric to the digit, and one that is not --
-/// an icosphere, a scanned model -- is not. Shear is what makes the difference
-/// visible: a non-Killing field draws a bump into filaments finer than the mesh
-/// can hold, and the central scheme turns those into oscillation.
-///
-/// The fallback is the de Rham map of the constant ambient $(n-1)$-form summing
-/// every blade. A constant form is closed and both pullback and the de Rham map
-/// commute with $dif$, so the cochain is a cocycle *exactly*, on any mesh at
-/// all. Summing the blades rather than picking one keeps it from vanishing
-/// where the tangent planes annihilate that blade. It shears, but it conserves.
-///
-/// Either way the flux is a cocycle, so the discrete divergence vanishes; and
-/// reading the velocity off an $(n-1)$-form is the other half, since the
-/// tangential part of one on a facet *is* its flux, which the Whitney space's
-/// conformity makes single-valued between neighbors. Those are the two
+/// Closed is what conservation needs. $dif sigma = 0$ is the discrete
+/// divergence, and reading the velocity off an $(n-1)$-form is the other half,
+/// since the tangential part of one on a facet *is* its flux, which the Whitney
+/// space's conformity makes single-valued between neighbors. Those are the two
 /// conditions transport needs to conserve at the ends of the grade range.
+///
+/// *Smoothest* is what makes it look like transport. A field that is not
+/// Killing shears, drawing a bump into filaments finer than the mesh holds, and
+/// a central scheme turns those into oscillation. A Killing field generally
+/// does not exist -- on a piecewise-flat manifold it would have to fix every
+/// hinge of nonzero angle defect -- so the reachable ask is the least-shearing
+/// closed field, and that is the minimizer of the Hodge-Laplace Rayleigh
+/// quotient over closed forms.
+///
+/// One construction, and the classical answers fall out of it rather than
+/// being special-cased. The harmonic forms are its zero shell, so a mesh whose
+/// topology supplies them uses one: on a torus that is the circulation around a
+/// handle. Where there are none, the lowest exact mode takes over: on a sphere
+/// $dif$ of the $ell = 1$ eigenfunction, which *is* the rigid rotation, at the
+/// eigenvalue $ell (ell + 1) = 2$ the round sphere has.
+///
+/// The lowest eigenspace is degenerate -- threefold on a sphere, twofold on a
+/// torus -- so a member is chosen by projecting a fixed reference onto it
+/// rather than by taking whichever vector the eigensolver returned first, which
+/// would swing the flow's direction between refinements.
 fn solenoidal_flux(topology: &Complex, coords: &MeshCoords, metric: &MeshLengthsSq) -> Cochain {
-  if let Some(rotation) = rotational_flux(topology, coords, metric) {
-    return rotation;
+  let reference = ambient_blade_flux(topology, coords);
+  smoothest_closed_space(topology, metric)
+    .and_then(|space| project_onto(&reference, &space, topology, metric))
+    .unwrap_or(reference)
+}
+
+/// The lowest-eigenvalue closed $(n-1)$-forms: the harmonic shell where the
+/// topology has one, else $dif$ of the lowest nonzero $(n-2)$-eigenmode, whose
+/// eigenvalue it inherits because $dif$ commutes with the Laplacian.
+fn smoothest_closed_space(topology: &Complex, metric: &MeshLengthsSq) -> Option<Matrix> {
+  use formoniq::{
+    problems::elliptic::{solve_evp, solve_harmonics},
+    whitney_complex::WhitneyComplex,
+  };
+  let flux_grade = topology.dim() - 1;
+  let whitney = WhitneyComplex::new(topology, metric);
+
+  let harmonic = solve_harmonics(&whitney, flux_grade).ok()?;
+  if harmonic.ncols() > 0 {
+    return Some(harmonic);
   }
 
+  let potential_grade = flux_grade - 1;
+  if potential_grade < 0 {
+    return None;
+  }
+  let (values, _, modes) = solve_evp(&whitney, potential_grade, LOWEST_MODES).ok()?;
+  let columns: Vec<Vector> = values
+    .iter()
+    .enumerate()
+    .filter(|(_, value)| **value > HARMONIC_EIGENVALUE)
+    .take(LOWEST_MODES)
+    .map(|(i, _)| {
+      Cochain::new(potential_grade, modes.column(i).into_owned())
+        .dif(topology)
+        .into_coeffs()
+    })
+    .collect();
+  (!columns.is_empty()).then(|| Matrix::from_columns(&columns))
+}
+
+/// The $L^2$ projection of `reference` onto the span of `space`'s columns,
+/// `None` if it lands on nothing there.
+fn project_onto(
+  reference: &Cochain,
+  space: &Matrix,
+  topology: &Complex,
+  metric: &MeshLengthsSq,
+) -> Option<Cochain> {
+  use formoniq::{assemble::assemble_galmat, operators::HodgeMassElmat};
+  use simplicial::linalg::CsrMatrix;
+
+  let grade = reference.grade();
+  let mass = CsrMatrix::from(&assemble_galmat(
+    topology,
+    metric,
+    HodgeMassElmat::new(topology.dim(), grade),
+  ));
+  let weighted = &mass * space;
+  let gram = space.transpose() * &weighted;
+  let rhs = weighted.transpose() * reference.coeffs();
+
+  let coeffs = gram.lu().solve(&rhs)?;
+  let projected = space * coeffs;
+  (projected.norm() > 1e-12 * reference.coeffs().norm()).then(|| Cochain::new(grade, projected))
+}
+
+/// The de Rham map of the constant ambient $(n-1)$-form summing every blade: a
+/// cocycle on any mesh at all, since a constant form is closed and both
+/// pullback and the de Rham map commute with $dif$.
+///
+/// Summing the blades rather than picking one keeps it from vanishing where the
+/// tangent planes annihilate that blade. It shears, so it serves as the
+/// reference a smoother field is chosen against rather than as the velocity.
+fn ambient_blade_flux(topology: &Complex, coords: &MeshCoords) -> Cochain {
   let ambient = coords.dim();
   let flux_grade = topology.dim() - 1;
   let coeffs = Vector::from_element(exterior::exterior_dim(ambient, flux_grade), 1.0);
+
   let form = DiffFormClosure::new(
     move |_| MultiForm::new(coeffs.clone(), ambient, flux_grade),
     ambient,
     flux_grade,
   );
   derham_map(&form.pullback_on(topology, coords), topology, 1)
-}
-
-/// The flux of a rigid rotation about the mesh's centroid, `None` unless the
-/// mesh is symmetric enough under it for the flux to come out closed.
-///
-/// The test is the precondition itself rather than a heuristic: a rotation is
-/// divergence-free exactly when it is an isometry, and the discrete divergence
-/// $dif sigma$ is what says so.
-fn rotational_flux(
-  topology: &Complex,
-  coords: &MeshCoords,
-  metric: &MeshLengthsSq,
-) -> Option<Cochain> {
-  let orientation = topology.orientation()?;
-  let n = coords.dim().index();
-  if n < 2 {
-    return None;
-  }
-  let centroid = coords
-    .coord_iter()
-    .fold(Vector::zeros(n), |acc, c| acc + *c)
-    / coords.nvertices().max(1) as f64;
-
-  let rotation = DiffFormClosure::new(
-    move |p| {
-      let r = p.vector() - &centroid;
-      let mut v = Vector::zeros(n);
-      v[0] = -r[1];
-      v[1] = r[0];
-      MultiForm::line(v)
-    },
-    n,
-    Dim::ONE,
-  );
-  let flux = derham_map(
-    &rotation
-      .pullback_on(topology, coords)
-      .hodge_star(topology, metric, orientation),
-    topology,
-    2,
-  );
-
-  let scale = flux.coeffs().amax();
-  let divergence = flux.dif(topology).coeffs().amax();
-  (scale > 0.0 && divergence <= 1e-10 * scale).then_some(flux)
 }
 
 /// [`solenoidal_flux`] scaled to unit *mean* speed, so a unit of solve time is
@@ -1454,34 +1489,33 @@ mod tests {
     );
   }
 
-  /// The donut's axial rotation is an exact discrete isometry, so transport
-  /// there uses it and carries a bump without shearing it into scales the mesh
-  /// cannot hold. An icosphere is not symmetric under a continuous rotation, so
-  /// it falls back to the construction that is closed on any mesh at all.
+  /// The transport velocity is the smoothest closed field the mesh admits, and
+  /// which of the two branches supplies it is the topology's answer, not a
+  /// threshold's: a torus has harmonic $1$-forms and uses one, a sphere has
+  /// none and falls to the lowest exact mode, which is the rigid rotation.
+  ///
+  /// Either way the flux is a cocycle, which is what conservation at the ends
+  /// of the grade range rests on.
   #[test]
-  fn a_symmetric_mesh_transports_along_its_own_isometry() {
-    let donut = crate::gallery::QuotientSurface::Donut.build(40);
-    let metric = donut.1.to_edge_lengths_sq(&donut.0);
-    assert!(
-      rotational_flux(&donut.0, &donut.1, &metric).is_some(),
-      "the donut of revolution is symmetric about its axis"
-    );
+  fn the_velocity_is_the_smoothest_closed_field() {
+    let donut = crate::gallery::QuotientSurface::Donut.build(20);
+    let sphere = Scene::spherical_harmonics(2, 1);
 
-    let sphere = Scene::spherical_harmonics(3, 1);
-    let sphere_metric = sphere.coords.to_edge_lengths_sq(&sphere.topology);
-    assert!(
-      rotational_flux(&sphere.topology, &sphere.coords, &sphere_metric).is_none(),
-      "an icosphere has no continuous rotational symmetry"
-    );
-
-    // Whichever branch is taken, the flux is a cocycle: the discrete
-    // divergence is what conservation at the ends of the grade range needs.
-    for (name, topology, coords, metric) in [
-      ("donut", donut.0, donut.1, metric),
-      ("sphere", sphere.topology, sphere.coords, sphere_metric),
+    for (name, topology, coords, harmonics) in [
+      ("donut", donut.0, donut.1, 2),
+      ("sphere", sphere.topology, sphere.coords, 0),
     ] {
+      let metric = coords.to_edge_lengths_sq(&topology);
+      let space = smoothest_closed_space(&topology, &metric).expect("a closed field exists");
+      assert_eq!(
+        space.ncols().min(3),
+        if harmonics > 0 { harmonics } else { 3 },
+        "{name}: the bottom eigenspace has the wrong dimension"
+      );
+
       let flux = solenoidal_flux(&topology, &coords, &metric);
       let scale = flux.coeffs().amax();
+      assert!(scale > 0.0, "{name}: the velocity vanished");
       assert!(
         flux.dif(&topology).coeffs().amax() <= 1e-10 * scale,
         "{name}: the flux is not divergence-free"
