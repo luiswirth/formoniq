@@ -13,9 +13,10 @@ use clap::{Parser, Subcommand};
 use derham::cochain::Cochain;
 use formoniq_studio::export::{ExportSpec, export};
 use formoniq_studio::gallery::{
-  BuiltinMesh, CochainSpec, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS, GRID_DIM_DEFAULT,
-  GRID_DIM_MAX, HEAT_FINAL_TIME, MeshSource, NamedCochain, QUOTIENT_CELLS_DEFAULT, QuotientSurface,
-  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, Study, WAVE_FINAL_TIME,
+  ADVECTION_FINAL_TIME, BuiltinMesh, CochainSpec, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
+  GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, MeshSource, NamedCochain,
+  QUOTIENT_CELLS_DEFAULT, QuotientSurface, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, Study,
+  WAVE_FINAL_TIME,
 };
 use realize::io::vtu;
 use simplicial::Dim;
@@ -180,10 +181,17 @@ fn parse_graded_study(s: &str) -> Option<Study> {
       final_time: HEAT_FINAL_TIME,
     });
   }
-  graded("wave").map(|grade| Study::Wave {
+  if let Some(grade) = graded("wave") {
+    return Some(Study::Wave {
+      grade,
+      nsteps: DEFAULT_TRAJECTORY_STEPS,
+      final_time: WAVE_FINAL_TIME,
+    });
+  }
+  graded("advection").map(|grade| Study::Advection {
     grade,
     nsteps: DEFAULT_TRAJECTORY_STEPS,
-    final_time: WAVE_FINAL_TIME,
+    final_time: ADVECTION_FINAL_TIME,
   })
 }
 

@@ -110,6 +110,9 @@ pub const TRAJECTORY_STEPS_MAX: usize = 400;
 // reflect rather than barely stirring.
 pub const HEAT_FINAL_TIME: f64 = 0.5;
 pub const WAVE_FINAL_TIME: f64 = 12.0;
+// The advection field is normalized against the mesh's extent, so a unit of
+// time is roughly a radian of the rotation: a full turn carries the bump home.
+pub const ADVECTION_FINAL_TIME: f64 = 6.3;
 // The final-time sliders' ranges, one per equation because the two evolve on
 // different scales: the parabolic smoothing settles quickly, the hyperbolic
 // fronts want several periods to propagate and reflect.
@@ -117,6 +120,8 @@ pub const HEAT_FINAL_TIME_MIN: f64 = 0.05;
 pub const HEAT_FINAL_TIME_MAX: f64 = 2.0;
 pub const WAVE_FINAL_TIME_MIN: f64 = 1.0;
 pub const WAVE_FINAL_TIME_MAX: f64 = 30.0;
+pub const ADVECTION_FINAL_TIME_MIN: f64 = 0.5;
+pub const ADVECTION_FINAL_TIME_MAX: f64 = 25.0;
 
 /// The shared surface mesh a study solves against, built once so every
 /// per-grade eigensolve reuses it rather than remeshing.
@@ -454,6 +459,15 @@ pub enum Study {
     nsteps: usize,
     final_time: f64,
   },
+  /// Linear advection $diff_t u + cal(L)_v u = 0$ of a localized bump along a
+  /// rigid rotation, as a sampled trajectory: transport rather than diffusion
+  /// or propagation. The scheme is central, so the bump is carried without
+  /// damping and the dispersive oscillation is visible in its wake.
+  Advection {
+    grade: ExteriorGrade,
+    nsteps: usize,
+    final_time: f64,
+  },
 }
 
 impl Study {
@@ -471,9 +485,10 @@ impl Study {
   /// reads the grade off its data (an explicit cochain list).
   pub(crate) fn grade(&self) -> Option<ExteriorGrade> {
     match self {
-      Study::Eigenmodes { grade, .. } | Study::Heat { grade, .. } | Study::Wave { grade, .. } => {
-        Some(*grade)
-      }
+      Study::Eigenmodes { grade, .. }
+      | Study::Heat { grade, .. }
+      | Study::Wave { grade, .. }
+      | Study::Advection { grade, .. } => Some(*grade),
       Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => None,
     }
   }
@@ -486,6 +501,7 @@ impl Study {
       Study::HodgeDecomposition => "Hodge decomposition".to_string(),
       Study::Heat { grade, .. } => format!("Heat equation, grade {grade}"),
       Study::Wave { grade, .. } => format!("Wave equation, grade {grade}"),
+      Study::Advection { grade, .. } => format!("Advection, grade {grade}"),
     }
   }
 
@@ -516,6 +532,17 @@ impl Study {
         nsteps,
         final_time,
       } => Scene::wave(
+        topology.clone(),
+        coords.clone(),
+        *grade,
+        *nsteps,
+        *final_time,
+      ),
+      Study::Advection {
+        grade,
+        nsteps,
+        final_time,
+      } => Scene::advection(
         topology.clone(),
         coords.clone(),
         *grade,
@@ -689,6 +716,18 @@ pub(crate) fn presets() -> Vec<Preset> {
         grade: Dim::ZERO,
         nsteps: DEFAULT_TRAJECTORY_STEPS,
         final_time: WAVE_FINAL_TIME,
+      },
+      selection: None,
+      marks: None,
+    },
+    Preset {
+      name: "Advection",
+      description: "A bump carried around the sphere by a rigid rotation, the central scheme's dispersion trailing it",
+      mesh: MeshSource::START,
+      study: Study::Advection {
+        grade: Dim::ZERO,
+        nsteps: DEFAULT_TRAJECTORY_STEPS,
+        final_time: ADVECTION_FINAL_TIME,
       },
       selection: None,
       marks: None,

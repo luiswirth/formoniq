@@ -8,13 +8,13 @@ use exterior::ExteriorGrade;
 use simplicial::{Dim, topology::simplex::Simplex};
 
 use crate::gallery::{
-  BuiltinMesh, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS, EIGENMODES_NMODES_MAX,
-  EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT, GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX,
-  HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX, HEAT_FINAL_TIME_MIN, MeshSource, Preset,
-  QUOTIENT_CELLS_DEFAULT, QUOTIENT_CELLS_MAX, QUOTIENT_CELLS_MIN, QuotientSurface,
-  REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX, Study,
-  TRAJECTORY_STEPS_MAX, TRAJECTORY_STEPS_MIN, WAVE_FINAL_TIME, WAVE_FINAL_TIME_MAX,
-  WAVE_FINAL_TIME_MIN,
+  ADVECTION_FINAL_TIME_MAX, ADVECTION_FINAL_TIME_MIN, BuiltinMesh, DEFAULT_NMODES,
+  DEFAULT_TRAJECTORY_STEPS, EIGENMODES_NMODES_MAX, EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT,
+  GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX,
+  HEAT_FINAL_TIME_MIN, MeshSource, Preset, QUOTIENT_CELLS_DEFAULT, QUOTIENT_CELLS_MAX,
+  QUOTIENT_CELLS_MIN, QuotientSurface, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX,
+  SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX, Study, TRAJECTORY_STEPS_MAX, TRAJECTORY_STEPS_MIN,
+  WAVE_FINAL_TIME, WAVE_FINAL_TIME_MAX, WAVE_FINAL_TIME_MIN,
 };
 use crate::scene::{FieldOffers, dof_label};
 
@@ -726,6 +726,26 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
       );
       grade_changed | steps | time
     }
+    Study::Advection {
+      grade,
+      nsteps,
+      final_time,
+    } => {
+      let grade_changed = grade_tabs(ui, grade, max_grade);
+      let steps = commit_slider(
+        ui,
+        nsteps,
+        TRAJECTORY_STEPS_MIN..=TRAJECTORY_STEPS_MAX,
+        "steps",
+      );
+      let time = commit_slider(
+        ui,
+        final_time,
+        ADVECTION_FINAL_TIME_MIN..=ADVECTION_FINAL_TIME_MAX,
+        "final t",
+      );
+      grade_changed | steps | time
+    }
     Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => false,
   }
 }
@@ -740,6 +760,7 @@ fn study_equation(study: &Study) -> &'static str {
     Study::HodgeDecomposition => "ω = dα + δβ + h",
     Study::Heat { .. } => "∂ₜu = −Δu · parabolic",
     Study::Wave { .. } => "∂ₜₜu = −Δu · hyperbolic",
+    Study::Advection { .. } => "∂ₜu + ℒᵥu = 0 · transport",
     Study::Cochains(_) => "explicit cochains",
   }
 }
