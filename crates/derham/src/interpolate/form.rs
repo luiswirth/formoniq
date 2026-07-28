@@ -1,5 +1,6 @@
 use {
   exterior::{ExteriorGrade, MultiForm, MultiVector},
+  gramian::Metric,
   multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
@@ -88,5 +89,100 @@ impl WhitneyLsf {
   /// is the zero space.
   pub fn dif(&self) -> MultiForm {
     factorial_f64(self.grade().index() + 1) * self.barycentric_blade().pullback(&self.difbarys)
+  }
+
+  /// The codifferential $delta W_sigma = (-1)^(n(k+1)+1) (-1)^q star dif star
+  /// W_sigma$, exact on the cell and constant like [`Self::dif`], because the
+  /// shape function's coefficients are affine.
+  ///
+  /// Unlike the differential this is *not* metric-free: $delta$ is the formal
+  /// adjoint of $dif$, so it reads the metric through the star, and the
+  /// signature enters through $(-1)^q$ exactly as the star's involution does.
+  ///
+  /// It vanishes identically. Writing $W_sigma = k! sum_i (-1)^i
+  /// lambda_(sigma_i) beta_i$ with $beta_i$ the constant blade that omits
+  /// $dif lambda_(sigma_i)$,
+  ///
+  /// $$ delta W_sigma = -k! sum_i (-1)^i iota_((dif lambda_(sigma_i))^sharp)
+  ///    beta_i, $$
+  ///
+  /// and contracting $beta_i$ produces the inner products $inner(dif
+  /// lambda_(sigma_i), dif lambda_(sigma_m))$, symmetric in $(i, m)$, against a
+  /// sign structure antisymmetric in $(i, m)$: the unordered pairs cancel. So
+  /// the lowest-order Whitney forms are coclosed on every cell, of any
+  /// dimension, grade and signature.
+  ///
+  /// That is not a curiosity but the shape of the weak Lie derivative on this
+  /// space. Integrating $dif iota_v omega$ by parts over a cell moves the
+  /// differential onto the test function, and this being zero leaves the whole
+  /// of Cartan's second term supported on $diff K$: in the interior only
+  /// $iota_v dif$ survives.
+  pub fn codif(&self, metric: &Metric) -> MultiForm {
+    let (dim, grade) = (self.cell_dim, self.grade());
+    if grade == 0 {
+      return MultiForm::zero(dim, grade - 1);
+    }
+
+    let dif_star = self
+      .dof_simp
+      .deletions()
+      .map(|(sign, vertex, rest)| {
+        let blade = |c| MultiForm::from_blade_signed(self.nvertices(), Sign::Pos, c);
+        let difbary = blade(Combination::single(vertex)).pullback(&self.difbarys);
+        let beta = blade(rest).pullback(&self.difbarys);
+        sign.as_f64() * difbary.wedge(&beta.hodge_star(metric))
+      })
+      .reduce(|a, b| a + b)
+      .expect("A positive grade has at least one deletion.");
+
+    let parity = dim.index() * (grade.index() + 1) + 1 + metric.signature().1;
+    (factorial_f64(grade.index()) * Sign::from_parity(parity).as_f64())
+      * dif_star.hodge_star(metric)
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use super::*;
+  use gramian::Gramian;
+  use multiindex::combinations;
+
+  /// A non-diagonal metric of signature $(n - q, q)$, so the law is not read on
+  /// an orthonormal frame where terms cancel for the wrong reason.
+  fn skewed_metric(dim: usize, q: usize) -> Metric {
+    let j = Matrix::from_fn(dim, dim, |i, k| match i.cmp(&k) {
+      std::cmp::Ordering::Equal => 1.0,
+      std::cmp::Ordering::Greater => ((3 * i + 5 * k) % 4) as f64 / 8.0,
+      std::cmp::Ordering::Less => 0.0,
+    });
+    Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
+  }
+
+  /// The lowest-order Whitney forms are coclosed: $delta W_sigma = 0$ on every
+  /// cell, at every dimension, grade and signature.
+  ///
+  /// The cancellation is between the symmetry of $inner(dif lambda_i, dif
+  /// lambda_j)$ and the antisymmetry of the deletion signs, so it must survive
+  /// an indefinite metric and a non-orthogonal frame, and both are swept.
+  #[test]
+  fn whitney_forms_are_coclosed() {
+    for dim in (1..=4).map(Dim::from) {
+      for q in 0..=dim.index() {
+        for metric in [
+          Metric::new(Gramian::pseudo_euclidean(dim.index() - q, q)),
+          skewed_metric(dim.index(), q),
+        ] {
+          for grade in dim.range_inclusive() {
+            for dof_simp in combinations(dim.index() + 1, (grade + 1).index()) {
+              let codif = WhitneyLsf::standard(dim, dof_simp).codif(&metric);
+              assert!(
+                codif.coeffs().iter().all(|c| c.abs() < 1e-12),
+                "dim {dim:?} grade {grade:?} q {q} dof {dof_simp:?}: {codif:?}"
+              );
+            }
+          }
+        }
+      }
+    }
   }
 }
