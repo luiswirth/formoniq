@@ -93,7 +93,6 @@ fn cholesky_is_accurate(a: &CsrMatrix, chol: &FaerCholesky) -> bool {
 }
 
 impl iterative::ApproxInverse for DirectInverse {
-  type Space = iterative::Vector;
   fn dim(&self) -> usize {
     self.dim
   }

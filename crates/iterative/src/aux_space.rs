@@ -43,7 +43,7 @@ use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
 struct Correction {
   prolong: CsrMatrix,
   restrict: CsrMatrix,
-  inverse: Box<dyn SelfAdjoint<Space = Vector>>,
+  inverse: Box<dyn SelfAdjoint>,
 }
 
 impl Correction {
@@ -86,11 +86,7 @@ impl<S: SelfAdjoint> AuxiliarySpace<S> {
   /// smoother's dimension) or out of the inverse's space (its column count must
   /// match the inverse's dimension).
   #[must_use]
-  pub fn with_correction(
-    mut self,
-    prolong: CsrMatrix,
-    inverse: Box<dyn SelfAdjoint<Space = Vector>>,
-  ) -> Self {
+  pub fn with_correction(mut self, prolong: CsrMatrix, inverse: Box<dyn SelfAdjoint>) -> Self {
     assert_eq!(
       prolong.nrows(),
       self.smoother.dim(),
@@ -111,8 +107,7 @@ impl<S: SelfAdjoint> AuxiliarySpace<S> {
   }
 }
 
-impl<S: SelfAdjoint<Space = Vector>> ApproxInverse for AuxiliarySpace<S> {
-  type Space = Vector;
+impl<S: SelfAdjoint> ApproxInverse for AuxiliarySpace<S> {
   fn dim(&self) -> usize {
     self.smoother.dim()
   }
@@ -130,7 +125,7 @@ impl<S: SelfAdjoint<Space = Vector>> ApproxInverse for AuxiliarySpace<S> {
 /// the smoother's promise, the corrections only adding to it, exactly the
 /// pattern the rest of the crate follows. It is what lets this preconditioner
 /// drive [`cg`](crate::krylov::cg).
-impl<S: SelfAdjoint<Space = Vector>> SelfAdjoint for AuxiliarySpace<S> {}
+impl<S: SelfAdjoint> SelfAdjoint for AuxiliarySpace<S> {}
 
 #[cfg(test)]
 mod tests {
@@ -148,7 +143,6 @@ mod tests {
     }
   }
   impl ApproxInverse for DenseInverse {
-    type Space = Vector;
     fn dim(&self) -> usize {
       self.0.nrows()
     }

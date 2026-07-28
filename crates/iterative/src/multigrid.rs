@@ -87,7 +87,7 @@ pub struct VCycle<S, C> {
   post: usize,
 }
 
-impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<S, C> {
+impl<S: ApproxInverse, C: ApproxInverse> VCycle<S, C> {
   /// A V-cycle with independent pre- and post-smoothing counts.
   pub fn new(levels: Vec<Level<S>>, coarse: C, pre: usize, post: usize) -> Self {
     Self {
@@ -128,23 +128,14 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<
 /// Refine `x` toward solving `a x = r` by `sweeps` stationary steps of the
 /// smoother, continuing from the incoming `x` rather than restarting --- which
 /// is what post-smoothing after the coarse correction needs.
-fn smooth<S: ApproxInverse<Space = Vector>>(
-  a: &CsrMatrix,
-  s: &S,
-  r: &Vector,
-  x: &mut Vector,
-  sweeps: usize,
-) {
+fn smooth<S: ApproxInverse>(a: &CsrMatrix, s: &S, r: &Vector, x: &mut Vector, sweeps: usize) {
   for _ in 0..sweeps {
     let residual = r - a * &*x;
     *x += s.apply(&residual);
   }
 }
 
-impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> ApproxInverse
-  for VCycle<S, C>
-{
-  type Space = Vector;
+impl<S: ApproxInverse, C: ApproxInverse> ApproxInverse for VCycle<S, C> {
   fn dim(&self) -> usize {
     self
       .levels
@@ -166,4 +157,4 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> ApproxI
 /// definiteness the constructor's promise --- here also that `pre == post`,
 /// which [`VCycle::symmetric`] guarantees. It is what lets a V-cycle precondition
 /// [`cg`](crate::krylov::cg).
-impl<S: SelfAdjoint<Space = Vector>, C: SelfAdjoint<Space = Vector>> SelfAdjoint for VCycle<S, C> {}
+impl<S: SelfAdjoint, C: SelfAdjoint> SelfAdjoint for VCycle<S, C> {}

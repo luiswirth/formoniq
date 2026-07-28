@@ -87,13 +87,11 @@ impl InnerProductSpace for Vector {
 /// one space, and pinning it there is what keeps the apply monomorphized and
 /// makes pairing an operator with a preconditioner living somewhere else a
 /// compile error rather than an implicit transfer.
-pub trait LinearOperator {
-  /// The space the operator acts on.
-  type Space: InnerProductSpace;
+pub trait LinearOperator<S: InnerProductSpace = Vector> {
   /// The order $n$ of the square operator.
   fn dim(&self) -> usize;
   /// Apply the operator: $x |-> A x$.
-  fn apply(&self, x: &Self::Space) -> Self::Space;
+  fn apply(&self, x: &S) -> S;
 }
 
 /// A cheap approximate inverse $B approx A^(-1)$, applied as $r |-> B r$.
@@ -103,13 +101,11 @@ pub trait LinearOperator {
 /// sitting on a level of a multigrid hierarchy it is a *smoother*. The exact
 /// inverse $B = A^(-1)$ (a factorization) is the perfect special case, and the
 /// identity $B = I$ the trivial one.
-pub trait ApproxInverse {
-  /// The space the approximate inverse acts on.
-  type Space: InnerProductSpace;
+pub trait ApproxInverse<S: InnerProductSpace = Vector> {
   /// The order $n$ of the square operator approximated.
   fn dim(&self) -> usize;
   /// Apply the approximate inverse: $r |-> B r$.
-  fn apply(&self, r: &Self::Space) -> Self::Space;
+  fn apply(&self, r: &S) -> S;
 }
 
 /// Marker: [`ApproxInverse::apply`] is a fixed self-adjoint positive-definite
@@ -122,7 +118,7 @@ pub trait ApproxInverse {
 /// asymmetric smoothing) is rejected at compile time rather than converging
 /// erratically at runtime. Self-adjointness is structural; positive-definiteness
 /// is the constructor's promise, exactly as for the operator it approximates.
-pub trait SelfAdjoint: ApproxInverse {}
+pub trait SelfAdjoint<S: InnerProductSpace = Vector>: ApproxInverse<S> {}
 
 /// When to stop iterating: a relative residual target and an iteration ceiling.
 #[derive(Clone, Copy, Debug)]
@@ -450,7 +446,6 @@ mod tests {
     }
   }
   impl ApproxInverse for DenseInverse {
-    type Space = Vector;
     fn dim(&self) -> usize {
       self.inv.nrows()
     }
@@ -659,8 +654,7 @@ mod foreign_space {
   /// operator's own representation shows through.
   struct DenseOp(DMatrix<f64>);
 
-  impl LinearOperator for DenseOp {
-    type Space = Coords;
+  impl LinearOperator<Coords> for DenseOp {
     fn dim(&self) -> usize {
       self.0.nrows()
     }
@@ -682,7 +676,7 @@ mod foreign_space {
 
     let (x, report) = krylov::cg(
       &DenseOp(dense.clone()),
-      &Identity::<Coords>::new(5),
+      &Identity::new(5),
       &Coords(rhs.clone()),
       StopCriterion::rtol(1e-12),
     );
@@ -704,13 +698,13 @@ mod foreign_space {
 
     let (foreign, _) = krylov::cg(
       &DenseOp(dense.clone()),
-      &Identity::<Coords>::new(5),
+      &Identity::new(5),
       &Coords(rhs.clone()),
       stop,
     );
     let (host, _) = krylov::cg(
       &crate::testutil::csr(&dense),
-      &Identity::<Vector>::new(5),
+      &Identity::new(5),
       &Vector::from_column_slice(&rhs),
       stop,
     );
@@ -728,7 +722,7 @@ mod foreign_space {
 
     let (x, report) = krylov::minres(
       &DenseOp(dense.clone()),
-      &Identity::<Coords>::new(5),
+      &Identity::new(5),
       &Coords(rhs.clone()),
       StopCriterion::rtol(1e-12),
     );

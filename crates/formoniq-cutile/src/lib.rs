@@ -282,8 +282,6 @@ impl CellOperator {
 /// two-stage decomposition be tested through a full Krylov solve rather than
 /// only on a single apply.
 impl iterative::LinearOperator for CellOperator {
-  type Space = Vector;
-
   fn dim(&self) -> usize {
     debug_assert_eq!(self.ndofs_row, self.ndofs_col);
     self.ndofs_row
@@ -473,8 +471,8 @@ mod test {
     let b = Vector::from_fn(ndofs, |i, _| ((i * 5 + 1) % 11) as f64 - 5.0);
     let stop = StopCriterion::rtol(1e-10);
 
-    let (x_cell, _) = cg(&cellop, &Identity::<Vector>::new(ndofs), &b, stop);
-    let (x_assembled, _) = cg(&assembled, &Identity::<Vector>::new(ndofs), &b, stop);
+    let (x_cell, _) = cg(&cellop, &Identity::new(ndofs), &b, stop);
+    let (x_assembled, _) = cg(&assembled, &Identity::new(ndofs), &b, stop);
     assert_relative_eq!(&x_cell, &x_assembled, epsilon = 1e-8);
   }
 
