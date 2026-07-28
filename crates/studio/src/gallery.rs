@@ -264,7 +264,7 @@ impl QuotientSurface {
       .find(|s| s.name() == name)
   }
 
-  fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
+  pub(crate) fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
     use simplicial::mesher::{quotient::FlatQuotient, quotient_embed};
     let cells_axis = cells_axis.max(QUOTIENT_CELLS_MIN);
     match self {

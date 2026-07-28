@@ -763,12 +763,12 @@ impl Scene {
     use formoniq::problems::advection::{Transport, solve_transport};
 
     let metric = coords.to_edge_lengths_sq(&topology);
-    let flux = solenoidal_flux(&topology, &coords);
     // The star reads an orientation, so a non-orientable mesh has no velocity
     // to build and the field stands still rather than flipping across facets.
     let Some(orientation) = topology.orientation().cloned() else {
       return Self::placeholder_on(topology, coords);
     };
+    let flux = unit_speed_flux(&topology, &coords, &metric, &orientation);
     let velocity = WhitneyInterpolant::new(flux, &topology)
       .hodge_star(&topology, &metric, &orientation)
       .sharp(&topology, &metric);
@@ -1217,6 +1217,44 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 /// normal to $z$ kills $dif z$. On a flat domain the result is a uniform
 /// translation, on a sphere a rigid rotation about the diagonal axis -- with
 /// the two fixed points the hairy ball theorem demands.
+/// [`solenoidal_flux`] scaled to unit peak speed, so a unit of solve time is a
+/// unit of distance and the final time reads as a travel length.
+///
+/// The construction fixes the field's *shape* and says nothing about its
+/// magnitude, which comes out of the mesh's edge lengths and would otherwise
+/// vary by a factor of several between meshes -- enough to turn a resolved
+/// transport into an unresolved one at the same final time. Scaling a cochain
+/// is linear all the way to the velocity and leaves the cocycle a cocycle.
+fn unit_speed_flux(
+  topology: &Complex,
+  coords: &MeshCoords,
+  metric: &simplicial::geometry::metric::mesh::MeshLengthsSq,
+  orientation: &simplicial::topology::orientation::Orientation,
+) -> Cochain {
+  use derham::{
+    interpolate::interpolant::WhitneyInterpolant,
+    section::{Section, SectionOps, SharpOp},
+  };
+  use simplicial::atlas::ChartExt;
+
+  let flux = solenoidal_flux(topology, coords);
+  let probe = WhitneyInterpolant::new(flux.clone(), topology)
+    .hodge_star(topology, metric, orientation)
+    .sharp(topology, metric);
+
+  let peak = topology
+    .cells()
+    .handle_iter()
+    .map(|cell| probe.at(&ChartExt::barycenter(cell)).coeffs().norm())
+    .fold(0.0, f64::max);
+
+  if peak > 0.0 {
+    Cochain::new(flux.grade(), flux.coeffs() / peak)
+  } else {
+    flux
+  }
+}
+
 fn solenoidal_flux(topology: &Complex, coords: &MeshCoords) -> Cochain {
   let ambient = coords.dim();
   let flux_grade = topology.dim() - 1;
