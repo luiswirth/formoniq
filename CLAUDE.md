@@ -297,6 +297,8 @@ Breaking one is a bug even if it compiles and passes tests.
    the duality pairing and the de Rham map involve *no* metric.
    Only the Hodge star, the musicals and inner products do.
    Do not let a `Metric` leak into a signature that does not mathematically need one.
+   Asking for less than determines the answer is the same failure read backwards,
+   and the worse one: the signature compiles and silently returns one of several.
    Metric-free is the sharpest instance, not the only one:
    orientation, volume and the connection are each a weaker datum than the metric,
    and a concept resting on one of them says so.
@@ -323,11 +325,15 @@ Breaking one is a bug even if it compiles and passes tests.
    and it is `None` on a non-orientable complex,
    so holding an `&Orientation` *is* the proof of orientability,
    in the same sense as the `role::` witnesses.
-   **Anything that stars a top-grade form, or integrates over the manifold, takes that orientation.
-   Code that cannot get one refuses rather than proceeding per cell.**
-   A per-cell star without it returns $plus.minus$ the true value
-   with the sign flipping wherever colex disagrees with the manifold,
+   **A star whose result is compared between cells takes that orientation,
+   at every grade,
+   and code that cannot get one refuses rather than proceeding per cell.**
+   Without it the value carries $plus.minus$ the true one,
+   the sign flipping wherever colex disagrees with the manifold,
    which is plausible on screen and wrong.
+   A star confined to one cell's own integral does not:
+   the induced orientation of its boundary flips with it and the two cancel,
+   which is why assembly stays independent of the gauge.
    Orientability is per connected component,
    and the orientation is fixed only up to a global sign on each,
    the ordinary ambiguity of a fundamental class, not a choice the code could avoid.
@@ -457,6 +463,9 @@ New math ships with the law that characterizes it, not with a golden number:
 
 Sweep over all dimensions and grades (`for dim in 0..=4`, `for grade in 0..=dim`)
 rather than fixing one case.
+Check that a law can fail before trusting that it holds:
+one asserting a quantity vanishes
+passes on an implementation that returns zero for the wrong reason.
 The examples in `crates/formoniq/examples/` are the end-to-end check,
 convergence rates, spectra,
 but they are run and read by hand, not asserted by `cargo test`.
