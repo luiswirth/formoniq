@@ -1,18 +1,22 @@
 use {
-  derham::{interpolate::samples::LsfSamples, section::Section, trace::FaceTrace},
+  derham::{
+    interpolate::{form::WhitneyCoeffs, samples::LsfSamples},
+    section::Section,
+    trace::FaceTrace,
+  },
   exterior::{
     Contravariant, Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian,
   },
-  gramian::Metric,
-  multiindex::{Combination, Sign, factorial},
+  gramian::{Gramian, Metric},
+  multiindex::{Combination, Sign},
   simplicial::{
     atlas::{
-      Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, ref_difbarys,
-      refsimp_vol,
+      Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, ref_bary_gramian,
+      ref_difbarys, refsimp_vol,
     },
     geometry::cell_volume,
     linalg::{Matrix, Vector},
-    topology::simplex::{standard_boundary_operator, standard_subsimps},
+    topology::simplex::standard_boundary_operator,
   },
 };
 
@@ -21,19 +25,6 @@ pub trait ElMatProvider: Sync {
   fn row_grade(&self) -> ExteriorGrade;
   fn col_grade(&self) -> ExteriorGrade;
   fn eval(&self, metric: &Metric, chart: Chart) -> ElMat;
-}
-
-/// Element matrix of the scalar mass bilinear form, $[integral_K lambda_i lambda_j]$.
-///
-/// Exact closed form: $vol(K) (1 + delta_(i j)) / ((n+1)(n+2))$.
-/// The barycentric building block of the Hodge mass matrix.
-fn scalar_mass_elmat(metric: &Metric) -> ElMat {
-  let dim = metric.dim();
-  let ndofs = dim + 1;
-  let v = cell_volume(metric) / ((dim + 1) * (dim + 2)) as f64;
-  let mut elmat = Matrix::from_element(ndofs, ndofs, v);
-  elmat.fill_diagonal(2.0 * v);
-  elmat
 }
 
 /// Approximated Element Matrix Provider for scalar mass bilinear form,
@@ -56,25 +47,34 @@ impl ElMatProvider for ScalarLumpedMassElmat {
 /// Element Matrix for the weak Hodge star operator / the mass bilinear form.
 ///
 /// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
+///
+/// The integrand splits into a blade half and a polynomial half, so
+/// $M = vol_K C^top (H times.circle Q) C$, with $H = D (Lambda^k g^(-1)) D^top$
+/// the Gramian of the barycentric $k$-blades $dif lambda_I$,
+/// $Q_(v w) = (1 + delta_(v w)) \/ ((n+1)(n+2))$ the unit-volume scalar mass,
+/// and $C$ the coefficient map of the deletion formula
+/// $W_sigma = k! sum_i (-1)^i lambda_(sigma_i) dif lambda_(sigma without sigma_i)$.
+/// Only $H$ depends on the metric, so $M$ is linear in $Lambda^k g^(-1)$.
 pub struct HodgeMassElmat {
   dim: Dim,
   grade: ExteriorGrade,
-  simplices: Vec<Combination>,
+  /// $C$, the Whitney basis as a map into blades times coordinates.
+  coeffs: WhitneyCoeffs,
   /// $Lambda^k$ of the reference barycentric differentials: the pullback
   /// matrix taking formal barycentric $k$-blades to reference $k$-forms.
   difbarys_power: Matrix,
+  /// $Q$, the barycentric half, at unit volume.
+  bary_gramian: Gramian,
 }
 impl HodgeMassElmat {
   pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    let simplices: Vec<_> = standard_subsimps(dim, grade).collect();
-    let difbarys_power = exterior_power(&ref_difbarys(dim), grade);
-
     Self {
       dim,
       grade,
-      simplices,
-      difbarys_power,
+      coeffs: WhitneyCoeffs::new(dim, grade),
+      difbarys_power: exterior_power(&ref_difbarys(dim), grade),
+      bary_gramian: ref_bary_gramian(dim),
     }
   }
 }
@@ -89,31 +89,16 @@ impl ElMatProvider for HodgeMassElmat {
   fn eval(&self, metric: &Metric, _chart: Chart) -> Matrix {
     assert_eq!(self.dim, metric.dim());
 
-    let scalar_mass = scalar_mass_elmat(metric);
+    // $H$: the Gramian of the barycentric $k$-blades $lambda^* (e_I)$, one
+    // Cauchy-Binet sandwich for all Whitney wedge terms at once.
     let form_gramian = multiform_gramian(metric, self.grade);
-
-    // Inner products of the pulled-back barycentric k-blades
-    // $lambda^* (e_I)$: one Cauchy-Binet sandwich for all Whitney wedge
-    // terms at once.
-    let blade_inners =
+    let blade_gramian =
       &self.difbarys_power * form_gramian.matrix() * self.difbarys_power.transpose();
 
-    let mut elmat = Matrix::zeros(self.simplices.len(), self.simplices.len());
-    for (i, asimp) in self.simplices.iter().enumerate() {
-      for (j, bsimp) in self.simplices.iter().enumerate() {
-        let mut sum = 0.0;
-        for (asign, avertex, arest) in asimp.deletions() {
-          for (bsign, bvertex, brest) in bsimp.deletions() {
-            sum += (asign * bsign).as_f64()
-              * blade_inners[(arest.rank(), brest.rank())]
-              * scalar_mass[(avertex, bvertex)];
-          }
-        }
-        elmat[(i, j)] = sum;
-      }
-    }
-
-    factorial(self.grade.index()).pow(2) as f64 * elmat
+    cell_volume(metric)
+      * self
+        .coeffs
+        .pullback(&blade_gramian, self.bary_gramian.matrix())
   }
 }
 
@@ -638,6 +623,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use multiindex::factorial;
   use simplicial::Dim;
   use simplicial::topology::complex::Complex;
 
@@ -916,7 +902,8 @@ mod test {
       let refcomplex = Complex::standard(dim);
       let hodge_mass =
         HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric(), refchart(&refcomplex));
-      let scalar_mass = scalar_mass_elmat(&geo.metric());
+      let metric = geo.metric();
+      let scalar_mass = cell_volume(&metric) * ref_bary_gramian(dim).matrix();
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }
