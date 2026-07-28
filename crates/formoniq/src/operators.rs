@@ -516,12 +516,23 @@ impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, 
 /// metric-free, and the metric enters only through the $L^2$ pairing and the
 /// star.
 ///
-/// **Unstabilized.** Each cell integrates its own trace over a shared facet, so
-/// no numerical flux is chosen and the neighbors' disagreement is the whole of
-/// the coupling. The operator is nonsymmetric and, as plain Galerkin advection
-/// always is, prone to oscillation; upwinding would replace the own-side trace
-/// with one selected from the inflow side, which is the only part of this that
-/// needs to see a neighbor.
+/// **Central and unstabilized**: each cell integrates its own trace over a
+/// shared facet, so no numerical flux is chosen and the neighbors' disagreement
+/// is the whole of the coupling.
+///
+/// Conservative, exactly so at the ends of the grade range. The antisymmetry
+/// defect is $integral_(diff K) inner(omega, eta) iota_v vol$, and it vanishes
+/// wherever neighboring facet terms cancel: at $k = 0$ the shape functions are
+/// continuous, at $k = n$ they are constant per cell and what is left is
+/// $integral_K div v$. There the operator is skew and the $L^2$ norm is
+/// preserved exactly; between the two ends it is not.
+///
+/// The price is *dispersion*. Carrying no dissipation it damps nothing, so the
+/// phase error of the modes the mesh barely resolves persists as oscillation.
+/// Conservation is silent about this: skewness pins the spectrum to the
+/// imaginary axis and says nothing about where along it each mode sits, which
+/// is precisely what dispersion is. Upwinding buys monotonicity by paying that
+/// conservation away, and is the only part of this that needs a neighbor.
 pub struct LieDerivativeElmat<'a, V> {
   velocity: &'a V,
   grade: ExteriorGrade,
