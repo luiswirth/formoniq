@@ -1,5 +1,5 @@
 use {
-  derham::{interpolate::form::WhitneyForm, section::Section},
+  derham::{interpolate::form::WhitneyLsf, section::Section},
   exterior::{Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian},
   gramian::Metric,
   multiindex::{Combination, factorial},
@@ -218,7 +218,7 @@ impl ElMatProvider for CodifDifElmat {
 pub struct WhitneyQuadrature {
   grade: ExteriorGrade,
   qr: SimplexQuadRule,
-  whitneys: Vec<WhitneyForm>,
+  whitneys: Vec<WhitneyLsf>,
 }
 impl WhitneyQuadrature {
   /// `qr` defaults to the degree-1 Grundmann-Möller rule, the cheapest rule
@@ -231,7 +231,7 @@ impl WhitneyQuadrature {
     let (dim, grade) = (dim.into(), grade.into());
     let qr = qr.unwrap_or(SimplexQuadRule::degree(dim, 1));
     let whitneys = standard_subsimps(dim, grade)
-      .map(|dof_simp| WhitneyForm::standard(dim, dof_simp))
+      .map(|dof_simp| WhitneyLsf::standard(dim, dof_simp))
       .collect();
     Self {
       grade,
@@ -391,7 +391,7 @@ mod test {
 
   use derham::{
     cochain::Cochain,
-    interpolate::{form::WhitneyForm, interpolant::WhitneyInterpolant},
+    interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
   use simplicial::{
     geometry::metric::simplex::SimplexLengthsSq, topology::simplex::standard_subsimps,
@@ -503,7 +503,7 @@ mod test {
         let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
 
         let difwhitneys: Vec<_> = standard_subsimps(dim, grade)
-          .map(|simp| WhitneyForm::standard(dim, simp).dif())
+          .map(|simp| WhitneyLsf::standard(dim, simp).dif())
           .collect();
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {

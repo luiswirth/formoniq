@@ -1,4 +1,4 @@
-use super::form::WhitneyForm;
+use super::form::WhitneyLsf;
 use crate::cochain::Cochain;
 
 use {
@@ -15,7 +15,7 @@ use {
 ///
 /// This is the FEEC representation formula, reconstructing a genuine
 /// differential form from a cochain. It is intrinsic -- the cochain and the
-/// [`Complex`] are all it takes, since the [`WhitneyForm`]s are pure
+/// [`Complex`] are all it takes, since the [`WhitneyLsf`]s are pure
 /// combinatorics of the reference cell -- so the interpolant exists on a mesh
 /// that carries only Regge edge lengths, or no geometry at all.
 ///
@@ -26,7 +26,7 @@ pub struct WhitneyInterpolant<'a> {
   complex: &'a Complex,
   /// The Whitney forms of the DOF subsimplices, in the colex order of their
   /// local vertex sets: the same order the faces of a cell come in.
-  forms: Vec<WhitneyForm>,
+  forms: Vec<WhitneyLsf>,
 }
 
 impl<'a> WhitneyInterpolant<'a> {
@@ -36,7 +36,7 @@ impl<'a> WhitneyInterpolant<'a> {
       "Cochain is not a cochain on this complex."
     );
     let forms = standard_subsimps(complex.dim(), cochain.grade())
-      .map(|dof_simp| WhitneyForm::standard(complex.dim(), dof_simp))
+      .map(|dof_simp| WhitneyLsf::standard(complex.dim(), dof_simp))
       .collect();
     Self {
       cochain,
@@ -103,7 +103,7 @@ mod test {
         // dif(W c) = sum_sigma c_sigma dif(W_sigma): elementwise constant.
         let mut dif_of_interpolation = MultiForm::zero(dim, grade + 1);
         for dof_simp in cell.faces(grade) {
-          let form = WhitneyForm::standard(dim, dof_simp.simplex().relative_to(cell.simplex()));
+          let form = WhitneyLsf::standard(dim, dof_simp.simplex().relative_to(cell.simplex()));
           dif_of_interpolation += cochain[dof_simp] * form.dif();
         }
 
