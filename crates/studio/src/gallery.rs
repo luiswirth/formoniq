@@ -45,9 +45,15 @@ pub(crate) const GRID_CELLS_MAX: usize = 20;
 // refinement slider. The shorter axes are scaled down from it, so the cells stay
 // near equilateral rather than inheriting the fundamental domain's aspect ratio.
 // Three is the floor the generator imposes on a closed axis.
-pub const QUOTIENT_CELLS_DEFAULT: usize = 12;
+//
+// Calibrated against the sphere, which is the mesh every cost here was reasoned
+// about: its default carries 1280 cells and 1920 edges, so a donut of 40 (800
+// cells, 1200 edges) sits comfortably inside it while a donut of 12 carried 72
+// cells -- eighteen times coarser than the mesh beside it in the same picker,
+// too coarse to resolve anything a field does.
+pub const QUOTIENT_CELLS_DEFAULT: usize = 40;
 pub(crate) const QUOTIENT_CELLS_MIN: usize = 3;
-pub(crate) const QUOTIENT_CELLS_MAX: usize = 48;
+pub(crate) const QUOTIENT_CELLS_MAX: usize = 64;
 
 // The donut's tube as a fraction of its revolution radius. The binding
 // constraint is not self-intersection of the mesh -- the generator already
@@ -110,9 +116,10 @@ pub const TRAJECTORY_STEPS_MAX: usize = 400;
 // reflect rather than barely stirring.
 pub const HEAT_FINAL_TIME: f64 = 0.5;
 pub const WAVE_FINAL_TIME: f64 = 12.0;
-// The advection field is normalized against the mesh's extent, so a unit of
-// time is roughly a radian of the rotation: a full turn carries the bump home.
-pub const ADVECTION_FINAL_TIME: f64 = 6.3;
+// The advection field carries unit mean speed, so a unit of time is a unit of
+// distance travelled: the gallery's surfaces are unit-scale with a revolution
+// of about `QUOTIENT_CIRCUMFERENCE`, and this is a couple of laps.
+pub const ADVECTION_FINAL_TIME: f64 = 13.0;
 // The final-time sliders' ranges, one per equation because the two evolve on
 // different scales: the parabolic smoothing settles quickly, the hyperbolic
 // fronts want several periods to propagate and reflect.
@@ -121,7 +128,7 @@ pub const HEAT_FINAL_TIME_MAX: f64 = 2.0;
 pub const WAVE_FINAL_TIME_MIN: f64 = 1.0;
 pub const WAVE_FINAL_TIME_MAX: f64 = 30.0;
 pub const ADVECTION_FINAL_TIME_MIN: f64 = 0.5;
-pub const ADVECTION_FINAL_TIME_MAX: f64 = 25.0;
+pub const ADVECTION_FINAL_TIME_MAX: f64 = 40.0;
 
 /// The shared surface mesh a study solves against, built once so every
 /// per-grade eigensolve reuses it rather than remeshing.
