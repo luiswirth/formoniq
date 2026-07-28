@@ -144,8 +144,11 @@ impl WhitneyLsf {
 #[cfg(test)]
 mod test {
   use super::*;
+  use exterior::{exterior_bases, multiform_gramian};
   use gramian::Gramian;
   use multiindex::combinations;
+  use simplicial::atlas::{SimplexQuadRule, refsimp_vol};
+  use simplicial::linalg::Vector;
 
   /// A non-diagonal metric of signature $(n - q, q)$, so the law is not read on
   /// an orthonormal frame where terms cancel for the wrong reason.
@@ -156,6 +159,61 @@ mod test {
       std::cmp::Ordering::Less => 0.0,
     });
     Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
+  }
+
+  /// The same law read off the *definition* of $delta$ instead of the formula
+  /// $star dif star$ that [`WhitneyLsf::codif`] computes.
+  ///
+  /// $delta omega = 0$ exactly when $integral_K inner(dif phi, omega) = 0$ for
+  /// every test form $phi$ vanishing on $diff K$, since that is adjointness
+  /// with the boundary term killed. Take $phi = b c$ with $b = product_i
+  /// lambda_i$ the bubble, which vanishes on every facet because each facet
+  /// kills one barycentric coordinate, and $c$ a constant blade; then $dif phi
+  /// = dif b wedge c$ and the check never touches a Hodge star.
+  #[test]
+  fn whitney_forms_annihilate_the_differentials_of_interior_test_forms() {
+    for dim in (1..=3).map(Dim::from) {
+      let difbarys = ref_difbarys(dim);
+      let nvertices = (dim + 1).index();
+      let qr = SimplexQuadRule::degree(dim, nvertices + 1);
+
+      // $dif b = sum_i (product_(j != i) lambda_j) dif lambda_i$.
+      let bubble_dif = |bary: BaryRef| {
+        let mut coeffs = Vector::zeros(dim.index());
+        for i in 0..nvertices {
+          let weight: f64 = (0..nvertices)
+            .filter(|&j| j != i)
+            .map(|j| bary.view()[j])
+            .product();
+          coeffs += weight * difbarys.row(i).transpose();
+        }
+        MultiForm::line(coeffs)
+      };
+
+      for q in 0..=dim.index() {
+        let metric = skewed_metric(dim.index(), q);
+        for grade in 1..=dim.index() {
+          let inner = multiform_gramian(&metric, grade);
+          for dof_simp in combinations(nvertices, grade + 1) {
+            let whitney = WhitneyLsf::standard(dim, dof_simp);
+            for blade in exterior_bases(dim, grade - 1) {
+              let c = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
+              let integral = qr.integrate_ref(
+                &|bary: BaryRef| {
+                  let dif_phi = bubble_dif(bary).wedge(&c);
+                  inner.inner(dif_phi.coeffs(), whitney.at_bary(bary).coeffs())
+                },
+                refsimp_vol(dim),
+              );
+              assert!(
+                integral.abs() < 1e-12,
+                "dim {dim:?} grade {grade} q {q} dof {dof_simp:?} blade {blade:?}: {integral}"
+              );
+            }
+          }
+        }
+      }
+    }
   }
 
   /// The lowest-order Whitney forms are coclosed: $delta W_sigma = 0$ on every
