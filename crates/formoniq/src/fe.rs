@@ -63,7 +63,7 @@ pub fn fe_l2_error<F: Section<Covariant>>(
       let inner = multiform_gramian(&metric, grade);
       let error_pointwise =
         |point: &MeshPoint| inner.norm_sq((exact.at(point) - fe_whitney.at(point)).coeffs());
-      qr.integrate_cell(cell.idx(), &error_pointwise, cell_volume(&metric))
+      qr.integrate_cell(cell, &error_pointwise, cell_volume(&metric))
     })
     .sum();
 

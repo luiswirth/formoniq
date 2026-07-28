@@ -1,6 +1,6 @@
 //! A chart of the atlas.
 
-use super::{Bary, MeshPoint, Transition};
+use super::{Bary, BaryRef, MeshPoint, Transition};
 use crate::topology::role::Cell;
 
 use multiindex::Combination;
@@ -30,7 +30,11 @@ pub trait ChartExt<'m> {
   fn barycenter(self) -> MeshPoint;
   /// The point given by the barycentric coordinates it has on a face of this
   /// cell, identified by the face's local vertex positions.
-  fn point_on_face(self, positions: &Combination, face_bary: &Bary) -> MeshPoint;
+  fn point_on_face<'a>(
+    self,
+    positions: &Combination,
+    face_bary: impl Into<BaryRef<'a>>,
+  ) -> MeshPoint;
   /// The transition map into another chart, defined on the face the two share.
   fn transition_to(self, target: Chart<'m>) -> Transition;
 }
@@ -42,7 +46,11 @@ impl<'m> ChartExt<'m> for Cell<'m> {
   fn barycenter(self) -> MeshPoint {
     MeshPoint::barycenter(self.idx())
   }
-  fn point_on_face(self, positions: &Combination, face_bary: &Bary) -> MeshPoint {
+  fn point_on_face<'a>(
+    self,
+    positions: &Combination,
+    face_bary: impl Into<BaryRef<'a>>,
+  ) -> MeshPoint {
     MeshPoint::on_face(self.idx(), positions, face_bary)
   }
   fn transition_to(self, target: Chart<'m>) -> Transition {
