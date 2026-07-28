@@ -21,7 +21,60 @@ pub type Vector = na::DVector<f64>;
 /// the source a diagonal or triangular preconditioner reads its entries from.
 pub type CsrMatrix = nas::CsrMatrix<f64>;
 
-/// A linear operator $A: RR^n -> RR^n$, applied as $x |-> A x$ --- the only
+/// A real inner product space: the structure a Krylov method asks of its
+/// vectors, and nothing more.
+///
+/// Conjugate gradients and MINRES form linear combinations and inner products.
+/// They never index an entry, never slice, never name a basis, and the only
+/// vector they can produce without being handed one is zero. That is exactly
+/// this trait, so a method written against it runs wherever its vectors live.
+///
+/// [`Vector`] is the archetypal instance. The reason to want another is a
+/// vector that does not live in host memory, where copying the iterates back
+/// and forth every step would cost more than the solve; pinning the space in
+/// the operator makes pairing one with a preconditioner living elsewhere a
+/// compile error rather than an implicit transfer.
+///
+/// The zero vector is taken from an existing one rather than from a dimension,
+/// because a dimension does not determine a vector: a device vector needs an
+/// allocator to exist, and the solution of $A x = b$ lives in the space $b$
+/// does. That is also why the trait carries no dimension of its own.
+pub trait InnerProductSpace: Clone {
+  /// The zero vector of the space this one lives in: the additive identity,
+  /// and the only element a Krylov method can name without being handed one.
+  fn zeros_like(&self) -> Self;
+  /// The inner product $angle.l x, y angle.r$.
+  fn dot(&self, other: &Self) -> f64;
+  /// $y <- alpha x + beta y$, the one linear combination every update is an
+  /// instance of.
+  ///
+  /// `x` is a distinct vector from `self`; scaling in place is
+  /// [`scale`](Self::scale).
+  fn axpby(&mut self, alpha: f64, x: &Self, beta: f64);
+  /// $x <- alpha x$.
+  fn scale(&mut self, alpha: f64);
+  /// The induced norm $norm(x) = sqrt(angle.l x, x angle.r)$.
+  fn norm(&self) -> f64 {
+    self.dot(self).sqrt()
+  }
+}
+
+impl InnerProductSpace for Vector {
+  fn zeros_like(&self) -> Self {
+    Vector::zeros(self.len())
+  }
+  fn dot(&self, other: &Self) -> f64 {
+    na::DVector::dot(self, other)
+  }
+  fn axpby(&mut self, alpha: f64, x: &Self, beta: f64) {
+    self.axpy(alpha, x, beta);
+  }
+  fn scale(&mut self, alpha: f64) {
+    *self *= alpha;
+  }
+}
+
+/// A linear operator $A: V -> V$, applied as $x |-> A x$ --- the only
 /// thing a Krylov method asks of its system matrix.
 ///
 /// Distinct from [`ApproxInverse`] by intent, not by shape: this is $A$, that is
@@ -29,10 +82,12 @@ pub type CsrMatrix = nas::CsrMatrix<f64>;
 /// sweep) take the assembled [`CsrMatrix`] at construction instead, which keeps
 /// this interface at the matrix-free minimum a matvec needs.
 pub trait LinearOperator {
+  /// The space the operator acts on.
+  type Space: InnerProductSpace;
   /// The order $n$ of the square operator.
   fn dim(&self) -> usize;
   /// Apply the operator: $x |-> A x$.
-  fn apply(&self, x: &Vector) -> Vector;
+  fn apply(&self, x: &Self::Space) -> Self::Space;
 }
 
 /// A cheap approximate inverse $B approx A^(-1)$, applied as $r |-> B r$.
@@ -43,10 +98,13 @@ pub trait LinearOperator {
 /// inverse $B = A^(-1)$ (a factorization) is the perfect special case, and the
 /// identity $B = I$ the trivial one.
 pub trait ApproxInverse {
+  /// The space the approximate inverse acts on, which a solver requires to be
+  /// the operator's own.
+  type Space: InnerProductSpace;
   /// The order $n$ of the square operator approximated.
   fn dim(&self) -> usize;
   /// Apply the approximate inverse: $r |-> B r$.
-  fn apply(&self, r: &Vector) -> Vector;
+  fn apply(&self, r: &Self::Space) -> Self::Space;
 }
 
 /// Marker: [`ApproxInverse::apply`] is a fixed self-adjoint positive-definite
@@ -387,6 +445,7 @@ mod tests {
     }
   }
   impl ApproxInverse for DenseInverse {
+    type Space = Vector;
     fn dim(&self) -> usize {
       self.inv.nrows()
     }
@@ -546,5 +605,110 @@ mod tests {
     let r = Vector::from_fn(5, |i, _| (i as f64 + 1.0).ln());
     let s = Vector::from_fn(5, |i, _| (2.0 * i as f64).cos());
     assert!((precond.apply(&r).dot(&s) - r.dot(&precond.apply(&s))).abs() < 1e-12);
+  }
+}
+
+#[cfg(test)]
+mod space {
+  use crate::{
+    ApproxInverse, InnerProductSpace, LinearOperator, SelfAdjoint, StopCriterion, Vector,
+    krylov::cg, testutil::spd_from_spectrum,
+  };
+
+  /// A realization of the space sharing no code with nalgebra: a plain `Vec`
+  /// and hand-written arithmetic.
+  ///
+  /// The point of the second instance is that it is a *second* one. If the
+  /// Krylov methods still reach the same iterate here, they read nothing about
+  /// their vectors beyond [`InnerProductSpace`], which is what lets the same
+  /// method run on vectors that never enter host memory.
+  #[derive(Clone, Debug)]
+  struct Coords(Vec<f64>);
+
+  impl InnerProductSpace for Coords {
+    fn zeros_like(&self) -> Self {
+      Coords(vec![0.0; self.0.len()])
+    }
+    fn dot(&self, other: &Self) -> f64 {
+      self.0.iter().zip(&other.0).map(|(a, b)| a * b).sum()
+    }
+    fn axpby(&mut self, alpha: f64, x: &Self, beta: f64) {
+      for (y, x) in self.0.iter_mut().zip(&x.0) {
+        *y = alpha * x + beta * *y;
+      }
+    }
+    fn scale(&mut self, alpha: f64) {
+      self.0.iter_mut().for_each(|y| *y *= alpha);
+    }
+  }
+
+  /// A dense operator over [`Coords`], row-major, applied by hand.
+  struct Dense {
+    rows: Vec<Vec<f64>>,
+  }
+  impl LinearOperator for Dense {
+    type Space = Coords;
+    fn dim(&self) -> usize {
+      self.rows.len()
+    }
+    fn apply(&self, x: &Coords) -> Coords {
+      Coords(
+        self
+          .rows
+          .iter()
+          .map(|row| row.iter().zip(&x.0).map(|(a, b)| a * b).sum())
+          .collect(),
+      )
+    }
+  }
+
+  struct Unpreconditioned(usize);
+  impl ApproxInverse for Unpreconditioned {
+    type Space = Coords;
+    fn dim(&self) -> usize {
+      self.0
+    }
+    fn apply(&self, r: &Coords) -> Coords {
+      r.clone()
+    }
+  }
+  impl SelfAdjoint for Unpreconditioned {}
+
+  /// The same system solved in two unrelated realizations of the space agrees,
+  /// iterate for iterate.
+  ///
+  /// Not merely to the tolerance: conjugate gradients is a deterministic
+  /// recurrence in the inner products alone, so two spaces that agree on those
+  /// must produce the same iterates, and the iteration counts must match
+  /// exactly. A method that peeked at an entry would have no reason to.
+  #[test]
+  fn the_krylov_methods_read_nothing_but_the_space() {
+    let dense = spd_from_spectrum(&[1.0, 2.0, 3.5, 6.0, 11.0]);
+    let n = dense.nrows();
+    let rhs: Vec<f64> = (0..n).map(|i| (i as f64 + 1.0).sqrt()).collect();
+
+    let (host, host_report) = cg(
+      &crate::testutil::csr(&dense),
+      &crate::Identity::new(n),
+      &Vector::from_column_slice(&rhs),
+      StopCriterion::rtol(1e-12),
+    );
+
+    let op = Dense {
+      rows: (0..n)
+        .map(|i| dense.row(i).iter().copied().collect())
+        .collect(),
+    };
+    let (coords, coords_report) = cg(
+      &op,
+      &Unpreconditioned(n),
+      &Coords(rhs),
+      StopCriterion::rtol(1e-12),
+    );
+
+    assert_eq!(host_report.iters, coords_report.iters);
+    for (h, c) in host.iter().zip(&coords.0) {
+      assert!((h - c).abs() < 1e-12, "{h} vs {c}");
+    }
   }
 }

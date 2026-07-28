@@ -18,6 +18,7 @@ impl Identity {
 }
 
 impl ApproxInverse for Identity {
+  type Space = Vector;
   fn dim(&self) -> usize {
     self.dim
   }
@@ -78,6 +79,7 @@ impl Jacobi {
 }
 
 impl ApproxInverse for Jacobi {
+  type Space = Vector;
   fn dim(&self) -> usize {
     self.inv_diag.len()
   }
@@ -105,14 +107,15 @@ pub struct BlockDiagonal<B> {
   blocks: Vec<B>,
 }
 
-impl<B: ApproxInverse> BlockDiagonal<B> {
+impl<B: ApproxInverse<Space = Vector>> BlockDiagonal<B> {
   /// The block inverses, in the order their spaces are stacked in the vector.
   pub fn new(blocks: Vec<B>) -> Self {
     Self { blocks }
   }
 }
 
-impl<B: ApproxInverse> ApproxInverse for BlockDiagonal<B> {
+impl<B: ApproxInverse<Space = Vector>> ApproxInverse for BlockDiagonal<B> {
+  type Space = Vector;
   fn dim(&self) -> usize {
     self.blocks.iter().map(ApproxInverse::dim).sum()
   }
@@ -129,4 +132,4 @@ impl<B: ApproxInverse> ApproxInverse for BlockDiagonal<B> {
   }
 }
 
-impl<B: SelfAdjoint> SelfAdjoint for BlockDiagonal<B> {}
+impl<B: SelfAdjoint<Space = Vector>> SelfAdjoint for BlockDiagonal<B> {}
