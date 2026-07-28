@@ -22,7 +22,8 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   let mut iters = 0;
   let residual = loop {
     let mut r = op.apply(&x);
-    r.axpby(1.0, b, -1.0);
+    r.scale(-1.0);
+    r.add(b);
     let residual = r.norm() / b_norm;
     converged = residual <= stop.rtol;
     // Residual checked after every step and the budget gates only the work, so
@@ -30,7 +31,7 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
     if converged || iters >= stop.max_iters {
       break residual;
     }
-    x.axpby(1.0, &precond.apply(&r), 1.0);
+    x.add(&precond.apply(&r));
     iters += 1;
   };
   (
@@ -77,8 +78,9 @@ impl<O: LinearOperator, B: ApproxInverse<Space = O::Space>> ApproxInverse for St
     let mut x = r.zeros_like();
     for _ in 0..self.sweeps {
       let mut resid = self.op.apply(&x);
-      resid.axpby(1.0, r, -1.0);
-      x.axpby(1.0, &self.precond.apply(&resid), 1.0);
+      resid.scale(-1.0);
+      resid.add(r);
+      x.add(&self.precond.apply(&resid));
     }
     x
   }

@@ -24,10 +24,11 @@ pub type CsrMatrix = nas::CsrMatrix<f64>;
 /// A real inner product space: the structure a Krylov method asks of its
 /// vectors, and nothing more.
 ///
-/// Conjugate gradients and MINRES form linear combinations and inner products.
-/// They never index an entry, never slice, never name a basis, and the only
-/// vector they can produce without being handed one is zero. That is exactly
-/// this trait, so a method written against it runs wherever its vectors live.
+/// Conjugate gradients and MINRES scale a vector, add a scaled one to it, and
+/// take inner products. They never index an entry, never slice, never name a
+/// basis, and the only vector they can produce without being handed one is
+/// zero. That is exactly this trait, so a method written against it runs
+/// wherever its vectors live.
 ///
 /// [`Vector`] is the archetypal instance. The reason to want another is a
 /// vector that does not live in host memory, where copying the iterates back
@@ -45,14 +46,21 @@ pub trait InnerProductSpace: Clone {
   fn zeros_like(&self) -> Self;
   /// The inner product $angle.l x, y angle.r$.
   fn dot(&self, other: &Self) -> f64;
-  /// $y <- alpha x + beta y$, the one linear combination every update is an
-  /// instance of.
-  ///
-  /// `x` is a distinct vector from `self`; scaling in place is
-  /// [`scale`](Self::scale).
-  fn axpby(&mut self, alpha: f64, x: &Self, beta: f64);
-  /// $x <- alpha x$.
+  /// $x <- alpha x$, the scalar action.
   fn scale(&mut self, alpha: f64);
+  /// $y <- y + alpha x$, the addition, fused with the scaling of its argument.
+  ///
+  /// Fused rather than composed out of [`scale`](Self::scale) and
+  /// [`add`](Self::add) because a Krylov method never asks for bare addition:
+  /// every update it makes is of this shape, and building each one from a
+  /// scaled copy would allocate a vector per step.
+  ///
+  /// `x` is a distinct vector from `self`.
+  fn add_scaled(&mut self, alpha: f64, x: &Self);
+  /// $y <- y + x$.
+  fn add(&mut self, x: &Self) {
+    self.add_scaled(1.0, x);
+  }
   /// The induced norm $norm(x) = sqrt(angle.l x, x angle.r)$.
   fn norm(&self) -> f64 {
     self.dot(self).sqrt()
@@ -66,11 +74,11 @@ impl InnerProductSpace for Vector {
   fn dot(&self, other: &Self) -> f64 {
     na::DVector::dot(self, other)
   }
-  fn axpby(&mut self, alpha: f64, x: &Self, beta: f64) {
-    self.axpy(alpha, x, beta);
-  }
   fn scale(&mut self, alpha: f64) {
     *self *= alpha;
+  }
+  fn add_scaled(&mut self, alpha: f64, x: &Self) {
+    self.axpy(alpha, x, 1.0);
   }
 }
 
@@ -632,13 +640,13 @@ mod space {
     fn dot(&self, other: &Self) -> f64 {
       self.0.iter().zip(&other.0).map(|(a, b)| a * b).sum()
     }
-    fn axpby(&mut self, alpha: f64, x: &Self, beta: f64) {
-      for (y, x) in self.0.iter_mut().zip(&x.0) {
-        *y = alpha * x + beta * *y;
-      }
-    }
     fn scale(&mut self, alpha: f64) {
       self.0.iter_mut().for_each(|y| *y *= alpha);
+    }
+    fn add_scaled(&mut self, alpha: f64, x: &Self) {
+      for (y, x) in self.0.iter_mut().zip(&x.0) {
+        *y += alpha * x;
+      }
     }
   }
 

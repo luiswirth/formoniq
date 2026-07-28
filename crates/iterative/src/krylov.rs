@@ -68,12 +68,13 @@ pub fn cg<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
     }
     let ap = op.apply(&p);
     let alpha = rz / p.dot(&ap);
-    x.axpby(alpha, &p, 1.0);
-    r.axpby(-alpha, &ap, 1.0);
+    x.add_scaled(alpha, &p);
+    r.add_scaled(-alpha, &ap);
     z = precond.apply(&r);
     let rz_next = r.dot(&z);
     let beta = rz_next / rz;
-    p.axpby(1.0, &z, beta);
+    p.scale(beta);
+    p.add(&z);
     rz = rz_next;
     iters += 1;
   };
@@ -152,10 +153,10 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
     v.scale(beta.recip());
     let mut y_next = op.apply(&v);
     if iters >= 2 {
-      y_next.axpby(-beta / oldb, &r1, 1.0);
+      y_next.add_scaled(-beta / oldb, &r1);
     }
     let alfa = v.dot(&y_next);
-    y_next.axpby(-alfa / beta, &r2, 1.0);
+    y_next.add_scaled(-alfa / beta, &r2);
     r1 = r2;
     r2 = y_next;
     y = precond.apply(&r2);
@@ -178,12 +179,12 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
     // Update the solution. Entering, `w` holds w_{k-1} and `w2` holds w_{k-2};
     // oldeps multiplies the older, delta the newer.
     let mut wnew = v;
-    wnew.axpby(-oldeps, &w2, 1.0);
-    wnew.axpby(-delta, &w, 1.0);
+    wnew.add_scaled(-oldeps, &w2);
+    wnew.add_scaled(-delta, &w);
     wnew.scale(gamma.recip());
     w2 = w;
     w = wnew;
-    x.axpby(phi, &w, 1.0);
+    x.add_scaled(phi, &w);
 
     residual = phibar / beta1;
     if residual <= stop.rtol {
