@@ -55,7 +55,6 @@ extern crate nalgebra as na;
 
 use coorder::Coord;
 use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
-use exterior::MultiForm;
 use formoniq::{
   assemble::assemble_galvec,
   fe::fe_l2_error,
@@ -65,6 +64,8 @@ use formoniq::{
 };
 use glatt::field::DiffFormClosure;
 use gramian::Metric;
+use multialgebra::Tensor;
+use multialgebra::Variance;
 use simplicial::{
   atlas::SimplexQuadRule, geometry::coord::mesh::MeshCoords, linalg::Vector,
   mesher::cartesian::CartesianGrid, topology::ordering::CellOrdering,
@@ -88,26 +89,29 @@ fn main() {
 /// $inner(a, a)_(eta^(-1)) = -a_0^2 + norm(a_"space")^2 = 0$. The spatial part is
 /// generic (irrational against the box), giving a massless wave propagating
 /// obliquely to the mesh axes.
-fn wave_covector(dim: usize) -> MultiForm {
+fn wave_covector(dim: usize) -> Tensor {
   let space = [0.5, 0.3, 0.2];
   let space = &space[..dim - 1];
   let a0 = space.iter().map(|c| c * c).sum::<f64>().sqrt();
   let mut coeffs = Vec::with_capacity(dim);
   coeffs.push(a0);
   coeffs.extend_from_slice(space);
-  MultiForm::line(PI * Vector::from_column_slice(&coeffs))
+  Tensor::line(PI * Vector::from_column_slice(&coeffs), Variance::Covariant)
 }
 
 /// A constant grade-1 polarization $omega$, transverse-ish to $a$ so that
 /// $a wedge omega != 0$ and the field is nontrivial. Deterministic and generic.
-fn polarization(dim: usize) -> MultiForm {
-  MultiForm::line(Vector::from_fn(dim, |i, _| 1.0 + 0.5 * (i as f64)))
+fn polarization(dim: usize) -> Tensor {
+  Tensor::line(
+    Vector::from_fn(dim, |i, _| 1.0 + 0.5 * (i as f64)),
+    Variance::Covariant,
+  )
 }
 
 fn convergence(dim: usize, nsubs: &[usize]) {
   let eta = Metric::minkowski(dim);
   let a = wave_covector(dim);
-  let a_sharp = a.sharp(&eta);
+  let a_sharp = a.musical(&eta);
   let a_vec = a.components().clone();
 
   // The constant field bivector $Phi = a wedge omega$ and the current bivector

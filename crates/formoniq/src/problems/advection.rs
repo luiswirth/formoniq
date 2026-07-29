@@ -17,7 +17,7 @@ pub struct Transport<'a, V> {
 }
 
 use derham::{cochain::Cochain, section::Section};
-use exterior::{Contravariant, ExteriorGrade};
+use multialgebra::ExteriorGrade;
 use simplicial::{
   geometry::metric::mesh::MeshLengthsSq,
   linalg::{CsrMatrix, Vector},
@@ -29,7 +29,7 @@ use simplicial::{
 ///
 /// $A$ is the *central* discretization: conservative, and dispersive for it.
 /// See [`LieDerivativeElmat`].
-pub fn assemble_transport<V: Sync + Section<Contravariant>>(
+pub fn assemble_transport<V: Sync + Section>(
   topology: &Complex,
   geometry: &MeshLengthsSq,
   transport: &Transport<V>,
@@ -60,7 +60,7 @@ pub fn assemble_transport<V: Sync + Section<Contravariant>>(
 /// prescribed inflow, so a solution transported into the boundary is not
 /// meaningful. Run this on a closed manifold, or stop before the feature
 /// reaches the boundary.
-pub fn solve_transport<V: Sync + Section<Contravariant>>(
+pub fn solve_transport<V: Sync + Section>(
   topology: &Complex,
   geometry: &MeshLengthsSq,
   transport: &Transport<V>,

@@ -9,8 +9,8 @@
 
 use {
   coorder::Coord,
-  exterior::ExteriorElement,
   glatt::field::DiffFormClosure,
+  multialgebra::{Tensor, Variance},
   multiindex::{Combination, Sign, binomial},
   simplicial::{
     geometry::metric::mesh::MeshLengthsSq,
@@ -212,7 +212,8 @@ impl BoxEigenform {
     let blade = Combination::from_increasing(0..grade);
     DiffFormClosure::new(
       move |p: &Coord| {
-        bump(p, grade, relative) * ExteriorElement::from_blade_signed(dim, Sign::Pos, blade)
+        bump(p, grade, relative)
+          * Tensor::from_blade_signed(dim, Sign::Pos, blade, Variance::Covariant)
       },
       dim,
       grade,
@@ -227,7 +228,7 @@ impl BoxEigenform {
     DiffFormClosure::new(
       move |p: &Coord| {
         (lambda * bump(p, grade, relative))
-          * ExteriorElement::from_blade_signed(dim, Sign::Pos, blade)
+          * Tensor::from_blade_signed(dim, Sign::Pos, blade, Variance::Covariant)
       },
       dim,
       grade,
@@ -244,12 +245,16 @@ impl BoxEigenform {
     let blade = Combination::from_increasing(0..grade);
     Some(DiffFormClosure::new(
       move |p: &Coord| {
-        let e_blade = ExteriorElement::from_blade_signed(dim, Sign::Pos, blade);
+        let e_blade = Tensor::from_blade_signed(dim, Sign::Pos, blade, Variance::Covariant);
         // Terms with $j in I$ drop out: the wedge of a repeated index is zero.
         (0..dim)
           .map(|j| {
-            let e_j =
-              ExteriorElement::from_blade_signed(dim, Sign::Pos, Combination::from_increasing([j]));
+            let e_j = Tensor::from_blade_signed(
+              dim,
+              Sign::Pos,
+              Combination::from_increasing([j]),
+              Variance::Covariant,
+            );
             bump_partial(p, grade, j, relative) * e_j.wedge(&e_blade)
           })
           .sum()

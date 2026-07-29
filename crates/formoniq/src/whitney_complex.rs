@@ -19,7 +19,7 @@ use crate::{
 use {
   crate::linalg::quadratic_form_sparse,
   derham::cochain::Cochain,
-  exterior::ExteriorGrade,
+  multialgebra::ExteriorGrade,
   simplicial::{
     Dim,
     geometry::metric::mesh::MeshLengthsSq,

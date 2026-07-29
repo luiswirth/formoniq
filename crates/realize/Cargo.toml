@@ -11,13 +11,13 @@ publish = false
 name = "realize"
 
 [dependencies]
+multialgebra = { path = "../multialgebra", version = "0.2.0" }
 formoniq = { path = "../formoniq" }
 derham = { path = "../derham" }
 glatt = { path = "../glatt" }
 simplicial = { path = "../simplicial" }
 coorder = { path = "../coorder" }
 gramian = { path = "../gramian" }
-exterior = { path = "../exterior" }
 nalgebra = "0.35.0"
 # The bake's vertex records are laid out for a GPU upload, so they carry `Pod`
 # and `Zeroable`. `bytemuck` is the layout vocabulary alone -- a pure-Rust
