@@ -156,6 +156,14 @@ pub struct Chain {
   coeffs: Vec<i64>,
 }
 impl Chain {
+  /// A chain from its coefficients, one per $k$-simplex in colex order.
+  pub fn new(grade: impl Into<Dim>, coeffs: Vec<i64>) -> Self {
+    Self {
+      grade: grade.into(),
+      coeffs,
+    }
+  }
+
   pub fn grade(&self) -> Dim {
     self.grade
   }
@@ -172,6 +180,34 @@ impl Chain {
       .enumerate()
       .filter(|&(_, &c)| c != 0)
       .map(|(kidx, &c)| (kidx, c))
+  }
+
+  /// The boundary $diff_k: C_k -> C_(k-1)$.
+  ///
+  /// Exact over $ZZ$: the incidence coefficients are $plus.minus 1$, so the
+  /// chain complex stays integral and $diff compose diff = 0$ holds without
+  /// rounding.
+  ///
+  /// Total at the ends. Below grade zero there is nothing to bound, and the
+  /// complex extends by zero either way, so the result is the empty chain
+  /// rather than a panic.
+  pub fn boundary(&self, topology: &Complex) -> Self {
+    if self.grade == 0 {
+      return Self::new(self.grade - 1, Vec::new());
+    }
+    let mut coeffs = vec![0i64; topology.nsimplices(self.grade - 1)];
+    for (kidx, coefficient) in self.support() {
+      for (sign, face) in topology
+        .skeleton(self.grade)
+        .handle_iter()
+        .nth(kidx)
+        .expect("a chain's coefficients are indexed by its own skeleton")
+        .boundary()
+      {
+        coeffs[face.kidx()] += sign.as_i32() as i64 * coefficient;
+      }
+    }
+    Self::new(self.grade - 1, coeffs)
   }
 }
 
