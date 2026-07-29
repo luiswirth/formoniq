@@ -181,8 +181,7 @@ impl TensorExt for Tensor {
       let matrix = slot
         .factor
         .induced(variance_gramian(slot.variance, metric).matrix());
-      musical = musical.apply_to_slot(which, &matrix);
-      musical.slots_mut()[which] = slot.dual();
+      musical = musical.apply_to_slot(which, &matrix).dualize_slot(which);
     }
     musical
   }

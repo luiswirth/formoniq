@@ -480,3 +480,28 @@ fn the_tensor_product_spans_spaces() {
     form.components().len() * other.components().len()
   );
 }
+
+/// Dualizing a slot is an involution that leaves the components alone, and it
+/// is what makes the duality pairing defined: a tensor pairs with its own
+/// dualization, and that pairing is nondegenerate.
+#[test]
+fn dualizing_a_slot_is_a_relabelling() {
+  for dim in 1..=4 {
+    for grade in 0..=dim {
+      let form = probe_element(dim, grade, 2, Variance::Covariant);
+      let dualized = form.clone().dualize_slot(0);
+
+      assert_eq!(dualized.slots()[0].variance, Variance::Contravariant);
+      assert_eq!(dualized.components(), form.components());
+      assert_eq!(dualized.clone().dualize_slot(0).slots(), form.slots());
+
+      // Nondegenerate, which is what a relabelling has to buy to be worth
+      // having: the pairing is the sum of the squared components.
+      assert_relative_eq!(
+        pairing(&form, &dualized),
+        form.components().dot(form.components()),
+        epsilon = 1e-12
+      );
+    }
+  }
+}

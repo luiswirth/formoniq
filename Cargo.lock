@@ -3745,7 +3745,6 @@ dependencies = [
  "approx",
  "ciborium",
  "coorder",
- "gramian",
  "indexmap",
  "itertools 0.15.0",
  "multiindex",
