@@ -49,7 +49,7 @@
 //! vector-nodal space is future work.
 
 use iterative::{ApproxInverse, AuxiliarySpace, Jacobi, SelfAdjoint};
-use multialgebra::exterior_power;
+use multialgebra::{Tensor, exterior_dim, exterior_power};
 use simplicial::{
   geometry::coord::mesh::MeshCoords,
   linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
@@ -97,7 +97,7 @@ pub fn vector_nodal_prolongation(
   let nvertices = coords.nvertices();
   let ksimplices = topology.skeleton(grade);
   let nrows = ksimplices.len();
-  let ncovectors = num_minors(ambient, k);
+  let ncovectors = exterior_dim(ambient, k);
   let ncols = ncovectors * nvertices;
 
   // Integral of a nodal hat over the standard k-simplex: vol(1/k!) times 1/(k+1).
@@ -107,7 +107,7 @@ pub fn vector_nodal_prolongation(
     let vertices: Vec<usize> = simp.simplex().iter().collect();
     let blade = tangent_blade(coords, &vertices, ambient, k);
     for &a in &vertices {
-      for (comp, &value) in blade.iter().enumerate() {
+      for (comp, &value) in blade.components().iter().enumerate() {
         coo.push(row, comp * nvertices + a, factor * value);
       }
     }
@@ -115,24 +115,19 @@ pub fn vector_nodal_prolongation(
   CsrMatrix::from(&coo)
 }
 
-/// The ambient tangent $k$-blade $v_1 wedge dots.c wedge v_k$ of a simplex,
-/// its edge vectors from vertex $0$ (colex order) reduced by the $k$-th exterior
-/// power to the column of $binom(N,k)$ minors in colex.
-fn tangent_blade(coords: &MeshCoords, vertices: &[usize], ambient: usize, k: usize) -> Vector {
+/// The ambient tangent $k$-blade $v_1 wedge dots.c wedge v_k$ of a simplex: the
+/// wedge of its edge vectors from vertex $0$, in colex order.
+///
+/// A multivector, contravariant: it is spanned by tangent vectors, so it pushes
+/// forward and is measured by $Lambda^k g$ rather than its inverse. The
+/// components are the $binom(N,k)$ minors in colex, which is what
+/// [`exterior_power`] of the edge matrix produces in its one column.
+fn tangent_blade(coords: &MeshCoords, vertices: &[usize], ambient: usize, k: usize) -> Tensor {
   let base = coords.coord(vertices[0]).view();
   let edges = Matrix::from_fn(ambient, k, |i, j| {
     coords.coord(vertices[j + 1]).view()[i] - base[i]
   });
-  exterior_power(&edges, k).column(0).into_owned()
-}
-
-/// $binom(N, k)$, the dimension of $Lambda^k RR^N$: the number of covectors, and
-/// the row count of a tangent blade. Zero off range.
-fn num_minors(ambient: usize, k: usize) -> usize {
-  if k > ambient {
-    return 0;
-  }
-  (0..k).fold(1usize, |acc, i| acc * (ambient - i) / (i + 1))
+  Tensor::multivector(exterior_power(&edges, k).column(0).into_owned(), ambient, k)
 }
 
 /// A grade-$k$ Hodge-Laplace solver preconditioned by the Hiptmair-Xu
@@ -352,7 +347,6 @@ mod tests {
     section::{CoordFieldExt, Wedge},
   };
   use glatt::field::DiffFormClosure;
-  use multialgebra::Tensor;
   use simplicial::mesher::cartesian::CartesianGrid;
 
   /// Column $(a, I)$ of $Pi_"vec"$ is the de Rham map of $phi_a e_I$: the
@@ -366,7 +360,7 @@ mod tests {
       let nvertices = coords.nvertices();
       for grade in 1..=dim {
         let pi = vector_nodal_prolongation(&topology, &coords, grade);
-        let ncovectors = num_minors(dim, grade);
+        let ncovectors = exterior_dim(dim, grade);
         for covector in 0..ncovectors {
           // The constant ambient basis k-covector e_I, pulled onto the mesh.
           let e_i = DiffFormClosure::new(
