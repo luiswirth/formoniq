@@ -38,9 +38,9 @@ use crate::operators::ElMatProvider;
 #[cfg(test)]
 use approx::assert_relative_eq;
 
-use gramian::Metric;
 use iterative::{ApproxInverse, LinearOperator};
-use regge::metric::mesh::MeshLengthsSq;
+use metric::Metric;
+use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
   linalg::Vector,
   topology::{complex::Complex, incidence::FaceIncidence},
@@ -221,7 +221,7 @@ mod test {
   };
 
   use iterative::{Identity, StopCriterion, krylov::cg};
-  use regge::metric::mesh::MeshLengthsSq;
+  use regge::lengths::mesh::MeshLengthsSq;
   use simplicial::{linalg::CsrMatrix, topology::complex::Complex};
 
   fn mesh(dim: usize, refinement: usize) -> (Complex, MeshLengthsSq) {

@@ -23,7 +23,7 @@
 //! point" means, and no `Metric` of the continuum enters.
 
 use coorder::{Ambient, Coord, CoordSpace, Coords, Matrix, Vector};
-use gramian::{Gramian, Metric};
+use metric::Metric;
 use multialgebra::Dim;
 
 /// A smooth parametrization $phi: Omega -> RR^N$ of the continuum, with its
@@ -199,7 +199,7 @@ impl<S: CoordSpace> Parametrization<S> {
   /// in the flat coordinates). It presupposes no inverse and no closed form --
   /// only the Jacobian, which is always available.
   pub fn induced_metric(&self, u: &Coords<S>) -> Metric {
-    Metric::new(Gramian::from_euclidean_vectors(self.jacobian(u)))
+    Metric::from_euclidean_vectors(self.jacobian(u))
   }
 }
 
@@ -529,7 +529,7 @@ mod test {
       let u = Coord::from_iterator(2, [theta, phi]);
       let g = sphere.induced_metric(&u);
       let expected = Matrix::from_diagonal(&na::dvector![1.0, theta.sin().powi(2)]);
-      assert_relative_eq!(g.vector_gramian().matrix(), &expected, epsilon = 1e-6);
+      assert_relative_eq!(g.matrix(), &expected, epsilon = 1e-6);
     }
   }
 

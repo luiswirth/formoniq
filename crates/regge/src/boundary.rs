@@ -8,7 +8,7 @@
 use multiindex::Dim;
 use simplicial::{linalg::Matrix, topology::boundary::BoundaryComplex};
 
-use crate::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq};
+use crate::{coord::mesh::MeshCoords, lengths::mesh::MeshLengthsSq};
 
 /// Restricting a parent's geometry to a boundary.
 pub trait BoundaryComplexExt {

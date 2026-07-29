@@ -5,8 +5,8 @@
 //! are stated one crate down, where no metric exists to leak in.
 
 use approx::assert_relative_eq;
-use gramian::tensor::{TensorExt, inner};
-use gramian::{Gramian, Metric};
+use metric::Metric;
+use metric::tensor::{TensorExt, inner};
 use multialgebra::tensor::{pairing, wedge_pairing};
 use multialgebra::{Matrix, Tensor, Variance, Vector, exterior_bases, exterior_dim};
 use multiindex::Sign;
@@ -28,9 +28,10 @@ fn probe_element(dim: usize, grade: usize, seed: usize, variance: Variance) -> T
 
 fn probe_metric(dim: usize) -> Metric {
   let a = probe_matrix(dim, dim, 5);
-  Metric::new(Gramian::new(
+  Metric::new(
+    Variance::Covariant,
     a.transpose() * &a + Matrix::identity(dim, dim),
-  ))
+  )
 }
 fn probe_pseudo_metric(dim: usize, q: usize) -> Metric {
   let j = Matrix::from_fn(dim, dim, |i, jj| {
@@ -42,7 +43,7 @@ fn probe_pseudo_metric(dim: usize, q: usize) -> Metric {
       0.0
     }
   });
-  Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
+  Metric::pseudo_euclidean(dim - q, q).pullback(&j)
 }
 
 /// $star star = (-1)^(k(n-k)) (-1)^q$ on any signature, for both variances.
@@ -51,7 +52,7 @@ fn hodge_star_involution() {
   for dim in 1..=4 {
     for q in 0..=dim {
       for metric in [
-        Metric::new(Gramian::pseudo_euclidean(dim - q, q)),
+        Metric::pseudo_euclidean(dim - q, q),
         probe_pseudo_metric(dim, q),
       ] {
         for grade in 0..=dim {
@@ -85,7 +86,7 @@ fn wedge_with_star_is_inner_times_volume() {
   for dim in 1..=4 {
     for q in 0..=dim {
       for metric in [
-        Metric::new(Gramian::pseudo_euclidean(dim - q, q)),
+        Metric::pseudo_euclidean(dim - q, q),
         probe_pseudo_metric(dim, q),
       ] {
         for grade in 0..=dim {
@@ -201,7 +202,7 @@ fn the_dense_embedding_matches_the_gramian_up_to_the_factorials() {
 fn the_star_is_what_turns_the_wedge_pairing_into_the_inner_product() {
   for dim in 1..=4 {
     for q in 0..=dim {
-      let metric = Metric::new(Gramian::pseudo_euclidean(dim - q, q));
+      let metric = Metric::pseudo_euclidean(dim - q, q);
       let volume = metric.det_sqrt();
       for grade in 0..=dim {
         let alpha = probe_element(dim, grade, 3, Variance::Covariant);

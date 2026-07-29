@@ -51,7 +51,7 @@
 //! than one up to truncation. Errors are normed in the Euclidean comparison
 //! geometry, since the indefinite Lorentzian pairing cannot norm one.
 
-use gramian::tensor::inner;
+use metric::tensor::inner;
 
 extern crate nalgebra as na;
 
@@ -65,8 +65,8 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use gramian::Metric;
-use gramian::tensor::TensorExt;
+use metric::Metric;
+use metric::tensor::TensorExt;
 use multialgebra::Tensor;
 use multialgebra::Variance;
 use regge::{coord::mesh::MeshCoords, mesher::cartesian::CartesianGrid};

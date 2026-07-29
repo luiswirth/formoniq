@@ -1,7 +1,7 @@
 extern crate nalgebra as na;
 
 use formoniq::operators::{self, ElMatProvider};
-use regge::metric::simplex::SimplexLengthsSq;
+use regge::lengths::simplex::SimplexLengthsSq;
 use simplicial::linalg::Matrix;
 use simplicial::{Dim, atlas::unit_simplex_volume, topology::complex::Complex};
 

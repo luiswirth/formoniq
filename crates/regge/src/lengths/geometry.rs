@@ -42,7 +42,7 @@ use simplicial::{
   },
 };
 
-use gramian::Metric;
+use metric::Metric;
 
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
@@ -178,14 +178,15 @@ impl CellGramians {
 /// Regge signed squared edge lengths from a cell's metric tensor, on any
 /// signature.
 pub fn simplex_lengths_sq_of(metric: &Metric) -> SimplexLengthsSq {
-  SimplexLengthsSq::from_metric_tensor(metric.vector_gramian())
+  SimplexLengthsSq::from_metric(metric)
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
   use crate::mesher::cartesian::CartesianGrid;
-  use gramian::Gramian;
+  use metric::Metric;
+  use multialgebra::Variance;
 
   /// Tangential-tangential continuity is what makes the metric $->$ lengths
   /// leg well defined at all, so a geometry that violates it has to be refused
@@ -213,7 +214,7 @@ mod test {
         .handle_iter()
         .map(|cell| lengths.cell_metric(cell))
         .collect();
-      metrics[0] = Metric::new(Gramian::new(metrics[0].vector_gramian().matrix() * 1.5));
+      metrics[0] = Metric::new(Variance::Covariant, metrics[0].matrix() * 1.5);
       let broken = CellGramians::new(topology.dim(), metrics);
 
       assert!(!broken.is_regge_conforming(&topology));

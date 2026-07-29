@@ -15,6 +15,10 @@ multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = "0.35.0"
 tinyvec = { version = "1.11.0", features = ["alloc"] }
+serde = { version = "1.0.228", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]
 
 [dev-dependencies]
 divan = "0.1.21"

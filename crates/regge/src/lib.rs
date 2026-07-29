@@ -5,17 +5,17 @@ extern crate nalgebra_sparse as nas;
 
 pub mod boundary;
 pub mod coord;
-pub mod metric;
+pub mod lengths;
 pub mod refine;
 
 pub mod io;
 pub mod mesher;
 
-use gramian::Metric;
+use metric::Metric;
 use multiindex::Dim;
 use simplicial::{atlas::unit_simplex_volume, topology::complex::Complex};
 
-use self::metric::mesh::MeshLengthsSq;
+use self::lengths::mesh::MeshLengthsSq;
 
 /// The volume of a cell carrying the given metric tensor,
 /// $vol(K) = vol(hat(K)) sqrt(abs(det g))$.
@@ -36,7 +36,7 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// standard mass-lumping convention.
 ///
 /// Intrinsic: reads the Regge edge lengths, not an embedding, since
-/// [`Gramian::vertex_angle`](gramian::Gramian::vertex_angle) needs no
+/// [`Metric::vertex_angle`](metric::Metric::vertex_angle) needs no
 /// coordinates -- a Regge manifold given only as [`MeshLengthsSq`] has a
 /// Gaussian curvature exactly as well as an embedded one, which is why the
 /// primitive is what this consumes. This
@@ -70,7 +70,7 @@ pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -
     let verts = &cell.simplex().vertices;
     for m in 0..3 {
       let (a, b) = ((m + 1) % 3, (m + 2) % 3);
-      angle_sum[verts[m]] += metric.vector_gramian().vertex_angle(m, a, b);
+      angle_sum[verts[m]] += metric.vertex_angle(m, a, b);
       areas[verts[m]] += vol / 3.0;
     }
   }
@@ -94,7 +94,7 @@ mod tests {
   /// Gauss-Bonnet on the unit sphere ($chi = 2$): $sum_v K(v) A(v) = 4 pi$
   /// exactly, independent of the triangulation and of the area convention --
   /// a machine-checked identity, not a tolerance around a numerically
-  /// approximated constant. Driven through [`metric::mesh::MeshLengthsSq`], the
+  /// approximated constant. Driven through [`lengths::mesh::MeshLengthsSq`], the
   /// Regge-only representation, to demonstrate this needs no embedding at
   /// all.
   #[test]

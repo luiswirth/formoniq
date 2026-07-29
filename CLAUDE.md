@@ -61,14 +61,14 @@ Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing:
-`multiindex → multialgebra → gramian → { regge, glatt } → derham → formoniq → realize → studio`,
+`multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq → realize → studio`,
 with `coorder` and `simplicial` joining from the side:
 `coorder` is foundational, and `simplicial` (pure topology plus the atlas)
-sits beside `gramian` as what `regge` adds a metric to.
+sits beside `metric` as what `regge` adds a metric to.
 `regge`/`glatt` are siblings, the discrete manifold and the continuum one.
 
 Two of those boundaries are invariants made structural rather than documented.
-**Invariant 5** splits `multialgebra` from `gramian`:
+**Invariant 5** splits `multialgebra` from `metric`:
 the wedge, the contraction, the transfer and both pairings need no metric,
 the inner product, the Hodge star and the musicals need nothing else,
 so an operation's crate now says what it depends on.
@@ -90,7 +90,7 @@ joining the ladder only where `formoniq` consumes it.
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
 | `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map |
-| `gramian`    | metric structure, and the operations needing one | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, Riemannian is $q = 0$), `CausalType`, and the metric half of the algebra: the induced Gramians, `inner`, and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
+| `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
 | `regge`      | the simplicial manifold $M_h$       | the geometry a complex carries: `MeshLengthsSq` (the intrinsic Regge primitive the engine consumes), `MeshCoords` and `CellGramians` the sources that convert into it, `cell_volume`, `vertex_gaussian_curvature`, the extensions reaching down onto `simplicial`'s types (`SimplexCoordsExt`, `SubdivisionExt`, `BoundaryComplexExt`), `mesher::` (grids with coordinates, quotient tori, sphere surfaces) and `io::gmsh` |
@@ -103,7 +103,7 @@ joining the ladder only where `formoniq` consumes it.
 
 No crate exists solely to hold a shared type alias.
 `Vector`/`Matrix` (dense nalgebra) are trivial aliases with no nominal identity to share,
-so `gramian`, `coorder`, `multialgebra` and `glatt`
+so `metric`, `coorder`, `multialgebra` and `glatt`
 each declare their own directly from `nalgebra` rather than depending on anything for them.
 `simplicial` is the lowest crate that needs *sparse* matrices (its boundary operators),
 so that is where `CsrMatrix`/`CooMatrix` and the extension traits built on them (`CooMatrixExt`) live,
@@ -303,8 +303,9 @@ Breaking one is a bug even if it compiles and passes tests.
    and a `Tensor` may mix them: that is what an endomorphism, a torsion or a trace *is*.
    Variance decides the functorial direction (pullback vs. pushforward),
    the duality pairing, the musical isomorphisms and the choice of $g$ vs. $g^(-1)$.
-   Never collapse the two, and never pick the Gramian by hand:
-   go through `variance_gramian` / `slot_gramian` / `multiform_gramian` / `multivector_gramian`.
+   Never collapse the two, and never choose between $g$ and $g^(-1)$ by hand:
+   go through `Metric::measuring` / `Metric::on_slot` /
+   `multiform_metric` / `multivector_metric`.
 
    It is the one datum with **no representational footprint**:
    $dim Lambda^k (V) = dim Lambda^k (V^*)$,
@@ -574,6 +575,16 @@ rather than the algorithm.
 Peers as operators, not as objects:
 a direct factorization and an eigensolve need entries,
 so the assembled form is strictly the more capable one.
+
+**One datum, derived not stored.**
+Where one value determines another, the second is computed at the point of use
+and never held beside the first:
+$g$ determines $g^(-1)$, so `Metric` holds one matrix and a variance
+and `dual` is the passage between them.
+A stored pair is one datum in two places,
+kept in step by construction alone, and it pushes the choice between the two onto every caller.
+Caching is the exception and needs the measurement to justify it,
+not the other way round.
 
 **Linalg backends by role.**
 nalgebra dense (`Matrix`/`Vector`) for element-local math

@@ -194,8 +194,8 @@ impl WhitneyExpansion {
 mod test {
   use super::*;
   use approx::assert_relative_eq;
-  use gramian::tensor::multiform_gramian;
-  use gramian::{Gramian, Metric};
+  use metric::Metric;
+  use metric::tensor::multiform_metric;
   use multialgebra::{exterior_bases, exterior_dim};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
@@ -210,7 +210,7 @@ mod test {
       std::cmp::Ordering::Greater => ((3 * i + 5 * k) % 4) as f64 / 8.0,
       std::cmp::Ordering::Less => 0.0,
     });
-    Metric::new(Gramian::pseudo_euclidean(dim - q, q).pullback(&j))
+    Metric::pseudo_euclidean(dim - q, q).pullback(&j)
   }
 
   /// $C^top (H times.circle Q) C$ computed on the factors agrees with the same
@@ -313,7 +313,7 @@ mod test {
       for q in 0..=dim.index() {
         let metric = skewed_metric(dim.index(), q);
         for grade in 1..=dim.index() {
-          let inner = multiform_gramian(&metric, grade);
+          let inner = multiform_metric(&metric, grade);
           for dof_simp in combinations(nvertices, grade + 1) {
             let whitney = WhitneyLsf::unit(dim, dof_simp);
             for blade in exterior_bases(dim, grade - 1) {

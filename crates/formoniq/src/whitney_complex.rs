@@ -21,7 +21,7 @@ use {
   crate::linalg::quadratic_form_sparse,
   derham::cochain::Cochain,
   multialgebra::ExteriorGrade,
-  regge::metric::mesh::MeshLengthsSq,
+  regge::lengths::mesh::MeshLengthsSq,
   simplicial::{
     Dim,
     linalg::{CooMatrix, CsrMatrix, Vector},

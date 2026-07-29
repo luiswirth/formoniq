@@ -83,8 +83,8 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use gramian::tensor::{TensorExt, inner};
-use gramian::{CausalType, Metric};
+use metric::tensor::{TensorExt, inner};
+use metric::{CausalType, Metric};
 use multialgebra::{Tensor, Variance, exterior_bases, exterior_dim};
 use multiindex::Sign;
 use regge::{

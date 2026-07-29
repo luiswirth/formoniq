@@ -27,8 +27,8 @@
 //! as the field is the thing to avoid.
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use gramian::Metric;
-use gramian::tensor::TensorExt;
+use metric::Metric;
+use metric::tensor::TensorExt;
 use multialgebra::{ExteriorGrade, Tensor};
 use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::Vector;

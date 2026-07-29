@@ -1,5 +1,5 @@
 use super::{Coord, CoordRef, simplex::SimplexRefExt};
-use crate::metric::{CellGramians, mesh::MeshLengthsSq};
+use crate::lengths::{CellGramians, mesh::MeshLengthsSq};
 use simplicial::{
   Dim,
   topology::{
@@ -10,7 +10,8 @@ use simplicial::{
   },
 };
 
-use gramian::{Gramian, Metric};
+use metric::Metric;
+use multialgebra::Variance;
 use simplicial::linalg::{Matrix, Vector};
 
 use itertools::Itertools;
@@ -29,7 +30,7 @@ use std::{io, path::Path};
 pub struct MeshCoords {
   matrix: Matrix,
   /// The inner product of the ambient space the vertices live in.
-  ambient: Gramian,
+  ambient: Metric,
 }
 
 impl MeshCoords {
@@ -58,11 +59,9 @@ impl MeshCoords {
   /// metric of a subskeleton simplex are well defined from the shared
   /// coordinates with no containing cell consulted.
   pub fn simplex_metric(&self, simplex: SimplexRef) -> Metric {
-    Metric::new(
-      self
-        .ambient
-        .pullback(&simplex.coord_simplex(self).spanning_vectors()),
-    )
+    self
+      .ambient
+      .pullback(&simplex.coord_simplex(self).spanning_vectors())
   }
 
   /// Materialize the per-cell metrics this embedding induces.
@@ -83,13 +82,13 @@ impl MeshCoords {
   /// Vertices of an embedding into Euclidean space: the ambient inner product
   /// is the standard one.
   pub fn new(matrix: Matrix) -> Self {
-    let ambient = Gramian::euclidean(matrix.nrows());
+    let ambient = Metric::euclidean(matrix.nrows());
     Self::with_ambient(matrix, ambient)
   }
   /// Vertices of an embedding into the flat pseudo-Euclidean space the given
-  /// ambient Gramian describes -- e.g. [`Gramian::minkowski`] for a mesh of a
+  /// ambient Gramian describes -- e.g. [`Metric::minkowski`] for a mesh of a
   /// Lorentzian spacetime.
-  pub fn with_ambient(matrix: Matrix, ambient: Gramian) -> Self {
+  pub fn with_ambient(matrix: Matrix, ambient: Metric) -> Self {
     assert_eq!(
       ambient.dim(),
       matrix.nrows(),
@@ -102,7 +101,7 @@ impl MeshCoords {
     &self.matrix
   }
   /// The inner product of the ambient space.
-  pub fn ambient(&self) -> &Gramian {
+  pub fn ambient(&self) -> &Metric {
     &self.ambient
   }
   pub fn matrix_mut(&mut self) -> &mut Matrix {
@@ -223,7 +222,7 @@ impl MeshCoords {
     for i in old_dim..dim.index() {
       ambient[(i, i)] = 1.0;
     }
-    self.ambient = Gramian::new_unchecked(ambient);
+    self.ambient = Metric::new_unchecked(Variance::Covariant, ambient);
     self
   }
 }
@@ -301,7 +300,7 @@ mod test {
   use super::*;
   use crate::{
     mesher::cartesian::CartesianGrid,
-    {cell_volume, coord::simplex::SimplexRefExt, metric::mesh::EdgeRefExt},
+    {cell_volume, coord::simplex::SimplexRefExt, lengths::mesh::EdgeRefExt},
   };
   use multiindex::Dim;
 
@@ -319,16 +318,10 @@ mod test {
       for grade in (1..=dim.index()).map(Dim::from) {
         for simp in topology.skeleton(grade).handle_iter() {
           let from_lengths = lengths.simplex_metric(simp);
-          let induced = Metric::new(
-            coords
-              .ambient()
-              .pullback(&simp.coord_simplex(&coords).spanning_vectors()),
-          );
-          approx::assert_relative_eq!(
-            from_lengths.vector_gramian().matrix(),
-            induced.vector_gramian().matrix(),
-            epsilon = 1e-12
-          );
+          let induced = coords
+            .ambient()
+            .pullback(&simp.coord_simplex(&coords).spanning_vectors());
+          approx::assert_relative_eq!(from_lengths.matrix(), induced.matrix(), epsilon = 1e-12);
           // The volume accessor is total over the skeleton and agrees with the
           // metric's own volume factor.
           approx::assert_relative_eq!(
@@ -369,7 +362,7 @@ mod test {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let spacetime = MeshCoords::with_ambient(
         coords.matrix().clone(),
-        gramian::Gramian::minkowski(dim.index()),
+        metric::Metric::minkowski(dim.index()),
       );
       for cell in topology.cells().handle_iter() {
         let metric = spacetime.cell_metric(cell);
@@ -386,11 +379,11 @@ mod test {
   /// invented for.
   #[test]
   fn lorentzian_ambient_realizes_lorentzian_regge_data() {
-    use gramian::CausalType;
+    use metric::CausalType;
     let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), 1).triangulate();
     let mut matrix = coords.matrix().clone();
     matrix.row_mut(0).scale_mut(0.7);
-    let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(2));
+    let spacetime = MeshCoords::with_ambient(matrix, metric::Metric::minkowski(2));
     let regge = spacetime.to_edge_lengths_sq(&topology);
 
     let mut seen = std::collections::HashSet::new();
@@ -408,11 +401,7 @@ mod test {
     for cell in topology.cells().handle_iter() {
       let from_regge = regge.cell_metric(cell);
       let from_coords = spacetime.cell_metric(cell);
-      approx::assert_relative_eq!(
-        from_regge.vector_gramian().matrix(),
-        from_coords.vector_gramian().matrix(),
-        epsilon = 1e-12
-      );
+      approx::assert_relative_eq!(from_regge.matrix(), from_coords.matrix(), epsilon = 1e-12);
       assert_eq!(from_regge.signature(), (1, 1));
     }
   }

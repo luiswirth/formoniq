@@ -41,8 +41,8 @@
 //! life.
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use gramian::Metric;
-use gramian::tensor::TensorExt;
+use metric::Metric;
+use metric::tensor::TensorExt;
 use regge::coord::mesh::MeshCoords;
 use simplicial::Sign;
 use simplicial::linalg::Matrix;

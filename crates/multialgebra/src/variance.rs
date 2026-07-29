@@ -9,10 +9,11 @@
 /// one, so it is stated once at construction and propagated from there.
 ///
 /// It decides the duality pairing, the direction of the functor (pushforward
-/// against pullback), the musical isomorphisms and which Gramian measures a
-/// slot. Never choose that Gramian by hand; go through `gramian`'s
-/// `variance_gramian`.
+/// against pullback), the musical isomorphisms and which metric measures a
+/// slot. Never choose between $g$ and $g^(-1)$ by hand; go through the `metric`
+/// crate's `Metric::measuring`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Variance {
   /// Elements of $Lambda^k V$ and $"Sym"^k V$: vectors and multivectors.
   Contravariant,

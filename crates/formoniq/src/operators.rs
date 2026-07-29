@@ -4,9 +4,9 @@ use {
     section::Section,
     trace::FaceTrace,
   },
-  gramian::{
+  metric::{
     Metric,
-    tensor::{TensorExt, multiform_gramian},
+    tensor::{TensorExt, multiform_metric},
   },
   multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
   multiindex::{Combination, Sign},
@@ -92,7 +92,7 @@ impl ElMatProvider for HodgeMassElmat {
 
     // $H$: the Gramian of the barycentric $k$-blades $lambda^* (e_I)$, one
     // Cauchy-Binet sandwich for all Whitney wedge terms at once.
-    let form_gramian = multiform_gramian(metric, self.grade);
+    let form_gramian = multiform_metric(metric, self.grade);
     let blade_gramian =
       &self.difbarys_power * form_gramian.matrix() * self.difbarys_power.transpose();
 
@@ -447,7 +447,7 @@ impl<F: Sync + Section> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
     self.grade
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
-    let inner = multiform_gramian(metric, self.grade);
+    let inner = multiform_metric(metric, self.grade);
     self.quad.integrate_pair(
       &self.shapes,
       &self.shapes,
@@ -545,7 +545,7 @@ impl<V: Sync + Section> ElMatProvider for LieDerivativeElmat<'_, V> {
   }
 
   fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
-    let inner = multiform_gramian(metric, self.grade);
+    let inner = multiform_metric(metric, self.grade);
 
     let interior = self.volume.integrate_pair(
       &self.test,
@@ -608,7 +608,7 @@ impl<F: Sync + Section> ElVecProvider for SourceElVec<'_, F> {
     self.source.grade()
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> ElVec {
-    let inner = multiform_gramian(metric, self.grade());
+    let inner = multiform_metric(metric, self.grade());
     self.quad.integrate(
       &self.shapes,
       chart,
@@ -631,7 +631,7 @@ mod test {
     interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
   use multialgebra::Tensor;
-  use regge::metric::simplex::SimplexLengthsSq;
+  use regge::lengths::simplex::SimplexLengthsSq;
   use simplicial::topology::simplex::unit_subsimps;
 
   use approx::assert_relative_eq;
@@ -748,7 +748,7 @@ mod test {
 
       for grade in dim.range_inclusive() {
         let test = LsfSamples::whitney(dim, grade, volume.nodes());
-        let inner = multiform_gramian(&metric, grade);
+        let inner = multiform_metric(&metric, grade);
 
         let boundary_test = LsfSamples::whitney(dim, grade, boundary.nodes());
         let boundary_trial = LsfSamples::whitney(dim, grade, boundary.nodes());
@@ -858,7 +858,7 @@ mod test {
         let elmat = LieDerivativeElmat::new(&velocity, grade, 2).eval(&metric, chart);
         let symmetric_part = &elmat + elmat.transpose();
 
-        let inner = multiform_gramian(&metric, grade);
+        let inner = multiform_metric(&metric, grade);
         let shapes = LsfSamples::whitney(dim, grade, boundary.nodes());
         let defect = boundary.integrate_pair(&shapes, &shapes, chart, |_point, row, col| {
           inner.inner(row.components(), col.components()) * flux.clone()
@@ -976,7 +976,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = gramian::tensor::inner(awhitney, bwhitney, &geo.metric());
+            inner[(i, j)] = metric::tensor::inner(awhitney, bwhitney, &geo.metric());
           }
         }
         inner *= geo.vol();

@@ -8,7 +8,7 @@ use simplicial::linalg::{Matrix, Vector};
 pub use multiindex::cartesian::{cartesian2linear, linear2cartesian};
 
 use crate::coord::mesh::MeshCoords;
-use gramian::Gramian;
+use metric::Metric;
 use simplicial::{
   Dim,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
@@ -208,7 +208,7 @@ impl CartesianGrid {
     }
     let grid = Self::new_min_max(Vector::zeros(dim.index()), max, ncells_axis);
     let (complex, coords) = grid.triangulate();
-    let coords = MeshCoords::with_ambient(coords.into_matrix(), Gramian::minkowski(dim.index()));
+    let coords = MeshCoords::with_ambient(coords.into_matrix(), Metric::minkowski(dim.index()));
     debug_assert!(
       coords
         .to_edge_lengths_sq(&complex)

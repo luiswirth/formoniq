@@ -13,8 +13,8 @@ use {
   multialgebra::{Tensor, Variance},
   multiindex::{Combination, Sign, binomial},
   regge::{
+    lengths::mesh::MeshLengthsSq,
     mesher::{cartesian::CartesianGrid, quotient::FlatQuotient},
-    metric::mesh::MeshLengthsSq,
   },
   simplicial::{
     linalg::Vector,

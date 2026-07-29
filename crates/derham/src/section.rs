@@ -28,16 +28,16 @@
 //! I/O.
 
 use crate::interpolate::interpolant::WhitneyInterpolant;
-use gramian::tensor::TensorExt;
+use metric::tensor::TensorExt;
 
 use {
   coorder::{Ambient, CoordSpace, Coords},
   glatt::{field::CoordField, parametrization::Parametrization},
-  gramian::Metric,
+  metric::Metric,
   multialgebra::{Dim, ExteriorGrade, Tensor},
   regge::{
     coord::{CoordRef, locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
-    metric::mesh::MeshLengthsSq,
+    lengths::mesh::MeshLengthsSq,
   },
   simplicial::linalg::Vector,
   simplicial::{

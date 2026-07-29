@@ -29,12 +29,12 @@
 //! so one sample per cell is a genuine reduction and the file is a picture of
 //! the field rather than the field itself.
 
-use gramian::tensor::TensorExt;
+use metric::tensor::TensorExt;
 use std::io;
 use std::path::Path;
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use gramian::Metric;
+use metric::Metric;
 use multialgebra::{ExteriorGrade, Tensor};
 use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};
 use simplicial::{

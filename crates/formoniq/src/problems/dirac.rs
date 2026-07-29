@@ -892,7 +892,7 @@ mod test {
   #[test]
   fn dirac_source_reproduces_constant_field() {
     use regge::coord::mesh::MeshCoords;
-    use regge::metric::mesh::MeshLengthsSq;
+    use regge::lengths::mesh::MeshLengthsSq;
     use simplicial::topology::complex::Complex;
 
     fn run(topology: &Complex, coords: &MeshCoords, geometry: &MeshLengthsSq) {

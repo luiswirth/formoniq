@@ -719,7 +719,7 @@ dependencies = [
  "approx",
  "coorder",
  "glatt",
- "gramian",
+ "metric",
  "multialgebra",
  "multiindex",
  "nalgebra",
@@ -1248,9 +1248,9 @@ dependencies = [
  "derham",
  "faer",
  "glatt",
- "gramian",
  "iterative",
  "itertools 0.15.0",
+ "metric",
  "multialgebra",
  "multiindex",
  "nalgebra",
@@ -1272,7 +1272,7 @@ dependencies = [
  "derham",
  "formoniq",
  "glatt",
- "gramian",
+ "metric",
  "multialgebra",
  "nalgebra",
  "rayon",
@@ -1301,10 +1301,10 @@ dependencies = [
  "formoniq-realize",
  "getrandom 0.3.4",
  "glatt",
- "gramian",
  "image",
  "js-sys",
  "log",
+ "metric",
  "multialgebra",
  "naga",
  "nalgebra",
@@ -1572,7 +1572,7 @@ version = "0.2.0"
 dependencies = [
  "approx",
  "coorder",
- "gramian",
+ "metric",
  "multialgebra",
  "nalgebra",
 ]
@@ -1646,17 +1646,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdf242682df893b86f33a73828fb09ca4b2d3bb6cc95249707fc684d27484b91"
 dependencies = [
  "bitflags 2.13.1",
-]
-
-[[package]]
-name = "gramian"
-version = "0.2.0"
-dependencies = [
- "approx",
- "multialgebra",
- "multiindex",
- "nalgebra",
- "serde",
 ]
 
 [[package]]
@@ -2200,6 +2189,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "metric"
+version = "0.2.0"
+dependencies = [
+ "approx",
+ "multialgebra",
+ "multiindex",
+ "nalgebra",
+ "serde",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2240,6 +2240,7 @@ dependencies = [
  "divan",
  "multiindex",
  "nalgebra",
+ "serde",
  "tinyvec",
 ]
 
@@ -3520,8 +3521,8 @@ dependencies = [
  "approx",
  "ciborium",
  "coorder",
- "gramian",
  "itertools 0.15.0",
+ "metric",
  "mshio",
  "multialgebra",
  "multiindex",

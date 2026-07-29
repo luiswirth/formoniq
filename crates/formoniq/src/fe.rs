@@ -25,9 +25,9 @@
 use {
   crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
-  gramian::tensor::multiform_gramian,
   iterative::{Jacobi, StopCriterion, krylov::cg},
-  regge::{cell_volume, metric::mesh::MeshLengthsSq},
+  metric::tensor::multiform_metric,
+  regge::{cell_volume, lengths::mesh::MeshLengthsSq},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     linalg::{CsrMatrix, Vector},
@@ -60,7 +60,7 @@ pub fn fe_l2_error<F: Section>(
     .handle_iter()
     .map(|cell| {
       let metric = geometry.cell_metric(cell);
-      let inner = multiform_gramian(&metric, grade);
+      let inner = multiform_metric(&metric, grade);
       let error_pointwise =
         |point: &MeshPoint| inner.norm_sq((exact.at(point) - fe_whitney.at(point)).components());
       qr.integrate_cell(cell, &error_pointwise, cell_volume(&metric))
