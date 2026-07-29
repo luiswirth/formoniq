@@ -27,10 +27,9 @@
 use crate::gallery::{Mesh, Study};
 use crate::scene::{LineField, ScalarField, Scene};
 
-use simplicial::{
-  geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, skeleton::Skeleton},
-};
+use simplicial::topology::{complex::Complex, skeleton::Skeleton};
+
+use regge::coord::mesh::MeshCoords;
 
 /// A build to run: a mesh, and the study to run on it.
 ///

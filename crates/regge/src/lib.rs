@@ -1,18 +1,19 @@
-//! The geometry a mesh carries: the metric layer, and the extrinsic coordinate
-//! layer downstream of it.
-//!
-//! [`metric`] is the intrinsic one and the only one the manifold's geometry
-//! actually rests on; [`coord`] is an embedding, one geometry source among
-//! several. The dependency runs that way and not the other: an embedding
-//! induces a metric, a metric induces no embedding.
+#![doc = include_str!("../README.md")]
 
+extern crate nalgebra as na;
+extern crate nalgebra_sparse as nas;
+
+pub mod boundary;
 pub mod coord;
 pub mod metric;
 pub mod refine;
 
-use crate::{Dim, atlas::unit_simplex_volume, topology::complex::Complex};
+pub mod io;
+pub mod mesher;
 
 use gramian::Metric;
+use multiindex::Dim;
+use simplicial::{atlas::unit_simplex_volume, topology::complex::Complex};
 
 use self::metric::mesh::MeshLengthsSq;
 
@@ -89,7 +90,6 @@ pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::Dim;
 
   /// Gauss-Bonnet on the unit sphere ($chi = 2$): $sum_v K(v) A(v) = 4 pi$
   /// exactly, independent of the triangulation and of the area convention --

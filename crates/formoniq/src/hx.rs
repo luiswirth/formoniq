@@ -50,8 +50,8 @@
 
 use iterative::{ApproxInverse, AuxiliarySpace, Jacobi, SelfAdjoint};
 use multialgebra::{Tensor, exterior_dim, exterior_power};
+use regge::coord::mesh::MeshCoords;
 use simplicial::{
-  geometry::coord::mesh::MeshCoords,
   linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
   topology::complex::Complex,
 };
@@ -347,7 +347,7 @@ mod tests {
     section::{CoordFieldExt, Wedge},
   };
   use glatt::field::DiffFormClosure;
-  use simplicial::mesher::cartesian::CartesianGrid;
+  use regge::mesher::cartesian::CartesianGrid;
 
   /// Column $(a, I)$ of $Pi_"vec"$ is the de Rham map of $phi_a e_I$: the
   /// assembly is validated against the tested [`derham_map`], the primitive it

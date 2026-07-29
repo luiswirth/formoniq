@@ -1,9 +1,9 @@
 use super::EdgeIdx;
-use crate::{Dim, topology::simplex::nedges};
+use simplicial::{Dim, topology::simplex::nedges};
 
-use crate::linalg::{Matrix, Vector};
 use gramian::{CausalType, Gramian, Metric};
 use multiindex::{Combination, combinations, factorial};
+use simplicial::linalg::{Matrix, Vector};
 
 /// The signed squared edge lengths of a simplex: Regge calculus, on any
 /// metric signature.
@@ -21,7 +21,7 @@ use multiindex::{Combination, combinations, factorial};
 pub struct SimplexLengthsSq {
   /// The binom(dim+1,2) signed squared edge lengths, on the
   /// colexicographically ordered vertex pairs: the same order as
-  /// [`Simplex::subsimps`](crate::topology::simplex::Simplex::subsimps) with dim 1.
+  /// [`Simplex::subsimps`](simplicial::topology::simplex::Simplex::subsimps) with dim 1.
   lengths_sq: Vector,
   /// Dimension of the simplex.
   dim: Dim,
@@ -244,7 +244,7 @@ impl SimplexLengthsSq {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::Dim;
+  use multiindex::Dim;
 
   use approx::assert_relative_eq;
 

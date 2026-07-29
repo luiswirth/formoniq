@@ -1,8 +1,8 @@
 use crate::operators::{ElMatProvider, ElVecProvider};
 
 use itertools::Itertools;
+use regge::metric::mesh::MeshLengthsSq;
 use simplicial::{
-  geometry::metric::mesh::MeshLengthsSq,
   linalg::{CooMatrix, Vector},
   topology::complex::Complex,
 };
@@ -98,9 +98,9 @@ mod test {
   use crate::operators::HodgeMassElmat;
   use simplicial::Dim;
 
-  use simplicial::{
-    geometry::metric::CellGramians, linalg::Matrix, mesher::cartesian::CartesianGrid,
-  };
+  use simplicial::linalg::Matrix;
+
+  use regge::{mesher::cartesian::CartesianGrid, metric::CellGramians};
 
   /// Assembly consumes the edge-length primitive, so representation
   /// independence is a property of the conversions *into* it: routing a
@@ -138,7 +138,7 @@ mod test {
   /// coordinates in the assembly path.
   #[test]
   fn lorentzian_sources_reduce_to_the_same_regge_data() {
-    use simplicial::geometry::coord::mesh::MeshCoords;
+    use regge::coord::mesh::MeshCoords;
 
     for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();

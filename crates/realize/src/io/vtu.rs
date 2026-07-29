@@ -36,10 +36,10 @@ use std::path::Path;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
 use multialgebra::{ExteriorGrade, Tensor};
+use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};
 use simplicial::{
   Dim, Sign,
   atlas::MeshPoint,
-  geometry::coord::{mesh::MeshCoords, simplex::SimplexRefExt},
   topology::{complex::Complex, role::Cell},
 };
 
@@ -400,8 +400,8 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use regge::mesher::cartesian::CartesianGrid;
   use simplicial::linalg::Vector;
-  use simplicial::mesher::cartesian::CartesianGrid;
 
   /// The named `DataArray`'s numbers, in document order.
   fn data_array(xml: &str, name: &str) -> Vec<f64> {

@@ -37,10 +37,9 @@ use std::time::Instant;
 
 use formoniq::{linalg::DirectInverse, multigrid::Grade0Multigrid};
 use iterative::{ApproxInverse, Jacobi, StopCriterion, krylov::cg};
+use regge::{mesher::cartesian::CartesianGrid, metric::mesh::MeshLengthsSq};
 use simplicial::{
-  geometry::metric::mesh::MeshLengthsSq,
   linalg::{CsrMatrix, Vector},
-  mesher::cartesian::CartesianGrid,
   topology::complex::Complex,
 };
 

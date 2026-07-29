@@ -23,11 +23,9 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::Matrix;
-use simplicial::{
-  geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, ordering::CellOrdering, orientation::Orientation},
-};
+use simplicial::topology::{complex::Complex, ordering::CellOrdering, orientation::Orientation};
 
 use crate::io::surface::TriangleSurface3D;
 

@@ -20,12 +20,10 @@
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use multialgebra::ExteriorGrade;
-use simplicial::{
-  Dim,
-  atlas::MeshPoint,
-  geometry::coord::{locate::PointLocator, mesh::MeshCoords},
-  topology::complex::Complex,
-};
+use regge::coord::locate::PointLocator;
+use regge::coord::mesh::MeshCoords;
+use simplicial::topology::complex::Complex;
+use simplicial::{Dim, atlas::MeshPoint};
 
 use crate::reduce::{reduction_sign, scalarize};
 
@@ -214,7 +212,7 @@ fn voxel_center(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::mesher::cartesian::CartesianGrid;
+  use regge::mesher::cartesian::CartesianGrid;
 
   /// A constant 0-form samples to that constant everywhere *inside* the mesh
   /// and to zero outside it: the interpolation is exact on $cal(W) Lambda^0$'s

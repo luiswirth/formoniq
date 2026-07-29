@@ -1,10 +1,8 @@
-use crate::linalg::Matrix;
+use simplicial::linalg::Matrix;
 
-use crate::{
-  geometry::coord::mesh::{MeshCoords, close_vertex_gaps},
-  topology::{
-    VertexIdx, complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton,
-  },
+use crate::coord::mesh::{MeshCoords, close_vertex_gaps};
+use simplicial::topology::{
+  VertexIdx, complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton,
 };
 
 pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshCoords) {
@@ -20,7 +18,7 @@ pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshCoords) {
 /// the kind -- element node order is a storage convention, not a structure on
 /// the mesh -- so the check is real and a file may well fail it. Refinement
 /// falls back to the colex ordering without one
-/// ([`Complex::refine`](crate::topology::complex::Complex::refine)), which is
+/// ([`Complex::refine`](simplicial::topology::complex::Complex::refine)), which is
 /// always available and always valid; what is lost is only that a refinement
 /// tower composes.
 ///

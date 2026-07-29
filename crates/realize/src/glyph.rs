@@ -45,10 +45,10 @@ use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::tensor::TensorExt;
 use rayon::prelude::*;
+use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};
 use simplicial::linalg::Vector;
 use simplicial::{
   atlas::{MeshPoint, unit_lattice_bary},
-  geometry::coord::{mesh::MeshCoords, simplex::SimplexRefExt},
   topology::complex::Complex,
 };
 
@@ -87,9 +87,7 @@ pub const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
 ///
 /// A `dim == 0` cell has no edge, so the shortest is `0.0` -- no lattice to
 /// space and no arrow to draw.
-pub fn cell_extent(
-  coord_simplex: &simplicial::geometry::coord::simplex::SimplexCoords,
-) -> (f64, f64) {
+pub fn cell_extent(coord_simplex: &regge::coord::simplex::SimplexCoords) -> (f64, f64) {
   let vertices: Vec<_> = coord_simplex.coord_iter().collect();
   let (min, max) = vertices
     .iter()
@@ -294,12 +292,12 @@ mod tests {
   fn an_arrow_is_sized_by_its_cell_at_every_refinement() {
     let mut ratios = Vec::new();
     for subdivisions in 1..=4 {
-      let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(subdivisions);
+      let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(subdivisions);
       let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
       let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
       assert!(!instances.is_empty(), "the sweep must produce glyphs");
 
-      let edge = simplicial::geometry::coord::mean_edge_length(&topology, &coords);
+      let edge = regge::coord::mean_edge_length(&topology, &coords);
       let longest = instances
         .iter()
         .map(|g| f64::from(g.length))
@@ -331,7 +329,7 @@ mod tests {
   #[test]
   fn a_solids_arrows_lie_on_its_boundary_surface() {
     use crate::surface::Surface;
-    use simplicial::mesher::cartesian::CartesianGrid;
+    use regge::mesher::cartesian::CartesianGrid;
 
     let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
     let surface = Surface::of(&topology, &coords);
@@ -371,7 +369,7 @@ mod tests {
   /// shader: the bake stores arrows, not corners.
   #[test]
   fn the_bake_emits_one_instance_per_lattice_point() {
-    let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(1);
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
     let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
     let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
 

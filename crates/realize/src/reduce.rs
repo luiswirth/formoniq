@@ -30,11 +30,11 @@ use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
 use gramian::tensor::TensorExt;
 use multialgebra::{ExteriorGrade, Tensor};
+use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::Vector;
 use simplicial::{
   Sign,
   atlas::{Bary, MeshPoint},
-  geometry::coord::mesh::MeshCoords,
   topology::{
     complex::Complex,
     handle::{SimplexIdx, SimplexRef},
@@ -451,7 +451,7 @@ mod tests {
   /// own DOF.
   #[test]
   fn trace_diagonal_is_cochain_density() {
-    use simplicial::geometry::{cell_volume, coord::mesh::unit_coord_complex};
+    use regge::{cell_volume, coord::mesh::unit_coord_complex};
     for n in 1..=3 {
       let (topology, coords) = unit_coord_complex(n);
       for k in 1..=n {

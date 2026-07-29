@@ -35,13 +35,13 @@ use {
   glatt::{field::CoordField, parametrization::Parametrization},
   gramian::Metric,
   multialgebra::{Dim, ExteriorGrade, Tensor},
+  regge::{
+    coord::{CoordRef, locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
+    metric::mesh::MeshLengthsSq,
+  },
   simplicial::linalg::Vector,
   simplicial::{
     atlas::MeshPoint,
-    geometry::{
-      coord::{CoordRef, locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
-      metric::mesh::MeshLengthsSq,
-    },
     topology::{complex::Complex, orientation::Orientation},
   },
 };
@@ -490,11 +490,11 @@ mod test {
 
   use {
     glatt::field::DiffFormClosure,
-    simplicial::linalg::Vector,
-    simplicial::{
-      geometry::coord::{Coord, locate::PointLocator},
+    regge::{
+      coord::{Coord, locate::PointLocator},
       mesher::cartesian::CartesianGrid,
     },
+    simplicial::linalg::Vector,
   };
 
   use approx::assert_relative_eq;
@@ -610,10 +610,8 @@ mod test {
   #[test]
   fn composite_pullback_is_functorial() {
     use glatt::parametrization::Parametrization;
-    use simplicial::{
-      atlas::MeshPoint, geometry::coord::simplex::SimplexRefExt,
-      mesher::sphere::mesh_sphere_surface,
-    };
+    use regge::{coord::simplex::SimplexRefExt, mesher::sphere::mesh_sphere_surface};
+    use simplicial::atlas::MeshPoint;
 
     let (topology, coords) = mesh_sphere_surface(2);
     let sphere = Parametrization::sphere(Dim::new(2), 1.0);

@@ -163,7 +163,7 @@ impl Cochain {
 ///
 /// Shape alone does not make two such columns the same object. Signed squared
 /// edge lengths
-/// ([`MeshLengthsSq`](simplicial::geometry::metric::mesh::MeshLengthsSq)) are
+/// ([`MeshLengthsSq`](regge::metric::mesh::MeshLengthsSq)) are
 /// grade-1 columns too, but their datum $g(t_e, t_e)$ is *quadratic* in the
 /// edge tangent and so blind to its reversal, while a cochain's $integral_e
 /// omega$ is linear and changes sign with it. They sit on the two sides of
@@ -275,7 +275,7 @@ impl std::ops::Sub for Cochain {
 mod test {
 
   use super::*;
-  use simplicial::mesher::cartesian::CartesianGrid;
+  use regge::mesher::cartesian::CartesianGrid;
 
   #[cfg(feature = "serde")]
   #[test]

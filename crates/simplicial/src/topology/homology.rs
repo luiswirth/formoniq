@@ -500,23 +500,41 @@ fn mod_inverse(a: i64, p: i64) -> i64 {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::mesher::cartesian::CartesianGrid;
-  use crate::topology::skeleton::Skeleton;
+  use crate::mesher::grid::CartesianTopology;
+  use crate::topology::{simplex::Simplex, skeleton::Skeleton};
 
-  /// A square annulus: the $3 times 3$ unit mesh with the middle cell removed,
-  /// so $b_1 = 1$ (one hole).
+  /// A combinatorial 2-sphere: the boundary of a tetrahedron, whose four
+  /// triangles are the facets of the 3-simplex.
+  ///
+  /// $b_2 = 1$, and no coordinates are needed to say so -- a sphere is a
+  /// combinatorial object here, not a subdivided icosahedron.
+  fn two_sphere() -> Complex {
+    Complex::from_cells(Skeleton::new(vec![
+      Simplex::new(vec![0, 1, 2]),
+      Simplex::new(vec![0, 1, 3]),
+      Simplex::new(vec![0, 2, 3]),
+      Simplex::new(vec![1, 2, 3]),
+    ]))
+  }
+
+  /// A square annulus: the $3 times 3$ grid with the middle box removed, so
+  /// $b_1 = 1$.
+  ///
+  /// The middle box is named by its *index*, not by a barycenter: the Kuhn
+  /// generator emits `factorial(dim)` cells per box in colex order, so box
+  /// $(1, 1)$ of a $3 times 3$ grid is index 4 and its cells are 8 and 9. That
+  /// is combinatorics, which is why this test needs no embedding.
   fn annulus() -> Complex {
-    use crate::geometry::coord::simplex::SimplexCoords;
-    let (square, coords) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();
-    let cells: Vec<_> = square
-      .cells()
-      .handle_iter()
-      .filter(|cell| {
-        let bc = SimplexCoords::from_simplex_and_coords(cell.simplex(), &coords).barycenter();
-        let inside = |x: f64| 1.0 / 3.0 < x && x < 2.0 / 3.0;
-        !(inside(bc[0]) && inside(bc[1]))
-      })
-      .map(|cell| cell.simplex().clone())
+    let grid = CartesianTopology::cube(2, 3);
+    let middle_box = 4;
+    let per_box = multiindex::factorial(2);
+    let removed = middle_box * per_box..(middle_box + 1) * per_box;
+    let cells: Vec<Simplex> = grid
+      .cell_skeleton()
+      .iter()
+      .enumerate()
+      .filter(|(i, _)| !removed.contains(i))
+      .map(|(_, s)| s.clone())
       .collect();
     Complex::from_cells(Skeleton::new(cells))
   }
@@ -524,9 +542,9 @@ mod test {
   /// A spread of complexes with nontrivial homology across the grades.
   fn test_complexes() -> Vec<Complex> {
     let mut complexes: Vec<Complex> = (1..=3)
-      .map(|dim| CartesianGrid::new_unit(dim, 2).triangulate().0)
+      .map(|dim| CartesianTopology::cube(dim, 2).triangulate())
       .collect();
-    complexes.push(crate::mesher::sphere::mesh_sphere_surface(1).0);
+    complexes.push(two_sphere());
     complexes.push(annulus());
     complexes
   }
@@ -604,24 +622,12 @@ mod test {
     }
   }
 
-  /// The annulus has one hole, and its $H_1$ generator is a nontrivial loop --
-  /// a cycle around the hole spanning several edges.
-  #[test]
-  fn annulus_generator_is_a_loop() {
-    let complex = annulus();
-    let generators = complex.homology_generators(Dim::new(1));
-    assert_eq!(generators.len(), 1);
-    let loop_ = &generators[0];
-    assert!(is_cycle(&complex, loop_));
-    assert!(loop_.support().count() >= 3);
-  }
-
   /// Euler--Poincaré: the alternating simplex count equals the alternating
   /// Betti sum. A cross-check tying the Betti numbers back to the raw counts.
   #[test]
   fn euler_poincare() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let topology = CartesianTopology::cube(dim, 2).triangulate();
       let alt_betti: i64 = topology
         .betti_numbers()
         .iter()
@@ -636,7 +642,7 @@ mod test {
   #[test]
   fn cube_is_contractible() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let topology = CartesianTopology::cube(dim, 2).triangulate();
       let expected: Vec<usize> = std::iter::once(1)
         .chain(std::iter::repeat_n(0, dim.index()))
         .collect();
@@ -648,7 +654,7 @@ mod test {
   /// 2-sphere realizes it with Betti numbers $(1, 0, 1)$.
   #[test]
   fn sphere_poincare_duality() {
-    let (topology, _) = crate::mesher::sphere::mesh_sphere_surface(1);
+    let topology = two_sphere();
     let betti = topology.betti_numbers();
     let n = topology.dim();
     for k in 0..=n.index() {
@@ -667,7 +673,7 @@ mod test {
   #[test]
   fn box_lefschetz_duality() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let topology = CartesianTopology::cube(dim, 2).triangulate();
       for k in dim.range_inclusive() {
         assert_eq!(
           topology.relative_betti_number(k),
@@ -687,7 +693,7 @@ mod test {
   /// complex, so relative and absolute Betti numbers coincide. The 2-sphere.
   #[test]
   fn closed_manifold_relative_equals_absolute() {
-    let (topology, _) = crate::mesher::sphere::mesh_sphere_surface(1);
+    let topology = two_sphere();
     for k in topology.dim().range_inclusive() {
       assert_eq!(
         topology.relative_betti_number(k),
@@ -695,5 +701,15 @@ mod test {
         "k={k}"
       );
     }
+  }
+
+  #[test]
+  fn annulus_generator_is_a_loop() {
+    let complex = annulus();
+    let generators = complex.homology_generators(Dim::new(1));
+    assert_eq!(generators.len(), 1);
+    let loop_ = &generators[0];
+    assert!(is_cycle(&complex, loop_));
+    assert!(loop_.support().count() >= 3);
   }
 }

@@ -28,11 +28,11 @@
 use itertools::Itertools;
 use multiindex::cartesian::{cartesian2linear_mixed, linear2cartesian_mixed};
 
-use crate::{
+use crate::mesher::cartesian::CartesianGrid;
+use crate::metric::mesh::MeshLengthsSq;
+use simplicial::{
   Dim,
-  geometry::metric::mesh::MeshLengthsSq,
   linalg::Vector,
-  mesher::cartesian::CartesianGrid,
   topology::{
     VertexIdx, complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton,
   },
@@ -433,9 +433,10 @@ impl FlatQuotient {
 #[cfg(test)]
 mod test {
   use super::{FlatQuotient, Identification};
-  use crate::Dim;
-  use crate::{geometry::metric::mesh::MeshLengthsSq, linalg::Vector, topology::complex::Complex};
+  use crate::metric::mesh::MeshLengthsSq;
+  use multiindex::Dim;
   use multiindex::binomial;
+  use simplicial::{linalg::Vector, topology::complex::Complex};
 
   fn shape_classes(complex: &Complex, lengths: &MeshLengthsSq) -> usize {
     let mut classes: Vec<Vec<u64>> = complex

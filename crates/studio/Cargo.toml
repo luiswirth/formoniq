@@ -18,6 +18,7 @@ formoniq-realize = { path = "../realize" }
 derham = { path = "../derham", features = ["serde"] }
 glatt = { path = "../glatt" }
 simplicial = { path = "../simplicial", features = ["serde"] }
+regge = { path = "../regge", features = ["serde"] }
 coorder = { path = "../coorder" }
 gramian = { path = "../gramian" }
 # Pinned to match egui-wgpu 0.35's own wgpu dependency: the render pass and

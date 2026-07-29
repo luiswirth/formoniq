@@ -15,16 +15,16 @@
 //!   materialized cell column of the derivation chain, living natively on the
 //!   cell skeleton with no need of a global edge indexing. A convenience for a
 //!   source that arrives as raw per-cell metrics and the intermediary of
-//!   [`refine_gramians`](crate::topology::refine::Subdivision::refine_gramians);
+//!   [`refine_gramians`](crate::refine::SubdivisionExt::refine_gramians);
 //!   it converts back to edge lengths losslessly on a *Regge-conforming*
 //!   geometry ([`CellGramians::is_regge_conforming`]), and only there. Not to be
 //!   confused with the face consistency of a
-//!   [`CellOrdering`](crate::topology::ordering::CellOrdering), which is about
+//!   [`CellOrdering`](simplicial::topology::ordering::CellOrdering), which is about
 //!   how shared faces are *subdivided*, not about what metric they carry.
 //!
-//! An embedding ([`MeshCoords`](crate::geometry::coord::mesh::MeshCoords),
+//! An embedding ([`MeshCoords`](crate::coord::mesh::MeshCoords),
 //! grade-0 data) is a *third* source, but it lives one layer up in
-//! [`coord`](crate::geometry::coord): an embedding induces a metric, the metric
+//! [`coord`](crate::coord): an embedding induces a metric, the metric
 //! layer knows nothing of embeddings and must not.
 //!
 //! There is no trait unifying the representations. Each answers "the metric of
@@ -33,7 +33,7 @@
 //! not through runtime dispatch on the hot path.
 
 use super::{mesh::MeshLengthsSq, simplex::SimplexLengthsSq};
-use crate::{
+use simplicial::{
   Dim,
   topology::{
     complex::Complex,
@@ -111,12 +111,12 @@ impl CellGramians {
   /// never a length that silently favors one cell over another.
   pub fn try_to_edge_lengths_sq(&self, topology: &Complex) -> Option<MeshLengthsSq> {
     if topology.dim() == 0 {
-      return Some(MeshLengthsSq::new_unchecked(crate::linalg::Vector::zeros(
-        0,
-      )));
+      return Some(MeshLengthsSq::new_unchecked(
+        simplicial::linalg::Vector::zeros(0),
+      ));
     }
     let nedges = topology.edges().len();
-    let mut edge_lengths_sq = crate::linalg::Vector::zeros(nedges);
+    let mut edge_lengths_sq = simplicial::linalg::Vector::zeros(nedges);
     let mut written = vec![false; nedges];
     for cell in topology.cells().handle_iter() {
       let lengths_sq = simplex_lengths_sq_of(&self.metrics[cell.get()]);
@@ -167,11 +167,11 @@ impl CellGramians {
 
   #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-    crate::io::cbor::save_cbor(self, path)
+    simplicial::io::cbor::save_cbor(self, path)
   }
   #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-    crate::io::cbor::load_cbor(path)
+    simplicial::io::cbor::load_cbor(path)
   }
 }
 

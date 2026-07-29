@@ -12,10 +12,11 @@ extern crate nalgebra as na;
 
 use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
+use regge::coord::simplex::SimplexCoordsExt;
+use regge::mesher::cartesian::CartesianGrid;
 use simplicial::{
   Dim,
   linalg::{CooMatrix, CsrMatrix, Matrix},
-  mesher::cartesian::CartesianGrid,
 };
 
 use approx::assert_relative_eq;
@@ -89,7 +90,7 @@ fn harmonics_are_cohomology_cube() {
 /// The mesh is closed, so the relative complex coincides with the full one.
 #[test]
 fn harmonics_are_cohomology_sphere() {
-  let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(1);
+  let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
   let dim = topology.dim();
@@ -217,10 +218,8 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 /// genuinely nontrivial harmonic 1-form around the hole.
 #[test]
 fn long_exact_sequence_of_the_pair_annulus() {
-  use simplicial::{
-    geometry::coord::simplex::SimplexCoords,
-    topology::{complex::Complex, skeleton::Skeleton},
-  };
+  use regge::coord::simplex::SimplexCoords;
+  use simplicial::topology::{complex::Complex, skeleton::Skeleton};
 
   // Annulus: 3x3 boxes with the middle box removed.
   let (square, coords) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();

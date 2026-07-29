@@ -15,13 +15,9 @@ use super::{
   simplex::Simplex,
   skeleton::Skeleton,
 };
-use crate::{
-  Dim,
-  geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq},
-  topology::VertexIdx,
-};
+use crate::{Dim, topology::VertexIdx};
 
-use crate::linalg::{CooMatrix, Matrix};
+use crate::linalg::CooMatrix;
 
 /// A codimension-1 subcomplex of $K$ as a complex in its own right, with
 /// its own (monotone) vertex numbering and the simplex-wise inclusion into
@@ -152,41 +148,14 @@ impl BoundaryComplex {
     }
     trace
   }
-
-  /// The induced geometry: parent squared edge lengths restricted to the
-  /// boundary. A pure data restriction, total on any signature; on an
-  /// indefinite parent a null facet carries degenerate data, which surfaces
-  /// where a facet metric is actually built from it, not here.
-  pub fn trace_lengths_sq(&self, parent: &MeshLengthsSq) -> MeshLengthsSq {
-    // A 0-dimensional boundary (of a 1d mesh) has no edges.
-    let lengths_sq: Vec<f64> = if self.dim() == 0 {
-      Vec::new()
-    } else {
-      self
-        .parent_kidxs(Dim::ONE)
-        .iter()
-        .map(|&iedge| parent[iedge])
-        .collect()
-    };
-    MeshLengthsSq::new_unchecked(lengths_sq.into())
-  }
-
-  /// The vertex coordinates restricted to the boundary.
-  pub fn trace_coords(&self, parent: &MeshCoords) -> MeshCoords {
-    let columns: Vec<_> = self
-      .parent_kidxs(Dim::ZERO)
-      .iter()
-      .map(|&ivertex| parent.matrix().column(ivertex))
-      .collect();
-    MeshCoords::with_ambient(Matrix::from_columns(&columns), parent.ambient().clone())
-  }
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::mesher::cartesian::CartesianGrid;
+  use crate::linalg::Matrix;
+  use crate::mesher::grid::CartesianTopology;
 
   use crate::linalg::CsrMatrix;
 
@@ -195,7 +164,7 @@ mod test {
   #[test]
   fn boundary_of_cube_is_sphere() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let topology = CartesianTopology::cube(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       assert!(!boundary.complex().has_boundary());
       for k in dim.range() {
@@ -218,7 +187,7 @@ mod test {
   #[test]
   fn trace_is_cochain_map() {
     for dim in (2..=3usize).map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let topology = CartesianTopology::cube(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       for k in (dim - 1).range() {
         let trace_k = CsrMatrix::from(&boundary.trace_operator(k));
@@ -238,7 +207,7 @@ mod test {
   #[test]
   fn trace_dimensions_are_exact() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let topology = CartesianTopology::cube(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
       for k in dim.range() {
         let nboundary = boundary.complex().nsimplices(k);

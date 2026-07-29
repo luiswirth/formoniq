@@ -6,7 +6,7 @@
 //! and the intrinsic geometry (invariant 2) must never ask for it.
 //!
 //! Ambient coordinates are therefore kept apart, by type, from the
-//! [`Bary`](crate::atlas::Bary) and [`Local`](crate::atlas::Local) coordinates
+//! [`Bary`](simplicial::atlas::Bary) and [`Local`](simplicial::atlas::Local) coordinates
 //! of a chart: those are intrinsic and exist on every geometry, and the maps
 //! between the two worlds are the parametrizations in
 //! [`simplex`].
@@ -17,11 +17,11 @@ pub mod simplex;
 
 pub use coorder::{Ambient, Coord, CoordRef};
 
-use crate::linalg::{RowVector, RowVectorView, Vector, VectorView};
+use simplicial::linalg::{RowVector, RowVectorView, Vector, VectorView};
 
 use self::mesh::MeshCoords;
 use super::cell_volume;
-use crate::{Dim, topology::complex::Complex};
+use simplicial::{Dim, topology::complex::Complex};
 
 pub type TangentVector = Vector;
 pub type TangentVectorRef<'a> = VectorView<'a>;
@@ -155,7 +155,7 @@ pub fn vertex_curvature_radius(topology: &Complex, coords: &MeshCoords) -> Vec<f
 pub fn mean_edge_length(topology: &Complex, coords: &MeshCoords) -> f64 {
   // The total accessor: a 0-complex has no edges, which is the answer rather
   // than a case to exclude.
-  let Some(edges) = topology.role_skeleton::<crate::topology::role::roles::Edge>() else {
+  let Some(edges) = topology.role_skeleton::<simplicial::topology::role::roles::Edge>() else {
     return 0.0;
   };
   let mut total = 0.0;
@@ -413,7 +413,7 @@ impl PointGrid {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use crate::Dim;
+  use multiindex::Dim;
 
   /// The unit sphere has constant curvature $K = H^2 = 1$ and curvature
   /// radius $1$ everywhere. The discrete estimators recover $|H|$ to within
@@ -502,7 +502,7 @@ mod tests {
   /// A closed slab of the given thickness in $z$, triangulated on a coarse
   /// grid: two parallel faces plus the four sides, wound as one closed surface.
   fn slab(thickness: f64) -> (Complex, MeshCoords) {
-    use crate::topology::{simplex::Simplex, skeleton::Skeleton};
+    use simplicial::topology::{simplex::Simplex, skeleton::Skeleton};
     let n = 6;
     let half = thickness / 2.0;
     let mut points: Vec<Vector> = Vec::new();
@@ -569,7 +569,7 @@ mod tests {
       })
       .collect();
     let complex = Complex::from_cells(Skeleton::new(cells));
-    let coords = MeshCoords::from(crate::linalg::Matrix::from_columns(&points));
+    let coords = MeshCoords::from(simplicial::linalg::Matrix::from_columns(&points));
     (complex, coords)
   }
 

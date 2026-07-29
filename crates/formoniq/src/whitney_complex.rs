@@ -15,14 +15,15 @@ use crate::{
   linalg::faer::FaerLu,
   operators::HodgeMassElmat,
 };
+use regge::boundary::BoundaryComplexExt;
 
 use {
   crate::linalg::quadratic_form_sparse,
   derham::cochain::Cochain,
   multialgebra::ExteriorGrade,
+  regge::metric::mesh::MeshLengthsSq,
   simplicial::{
     Dim,
-    geometry::metric::mesh::MeshLengthsSq,
     linalg::{CooMatrix, CsrMatrix, Vector},
     topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
   },
@@ -602,9 +603,9 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
 mod test {
   use super::*;
   use derham::cochain::Cochain;
+  use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
   use simplicial::linalg::Vector;
-  use simplicial::mesher::cartesian::CartesianGrid;
 
   /// The full $H Lambda(dif)$ norm is the Pythagorean sum of the $L^2$ norm and
   /// the $dif$ seminorm, and its Gram matrix [`HilbertComplex::hdif_gram`]

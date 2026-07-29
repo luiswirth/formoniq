@@ -8,12 +8,12 @@ use {
   gramian::{Gramian, Metric},
   multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
   multiindex::{Combination, Sign},
+  regge::cell_volume,
   simplicial::{
     atlas::{
       Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, unit_bary_gramian,
       unit_difbarys, unit_simplex_volume,
     },
-    geometry::cell_volume,
     linalg::{Matrix, Vector},
     topology::simplex::unit_boundary_operator,
   },
@@ -632,7 +632,8 @@ mod test {
     interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
   use multialgebra::Tensor;
-  use simplicial::{geometry::metric::simplex::SimplexLengthsSq, topology::simplex::unit_subsimps};
+  use regge::metric::simplex::SimplexLengthsSq;
+  use simplicial::topology::simplex::unit_subsimps;
 
   use approx::assert_relative_eq;
 

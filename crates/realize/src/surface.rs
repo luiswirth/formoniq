@@ -25,12 +25,13 @@
 //! predicate that separates the two, and a mark that needs the volume must say
 //! so rather than trace to zero and draw nothing.
 
+use regge::boundary::BoundaryComplexExt;
 use std::borrow::Cow;
 
 use derham::cochain::Cochain;
 use multialgebra::ExteriorGrade;
+use regge::coord::mesh::MeshCoords;
 use simplicial::{
-  geometry::coord::mesh::MeshCoords,
   linalg::Vector,
   topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx},
 };
@@ -149,7 +150,7 @@ impl Surface {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::mesher::{cartesian::CartesianGrid, sphere::mesh_sphere_surface};
+  use regge::mesher::{cartesian::CartesianGrid, sphere::mesh_sphere_surface};
 
   /// The reduction is the identity at and below the render primitive's own
   /// dimension: a surface is its own render surface, and nothing is copied or

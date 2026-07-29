@@ -27,9 +27,9 @@ use {
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
   gramian::tensor::multiform_gramian,
   iterative::{Jacobi, StopCriterion, krylov::cg},
+  regge::{cell_volume, metric::mesh::MeshLengthsSq},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
-    geometry::{cell_volume, metric::mesh::MeshLengthsSq},
     linalg::{CsrMatrix, Vector},
     topology::complex::Complex,
   },
@@ -126,7 +126,7 @@ mod test {
 
   use derham::section::CoordFieldExt;
   use glatt::field::DiffFormClosure;
-  use simplicial::mesher::cartesian::CartesianGrid;
+  use regge::mesher::cartesian::CartesianGrid;
 
   use crate::linalg::faer::FaerCholesky;
   use approx::assert_relative_eq;

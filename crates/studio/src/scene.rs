@@ -1,8 +1,8 @@
 use std::borrow::Cow;
 
 use glatt::field::DiffFormClosure;
+use regge::metric::mesh::MeshLengthsSq;
 use simplicial::Sign;
-use simplicial::geometry::metric::mesh::MeshLengthsSq;
 use simplicial::linalg::{Matrix, Vector};
 use simplicial::topology::orientation::Orientation;
 
@@ -10,9 +10,9 @@ use crate::ui::Selection;
 use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use multialgebra::{Blade, ExteriorGrade, Tensor, Variance};
 use realize::surface::Surface;
+use regge::coord::mesh::MeshCoords;
 use simplicial::{
   Dim,
-  geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex},
 };
 
@@ -386,7 +386,7 @@ impl Scene {
   /// the same code as grade 0, which is the point of the $min(k, n-k)$ dispatch
   /// (discussion #101).
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
-    use simplicial::mesher::sphere::mesh_sphere_surface;
+    use regge::mesher::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     // Built before the fields are filed: the mark each one gets is chosen
@@ -445,7 +445,7 @@ impl Scene {
   /// actual modes in when it lands. The lone field has no eigenvalue, so it is
   /// drawn as a plain, undeformed surface.
   pub fn sphere_placeholder(nsubdivisions: usize) -> Self {
-    use simplicial::mesher::sphere::mesh_sphere_surface;
+    use regge::mesher::sphere::mesh_sphere_surface;
 
     let (topology, coords) = mesh_sphere_surface(nsubdivisions);
     Self::placeholder_on(topology, coords)
@@ -497,7 +497,7 @@ impl Scene {
   /// shared construction below, where every DOF simplex's support is the one
   /// cell itself.
   pub fn whitney_basis(cell_dim: impl Into<Dim>) -> Self {
-    use simplicial::geometry::coord::mesh::unit_coord_complex;
+    use regge::coord::mesh::unit_coord_complex;
 
     let cell_dim = cell_dim.into();
     let (topology, coords) = unit_coord_complex(cell_dim);
@@ -637,7 +637,7 @@ impl Scene {
     for grade in dim.range_inclusive() {
       let ndofs = topology.nsimplices(grade);
       for (idof, dof_simp) in topology.skeleton_raw(grade).iter().enumerate() {
-        let name = format!("W^{grade}_{{{}}}", dof_label(dof_simp));
+        let name = format!("W^{grade}_{}", dof_label(dof_simp));
 
         let mut coeffs = na::DVector::zeros(ndofs);
         coeffs[idof] = 1.0;
@@ -1421,7 +1421,7 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
           .map(|v| coords.coord(v).into_owned())
           .fold(Vector::zeros(n), |acc, c| acc + c)
           / vertices.nvertices() as f64;
-        bump(&barycenter) * simplicial::geometry::cell_volume(&geometry.cell_metric(cell))
+        bump(&barycenter) * regge::cell_volume(&geometry.cell_metric(cell))
       })
       .collect::<Vec<_>>();
     return Cochain::new(grade, Vector::from_vec(coeffs));
@@ -1695,7 +1695,7 @@ mod tests {
   fn harmonic_top_form_reduces_to_a_constant_density() {
     use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
 
-    let (topology, coords) = simplicial::mesher::sphere::mesh_sphere_surface(2);
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(2);
     let lengths = coords.to_edge_lengths_sq(&topology);
     let (eigenvals, _, eigenfuncs) =
       solve_evp(&WhitneyComplex::new(&topology, &lengths), 2, 1).unwrap();
@@ -1779,7 +1779,7 @@ mod tests {
   /// rather than decaying to zero -- the peak drops while the total does not.
   #[test]
   fn heat_flow_is_total_on_a_closed_mesh() {
-    use simplicial::mesher::sphere::mesh_sphere_surface;
+    use regge::mesher::sphere::mesh_sphere_surface;
     let (topology, coords) = mesh_sphere_surface(2);
     let scene = Scene::heat(topology, coords, 0, 10, 0.2);
 

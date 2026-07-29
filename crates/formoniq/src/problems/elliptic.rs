@@ -413,8 +413,8 @@ impl MixedGalMats {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
+  use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
-  use simplicial::mesher::cartesian::CartesianGrid;
 
   /// Block-preconditioned MINRES solves the mixed Hodge-Laplace KKT system to
   /// the same solution as the direct LU factorization, swept over dimension and

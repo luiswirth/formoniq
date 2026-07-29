@@ -26,8 +26,8 @@ use {
     problems::wave::{WaveState, cfl_dt, solve_wave},
     whitney_complex::WhitneyComplex,
   },
+  regge::mesher::cartesian::CartesianGrid,
   simplicial::linalg::Vector,
-  simplicial::mesher::cartesian::CartesianGrid,
   util::{BoundaryCondition, BoxEigenform},
 };
 

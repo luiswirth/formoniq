@@ -14,6 +14,7 @@ categories = ["mathematics", "science"]
 multialgebra = { path = "../multialgebra", version = "0.2.0" }
 glatt = { path = "../glatt", version = "0.2.0" }
 simplicial = { path = "../simplicial", version = "0.2.0" }
+regge = { path = "../regge", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }
 gramian = { path = "../gramian", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
@@ -26,4 +27,4 @@ approx = "0.5.1"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
 [features]
-serde = ["dep:serde", "nalgebra/serde-serialize", "simplicial/serde"]
+serde = ["dep:serde", "nalgebra/serde-serialize", "simplicial/serde", "regge/serde"]

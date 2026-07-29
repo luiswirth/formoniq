@@ -230,7 +230,7 @@ impl<'m> Facet<'m> {
 
 /// What the edge proof unlocks: the pair structure of grade 1. The metric
 /// side adds the length the proof keys
-/// ([`EdgeRefExt`](crate::geometry::metric::mesh::EdgeRefExt)).
+/// (`EdgeRefExt`).
 impl<'m> Edge<'m> {
   /// The two endpoints, in vertex order: the type states that an edge has
   /// exactly two.
@@ -334,7 +334,8 @@ impl<'m, R: SimplexRole> Deref for RoledSkeleton<'m, R> {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::{mesher::cartesian::CartesianGrid, topology::complex::Complex};
+  use crate::mesher::grid::CartesianTopology;
+  use crate::topology::complex::Complex;
 
   /// The role predicates, swept over all dimensions and grades: a role is
   /// admitted exactly on its dimension, and roles coexist where their
@@ -371,7 +372,7 @@ mod test {
   #[test]
   fn neighboring_is_symmetric_and_facet_induced() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let complex = CartesianTopology::cube(dim, 2).triangulate();
       for cell in complex.cells().handle_iter() {
         let interior = cell.facets().filter(|f| !f.is_boundary()).count();
         assert_eq!(cell.neighbors().count(), interior);
@@ -413,7 +414,7 @@ mod test {
   #[test]
   fn ridge_fans_walk_the_hinge() {
     for dim in (2..=3usize).map(Dim::from) {
-      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let complex = CartesianTopology::cube(dim, 2).triangulate();
       for ridge in complex
         .role_skeleton::<roles::Ridge>()
         .unwrap()

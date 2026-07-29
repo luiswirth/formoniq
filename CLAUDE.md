@@ -61,9 +61,22 @@ Code should read the way a mathematician would write.
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing:
-`{ multiindex, gramian, coorder } → multialgebra → { simplicial, glatt } → derham → formoniq → realize → studio`,
-where `multiindex`/`gramian`/`coorder` are foundational siblings
-and `simplicial`/`glatt` are siblings one level up.
+`multiindex → multialgebra → gramian → { regge, glatt } → derham → formoniq → realize → studio`,
+with `coorder` and `simplicial` joining from the side:
+`coorder` is foundational, and `simplicial` (pure topology plus the atlas)
+sits beside `gramian` as what `regge` adds a metric to.
+`regge`/`glatt` are siblings, the discrete manifold and the continuum one.
+
+Two of those boundaries are invariants made structural rather than documented.
+**Invariant 5** splits `multialgebra` from `gramian`:
+the wedge, the contraction, the transfer and both pairings need no metric,
+the inner product, the Hodge star and the musicals need nothing else,
+so an operation's crate now says what it depends on.
+**Invariant 1** splits `simplicial` from `regge`:
+the complex is combinatorics, a geometry is a genuinely second input,
+and the split runs through the meshers too --
+the Kuhn triangulation of a box is combinatorial (`CartesianTopology`),
+placing its vertices is not (`CartesianGrid`).
 `iterative` is off to the side:
 a standalone Krylov/preconditioner crate depending on nothing but `nalgebra-sparse`,
 joining the ladder only where `formoniq` consumes it.
@@ -72,9 +85,10 @@ joining the ladder only where `formoniq` consumes it.
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
 | `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, musicals, the Hodge star as the one non-uniform operation, `pullback`/`pushforward` of a value along a linear map |
-| `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature, Riemannian is $q = 0$), `CausalType` |
+| `gramian`    | metric structure, and the operations needing one | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, Riemannian is $q = 0$), `CausalType`, and the metric half of the algebra: the induced Gramians, `inner`, and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
-| `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
+| `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
+| `regge`      | the simplicial manifold $M_h$       | the geometry a complex carries: `MeshLengthsSq` (the intrinsic Regge primitive the engine consumes), `MeshCoords` and `CellGramians` the sources that convert into it, `cell_volume`, `vertex_gaussian_curvature`, the extensions reaching down onto `simplicial`'s types (`SimplexCoordsExt`, `SubdivisionExt`, `BoundaryComplexExt`), `mesher::` (grids with coordinates, quotient tori, sphere surfaces) and `io::gmsh` |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | discrete differential forms         | `Cochain`, `section::Section` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `polynomial::` ($P_r Lambda^k$ and the trimmed $P^-_r Lambda^k$ as $"Sym"^r times.circle Lambda^k$ in barycentric coordinates), `decomposition::GeometricDecomposition` (the direct sum over subsimplices, hence the local-to-global map), `project::derham_map` |
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner. `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Backend is `nalgebra-sparse` alone, no faer |
@@ -88,7 +102,7 @@ so `gramian`, `coorder`, `multialgebra` and `glatt`
 each declare their own directly from `nalgebra` rather than depending on anything for them.
 `simplicial` is the lowest crate that needs *sparse* matrices (its boundary operators),
 so that is where `CsrMatrix`/`CooMatrix` and the extension traits built on them (`CooMatrixExt`) live,
-reused downward by `derham`, `formoniq` and `studio`
+reused upward by `regge`, `derham`, `formoniq` and `studio`
 because they already depend on `simplicial` for real reasons.
 `faer` and the eigensolver go one further:
 they are needed only in `formoniq`, the one crate that runs a *direct* solve or an eigenproblem,
@@ -100,8 +114,8 @@ and `formoniq` depends on it like any other building block.
 
 Dependencies flow strictly downward.
 A lower crate never learns about a higher one:
-`multialgebra` must never hear about meshes, `simplicial` never about forms.
-`simplicial` (the simplicial $M_h$) and `glatt` (the smooth $M$ it approximates)
+`multialgebra` must never hear about meshes or metrics, `simplicial` never about either.
+`regge` (the simplicial $M_h$) and `glatt` (the smooth $M$ it approximates)
 are independent objects, so neither depends on the other.
 Their one relation, pulling continuum data onto the mesh and the error that costs,
 is the join, and it lives in `derham`, the crate above both.
@@ -134,14 +148,14 @@ A concept belongs in the lowest crate (or module) that can express it
 with the dependencies it already has.
 If expressing it there would need a new downward dependency,
 it belongs one level up instead, in the crate that joins the two,
-which is why `derham` exists, where `multialgebra`, `simplicial` and `glatt` all meet.
+which is why `derham` exists, where the algebra, `regge` and `glatt` all meet.
 Never widen a lower crate's dependencies to make a method fit.
 
 **The building-block crates are standalone, and published as such.**
 Concepts floating up leaves each lower crate a self-contained mathematical object,
 not FEEC-internal plumbing:
 `multialgebra` is a multilinear-algebra library,
-`simplicial` a simplicial-topology-and-Regge-geometry one,
+`simplicial` a simplicial-topology one and `regge` its metric geometry,
 `multiindex` colex combinatorics,
 `glatt` continuum differential geometry,
 each usable, and released, on its own,

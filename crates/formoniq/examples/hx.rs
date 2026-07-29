@@ -30,9 +30,8 @@ use formoniq::{
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 use iterative::{ApproxInverse, Identity, Jacobi, StopCriterion, krylov::cg};
-use simplicial::{
-  geometry::coord::mesh::MeshCoords, linalg::Vector, mesher::cartesian::CartesianGrid,
-};
+use regge::{coord::mesh::MeshCoords, mesher::cartesian::CartesianGrid};
+use simplicial::linalg::Vector;
 
 /// V-cycle pre- and post-smoothing sweeps, shared by the plain multigrid baseline
 /// and the HX multigrid auxiliary blocks.

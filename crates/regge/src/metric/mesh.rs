@@ -1,5 +1,5 @@
 use super::{EdgeIdx, simplex::SimplexLengthsSq};
-use crate::{
+use simplicial::{
   Dim,
   topology::{
     complex::Complex,
@@ -9,8 +9,8 @@ use crate::{
   },
 };
 
-use crate::linalg::Vector;
 use gramian::{CausalType, Metric};
+use simplicial::linalg::Vector;
 
 use itertools::Itertools;
 use rayon::iter::ParallelIterator;
@@ -165,7 +165,7 @@ impl MeshLengthsSq {
   /// defined from the edge data alone.
   ///
   /// This is the metric, not the chart. Only a top-dimensional simplex carries
-  /// a [`Chart`](crate::atlas::Chart) -- a frame in which to express a section
+  /// a [`Chart`](simplicial::atlas::Chart) -- a frame in which to express a section
   /// -- but *every* simplex has a metric to measure it by.
   pub fn simplex_metric(&self, simplex: SimplexRef) -> Metric {
     self.simplex_lengths_sq(simplex).metric()
@@ -237,11 +237,11 @@ impl MeshLengthsSq {
 
   #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-    crate::io::cbor::save_cbor(self, path)
+    simplicial::io::cbor::save_cbor(self, path)
   }
   #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-    crate::io::cbor::load_cbor(path)
+    simplicial::io::cbor::load_cbor(path)
   }
 }
 impl std::ops::Index<EdgeIdx> for MeshLengthsSq {
@@ -304,8 +304,8 @@ pub fn unit_metric_complex(dim: Dim) -> MetricComplex {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::Dim;
   use crate::mesher::cartesian::CartesianGrid;
+  use multiindex::Dim;
 
   /// Coordinates and squared edge lengths read uniformly as data on simplices:
   /// coords (grade 0) return a column view, squared lengths (grade 1) a
@@ -356,7 +356,7 @@ mod test {
             // Column $a$ is the face's tangent vector $u_(a+1) - u_0$ read in
             // the cell's basis $e_i = v_(i+1) - v_0$, where the apex $v_0$
             // contributes nothing because $e_(-1) = 0$.
-            let mut inclusion = crate::linalg::Matrix::zeros(dim.index(), grade);
+            let mut inclusion = simplicial::linalg::Matrix::zeros(dim.index(), grade);
             let apex = positions.index_at(0);
             for a in 0..grade {
               let head = positions.index_at(a + 1);

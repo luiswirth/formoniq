@@ -1,7 +1,7 @@
 use simplicial::linalg::Vector;
 
 use crate::io::surface::TriangleSurface3D;
-use simplicial::geometry::coord::mesh::MeshCoords;
+use regge::coord::mesh::MeshCoords;
 use simplicial::topology::complex::Complex;
 
 use std::fmt::Write;

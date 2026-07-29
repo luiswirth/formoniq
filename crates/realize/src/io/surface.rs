@@ -6,11 +6,9 @@
 //! the same two things a graphics API does and the core keeps out: an explicit
 //! winding, and an explicit embedding, fixed at 3.
 
+use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::VectorView;
-use simplicial::{
-  geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
-};
+use simplicial::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
 
 use crate::bake::orient_triangles;
 

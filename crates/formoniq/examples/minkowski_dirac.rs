@@ -87,13 +87,11 @@ use gramian::tensor::{TensorExt, inner};
 use gramian::{CausalType, Metric};
 use multialgebra::{Tensor, Variance, exterior_bases, exterior_dim};
 use multiindex::Sign;
-use simplicial::{
-  atlas::SimplexQuadRule,
-  geometry::coord::mesh::MeshCoords,
-  linalg::Vector,
+use regge::{
+  coord::mesh::MeshCoords,
   mesher::cartesian::{CAUSAL_TIME_SCALE, CartesianGrid},
-  topology::ordering::CellOrdering,
 };
+use simplicial::{atlas::SimplexQuadRule, linalg::Vector, topology::ordering::CellOrdering};
 
 use std::f64::consts::PI;
 

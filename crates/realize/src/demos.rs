@@ -5,11 +5,9 @@
 //! itself. They are fixtures with a shape worth reusing, not a mesh library:
 //! anything generated belongs in `simplicial`'s meshers.
 
+use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::Matrix;
-use simplicial::{
-  geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
-};
+use simplicial::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
 
 /// The "triforce" teaching mesh: a central equilateral triangle with one
 /// congruent triangle mirrored outward across each of its three edges, four

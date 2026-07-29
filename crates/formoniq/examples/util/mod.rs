@@ -12,10 +12,12 @@ use {
   glatt::field::DiffFormClosure,
   multialgebra::{Tensor, Variance},
   multiindex::{Combination, Sign, binomial},
-  simplicial::{
-    geometry::metric::mesh::MeshLengthsSq,
-    linalg::Vector,
+  regge::{
     mesher::{cartesian::CartesianGrid, quotient::FlatQuotient},
+    metric::mesh::MeshLengthsSq,
+  },
+  simplicial::{
+    linalg::Vector,
     topology::{complex::Complex, ordering::CellOrdering},
   },
 };
