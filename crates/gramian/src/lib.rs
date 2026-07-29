@@ -2,6 +2,8 @@
 
 extern crate nalgebra as na;
 
+pub mod tensor;
+
 /// The dimension of a space or object.
 pub type Dim = usize;
 
