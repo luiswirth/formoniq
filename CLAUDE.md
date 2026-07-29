@@ -489,6 +489,14 @@ The examples in `crates/formoniq/examples/` are the end-to-end check,
 convergence rates, spectra,
 but they are run and read by hand, not asserted by `cargo test`.
 
+**Polynomial degree is a parameter, never a code path.**
+$P^-_r Lambda^k$ is `Sym^r (x) Lambda^k` in barycentric coordinates,
+and the first-order Whitney space is its $r = 1$ case, not a separate construction.
+One assembly routine, one geometric decomposition, one exterior derivative serve every degree,
+and `HilbertComplex` is what lets a problem be written once and run at any of them.
+A test pins the two together: at $r = 1$ the trimmed complex's assembled
+dof counts, mass matrices and differential equal the Whitney complex's.
+
 **$Lambda$ and $"Sym"$ are siblings, and one construction.**
 They are the two quotients of the tensor algebra by the two ways adjacent
 factors commute, so a single `Parity` carries the whole distinction and every

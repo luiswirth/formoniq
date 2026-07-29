@@ -3,8 +3,10 @@
 extern crate nalgebra as na;
 
 pub mod cochain;
+pub mod decomposition;
 pub mod interpolate;
 pub mod io;
+pub mod polynomial;
 pub mod project;
 pub mod prolongate;
 pub mod section;

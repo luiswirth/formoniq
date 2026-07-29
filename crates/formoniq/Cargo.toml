@@ -46,3 +46,9 @@ faer = { version = "0.24.4", features = ["rayon"] }
 [dev-dependencies]
 tracing-subscriber = "0.3.23"
 num-traits = "0.2.19"
+
+divan = "0.1.21"
+
+[[bench]]
+name = "assemble"
+harness = false

@@ -1,9 +1,12 @@
 use crate::operators::{ElMatProvider, ElVecProvider};
 
+use derham::decomposition::CellDofs;
+use gramian::Metric;
 use itertools::Itertools;
 use simplicial::{
+  atlas::Chart,
   geometry::metric::mesh::MeshLengthsSq,
-  linalg::{CooMatrix, Vector},
+  linalg::{CooMatrix, CsrMatrix, Vector},
   topology::complex::Complex,
 };
 
@@ -88,6 +91,116 @@ pub fn assemble_galvec(
   let mut galvec = Vector::zeros(nsimps);
   for (irow, val) in entries {
     galvec[irow] += val;
+  }
+  galvec
+}
+
+/// Assemble a Galerkin matrix through an explicit local-to-global map.
+///
+/// The general form of [`assemble_galmat`], which reads a dof off a
+/// $k$-simplex of the cell: the first-order case of a [`CellDofs`]. Every
+/// polynomial degree assembles through this.
+///
+/// `elmat` is evaluated once per cell and scattered; it must return a matrix of
+/// shape `row_dofs.ndofs_local()` by `col_dofs.ndofs_local()`.
+pub fn assemble_galmat_dofs(
+  topology: &Complex,
+  geometry: &MeshLengthsSq,
+  row_dofs: &CellDofs,
+  col_dofs: &CellDofs,
+  elmat: impl Fn(&Metric, Chart) -> simplicial::linalg::Matrix + Sync,
+) -> GalMat {
+  let cells = topology.cells();
+  let triplets: Vec<(usize, usize, f64)> = cells
+    .handle_par_iter()
+    .flat_map_iter(|cell| {
+      let metric = geometry.cell_metric(cell);
+      let elmat = elmat(&metric, cell);
+      let rows = row_dofs.cell(cell.kidx());
+      let cols = col_dofs.cell(cell.kidx());
+
+      let mut local = Vec::with_capacity(rows.len() * cols.len());
+      for (ilocal, &iglobal) in rows.iter().enumerate() {
+        for (jlocal, &jglobal) in cols.iter().enumerate() {
+          let value = elmat[(ilocal, jlocal)];
+          if value != 0.0 {
+            local.push((iglobal, jglobal, value));
+          }
+        }
+      }
+      local
+    })
+    .collect();
+
+  let (rows, cols, values) = triplets.into_iter().multiunzip();
+  GalMat::try_from_triplets(row_dofs.ndofs(), col_dofs.ndofs(), rows, cols, values).unwrap()
+}
+
+/// Scatter a cell-independent local matrix into a global one by *averaging*
+/// rather than accumulating.
+///
+/// The exterior derivative is the same matrix on every cell, so a pair of dofs
+/// is seen by every cell containing both, each contributing the identical
+/// entry, and summing would multiply the operator by that multiplicity.
+/// Visiting one cell per column does not avoid it: a basis function's
+/// derivative is supported on all the cells containing its dof.
+///
+/// The multiplicity is counted by scattering ones through the same loop, so the
+/// two sparsity patterns are identical by construction.
+pub fn scatter_local_operator(
+  topology: &Complex,
+  row_dofs: &CellDofs,
+  col_dofs: &CellDofs,
+  local: &simplicial::linalg::Matrix,
+) -> CsrMatrix {
+  let mut values = CooMatrix::new(row_dofs.ndofs(), col_dofs.ndofs());
+  let mut counts = CooMatrix::new(row_dofs.ndofs(), col_dofs.ndofs());
+
+  for kidx in 0..topology.nsimplices(topology.dim()) {
+    let rows = row_dofs.cell(kidx);
+    let cols = col_dofs.cell(kidx);
+    for (ilocal, &iglobal) in rows.iter().enumerate() {
+      for (jlocal, &jglobal) in cols.iter().enumerate() {
+        values.push(iglobal, jglobal, local[(ilocal, jlocal)]);
+        counts.push(iglobal, jglobal, 1.0);
+      }
+    }
+  }
+
+  let mut values = CsrMatrix::from(&values);
+  let counts = CsrMatrix::from(&counts);
+  for (value, count) in values.values_mut().iter_mut().zip(counts.values()) {
+    *value /= count;
+  }
+  values
+}
+
+/// Assemble a Galerkin vector through an explicit local-to-global map: the
+/// counterpart of [`assemble_galmat_dofs`].
+pub fn assemble_galvec_dofs(
+  topology: &Complex,
+  geometry: &MeshLengthsSq,
+  dofs: &CellDofs,
+  elvec: impl Fn(&Metric, Chart) -> Vector + Sync,
+) -> GalVec {
+  let contributions: Vec<(usize, f64)> = topology
+    .cells()
+    .handle_par_iter()
+    .flat_map_iter(|cell| {
+      let metric = geometry.cell_metric(cell);
+      let elvec = elvec(&metric, cell);
+      dofs
+        .cell(cell.kidx())
+        .iter()
+        .copied()
+        .zip(elvec.iter().copied())
+        .collect::<Vec<_>>()
+    })
+    .collect();
+
+  let mut galvec = GalVec::zeros(dofs.ndofs());
+  for (global, value) in contributions {
+    galvec[global] += value;
   }
   galvec
 }

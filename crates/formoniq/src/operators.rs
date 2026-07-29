@@ -1,16 +1,18 @@
 use {
   derham::{
+    decomposition::GeometricDecomposition,
     interpolate::{form::WhitneyExpansion, samples::LsfSamples},
     section::Section,
     trace::FaceTrace,
   },
   gramian::{Gramian, Metric},
+  multialgebra::tensor::factorwise_kronecker,
   multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power, multiform_gramian},
   multiindex::{Combination, Sign},
   simplicial::{
     atlas::{
       Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, unit_bary_gramian,
-      unit_difbarys, unit_simplex_volume,
+      unit_bary_moments, unit_difbarys, unit_simplex_volume,
     },
     geometry::cell_volume,
     linalg::{Matrix, Vector},
@@ -602,6 +604,21 @@ impl<'a, F: Section> SourceElVec<'a, F> {
       shapes,
     }
   }
+
+  /// The same load, against an arbitrary family of shape functions.
+  ///
+  /// The shape functions are the only thing a polynomial degree changes, the
+  /// Whitney ones being the degree-one member of the family.
+  pub fn with_shapes(source: &'a F, qr: Option<SimplexQuadRule>, shapes: LsfSamples) -> Self {
+    let quad = CellQuadrature::new(source.dim(), qr);
+    assert_eq!(shapes.nnodes(), quad.nodes().len());
+    assert_eq!(shapes.grade(), source.grade());
+    Self {
+      source,
+      quad,
+      shapes,
+    }
+  }
 }
 impl<F: Sync + Section> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
@@ -615,6 +632,80 @@ impl<F: Sync + Section> ElVecProvider for SourceElVec<'_, F> {
       cell_volume(metric),
       |point, whitney| inner.inner(self.source.at(point).components(), whitney.components()),
     )
+  }
+}
+
+/// The element matrix of the $L^2 Lambda^k$ inner product on
+/// $P^-_r Lambda^k$: the higher-order Hodge mass matrix.
+///
+/// The integrand splits into a blade half and a polynomial half exactly as at
+/// first order, so
+///
+/// $M = vol_K space C^top (Q_r times.circle H) C$,
+///
+/// with $H = D (Lambda^k g^(-1)) D^top$ the Gramian of the barycentric
+/// $k$-blades $dif lambda_I$, $Q_r$ the barycentric moments of degree $r$, and
+/// $C$ the components of the local basis on the products
+/// $lambda^alpha dif lambda_I$. Only $H$ depends on the metric, so $M$ is
+/// linear in $Lambda^k g^(-1)$ at every degree.
+///
+/// $Q_r$ is exact, the closed form $n! space alpha! \/ (abs(alpha) + n)!$, so
+/// the mass matrix is integrated and not quadratured. [`HodgeMassElmat`] is
+/// this at $r = 1$, where $Q_1$ is the barycentric Gramian.
+///
+/// $C$ is the geometric decomposition's own basis, so the local matrix is
+/// ordered as the local-to-global map scatters it.
+pub struct TrimmedMassElmat {
+  dim: Dim,
+  grade: ExteriorGrade,
+  /// $C$, the local basis in the barycentric tensor basis.
+  coefficients: Matrix,
+  /// $Lambda^k$ of the reference barycentric differentials.
+  difbarys_power: Matrix,
+  /// $Q_r$, the polynomial half, at unit volume.
+  moments: Gramian,
+}
+
+impl TrimmedMassElmat {
+  pub fn new(decomposition: &GeometricDecomposition) -> Self {
+    let dim = decomposition.cell_dim();
+    let grade = decomposition.grade();
+    let basis = decomposition.local_basis();
+
+    // A trimmed function of degree r is a monomial of degree r-1 times a
+    // Whitney form, homogeneous of degree one, so the tensor sits at degree r.
+    let poly_degree = decomposition.degree();
+
+    let ncomponents = basis
+      .first()
+      .map_or(0, |(_, form)| form.tensor().components().len());
+    let coefficients = Matrix::from_fn(ncomponents, basis.len(), |i, j| {
+      basis[j].1.tensor().components()[i]
+    });
+
+    Self {
+      dim,
+      grade,
+      coefficients,
+      difbarys_power: exterior_power(&unit_difbarys(dim), grade),
+      moments: unit_bary_moments(dim, poly_degree),
+    }
+  }
+
+  pub fn eval(&self, metric: &Metric, _chart: Chart) -> Matrix {
+    assert_eq!(self.dim, metric.dim());
+    if self.coefficients.ncols() == 0 {
+      return Matrix::zeros(0, 0);
+    }
+
+    // H, the Gramian of the barycentric k-blades: one Cauchy-Binet sandwich
+    // for every basis function at once.
+    let form_gramian = multiform_gramian(metric, self.grade);
+    let blade_gramian =
+      &self.difbarys_power * form_gramian.matrix() * self.difbarys_power.transpose();
+
+    let weight = factorwise_kronecker(&[self.moments.matrix().clone(), blade_gramian]);
+    cell_volume(metric) * self.coefficients.transpose() * weight * &self.coefficients
   }
 }
 
