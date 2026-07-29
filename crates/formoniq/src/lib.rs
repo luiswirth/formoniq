@@ -13,4 +13,5 @@ pub mod multigrid;
 pub mod operators;
 pub mod problems;
 pub mod time;
+pub mod trimmed_complex;
 pub mod whitney_complex;

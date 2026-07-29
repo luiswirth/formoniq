@@ -1245,6 +1245,7 @@ dependencies = [
  "approx",
  "coorder",
  "derham",
+ "divan",
  "faer",
  "glatt",
  "gramian",

@@ -39,6 +39,25 @@ impl LsfSamples {
     Self { grade, values }
   }
 
+  /// The trimmed shape functions $P^-_r Lambda^k$ of a geometric
+  /// decomposition, at the given points, in the decomposition's own dof order.
+  ///
+  /// The general family the Whitney one is the $r = 1$ case of.
+  pub fn trimmed(
+    decomposition: &crate::decomposition::GeometricDecomposition,
+    nodes: &[Bary],
+  ) -> Self {
+    let basis = decomposition.local_basis();
+    let values = nodes
+      .iter()
+      .map(|bary| basis.iter().map(|(_, form)| form.at_bary(bary)).collect())
+      .collect();
+    Self {
+      grade: decomposition.grade(),
+      values,
+    }
+  }
+
   /// The differentials of the Whitney shape functions of a grade, which are
   /// constant on the cell and so take the same value at every node.
   ///
