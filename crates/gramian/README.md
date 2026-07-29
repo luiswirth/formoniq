@@ -37,7 +37,7 @@ Gram matrices and pseudo-Riemannian metrics of arbitrary signature.
 `gramian` is the metric layer of
 [formoniq](https://github.com/luiswirth/formoniq),
 a finite element exterior calculus (FEEC) engine:
-`exterior` induces from it the inner products on exterior powers
+`multialgebra` induces from it the inner products on exterior and symmetric powers
 (the signature is what turns the Hodge star Lorentzian),
 and `simplicial` uses it as the per-cell metric of Regge geometry.
 The crate itself is plain linear algebra over one basis at a time,

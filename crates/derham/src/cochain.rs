@@ -1,7 +1,7 @@
 use simplicial::linalg::{CsrMatrix, Vector};
 
 use {
-  exterior::ExteriorGrade,
+  multialgebra::ExteriorGrade,
   simplicial::{
     topology::skeleton::Skeleton,
     topology::{

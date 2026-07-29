@@ -12,7 +12,7 @@
 //!
 //! The mesh-independent [`CoordField`]s of the `glatt` crate -- analytic
 //! data on the smooth manifold $M$ -- connect to this world through the functor
-//! whose direction the [`Variance`] fixes:
+//! whose direction the variance of the values fixes:
 //!
 //! - covariant: a coordinate form **pulls back** onto the mesh along the
 //!   composite of the cell parametrization and the continuum chart
@@ -20,21 +20,20 @@
 //! - contravariant: the direction reverses, so a multivector field on the
 //!   manifold is what pushes forward into ambient space instead.
 //!
-//! The type system enforces this: [`Pullback`] implements [`Section`] only for
-//! [`Covariant`]. The opposite direction, sampling a section back into ambient
-//! coordinates ([`Sampler`]), is not canonical for forms -- it extends the
-//! value by zero on the normal space through the chart pseudo-inverse -- and is
-//! confined to visualization and I/O.
+//! Variance is carried by the slots of the value, so [`Pullback`] rejects a
+//! contravariant field where it once failed to compile. The opposite direction,
+//! sampling a section back into ambient coordinates ([`Sampler`]), is not
+//! canonical for forms -- it extends the value by zero on the normal space
+//! through the chart pseudo-inverse -- and is confined to visualization and
+//! I/O.
 
 use crate::interpolate::interpolant::WhitneyInterpolant;
 
 use {
   coorder::{Ambient, CoordSpace, Coords},
-  exterior::{
-    Contravariant, Covariant, Dim, ExteriorElement, ExteriorGrade, MultiForm, MultiVector, Variance,
-  },
   glatt::{field::CoordField, parametrization::Parametrization},
   gramian::Metric,
+  multialgebra::{Dim, ExteriorGrade, Tensor},
   simplicial::linalg::Vector,
   simplicial::{
     atlas::MeshPoint,
@@ -47,8 +46,8 @@ use {
 };
 
 /// A section of the exterior bundle $Lambda^k T^(*) M$ over the simplicial
-/// manifold: a differential form when [`Covariant`], a multivector field when
-/// [`Contravariant`].
+/// manifold: a differential form when its values are covariant, a multivector
+/// field when they are contravariant.
 ///
 /// The value at a [`MeshPoint`] is expressed in the reference frame of the
 /// containing cell's chart, hence lives in $Lambda^k (RR^n)$ for the intrinsic
@@ -59,12 +58,12 @@ use {
 /// do share is that the quantities extracted from them -- the integral over a
 /// face in the de Rham map, the $L^2$ inner product over a cell -- are
 /// chart-independent.
-pub trait Section<V: Variance> {
+pub trait Section {
   /// The dimension of the simplicial manifold, which is that of the cell
   /// charts.
   fn dim(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
-  fn at(&self, point: &MeshPoint) -> ExteriorElement<V>;
+  fn at(&self, point: &MeshPoint) -> Tensor;
 }
 
 /// The pullback of a continuum differential form onto the mesh, $omega |->
@@ -79,9 +78,10 @@ pub trait Section<V: Variance> {
 /// chart $chi$ -- the ordinary transition-map pattern, but spanning $M_h$ and
 /// $M$ instead of two patches of one manifold. Evaluate $omega$ at
 /// $u = chi(psi_K(lambda))$ and pull the value back through the composite
-/// differential $dif chi dot dif psi_K$. Metric-free, and only for [`Covariant`]
+/// differential $dif chi dot dif psi_K$. Metric-free, and only for covariant
 /// fields -- pullback is the contravariant action of $Lambda^k$, so the functor
-/// runs this way and no other.
+/// runs this way and no other, and a contravariant value is rejected rather
+/// than silently transported backwards.
 ///
 /// The construction is a bona fide pullback of a form along a smooth map, and
 /// $(R s)_sigma = integral_(r(sigma)) omega_M$ is the exact integral of the true
@@ -122,7 +122,7 @@ enum ContinuumChartMap<'a, S: CoordSpace> {
   },
 }
 
-impl<'a, F: CoordField<Covariant, Ambient>> Pullback<'a, F, Ambient> {
+impl<'a, F: CoordField<Ambient>> Pullback<'a, F, Ambient> {
   /// The flat pullback: the field's domain *is* the ambient space.
   pub fn identity(field: &'a F, topology: &'a Complex, coords: &'a MeshCoords) -> Self {
     assert_eq!(
@@ -139,7 +139,7 @@ impl<'a, F: CoordField<Covariant, Ambient>> Pullback<'a, F, Ambient> {
   }
 }
 
-impl<'a, S: CoordSpace, F: CoordField<Covariant, S>> Pullback<'a, F, S> {
+impl<'a, S: CoordSpace, F: CoordField<S>> Pullback<'a, F, S> {
   /// The curved pullback: the field lives on a chart domain of the continuum,
   /// reached through `param`.
   pub fn through(
@@ -171,14 +171,14 @@ impl<'a, S: CoordSpace, F: CoordField<Covariant, S>> Pullback<'a, F, S> {
   }
 }
 
-impl<S: CoordSpace, F: CoordField<Covariant, S>> Section<Covariant> for Pullback<'_, F, S> {
+impl<S: CoordSpace, F: CoordField<S>> Section for Pullback<'_, F, S> {
   fn dim(&self) -> Dim {
     self.topology.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.field.grade()
   }
-  fn at(&self, point: &MeshPoint) -> MultiForm {
+  fn at(&self, point: &MeshPoint) -> Tensor {
     let cell = point.chart(self.topology);
     let parametrization = cell.coord_simplex(self.coords);
     let global = parametrization.bary2global(point.bary());
@@ -213,7 +213,7 @@ impl<S: CoordSpace, F: CoordField<Covariant, S>> Section<Covariant> for Pullback
 /// Pull a continuum form onto the mesh:
 /// `f.pullback_on(&topology, &coords)` (flat) or
 /// `f.pullback_through(&topology, &coords, &param)` (curved).
-pub trait CoordFieldExt<S: CoordSpace = Ambient>: Sized + CoordField<Covariant, S> {
+pub trait CoordFieldExt<S: CoordSpace = Ambient>: Sized + CoordField<S> {
   /// Pull the form onto the mesh along a continuum [`Parametrization`].
   fn pullback_through<'a>(
     &'a self,
@@ -233,12 +233,12 @@ pub trait CoordFieldExt<S: CoordSpace = Ambient>: Sized + CoordField<Covariant, 
     coords: &'a MeshCoords,
   ) -> Pullback<'a, Self, Ambient>
   where
-    Self: CoordField<Covariant, Ambient>,
+    Self: CoordField<Ambient>,
   {
     Pullback::identity(self, topology, coords)
   }
 }
-impl<S: CoordSpace, F: CoordField<Covariant, S>> CoordFieldExt<S> for F {}
+impl<S: CoordSpace, F: CoordField<S>> CoordFieldExt<S> for F {}
 
 /// The ambient-coordinate sampling of a section: the inverse road, taken
 /// only for visualization and I/O.
@@ -261,7 +261,7 @@ pub struct Sampler<'a, F> {
   locator: Option<&'a PointLocator>,
 }
 
-impl<'a, F: Section<Covariant>> Sampler<'a, F> {
+impl<'a, F: Section> Sampler<'a, F> {
   pub fn new(field: &'a F, topology: &'a Complex, coords: &'a MeshCoords) -> Self {
     Self {
       field,
@@ -295,7 +295,7 @@ impl<'a, F: Section<Covariant>> Sampler<'a, F> {
   }
 
   /// The value at a mesh point, expressed in the ambient frame.
-  pub fn at_point(&self, point: &MeshPoint) -> MultiForm {
+  pub fn at_point(&self, point: &MeshPoint) -> Tensor {
     let parametrization = point.chart(self.topology).coord_simplex(self.coords);
     self
       .field
@@ -305,18 +305,18 @@ impl<'a, F: Section<Covariant>> Sampler<'a, F> {
 
   /// The value at a global coordinate, in the ambient frame;
   /// `None` outside the mesh.
-  pub fn at_global<'b>(&self, coord: impl Into<CoordRef<'b>>) -> Option<MultiForm> {
+  pub fn at_global<'b>(&self, coord: impl Into<CoordRef<'b>>) -> Option<Tensor> {
     self.locate(coord).map(|point| self.at_point(&point))
   }
 }
 
 /// Sample a section in ambient coordinates: `f.sampled_on(&topology, &coords)`.
-pub trait SectionExt: Sized + Section<Covariant> {
+pub trait SectionExt: Sized + Section {
   fn sampled_on<'a>(&'a self, topology: &'a Complex, coords: &'a MeshCoords) -> Sampler<'a, Self> {
     Sampler::new(self, topology, coords)
   }
 }
-impl<F: Section<Covariant>> SectionExt for F {}
+impl<F: Section> SectionExt for F {}
 
 /// The pointwise wedge $alpha wedge beta$ of two fields of the same variance.
 ///
@@ -331,14 +331,14 @@ impl<A, B> Wedge<A, B> {
     Self { left, right }
   }
 }
-impl<V: Variance, A: Section<V>, B: Section<V>> Section<V> for Wedge<A, B> {
+impl<A: Section, B: Section> Section for Wedge<A, B> {
   fn dim(&self) -> Dim {
     self.left.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.left.grade() + self.right.grade()
   }
-  fn at(&self, point: &MeshPoint) -> ExteriorElement<V> {
+  fn at(&self, point: &MeshPoint) -> Tensor {
     self.left.at(point).wedge(&self.right.at(point))
   }
 }
@@ -363,30 +363,30 @@ impl<F> MetricOp<'_, F> {
 /// The musical isomorphism $sharp$ applied pointwise: a differential form
 /// becomes a multivector field, on fully equal footing.
 pub struct Sharp<'a, F>(MetricOp<'a, F>);
-impl<F: Section<Covariant>> Section<Contravariant> for Sharp<'_, F> {
+impl<F: Section> Section for Sharp<'_, F> {
   fn dim(&self) -> Dim {
     self.0.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.0.field.grade()
   }
-  fn at(&self, point: &MeshPoint) -> MultiVector {
-    self.0.field.at(point).sharp(&self.0.cell_metric(point))
+  fn at(&self, point: &MeshPoint) -> Tensor {
+    self.0.field.at(point).musical(&self.0.cell_metric(point))
   }
 }
 
 /// The musical isomorphism $flat$ applied pointwise: a multivector field
 /// becomes a differential form.
 pub struct Flat<'a, F>(MetricOp<'a, F>);
-impl<F: Section<Contravariant>> Section<Covariant> for Flat<'_, F> {
+impl<F: Section> Section for Flat<'_, F> {
   fn dim(&self) -> Dim {
     self.0.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.0.field.grade()
   }
-  fn at(&self, point: &MeshPoint) -> MultiForm {
-    self.0.field.at(point).flat(&self.0.cell_metric(point))
+  fn at(&self, point: &MeshPoint) -> Tensor {
+    self.0.field.at(point).musical(&self.0.cell_metric(point))
   }
 }
 
@@ -403,26 +403,26 @@ pub struct HodgeStar<'a, F> {
   op: MetricOp<'a, F>,
   orientation: &'a Orientation,
 }
-impl<V: Variance, F: Section<V>> Section<V> for HodgeStar<'_, F> {
+impl<F: Section> Section for HodgeStar<'_, F> {
   fn dim(&self) -> Dim {
     self.op.field.dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.op.field.dim() - self.op.field.grade()
   }
-  fn at(&self, point: &MeshPoint) -> ExteriorElement<V> {
+  fn at(&self, point: &MeshPoint) -> Tensor {
     let chart = point.chart(self.op.topology);
     self
       .op
       .field
       .at(point)
-      .hodge_star(&self.op.cell_metric(point), self.orientation.sign(chart))
+      .star(&self.op.cell_metric(point), self.orientation.sign(chart))
   }
 }
 
-/// The pointwise combinators, in method position: `omega.sharp(&topology, &geometry)`.
-pub trait SectionOps<V: Variance>: Sized + Section<V> {
-  fn wedge<B: Section<V>>(self, other: B) -> Wedge<Self, B> {
+/// The pointwise combinators, in method position: `omega.musical(&topology, &geometry)`.
+pub trait SectionOps: Sized + Section {
+  fn wedge<B: Section>(self, other: B) -> Wedge<Self, B> {
     Wedge::new(self, other)
   }
   fn hodge_star<'a>(
@@ -441,11 +441,11 @@ pub trait SectionOps<V: Variance>: Sized + Section<V> {
     }
   }
 }
-impl<V: Variance, F: Section<V>> SectionOps<V> for F {}
+impl<F: Section> SectionOps for F {}
 
 /// The musicals, which change the variance and so cannot sit on the
 /// variance-generic [`SectionOps`].
-pub trait SharpOp: Sized + Section<Covariant> {
+pub trait SharpOp: Sized + Section {
   fn sharp<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Sharp<'a, Self> {
     Sharp(MetricOp {
       field: self,
@@ -454,9 +454,9 @@ pub trait SharpOp: Sized + Section<Covariant> {
     })
   }
 }
-impl<F: Section<Covariant>> SharpOp for F {}
+impl<F: Section> SharpOp for F {}
 
-pub trait FlatOp: Sized + Section<Contravariant> {
+pub trait FlatOp: Sized + Section {
   fn flat<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Flat<'a, Self> {
     Flat(MetricOp {
       field: self,
@@ -465,17 +465,17 @@ pub trait FlatOp: Sized + Section<Contravariant> {
     })
   }
 }
-impl<F: Section<Contravariant>> FlatOp for F {}
+impl<F: Section> FlatOp for F {}
 
 /// The Whitney interpolation of a cochain, as a section of the manifold.
-impl Section<Covariant> for WhitneyInterpolant<'_> {
+impl Section for WhitneyInterpolant<'_> {
   fn dim(&self) -> Dim {
     self.complex().dim()
   }
   fn grade(&self) -> ExteriorGrade {
     self.cochain().grade()
   }
-  fn at(&self, point: &MeshPoint) -> MultiForm {
+  fn at(&self, point: &MeshPoint) -> Tensor {
     self.eval(point)
   }
 }

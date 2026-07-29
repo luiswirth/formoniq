@@ -10,7 +10,7 @@ use {
     faer::FaerLu,
   },
   derham::cochain::Cochain,
-  exterior::ExteriorGrade,
+  multialgebra::ExteriorGrade,
 };
 
 use iterative::{BlockDiagonal, StopCriterion, krylov::minres};

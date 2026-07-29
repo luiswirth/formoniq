@@ -11,7 +11,7 @@ keywords = ["de-rham", "cochain", "whitney", "fem"]
 categories = ["mathematics", "science"]
 
 [dependencies]
-exterior = { path = "../exterior", version = "0.2.0" }
+multialgebra = { path = "../multialgebra", version = "0.2.0" }
 glatt = { path = "../glatt", version = "0.2.0" }
 simplicial = { path = "../simplicial", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }

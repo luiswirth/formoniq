@@ -50,7 +50,7 @@ are the end-to-end convergence and spectrum checks.
 ## Place in the ecosystem
 
 `formoniq` is the top of a small stack of standalone crates:
-[exterior](https://crates.io/crates/exterior) (exterior algebra),
+[multialgebra](https://crates.io/crates/multialgebra) (exterior and symmetric algebra),
 [simplicial](https://crates.io/crates/simplicial) (simplicial topology and Regge geometry),
 [glatt](https://crates.io/crates/glatt) (the smooth continuum)
 and [derham](https://crates.io/crates/derham) (discrete differential forms).
