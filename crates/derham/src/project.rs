@@ -31,7 +31,7 @@
 use crate::{cochain::Cochain, section::Section, trace::FaceTrace};
 
 use {
-  exterior::{Covariant, MultiVector, exterior_power},
+  multialgebra::{Tensor, exterior_power},
   multiindex::Combination,
   simplicial::{
     Dim,
@@ -51,11 +51,7 @@ use {
 /// ```ignore
 /// derham_map(&omega.pullback_on(&topology, &coords), &topology, 1)
 /// ```
-pub fn derham_map(
-  field: &impl Section<Covariant>,
-  topology: &Complex,
-  quad_degree: usize,
-) -> Cochain {
+pub fn derham_map(field: &impl Section, topology: &Complex, quad_degree: usize) -> Cochain {
   let grade = field.grade();
   let qr = SimplexQuadRule::degree(grade, quad_degree);
 
@@ -82,11 +78,11 @@ pub fn derham_map(
 /// in the crate that joins them. Metric-free and coordinate-free: a face of a
 /// cell has spanning vectors in the cell's chart whatever geometry the mesh
 /// carries, and none at all if it carries none.
-pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> MultiVector {
+pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> Tensor {
   let grade = positions.card() - 1;
   let spanning = unit_face_spanning_vectors(cell_dim, positions);
   let coeffs = exterior_power(&spanning, grade).column(0).into_owned();
-  MultiVector::new(coeffs, cell_dim, grade)
+  Tensor::multivector(coeffs, cell_dim, grade)
 }
 
 /// $integral_sigma omega$ over a face of a cell, expressed in that cell's
@@ -98,7 +94,7 @@ pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> MultiVector
 /// quadrature of the duality pairing against the face's tangent blade --
 /// no metric anywhere.
 pub fn integrate_face(
-  field: &impl Section<Covariant>,
+  field: &impl Section,
   chart: Chart,
   positions: &Combination,
   qr: &SimplexQuadRule,
@@ -123,8 +119,8 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
-    coorder::Coord, exterior::ExteriorElement, glatt::field::DiffFormClosure,
-    simplicial::linalg::Vector, simplicial::mesher::cartesian::CartesianGrid,
+    coorder::Coord, glatt::field::DiffFormClosure, simplicial::linalg::Vector,
+    simplicial::mesher::cartesian::CartesianGrid,
   };
 
   use approx::assert_relative_eq;
@@ -153,7 +149,7 @@ mod test {
       (
         DiffFormClosure::one_form(|p| na::dvector![p[1], 0.0], Dim::new(2)),
         DiffFormClosure::new(
-          |_| ExteriorElement::new(na::dvector![-1.0], Dim::new(2), Dim::new(2)),
+          |_| Tensor::multiform(na::dvector![-1.0], Dim::new(2), Dim::new(2)),
           Dim::new(2),
           Dim::new(2),
         ),
@@ -162,7 +158,7 @@ mod test {
       (
         DiffFormClosure::one_form(|p| na::dvector![0.0, p[2], 0.0], Dim::new(3)),
         DiffFormClosure::new(
-          |_| ExteriorElement::new(na::dvector![0.0, 0.0, -1.0], Dim::new(3), Dim::new(2)),
+          |_| Tensor::multiform(na::dvector![0.0, 0.0, -1.0], Dim::new(3), Dim::new(2)),
           Dim::new(3),
           Dim::new(2),
         ),
@@ -170,12 +166,12 @@ mod test {
       // 3d: omega = x dy wedge dz, dif omega = dx wedge dy wedge dz
       (
         DiffFormClosure::new(
-          |p| ExteriorElement::new(na::dvector![0.0, 0.0, p[0]], Dim::new(3), Dim::new(2)),
+          |p| Tensor::multiform(na::dvector![0.0, 0.0, p[0]], Dim::new(3), Dim::new(2)),
           Dim::new(3),
           Dim::new(2),
         ),
         DiffFormClosure::new(
-          |_| ExteriorElement::new(na::dvector![1.0], Dim::new(3), Dim::new(3)),
+          |_| Tensor::multiform(na::dvector![1.0], Dim::new(3), Dim::new(3)),
           Dim::new(3),
           Dim::new(3),
         ),

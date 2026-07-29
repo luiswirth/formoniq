@@ -5,8 +5,178 @@ pub mod composition;
 pub mod monotone;
 pub mod permutation;
 
+pub use cartesian::{Word, WordDeletions, Words};
 pub use composition::Composition;
-pub use monotone::Repetition;
+pub use monotone::{MonoDeletions, MonoIndex, MonoIndices, Repetition, Symbols};
+
+/// A basis element of one of the three index families.
+///
+/// The three are the bases of the three symmetry types:
+/// [`Combination`] a subset for $Lambda^k$, [`Composition`] an exponent vector
+/// for $"Sym"^k$, and [`Word`] a word for $V^(times.circle k)$.
+///
+/// [`MonoIndex`] covers the two monotone ones, subsets and multisets, which the
+/// shift makes a single bitset. [`Word`] covers the free one, where there
+/// is no symmetry to quotient by and therefore nothing to compress: the two
+/// representations differ because the objects do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MultiIndex {
+  /// A subset or a multiset: the basis of $Lambda^k$ or $"Sym"^k$.
+  Mono(MonoIndex),
+  /// A word: the basis of the free power $V^(times.circle k)$.
+  Word(Word),
+}
+
+impl MultiIndex {
+  pub fn degree(&self) -> usize {
+    match self {
+      Self::Mono(index) => index.degree(),
+      Self::Word(index) => index.degree(),
+    }
+  }
+  /// The rank in the family's own order: colex for the monotone ones, radix
+  /// for the free one.
+  pub fn rank(&self) -> usize {
+    match self {
+      Self::Mono(index) => index.rank(),
+      Self::Word(index) => index.rank(),
+    }
+  }
+  /// The symbols, in position order.
+  pub fn word(&self) -> Symbols {
+    match self {
+      Self::Mono(index) => index.word(),
+      Self::Word(index) => index.symbols(),
+    }
+  }
+  pub fn symbol(&self, position: usize) -> usize {
+    match self {
+      Self::Mono(index) => index.symbol(position),
+      Self::Word(index) => index.symbol(position),
+    }
+  }
+  /// How many positions carry a symbol.
+  pub fn multiplicity(&self, symbol: usize) -> usize {
+    match self {
+      Self::Mono(index) => index.multiplicity(symbol),
+      Self::Word(index) => index.iter().filter(|&s| s == symbol).count(),
+    }
+  }
+
+  /// The monotone index, if this is one.
+  pub fn as_mono(&self) -> Option<&MonoIndex> {
+    match self {
+      Self::Mono(index) => Some(index),
+      Self::Word(_) => None,
+    }
+  }
+  /// The cartesian index, if this is one.
+  pub fn as_word(&self) -> Option<&Word> {
+    match self {
+      Self::Word(index) => Some(index),
+      Self::Mono(_) => None,
+    }
+  }
+
+  /// Combine two indices of one family: the signed merge on the quotients,
+  /// concatenation on the free power.
+  ///
+  /// `None` only where the result is the zero of the algebra, which happens on
+  /// an alternating index alone. The symmetric merge and the free
+  /// concatenation are both total.
+  ///
+  /// # Panics
+  /// If the families differ.
+  pub fn merge(&self, other: &Self) -> Option<(Sign, Self)> {
+    match (self, other) {
+      (Self::Mono(left), Self::Mono(right)) => {
+        left.merge(right).map(|(sign, index)| (sign, index.into()))
+      }
+      (Self::Word(left), Self::Word(right)) => Some((Sign::Pos, left.concat(right).into())),
+      _ => panic!("a merge is within one family"),
+    }
+  }
+
+  /// Every single-position deletion, with the sign it carries.
+  ///
+  /// Alternating deletions alternate in sign, symmetric and free ones do not.
+  /// A free deletion is the simplest of the three: positions are distinct and
+  /// nothing is reordered, so there is no permutation to take a sign from.
+  pub fn deletions(&self) -> MultiDeletions {
+    match self {
+      Self::Mono(index) => MultiDeletions::Mono(index.deletions()),
+      Self::Word(index) => MultiDeletions::Word(index.deletions()),
+    }
+  }
+}
+
+/// Every index of a family, degree and alphabet.
+///
+/// An enum rather than a boxed trait object: the monotone path allocates
+/// nothing, and both variants are now the same size, so nothing is paid for
+/// the family that is not in use.
+#[derive(Debug, Clone)]
+pub enum MultiIndices {
+  Mono(MonoIndices),
+  Word(Words),
+}
+
+impl Iterator for MultiIndices {
+  type Item = MultiIndex;
+  fn next(&mut self) -> Option<MultiIndex> {
+    match self {
+      Self::Mono(indices) => indices.next().map(MultiIndex::Mono),
+      Self::Word(indices) => indices.next().map(MultiIndex::Word),
+    }
+  }
+  fn size_hint(&self) -> (usize, Option<usize>) {
+    match self {
+      Self::Mono(indices) => indices.size_hint(),
+      Self::Word(indices) => indices.size_hint(),
+    }
+  }
+}
+impl ExactSizeIterator for MultiIndices {}
+
+/// Every single-position deletion of a [`MultiIndex`], with its sign.
+#[derive(Debug, Clone)]
+pub enum MultiDeletions {
+  Mono(MonoDeletions),
+  Word(WordDeletions),
+}
+
+impl Iterator for MultiDeletions {
+  type Item = (Sign, usize, MultiIndex);
+  fn next(&mut self) -> Option<Self::Item> {
+    match self {
+      Self::Mono(deletions) => deletions
+        .next()
+        .map(|(sign, symbol, reduced)| (sign, symbol, MultiIndex::Mono(reduced))),
+      Self::Word(deletions) => deletions
+        .next()
+        .map(|(symbol, reduced)| (Sign::Pos, symbol, MultiIndex::Word(reduced))),
+    }
+  }
+}
+
+impl Default for MultiIndex {
+  /// The empty alternating index: the basis of the scalars.
+  fn default() -> Self {
+    Self::Mono(MonoIndex::default())
+  }
+}
+
+impl From<MonoIndex> for MultiIndex {
+  fn from(index: MonoIndex) -> Self {
+    Self::Mono(index)
+  }
+}
+impl From<Word> for MultiIndex {
+  fn from(index: Word) -> Self {
+    Self::Word(index)
+  }
+}
+
 pub use permutation::Permutation;
 
 /// The degree of a graded structure: the dimension of a simplex, the grade of an
@@ -173,8 +343,31 @@ impl std::fmt::Display for Degree {
 /// The dimension of a simplex or space: the [`Degree`] under its geometric name.
 pub type Dim = Degree;
 
+/// Pascal's triangle up to the index ceiling, computed once.
+///
+/// A rank is a sum of binomials and ranking is the innermost thing the algebra
+/// does, so this is a table lookup rather than a division loop. It covers every
+/// shifted symbol a [`MonoIndex`] can hold; beyond that the exact computation
+/// still runs, so nothing here is a bound on what may be counted.
+const BINOMIAL_TABLE_SIZE: usize = monotone::MAX_SHIFTED_SYMBOLS + 1;
+static BINOMIALS: std::sync::LazyLock<[[usize; BINOMIAL_TABLE_SIZE]; BINOMIAL_TABLE_SIZE]> =
+  std::sync::LazyLock::new(|| {
+    let mut table = [[0usize; BINOMIAL_TABLE_SIZE]; BINOMIAL_TABLE_SIZE];
+    for n in 0..BINOMIAL_TABLE_SIZE {
+      table[n][0] = 1;
+      for k in 1..=n {
+        table[n][k] = table[n - 1][k - 1].saturating_add(table[n - 1].get(k).copied().unwrap_or(0));
+      }
+    }
+    table
+  });
+
 pub fn binomial(n: usize, k: usize) -> usize {
-  num_integer::binomial(n, k)
+  if n < BINOMIAL_TABLE_SIZE && k < BINOMIAL_TABLE_SIZE {
+    BINOMIALS[n][k]
+  } else {
+    num_integer::binomial(n, k)
+  }
 }
 pub fn factorial(num: usize) -> usize {
   (1..=num).product()
@@ -297,50 +490,56 @@ pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
   nswaps
 }
 
-/// A strictly increasing multi-index: a finite set of indices `0..64`,
-/// stored as a bitset.
+/// A strictly increasing multi-index: a finite set of indices, stored as the
+/// bitset of its symbols.
 ///
-/// The canonical basis element of simplicial chains (a set of vertices) and
-/// of exterior algebra blades (a set of covector indices).
+/// The basis element of $Lambda^k$ (a set of covector indices) and of
+/// simplicial chains (a set of vertices).
+///
+/// A newtype over [`MonoIndex`] at [`Repetition::Forbidden`], which is what it
+/// has always been: a subset is a monotone word that may not repeat, and
+/// forbidding repetition makes the shift zero, so the shifted word a
+/// `MonoIndex` stores *is* the set. The wrapper adds nothing to the
+/// representation and enforces the family, so a multiset cannot be handed to a
+/// subset's operations.
 ///
 /// The derived `Ord` compares the bitsets numerically, which for equal
 /// cardinality is exactly the colexicographic order.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Combination(u64);
+pub struct Combination(MonoIndex);
 
 /// The maximum index (exclusive) a [`Combination`] can contain.
-pub const MAX_NINDICES: usize = 64;
+pub const MAX_NINDICES: usize = monotone::MAX_SHIFTED_SYMBOLS;
 
 impl Combination {
   pub fn empty() -> Self {
-    Self(0)
+    Self(MonoIndex::empty(Repetition::Forbidden))
   }
   pub fn single(index: usize) -> Self {
-    assert!(index < MAX_NINDICES);
-    Self(1 << index)
+    Self(MonoIndex::single(Repetition::Forbidden, index))
   }
   /// The full set ${0, dots, card - 1}$.
   pub fn full(card: usize) -> Self {
     assert!(card <= MAX_NINDICES);
     if card == MAX_NINDICES {
-      Self(u64::MAX)
+      Self::from_bits(u128::MAX)
     } else {
-      Self((1 << card) - 1)
+      Self::from_bits((1u128 << card) - 1)
     }
   }
   /// From strictly increasing indices.
   pub fn from_increasing(indices: impl IntoIterator<Item = usize>) -> Self {
-    let mut set = 0u64;
+    let mut set = 0u128;
     for index in indices {
       assert!(index < MAX_NINDICES);
-      let bit = 1 << index;
+      let bit = 1u128 << index;
       assert!(
         set & bit == 0 && set < bit,
         "Indices must be strictly increasing."
       );
       set |= bit;
     }
-    Self(set)
+    Self::from_bits(set)
   }
 
   /// Canonicalize an arbitrarily ordered index word into the sign of its
@@ -349,11 +548,11 @@ impl Combination {
   /// `None` if an index repeats. The only place unsorted multi-indices
   /// exist: as transient inputs.
   pub fn from_word(word: impl IntoIterator<Item = usize>) -> Option<(Sign, Self)> {
-    let mut set = 0u64;
+    let mut set = 0u128;
     let mut inversions = 0;
     for index in word {
       assert!(index < MAX_NINDICES);
-      let bit = 1u64 << index;
+      let bit = 1u128 << index;
       if set & bit != 0 {
         return None;
       }
@@ -361,35 +560,36 @@ impl Combination {
       inversions += (set >> index).count_ones() as usize;
       set |= bit;
     }
-    Some((Sign::from_parity(inversions), Self(set)))
+    Some((Sign::from_parity(inversions), Self::from_bits(set)))
   }
 
-  pub fn bits(self) -> u64 {
-    self.0
+  /// The raw bitset, each set bit an index.
+  pub fn bits(self) -> u128 {
+    self.0.shifted_bits()
+  }
+  /// From a raw bitset, each set bit an index.
+  ///
+  /// Every bitset denotes a combination, so this is total; the name marks that
+  /// the caller is working at the bit level, where the set is the bits.
+  pub fn from_bits(bits: u128) -> Self {
+    Self(MonoIndex::from_shifted(Repetition::Forbidden, bits))
   }
   pub fn card(self) -> usize {
-    self.0.count_ones() as usize
+    self.0.degree()
   }
   pub fn is_empty(self) -> bool {
-    self.0 == 0
+    self.card() == 0
   }
   pub fn contains(self, index: usize) -> bool {
-    index < MAX_NINDICES && self.0 & (1 << index) != 0
+    index < MAX_NINDICES && self.bits() & (1 << index) != 0
   }
   pub fn is_subset_of(self, other: Self) -> bool {
-    self.0 & other.0 == self.0
+    self.bits() & other.bits() == self.bits()
   }
 
   /// The indices in ascending order.
   pub fn iter(self) -> impl Iterator<Item = usize> {
-    let mut set = self.0;
-    std::iter::from_fn(move || {
-      (set != 0).then(|| {
-        let index = set.trailing_zeros() as usize;
-        set &= set - 1;
-        index
-      })
-    })
+    monotone::set_bits(self.bits())
   }
   /// The position-th smallest index.
   pub fn index_at(self, position: usize) -> usize {
@@ -398,12 +598,12 @@ impl Combination {
   /// With the index added; must not be contained yet.
   pub fn inserted(self, index: usize) -> Self {
     assert!(index < MAX_NINDICES && !self.contains(index));
-    Self(self.0 | 1 << index)
+    Self::from_bits(self.bits() | 1 << index)
   }
   /// The position of an index within the set.
   pub fn position_of(self, index: usize) -> usize {
     assert!(self.contains(index));
-    (self.0 & ((1 << index) - 1)).count_ones() as usize
+    (self.bits() & ((1 << index) - 1)).count_ones() as usize
   }
 
   /// Colexicographic rank among all combinations of the same cardinality:
@@ -420,16 +620,16 @@ impl Combination {
   }
   /// Inverse of [`Self::rank`]: greedy from the largest element.
   pub fn from_rank(card: usize, mut rank: usize) -> Self {
-    let mut set = 0u64;
+    let mut set = 0u128;
     for position in (1..=card).rev() {
       let mut index = position - 1;
       while binomial(index + 1, position) <= rank {
         index += 1;
       }
       rank -= binomial(index, position);
-      set |= 1 << index;
+      set |= 1u128 << index;
     }
-    Self(set)
+    Self::from_bits(set)
   }
 
   /// All combinations of the given cardinality in colexicographic order.
@@ -447,7 +647,7 @@ impl Combination {
   /// The next combination of the same cardinality in colexicographic order
   /// (Gosper's hack).
   fn colex_successor(self) -> Option<Self> {
-    let x = self.0;
+    let x = self.bits();
     if x == 0 {
       return None;
     }
@@ -456,27 +656,30 @@ impl Combination {
     if v == 0 {
       return None;
     }
-    Some(Self(v | (((x ^ v) / u) >> 2)))
+    Some(Self::from_bits(v | (((x ^ v) / u) >> 2)))
   }
 
   /// Merge two disjoint combinations with the sign of the interleaving
   /// permutation: the wedge of basis blades. `None` if they intersect.
   pub fn union_signed(self, other: Self) -> Option<(Sign, Self)> {
-    if self.0 & other.0 != 0 {
+    if self.bits() & other.bits() != 0 {
       return None;
     }
     let mut inversions = 0;
     for index in other.iter() {
-      inversions += (self.0 >> index >> 1).count_ones() as usize;
+      inversions += (self.bits() >> index >> 1).count_ones() as usize;
     }
-    Some((Sign::from_parity(inversions), Self(self.0 | other.0)))
+    Some((
+      Sign::from_parity(inversions),
+      Self::from_bits(self.bits() | other.bits()),
+    ))
   }
 
   /// The complement within ${0, dots, n-1}$ and the sign such that
   /// $e_S wedge e_(S^c) = "sign" dot e_({0, dots, n-1})$: the combinatorics
   /// of the Hodge star.
   pub fn complement_signed(self, n: usize) -> (Sign, Self) {
-    let complement = Self(!self.0 & Self::full(n).0);
+    let complement = Self::from_bits(!self.bits() & Self::full(n).bits());
     let (sign, _) = self
       .union_signed(complement)
       .expect("Complement is disjoint.");
@@ -487,7 +690,7 @@ impl Combination {
   /// the boundary of a simplex and the interior product of a blade.
   pub fn deletions(self) -> impl Iterator<Item = (Sign, usize, Self)> {
     self.iter().enumerate().map(move |(position, index)| {
-      let deleted = Self(self.0 & !(1 << index));
+      let deleted = Self::from_bits(self.bits() & !(1 << index));
       (Sign::from_parity(position), index, deleted)
     })
   }

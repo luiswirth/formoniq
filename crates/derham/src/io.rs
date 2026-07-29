@@ -1,6 +1,6 @@
 use crate::cochain::Cochain;
 
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 
 use std::{
   fs::File,

@@ -23,8 +23,8 @@
 //! point" means, and no `Metric` of the continuum enters.
 
 use coorder::{Ambient, Coord, CoordSpace, Coords, Matrix, Vector};
-use exterior::Dim;
 use gramian::{Gramian, Metric};
+use multialgebra::Dim;
 
 /// A smooth parametrization $phi: Omega -> RR^N$ of the continuum, with its
 /// derived Jacobian and chart.

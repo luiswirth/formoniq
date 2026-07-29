@@ -25,8 +25,8 @@
 use {
   crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
-  exterior::{Covariant, multiform_gramian},
   iterative::{Jacobi, StopCriterion, krylov::cg},
+  multialgebra::multiform_gramian,
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::mesh::MeshLengthsSq},
@@ -44,7 +44,7 @@ use crate::{assemble::assemble_galvec, operators::SourceElVec, whitney_complex::
 /// each cell by the induced inner product $Lambda^k g^(-1)$ of that cell's
 /// metric. On a curved (embedded) mesh this is the only correct thing to do --
 /// the flat ambient Gramian would measure the wrong norm.
-pub fn fe_l2_error<F: Section<Covariant>>(
+pub fn fe_l2_error<F: Section>(
   fe_cochain: &Cochain,
   exact: &F,
   topology: &Complex,
@@ -81,7 +81,7 @@ pub fn fe_l2_error<F: Section<Covariant>>(
 ///
 /// Unlike the de Rham map this is defined for any $L^2$ form, but it does not
 /// commute with $dif$ and it costs a global solve. See the module docs.
-pub fn l2_projection<F: Sync + Section<Covariant>>(
+pub fn l2_projection<F: Sync + Section>(
   field: &F,
   whitney: WhitneyComplex,
   qr: Option<SimplexQuadRule>,

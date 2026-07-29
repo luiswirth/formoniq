@@ -8,7 +8,7 @@ use simplicial::topology::orientation::Orientation;
 
 use crate::ui::Selection;
 use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
-use exterior::{Blade, ExteriorGrade, MultiForm};
+use multialgebra::{Blade, ExteriorGrade, Tensor, Variance};
 use realize::surface::Surface;
 use simplicial::{
   Dim,
@@ -1233,11 +1233,21 @@ const HARMONIC_EIGENVALUE: f64 = 1e-8;
 /// torus -- so a member is chosen by projecting a fixed reference onto it
 /// rather than by taking whichever vector the eigensolver returned first, which
 /// would swing the flow's direction between refinements.
+///
+/// That reference selects only within an *exact* space. It is a coboundary, and
+/// the Hodge decomposition puts it orthogonal to the harmonic shell, so on a
+/// mesh whose topology supplies harmonics the projection is empty and the
+/// eigensolver's own first vector is all there is to go on. The choice is a
+/// gauge either way: every member of the shell is equally the smoothest closed
+/// field, and what the reference buys where it applies is reproducibility, not
+/// correctness.
 fn solenoidal_flux(topology: &Complex, coords: &MeshCoords, metric: &MeshLengthsSq) -> Cochain {
   let reference = ambient_blade_flux(topology, coords);
-  smoothest_closed_space(topology, metric)
-    .and_then(|space| project_onto(&reference, &space, topology, metric))
-    .unwrap_or(reference)
+  let Some(space) = smoothest_closed_space(topology, metric) else {
+    return reference;
+  };
+  project_onto(&reference, &space, topology, metric)
+    .unwrap_or_else(|| Cochain::new(reference.grade(), space.column(0).into_owned()))
 }
 
 /// The lowest-eigenvalue closed $(n-1)$-forms: the harmonic shell where the
@@ -1277,6 +1287,11 @@ fn smoothest_closed_space(topology: &Complex, metric: &MeshLengthsSq) -> Option<
 
 /// The $L^2$ projection of `reference` onto the span of `space`'s columns,
 /// `None` if it lands on nothing there.
+///
+/// The emptiness test is in the mass norm the projection is taken in, against a
+/// margin far above roundoff: where the reference is genuinely orthogonal to the
+/// space, what survives is the eigensolver's residual, and a threshold close to
+/// machine epsilon would pass that noise off as a field.
 fn project_onto(
   reference: &Cochain,
   space: &Matrix,
@@ -1297,8 +1312,10 @@ fn project_onto(
   let rhs = weighted.transpose() * reference.coeffs();
 
   let coeffs = gram.lu().solve(&rhs)?;
-  let projected = space * coeffs;
-  (projected.norm() > 1e-12 * reference.coeffs().norm()).then(|| Cochain::new(grade, projected))
+  let projected_norm_sq = coeffs.dot(&rhs);
+  let reference_norm_sq = formoniq::linalg::quadratic_form_sparse(&mass, reference.coeffs());
+
+  (projected_norm_sq > 1e-12 * reference_norm_sq).then(|| Cochain::new(grade, space * coeffs))
 }
 
 /// The de Rham map of the constant ambient $(n-1)$-form summing every blade: a
@@ -1311,10 +1328,10 @@ fn project_onto(
 fn ambient_blade_flux(topology: &Complex, coords: &MeshCoords) -> Cochain {
   let ambient = coords.dim();
   let flux_grade = topology.dim() - 1;
-  let coeffs = Vector::from_element(exterior::exterior_dim(ambient, flux_grade), 1.0);
+  let coeffs = Vector::from_element(multialgebra::exterior_dim(ambient, flux_grade), 1.0);
 
   let form = DiffFormClosure::new(
-    move |_| MultiForm::new(coeffs.clone(), ambient, flux_grade),
+    move |_| Tensor::multiform(coeffs.clone(), ambient, flux_grade),
     ambient,
     flux_grade,
   );
@@ -1410,7 +1427,12 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
     return Cochain::new(grade, Vector::from_vec(coeffs));
   }
 
-  let blade = MultiForm::from_blade_signed(n, Sign::Pos, Blade::from_rank(grade.index(), 0));
+  let blade = Tensor::from_blade_signed(
+    n,
+    Sign::Pos,
+    Blade::from_rank(grade.index(), 0),
+    Variance::Covariant,
+  );
   let field = DiffFormClosure::new(move |p| blade.clone() * bump(p.vector()), n, grade);
   let pulled = field.pullback_on(topology, coords);
   derham_map(&pulled, topology, 2)
@@ -1496,6 +1518,11 @@ mod tests {
   ///
   /// Either way the flux is a cocycle, which is what conservation at the ends
   /// of the grade range rests on.
+  ///
+  /// The magnitude is checked against the reference field and not against zero,
+  /// because the failure this guards is a *near*-vanishing one: a projection
+  /// onto a space the reference is orthogonal to returns roundoff, which is
+  /// nonzero, and closed to the same roundoff, so both laws pass on nothing.
   #[test]
   fn the_velocity_is_the_smoothest_closed_field() {
     let donut = crate::gallery::QuotientSurface::Donut.build(20);
@@ -1515,7 +1542,11 @@ mod tests {
 
       let flux = solenoidal_flux(&topology, &coords, &metric);
       let scale = flux.coeffs().amax();
-      assert!(scale > 0.0, "{name}: the velocity vanished");
+      let reference = ambient_blade_flux(&topology, &coords).coeffs().amax();
+      assert!(
+        scale > 1e-6 * reference,
+        "{name}: the velocity vanished, {scale:e} against a reference of {reference:e}"
+      );
       assert!(
         flux.dif(&topology).coeffs().amax() <= 1e-10 * scale,
         "{name}: the flux is not divergence-free"

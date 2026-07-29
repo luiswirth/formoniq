@@ -12,7 +12,7 @@ categories = ["mathematics", "science"]
 
 [dependencies]
 derham = { path = "../derham", version = "0.2.0" }
-exterior = { path = "../exterior", version = "0.2.0" }
+multialgebra = { path = "../multialgebra", version = "0.2.0" }
 glatt = { path = "../glatt", version = "0.2.0" }
 simplicial = { path = "../simplicial", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }
@@ -46,3 +46,9 @@ faer = { version = "0.24.4", features = ["rayon"] }
 [dev-dependencies]
 tracing-subscriber = "0.3.23"
 num-traits = "0.2.19"
+
+divan = "0.1.21"
+
+[[bench]]
+name = "assemble"
+harness = false

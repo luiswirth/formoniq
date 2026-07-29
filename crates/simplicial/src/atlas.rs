@@ -62,7 +62,7 @@ use crate::Dim;
 use crate::linalg::{Matrix, RowVector, Vector};
 use coorder::{CoordSpace, Coords, CoordsRef};
 use gramian::Gramian;
-use multiindex::{Combination, Composition, factorial_f64};
+use multiindex::{Combination, Composition, Degree, MonoIndex, Repetition, factorial_f64};
 
 /// The barycentric coordinate space of a chart: the affine weights
 /// $lambda in RR^(n+1)$, $sum_i lambda_i = 1$.
@@ -173,22 +173,51 @@ pub fn unit_difbarys(dim: impl Into<Dim>) -> Matrix {
   difbarys
 }
 
-/// The Gramian of the barycentric coordinate functions in $L^2(hat(K))$, at
-/// unit volume:
-/// $Q_(v w) = 1 \/ vol(hat(K)) integral_(hat(K)) lambda_v lambda_w
-/// = (1 + delta_(v w)) \/ ((n+1)(n+2))$.
+/// The mean of a barycentric monomial over the reference cell,
+/// $1 \/ vol(hat(K)) integral_(hat(K)) lambda^alpha
+/// = n! space alpha! \/ (abs(alpha) + n)!$.
+///
+/// Exact, so a mass matrix over polynomial forms of any degree is integrated
+/// rather than quadratured.
+///
+/// Total at the trivial end: the empty monomial is the constant $1$.
+pub fn unit_bary_monomial_mean(dim: impl Into<Dim>, monomial: &MonoIndex) -> f64 {
+  let dim = dim.into().index();
+  let multiplicities: f64 = (0..=dim)
+    .map(|vertex| factorial_f64(monomial.multiplicity(vertex)))
+    .product();
+  multiplicities * factorial_f64(dim) / factorial_f64(monomial.degree() + dim)
+}
+
+/// The Gramian of the degree-$r$ barycentric monomials in $L^2(hat(K))$, at
+/// unit volume: $Q_(alpha beta) = 1 \/ vol(hat(K))
+/// integral_(hat(K)) lambda^alpha lambda^beta$, on colex-ordered monomials.
+///
+/// The factor a mass matrix carries alongside the inner product on $Lambda^k$.
+/// Metric-free, and exact at every degree, being [`unit_bary_monomial_mean`] of
+/// the product monomial.
+pub fn unit_bary_moments(dim: impl Into<Dim>, degree: impl Into<Degree>) -> Gramian {
+  let (dim, degree) = (dim.into(), degree.into());
+  let nvertices = (dim + 1).index();
+  let monomials: Vec<MonoIndex> =
+    MonoIndex::all(Repetition::Allowed, nvertices, degree.index()).collect();
+  Gramian::new_unchecked(Matrix::from_fn(monomials.len(), monomials.len(), |i, j| {
+    let (_, product) = monomials[i]
+      .merge(&monomials[j])
+      .expect("a monomial product never vanishes");
+    unit_bary_monomial_mean(dim, &product)
+  }))
+}
+
+/// The Gramian of the barycentric coordinate functions themselves:
+/// [`unit_bary_moments`] at degree one,
+/// $Q_(v w) = (1 + delta_(v w)) \/ ((n+1)(n+2))$.
 ///
 /// Identity plus rank one, $Q = (I + bb(1) bb(1)^top) \/ ((n+1)(n+2))$, hence
-/// positive definite. Metric-free like every reference datum: this is the whole
-/// polynomial content of the affine chart, the factor a mass matrix carries
-/// alongside the inner product on $Lambda^k$, and the one a higher-order space
-/// replaces by the barycentric moments of higher degree.
+/// positive definite. The first-order case of the general moments; the closed
+/// form above is kept as a law rather than as the implementation.
 pub fn unit_bary_gramian(dim: impl Into<Dim>) -> Gramian {
-  let nvertices = (dim.into() + 1).index();
-  let scale = ((nvertices * (nvertices + 1)) as f64).recip();
-  let mut gramian = Matrix::from_element(nvertices, nvertices, scale);
-  gramian.fill_diagonal(2.0 * scale);
-  Gramian::new_unchecked(gramian)
+  unit_bary_moments(dim, Degree::ONE)
 }
 
 /// The local coordinates of the vertices of the unit $n$-simplex, as the
@@ -337,6 +366,52 @@ pub fn face_bary_to_cell_bary<'a>(
 
 #[cfg(test)]
 mod test {
+
+  /// The barycentric moments reproduce the closed form at degree one,
+  /// $Q_(v w) = (1 + delta_(v w)) \/ ((n+1)(n+2))$.
+  ///
+  /// The general moments are what runs; the closed form is the law they are
+  /// checked against.
+  #[test]
+  fn the_first_order_moments_are_the_closed_form() {
+    for dim in 0..=5 {
+      let nvertices = dim + 1;
+      let scale = ((nvertices * (nvertices + 1)) as f64).recip();
+      let moments = unit_bary_moments(dim, Degree::ONE);
+      for v in 0..nvertices {
+        for w in 0..nvertices {
+          let expected = if v == w { 2.0 * scale } else { scale };
+          approx::assert_relative_eq!(moments.matrix()[(v, w)], expected, epsilon = 1e-14);
+        }
+      }
+    }
+  }
+
+  /// The monomial mean is the exact integral, checked against a quadrature rule
+  /// of sufficient order on the reference cell.
+  ///
+  /// The rule is exact to the degrees swept, so the two agree to roundoff.
+  #[test]
+  fn the_monomial_mean_is_the_integral() {
+    for dim in 1..=3 {
+      for degree in 0..=3 {
+        let rule = SimplexQuadRule::degree(dim, 2 * degree + 2);
+        for monomial in MonoIndex::all(Repetition::Allowed, dim + 1, degree) {
+          let integrand = |bary: BaryRef| -> f64 {
+            (0..=dim)
+              .map(|vertex| bary[vertex].powi(monomial.multiplicity(vertex) as i32))
+              .product()
+          };
+          let quadrature = rule.integrate_unit(&integrand, 1.0);
+          approx::assert_relative_eq!(
+            unit_bary_monomial_mean(dim, &monomial),
+            quadrature,
+            epsilon = 1e-10
+          );
+        }
+      }
+    }
+  }
   use super::*;
   use crate::Dim;
 

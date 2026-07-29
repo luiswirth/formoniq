@@ -28,7 +28,7 @@
 use std::borrow::Cow;
 
 use derham::cochain::Cochain;
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 use simplicial::{
   geometry::coord::mesh::MeshCoords,
   linalg::Vector,

@@ -3,7 +3,7 @@
 use super::form::WhitneyLsf;
 
 use {
-  exterior::{Dim, ExteriorGrade, MultiForm},
+  multialgebra::{Dim, ExteriorGrade, Tensor},
   simplicial::{atlas::Bary, topology::simplex::unit_subsimps},
 };
 
@@ -22,7 +22,7 @@ use {
 pub struct LsfSamples {
   grade: ExteriorGrade,
   /// `[node][dof]`.
-  values: Vec<Vec<MultiForm>>,
+  values: Vec<Vec<Tensor>>,
 }
 
 impl LsfSamples {
@@ -37,6 +37,25 @@ impl LsfSamples {
       .map(|bary| lsfs.iter().map(|lsf| lsf.at_bary(bary)).collect())
       .collect();
     Self { grade, values }
+  }
+
+  /// The trimmed shape functions $P^-_r Lambda^k$ of a geometric
+  /// decomposition, at the given points, in the decomposition's own dof order.
+  ///
+  /// The general family the Whitney one is the $r = 1$ case of.
+  pub fn trimmed(
+    decomposition: &crate::decomposition::GeometricDecomposition,
+    nodes: &[Bary],
+  ) -> Self {
+    let basis = decomposition.local_basis();
+    let values = nodes
+      .iter()
+      .map(|bary| basis.iter().map(|(_, form)| form.at_bary(bary)).collect())
+      .collect();
+    Self {
+      grade: decomposition.grade(),
+      values,
+    }
   }
 
   /// The differentials of the Whitney shape functions of a grade, which are
@@ -65,7 +84,7 @@ impl LsfSamples {
   }
 
   /// The values of every shape function at one node.
-  pub fn at_node(&self, inode: usize) -> &[MultiForm] {
+  pub fn at_node(&self, inode: usize) -> &[Tensor] {
     &self.values[inode]
   }
 }

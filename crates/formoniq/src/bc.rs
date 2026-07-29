@@ -37,7 +37,7 @@ use crate::{
 use {
   crate::linalg::faer::FaerCholesky,
   derham::{cochain::Cochain, section::Section},
-  exterior::{Covariant, ExteriorGrade},
+  multialgebra::ExteriorGrade,
   simplicial::{
     atlas::SimplexQuadRule,
     linalg::{CsrMatrix, Vector},
@@ -119,7 +119,7 @@ pub fn solve_with_essential_bc(
 /// $h = diff u \/ diff n$. Homogeneous natural conditions need no call.
 pub fn neumann_load(
   boundary: &BoundaryWhitneyComplex,
-  data: &(impl Section<Covariant> + Sync),
+  data: &(impl Section + Sync),
   qr: Option<SimplexQuadRule>,
 ) -> Vector {
   assert_eq!(data.dim(), boundary.topology().dim());

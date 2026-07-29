@@ -1,5 +1,5 @@
 use {
-  exterior::{ExteriorGrade, MultiForm, MultiVector},
+  multialgebra::{ExteriorGrade, Tensor, Variance},
   multiindex::{Combination, Sign, binomial, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
@@ -70,13 +70,18 @@ impl WhitneyLsf {
 
   /// The DOF vertex set as a blade in the formal barycentric space
   /// $Lambda^(k+1) (RR^(n+1))$.
-  fn barycentric_blade(&self) -> MultiForm {
-    MultiForm::from_blade_signed(self.nvertices(), Sign::Pos, self.dof_simp)
+  fn barycentric_blade(&self) -> Tensor {
+    Tensor::from_blade_signed(
+      self.nvertices(),
+      Sign::Pos,
+      self.dof_simp,
+      Variance::Covariant,
+    )
   }
 
   /// The value at a point of the reference cell, in its reference frame.
-  pub fn at_bary<'a>(&self, bary: impl Into<BaryRef<'a>>) -> MultiForm {
-    let bary = MultiVector::line(bary.into().view().into_owned());
+  pub fn at_bary<'a>(&self, bary: impl Into<BaryRef<'a>>) -> Tensor {
+    let bary = Tensor::line(bary.into().view().into_owned(), Variance::Contravariant);
     let koszul = self.barycentric_blade().interior_product(&bary);
     factorial_f64(self.grade().index()) * koszul.pullback(&self.difbarys)
   }
@@ -87,7 +92,7 @@ impl WhitneyLsf {
   ///
   /// Vanishes automatically for the top grade, where $Lambda^(k+1) (RR^n)$
   /// is the zero space.
-  pub fn dif(&self) -> MultiForm {
+  pub fn dif(&self) -> Tensor {
     factorial_f64(self.grade().index() + 1) * self.barycentric_blade().pullback(&self.difbarys)
   }
 }
@@ -189,8 +194,8 @@ impl WhitneyExpansion {
 mod test {
   use super::*;
   use approx::assert_relative_eq;
-  use exterior::{exterior_bases, multiform_gramian};
   use gramian::{Gramian, Metric};
+  use multialgebra::{exterior_bases, multiform_gramian};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
   use simplicial::linalg::Vector;
@@ -301,7 +306,7 @@ mod test {
             .product();
           coeffs += weight * difbarys.row(i).transpose();
         }
-        MultiForm::line(coeffs)
+        Tensor::line(coeffs, Variance::Covariant)
       };
 
       for q in 0..=dim.index() {
@@ -311,7 +316,7 @@ mod test {
           for dof_simp in combinations(nvertices, grade + 1) {
             let whitney = WhitneyLsf::unit(dim, dof_simp);
             for blade in exterior_bases(dim, grade - 1) {
-              let c = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
+              let c = Tensor::from_blade_signed(dim, Sign::Pos, blade, Variance::Covariant);
               let integral = qr.integrate_unit(
                 &|bary: BaryRef| {
                   let dif_phi = bubble_dif(bary).wedge(&c);

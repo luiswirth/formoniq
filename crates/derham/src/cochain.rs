@@ -1,19 +1,57 @@
 use simplicial::linalg::{CsrMatrix, Vector};
 
 use {
-  exterior::ExteriorGrade,
+  multialgebra::ExteriorGrade,
   simplicial::{
     topology::skeleton::Skeleton,
     topology::{
       complex::Complex,
       data::SkeletonData,
       handle::{KSimplexIdx, SimplexIdx, SimplexRef},
+      homology::Chain,
     },
   },
 };
 
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
+
+/// The duality pairing $angle.l omega, c angle.r = sum_sigma omega_sigma
+/// c_sigma$ of a cochain with a chain of the same grade.
+///
+/// The pairing that makes $C^k$ the dual of $C_k$, and the discrete reading of
+/// $integral_c omega$: a cochain *is* the assignment of an integral to each
+/// simplex, so summing against a chain's coefficients integrates over the
+/// chain.
+///
+/// Metric-free, and so is its adjunction. $diff$ and $dif$ are adjoint here,
+/// $angle.l dif omega, c angle.r = angle.l omega, diff c angle.r$, which is
+/// Stokes' theorem in its discrete form and the reason the coboundary is the
+/// transpose of the boundary.
+///
+/// A free function, not a method: a pairing is a bilinear map on two spaces and
+/// privileges neither of them.
+///
+/// # Panics
+/// If the grades or the lengths disagree.
+pub fn pairing(cochain: &Cochain, chain: &Chain) -> f64 {
+  assert_eq!(
+    cochain.grade(),
+    chain.grade(),
+    "a pairing is between a cochain and a chain of one grade"
+  );
+  assert_eq!(
+    cochain.coeffs().len(),
+    chain.coeffs().len(),
+    "a pairing is over one skeleton"
+  );
+  cochain
+    .coeffs()
+    .iter()
+    .zip(chain.coeffs())
+    .map(|(coefficient, multiplicity)| coefficient * *multiplicity as f64)
+    .sum()
+}
 
 /// A $k$-cochain: one real coefficient per $k$-simplex of the skeleton.
 ///
@@ -275,6 +313,99 @@ mod test {
         for simplex in skeleton.handle_iter() {
           assert_eq!(*cochain.at_ref(simplex), cochain[simplex.idx()]);
         }
+      }
+    }
+  }
+
+  /// A probe chain and cochain of a grade, with coefficients that are neither
+  /// constant nor symmetric, so a law cannot pass by accident.
+  fn probe_chain(topology: &Complex, grade: usize) -> Chain {
+    let coeffs = (0..topology.nsimplices(grade))
+      .map(|i| (i % 7) as i64 - 3)
+      .collect();
+    Chain::new(grade, coeffs)
+  }
+  fn probe_cochain(topology: &Complex, grade: usize) -> Cochain {
+    Cochain::from_function(|s| ((s.kidx() % 5) as f64) - 2.0, grade, topology)
+  }
+
+  /// The boundary and the exterior derivative are adjoint under the
+  /// chain-cochain pairing: $angle.l dif omega, c angle.r
+  /// = angle.l omega, diff c angle.r$.
+  ///
+  /// Discrete Stokes, and the statement that makes $C^k$ the dual complex of
+  /// $C_k$ rather than merely a vector space of the same dimension. It is the
+  /// reason the coboundary is the transpose of the boundary, so it holds with
+  /// no metric, no orientation and no geometry.
+  #[test]
+  fn the_boundary_and_the_exterior_derivative_are_adjoint() {
+    for dim in 1..=3 {
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      for grade in 0..dim {
+        let cochain = probe_cochain(&topology, grade);
+        let chain = probe_chain(&topology, grade + 1);
+
+        let differentiated = pairing(&cochain.dif(&topology), &chain);
+        let bounded = pairing(&cochain, &chain.boundary(&topology));
+
+        assert!(
+          differentiated.abs() > 1e-9,
+          "dim {dim} grade {grade}: the law would hold vacuously"
+        );
+        assert!(
+          (differentiated - bounded).abs() < 1e-9,
+          "dim {dim} grade {grade}: {differentiated} != {bounded}"
+        );
+      }
+    }
+  }
+
+  /// $diff compose diff = 0$ and $dif compose dif = 0$ are the same statement
+  /// read through the pairing, so neither can hold while the other fails.
+  ///
+  /// Both are checked to be nonzero one step earlier, since a pairing that
+  /// vanished for its own reasons would satisfy this without either operator
+  /// being nilpotent.
+  #[test]
+  fn nilpotency_is_one_statement_on_both_sides() {
+    for dim in 2..=3 {
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      for grade in 0..dim - 1 {
+        let cochain = probe_cochain(&topology, grade);
+        let chain = probe_chain(&topology, grade + 2);
+
+        // One step must not already vanish, or both halves below hold for the
+        // wrong reason. It is checked against a chain one grade up rather than
+        // against the boundary: adjointness makes
+        // $angle.l dif omega, diff c angle.r = angle.l dif dif omega, c angle.r$,
+        // which is zero for the very reason being tested.
+        assert!(
+          pairing(&cochain.dif(&topology), &probe_chain(&topology, grade + 1)).abs() > 1e-9,
+          "dim {dim} grade {grade}: one step already vanishes"
+        );
+        let twice_up = pairing(&cochain.dif(&topology).dif(&topology), &chain);
+        let twice_down = pairing(&cochain, &chain.boundary(&topology).boundary(&topology));
+
+        assert!(twice_up.abs() < 1e-9, "dim {dim} grade {grade}: dd != 0");
+        assert!(twice_down.abs() < 1e-9, "dim {dim} grade {grade}: bb != 0");
+      }
+    }
+  }
+
+  /// The pairing is bilinear and reads the coefficients it says it does.
+  #[test]
+  fn the_pairing_sums_over_the_simplices() {
+    for dim in 1..=3 {
+      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      for grade in 0..=dim {
+        let cochain = probe_cochain(&topology, grade);
+        let chain = probe_chain(&topology, grade);
+
+        let expected: f64 = chain
+          .support()
+          .map(|(kidx, multiplicity)| cochain.coeffs()[kidx] * multiplicity as f64)
+          .sum();
+        assert!((pairing(&cochain, &chain) - expected).abs() < 1e-12);
       }
     }
   }

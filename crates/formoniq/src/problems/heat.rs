@@ -10,7 +10,7 @@ use crate::{
 };
 
 use derham::cochain::Cochain;
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 
 /// Radau IIA for the Hodge heat equation $diff_t u = -Delta u + f$ on Whitney
 /// $k$-forms of any `grade`, with the full Hodge Laplacian

@@ -29,9 +29,9 @@ use {
     project::derham_map,
     section::{CoordFieldExt, SharpOp},
   },
-  exterior::{ExteriorElement, MultiForm},
   formoniq::problems::advection::{Transport, assemble_transport, solve_transport},
   glatt::field::DiffFormClosure,
+  multialgebra::{Tensor, Variance},
   simplicial::{Dim, linalg::Vector, mesher::cartesian::CartesianGrid},
 };
 
@@ -59,7 +59,7 @@ fn main() {
     let velocity_form = DiffFormClosure::new(
       {
         let direction = direction.clone();
-        move |_x| MultiForm::line(Vector::from_vec(direction.clone()))
+        move |_x| Tensor::line(Vector::from_vec(direction.clone()), Variance::Covariant)
       },
       dim,
       Dim::ONE,
@@ -76,11 +76,11 @@ fn main() {
     };
 
     for grade in dim.range_inclusive() {
-      let ncomponents = exterior::exterior_dim(dim, grade);
+      let ncomponents = multialgebra::exterior_dim(dim, grade);
       let field = DiffFormClosure::new(
         move |x| {
           let coeffs = Vector::from_element(ncomponents, bump(x.vector()));
-          ExteriorElement::new(coeffs, dim, grade)
+          Tensor::multiform(coeffs, dim, grade)
         },
         dim,
         grade,

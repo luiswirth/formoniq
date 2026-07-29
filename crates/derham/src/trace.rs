@@ -1,7 +1,7 @@
 //! The trace of a form onto a face of a cell.
 
 use {
-  exterior::{Dim, ExteriorGrade, MultiForm, exterior_power},
+  multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
   multiindex::Combination,
   simplicial::{atlas::unit_face_spanning_vectors, linalg::Matrix},
 };
@@ -53,13 +53,13 @@ impl FaceTrace {
   }
 
   /// $tr_tau omega$, valued on the face's tangent space.
-  pub fn apply(&self, form: &MultiForm) -> MultiForm {
+  pub fn apply(&self, form: &Tensor) -> Tensor {
     assert_eq!(
       form.grade(),
       self.grade,
       "Trace applied at the wrong grade."
     );
-    MultiForm::new(&self.map * form.components(), self.face_dim, self.grade)
+    Tensor::multiform(&self.map * form.components(), self.face_dim, self.grade)
   }
 
   /// The single coefficient of a trace at the face's *top* grade, $k = d$,
@@ -69,7 +69,7 @@ impl FaceTrace {
   /// the duality pairing of $omega$ with the face's tangent blade, so
   /// integrating a $k$-form over a $k$-simplex is the top-grade case of the
   /// trace and not a construction of its own.
-  pub fn top_coefficient(&self, form: &MultiForm) -> f64 {
+  pub fn top_coefficient(&self, form: &Tensor) -> f64 {
     assert_eq!(
       self.grade, self.face_dim,
       "The top coefficient exists only at the face's own dimension."
@@ -82,16 +82,17 @@ impl FaceTrace {
 mod test {
   use super::*;
   use crate::project::face_tangent_blade;
+  use multialgebra::tensor::pairing;
 
-  use exterior::Vector;
+  use multialgebra::Vector;
   use multiindex::combinations;
   use simplicial::topology::simplex::Simplex;
 
   use approx::assert_relative_eq;
 
-  fn test_form(dim: Dim, grade: ExteriorGrade) -> MultiForm {
-    let n = exterior::exterior_dim(dim, grade);
-    MultiForm::new(
+  fn test_form(dim: Dim, grade: ExteriorGrade) -> Tensor {
+    let n = multialgebra::exterior_dim(dim, grade);
+    Tensor::multiform(
       Vector::from_iterator(n, (0..n).map(|i| 0.7 * (i as f64) - 1.3)),
       dim,
       grade,
@@ -111,7 +112,7 @@ mod test {
           let blade = face_tangent_blade(dim, &positions);
           assert_relative_eq!(
             trace.top_coefficient(&form),
-            form.pairing(&blade),
+            pairing(&form, &blade),
             epsilon = 1e-12
           );
         }
