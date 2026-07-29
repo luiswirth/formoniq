@@ -11,9 +11,14 @@ keywords = ["gram-matrix", "pseudo-riemannian", "linear-algebra"]
 categories = ["mathematics"]
 
 [dependencies]
+multialgebra = { path = "../multialgebra", version = "0.2.0" }
+multiindex = { path = "../multiindex", version = "0.2.0" }
 nalgebra = "0.35.0"
 
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
 [features]
 serde = ["dep:serde", "nalgebra/serde-serialize"]
+
+[dev-dependencies]
+approx = "0.5.1"

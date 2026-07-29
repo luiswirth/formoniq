@@ -1,7 +1,5 @@
 //! Whether a slot is built from the vector space or from its dual.
 
-use gramian::{Gramian, Metric};
-
 /// Whether a slot is built from $V$ (contravariant) or from $V^*$ (covariant).
 ///
 /// The one datum with no representational footprint:
@@ -12,7 +10,8 @@ use gramian::{Gramian, Metric};
 ///
 /// It decides the duality pairing, the direction of the functor (pushforward
 /// against pullback), the musical isomorphisms and which Gramian measures a
-/// slot. Never choose that Gramian by hand; go through [`Self::gramian`].
+/// slot. Never choose that Gramian by hand; go through `gramian`'s
+/// `variance_gramian`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Variance {
   /// Elements of $Lambda^k V$ and $"Sym"^k V$: vectors and multivectors.
@@ -28,15 +27,6 @@ impl Variance {
     match self {
       Self::Contravariant => Self::Covariant,
       Self::Covariant => Self::Contravariant,
-    }
-  }
-
-  /// The Gramian measuring a slot of this variance: the metric tensor $g$ for
-  /// the contravariant side, its inverse $g^(-1)$ for the covariant one.
-  pub fn gramian(self, metric: &Metric) -> &Gramian {
-    match self {
-      Self::Contravariant => metric.vector_gramian(),
-      Self::Covariant => metric.covector_gramian(),
     }
   }
 }

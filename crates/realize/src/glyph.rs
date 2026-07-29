@@ -43,6 +43,7 @@
 
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use gramian::tensor::TensorExt;
 use rayon::prelude::*;
 use simplicial::linalg::Vector;
 use simplicial::{

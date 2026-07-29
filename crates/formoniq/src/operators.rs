@@ -1,3 +1,4 @@
+use gramian::tensor::{TensorExt, multiform_gramian};
 use {
   derham::{
     interpolate::{form::WhitneyExpansion, samples::LsfSamples},
@@ -5,7 +6,7 @@ use {
     trace::FaceTrace,
   },
   gramian::{Gramian, Metric},
-  multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power, multiform_gramian},
+  multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
   multiindex::{Combination, Sign},
   simplicial::{
     atlas::{
@@ -975,7 +976,7 @@ mod test {
         let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = awhitney.inner(bwhitney, &geo.metric());
+            inner[(i, j)] = gramian::tensor::inner(awhitney, bwhitney, &geo.metric());
           }
         }
         inner *= geo.vol();

@@ -5,7 +5,6 @@ extern crate nalgebra as na;
 pub mod tensor;
 pub mod variance;
 
-use gramian::Gramian;
 use multiindex::{
   Composition, MonoIndex, MultiIndex, MultiIndices, Repetition, Word, binomial, combinations,
 };
@@ -162,8 +161,14 @@ impl Factor {
     }
   }
 
-  /// The inner product induced on $F(V)$ by one on $V$: the $k times k$ minors
-  /// of the Gramian, under $det$ when alternating and $"per"$ when symmetric.
+  /// The bilinear form induced on $F(V)$ by one on $V$: the $k times k$ minors
+  /// of its matrix, under $det$ when alternating, $"per"$ when symmetric, and
+  /// the plain diagonal product when free.
+  ///
+  /// Takes a bare matrix and knows nothing of non-degeneracy or signature: this
+  /// crate is the metric-free half of the algebra, and an induced *form* needs
+  /// only a form. The `gramian` crate wraps this where those properties are
+  /// wanted.
   ///
   /// The same minors [`Self::induced`] takes, of the metric rather than of a
   /// map. Both are $sum_sigma "sign"(sigma) product_i A_(i sigma(i))$ under the
@@ -180,8 +185,9 @@ impl Factor {
   /// So under a Euclidean metric the alternating basis is orthonormal and the
   /// symmetric one merely orthogonal, $norm(x^alpha)^2 = alpha!$, the
   /// multiplicity a repeated slot carries.
-  pub fn gramian(&self, single: &Gramian) -> Gramian {
-    let dim = single.dim();
+  pub fn induced_form(&self, single: &Matrix) -> Matrix {
+    assert_eq!(single.nrows(), single.ncols(), "a bilinear form is square");
+    let dim = single.nrows();
     let basis: Vec<MultiIndex> = self.basis(dim).collect();
     let entry = |row: &MultiIndex, col: &MultiIndex| {
       let minor = Matrix::from_fn(self.degree.index(), self.degree.index(), |i, j| {
@@ -196,9 +202,7 @@ impl Factor {
         Symmetry::Free => (0..self.degree.index()).map(|i| minor[(i, i)]).product(),
       }
     };
-    Gramian::new_unchecked(Matrix::from_fn(basis.len(), basis.len(), |i, j| {
-      entry(&basis[i], &basis[j])
-    }))
+    Matrix::from_fn(basis.len(), basis.len(), |i, j| entry(&basis[i], &basis[j]))
   }
 
   /// The functor applied to a linear map: $Lambda^k A$ or $"Sym"^k A$.
@@ -279,18 +283,6 @@ impl Slot {
   pub fn basis(&self) -> MultiIndices {
     self.factor.basis(self.dim)
   }
-  /// The Gramian measuring this slot, the variance choosing $g$ or $g^(-1)$.
-  ///
-  /// # Panics
-  /// If the metric is not of this slot's own space.
-  pub fn gramian(&self, metric: &gramian::Metric) -> Gramian {
-    assert_eq!(
-      metric.dim(),
-      self.dim.index(),
-      "a slot is measured by a metric of its own space"
-    );
-    self.factor.gramian(self.variance.gramian(metric))
-  }
   /// The same slot with its variance flipped: what a musical isomorphism does.
   pub fn dual(&self) -> Self {
     Self::new(self.factor, self.variance.dual(), self.dim)
@@ -332,22 +324,6 @@ pub fn exterior_bases(
       .expect("an alternating basis is monotone")
       .to_combination()
   })
-}
-
-/// The inner product on $Lambda^k$ induced by one on $V$:
-/// $inner(e_I, e_J) = det [inner(e_i, e_j)]_(i in I, j in J)$.
-pub fn multi_gramian(single: &Gramian, grade: impl Into<ExteriorGrade>) -> Gramian {
-  Factor::alternating(grade).gramian(single)
-}
-
-/// The induced inner product on multivectors $Lambda^k V$: $Lambda^k g$.
-pub fn multivector_gramian(metric: &gramian::Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
-  multi_gramian(metric.vector_gramian(), grade)
-}
-
-/// The induced inner product on multiforms $Lambda^k V^*$: $Lambda^k g^(-1)$.
-pub fn multiform_gramian(metric: &gramian::Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
-  multi_gramian(metric.covector_gramian(), grade)
 }
 
 /// The permanent: the determinant with every sign made positive,

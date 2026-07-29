@@ -25,8 +25,8 @@
 use {
   crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
+  gramian::tensor::multiform_gramian,
   iterative::{Jacobi, StopCriterion, krylov::cg},
-  multialgebra::multiform_gramian,
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
     geometry::{cell_volume, metric::mesh::MeshLengthsSq},

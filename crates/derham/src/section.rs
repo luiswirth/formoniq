@@ -28,6 +28,7 @@
 //! I/O.
 
 use crate::interpolate::interpolant::WhitneyInterpolant;
+use gramian::tensor::TensorExt;
 
 use {
   coorder::{Ambient, CoordSpace, Coords},

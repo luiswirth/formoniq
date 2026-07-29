@@ -83,6 +83,7 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
+use gramian::tensor::{TensorExt, inner};
 use gramian::{CausalType, Metric};
 use multialgebra::{Tensor, Variance, exterior_bases, exterior_dim};
 use multiindex::Sign;
@@ -169,7 +170,7 @@ fn clifford_dispersion() {
   for dim in [2, 3, 4] {
     let eta = Metric::minkowski(dim);
     let a = wave_covector(dim);
-    let norm_sq = a.inner(&a, &eta);
+    let norm_sq = inner(&a, &a, &eta);
     let causal = CausalType::from_norm_sq(norm_sq);
     println!("  dim {dim}: <a,a> = {norm_sq:+.4} ({causal:?}) -- D^2 plane-wave symbol");
   }

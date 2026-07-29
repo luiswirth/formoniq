@@ -29,6 +29,7 @@
 //! so one sample per cell is a genuine reduction and the file is a picture of
 //! the field rather than the field itself.
 
+use gramian::tensor::TensorExt;
 use std::io;
 use std::path::Path;
 

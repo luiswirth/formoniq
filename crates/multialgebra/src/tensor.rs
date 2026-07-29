@@ -1,6 +1,5 @@
 //! A tensor product of alternating and symmetric factors over one space.
 
-use gramian::{Gramian, Metric};
 use multiindex::{Degree, Dim, MonoIndex, MultiIndex, Sign, Word};
 
 use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, induced};
@@ -169,6 +168,18 @@ impl Tensor {
     &self.slots
   }
 
+  /// The slots, mutably, for an operation that changes a slot's *description*
+  /// without changing the components: a musical isomorphism flipping a
+  /// variance, and little else.
+  ///
+  /// # Panics
+  /// The caller must not change any slot's extent, which the components are
+  /// sized by. Debug builds check it on drop of the borrow via
+  /// [`Self::components`] length on the next operation; release builds do not.
+  pub fn slots_mut(&mut self) -> &mut [Slot] {
+    &mut self.slots
+  }
+
   /// The variance shared by every slot, if they share one.
   ///
   /// `None` on a genuinely mixed tensor, and that is what makes functorial
@@ -327,12 +338,6 @@ impl Tensor {
   /// there is only one slot to contract.
   pub fn interior_product(&self, dual: &Self) -> Self {
     self.contract(0, dual)
-  }
-
-  /// The Hodge star on the first slot: [`Self::hodge_star`] where there is only
-  /// one slot to star.
-  pub fn star(&self, metric: &Metric, orientation: Sign) -> Self {
-    self.hodge_star(0, metric, orientation)
   }
 
   /// The tensor product $times.circle$: factor lists concatenated, components
@@ -633,7 +638,7 @@ impl Tensor {
   /// permutation times the component of the sorted index, and zero where an
   /// alternating slot repeats a symbol.
   ///
-  /// **Unnormalized**, matching [`Factor::gramian`]: a basis element is
+  /// **Unnormalized**, matching [`Factor::induced_form`]: a basis element is
   /// $e_I = sum_sigma "sgn"(sigma) e_(i_(sigma(1))) times.circle dots.c$ with
   /// no $1\/k!$, so the orderings that coincide on a symmetric slot are summed
   /// rather than assigned.
@@ -807,12 +812,16 @@ impl Tensor {
     Self::new(slots, value.components)
   }
 
-  /// Apply a linear map to one factor's slot, leaving the others alone:
+  /// Apply a linear map to one slot, leaving the others alone:
   /// $id times.circle dots times.circle M times.circle dots times.circle id$.
   ///
   /// By stride arithmetic rather than by materializing the Kronecker product,
-  /// so a single factor costs exactly one application of `matrix`.
-  fn apply_to_factor(&self, which: usize, matrix: &Matrix) -> Self {
+  /// so a single slot costs exactly one application of `matrix`.
+  ///
+  /// The map acts on the slot's *own* basis, not on the underlying space: it is
+  /// already an induced map. [`Self::pullback`] and [`Self::pushforward`] are
+  /// what take a map of the space.
+  pub fn apply_to_slot(&self, which: usize, matrix: &Matrix) -> Self {
     let stride = self.strides[which];
     let source_dim = self.slots[which].multidim();
     assert_eq!(matrix.ncols(), source_dim);
@@ -841,71 +850,6 @@ impl Tensor {
     }
     slots[which] = self.slots[which];
     Self::new(slots, components)
-  }
-
-  /// The induced inner product: the Kronecker product of the per-slot Gramians,
-  /// each slot's own variance choosing $g$ or $g^(-1)$ for it.
-  ///
-  /// Correct on a mixed tensor, where one global choice would not be.
-  pub fn gramian(&self, metric: &Metric) -> Gramian {
-    tensor_gramian(&self.slots, metric)
-  }
-
-  pub fn inner(&self, other: &Self, metric: &Metric) -> f64 {
-    assert_eq!(self.slots, other.slots);
-    self
-      .gramian(metric)
-      .inner(&self.components, &other.components)
-  }
-  /// Magnitude $sqrt(abs(inner(v, v)))$, never NaN: on an indefinite metric the
-  /// sign of [`Self::inner`] carries the causal character separately.
-  pub fn norm(&self, metric: &Metric) -> f64 {
-    self.inner(self, metric).abs().sqrt()
-  }
-
-  /// The Hodge star on factor `which`, $star: Lambda^k -> Lambda^(n-k)$,
-  /// defined by $alpha wedge star beta = inner(alpha, beta) vol$.
-  ///
-  /// The one operation not uniform over the factors: it needs a top degree to
-  /// complement against, which a symmetric factor lacks.
-  ///
-  /// `orientation` is the handedness of this basis against the one the volume
-  /// form is taken in, required because a metric alone does not determine a
-  /// star. `Sign::Pos` is right for a standalone vector space and wrong for a
-  /// mesh read cell by cell, each cell's frame being a gauge.
-  ///
-  /// # Panics
-  /// If the factor is symmetric.
-  pub fn hodge_star(&self, which: usize, metric: &Metric, orientation: Sign) -> Self {
-    let slot = self.slots[which];
-    assert_eq!(
-      slot.symmetry(),
-      Symmetry::Alternating,
-      "a symmetric factor has no top degree, so no Hodge star"
-    );
-    assert_eq!(metric.dim(), slot.dim.index());
-
-    let gramian = slot.variance.gramian(metric);
-    let volume = Factor::alternating(slot.dim).gramian(gramian).matrix()[(0, 0)]
-      .abs()
-      .sqrt();
-    let weighted = self.apply_to_factor(which, &slot.factor.induced(gramian.matrix()));
-
-    let mut starred_slots = self.slots.clone();
-    starred_slots[which] = slot.with_degree(slot.dim - slot.degree());
-    let mut starred = Self::zero(starred_slots);
-
-    for (component, basis) in weighted.basis_iter() {
-      let (sign, complement) = basis[which]
-        .as_mono()
-        .expect("a star is of an alternating slot")
-        .complement_signed(slot.dim.index());
-      let mut target: Basis = basis;
-      target[which] = MultiIndex::Mono(complement);
-      let flat = starred.flat_index(&target);
-      starred.components[flat] = orientation.as_f64() * sign.as_f64() * component / volume;
-    }
-    starred
   }
 
   /// The functorial action of a linear map on every factor at once: the
@@ -979,23 +923,6 @@ impl Tensor {
     let slots: Slots = self.slots.iter().map(|s| s.with_dim(map.ncols())).collect();
     Self::new(slots, components)
   }
-
-  /// The musical isomorphism on every slot, each by its own variance: $flat$ on
-  /// a contravariant slot, $sharp$ on a covariant one.
-  ///
-  /// Slot by slot rather than through one induced matrix, so a mixed tensor
-  /// raises and lowers the right indices instead of applying one Gramian to all
-  /// of them.
-  pub fn musical(&self, metric: &Metric) -> Tensor {
-    let mut musical = self.clone();
-    for which in 0..self.slots.len() {
-      let slot = self.slots[which];
-      let matrix = slot.factor.induced(slot.variance.gramian(metric).matrix());
-      musical = musical.apply_to_factor(which, &matrix);
-      musical.slots[which] = slot.dual();
-    }
-    musical
-  }
 }
 
 /// The metric-free duality pairing of two tensors of dual variance,
@@ -1032,7 +959,7 @@ pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
 /// only a top degree to land in and a basis to read the coefficient against,
 /// where the Hodge star needs a metric as well. That is the whole difference
 /// between the two dualities the exterior algebra carries, and it is why this
-/// exists separately from [`Tensor::inner`].
+/// exists separately from the metric inner product, which lives one crate up.
 ///
 /// Nondegenerate, so it identifies $Lambda^(n-k)$ with the dual of $Lambda^k$
 /// without ever choosing an inner product. Antisymmetric up to the grading,
@@ -1107,19 +1034,6 @@ pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
     .cloned()
     .reduce(|acc, slot| acc.kronecker(&slot))
     .unwrap_or_else(|| Matrix::identity(1, 1))
-}
-
-/// The induced inner product on $times.circle_i F_i$: the Kronecker product of
-/// the per-slot Gramians, in the same slot order as the components.
-///
-/// Each slot chooses $g$ or $g^(-1)$ by its own variance, so a mixed tensor is
-/// measured correctly where a single global choice would not be.
-pub fn tensor_gramian(slots: &[Slot], metric: &Metric) -> Gramian {
-  let per_slot: Vec<Matrix> = slots
-    .iter()
-    .map(|slot| slot.gramian(metric).matrix().clone())
-    .collect();
-  Gramian::new_unchecked(factorwise_kronecker(&per_slot))
 }
 
 impl std::ops::Add for Tensor {
@@ -1200,11 +1114,11 @@ mod test {
       ((seed + 3 * i + 7 * j) % 5) as f64 / 5.0 + if i == j { 1.0 } else { 0.0 }
     })
   }
-  fn probe_metric(dim: usize) -> Metric {
+  /// A symmetric positive definite matrix: a bilinear form, which is all the
+  /// induced form asks for.
+  fn probe_metric(dim: usize) -> Matrix {
     let a = probe(dim, dim, 2);
-    Metric::new(Gramian::new(
-      a.transpose() * &a + Matrix::identity(dim, dim),
-    ))
+    a.transpose() * &a + Matrix::identity(dim, dim)
   }
 
   /// The induced Gramian is the pullback of the Gramian: measuring the images
@@ -1227,13 +1141,13 @@ mod test {
             degree: degree.into(),
           };
           let map = probe_map(target, source, 1);
-          let metric = probe_metric(target).vector_gramian().clone();
+          let metric = probe_metric(target);
 
-          let pulled = Gramian::new_unchecked(map.transpose() * metric.matrix() * &map);
+          let pulled = map.transpose() * (&metric) * &map;
           let induced = factor.induced(&map);
           assert_relative_eq!(
-            factor.gramian(&pulled).matrix(),
-            &(induced.transpose() * factor.gramian(&metric).matrix() * &induced),
+            &factor.induced_form(&pulled),
+            &(induced.transpose() * &factor.induced_form(&metric) * &induced),
             epsilon = 1e-7
           );
         }
@@ -1251,14 +1165,14 @@ mod test {
   #[test]
   fn the_euclidean_gramian_reads_off_the_multiplicities() {
     for dim in 1..=4 {
-      let euclidean = Gramian::euclidean(dim);
+      let euclidean = Matrix::identity(dim, dim);
       for degree in 0..=3 {
         let alternating = Factor::alternating(degree);
         let identity = Matrix::identity(alternating.multidim(dim), alternating.multidim(dim));
-        assert_relative_eq!(alternating.gramian(&euclidean).matrix(), &identity);
+        assert_relative_eq!(&alternating.induced_form(&euclidean), &identity);
 
         let symmetric = Factor::symmetric(degree);
-        let gramian = symmetric.gramian(&euclidean);
+        let gramian = symmetric.induced_form(&euclidean);
         for (i, index) in symmetric.basis(dim).enumerate() {
           for (j, other) in symmetric.basis(dim).enumerate() {
             let expected = if i == j {
@@ -1268,7 +1182,7 @@ mod test {
             } else {
               0.0
             };
-            assert_relative_eq!(gramian.matrix()[(i, j)], expected);
+            assert_relative_eq!(gramian[(i, j)], expected);
             let _ = &other;
           }
         }
@@ -1444,11 +1358,11 @@ mod test {
     let factor = Factor::symmetric(2);
     let (target, source) = (4, 3);
     let map = probe_map(target, source, 1);
-    let metric = probe_metric(target).vector_gramian().clone();
-    let pulled = Gramian::new_unchecked(map.transpose() * metric.matrix() * &map);
+    let metric = probe_metric(target);
+    let pulled = map.transpose() * (&metric) * &map;
     let induced = factor.induced(&map);
 
-    let holds = |rescale: &dyn Fn(&Factor, &Gramian) -> Matrix| {
+    let holds = |rescale: &dyn Fn(&Factor, &Matrix) -> Matrix| {
       let lhs = rescale(&factor, &pulled);
       let rhs = rescale(&factor, &metric);
       (lhs - induced.transpose() * rhs * &induced).amax() < 1e-7
@@ -1456,22 +1370,22 @@ mod test {
 
     // Any global constant survives, so the law cannot choose one.
     for constant in [1.0, 0.5, 1.0 / 6.0] {
-      assert!(holds(&move |factor: &Factor, g: &Gramian| {
-        factor.gramian(g).matrix() * constant
+      assert!(holds(&move |factor: &Factor, g: &Matrix| {
+        factor.induced_form(g) * constant
       }));
     }
     // A per-index factor does not.
-    assert!(!holds(&|factor: &Factor, g: &Gramian| {
+    assert!(!holds(&|factor: &Factor, g: &Matrix| {
       let scale: Vec<f64> = factor
-        .basis(g.dim())
+        .basis(g.nrows())
         .map(|index| {
-          (0..g.dim())
+          (0..g.nrows())
             .map(|symbol| factorial(index.multiplicity(symbol)))
             .product::<usize>() as f64
         })
         .collect();
       Matrix::from_fn(scale.len(), scale.len(), |i, j| {
-        factor.gramian(g).matrix()[(i, j)] / scale[i]
+        factor.induced_form(g)[(i, j)] / scale[i]
       })
     }));
   }
@@ -1482,11 +1396,11 @@ mod test {
   #[test]
   fn the_gramians_coincide_below_degree_two() {
     for dim in 1..=4 {
-      let metric = probe_metric(dim).vector_gramian().clone();
+      let metric = probe_metric(dim);
       for degree in 0..=1 {
         assert_relative_eq!(
-          Factor::alternating(degree).gramian(&metric).matrix(),
-          Factor::symmetric(degree).gramian(&metric).matrix()
+          &Factor::alternating(degree).induced_form(&metric),
+          &Factor::symmetric(degree).induced_form(&metric)
         );
       }
     }

@@ -28,6 +28,7 @@
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
+use gramian::tensor::TensorExt;
 use multialgebra::{ExteriorGrade, Tensor};
 use simplicial::linalg::Vector;
 use simplicial::{

@@ -42,6 +42,7 @@
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
+use gramian::tensor::TensorExt;
 use simplicial::Sign;
 use simplicial::linalg::Matrix;
 use simplicial::{

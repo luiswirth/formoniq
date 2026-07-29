@@ -1648,6 +1648,9 @@ dependencies = [
 name = "gramian"
 version = "0.2.0"
 dependencies = [
+ "approx",
+ "multialgebra",
+ "multiindex",
  "nalgebra",
  "serde",
 ]
@@ -2231,7 +2234,6 @@ version = "0.2.0"
 dependencies = [
  "approx",
  "divan",
- "gramian",
  "multiindex",
  "nalgebra",
  "tinyvec",

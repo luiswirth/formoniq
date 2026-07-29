@@ -51,6 +51,8 @@
 //! than one up to truncation. Errors are normed in the Euclidean comparison
 //! geometry, since the indefinite Lorentzian pairing cannot norm one.
 
+use gramian::tensor::inner;
+
 extern crate nalgebra as na;
 
 use coorder::Coord;
@@ -64,6 +66,7 @@ use formoniq::{
 };
 use glatt::field::DiffFormClosure;
 use gramian::Metric;
+use gramian::tensor::TensorExt;
 use multialgebra::Tensor;
 use multialgebra::Variance;
 use simplicial::{
@@ -122,7 +125,7 @@ fn convergence(dim: usize, nsubs: &[usize]) {
 
   // Null to roundoff; CausalType would read the residual sign, which says
   // nothing here.
-  let null_norm_sq = a.inner(&a, &eta);
+  let null_norm_sq = inner(&a, &a, &eta);
   println!(
     "Covariant Maxwell dif F = 0, delta F = J on [0,{:.1}] x [0,1]^{}, eta = diag(-1,+1,..): dim {dim}",
     simplicial::mesher::cartesian::CAUSAL_TIME_SCALE,
