@@ -13,7 +13,7 @@ use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;
 use regge::boundary::BoundaryComplexExt;
-use regge::coord::simplex::SimplexCoordsExt;
+use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;
 use simplicial::{Dim, linalg::CsrMatrix};
 
@@ -108,8 +108,6 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 /// The exact solution $u = x_1$ is reproduced.
 #[test]
 fn mixed_dirichlet_neumann_reproduces_linear_solution() {
-  use regge::coord::simplex::SimplexCoords;
-
   for dim in (2..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
@@ -120,7 +118,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
       .boundary_facets()
       .into_iter()
       .filter(|facet| {
-        let facet_coords = SimplexCoords::from_simplex_and_coords(facet.simplex(), &coords);
+        let facet_coords = simplex_coords(facet.simplex(), &coords);
         let x = facet_coords.barycenter()[0];
         x <= 1e-12 || x >= 1.0 - 1e-12
       })
@@ -154,8 +152,6 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
 /// reproduced.
 #[test]
 fn robin_reproduces_linear_solution() {
-  use regge::coord::simplex::SimplexCoords;
-
   for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
     let metric = coords.to_edge_lengths_sq(&topology);
@@ -178,7 +174,7 @@ fn robin_reproduces_linear_solution() {
     );
 
     let is_x_facet = |facet: &simplicial::topology::role::Facet<'_>| {
-      let facet_coords = SimplexCoords::from_simplex_and_coords(facet.simplex(), &coords);
+      let facet_coords = simplex_coords(facet.simplex(), &coords);
       let x = facet_coords.barycenter()[0];
       x <= 1e-12 || x >= 1.0 - 1e-12
     };

@@ -168,16 +168,22 @@ impl Tensor {
     &self.slots
   }
 
-  /// The slots, mutably, for an operation that changes a slot's *description*
-  /// without changing the components: a musical isomorphism flipping a
-  /// variance, and little else.
+  /// The same tensor with one slot's variance flipped, components untouched:
+  /// $Lambda^k V$ relabelled as $Lambda^k V^*$ and back.
+  ///
+  /// Metric-free, and a relabelling rather than a map. Variance has no
+  /// representational footprint ($dim Lambda^k (V) = dim Lambda^k (V^*)$), so
+  /// there is nothing to compute; what changes is which space the components
+  /// are read in. It is *not* a musical isomorphism, which applies $g$ or
+  /// $g^(-1)$ and does need a metric: the musical is this relabelling composed
+  /// with that application, and the two halves live in the two crates that
+  /// need them.
   ///
   /// # Panics
-  /// The caller must not change any slot's extent, which the components are
-  /// sized by. Debug builds check it on drop of the borrow via
-  /// [`Self::components`] length on the next operation; release builds do not.
-  pub fn slots_mut(&mut self) -> &mut [Slot] {
-    &mut self.slots
+  /// If `which` is out of range.
+  pub fn dualize_slot(mut self, which: usize) -> Self {
+    self.slots[which] = self.slots[which].dual();
+    self
   }
 
   /// The variance shared by every slot, if they share one.

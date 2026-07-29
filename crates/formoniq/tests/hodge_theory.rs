@@ -12,7 +12,7 @@ extern crate nalgebra as na;
 
 use derham::cochain::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
-use regge::coord::simplex::SimplexCoordsExt;
+use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;
 use simplicial::{
   Dim,
@@ -218,7 +218,6 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 /// genuinely nontrivial harmonic 1-form around the hole.
 #[test]
 fn long_exact_sequence_of_the_pair_annulus() {
-  use regge::coord::simplex::SimplexCoords;
   use simplicial::topology::{complex::Complex, skeleton::Skeleton};
 
   // Annulus: 3x3 boxes with the middle box removed.
@@ -227,7 +226,7 @@ fn long_exact_sequence_of_the_pair_annulus() {
     .cells()
     .handle_iter()
     .filter(|cell| {
-      let barycenter = SimplexCoords::from_simplex_and_coords(cell.simplex(), &coords).barycenter();
+      let barycenter = simplex_coords(cell.simplex(), &coords).barycenter();
       let inside = |x: f64| 1.0 / 3.0 < x && x < 2.0 / 3.0;
       !(inside(barycenter[0]) && inside(barycenter[1]))
     })
