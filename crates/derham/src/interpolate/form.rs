@@ -1,6 +1,6 @@
 use {
-  multialgebra::{ExteriorGrade, Tensor, Variance},
-  multiindex::{Combination, Sign, binomial, factorial_f64},
+  multialgebra::{ExteriorGrade, Tensor, Variance, exterior_dim},
+  multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
     Dim,
@@ -178,7 +178,7 @@ impl WhitneyExpansion {
   /// [`pullback`](Self::pullback) takes apart.
   pub fn matrix(&self) -> Matrix {
     let nvertices = (self.cell_dim + 1).index();
-    let nblades = binomial(nvertices, self.grade.index());
+    let nblades = exterior_dim(nvertices, self.grade);
     let scale = factorial_f64(self.grade.index());
     let mut coeffs = Matrix::zeros(nblades * nvertices, self.dofs.len());
     for (j, dof) in self.dofs.iter().enumerate() {
@@ -195,7 +195,7 @@ mod test {
   use super::*;
   use approx::assert_relative_eq;
   use gramian::{Gramian, Metric};
-  use multialgebra::{exterior_bases, multiform_gramian};
+  use multialgebra::{exterior_bases, exterior_dim, multiform_gramian};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
   use simplicial::linalg::Vector;
@@ -224,7 +224,7 @@ mod test {
       let nvertices = (dim + 1).index();
       for grade in 0..=dim.index() {
         let expansion = WhitneyExpansion::new(dim, grade);
-        let nblades = binomial(nvertices, grade);
+        let nblades = exterior_dim(nvertices, grade);
         let entry = |i: usize, j: usize| ((7 * i + 3 * j + 1) % 11) as f64 - 5.0;
         let blade = Matrix::from_fn(nblades, nblades, entry);
         let bary = Matrix::from_fn(nvertices, nvertices, entry);
@@ -258,7 +258,7 @@ mod test {
         let expansion = WhitneyExpansion::new(dim, grade);
         let matrix = expansion.matrix();
         let ndofs = expansion.dofs().len();
-        let nblades = binomial(nvertices, grade);
+        let nblades = exterior_dim(nvertices, grade);
 
         let collapsed = Matrix::from_fn(nblades, ndofs, |blade, dof| {
           (0..nvertices)
