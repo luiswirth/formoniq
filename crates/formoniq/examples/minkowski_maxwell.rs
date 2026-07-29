@@ -69,10 +69,8 @@ use gramian::Metric;
 use gramian::tensor::TensorExt;
 use multialgebra::Tensor;
 use multialgebra::Variance;
-use simplicial::{
-  atlas::SimplexQuadRule, geometry::coord::mesh::MeshCoords, linalg::Vector,
-  mesher::cartesian::CartesianGrid, topology::ordering::CellOrdering,
-};
+use regge::{coord::mesh::MeshCoords, mesher::cartesian::CartesianGrid};
+use simplicial::{atlas::SimplexQuadRule, linalg::Vector, topology::ordering::CellOrdering};
 
 use std::f64::consts::PI;
 
@@ -128,7 +126,7 @@ fn convergence(dim: usize, nsubs: &[usize]) {
   let null_norm_sq = inner(&a, &a, &eta);
   println!(
     "Covariant Maxwell dif F = 0, delta F = J on [0,{:.1}] x [0,1]^{}, eta = diag(-1,+1,..): dim {dim}",
-    simplicial::mesher::cartesian::CAUSAL_TIME_SCALE,
+    regge::mesher::cartesian::CAUSAL_TIME_SCALE,
     dim - 1
   );
   println!("  null wave covector: <a,a>_eta^-1 = {null_norm_sq:+.2e} (massless dispersion)");

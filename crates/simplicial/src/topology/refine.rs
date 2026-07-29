@@ -291,7 +291,7 @@ impl Subdivision {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::mesher::cartesian::CartesianGrid;
+  use crate::mesher::grid::CartesianTopology;
   use crate::topology::data::SkeletonData;
 
   /// Refinement counts match the reference pattern, and the refined complex is
@@ -301,7 +301,7 @@ mod test {
   #[test]
   fn refine_counts_and_conformity() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let coarse = CartesianTopology::cube(dim, 2).triangulate();
       for r in 1..=3 {
         let sub = coarse.refine(r);
         let fine = sub.complex();
@@ -349,7 +349,7 @@ mod test {
     assert_eq!(points.nvertices(), 1);
 
     for dim in (0..=3usize).map(Dim::from) {
-      let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let coarse = CartesianTopology::cube(dim, 2).triangulate();
       let identity = coarse.refine(1);
       assert_eq!(identity.complex().nsimplices(dim), coarse.nsimplices(dim));
       assert_eq!(identity.nvertices(), coarse.vertices().len());

@@ -28,10 +28,8 @@ use {
   formoniq::{
     linalg::quadratic_form_sparse, problems::heat::solve_heat, whitney_complex::WhitneyComplex,
   },
-  simplicial::{
-    linalg::{CsrMatrix, Vector},
-    mesher::cartesian::CartesianGrid,
-  },
+  regge::mesher::cartesian::CartesianGrid,
+  simplicial::linalg::{CsrMatrix, Vector},
   util::{BoundaryCondition, BoxEigenform},
 };
 

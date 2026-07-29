@@ -9,10 +9,8 @@ use crate::{
 use crate::linalg::{faer::FaerCholesky, quadratic_form_sparse};
 use derham::cochain::Cochain;
 use multialgebra::ExteriorGrade;
-use simplicial::{
-  geometry::metric::mesh::MeshLengthsSq,
-  linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector},
-};
+use regge::metric::mesh::MeshLengthsSq;
+use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector};
 
 pub struct WaveState {
   pub pos: Vector,
@@ -157,8 +155,8 @@ pub fn cfl_dt(mesh_geo: &MeshLengthsSq, vel: f64) -> f64 {
 mod test {
   use super::*;
   use crate::whitney_complex::WhitneyComplex;
+  use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
-  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 

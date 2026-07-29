@@ -30,10 +30,10 @@ extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
 use formoniq::whitney_complex::WhitneyComplex;
+use regge::mesher::cartesian::CartesianGrid;
 use simplicial::{
   Dim,
   linalg::{Matrix, Vector},
-  mesher::cartesian::CartesianGrid,
 };
 
 use std::sync::LazyLock;

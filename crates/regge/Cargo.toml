@@ -1,41 +1,34 @@
 [package]
-name = "simplicial"
+name = "regge"
 version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
-description = "A simplicial manifold of arbitrary dimension, with geometry as a pluggable input: topology, atlas, and Regge or embedded metrics."
+description = "Discrete metric geometry on a simplicial complex: signed squared edge lengths as the Regge primitive, with coordinates and per-cell metrics as sources."
 repository = "https://github.com/luiswirth/formoniq"
 readme = "README.md"
-keywords = ["simplicial", "mesh", "fem", "geometry"]
+keywords = ["regge-calculus", "simplicial", "discrete-geometry", "mesh"]
 categories = ["mathematics", "science"]
 
 [dependencies]
 coorder = { path = "../coorder", version = "0.2.0" }
 gramian = { path = "../gramian", version = "0.2.0" }
+multialgebra = { path = "../multialgebra", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
+simplicial = { path = "../simplicial", version = "0.2.0" }
 
-itertools = "0.15.0"
 nalgebra = "0.35.0"
 nalgebra-sparse = "0.12.0"
+itertools = "0.15.0"
+mshio = "0.4.2"
+rayon = "1.11.1"
+tracing = "0.1.41"
 
 ciborium = { version = "0.2.2", optional = true }
-
-num-bigint = "0.4.6"
-num-rational = "0.4.2"
-num-integer = "0.1.46"
-num-traits = "0.2.19"
-
-indexmap = "2.14.0"
-tracing = "0.1.44"
-
-approx = "0.5.1"
-rayon = "1.12.0"
-
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
 [features]
-serde = ["dep:serde", "dep:ciborium", "nalgebra/serde-serialize", "gramian/serde", "multiindex/serde"]
+serde = ["dep:serde", "dep:ciborium", "nalgebra/serde-serialize", "gramian/serde", "multiindex/serde", "simplicial/serde"]
 
 [dev-dependencies]
 approx = "0.5.1"

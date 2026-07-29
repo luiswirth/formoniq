@@ -18,8 +18,8 @@ mod test {
   use multiindex::Dim;
 
   use {
-    simplicial::linalg::Vector,
-    simplicial::{mesher::cartesian::CartesianGrid, topology::complex::Complex},
+    regge::mesher::cartesian::CartesianGrid, simplicial::linalg::Vector,
+    simplicial::topology::complex::Complex,
   };
 
   use approx::assert_relative_eq;

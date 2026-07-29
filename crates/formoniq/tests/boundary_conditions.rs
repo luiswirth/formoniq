@@ -12,7 +12,10 @@ use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;
-use simplicial::{Dim, linalg::CsrMatrix, mesher::cartesian::CartesianGrid};
+use regge::boundary::BoundaryComplexExt;
+use regge::coord::simplex::SimplexCoordsExt;
+use regge::mesher::cartesian::CartesianGrid;
+use simplicial::{Dim, linalg::CsrMatrix};
 
 use approx::assert_relative_eq;
 
@@ -105,7 +108,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 /// The exact solution $u = x_1$ is reproduced.
 #[test]
 fn mixed_dirichlet_neumann_reproduces_linear_solution() {
-  use simplicial::geometry::coord::simplex::SimplexCoords;
+  use regge::coord::simplex::SimplexCoords;
 
   for dim in (2..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
@@ -151,7 +154,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
 /// reproduced.
 #[test]
 fn robin_reproduces_linear_solution() {
-  use simplicial::geometry::coord::simplex::SimplexCoords;
+  use regge::coord::simplex::SimplexCoords;
 
   for dim in (1..=3).map(Dim::from) {
     let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();

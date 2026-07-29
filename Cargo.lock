@@ -724,6 +724,7 @@ dependencies = [
  "multiindex",
  "nalgebra",
  "nalgebra-sparse",
+ "regge",
  "serde",
  "simplicial",
 ]
@@ -1256,6 +1257,7 @@ dependencies = [
  "nalgebra-sparse",
  "num-traits",
  "rayon",
+ "regge",
  "simplicial",
  "tracing",
  "tracing-subscriber",
@@ -1274,6 +1276,7 @@ dependencies = [
  "multialgebra",
  "nalgebra",
  "rayon",
+ "regge",
  "simplicial",
 ]
 
@@ -1307,6 +1310,7 @@ dependencies = [
  "nalgebra",
  "pollster",
  "rayon",
+ "regge",
  "serde",
  "simplicial",
  "wasm-bindgen",
@@ -3510,6 +3514,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "regge"
+version = "0.2.0"
+dependencies = [
+ "approx",
+ "ciborium",
+ "coorder",
+ "gramian",
+ "itertools 0.15.0",
+ "mshio",
+ "multialgebra",
+ "multiindex",
+ "nalgebra",
+ "nalgebra-sparse",
+ "rayon",
+ "serde",
+ "simplicial",
+ "tracing",
+]
+
+[[package]]
 name = "renderdoc-sys"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3724,7 +3748,6 @@ dependencies = [
  "gramian",
  "indexmap",
  "itertools 0.15.0",
- "mshio",
  "multiindex",
  "nalgebra",
  "nalgebra-sparse",

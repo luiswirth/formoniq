@@ -27,7 +27,7 @@ use crate::scene::Scene;
 use crate::ui::{FieldView, MeshView, Post, Selection};
 use realize::bake::{self, BakedMesh};
 use realize::deposit::DepositLayout;
-use simplicial::geometry::coord::locate::PointLocator;
+use regge::coord::locate::PointLocator;
 
 /// The exposure the scene's radiance is read at, before the display transform.
 ///
@@ -83,7 +83,7 @@ const VOLUME_EMISSION: f32 = 1.4;
 /// scene's extent).
 ///
 /// It draws the mesh's own edges and vertices, so its scale is the mesh's local
-/// one ([`mean_edge_length`](simplicial::geometry::coord::mean_edge_length))
+/// one ([`mean_edge_length`](regge::coord::mean_edge_length))
 /// rather than the object's global one. Against the extent it read correctly at
 /// one refinement only: refine the mesh and the cells shrink while the strokes
 /// stay put, until the wireframe is a solid mass with no surface visible between
@@ -453,7 +453,7 @@ pub(crate) struct FieldAttributes {
 /// defined up to a scalar, so a global $A$ changes nothing about *which* mode is
 /// shown, only how far it swings. The displaced surface stays exactly $x + A f
 /// (x) n(x)$ with the field's own shape intact, and the reach bound
-/// ([`vertex_reach`](simplicial::geometry::coord::vertex_reach)) is what makes
+/// ([`vertex_reach`](regge::coord::vertex_reach)) is what makes
 /// that map an embedding -- no fold, no self-intersection.
 ///
 /// The maximum is over the field's whole evolution, not its representative
@@ -517,7 +517,7 @@ pub(crate) const TRAJECTORY_LOOP_SECONDS: f64 = 6.0;
 /// them into the mesh, which is the whole of scrubbing a trajectory.
 pub(crate) fn field_attributes(
   topology: &simplicial::topology::complex::Complex,
-  coords: &simplicial::geometry::coord::mesh::MeshCoords,
+  coords: &regge::coord::mesh::MeshCoords,
   cochain: &derham::cochain::Cochain,
   cell_corners: &[realize::bake::CellCorner],
   segments: &[[u32; 2]],
@@ -648,7 +648,7 @@ impl FieldDisplay {
     // which sizes what should read the same at any resolution. A mesh with no
     // edges has no local length, and falls back on the global one.
     let mesh_scale = {
-      let mean = simplicial::geometry::coord::mean_edge_length(&scene.topology, &scene.coords);
+      let mean = regge::coord::mean_edge_length(&scene.topology, &scene.coords);
       if mean > 0.0 {
         mean as f32
       } else {
@@ -1062,7 +1062,7 @@ impl FieldDisplay {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::geometry::coord::{vertex_curvature_radius, vertex_reach};
+  use regge::coord::{vertex_curvature_radius, vertex_reach};
 
   /// The law the amplitude bound exists to enforce: at the chosen amplitude no
   /// vertex displaces past its own reach, so the deformation stays an
@@ -1134,7 +1134,7 @@ mod tests {
     thickness: f64,
   ) -> (
     simplicial::topology::complex::Complex,
-    simplicial::geometry::coord::mesh::MeshCoords,
+    regge::coord::mesh::MeshCoords,
   ) {
     use simplicial::linalg::{Matrix, Vector};
     use simplicial::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
@@ -1204,7 +1204,7 @@ mod tests {
       .collect();
     (
       Complex::from_cells(Skeleton::new(cells)),
-      simplicial::geometry::coord::mesh::MeshCoords::from(Matrix::from_columns(&pts)),
+      regge::coord::mesh::MeshCoords::from(Matrix::from_columns(&pts)),
     )
   }
 }

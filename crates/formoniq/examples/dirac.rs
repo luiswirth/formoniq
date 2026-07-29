@@ -45,7 +45,7 @@ use formoniq::{
   whitney_complex::WhitneyComplex,
 };
 use glatt::field::DiffFormClosure;
-use simplicial::mesher::cartesian::CartesianGrid;
+use regge::mesher::cartesian::CartesianGrid;
 
 use std::f64::consts::PI;
 

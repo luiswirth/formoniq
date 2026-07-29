@@ -1,7 +1,7 @@
 //! The embedded specialization of [`SimplexCoords`]: the extrinsic bridges.
 //!
 //! The affine realization itself is generic over the coordinate space and lives
-//! in [`crate::atlas::simplex_coords`]. What is added here is everything that
+//! in [`simplicial::atlas::simplex_coords`]. What is added here is everything that
 //! presupposes an *embedding* -- the `Ambient` instantiation `SimplexCoords`
 //! (its default), whose vertices are points of $RR^N$:
 //!
@@ -17,19 +17,39 @@
 //! (invariant 2).
 
 use super::mesh::MeshCoords;
-use crate::{
-  geometry::metric::simplex::SimplexLengthsSq,
-  topology::{handle::SimplexRef, simplex::Simplex},
-};
+use crate::metric::simplex::SimplexLengthsSq;
+use simplicial::topology::{handle::SimplexRef, simplex::Simplex};
 
-use crate::linalg::Matrix;
 use coorder::Ambient;
 use gramian::Gramian;
+use simplicial::linalg::Matrix;
 
-pub use crate::atlas::SimplexCoords;
+pub use simplicial::atlas::SimplexCoords;
 
-impl SimplexCoords<Ambient> {
-  pub fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
+/// The geometry an ambient realization induces.
+///
+/// `simplicial`'s [`SimplexCoords<Ambient>`] is the affine parametrization
+/// $hat(K) -> RR^N$ and is metric-free. Reading a metric or edge lengths off it
+/// is the bridge this crate is for, so it reaches down as an extension: an
+/// embedding induces a metric, a metric induces no embedding.
+pub trait SimplexCoordsExt {
+  fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords;
+
+  /// The metric a *Euclidean* ambient induces on this realization: the
+  /// Gramian of the cell's spanning vectors. The general bridge is the
+  /// pullback of the mesh's ambient inner product
+  /// ([`MeshCoords::cell_metric`](crate::coord::mesh::MeshCoords::cell_metric)),
+  /// of which this is the standard-signature case.
+  fn metric_tensor(&self) -> Gramian;
+
+  /// The Regge squared edge lengths this (Euclidean-ambient) coordinate
+  /// realization has: the bridge from the extrinsic layer down into the
+  /// intrinsic one.
+  fn to_lengths_sq(&self) -> SimplexLengthsSq;
+}
+
+impl SimplexCoordsExt for SimplexCoords<Ambient> {
+  fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
     let mut vert_coords = Matrix::zeros(coords.dim().index(), simp.nvertices());
     for (i, v) in simp.iter().enumerate() {
       vert_coords.set_column(i, &coords.coord(v).view());
@@ -40,16 +60,16 @@ impl SimplexCoords<Ambient> {
   /// The metric a *Euclidean* ambient induces on this realization: the
   /// Gramian of the cell's spanning vectors. The general bridge is the
   /// pullback of the mesh's ambient inner product
-  /// ([`MeshCoords::cell_metric`](crate::geometry::coord::mesh::MeshCoords::cell_metric)),
+  /// ([`MeshCoords::cell_metric`](crate::coord::mesh::MeshCoords::cell_metric)),
   /// of which this is the standard-signature case.
-  pub fn metric_tensor(&self) -> Gramian {
+  fn metric_tensor(&self) -> Gramian {
     Gramian::from_euclidean_vectors(self.spanning_vectors())
   }
 
   /// The Regge squared edge lengths this (Euclidean-ambient) coordinate
   /// realization has: the bridge from the extrinsic layer down into the
   /// intrinsic one.
-  pub fn to_lengths_sq(&self) -> SimplexLengthsSq {
+  fn to_lengths_sq(&self) -> SimplexLengthsSq {
     let lengths_sq: Vec<f64> = self.edges().map(|e| e.vol().powi(2)).collect();
     // SAFETY: Squared lengths stem from a realization already.
     SimplexLengthsSq::new_unchecked(lengths_sq.into(), self.dim_intrinsic())
@@ -71,10 +91,10 @@ impl SimplexRefExt for SimplexRef<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::Dim;
-  use crate::atlas::unit_vertices;
-  use crate::geometry::metric::simplex::SimplexLengthsSq;
-  use crate::linalg::Vector;
+  use crate::metric::simplex::SimplexLengthsSq;
+  use multiindex::Dim;
+  use simplicial::atlas::unit_vertices;
+  use simplicial::linalg::Vector;
 
   use approx::assert_relative_eq;
 

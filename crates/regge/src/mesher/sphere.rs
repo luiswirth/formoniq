@@ -11,12 +11,10 @@
 
 use std::collections::HashMap;
 
-use crate::linalg::{Matrix, Vector};
+use simplicial::linalg::{Matrix, Vector};
 
-use crate::{
-  geometry::coord::mesh::MeshCoords,
-  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
-};
+use crate::coord::mesh::MeshCoords;
+use simplicial::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
 
 /// Geodesic sphere from subdividing an icosahedron `nsubdivisions` times.
 pub fn mesh_sphere_surface(nsubdivisions: usize) -> (Complex, MeshCoords) {

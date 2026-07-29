@@ -218,8 +218,8 @@ mod test {
     section::{Sampler, SectionExt},
   };
 
-  use simplicial::{
-    geometry::coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
+  use regge::{
+    coord::{locate::PointLocator, mesh::MeshCoords, simplex::SimplexRefExt},
     mesher::cartesian::CartesianGrid,
   };
 

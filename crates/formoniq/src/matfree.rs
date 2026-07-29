@@ -40,8 +40,8 @@ use approx::assert_relative_eq;
 
 use gramian::Metric;
 use iterative::{ApproxInverse, LinearOperator};
+use regge::metric::mesh::MeshLengthsSq;
 use simplicial::{
-  geometry::metric::mesh::MeshLengthsSq,
   linalg::Vector,
   topology::{complex::Complex, incidence::FaceIncidence},
 };
@@ -221,9 +221,8 @@ mod test {
   };
 
   use iterative::{Identity, StopCriterion, krylov::cg};
-  use simplicial::{
-    geometry::metric::mesh::MeshLengthsSq, linalg::CsrMatrix, topology::complex::Complex,
-  };
+  use regge::metric::mesh::MeshLengthsSq;
+  use simplicial::{linalg::CsrMatrix, topology::complex::Complex};
 
   fn mesh(dim: usize, refinement: usize) -> (Complex, MeshLengthsSq) {
     let coarse = Complex::unit(dim);

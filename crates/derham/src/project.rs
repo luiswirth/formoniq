@@ -119,8 +119,8 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
-    coorder::Coord, glatt::field::DiffFormClosure, simplicial::linalg::Vector,
-    simplicial::mesher::cartesian::CartesianGrid,
+    coorder::Coord, glatt::field::DiffFormClosure, regge::mesher::cartesian::CartesianGrid,
+    simplicial::linalg::Vector,
   };
 
   use approx::assert_relative_eq;

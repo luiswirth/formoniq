@@ -1,75 +1,57 @@
 # simplicial
 
-Simplicial manifolds of arbitrary dimension, with geometry a separate input from topology.
-Nothing is specialized to 2D or 3D, dimension is a runtime value,
-and the degenerate cases (a point, a single cell, an empty skeleton)
-run on the same code paths and return the trivial answer.
+Simplicial complexes of arbitrary dimension, and the piecewise-affine atlas on
+them. Metric-free throughout. Nothing is specialized to 2D or 3D, dimension is a
+runtime value, and the degenerate cases (a point, a single cell, an empty
+skeleton) run on the same code paths and return the trivial answer.
 
 ## The design
 
-A mesh is three independent layers, each below the next.
+A mesh is a topology and a geometry, and the separation is mathematical rather
+than a matter of taste: the boundary operator, incidence and homology are
+metric-free facts, and no amount of combinatorics derives a metric. So a
+geometry is a genuinely second input, and it lives in a crate of its own —
+[regge](https://crates.io/crates/regge). Nothing here has a notion of length.
 
-**Topology** is the combinatorial complex:
-incidence, orientation, navigation (star, link, cofaces),
-boundary and coboundary operators, and exact integer simplicial homology.
-Betti numbers, relative Betti numbers of the pair (K, ∂K),
-the Euler characteristic and representative homology generators
-are computed by exact rational arithmetic.
-The boundary of a complex is itself a first-class complex,
-with the trace operator as a cochain map onto it.
+**Topology** is the combinatorial complex: incidence, orientation, navigation
+(star, link, cofaces), boundary and coboundary operators, and exact integer
+simplicial homology. Betti numbers, relative Betti numbers of the pair (K, ∂K),
+the Euler characteristic and representative homology generators are computed by
+exact rational arithmetic. The boundary of a complex is itself a first-class
+complex, with the trace operator as a cochain map onto it.
 
-**The atlas** is the piecewise-affine chart structure, still metric-free:
-barycentric charts on the cells,
-affine transition maps between charts sharing a face (obeying the cocycle law),
-an intrinsic notion of a point (a cell plus barycentric weights),
-Grundmann-Möller quadrature exact to prescribed degree in every dimension,
-and uniform (Freudenthal) refinement recording the affine map of each child.
+**The atlas** is the piecewise-affine chart structure: barycentric charts on the
+cells, affine transition maps between charts sharing a face (obeying the cocycle
+law), an intrinsic notion of a point (a cell plus barycentric weights),
+Grundmann-Möller quadrature exact to prescribed degree in every dimension, and
+uniform (Freudenthal) refinement recording the affine map of each child. Affine,
+not flat: flatness is about curvature and presupposes a metric, while the charts
+are affine maps and need none.
 
-**Geometry** enters as one concrete intrinsic currency:
-the signed squared edge lengths on the 1-skeleton
-(positive spacelike, zero null, negative timelike),
-the primitive Regge invented for general relativity
-and the representation that keeps every signature expressible,
-from which a per-cell pseudo-Riemannian metric of any signature is derived.
-That metric is defined on every simplex, not only the cells:
-an edge's length, a facet's area, a hinge's metric
-are read off the shared edge data with no containing cell consulted.
-Coordinates and raw per-cell metric tensors are sources rather than a separate abstraction
-(each converts to the edge-length primitive at the API boundary, on equal footing),
-so an embedding (in a flat ambient space of any signature,
-Euclidean by default, Minkowski for a spacetime mesh)
-induces a metric but is never a prerequisite.
-Volumes, mesh widths, shape regularity and Gaussian curvature by angle defect
-are computed from edge data alone, on manifolds with no global coordinates
-(a flat torus, an abstract Riemannian manifold, a coordinate-free simplicial spacetime).
-Extrinsic quantities (mean curvature, a BVH point locator) sit downstream of the intrinsic layer.
-
-Distance geometry connects the metric representations:
-Cayley-Menger realizability checks,
-and the exact conversion between squared edge lengths and metric tensors in both directions.
-Refinement transports all three geometry representations exactly.
+**The Kuhn triangulation** of a box is here too, and that is not an oversight. It
+is combinatorics: which simplices, in which vertex order, from the per-axis cell
+counts alone. The vertex order is what makes uniform refinement compose, so it
+belongs with the topology; placing the vertices in space is `regge`'s.
 
 ## Correctness
 
-The test suite states laws and sweeps them over dimensions:
-∂∘∂ = 0, Euler-Poincaré, Poincaré duality on the sphere, Poincaré-Lefschetz for (K, ∂K),
-the transition cocycle law, exactness of quadrature on polynomials,
-and Gauss-Bonnet on Regge data without any embedding.
+The test suite states laws and sweeps them over dimensions: ∂∘∂ = 0,
+Euler-Poincaré, Poincaré duality on the sphere, Poincaré-Lefschetz for (K, ∂K),
+the transition cocycle law, and exactness of quadrature on polynomials.
+
+Every fixture is built combinatorially, which is the crate's own claim tested on
+itself: a 2-sphere is the boundary of a tetrahedron, and the annulus is a grid
+with its middle box removed *by index*. No test here needs a coordinate.
 
 ## I/O
 
-Gmsh `.msh` import is always available.
-CBOR serialization of every mesh structure is behind the `serde` feature.
+CBOR serialization of the combinatorial structures, behind the `serde` feature.
+Mesh formats are `regge`'s, since reading a mesh means reading coordinates too.
 
 ## Place in the ecosystem
 
-`simplicial` is the mesh layer of
-[formoniq](https://github.com/luiswirth/formoniq),
-a finite element exterior calculus (FEEC) engine.
-It knows nothing of differential forms:
-cochains, Whitney forms and PDEs live in the crates above it.
-The crate stands on its own as a simplicial-topology and Regge-geometry library.
-
-## License
-
-Dual-licensed under either MIT or Apache-2.0, at your option.
+`simplicial` is the topological layer of
+[formoniq](https://github.com/luiswirth/formoniq), a finite element exterior
+calculus (FEEC) engine. It knows nothing of differential forms or of geometry:
+metrics and edge lengths live in `regge`, and cochains, Whitney forms and PDEs
+in the crates above.
