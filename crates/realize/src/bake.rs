@@ -24,12 +24,10 @@ use std::collections::HashMap;
 
 use crate::surface::Surface;
 use bytemuck::{Pod, Zeroable};
+use regge::coord::{mesh::MeshCoords, vertex_reach};
+use simplicial::Dim;
 use simplicial::linalg::Vector;
-use simplicial::{
-  Dim,
-  geometry::coord::{mesh::MeshCoords, vertex_reach},
-  topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex},
-};
+use simplicial::topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex};
 
 /// Fraction of the local [`reach`](vertex_reach) allowed as normal
 /// displacement: kept below 1 so a vertex never reaches its own medial axis,
@@ -596,7 +594,7 @@ pub fn vertex_normals(
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::geometry::coord::mesh::unit_coord_complex;
+  use regge::coord::mesh::unit_coord_complex;
 
   /// The unit cell of every dimension the ambient reaches bakes, and bakes
   /// to the primitive $min(n, 2)$ names: a segment, a triangle, and a
@@ -682,7 +680,7 @@ mod tests {
   /// collapses.
   #[test]
   fn a_solid_bakes_only_its_boundary() {
-    use simplicial::mesher::cartesian::CartesianGrid;
+    use regge::mesher::cartesian::CartesianGrid;
     let (topology, coords) = CartesianGrid::new_unit(3, 3).triangulate();
     let coords = coords.embed_euclidean(3);
     let baked = BakedMesh::new(&topology, &coords);

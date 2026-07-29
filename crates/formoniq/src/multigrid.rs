@@ -30,8 +30,8 @@ use iterative::{
   {Report, StopCriterion},
 };
 use multialgebra::ExteriorGrade;
+use regge::metric::mesh::MeshLengthsSq;
 use simplicial::{
-  geometry::metric::mesh::MeshLengthsSq,
   linalg::{CsrMatrix, Vector},
   topology::{complex::Complex, ordering::CellOrdering, refine::Subdivision},
 };
@@ -222,7 +222,7 @@ impl Grade0Multigrid {
 mod tests {
   use super::*;
   use iterative::{ApproxInverse, Identity, krylov::cg};
-  use simplicial::mesher::cartesian::CartesianGrid;
+  use regge::mesher::cartesian::CartesianGrid;
 
   /// A 2D unit-square tower: a base grid of `base` cells per axis, refined
   /// `refinements` times. Returns the coarse topology and geometry the builder

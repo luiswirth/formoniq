@@ -43,11 +43,11 @@
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
 use gramian::Metric;
 use gramian::tensor::TensorExt;
+use regge::coord::mesh::MeshCoords;
 use simplicial::Sign;
 use simplicial::linalg::Matrix;
 use simplicial::{
   atlas::{ChartExt, Local, MeshPoint, local2bary, unit_difbarys, unit_vertices},
-  geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
 };
 
@@ -336,7 +336,7 @@ fn pad_mat4(matrix: &Matrix) -> Mat4 {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::geometry::coord::mesh::MeshCoords;
+  use regge::coord::mesh::MeshCoords;
 
   /// The generator preserves $sum_i lambda_i = 1$: its columns sum to zero, so
   /// $bb(1)^T dot(lambda) = 0$ and a particle never leaves the affine hull its

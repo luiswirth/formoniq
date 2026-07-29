@@ -2,7 +2,7 @@
 //! space.
 //!
 //! These exist for visualization and for I/O, never for the core path: the
-//! engine consumes the intrinsic [`MeshLengthsSq`][crate::geometry::metric::mesh::MeshLengthsSq]
+//! engine consumes the intrinsic [`MeshLengthsSq`][crate::metric::mesh::MeshLengthsSq]
 //! the quotient itself
 //! produces (invariant 2), and an embedding is a *second*, independent object.
 //! Where the embedding is not isometric the two are genuinely different
@@ -33,10 +33,10 @@
 use std::f64::consts::TAU;
 
 use crate::{
-  geometry::coord::mesh::MeshCoords,
-  linalg::{Matrix, Vector},
+  coord::mesh::MeshCoords,
   mesher::quotient::{FlatQuotient, Identification},
 };
+use simplicial::linalg::{Matrix, Vector};
 
 /// The equivariant embedding of a flat quotient, the general construction.
 ///
@@ -297,11 +297,9 @@ fn revolve(quotient: &FlatQuotient, point: impl Fn(&[usize]) -> [f64; 3]) -> Mes
 #[cfg(test)]
 mod test {
   use super::{donut_r3, equivariant, is_isometric, moebius_r3};
-  use crate::Dim;
-  use crate::{
-    linalg::Vector,
-    mesher::quotient::{FlatQuotient, Identification},
-  };
+  use crate::mesher::quotient::{FlatQuotient, Identification};
+  use multiindex::Dim;
+  use simplicial::linalg::Vector;
 
   /// The Clifford embedding is an **isometry**: the edge lengths it induces are
   /// the flat quotient's own, in every dimension.

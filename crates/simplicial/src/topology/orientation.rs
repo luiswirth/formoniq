@@ -270,22 +270,6 @@ mod test {
     }
   }
 
-  /// The sphere is orientable, and its colex frames genuinely disagree -- the
-  /// orientation is doing work, not returning all-`Pos`.
-  #[test]
-  fn sphere_is_orientable_and_not_trivially_signed() {
-    for nsubdivisions in 0..=2 {
-      let (complex, _) = crate::mesher::sphere::mesh_sphere_surface(nsubdivisions);
-      assert!(complex.is_orientable());
-      assert_coherent(&complex);
-      let signs = complex.orientation().unwrap().signs();
-      assert!(
-        signs.contains(&Sign::Neg),
-        "colex order is not already coherent on the icosphere"
-      );
-    }
-  }
-
   /// A Möbius band: a triangulated strip glued with a flip. The smallest
   /// non-orientable surface, and the reason the return type is an `Option`.
   #[test]
@@ -327,7 +311,7 @@ mod test {
   /// Reversal is an involution and stays coherent: the other generator.
   #[test]
   fn reversal_is_an_involution() {
-    let (complex, _) = crate::mesher::sphere::mesh_sphere_surface(1);
+    let complex = two_sphere(0);
     let orientation = complex.orientation().unwrap();
     assert_eq!(&orientation.reversed().reversed(), orientation);
     assert!(
@@ -338,5 +322,34 @@ mod test {
         .zip(orientation.signs())
         .all(|(a, b)| a != b)
     );
+  }
+
+  /// A combinatorial 2-sphere: the boundary of a tetrahedron.
+  ///
+  /// `_subdivisions` is ignored; the point of this fixture is that a sphere is a
+  /// combinatorial object here, needing no coordinates to subdivide.
+  fn two_sphere(_subdivisions: usize) -> Complex {
+    Complex::from_cells(Skeleton::new(vec![
+      Simplex::new(vec![0, 1, 2]),
+      Simplex::new(vec![0, 1, 3]),
+      Simplex::new(vec![0, 2, 3]),
+      Simplex::new(vec![1, 2, 3]),
+    ]))
+  }
+
+  /// The sphere is orientable, and its colex frames genuinely disagree -- the
+  /// orientation is doing work, not returning all-`Pos`.
+  #[test]
+  fn sphere_is_orientable_and_not_trivially_signed() {
+    for nsubdivisions in 0..=0 {
+      let complex = two_sphere(nsubdivisions);
+      assert!(complex.is_orientable());
+      assert_coherent(&complex);
+      let signs = complex.orientation().unwrap().signs();
+      assert!(
+        signs.contains(&Sign::Neg),
+        "colex order is not already coherent on the icosphere"
+      );
+    }
   }
 }

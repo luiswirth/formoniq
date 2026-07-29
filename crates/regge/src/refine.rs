@@ -12,23 +12,36 @@
 //!   agree with.
 //! - **Extrinsic** ([`MeshCoords::refine`]): each new vertex is placed by the
 //!   affine combination of coarse vertices recorded in its
-//!   [`VertexBirth`](crate::topology::refine::VertexBirth). An embedding is not
+//!   [`VertexBirth`](simplicial::topology::refine::VertexBirth). An embedding is not
 //!   needed to refine -- it is refined only because visualization and I/O want
 //!   one -- and the metric it induces equals the intrinsic refinement, which is
 //!   the law that ties the two.
 
-use crate::{
-  geometry::{coord::mesh::MeshCoords, metric::CellGramians, metric::mesh::MeshLengthsSq},
+use crate::{coord::mesh::MeshCoords, metric::CellGramians, metric::mesh::MeshLengthsSq};
+use simplicial::{
   linalg::Vector,
   topology::{complex::Complex, refine::Subdivision},
 };
 
-impl Subdivision {
+/// The geometric half of a refinement.
+///
+/// `simplicial`'s [`Subdivision`] is the combinatorial record of which child
+/// belongs to which parent; pulling a *geometry* back through it needs a metric,
+/// so it reaches down from here as an extension.
+pub trait SubdivisionExt {
   /// Refine per-cell metrics: each child carries the pullback of its parent
   /// cell's metric along the child's affine Jacobian. Exact and coordinate-free
   /// -- the intrinsic refinement of any geometry, once reduced to its per-cell
   /// metrics ([`CellGramians`]).
-  pub fn refine_gramians(&self, coarse: &CellGramians) -> CellGramians {
+  fn refine_gramians(&self, coarse: &CellGramians) -> CellGramians;
+}
+
+impl SubdivisionExt for Subdivision {
+  /// Refine per-cell metrics: each child carries the pullback of its parent
+  /// cell's metric along the child's affine Jacobian. Exact and coordinate-free
+  /// -- the intrinsic refinement of any geometry, once reduced to its per-cell
+  /// metrics ([`CellGramians`]).
+  fn refine_gramians(&self, coarse: &CellGramians) -> CellGramians {
     let metrics = self
       .children()
       .values()
@@ -57,7 +70,7 @@ impl MeshLengthsSq {
 impl MeshCoords {
   /// Refine an embedding: the coarse vertices keep their coordinates and label,
   /// and each new vertex is the affine combination of coarse vertices its
-  /// [`VertexBirth`](crate::topology::refine::VertexBirth) records. Extrinsic,
+  /// [`VertexBirth`](simplicial::topology::refine::VertexBirth) records. Extrinsic,
   /// for I/O and visualization; the intrinsic refinement is
   /// [`Subdivision::refine_gramians`].
   pub fn refine(&self, sub: &Subdivision) -> MeshCoords {
@@ -67,7 +80,7 @@ impl MeshCoords {
       "coordinates must match the coarse mesh being refined"
     );
     let ambient = self.dim();
-    let mut matrix = crate::linalg::Matrix::zeros(ambient.index(), sub.nvertices());
+    let mut matrix = simplicial::linalg::Matrix::zeros(ambient.index(), sub.nvertices());
     matrix
       .view_range_mut(.., 0..sub.ncoarse_vertices())
       .copy_from(self.matrix());
@@ -84,9 +97,10 @@ impl MeshCoords {
 
 #[cfg(test)]
 mod test {
-  use crate::Dim;
+  use super::SubdivisionExt;
   use crate::mesher::cartesian::CartesianGrid;
-  use crate::topology::complex::Complex;
+  use multiindex::Dim;
+  use simplicial::topology::complex::Complex;
 
   fn signature(complex: &Complex, lengths: &MeshLengthsSq) -> Vec<Vec<u64>> {
     let mut cells: Vec<Vec<u64>> = complex
@@ -107,8 +121,8 @@ mod test {
     cells
   }
 
-  use crate::geometry::cell_volume;
-  use crate::geometry::metric::mesh::MeshLengthsSq;
+  use crate::cell_volume;
+  use crate::metric::mesh::MeshLengthsSq;
 
   /// Refining a Kuhn-triangulated grid reproduces the finer grid the generator
   /// would have built: $"refine"("grid"(n), r) tilde.equiv "grid"(n r)$, up to
@@ -205,7 +219,7 @@ mod test {
   /// one, edge by edge.
   #[test]
   fn lengths_match_coords() {
-    use crate::topology::data::SkeletonData;
+    use simplicial::topology::data::SkeletonData;
     for dim in (1..=3usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let coarse_lengths = coords.to_edge_lengths_sq(&coarse);
@@ -237,7 +251,7 @@ mod test {
   /// growing number of congruence classes above dimension two.
   #[test]
   fn a_tower_on_the_inherited_ordering_is_the_product_refinement() {
-    use crate::topology::ordering::CellOrdering;
+    use simplicial::topology::ordering::CellOrdering;
 
     for dim in (1..=3usize).map(Dim::from) {
       let (coarse, coords) = CartesianGrid::new_unit(dim, 1).triangulate();
@@ -270,7 +284,7 @@ mod test {
   /// quality rather than about which mesh was built.
   #[test]
   fn a_tower_stays_self_similar() {
-    use crate::topology::ordering::CellOrdering;
+    use simplicial::topology::ordering::CellOrdering;
 
     fn shape_classes(complex: &Complex, lengths: &MeshLengthsSq) -> usize {
       let mut classes: Vec<Vec<u64>> = complex

@@ -32,7 +32,8 @@ use {
   formoniq::problems::advection::{Transport, assemble_transport, solve_transport},
   glatt::field::DiffFormClosure,
   multialgebra::{Tensor, Variance},
-  simplicial::{Dim, linalg::Vector, mesher::cartesian::CartesianGrid},
+  regge::mesher::cartesian::CartesianGrid,
+  simplicial::{Dim, linalg::Vector},
 };
 
 fn main() {

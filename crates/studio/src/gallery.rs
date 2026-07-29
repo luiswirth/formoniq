@@ -15,13 +15,12 @@ use std::sync::Arc;
 
 use derham::cochain::Cochain;
 use multialgebra::ExteriorGrade;
-use simplicial::{
-  Dim,
-  geometry::coord::mesh::{MeshCoords, unit_coord_complex},
-  topology::{complex::Complex, simplex::Simplex},
-};
+use regge::coord::mesh::MeshCoords;
+use regge::coord::mesh::unit_coord_complex;
+use simplicial::Dim;
+use simplicial::topology::{complex::Complex, simplex::Simplex};
 
-use simplicial::mesher::quotient::Identification;
+use regge::mesher::quotient::Identification;
 
 use crate::scene::Scene;
 use crate::ui::{Marks, Selection};
@@ -215,14 +214,14 @@ impl BuiltinMesh {
           .map_err(|e| format!("{}: not UTF-8 ({e})", self.label()))?;
         realize::io::obj::parse(text).map_err(|e| format!("{}: {e}", self.label()))
       }
-      Format::Gmsh => Ok(simplicial::io::gmsh::gmsh2coord_complex(entry.bytes)),
+      Format::Gmsh => Ok(regge::io::gmsh::gmsh2coord_complex(entry.bytes)),
     }
   }
 }
 
 /// Which flat quotient of the square, among those with an $RR^3$ realization.
 ///
-/// Both are [`simplicial::mesher::quotient::FlatQuotient`]s -- one generator, two
+/// Both are [`regge::mesher::quotient::FlatQuotient`]s -- one generator, two
 /// per-axis identifications -- and both are drawn through the surfaces of
 /// revolution of `mesher::quotient_embed`, the constructions that fit the fixed
 /// ambient $RR^3$. The rest of the family does not fit and so is not offered:
@@ -272,7 +271,7 @@ impl QuotientSurface {
   }
 
   pub(crate) fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
-    use simplicial::mesher::{quotient::FlatQuotient, quotient_embed};
+    use regge::mesher::{quotient::FlatQuotient, quotient_embed};
     let cells_axis = cells_axis.max(QUOTIENT_CELLS_MIN);
     match self {
       Self::Donut => {
@@ -389,12 +388,12 @@ impl MeshSource {
   /// rebuilt from its descriptor.
   pub fn build(&self) -> Result<Mesh, String> {
     match self {
-      MeshSource::Sphere { subdivisions } => Ok(simplicial::mesher::sphere::mesh_sphere_surface(
-        *subdivisions,
-      )),
+      MeshSource::Sphere { subdivisions } => {
+        Ok(regge::mesher::sphere::mesh_sphere_surface(*subdivisions))
+      }
       MeshSource::Grid { dim, cells_axis } => {
         let (topology, coords) =
-          simplicial::mesher::cartesian::CartesianGrid::new_unit(*dim, *cells_axis).triangulate();
+          regge::mesher::cartesian::CartesianGrid::new_unit(*dim, *cells_axis).triangulate();
         // The renderer draws in 3D; a grid of intrinsic dimension below 3 lifts
         // into $RR^3$ (a curve or a $z = 0$ surface), a no-op once `dim >= 3`,
         // exactly as the flat reference-cell scenes do.

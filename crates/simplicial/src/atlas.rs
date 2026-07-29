@@ -90,7 +90,7 @@ pub type LocalRef<'a> = CoordsRef<'a, LocalCartesian>;
 ///
 /// A property of the chart, not of the geometry: it is the factor by which a
 /// chart integral scales, and the metric enters only through the further factor
-/// $sqrt(abs(det g))$ (see [`cell_volume`](crate::geometry::cell_volume)).
+/// $sqrt(abs(det g))$ (see `cell_volume`).
 pub fn unit_simplex_volume(dim: impl Into<Dim>) -> f64 {
   let dim = dim.into();
   factorial_f64(dim.index()).recip()

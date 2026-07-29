@@ -1,11 +1,9 @@
 extern crate nalgebra as na;
 
 use formoniq::operators::{self, ElMatProvider};
+use regge::metric::simplex::SimplexLengthsSq;
 use simplicial::linalg::Matrix;
-use simplicial::{
-  Dim, atlas::unit_simplex_volume, geometry::metric::simplex::SimplexLengthsSq,
-  topology::complex::Complex,
-};
+use simplicial::{Dim, atlas::unit_simplex_volume, topology::complex::Complex};
 
 use approx::assert_relative_eq;
 

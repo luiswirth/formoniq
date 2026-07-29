@@ -1,18 +1,18 @@
-use crate::linalg::{Matrix, Vector};
 use multiindex::{
   Combination, Permutation,
   cartesian::{cartesian2linear_mixed, corner_offset, linear2cartesian_mixed, mixed_strides},
   factorial,
 };
+use simplicial::linalg::{Matrix, Vector};
 
 pub use multiindex::cartesian::{cartesian2linear, linear2cartesian};
 
-use crate::{
+use crate::coord::mesh::MeshCoords;
+use gramian::Gramian;
+use simplicial::{
   Dim,
-  geometry::coord::mesh::MeshCoords,
   topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
 };
-use gramian::Gramian;
 
 /// Time-axis scale of a causally generic Minkowski box (axis $0$ is time).
 ///
@@ -272,8 +272,8 @@ impl CartesianGrid {
 #[cfg(test)]
 mod test {
   use super::CartesianGrid;
-  use crate::Dim;
-  use crate::linalg::Matrix;
+  use multiindex::Dim;
+  use simplicial::linalg::Matrix;
 
   #[test]
   fn unit_cube_mesh() {

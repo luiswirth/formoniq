@@ -1,7 +1,8 @@
 use approx::assert_relative_eq;
 use formoniq::whitney_complex::WhitneyComplex;
+use regge::mesher::cartesian::CartesianGrid;
+use simplicial::Dim;
 use simplicial::linalg::{Matrix, Vector};
-use simplicial::{Dim, mesher::cartesian::CartesianGrid};
 
 const DIM: Dim = Dim::new(3);
 

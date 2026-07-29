@@ -20,13 +20,13 @@
 //! only if it also lies within tolerance of the cell's affine hull.
 
 use super::{CoordRef, simplex::SimplexRefExt};
-use crate::{
+use simplicial::{
   Dim,
   atlas::{Bary, Local, MeshPoint, local2bary},
   topology::{complex::Complex, handle::SimplexIdx},
 };
 
-use crate::linalg::{Matrix, Vector};
+use simplicial::linalg::{Matrix, Vector};
 
 /// An axis-aligned bounding box in $RR^d$.
 #[derive(Debug, Clone)]
@@ -284,8 +284,8 @@ fn build(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::Dim;
-  use crate::{geometry::coord::Coord, mesher::cartesian::CartesianGrid};
+  use crate::{coord::Coord, mesher::cartesian::CartesianGrid};
+  use multiindex::Dim;
 
   /// The BVH locator agrees with the brute-force linear scan on every query,
   /// and reports points outside the mesh as such.

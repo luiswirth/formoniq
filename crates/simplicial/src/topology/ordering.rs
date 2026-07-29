@@ -11,7 +11,7 @@
 //!
 //! So it is a datum, on the same footing as geometry. Topology is combinatorics
 //! ([`Complex`]), geometry arrives separately
-//! ([`MeshLengthsSq`](crate::geometry::metric::mesh::MeshLengthsSq)), and the
+//! (`MeshLengthsSq`), and the
 //! ordering arrives separately too: three orthogonal axes, none derivable from
 //! the others. Nothing in assembly, solving or homology may consult it -- those
 //! are invariant under relabelling, and a dependence on the ordering there is a
@@ -184,7 +184,7 @@ impl CellOrdering {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::mesher::cartesian::CartesianGrid;
+  use crate::mesher::grid::CartesianTopology;
   use multiindex::Sign;
 
   /// The colex ordering is face-consistent in every dimension: it restricts a
@@ -194,7 +194,7 @@ mod test {
   fn colex_ordering_is_face_consistent() {
     for dim in (0..=4usize).map(Dim::from) {
       for ncells_axis in 1..=2 {
-        let (complex, _) = CartesianGrid::new_unit(dim, ncells_axis).triangulate();
+        let complex = CartesianTopology::cube(dim, ncells_axis).triangulate();
         let ordering = CellOrdering::colex(&complex);
         assert_eq!(ordering.ncells(), complex.cells().len());
         assert!(ordering.is_face_consistent(&complex));
@@ -208,7 +208,7 @@ mod test {
   #[test]
   fn words_are_matched_by_vertex_set() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let complex = CartesianTopology::cube(dim, 2).triangulate();
       let colex = CellOrdering::colex(&complex);
       let mut words: Vec<Vec<VertexIdx>> = (0..colex.ncells())
         .map(|kidx| colex.word_by_kidx(kidx).to_vec())
@@ -225,7 +225,7 @@ mod test {
   #[test]
   fn the_kuhn_chain_ascends() {
     for dim in (1..=3usize).map(Dim::from) {
-      let grid = CartesianGrid::new_unit(dim, 2);
+      let grid = CartesianTopology::cube(dim, 2);
       let skeleton = grid.cell_skeleton();
       for simplex in skeleton.iter() {
         assert!(simplex.vertices.windows(2).all(|w| w[0] < w[1]));
@@ -241,7 +241,7 @@ mod test {
   #[test]
   fn a_transposed_cell_is_detected() {
     for dim in (2..=3usize).map(Dim::from) {
-      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let complex = CartesianTopology::cube(dim, 2).triangulate();
       let mut ordering = CellOrdering::colex(&complex);
       // An interior facet, and one of the two cells meeting there. Transposing
       // two vertices *of that facet* in the cell's word is what the neighbor
@@ -273,7 +273,7 @@ mod test {
   #[test]
   fn the_colex_ordering_winds_positively() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let complex = CartesianTopology::cube(dim, 2).triangulate();
       let ordering = CellOrdering::colex(&complex);
       let oriented = ordering.induced_orientation(&complex);
       // Colex gives every cell `Pos`; that is coherent only if no two adjacent
@@ -293,7 +293,7 @@ mod test {
   #[test]
   fn winding_is_the_parity_and_nothing_more() {
     for dim in (2..=3usize).map(Dim::from) {
-      let (complex, _) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let complex = CartesianTopology::cube(dim, 2).triangulate();
       let Some(coherent) = CellOrdering::colex(&complex).induced_orientation(&complex) else {
         continue;
       };

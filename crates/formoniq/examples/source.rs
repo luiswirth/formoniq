@@ -31,7 +31,8 @@ use {
     assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::elliptic,
     whitney_complex::WhitneyComplex,
   },
-  simplicial::{mesher::cartesian::CartesianGrid, topology::ordering::CellOrdering},
+  regge::mesher::cartesian::CartesianGrid,
+  simplicial::topology::ordering::CellOrdering,
   util::{BoundaryCondition, BoxEigenform, algebraic_convergence_rate, report},
 };
 

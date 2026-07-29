@@ -602,8 +602,8 @@ mod test {
   use crate::{
     linalg::faer::FaerCholesky, problems::elliptic::HodgeBlocks, whitney_complex::WhitneyComplex,
   };
+  use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
-  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 
@@ -891,10 +891,9 @@ mod test {
   /// and Lorentzian geometry alike.
   #[test]
   fn dirac_source_reproduces_constant_field() {
-    use simplicial::{
-      geometry::{coord::mesh::MeshCoords, metric::mesh::MeshLengthsSq},
-      topology::complex::Complex,
-    };
+    use regge::coord::mesh::MeshCoords;
+    use regge::metric::mesh::MeshLengthsSq;
+    use simplicial::topology::complex::Complex;
 
     fn run(topology: &Complex, coords: &MeshCoords, geometry: &MeshLengthsSq) {
       let dim = topology.dim();

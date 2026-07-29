@@ -1,7 +1,7 @@
 use super::{Coord, CoordRef, simplex::SimplexRefExt};
-use crate::{
+use crate::metric::{CellGramians, mesh::MeshLengthsSq};
+use simplicial::{
   Dim,
-  geometry::metric::{CellGramians, mesh::MeshLengthsSq},
   topology::{
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef},
@@ -10,8 +10,8 @@ use crate::{
   },
 };
 
-use crate::linalg::{Matrix, Vector};
 use gramian::{Gramian, Metric};
+use simplicial::linalg::{Matrix, Vector};
 
 use itertools::Itertools;
 
@@ -52,7 +52,7 @@ impl MeshCoords {
   /// vectors under the ambient inner product.
   ///
   /// The embedding counterpart of
-  /// [`MeshLengthsSq::simplex_metric`](crate::geometry::MeshLengthsSq::simplex_metric),
+  /// [`MeshLengthsSq::simplex_metric`](crate::MeshLengthsSq::simplex_metric),
   /// and total over every grade for the same reason (invariant 2): geometry is
   /// defined on every simplex, not only the cells, so the boundary trace and the
   /// metric of a subskeleton simplex are well defined from the shared
@@ -78,7 +78,7 @@ impl MeshCoords {
 
 impl MeshCoords {
   pub fn unit(ndim: impl Into<Dim>) -> Self {
-    Self::new(crate::atlas::unit_vertices(ndim.into()))
+    Self::new(simplicial::atlas::unit_vertices(ndim.into()))
   }
   /// Vertices of an embedding into Euclidean space: the ambient inner product
   /// is the standard one.
@@ -126,11 +126,11 @@ impl MeshCoords {
 
   #[cfg(feature = "serde")]
   pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-    crate::io::cbor::save_cbor(self, path)
+    simplicial::io::cbor::save_cbor(self, path)
   }
   #[cfg(feature = "serde")]
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
-    crate::io::cbor::load_cbor(path)
+    simplicial::io::cbor::load_cbor(path)
   }
 }
 
@@ -299,11 +299,11 @@ pub fn unit_coord_complex(dim: impl Into<Dim>) -> (Complex, MeshCoords) {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::Dim;
   use crate::{
-    geometry::{cell_volume, coord::simplex::SimplexRefExt, metric::mesh::EdgeRefExt},
     mesher::cartesian::CartesianGrid,
+    {cell_volume, coord::simplex::SimplexRefExt, metric::mesh::EdgeRefExt},
   };
+  use multiindex::Dim;
 
   /// Geometry is defined on every simplex, not only the cells: the intrinsic
   /// metric [`MeshLengthsSq::simplex_metric`] reads off a subsimplex's own edge

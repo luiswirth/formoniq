@@ -100,8 +100,8 @@ mod test {
   use crate::linalg::quadratic_form_sparse;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
+  use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
-  use simplicial::mesher::cartesian::CartesianGrid;
 
   use approx::assert_relative_eq;
 

@@ -194,8 +194,8 @@ impl WhitneyExpansion {
 mod test {
   use super::*;
   use approx::assert_relative_eq;
-  use gramian::{Gramian, Metric};
   use gramian::tensor::multiform_gramian;
+  use gramian::{Gramian, Metric};
   use multialgebra::{exterior_bases, exterior_dim};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};

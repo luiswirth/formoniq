@@ -81,9 +81,12 @@ is enforced by the crate boundaries rather than by convention.
   with the variance of each slot deciding pullback against pushforward,
   the musical isomorphisms and which Gramian measures it.
 - **[`simplicial`](crates/simplicial/README.md)**:
-  the simplicial manifold, keeping pure-combinatorial topology separate from geometry,
-  which enters intrinsically as signed squared edge lengths,
-  with coordinates and per-cell metrics as sources converting into them.
+  the simplicial complex and its piecewise-affine atlas, metric-free throughout,
+  with a geometry a genuinely separate input rather than a field on the mesh.
+- **[`regge`](crates/regge/README.md)**:
+  that geometry: signed squared edge lengths as the primitive,
+  with coordinates and per-cell metrics as sources converting into them,
+  so nothing in the core path requires an embedding.
 - **[`glatt`](crates/glatt/README.md)**:
   the continuum manifold that the simplicial one approximates,
   with parametrizations and analytic differential-form data on them.

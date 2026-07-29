@@ -18,8 +18,8 @@ pub struct Transport<'a, V> {
 
 use derham::{cochain::Cochain, section::Section};
 use multialgebra::ExteriorGrade;
+use regge::metric::mesh::MeshLengthsSq;
 use simplicial::{
-  geometry::metric::mesh::MeshLengthsSq,
   linalg::{CsrMatrix, Vector},
   topology::complex::Complex,
 };

@@ -24,7 +24,9 @@
 //! boundary, whose faces are not charts. Both give the empty layout, which
 //! every consumer treats as "no deposit" by arithmetic rather than by branch.
 
-use simplicial::{geometry::coord::mesh::MeshCoords, topology::complex::Complex};
+use simplicial::topology::complex::Complex;
+
+use regge::coord::mesh::MeshCoords;
 
 /// The atlas texture's side, in texels. One fixed square texture: the budget
 /// the per-cell resolutions are allocated out of. The trail is sampled from
@@ -206,7 +208,7 @@ fn shelf_pack(resolutions: &[u32]) -> Option<Vec<Block>> {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use simplicial::geometry::coord::mesh::unit_coord_complex;
+  use regge::coord::mesh::unit_coord_complex;
 
   fn layout_of(dim: usize) -> (Complex, MeshCoords, DepositLayout) {
     let (topology, coords) = unit_coord_complex(dim);
