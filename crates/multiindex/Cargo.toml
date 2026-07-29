@@ -12,6 +12,7 @@ categories = ["mathematics"]
 
 [dependencies]
 num-integer = "0.1.46"
+tinyvec = { version = "1.11.0", features = ["alloc"] }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
 [features]

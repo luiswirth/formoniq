@@ -440,6 +440,7 @@ dependencies = [
  "anstyle",
  "clap_lex",
  "strsim",
+ "terminal_size",
 ]
 
 [[package]]
@@ -513,6 +514,12 @@ checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
 ]
+
+[[package]]
+name = "condtype"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "baf0a07a401f374238ab8e2f11a104d2851bf9ce711ec69804834de8af45c7af"
 
 [[package]]
 name = "console_error_panic_hook"
@@ -711,9 +718,9 @@ version = "0.2.0"
 dependencies = [
  "approx",
  "coorder",
- "exterior",
  "glatt",
  "gramian",
+ "multialgebra",
  "multiindex",
  "nalgebra",
  "nalgebra-sparse",
@@ -763,6 +770,31 @@ name = "displaydoc"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ac70aa55017e108007fbaf5aa0f54b021c98f92ff8af59d42eda9da96e3dd4f"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
+name = "divan"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a405457ec78b8fe08b0e32b4a3570ab5dff6dd16eb9e76a5ee0a9d9cbd898933"
+dependencies = [
+ "cfg-if",
+ "clap",
+ "condtype",
+ "divan-macros",
+ "libc",
+ "regex-lite",
+]
+
+[[package]]
+name = "divan-macros"
+version = "0.1.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9556bc800956545d6420a640173e5ba7dfa82f38d3ea5a167eb555bc69ac3323"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -1070,16 +1102,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "exterior"
-version = "0.2.0"
-dependencies = [
- "approx",
- "gramian",
- "multiindex",
- "nalgebra",
-]
-
-[[package]]
 name = "faer"
 version = "0.24.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1223,12 +1245,12 @@ dependencies = [
  "approx",
  "coorder",
  "derham",
- "exterior",
  "faer",
  "glatt",
  "gramian",
  "iterative",
  "itertools 0.15.0",
+ "multialgebra",
  "multiindex",
  "nalgebra",
  "nalgebra-sparse",
@@ -1246,10 +1268,10 @@ dependencies = [
  "bytemuck",
  "coorder",
  "derham",
- "exterior",
  "formoniq",
  "glatt",
  "gramian",
+ "multialgebra",
  "nalgebra",
  "rayon",
  "simplicial",
@@ -1272,7 +1294,6 @@ dependencies = [
  "egui-wgpu",
  "egui-winit",
  "env_logger",
- "exterior",
  "formoniq",
  "formoniq-realize",
  "getrandom 0.3.4",
@@ -1281,6 +1302,7 @@ dependencies = [
  "image",
  "js-sys",
  "log",
+ "multialgebra",
  "naga",
  "nalgebra",
  "pollster",
@@ -1546,8 +1568,8 @@ version = "0.2.0"
 dependencies = [
  "approx",
  "coorder",
- "exterior",
  "gramian",
+ "multialgebra",
  "nalgebra",
 ]
 
@@ -2208,8 +2230,11 @@ name = "multialgebra"
 version = "0.2.0"
 dependencies = [
  "approx",
+ "divan",
+ "gramian",
  "multiindex",
  "nalgebra",
+ "tinyvec",
 ]
 
 [[package]]
@@ -2219,6 +2244,7 @@ dependencies = [
  "itertools 0.15.0",
  "num-integer",
  "serde",
+ "tinyvec",
 ]
 
 [[package]]
@@ -3470,6 +3496,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "regex-lite"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cab834c73d247e67f4fae452806d17d3c7501756d98c8808d7c9c7aa7d18f973"
+
+[[package]]
 name = "regex-syntax"
 version = "0.8.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3932,6 +3964,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "terminal_size"
+version = "0.4.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
+dependencies = [
+ "rustix 1.1.4",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "thiserror"
 version = "1.0.69"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4028,6 +4070,21 @@ dependencies = [
  "displaydoc",
  "zerovec",
 ]
+
+[[package]]
+name = "tinyvec"
+version = "1.12.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bb4ebadaa0af04fab11ae01eb5f9fdb5f9c5b875506e210e71c07873528baa7f"
+dependencies = [
+ "tinyvec_macros",
+]
+
+[[package]]
+name = "tinyvec_macros"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "toml_datetime"

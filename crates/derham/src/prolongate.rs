@@ -42,7 +42,7 @@ use crate::{
 };
 
 use {
-  exterior::{Covariant, Dim, ExteriorGrade, MultiForm},
+  multialgebra::{Dim, ExteriorGrade, Tensor},
   simplicial::{
     atlas::{Bary, MeshPoint, SimplexQuadRule},
     linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
@@ -187,14 +187,14 @@ struct ProlongedBasisForm<'a> {
   grade: ExteriorGrade,
 }
 
-impl Section<Covariant> for ProlongedBasisForm<'_> {
+impl Section for ProlongedBasisForm<'_> {
   fn dim(&self) -> Dim {
     self.dim
   }
   fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn at(&self, point: &MeshPoint) -> MultiForm {
+  fn at(&self, point: &MeshPoint) -> Tensor {
     let parent_bary: Vector = self.bary_map * point.bary().view();
     // The basis value lives in the parent's reference frame; the child's Jacobian
     // maps the fine reference frame into the parent's, so pulling back along it
@@ -334,14 +334,14 @@ mod test {
     fine_coords: &'a MeshCoords,
     grade: ExteriorGrade,
   }
-  impl Section<Covariant> for ResampledViaEmbedding<'_> {
+  impl Section for ResampledViaEmbedding<'_> {
     fn dim(&self) -> Dim {
       self.fine.dim()
     }
     fn grade(&self) -> ExteriorGrade {
       self.grade
     }
-    fn at(&self, point: &MeshPoint) -> MultiForm {
+    fn at(&self, point: &MeshPoint) -> Tensor {
       let param = point.chart(self.fine).coord_simplex(self.fine_coords);
       let global = param.bary2global(point.bary());
       let ambient = self

@@ -24,12 +24,12 @@
 //! test, not an assumption.
 
 use derham::prolongate::prolongation_matrix;
-use exterior::ExteriorGrade;
 use iterative::{
   Jacobi, Level, VCycle,
   krylov::cg,
   {Report, StopCriterion},
 };
+use multialgebra::ExteriorGrade;
 use simplicial::{
   geometry::metric::mesh::MeshLengthsSq,
   linalg::{CsrMatrix, Vector},

@@ -98,7 +98,7 @@ use crate::{
 };
 
 use derham::cochain::Cochain;
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 use simplicial::{
   Dim,
   linalg::{CooMatrix, CsrMatrix, Vector},
@@ -910,8 +910,8 @@ mod test {
           .map(|k| {
             let form = glatt::field::DiffFormClosure::new(
               move |_: &coorder::Coord| {
-                exterior::MultiForm::new(
-                  Vector::from_element(exterior::exterior_dim(dim, k), 1.0),
+                multialgebra::Tensor::multiform(
+                  Vector::from_element(multialgebra::exterior_dim(dim, k), 1.0),
                   dim,
                   k,
                 )

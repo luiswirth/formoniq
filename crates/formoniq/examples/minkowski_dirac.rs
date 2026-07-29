@@ -75,7 +75,6 @@ extern crate nalgebra as na;
 
 use coorder::Coord;
 use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
-use exterior::{MultiForm, exterior_bases, exterior_dim};
 use formoniq::{
   assemble::assemble_galvec,
   fe::fe_l2_error,
@@ -85,6 +84,7 @@ use formoniq::{
 };
 use glatt::field::DiffFormClosure;
 use gramian::{CausalType, Metric};
+use multialgebra::{Tensor, Variance, exterior_bases, exterior_dim};
 use multiindex::Sign;
 use simplicial::{
   atlas::SimplexQuadRule,
@@ -138,14 +138,18 @@ fn lorentzian_star_table() {
 
   println!("Lorentzian Hodge star on 2-forms of Minkowski R^(1,3) (mostly-plus):");
   for blade in exterior_bases(dim, 2) {
-    let form = MultiForm::from_blade_signed(dim, Sign::Pos, blade);
-    let star = form.hodge_star(&eta, Sign::Pos);
-    let star_star = star.hodge_star(&eta, Sign::Pos);
+    let form = Tensor::from_blade_signed(dim, Sign::Pos, blade, Variance::Covariant);
+    let star = form.star(&eta, Sign::Pos);
+    let star_star = star.star(&eta, Sign::Pos);
 
-    let (coeff, star_blade) = star
+    let (coeff, star_basis) = star
       .basis_iter()
       .find(|(c, _)| *c != 0.0)
       .expect("star of a blade is a blade");
+    let star_blade = star_basis[0]
+      .as_mono()
+      .expect("a star of a blade is alternating")
+      .to_combination();
     let sign = if coeff > 0.0 { '+' } else { '-' };
     let involution = star_star.components()[blade.rank()];
     println!(
@@ -174,15 +178,18 @@ fn clifford_dispersion() {
 
 /// The wave covector $a$ of the manufactured plane wave: timelike, generic
 /// against the mesh axes.
-fn wave_covector(dim: usize) -> MultiForm {
+fn wave_covector(dim: usize) -> Tensor {
   let components = [0.9, 0.5, 0.3, 0.2];
-  MultiForm::line(PI * Vector::from_column_slice(&components[..dim]))
+  Tensor::line(
+    PI * Vector::from_column_slice(&components[..dim]),
+    Variance::Covariant,
+  )
 }
 
 /// One constant blade per grade: the polarization $omega_k$ of the plane wave,
 /// deterministic and fully populated so every rung of the complex couples.
-fn polarization(dim: usize, grade: usize) -> MultiForm {
-  MultiForm::new(
+fn polarization(dim: usize, grade: usize) -> Tensor {
+  Tensor::multiform(
     Vector::from_fn(exterior_dim(dim, grade), |i, _| {
       ((3 * i + 2 * grade) % 5) as f64 / 2.0 - 1.0
     }),
@@ -194,14 +201,14 @@ fn polarization(dim: usize, grade: usize) -> MultiForm {
 fn convergence(dim: usize, nsubs: &[usize]) {
   let eta = Metric::minkowski(dim);
   let a = wave_covector(dim);
-  let a_sharp = a.sharp(&eta);
+  let a_sharp = a.musical(&eta);
   let a_vec = a.components().clone();
 
   // The grade-k component of the Clifford action $c_a omega = a wedge omega -
   // iota_(a^sharp) omega$ on the mixed-grade polarization: the wedge raises
   // grade k-1, the contraction lowers grade k+1.
-  let clifford_component = |k: usize| -> MultiForm {
-    let mut component = MultiForm::zero(dim, k);
+  let clifford_component = |k: usize| -> Tensor {
+    let mut component = Tensor::multiform_zero(dim, k);
     if k >= 1 {
       component += a.wedge(&polarization(dim, k - 1));
     }

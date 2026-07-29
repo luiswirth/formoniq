@@ -2,24 +2,66 @@
 
 extern crate nalgebra as na;
 
-use multiindex::{Composition, binomial, combinations};
+pub mod tensor;
+pub mod variance;
+
+use gramian::Gramian;
+use multiindex::{
+  Composition, MonoIndex, MultiIndex, MultiIndices, Repetition, Word, binomial, combinations,
+};
 
 pub use multiindex::{Degree, Dim};
+pub use tensor::Tensor;
+pub use variance::Variance;
 
 pub type Vector<T = f64> = na::DVector<T>;
 pub type Matrix<T = f64> = na::DMatrix<T>;
 
-/// The sign two indices of one factor pick up on swap: the single bit
-/// separating $Lambda$ from $"Sym"$, since $Lambda(V) = "Sym"(V\[1\])$.
+/// The symmetry a slot imposes on its positions: none, or one of the two
+/// quotients by a character of $S_k$.
 ///
-/// Everything else about the two constructions follows from it. Alternating
-/// forbids repetition, so a basis element is a *subset* and the degree is
-/// bounded by the dimension; symmetric permits it, so a basis element is a
-/// *multiset* and the degree is unbounded.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Parity {
+/// Two axes, not one. Either the $S_k$ action is quotiented or it is not, and
+/// if it is, a character says how. A character lands in an abelian group, so it
+/// factors through the abelianization of $S_k$, which is $ZZ\/2$ for $k >= 2$:
+/// the sign gives [`Self::Alternating`] and the trivial character
+/// [`Self::Symmetric`], and those are the whole list. [`Self::Free`] is the
+/// unquotiented tensor power sitting above them both.
+///
+/// The representation follows the mathematics exactly. An alternating index is
+/// a subset and a symmetric one a multiset, and the shift makes both a single
+/// bitset with an alphabet-independent rank. A free index is a *word*: no
+/// symmetry to exploit, so nothing to compress and no way to rank it without
+/// knowing the alphabet. The cost of a family is its information content.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Symmetry {
+  /// No quotient: $V^(times.circle k)$, of dimension $n^k$.
+  Free,
+  /// Quotient by the sign character: $Lambda^k$, of dimension $binom(n, k)$.
+  #[default]
   Alternating,
+  /// Quotient by the trivial character: $"Sym"^k$, of dimension
+  /// $binom(n+k-1, k)$.
   Symmetric,
+}
+
+impl Symmetry {
+  /// The combinatorial reading, for the quotients: whether a basis multi-index
+  /// may repeat a symbol.
+  ///
+  /// `None` on [`Self::Free`], whose basis is a word rather than a monotone
+  /// index, so repetition is not the axis that describes it.
+  pub fn repetition(self) -> Option<Repetition> {
+    match self {
+      Symmetry::Free => None,
+      Symmetry::Alternating => Some(Repetition::Forbidden),
+      Symmetry::Symmetric => Some(Repetition::Allowed),
+    }
+  }
+
+  /// Whether this symmetry quotients the action at all.
+  pub fn is_free(self) -> bool {
+    self == Symmetry::Free
+  }
 }
 
 /// One tensor factor: $Lambda^k$ or $"Sym"^k$, of whichever space it is
@@ -29,52 +71,139 @@ pub enum Parity {
 /// the functor, not its value on a particular space. That is what lets one
 /// factor describe both ends of a map between spaces of different dimensions,
 /// as [`Factor::induced`] does on a rectangular one.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Factor {
-  pub parity: Parity,
-  pub degree: Degree,
+  symmetry: Symmetry,
+  degree: Degree,
 }
 
 impl Factor {
-  pub fn alternating(degree: impl Into<Degree>) -> Self {
+  /// The factor of the given symmetry and degree.
+  ///
+  /// The symmetry is never normalized away, not even where the degree makes the
+  /// two functors agree. $Lambda^0 = "Sym"^0 = RR$ and $Lambda^1 = "Sym"^1 = V$
+  /// as spaces, but a factor is a *position in a shape* rather than the space
+  /// it currently denotes, and operations move degree through that position:
+  /// [`Tensor::transfer`] into a degree-zero symmetric factor must give
+  /// $"Sym"^1$, not $Lambda^1$, and merging two degree-one factors gives
+  /// $"Sym"^2$ or $Lambda^2$ by the symmetry. Collapsing it would lose which
+  /// family the factor can grow back into.
+  pub fn new(symmetry: Symmetry, degree: impl Into<Degree>) -> Self {
     Self {
-      parity: Parity::Alternating,
-      degree: degree.into(),
-    }
-  }
-  pub fn symmetric(degree: impl Into<Degree>) -> Self {
-    Self {
-      parity: Parity::Symmetric,
+      symmetry,
       degree: degree.into(),
     }
   }
 
-  /// $dim Lambda^k (RR^n) = binom(n, k)$ and
-  /// $dim "Sym"^k (RR^n) = binom(n + k - 1, k)$.
+  pub fn alternating(degree: impl Into<Degree>) -> Self {
+    Self::new(Symmetry::Alternating, degree)
+  }
+  pub fn symmetric(degree: impl Into<Degree>) -> Self {
+    Self::new(Symmetry::Symmetric, degree)
+  }
+
+  pub fn symmetry(&self) -> Symmetry {
+    self.symmetry
+  }
+  pub fn degree(&self) -> Degree {
+    self.degree
+  }
+
+  pub fn is_alternating(&self) -> bool {
+    self.symmetry == Symmetry::Alternating
+  }
+  pub fn is_symmetric(&self) -> bool {
+    self.symmetry == Symmetry::Symmetric
+  }
+
+  /// The same functor at another degree.
+  pub fn with_degree(&self, degree: impl Into<Degree>) -> Self {
+    Self::new(self.symmetry, degree)
+  }
+
+  /// $dim Lambda^k (RR^n) = binom(n, k)$, $dim "Sym"^k (RR^n) = binom(n+k-1, k)$
+  /// and $dim V^(times.circle k) = n^k$.
   ///
-  /// Total at the trivial ends of both: a negative degree names the zero space
-  /// either way, and only the alternating factor has a top degree beyond which
-  /// it vanishes again. That asymmetry is the whole difference in the counting.
+  /// The two quotients are one binomial over the shifted alphabet, differing
+  /// only in how wide the shift makes it. The free power is the count no
+  /// symmetry reduces.
+  ///
+  /// Total at both trivial ends with no case of its own. A negative degree
+  /// names the zero space; an alternating degree past the top gives
+  /// $binom(n, k) = 0$ because the binomial already vanishes there, and a
+  /// symmetric or free factor over the zero space gives $0$ in positive degree.
   pub fn multidim(&self, dim: impl Into<Dim>) -> usize {
     let dim = dim.into();
-    match self.parity {
-      Parity::Alternating => self
-        .degree
-        .index_in(dim)
-        .map_or(0, |degree| binomial(dim.index(), degree)),
-      Parity::Symmetric => {
-        if self.degree.get() < 0 {
-          0
-        } else {
-          Composition::count(dim.index(), self.degree.index())
-        }
-      }
+    if self.degree.get() < 0 {
+      return 0;
     }
+    let degree = self.degree.index();
+    match self.symmetry.repetition() {
+      Some(repetition) => binomial(repetition.shifted_nsymbols(dim.index(), degree), degree),
+      None => Word::count(dim.index(), degree),
+    }
+  }
+
+  /// The basis of $F(RR^n)$ in the family's own order: colex on the quotients,
+  /// radix on the free power.
+  ///
+  /// Empty exactly where [`Self::multidim`] is zero, so the trivial ends need
+  /// no case of their own.
+  pub fn basis(&self, dim: impl Into<Dim>) -> MultiIndices {
+    let dim = dim.into();
+    // A trivial space enumerates nothing, expressed as an empty sweep rather
+    // than a case of its own.
+    let Some(degree) = (self.multidim(dim) > 0).then(|| self.degree.index()) else {
+      return MultiIndices::Word(Word::all(0, 1));
+    };
+    match self.symmetry.repetition() {
+      Some(repetition) => MultiIndices::Mono(MonoIndex::all(repetition, dim.index(), degree)),
+      None => MultiIndices::Word(Word::all(dim.index(), degree)),
+    }
+  }
+
+  /// The inner product induced on $F(V)$ by one on $V$: the $k times k$ minors
+  /// of the Gramian, under $det$ when alternating and $"per"$ when symmetric.
+  ///
+  /// The same minors [`Self::induced`] takes, of the metric rather than of a
+  /// map. Both are $sum_sigma "sign"(sigma) product_i A_(i sigma(i))$ under the
+  /// family's own [`Repetition::sign_of`], but that shared form is not the
+  /// implementation: it is $k!$ either way, where $det$ is cubic. The
+  /// separation is real, $"per"$ being #P-hard, so the two stay separate here.
+  ///
+  /// The normalization is not free: both families take the inner product
+  /// $V^(times.circle k)$ induces divided by $k!$, on unnormalized products
+  /// ($v_1 wedge dots.c wedge v_k = sum_sigma "sgn"(sigma) v_(sigma(1))
+  /// times.circle dots.c$, and the same unsigned for $v_1 dots.c v_k$). Both
+  /// quotients are $k!$, leaving $det$ against $"per"$ with no further factor.
+  ///
+  /// So under a Euclidean metric the alternating basis is orthonormal and the
+  /// symmetric one merely orthogonal, $norm(x^alpha)^2 = alpha!$, the
+  /// multiplicity a repeated slot carries.
+  pub fn gramian(&self, single: &Gramian) -> Gramian {
+    let dim = single.dim();
+    let basis: Vec<MultiIndex> = self.basis(dim).collect();
+    let entry = |row: &MultiIndex, col: &MultiIndex| {
+      let minor = Matrix::from_fn(self.degree.index(), self.degree.index(), |i, j| {
+        single[(row.symbol(i), col.symbol(j))]
+      });
+      match self.symmetry {
+        Symmetry::Alternating => minor.determinant(),
+        Symmetry::Symmetric => permanent(&minor),
+        // The free power induces the tensor power of the inner product, so an
+        // entry is the plain product down the diagonal: no sum over
+        // permutations, because there is no permutation to sum over.
+        Symmetry::Free => (0..self.degree.index()).map(|i| minor[(i, i)]).product(),
+      }
+    };
+    Gramian::new_unchecked(Matrix::from_fn(basis.len(), basis.len(), |i, j| {
+      entry(&basis[i], &basis[j])
+    }))
   }
 
   /// The functor applied to a linear map: $Lambda^k A$ or $"Sym"^k A$.
   ///
-  /// One construction read through the parity. The alternating entries are the
+  /// One construction read through the symmetry. The alternating entries are the
   /// $k times k$ minors under $det$, the symmetric ones the same minors under
   /// $"per"$ -- the signed and unsigned sums over the same permutations, which
   /// is the defining relation one level up.
@@ -82,11 +211,176 @@ impl Factor {
   /// Functoriality $F(A B) = F(A) F(B)$ holds for both: Cauchy-Binet on the
   /// alternating side, its permanental counterpart on the symmetric one.
   pub fn induced(&self, map: &Matrix) -> Matrix {
-    match self.parity {
-      Parity::Alternating => exterior_power(map, self.degree),
-      Parity::Symmetric => symmetric_power(map, self.degree),
+    match self.symmetry {
+      Symmetry::Alternating => exterior_power(map, self.degree),
+      Symmetry::Symmetric => symmetric_power(map, self.degree),
+      Symmetry::Free => tensor_power(map, self.degree),
     }
   }
+}
+
+/// One slot of a [`Tensor`]: a [`Factor`], the space it is evaluated over, and
+/// the side it is built from.
+///
+/// The unit an operation names, and the unit an axis of a dense array would be:
+/// a slot has an extent ([`Self::multidim`]) exactly as an axis has a length,
+/// and additionally a symmetry and a variance the array has no room for.
+///
+/// A slot is simultaneously a value it holds and an argument it eats (of the
+/// dual), those being the same thing under $V tilde.equals V^(**)$, so "value"
+/// and "argument" are readings rather than structure. What *is* structure is
+/// the [`Variance`], and the pattern of it across the slots.
+///
+/// The dimension lives here rather than on the tensor so that slots may be over
+/// different spaces, which is what a rectangular map or a genuinely mixed
+/// tensor needs. It does *not* live on [`Factor`], which is the functor and
+/// must stay dimension-free for [`Factor::induced`] to describe both ends of a
+/// map from one value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Slot {
+  pub factor: Factor,
+  pub variance: Variance,
+  pub dim: Dim,
+}
+
+impl Slot {
+  pub fn new(factor: Factor, variance: Variance, dim: impl Into<Dim>) -> Self {
+    Self {
+      factor,
+      variance,
+      dim: dim.into(),
+    }
+  }
+  /// A covariant slot: a factor of $V^*$.
+  pub fn covariant(factor: Factor, dim: impl Into<Dim>) -> Self {
+    Self::new(factor, Variance::Covariant, dim)
+  }
+  /// A contravariant slot: a factor of $V$.
+  pub fn contravariant(factor: Factor, dim: impl Into<Dim>) -> Self {
+    Self::new(factor, Variance::Contravariant, dim)
+  }
+
+  pub fn symmetry(&self) -> Symmetry {
+    self.factor.symmetry()
+  }
+  pub fn degree(&self) -> Degree {
+    self.factor.degree()
+  }
+  pub fn is_alternating(&self) -> bool {
+    self.factor.is_alternating()
+  }
+  pub fn is_symmetric(&self) -> bool {
+    self.factor.is_symmetric()
+  }
+  /// The extent of this slot: the dimension of $F(RR^n)$.
+  pub fn multidim(&self) -> usize {
+    self.factor.multidim(self.dim)
+  }
+  pub fn basis(&self) -> MultiIndices {
+    self.factor.basis(self.dim)
+  }
+  /// The Gramian measuring this slot, the variance choosing $g$ or $g^(-1)$.
+  ///
+  /// # Panics
+  /// If the metric is not of this slot's own space.
+  pub fn gramian(&self, metric: &gramian::Metric) -> Gramian {
+    assert_eq!(
+      metric.dim(),
+      self.dim.index(),
+      "a slot is measured by a metric of its own space"
+    );
+    self.factor.gramian(self.variance.gramian(metric))
+  }
+  /// The same slot with its variance flipped: what a musical isomorphism does.
+  pub fn dual(&self) -> Self {
+    Self::new(self.factor, self.variance.dual(), self.dim)
+  }
+  /// The same slot at another degree.
+  pub fn with_degree(&self, degree: impl Into<Degree>) -> Self {
+    Self::new(self.factor.with_degree(degree), self.variance, self.dim)
+  }
+  /// The same slot over another space.
+  pub fn with_dim(&self, dim: impl Into<Dim>) -> Self {
+    Self::new(self.factor, self.variance, dim)
+  }
+}
+
+/// The grade of an exterior form: the [`Degree`] under its exterior-algebra
+/// name.
+pub type ExteriorGrade = Degree;
+
+/// A basis blade $e_(i_1) wedge dots.c wedge e_(i_k)$: a strictly increasing
+/// multi-index.
+pub type Blade = multiindex::Combination;
+
+/// $dim Lambda^k (RR^n) = binom(n, k)$, and $0$ off $[0, n]$ where the space is
+/// trivial.
+pub fn exterior_dim(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> usize {
+  Factor::alternating(grade).multidim(dim)
+}
+
+/// The basis blades of $Lambda^k (RR^n)$ in colexicographic order: the order of
+/// the components of a single alternating slot.
+pub fn exterior_bases(
+  dim: impl Into<Dim>,
+  grade: impl Into<ExteriorGrade>,
+) -> impl Iterator<Item = Blade> {
+  let basis: Vec<MultiIndex> = Factor::alternating(grade).basis(dim).collect();
+  basis.into_iter().map(|index| {
+    index
+      .as_mono()
+      .expect("an alternating basis is monotone")
+      .to_combination()
+  })
+}
+
+/// The inner product on $Lambda^k$ induced by one on $V$:
+/// $inner(e_I, e_J) = det [inner(e_i, e_j)]_(i in I, j in J)$.
+pub fn multi_gramian(single: &Gramian, grade: impl Into<ExteriorGrade>) -> Gramian {
+  Factor::alternating(grade).gramian(single)
+}
+
+/// The induced inner product on multivectors $Lambda^k V$: $Lambda^k g$.
+pub fn multivector_gramian(metric: &gramian::Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
+  multi_gramian(metric.vector_gramian(), grade)
+}
+
+/// The induced inner product on multiforms $Lambda^k V^*$: $Lambda^k g^(-1)$.
+pub fn multiform_gramian(metric: &gramian::Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
+  multi_gramian(metric.covector_gramian(), grade)
+}
+
+/// The permanent: the determinant with every sign made positive,
+/// $"per" A = sum_sigma product_i A_(i sigma(i))$.
+///
+/// Ryser's inclusion-exclusion, $2^n n$ rather than the $n!$ of the definition.
+/// Still exponential, the permanent being #P-hard, so it is confined to the
+/// $k times k$ minors of a Gramian and is not how [`symmetric_power`]
+/// computes.
+pub fn permanent(matrix: &Matrix) -> f64 {
+  let n = matrix.nrows();
+  assert_eq!(n, matrix.ncols(), "the permanent is of a square matrix");
+  if n == 0 {
+    return 1.0;
+  }
+  let mut total = 0.0;
+  for subset in 1..(1u64 << n) {
+    let selected = subset.count_ones() as usize;
+    let product: f64 = (0..n)
+      .map(|row| {
+        (0..n)
+          .filter(|col| subset & (1 << col) != 0)
+          .map(|col| matrix[(row, col)])
+          .sum::<f64>()
+      })
+      .product();
+    total += if (n - selected).is_multiple_of(2) {
+      product
+    } else {
+      -product
+    };
+  }
+  total
 }
 
 /// The exterior power functor $Lambda^k$ applied to a linear map: the $k$-th
@@ -113,6 +407,20 @@ pub fn exterior_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
     }
   }
   power
+}
+
+/// The tensor power functor $V^(times.circle k)$ applied to a linear map: the
+/// $k$-fold Kronecker power $A^(times.circle k)$, on radix-ordered words.
+///
+/// The simplest of the three, and the one the other two are quotients of:
+/// no minors, no signs, just the product down each word.
+pub fn tensor_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
+  let degree = degree.into();
+  if degree.get() < 0 {
+    let factor = Factor::new(Symmetry::Free, degree);
+    return Matrix::zeros(factor.multidim(map.nrows()), factor.multidim(map.ncols()));
+  }
+  (0..degree.index()).fold(Matrix::identity(1, 1), |power, _| power.kronecker(map))
 }
 
 /// The symmetric power functor $"Sym"^k$ applied to a linear map, on
@@ -181,16 +489,15 @@ fn degree_of(ncoeffs: usize, nparts: usize) -> usize {
 }
 
 /// The map induced on $times.circle_i F_i$ by a linear map on the underlying
-/// space: the Kronecker product of the per-factor induced maps.
+/// space: the Kronecker product of the per-slot induced maps.
 ///
-/// This is the whole of functoriality on a tensor product, and it is uniform
-/// over the factors -- the parity is consulted only inside
-/// [`Factor::induced`], never here. An empty product of factors is the scalars,
-/// on which every map induces the identity.
-pub fn induced(factors: &[Factor], map: &Matrix) -> Matrix {
-  factors
+/// The whole of functoriality on a tensor product, uniform over the slots: the
+/// symmetry is consulted only inside [`Factor::induced`], never here. An empty
+/// product of slots is the scalars, on which every map induces the identity.
+pub fn induced(slots: &[Slot], map: &Matrix) -> Matrix {
+  slots
     .iter()
-    .map(|factor| factor.induced(map))
+    .map(|slot| slot.factor.induced(map))
     .reduce(|acc, factor| acc.kronecker(&factor))
     .unwrap_or_else(|| Matrix::identity(1, 1))
 }
@@ -233,7 +540,7 @@ mod test {
     }
   }
 
-  /// $F(A B) = F(A) F(B)$ for a single factor of either parity: Cauchy-Binet
+  /// $F(A B) = F(A) F(B)$ for a single factor of either symmetry: Cauchy-Binet
   /// on the alternating side and its permanental counterpart on the symmetric
   /// one.
   ///
@@ -242,10 +549,10 @@ mod test {
   #[test]
   fn each_factor_is_a_functor() {
     for degree in 0..=3 {
-      for parity in [Parity::Alternating, Parity::Symmetric] {
+      for symmetry in [Symmetry::Alternating, Symmetry::Symmetric] {
         for &(p, q, r) in &[(2, 3, 2), (3, 2, 3), (4, 3, 2), (2, 2, 4)] {
           let factor = Factor {
-            parity,
+            symmetry,
             degree: degree.into(),
           };
           let (a, b) = (probe(p, q, 1), probe(q, r, 2));
@@ -263,8 +570,8 @@ mod test {
   /// per-factor ones, and is itself a functor.
   ///
   /// This is the law the crate exists for: one composition rule covering
-  /// $Lambda^k times.circle "Sym"^l$ with the parity consulted only per
-  /// factor. Mixed parities and unequal degrees, so neither can stand in for
+  /// $Lambda^k times.circle "Sym"^l$ with the symmetry consulted only per
+  /// factor. Mixed symmetries and unequal degrees, so neither can stand in for
   /// the other.
   #[test]
   fn the_tensor_product_of_factors_is_a_functor() {
@@ -281,9 +588,11 @@ mod test {
     ];
     for factors in &factor_lists {
       for &(p, q, r) in &[(3, 3, 3), (4, 3, 3), (3, 4, 2)] {
+        // The slots name the *domain*; `induced` reads both ends off the map.
+        let slots = tensor::covariant_slots(factors.iter().copied(), q);
         let (a, b) = (probe(p, q, 3), probe(q, r, 4));
-        let composed = induced(factors, &(&a * &b));
-        let separate = induced(factors, &a) * induced(factors, &b);
+        let composed = induced(&slots, &(&a * &b));
+        let separate = induced(&slots, &a) * induced(&slots, &b);
 
         let expected_rows: usize = factors.iter().map(|f| f.multidim(p)).product();
         let expected_cols: usize = factors.iter().map(|f| f.multidim(r)).product();
@@ -310,7 +619,7 @@ mod test {
     let (first, second) = (Factor::symmetric(2), Factor::alternating(1));
     let map = probe(3, 4, 6);
     let (a, b) = (first.induced(&map), second.induced(&map));
-    let product = induced(&[first, second], &map);
+    let product = induced(&tensor::covariant_slots([first, second], map.ncols()), &map);
 
     for r1 in 0..a.nrows() {
       for c1 in 0..a.ncols() {
@@ -327,14 +636,14 @@ mod test {
   }
 
   /// At degree one every factor is the space itself, so the functor is the map
-  /// back again, whatever the parity. The base case that pins the conventions:
+  /// back again, whatever the symmetry. The base case that pins the conventions:
   /// it fails on a transposed index or a wrong basis order.
   #[test]
   fn degree_one_induces_the_map_itself() {
-    for parity in [Parity::Alternating, Parity::Symmetric] {
+    for symmetry in [Symmetry::Alternating, Symmetry::Symmetric] {
       let map = probe(3, 4, 5);
       let factor = Factor {
-        parity,
+        symmetry,
         degree: Degree::ONE,
       };
       assert_relative_eq!(factor.induced(&map), map);

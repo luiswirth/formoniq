@@ -48,8 +48,8 @@
 //! the gradient correction are intrinsic. A fully intrinsic, connection-based
 //! vector-nodal space is future work.
 
-use exterior::exterior_power;
 use iterative::{ApproxInverse, AuxiliarySpace, Jacobi, SelfAdjoint};
+use multialgebra::exterior_power;
 use simplicial::{
   geometry::coord::mesh::MeshCoords,
   linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
@@ -62,7 +62,7 @@ use crate::{
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 
 /// The vector-nodal interpolation
 /// $Pi: [cal(W) Lambda^0]^(binom(N,k)) -> cal(W) Lambda^k$, the de Rham map of a
@@ -351,8 +351,8 @@ mod tests {
     project::derham_map,
     section::{CoordFieldExt, Wedge},
   };
-  use exterior::ExteriorElement;
   use glatt::field::DiffFormClosure;
+  use multialgebra::Tensor;
   use simplicial::mesher::cartesian::CartesianGrid;
 
   /// Column $(a, I)$ of $Pi_"vec"$ is the de Rham map of $phi_a e_I$: the
@@ -370,7 +370,7 @@ mod tests {
         for covector in 0..ncovectors {
           // The constant ambient basis k-covector e_I, pulled onto the mesh.
           let e_i = DiffFormClosure::new(
-            move |_| ExteriorElement::new(unit(ncovectors, covector), dim, grade),
+            move |_| Tensor::multiform(unit(ncovectors, covector), dim, grade),
             dim,
             grade,
           );

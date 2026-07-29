@@ -19,7 +19,7 @@
 
 use coorder::Coord;
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 use simplicial::{
   Dim,
   atlas::MeshPoint,

@@ -27,8 +27,8 @@
 //! as the field is the thing to avoid.
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use exterior::{ExteriorGrade, MultiForm};
 use gramian::Metric;
+use multialgebra::{ExteriorGrade, Tensor};
 use simplicial::linalg::Vector;
 use simplicial::{
   Sign,
@@ -76,13 +76,13 @@ pub fn corner_bounds(values: &[f64]) -> (f32, f32) {
 /// what makes a top-grade density or an $(n-1)$-form's direction mean anything
 /// globally. Below the star the sign is irrelevant, which is why it costs
 /// nothing to pass it always: [`reduction_sign`] returns `Pos` there.
-pub fn reduced_form(form: MultiForm, metric: &Metric, sign: Sign) -> MultiForm {
+pub fn reduced_form(form: Tensor, metric: &Metric, sign: Sign) -> Tensor {
   let n = form.dim();
   let k = form.grade();
   if k <= n - k {
     form
   } else {
-    form.hodge_star(metric, sign)
+    form.star(metric, sign)
   }
 }
 
@@ -99,12 +99,12 @@ pub fn reduced_form(form: MultiForm, metric: &Metric, sign: Sign) -> MultiForm {
 /// The caller states that condition, because only the caller knows whether the
 /// form's own dimension is the manifold's (the trace onto a face is top on the
 /// face while carrying no global sign). `None` is the honest magnitude.
-pub fn scalarize(form: MultiForm, metric: &Metric, signed: Option<Sign>) -> f64 {
+pub fn scalarize(form: Tensor, metric: &Metric, signed: Option<Sign>) -> f64 {
   if form.grade() == 0 {
     return form.components()[0];
   }
   match signed {
-    Some(sign) => form.hodge_star(metric, sign).components()[0],
+    Some(sign) => form.star(metric, sign).components()[0],
     None => form.norm(metric),
   }
 }
@@ -407,12 +407,12 @@ mod tests {
     for dim in 2..=4 {
       let metric = Metric::euclidean(dim);
       for grade in 1..dim {
-        let ncoeffs = MultiForm::zero(dim, grade).components().len();
+        let ncoeffs = Tensor::multiform_zero(dim, grade).components().len();
         for i in 0..ncoeffs {
           let mut coeffs = na::DVector::zeros(ncoeffs);
           coeffs[i] = 2.0;
-          let form = MultiForm::new(coeffs, dim, grade);
-          let starred = form.clone().hodge_star(&metric, Sign::Pos);
+          let form = Tensor::multiform(coeffs, dim, grade);
+          let starred = form.clone().star(&metric, Sign::Pos);
           let (direct, reduced) = (
             scalarize(form, &metric, None),
             scalarize(starred, &metric, None),
@@ -432,10 +432,10 @@ mod tests {
   fn scalarize_is_signed_at_the_extremal_grades() {
     for dim in 1..=4 {
       let metric = Metric::euclidean(dim);
-      let zero_form = MultiForm::new(na::dvector![-1.0], dim, 0);
+      let zero_form = Tensor::multiform(na::dvector![-1.0], dim, 0);
       assert!((scalarize(zero_form, &metric, None) + 1.0).abs() < 1e-12);
 
-      let top = MultiForm::new(na::dvector![1.0], dim, dim);
+      let top = Tensor::multiform(na::dvector![1.0], dim, dim);
       let pos = scalarize(top.clone(), &metric, Some(Sign::Pos));
       let neg = scalarize(top, &metric, Some(Sign::Neg));
       assert!((pos + neg).abs() < 1e-12);

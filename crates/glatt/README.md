@@ -40,7 +40,7 @@ a Regge mesh has no continuum, a continuum has no mesh,
 and their one relation
 (pulling continuum data onto a mesh, and the approximation error that costs)
 lives in the crate above both.
-`glatt` itself depends only on the exterior algebra,
+`glatt` itself depends only on the multilinear algebra,
 and stands on its own as a small library
 for parametrized smooth manifolds and analytic form fields.
 

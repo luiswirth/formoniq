@@ -11,9 +11,16 @@ keywords = ["exterior-algebra", "symmetric-algebra", "multilinear", "tensor"]
 categories = ["mathematics"]
 
 [dependencies]
+gramian = { path = "../gramian", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = "0.35.0"
+tinyvec = { version = "1.11.0", features = ["alloc"] }
 
 [dev-dependencies]
+divan = "0.1.21"
 approx = "0.5.1"
+
+[[bench]]
+name = "algebra"
+harness = false

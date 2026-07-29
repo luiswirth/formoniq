@@ -2,10 +2,17 @@
 
 Combinatorics of finite index sets, in colexicographic order.
 
-The central type is `Combination`:
-a strictly increasing multi-index stored as a 64-bit bitset.
-It labels a basis element wherever ordered index subsets occur
-(a subset of vertices, a set of covector indices, a corner of a cube).
+The central type is `MonoIndex`:
+a monotone multi-index, weakly or strictly increasing according to whether it
+may repeat a symbol, stored as the bitset of its *shifted* word.
+The shift w_i ↦ w_i + i takes a weakly increasing word to a strictly
+increasing one, so in shifted form a multiset is a set and one bitset serves
+both families: ranking, enumeration, deletion and the complement are the same
+bit operations either way, and the family is consulted only for the sign.
+`Combination` is the strictly increasing case on its own, labelling a basis
+element wherever ordered index subsets occur (a subset of vertices, a set of
+covector indices, a corner of a cube), and `Composition` the weakly increasing
+one, an exponent vector.
 The crate enumerates and ranks everything in one convention, colex order,
 via the combinatorial number system.
 
@@ -43,7 +50,7 @@ and the alternating deletions square to zero.
 `multiindex` is the indexing layer of
 [formoniq](https://github.com/luiswirth/formoniq),
 a finite element exterior calculus (FEEC) engine:
-`exterior` builds its basis blades and `simplicial` its simplices on `Combination`,
+`multialgebra` builds its basis blades and `simplicial` its simplices on `Combination`,
 and the shared colex rank aligns their orderings.
 The crate depends on neither.
 It is pure combinatorics, usable on its own.

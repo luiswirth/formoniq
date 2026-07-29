@@ -4,7 +4,6 @@ resolver = "2"
 members = [
   "crates/formoniq",
   "crates/derham",
-  "crates/exterior",
   "crates/glatt",
   "crates/simplicial",
   "crates/multiindex",
@@ -24,7 +23,6 @@ members = [
 default-members = [
   "crates/formoniq",
   "crates/derham",
-  "crates/exterior",
   "crates/glatt",
   "crates/simplicial",
   "crates/multiindex",
