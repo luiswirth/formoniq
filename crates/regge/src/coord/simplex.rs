@@ -17,11 +17,11 @@
 //! (invariant 2).
 
 use super::mesh::MeshCoords;
-use crate::metric::simplex::SimplexLengthsSq;
+use crate::lengths::simplex::SimplexLengthsSq;
 use simplicial::topology::{handle::SimplexRef, simplex::Simplex};
 
 use coorder::Ambient;
-use gramian::Gramian;
+use metric::Metric;
 use simplicial::linalg::Matrix;
 
 pub use simplicial::atlas::SimplexCoords;
@@ -38,7 +38,7 @@ pub trait SimplexCoordsExt {
   /// pullback of the mesh's ambient inner product
   /// ([`MeshCoords::cell_metric`](crate::coord::mesh::MeshCoords::cell_metric)),
   /// of which this is the standard-signature case.
-  fn metric_tensor(&self) -> Gramian;
+  fn metric_tensor(&self) -> Metric;
 
   /// The Regge squared edge lengths this (Euclidean-ambient) coordinate
   /// realization has: the bridge from the extrinsic layer down into the
@@ -66,8 +66,8 @@ impl SimplexCoordsExt for SimplexCoords<Ambient> {
   /// pullback of the mesh's ambient inner product
   /// ([`MeshCoords::cell_metric`](crate::coord::mesh::MeshCoords::cell_metric)),
   /// of which this is the standard-signature case.
-  fn metric_tensor(&self) -> Gramian {
-    Gramian::from_euclidean_vectors(self.spanning_vectors())
+  fn metric_tensor(&self) -> Metric {
+    Metric::from_euclidean_vectors(self.spanning_vectors())
   }
 
   /// The Regge squared edge lengths this (Euclidean-ambient) coordinate
@@ -95,7 +95,7 @@ impl SimplexRefExt for SimplexRef<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::metric::simplex::SimplexLengthsSq;
+  use crate::lengths::simplex::SimplexLengthsSq;
   use multiindex::Dim;
   use simplicial::atlas::unit_vertices;
   use simplicial::linalg::Vector;

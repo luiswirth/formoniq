@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use glatt::field::DiffFormClosure;
-use regge::metric::mesh::MeshLengthsSq;
+use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::Sign;
 use simplicial::linalg::{Matrix, Vector};
 use simplicial::topology::orientation::Orientation;

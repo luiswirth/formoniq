@@ -9,7 +9,7 @@ use simplicial::{
   },
 };
 
-use gramian::{CausalType, Metric};
+use metric::{CausalType, Metric};
 use simplicial::linalg::Vector;
 
 use itertools::Itertools;
@@ -24,11 +24,11 @@ use std::{io, path::Path};
 /// One scalar per edge is the whole geometry of the simplicial manifold --
 /// Regge's "general relativity without coordinates" -- and the squared length
 /// is the primitive that keeps it signature-blind: positive spacelike, zero
-/// null, negative timelike, exactly the [`Gramian::norm_sq`] convention. A
+/// null, negative timelike, exactly the [`Metric::norm_sq`] convention. A
 /// Riemannian mesh is the all-positive, Euclidean-realizable corner; a
 /// Lorentzian simplicial spacetime is the same data with causal signs.
 ///
-/// [`Gramian::norm_sq`]: gramian::Gramian::norm_sq
+/// [`Metric::norm_sq`]: metric::Metric::norm_sq
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct MeshLengthsSq {
@@ -368,13 +368,9 @@ mod test {
               }
             }
 
-            let restricted = cell_metric.vector_gramian().pullback(&inclusion);
+            let restricted = cell_metric.pullback(&inclusion);
             let intrinsic = lengths.simplex_metric(face);
-            approx::assert_relative_eq!(
-              intrinsic.vector_gramian().matrix(),
-              restricted.matrix(),
-              epsilon = 1e-12
-            );
+            approx::assert_relative_eq!(intrinsic.matrix(), restricted.matrix(), epsilon = 1e-12);
           }
         }
       }

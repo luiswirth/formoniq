@@ -1,13 +1,13 @@
 [package]
-name = "gramian"
+name = "metric"
 version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
-description = "A Gram matrix and pseudo-Riemannian metric: an inner product of arbitrary signature expressed in a basis."
+description = "Pseudo-Riemannian metrics of arbitrary signature, and the multilinear-algebra operations that need one: inner products, the Hodge star, the musicals."
 repository = "https://github.com/luiswirth/formoniq"
 readme = "README.md"
-keywords = ["gram-matrix", "pseudo-riemannian", "linear-algebra"]
+keywords = ["metric", "pseudo-riemannian", "hodge-star", "linear-algebra"]
 categories = ["mathematics"]
 
 [dependencies]
@@ -18,7 +18,7 @@ nalgebra = "0.35.0"
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
 [features]
-serde = ["dep:serde", "nalgebra/serde-serialize"]
+serde = ["dep:serde", "nalgebra/serde-serialize", "multialgebra/serde"]
 
 [dev-dependencies]
 approx = "0.5.1"

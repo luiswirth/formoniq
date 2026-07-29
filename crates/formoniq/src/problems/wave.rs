@@ -9,7 +9,7 @@ use crate::{
 use crate::linalg::{faer::FaerCholesky, quadratic_form_sparse};
 use derham::cochain::Cochain;
 use multialgebra::ExteriorGrade;
-use regge::metric::mesh::MeshLengthsSq;
+use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector};
 
 pub struct WaveState {

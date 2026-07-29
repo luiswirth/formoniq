@@ -1,7 +1,8 @@
 use super::EdgeIdx;
 use simplicial::{Dim, topology::simplex::nedges};
 
-use gramian::{CausalType, Gramian, Metric};
+use metric::{CausalType, Metric};
+use multialgebra::Variance;
 use multiindex::{Combination, combinations, factorial};
 use simplicial::linalg::{Matrix, Vector};
 
@@ -9,7 +10,7 @@ use simplicial::linalg::{Matrix, Vector};
 /// metric signature.
 ///
 /// The squared length $s_(i j) = norm(v_j - v_i)^2_g$ is the Regge primitive
-/// -- signed, exactly like [`Gramian::norm_sq`]: positive on a spacelike
+/// -- signed, exactly like [`Metric::norm_sq`]: positive on a spacelike
 /// edge, zero on a null one, negative on a timelike one. Regge invented the
 /// calculus for Lorentzian spacetimes ("general relativity without
 /// coordinates"), and the squared length is what makes that work: the metric
@@ -190,9 +191,9 @@ impl SimplexLengthsSq {
   /// The spanning (basis) vector $e_i$ points from vertex $0$ to vertex
   /// $i + 1$, so edges from the origin are signed squared basis norms and
   /// $norm(v_j - v_i)^2_g = g_(i-1,i-1) + g_(j-1,j-1) - 2 g_(i-1,j-1)$
-  /// otherwise. Inverse of [`Self::to_metric_tensor`], with no square root
+  /// otherwise. Inverse of [`Self::metric`], with no square root
   /// anywhere: the causal sign of every edge survives.
-  pub fn from_metric_tensor(metric: &Gramian) -> Self {
+  pub fn from_metric(metric: &Metric) -> Self {
     let dim = metric.dim();
 
     let mut lengths_sq = Vector::zeros(nedges(dim.into()));
@@ -209,19 +210,12 @@ impl SimplexLengthsSq {
     Self::new(lengths_sq, dim.into())
   }
 
-  /// The full metric: the Gramian on tangent vectors together with its
-  /// inverse on covectors, of whatever signature the squared lengths
-  /// describe.
-  pub fn metric(&self) -> Metric {
-    Metric::new(self.to_metric_tensor())
-  }
-
   /// Regge calculus: the metric tensor is the polarization identity in the
   /// signed squared lengths, $g_(i i) = s_(0, i+1)$ and
   /// $g_(i j) = (s_(0, i+1) + s_(0, j+1) - s_(i+1, j+1)) \/ 2$ -- rational in
   /// the Regge data and valid on any signature, which is why the squared
   /// length, not the length, is the primitive.
-  pub fn to_metric_tensor(&self) -> Gramian {
+  pub fn metric(&self) -> Metric {
     let mut metric = Matrix::zeros(self.dim().index(), self.dim().index());
     for i in 0..self.dim().index() {
       metric[(i, i)] = self[edge_index(0, i + 1)];
@@ -238,7 +232,7 @@ impl SimplexLengthsSq {
         metric[(j, i)] = val;
       }
     }
-    Gramian::new(metric)
+    Metric::new(Variance::Covariant, metric)
   }
 }
 #[cfg(test)]
@@ -248,14 +242,14 @@ mod test {
 
   use approx::assert_relative_eq;
 
-  /// from_metric_tensor and to_metric_tensor are inverse -- on every
+  /// from_metric and metric are inverse -- on every
   /// signature, the flat models pulled back to non-diagonal form included.
   /// The Regge representation loses nothing of a pseudo-Riemannian metric.
   #[test]
   fn metric_tensor_roundtrip() {
     for dim in (1..=4usize).map(Dim::from) {
       let lengths_sq = SimplexLengthsSq::unit(dim);
-      let roundtrip = SimplexLengthsSq::from_metric_tensor(&lengths_sq.to_metric_tensor());
+      let roundtrip = SimplexLengthsSq::from_metric(&lengths_sq.metric());
       assert_relative_eq!(lengths_sq.vector(), roundtrip.vector(), epsilon = 1e-12);
 
       for q in 0..=dim.index() {
@@ -268,14 +262,10 @@ mod test {
             0.0
           }
         });
-        let g = Gramian::pseudo_euclidean(dim.index() - q, q).pullback(&j);
-        let regge = SimplexLengthsSq::from_metric_tensor(&g);
-        assert_relative_eq!(
-          regge.to_metric_tensor().matrix(),
-          g.matrix(),
-          epsilon = 1e-12
-        );
-        assert_eq!(regge.to_metric_tensor().signature(), (dim.index() - q, q));
+        let g = Metric::pseudo_euclidean(dim.index() - q, q).pullback(&j);
+        let regge = SimplexLengthsSq::from_metric(&g);
+        assert_relative_eq!(regge.metric().matrix(), g.matrix(), epsilon = 1e-12);
+        assert_eq!(regge.metric().signature(), (dim.index() - q, q));
       }
     }
   }
@@ -286,7 +276,7 @@ mod test {
   #[test]
   fn minkowski_regge_edges() {
     for dim in (2..=4usize).map(Dim::from) {
-      let regge = SimplexLengthsSq::from_metric_tensor(&Gramian::minkowski(dim.index()));
+      let regge = SimplexLengthsSq::from_metric(&Metric::minkowski(dim.index()));
       // Edge 0-1 is the time axis $e_0$.
       assert_eq!(regge.causal_type(edge_index(0, 1)), CausalType::Timelike);
       // Edge 0-2 is the space axis $e_1$.

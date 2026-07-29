@@ -12,7 +12,7 @@ categories = ["mathematics", "science"]
 
 [dependencies]
 coorder = { path = "../coorder", version = "0.2.0" }
-gramian = { path = "../gramian", version = "0.2.0" }
+metric = { path = "../metric", version = "0.2.0" }
 multialgebra = { path = "../multialgebra", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
 simplicial = { path = "../simplicial", version = "0.2.0" }
@@ -28,7 +28,7 @@ ciborium = { version = "0.2.2", optional = true }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
 [features]
-serde = ["dep:serde", "dep:ciborium", "nalgebra/serde-serialize", "gramian/serde", "multiindex/serde", "simplicial/serde"]
+serde = ["dep:serde", "dep:ciborium", "nalgebra/serde-serialize", "metric/serde", "multiindex/serde", "simplicial/serde"]
 
 [dev-dependencies]
 approx = "0.5.1"

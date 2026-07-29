@@ -17,7 +17,7 @@ glatt = { path = "../glatt", version = "0.2.0" }
 simplicial = { path = "../simplicial", version = "0.2.0" }
 regge = { path = "../regge", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }
-gramian = { path = "../gramian", version = "0.2.0" }
+metric = { path = "../metric", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
 iterative = { path = "../iterative", version = "0.2.0" }
 

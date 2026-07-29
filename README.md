@@ -69,17 +69,18 @@ is enforced by the crate boundaries rather than by convention.
 - **[`multiindex`](crates/multiindex/README.md)**:
   colexicographic combinatorics of finite index sets,
   with ranked combinations, signed index algebra and radix multi-indices.
-- **[`gramian`](crates/gramian/README.md)**:
-  inner-product and metric structure in a basis,
-  with Gram matrices, pseudo-Riemannian metrics of arbitrary signature
-  and the induced distance geometry.
 - **[`coorder`](crates/coorder/README.md)**:
   affine coordinates tagged by the space they live in,
   so the maps between coordinate spaces are explicit and their confusion does not compile.
 - **[`multialgebra`](crates/multialgebra/README.md)**:
   the exterior and symmetric algebras as one construction, and tensor products of them,
-  with the variance of each slot deciding pullback against pushforward,
-  the musical isomorphisms and which Gramian measures it.
+  metric-free throughout,
+  with the variance of each slot deciding pullback against pushforward
+  and which metric measures it.
+- **[`metric`](crates/metric/README.md)**:
+  pseudo-Riemannian metrics of arbitrary signature and the operations needing one:
+  the inner product, the Hodge star and the musical isomorphisms,
+  with g and g⁻¹ one datum rather than a stored pair.
 - **[`simplicial`](crates/simplicial/README.md)**:
   the simplicial complex and its piecewise-affine atlas, metric-free throughout,
   with a geometry a genuinely separate input rather than a field on the mesh.
@@ -104,7 +105,7 @@ and are usable on their own.
 `simplicial` carries combinatorial topology
 (boundary operators, homology, Betti numbers) alongside intrinsic Regge geometry,
 none of which needs a differential form.
-`multiindex` is colex-ranked combinatorics, `gramian` is metric linear algebra,
+`multiindex` is colex-ranked combinatorics, `metric` is pseudo-Riemannian linear algebra,
 and `glatt` is continuum differential geometry.
 FEEC is what `derham` and `formoniq` build on top,
 not something the layers below are entangled with.
@@ -133,13 +134,13 @@ The `Scene` carries the engine's own types (`Complex`, `MeshCoords`, `Cochain`)
 rather than a lossy export,
 so coloring, displacement and the choice of render mark stay decisions made on the real object.
 The bake then reduces a complex to what a rasterizer draws:
-simplices of dimension ≤ 2 embedded in R³, with winding and position made explicit.
+simplices of dimension â¤ 2 embedded in RÂ³, with winding and position made explicit.
 Downstream of the bake there are no FEEC types, only ambient geometry.
 
 Ambient dimension is fixed at 3, the native space of the GPU,
 while intrinsic dimension and form grade stay general within it.
 Two reductions carry this.
-Form grade reduces to a render mark through the reduced grade min(k, n−k):
+Form grade reduces to a render mark through the reduced grade min(k, nâk):
 a scalar density coloring, a glyph or particle line field, a standing-wave displacement height.
 Intrinsic dimension reduces to a render primitive min(n, 2):
 a surface to wound triangles, a curve to segments, a point set to points,
@@ -152,7 +153,7 @@ distinguished only by material data.
 ## Origin
 
 The first version was developed as the
-[BSc thesis](https://github.com/luiswirth/bsc-thesis) of Luis Wirth at ETH Zürich,
+[BSc thesis](https://github.com/luiswirth/bsc-thesis) of Luis Wirth at ETH ZÃ¼rich,
 supervised by Prof. Dr. Ralf Hiptmair.
 It focused on the elliptic Hodge-Laplace problem with the first-order Whitney basis
 ([arXiv:2506.02429](https://arxiv.org/abs/2506.02429)).
@@ -181,13 +182,13 @@ Classical finite element methods are usually written for a fixed dimension,
 in explicit ambient coordinates,
 with separate machinery for scalar and vector fields,
 and with gradient, curl and divergence each treated on their own terms.
-Conforming vector-valued elements, the Nédélec and Raviart-Thomas families,
+Conforming vector-valued elements, the NÃ©dÃ©lec and Raviart-Thomas families,
 were originally constructed case by case and are intricate to derive and implement.
 
 FEEC, developed by Arnold, Falk and Winther,
 replaces that patchwork with one construction over differential forms.
 Gradient, curl and divergence are one exterior derivative d.
-The scalar and vector Laplacians are one Hodge-Laplace operator Δ = dδ + δd.
+The scalar and vector Laplacians are one Hodge-Laplace operator Î = dÎ´ + Î´d.
 Nodal, edge and face elements are Whitney forms at different degrees.
 Once the vector calculus is gone,
 the same construction works in any dimension and on domains of any topology.
@@ -195,7 +196,7 @@ the same construction works in any dimension and on domains of any topology.
 The organizing idea is to discretize the whole de Rham complex at once
 rather than each function space in isolation,
 and to keep its structure exact under discretization:
-the nilpotency d∘d = 0, the exactness relations, and the cohomology.
+the nilpotency dâd = 0, the exactness relations, and the cohomology.
 A discretization that preserves these is stable and convergent,
 and reproduces the topology of the domain rather than recovering it approximately.
 This is what "structure-preserving" means here,
@@ -208,7 +209,7 @@ The first-order Whitney forms, indexed only by form degree k,
 recover the classical families as special cases:
 
 - k = 0: Lagrange (nodal) elements
-- k = 1: Nédélec edge elements
+- k = 1: NÃ©dÃ©lec edge elements
 - k = n-1: Raviart-Thomas elements
 - k = n: piecewise-constant discontinuous elements
 
@@ -216,13 +217,13 @@ Scalar and vector FEM, edge and face elements,
 are one construction taken at different degrees
 rather than four separately implemented families.
 In the FEEC classification the Whitney space is the lowest-order trimmed polynomial space,
-`WΛᵏ = P⁻₁Λᵏ`.
-Higher-order `P⁻ᵣΛᵏ` elements are a direction being explored.
+`WÎáµ = Pâ»âÎáµ`.
+Higher-order `Pâ»áµ£Îáµ` elements are a direction being explored.
 
 ## Intrinsic geometry
 
 Most finite element implementations assume an embedding:
-the domain lives in Rᴺ and geometry is read from vertex coordinates.
+the domain lives in Rá´º and geometry is read from vertex coordinates.
 formoniq does not.
 A domain is an abstract simplicial complex carrying a pseudo-Riemannian metric
 supplied intrinsically, from Regge-style signed squared edge lengths,
@@ -246,7 +247,7 @@ hyperbolic through the signature alone.
 The Hodge-Laplace operator is singular.
 Its kernel is the space of harmonic forms,
 and by Hodge's theorem that kernel is isomorphic to the de Rham cohomology of the domain,
-with dimension the Betti number βₖ, the number of k-dimensional holes.
+with dimension the Betti number Î²â, the number of k-dimensional holes.
 Topology therefore governs solvability:
 existence and uniqueness of the source problem hold only modulo the harmonics.
 
@@ -260,8 +261,8 @@ On a sphere it finds none.
 The mixed formulation of Arnold, Falk and Winther makes this structure explicit.
 It introduces the codifferential weakly,
 so that only the exterior derivative appears in the discrete spaces
-(finite element spaces conforming to both HΛᵏ and its adjoint are hard to build),
-carries the harmonic part as an unknown, and fixes the gauge u ⊥ ℋᵏ.
+(finite element spaces conforming to both HÎáµ and its adjoint are hard to build),
+carries the harmonic part as an unknown, and fixes the gauge u â¥ âáµ.
 The result is a well-posed saddle-point system.
 
 ## Structure preservation
@@ -270,17 +271,17 @@ Two maps connect the continuous and discrete complexes.
 The de Rham map R discretizes a form by integrating it over each simplex, giving a cochain.
 The Whitney map W reconstructs a cochain into a piecewise-polynomial form by interpolation.
 Both commute with the exterior derivative,
-so the Whitney forms `WΛᵏ` are a subcomplex of the de Rham complex
-and the projection Πₕ = W∘R commutes with d.
+so the Whitney forms `WÎáµ` are a subcomplex of the de Rham complex
+and the projection Î â = WâR commutes with d.
 
 On the discrete side the exterior derivative is purely topological:
 the transpose of the signed incidence matrix of the mesh, with no metric involved,
 dual to the simplicial boundary operator under the chain-cochain pairing.
-The boundary squares to zero (∂∘∂ = 0) exactly as the exterior derivative does (d∘d = 0).
+The boundary squares to zero (âââ = 0) exactly as the exterior derivative does (dâd = 0).
 
 These identities are the test suite.
-Nilpotency, Whitney's theorem R∘W = id, Stokes' theorem R∘d = d∘R,
-the commuting-subcomplex property d∘W = W∘d,
+Nilpotency, Whitney's theorem RâW = id, Stokes' theorem Râd = dâR,
+the commuting-subcomplex property dâW = Wâd,
 the functoriality of the exterior power and the involution of the Hodge star
 are stated as theorems and swept over all dimensions and grades.
 The suite is a machine-checked statement of the mathematics
