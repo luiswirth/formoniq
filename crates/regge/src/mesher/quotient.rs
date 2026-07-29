@@ -28,8 +28,8 @@
 use itertools::Itertools;
 use multiindex::cartesian::{cartesian2linear_mixed, linear2cartesian_mixed};
 
+use crate::lengths::mesh::MeshLengthsSq;
 use crate::mesher::cartesian::CartesianGrid;
-use crate::metric::mesh::MeshLengthsSq;
 use simplicial::{
   Dim,
   linalg::Vector,
@@ -433,7 +433,7 @@ impl FlatQuotient {
 #[cfg(test)]
 mod test {
   use super::{FlatQuotient, Identification};
-  use crate::metric::mesh::MeshLengthsSq;
+  use crate::lengths::mesh::MeshLengthsSq;
   use multiindex::Dim;
   use multiindex::binomial;
   use simplicial::{linalg::Vector, topology::complex::Complex};

@@ -18,7 +18,7 @@ glatt = { path = "../glatt" }
 simplicial = { path = "../simplicial" }
 regge = { path = "../regge", version = "0.2.0" }
 coorder = { path = "../coorder" }
-gramian = { path = "../gramian" }
+metric = { path = "../metric" }
 nalgebra = "0.35.0"
 # The bake's vertex records are laid out for a GPU upload, so they carry `Pod`
 # and `Zeroable`. `bytemuck` is the layout vocabulary alone -- a pure-Rust

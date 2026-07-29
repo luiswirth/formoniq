@@ -2,7 +2,7 @@
 //! space.
 //!
 //! These exist for visualization and for I/O, never for the core path: the
-//! engine consumes the intrinsic [`MeshLengthsSq`][crate::metric::mesh::MeshLengthsSq]
+//! engine consumes the intrinsic [`MeshLengthsSq`][crate::lengths::mesh::MeshLengthsSq]
 //! the quotient itself
 //! produces (invariant 2), and an embedding is a *second*, independent object.
 //! Where the embedding is not isometric the two are genuinely different

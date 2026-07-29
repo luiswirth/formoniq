@@ -16,63 +16,34 @@ use multialgebra::{
 };
 use multiindex::{MultiIndex, Sign};
 
-use crate::{Gramian, Metric};
+use crate::Metric;
 
-/// The Gramian measuring a slot of a variance: the metric tensor $g$ for the
-/// contravariant side, its inverse $g^(-1)$ for the covariant one.
+/// The metric induced on $times.circle_i F_i$: the Kronecker product of the
+/// per-slot metrics, in the same slot order as the components.
 ///
-/// The choice is never to be made by hand.
-pub fn variance_gramian(variance: Variance, metric: &Metric) -> &Gramian {
-  match variance {
-    Variance::Contravariant => metric.vector_gramian(),
-    Variance::Covariant => metric.covector_gramian(),
-  }
-}
-
-/// The Gramian measuring one slot, its variance choosing $g$ or $g^(-1)$.
-///
-/// # Panics
-/// If the metric is not of the slot's own space.
-pub fn slot_gramian(slot: &Slot, metric: &Metric) -> Gramian {
-  assert_eq!(
-    metric.dim(),
-    slot.dim.index(),
-    "a slot is measured by a metric of its own space"
-  );
-  Gramian::new_unchecked(
-    slot
-      .factor
-      .induced_form(variance_gramian(slot.variance, metric).matrix()),
-  )
-}
-
-/// The induced inner product on $times.circle_i F_i$: the Kronecker product of
-/// the per-slot Gramians, in the same slot order as the components.
-///
-/// Each slot chooses $g$ or $g^(-1)$ by its own variance, so a mixed tensor is
-/// measured correctly where a single global choice would not be.
-pub fn tensor_gramian(slots: &[Slot], metric: &Metric) -> Gramian {
+/// Each slot is measured by [`Metric::measuring`] against its own variance, so
+/// a mixed tensor is measured correctly where a single global choice would not
+/// be.
+pub fn tensor_metric(slots: &[Slot], metric: &Metric) -> Metric {
   let per_slot: Vec<Matrix> = slots
     .iter()
-    .map(|slot| slot_gramian(slot, metric).matrix().clone())
+    .map(|slot| metric.on_slot(slot).matrix().clone())
     .collect();
-  Gramian::new_unchecked(factorwise_kronecker(&per_slot))
+  Metric::new_unchecked(Variance::Covariant, factorwise_kronecker(&per_slot))
 }
 
-/// The inner product on $Lambda^k$ induced by one on $V$:
-/// $inner(e_I, e_J) = det [inner(e_i, e_j)]_(i in I, j in J)$.
-pub fn multi_gramian(single: &Gramian, grade: impl Into<ExteriorGrade>) -> Gramian {
-  Gramian::new_unchecked(Factor::alternating(grade).induced_form(single.matrix()))
+/// The metric induced on multivectors $Lambda^k V$: $Lambda^k g$.
+pub fn multivector_metric(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Metric {
+  metric
+    .measuring(Variance::Contravariant)
+    .induced(Factor::alternating(grade))
 }
 
-/// The induced inner product on multivectors $Lambda^k V$: $Lambda^k g$.
-pub fn multivector_gramian(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
-  multi_gramian(metric.vector_gramian(), grade)
-}
-
-/// The induced inner product on multiforms $Lambda^k V^*$: $Lambda^k g^(-1)$.
-pub fn multiform_gramian(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Gramian {
-  multi_gramian(metric.covector_gramian(), grade)
+/// The metric induced on multiforms $Lambda^k V^*$: $Lambda^k g^(-1)$.
+pub fn multiform_metric(metric: &Metric, grade: impl Into<ExteriorGrade>) -> Metric {
+  metric
+    .measuring(Variance::Covariant)
+    .induced(Factor::alternating(grade))
 }
 
 /// The metric inner product of two tensors of one shape.
@@ -88,7 +59,7 @@ pub fn inner(left: &Tensor, right: &Tensor, metric: &Metric) -> f64 {
     right.slots(),
     "an inner product is of one shape"
   );
-  tensor_gramian(left.slots(), metric).inner(left.components(), right.components())
+  tensor_metric(left.slots(), metric).inner(left.components(), right.components())
 }
 
 /// The metric operations on a [`Tensor`], as methods where the notation asks
@@ -99,8 +70,8 @@ pub fn inner(left: &Tensor, right: &Tensor, metric: &Metric) -> f64 {
 /// carries that where `star(&omega, ..)` would not. [`inner`] stays free,
 /// being symmetric in its two arguments.
 pub trait TensorExt {
-  /// The induced inner product as a Gramian on this tensor's own basis.
-  fn gramian(&self, metric: &Metric) -> Gramian;
+  /// The induced metric on this tensor's own basis.
+  fn induced_metric(&self, metric: &Metric) -> Metric;
   /// Magnitude $sqrt(abs(inner(v, v)))$, never NaN: on an indefinite metric the
   /// sign of [`inner`] carries the causal character separately.
   fn norm(&self, metric: &Metric) -> f64;
@@ -124,14 +95,14 @@ pub trait TensorExt {
   /// a contravariant slot, $sharp$ on a covariant one.
   ///
   /// Slot by slot rather than through one induced matrix, so a mixed tensor
-  /// raises and lowers the right indices instead of applying one Gramian to all
+  /// raises and lowers the right indices instead of applying one metric to all
   /// of them.
   fn musical(&self, metric: &Metric) -> Tensor;
 }
 
 impl TensorExt for Tensor {
-  fn gramian(&self, metric: &Metric) -> Gramian {
-    tensor_gramian(self.slots(), metric)
+  fn induced_metric(&self, metric: &Metric) -> Metric {
+    tensor_metric(self.slots(), metric)
   }
 
   fn norm(&self, metric: &Metric) -> f64 {
@@ -147,11 +118,11 @@ impl TensorExt for Tensor {
     );
     assert_eq!(metric.dim(), slot.dim.index());
 
-    let gramian = variance_gramian(slot.variance, metric);
-    let volume = multi_gramian(gramian, slot.dim).matrix()[(0, 0)]
+    let measuring = metric.measuring(slot.variance);
+    let volume = measuring.induced(Factor::alternating(slot.dim)).matrix()[(0, 0)]
       .abs()
       .sqrt();
-    let weighted = self.apply_to_slot(which, &slot.factor.induced(gramian.matrix()));
+    let weighted = self.apply_to_slot(which, &slot.factor.induced(measuring.matrix()));
 
     let mut starred_slots: Slots = self.slots().iter().copied().collect();
     starred_slots[which] = slot.with_degree(slot.dim - slot.degree());
@@ -180,7 +151,7 @@ impl TensorExt for Tensor {
       let slot = self.slots()[which];
       let matrix = slot
         .factor
-        .induced(variance_gramian(slot.variance, metric).matrix());
+        .induced(metric.measuring(slot.variance).matrix());
       musical = musical.apply_to_slot(which, &matrix).dualize_slot(which);
     }
     musical

@@ -30,7 +30,7 @@ use iterative::{
   {Report, StopCriterion},
 };
 use multialgebra::ExteriorGrade;
-use regge::metric::mesh::MeshLengthsSq;
+use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
   linalg::{CsrMatrix, Vector},
   topology::{complex::Complex, ordering::CellOrdering, refine::Subdivision},

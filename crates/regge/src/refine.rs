@@ -17,7 +17,7 @@
 //!   one -- and the metric it induces equals the intrinsic refinement, which is
 //!   the law that ties the two.
 
-use crate::{coord::mesh::MeshCoords, metric::CellGramians, metric::mesh::MeshLengthsSq};
+use crate::{coord::mesh::MeshCoords, lengths::CellGramians, lengths::mesh::MeshLengthsSq};
 use simplicial::{
   linalg::Vector,
   topology::{complex::Complex, refine::Subdivision},
@@ -122,7 +122,7 @@ mod test {
   }
 
   use crate::cell_volume;
-  use crate::metric::mesh::MeshLengthsSq;
+  use crate::lengths::mesh::MeshLengthsSq;
 
   /// Refining a Kuhn-triangulated grid reproduces the finer grid the generator
   /// would have built: $"refine"("grid"(n), r) tilde.equiv "grid"(n r)$, up to
@@ -203,11 +203,7 @@ mod test {
         let extrinsic = fine_coords.to_cell_gramians(sub.complex());
 
         for (a, b) in intrinsic.metrics().iter().zip(extrinsic.metrics().iter()) {
-          approx::assert_relative_eq!(
-            a.vector_gramian().matrix(),
-            b.vector_gramian().matrix(),
-            epsilon = 1e-12
-          );
+          approx::assert_relative_eq!(a.matrix(), b.matrix(), epsilon = 1e-12);
         }
       }
     }

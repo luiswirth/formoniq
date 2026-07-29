@@ -1,7 +1,7 @@
 use crate::operators::{ElMatProvider, ElVecProvider};
 
 use itertools::Itertools;
-use regge::metric::mesh::MeshLengthsSq;
+use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
   linalg::{CooMatrix, Vector},
   topology::complex::Complex,
@@ -100,7 +100,7 @@ mod test {
 
   use simplicial::linalg::Matrix;
 
-  use regge::{mesher::cartesian::CartesianGrid, metric::CellGramians};
+  use regge::{lengths::CellGramians, mesher::cartesian::CartesianGrid};
 
   /// Assembly consumes the edge-length primitive, so representation
   /// independence is a property of the conversions *into* it: routing a
@@ -144,7 +144,7 @@ mod test {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let mut matrix = coords.into_matrix();
       matrix.row_mut(0).scale_mut(0.7);
-      let spacetime = MeshCoords::with_ambient(matrix, gramian::Gramian::minkowski(dim.index()));
+      let spacetime = MeshCoords::with_ambient(matrix, metric::Metric::minkowski(dim.index()));
 
       let from_coords = spacetime.to_edge_lengths_sq(&topology);
       let from_gramians = spacetime

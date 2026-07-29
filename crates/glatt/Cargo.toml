@@ -13,7 +13,7 @@ categories = ["mathematics", "science"]
 [dependencies]
 multialgebra = { path = "../multialgebra", version = "0.2.0" }
 coorder = { path = "../coorder", version = "0.2.0" }
-gramian = { path = "../gramian", version = "0.2.0" }
+metric = { path = "../metric", version = "0.2.0" }
 
 nalgebra = "0.35.0"
 

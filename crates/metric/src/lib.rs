@@ -4,6 +4,10 @@ extern crate nalgebra as na;
 
 pub mod tensor;
 
+use std::borrow::Cow;
+
+use multialgebra::{Factor, Slot, Variance};
+
 /// The dimension of a space or object.
 pub type Dim = usize;
 
@@ -57,46 +61,67 @@ impl CausalType {
   }
 }
 
-/// A Gram matrix: a non-degenerate symmetric bilinear form expressed in a
-/// basis, of arbitrary signature $(p, q)$.
+/// A pseudo-Riemannian metric of arbitrary signature $(p, q)$: a
+/// non-degenerate symmetric bilinear form expressed in a basis, hence an
+/// element of $"Sym"^2(V^*)$ when covariant and of $"Sym"^2(V)$ when
+/// contravariant.
 ///
-/// Riemannian ($q = 0$, positive definite) and Lorentzian inner products are
-/// one signature-parameterized type, not two code paths: every operation is
+/// Riemannian ($q = 0$, positive definite) and Lorentzian metrics are one
+/// signature-parameterized type, not two code paths: every operation is
 /// defined for any signature, and the few that are signature-sensitive (the
-/// volume factor, the causal trichotomy) read the signature off the form
+/// volume factor, the causal trichotomy) read the signature off the metric
 /// itself rather than assuming it.
+///
+/// **$g$ and $g^(-1)$ are one datum, not two.** The variance says which of the
+/// two this is: covariant is the metric tensor $g$, which measures vectors;
+/// contravariant is $g^(-1)$, which measures covectors. [`Self::dual`] is the
+/// exact passage between them and [`Self::measuring`] asks for the one that
+/// measures a given variance, so no code chooses $g$ against $g^(-1)$ by hand
+/// and no second field can fall out of step with the first. Since each
+/// determines the other, either may be handed to an operation and the answer
+/// is the same.
+///
+/// The dense matrix is the *representation*, not the identity: `det`, `dual`
+/// and the pullback are matrix operations with optimized implementations, which
+/// is why the matrix is what is stored.
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Gramian {
+pub struct Metric {
+  /// Whether this is $g$ (covariant, on $V$) or $g^(-1)$ (contravariant, on
+  /// $V^*$). No representational footprint, so it is stated, never derived.
+  variance: Variance,
   /// Symmetric non-degenerate matrix.
   matrix: Matrix,
 }
-impl Gramian {
-  pub fn new(matrix: Matrix) -> Self {
+impl Metric {
+  pub fn new(variance: Variance, matrix: Matrix) -> Self {
     assert!(is_symmetric(&matrix), "Matrix must be symmetric.");
-    let this = Self { matrix };
+    let this = Self { variance, matrix };
     assert!(
       this.is_nondegenerate(),
       "Matrix must be non-degenerate (invertible)."
     );
     this
   }
-  pub fn new_unchecked(matrix: Matrix) -> Self {
+  pub fn new_unchecked(variance: Variance, matrix: Matrix) -> Self {
     if cfg!(debug_assertions) {
-      Self::new(matrix)
+      Self::new(variance, matrix)
     } else {
-      Self { matrix }
+      Self { variance, matrix }
     }
   }
+  /// The metric a family of vectors (as columns) induces by being measured in a
+  /// Euclidean ambient: $g = V^top V$. Covariant, being a metric on the domain
+  /// those columns are indexed by.
   pub fn from_euclidean_vectors(vectors: Matrix) -> Self {
     assert!(is_full_rank(&vectors, 1e-9), "Matrix must be full rank.");
     let matrix = vectors.transpose() * vectors;
-    Self::new_unchecked(matrix)
+    Self::new_unchecked(Variance::Covariant, matrix)
   }
-  /// Orthonormal euclidean metric.
+  /// Orthonormal euclidean metric. Self-dual, $g = g^(-1) = I$.
   pub fn euclidean(dim: Dim) -> Self {
     let matrix = Matrix::identity(dim, dim);
-    Self::new_unchecked(matrix)
+    Self::new_unchecked(Variance::Covariant, matrix)
   }
   /// The flat pseudo-Euclidean form of signature $(p, q)$:
   /// $"diag"(+1, dots.c, +1, -1, dots.c, -1)$ with $p$ pluses followed by $q$
@@ -107,7 +132,7 @@ impl Gramian {
     for i in p..dim {
       matrix[(i, i)] = -1.0;
     }
-    Self::new_unchecked(matrix)
+    Self::new_unchecked(Variance::Covariant, matrix)
   }
   /// The Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$ in the mostly-plus
   /// convention: the timelike direction is basis vector $0$, the remaining
@@ -118,11 +143,15 @@ impl Gramian {
     assert!(dim >= 1, "Minkowski space has at least the time axis.");
     let mut matrix = Matrix::identity(dim, dim);
     matrix[(0, 0)] = -1.0;
-    Self::new_unchecked(matrix)
+    Self::new_unchecked(Variance::Covariant, matrix)
   }
 
   pub fn matrix(&self) -> &Matrix {
     &self.matrix
+  }
+  /// Whether this is $g$ (covariant) or $g^(-1)$ (contravariant).
+  pub fn variance(&self) -> Variance {
+    self.variance
   }
   pub fn dim(&self) -> Dim {
     self.matrix.nrows()
@@ -165,31 +194,83 @@ impl Gramian {
         .iter()
         .all(|lambda| lambda.abs() > 1e-12 * scale)
   }
-  pub fn inverse(self) -> Self {
+  /// The metric on the dual space: $g^(-1)$ from $g$ and back, with the
+  /// variance flipped to match.
+  ///
+  /// Total because non-degeneracy is checked at construction, and an involution
+  /// up to floating point. This is the only passage between the two, and it is
+  /// computed rather than stored: $g$ determines $g^(-1)$, so a stored pair
+  /// would be one datum in two places.
+  pub fn dual(&self) -> Self {
     let matrix = self
       .matrix
+      .clone()
       .try_inverse()
       .expect("Non-degenerate is always invertible.");
-    Self::new_unchecked(matrix)
+    Self::new_unchecked(self.variance.dual(), matrix)
   }
 
-  /// The pullback $J^top G J$ of the metric along a linear map $J$.
+  /// The metric that measures a slot of the given variance: $g$ for a
+  /// contravariant slot (vectors), $g^(-1)$ for a covariant one (covectors).
   ///
-  /// $G$ is a covariant 2-tensor, and this is its pullback: if $J: U -> V$
-  /// sends a basis of $U$ to vectors of $V$, the result is the Gramian $U$
-  /// inherits by measuring those images with $G$. For definite $G$, injective
-  /// $J$ (full column rank) keeps the result a metric; for indefinite $G$ the
+  /// Borrowed when this metric is already the right one, computed when it is
+  /// not, so the common case costs nothing. Correct whichever of the two is
+  /// handed in, each determining the other.
+  pub fn measuring(&self, slot: Variance) -> Cow<'_, Self> {
+    if self.variance == slot.dual() {
+      Cow::Borrowed(self)
+    } else {
+      Cow::Owned(self.dual())
+    }
+  }
+
+  /// The metric induced on $F(V)$, of the same variance: the $k times k$ minors
+  /// of this one under $det$ for an alternating factor and $"per"$ for a
+  /// symmetric one.
+  ///
+  /// $Lambda^k g$ measures multivectors when $g$ measures vectors, so the
+  /// variance is inherited rather than chosen. One method over both families,
+  /// which is why there is no separate exterior version.
+  pub fn induced(&self, factor: Factor) -> Self {
+    Self::new_unchecked(self.variance, factor.induced_form(&self.matrix))
+  }
+
+  /// The metric induced on one slot's own basis, its variance choosing $g$ or
+  /// $g^(-1)$ and its factor the minors.
+  ///
+  /// # Panics
+  /// If the metric is not of the slot's space.
+  pub fn on_slot(&self, slot: &Slot) -> Self {
+    assert_eq!(
+      self.dim(),
+      slot.dim.index(),
+      "a slot is measured by a metric of its own space"
+    );
+    self.measuring(slot.variance).induced(slot.factor)
+  }
+
+  /// The pullback $J^top g J$ of the metric along a linear map $J$.
+  ///
+  /// $g$ is a symmetric 2-tensor, and this is its pullback: if $J: U -> V$
+  /// sends a basis of $U$ to vectors of $V$, the result is the metric $U$
+  /// inherits by measuring those images with $g$. For definite $g$, injective
+  /// $J$ (full column rank) keeps the result a metric; for indefinite $g$ the
   /// pullback onto a proper subspace can be degenerate (a null subspace), so
   /// only square invertible $J$ -- e.g. the affine child-cell Jacobians of a
   /// simplex subdivision -- is guaranteed to stay a metric, with the same
   /// signature by Sylvester's law of inertia.
+  ///
+  /// The variance is preserved: a pullback of $g$ is a $g$ on the domain, and
+  /// pulling back $g^(-1)$ along $J$ is *not* the inverse of the pulled-back
+  /// $g$ unless $J$ is invertible. Take the dual after pulling back, not
+  /// before.
   pub fn pullback(&self, jacobian: &Matrix) -> Self {
-    Self::new_unchecked(self.inner_mat(jacobian, jacobian))
+    Self::new_unchecked(self.variance, self.inner_mat(jacobian, jacobian))
   }
 }
 
 /// Inner product functionality expressed directly in terms of the basis.
-impl Gramian {
+impl Metric {
   pub fn basis_inner(&self, i: usize, j: usize) -> f64 {
     self.matrix[(i, j)]
   }
@@ -243,135 +324,14 @@ impl Gramian {
     ((d_va + d_vb - d_ab) / (2.0 * (d_va * d_vb).sqrt())).acos()
   }
 }
-impl std::ops::Index<(usize, usize)> for Gramian {
+impl std::ops::Index<(usize, usize)> for Metric {
   type Output = f64;
   fn index(&self, (i, j): (usize, usize)) -> &Self::Output {
     &self.matrix[(i, j)]
   }
 }
 
-/// A pseudo-Riemannian metric: the Gramian on tangent vectors together with
-/// its inverse, the induced Gramian on covectors.
-///
-/// One signature-parameterized type for every non-degenerate symmetric metric:
-/// Riemannian geometry is the special case $q = 0$, Lorentzian geometry the
-/// case $q = 1$ (mostly-plus), with no separate code path for either.
-///
-/// Keeping both Gramians eliminates the recurring question of whether a
-/// computation needs $g$ or $g^(-1)$: contravariant quantities (vectors) are
-/// measured by [`Self::vector_gramian`], covariant ones (forms) by
-/// [`Self::covector_gramian`] -- indefinite or not.
-#[derive(Debug, Clone)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Metric {
-  vector_gramian: Gramian,
-  covector_gramian: Gramian,
-}
 impl Metric {
-  pub fn new(vector_gramian: Gramian) -> Self {
-    let covector_gramian = vector_gramian.clone().inverse();
-    Self {
-      vector_gramian,
-      covector_gramian,
-    }
-  }
-  /// Orthonormal euclidean metric.
-  pub fn euclidean(dim: Dim) -> Self {
-    Self {
-      vector_gramian: Gramian::euclidean(dim),
-      covector_gramian: Gramian::euclidean(dim),
-    }
-  }
-  /// The Minkowski metric $eta$ (mostly-plus, time along basis vector $0$):
-  /// the flat Lorentzian metric. $eta^(-1) = eta$, so both Gramians are the
-  /// same matrix.
-  pub fn minkowski(dim: Dim) -> Self {
-    Self {
-      vector_gramian: Gramian::minkowski(dim),
-      covector_gramian: Gramian::minkowski(dim),
-    }
-  }
-
-  pub fn dim(&self) -> Dim {
-    self.vector_gramian.dim()
-  }
-  /// The metric tensor $g$: the inner product on tangent vectors.
-  pub fn vector_gramian(&self) -> &Gramian {
-    &self.vector_gramian
-  }
-  /// The inverse metric tensor $g^(-1)$: the inner product on covectors.
-  pub fn covector_gramian(&self) -> &Gramian {
-    &self.covector_gramian
-  }
-  /// The volume factor $sqrt(abs(det g))$ of the metric: the density of the
-  /// (pseudo-)volume form, on any signature.
-  pub fn det_sqrt(&self) -> f64 {
-    self.vector_gramian.det_sqrt()
-  }
-  /// The signature $(p, q)$ of the metric. The covector Gramian shares it:
-  /// inversion preserves eigenvalue signs.
-  pub fn signature(&self) -> Signature {
-    self.vector_gramian.signature()
-  }
-  /// Whether the metric is Riemannian: the positive-definite special case
-  /// $q = 0$.
-  pub fn is_riemannian(&self) -> bool {
-    self.vector_gramian.is_riemannian()
-  }
-
-  /// The pullback of the metric along a linear map $J$ of tangent spaces:
-  /// the metric $J^top g J$ that a domain inherits by pushing its vectors
-  /// through $J$ and measuring them with $g$. The covector Gramian is the
-  /// inverse, recomputed rather than pushed forward. For an affine subcell of
-  /// a flat cell, $J$ is the cell's constant Jacobian and this is the subcell's
-  /// exact metric, of the same signature (Sylvester); for indefinite $g$ a
-  /// non-square $J$ can land on a degenerate (null) subspace, which is no
-  /// longer a metric -- see [`Gramian::pullback`].
-  pub fn pullback(&self, jacobian: &Matrix) -> Self {
-    Self::new(self.vector_gramian.pullback(jacobian))
-  }
-}
-
-/// Metric operations on tangent vectors (contravariant quantities), measured
-/// by the metric tensor $g$. These are the canonical measurements of
-/// directions and magnitudes; the dual operations on covectors are available
-/// through [`Self::covector_gramian`].
-impl Metric {
-  /// Inner product $g(v, w)$ of two tangent vectors.
-  pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
-    self.vector_gramian.inner(v, w)
-  }
-  /// Signed squared length $g(v, v)$ of a tangent vector: the primitive that
-  /// stays well defined on any signature, and whose sign is the causal
-  /// character.
-  pub fn norm_sq(&self, v: &Vector) -> f64 {
-    self.vector_gramian.norm_sq(v)
-  }
-  /// Magnitude $sqrt(abs(g(v, v)))$ of a tangent vector. On an indefinite
-  /// metric this is meaningful only together with the causal character
-  /// ([`Self::causal_type`]); it is never NaN.
-  pub fn norm(&self, v: &Vector) -> f64 {
-    self.vector_gramian.norm(v)
-  }
-  /// The causal character of a tangent vector: the sign of $g(v, v)$,
-  /// in the mostly-plus convention of [`CausalType`].
-  pub fn causal_type(&self, v: &Vector) -> CausalType {
-    self.vector_gramian.causal_type(v)
-  }
-  /// Cosine of the angle between two tangent vectors.
-  /// Meaningful on a Riemannian (definite) metric only.
-  pub fn angle_cos(&self, v: &Vector, w: &Vector) -> f64 {
-    self.vector_gramian.angle_cos(v, w)
-  }
-  /// Angle (in radians) between two tangent vectors.
-  /// Meaningful on a Riemannian (definite) metric only.
-  pub fn angle(&self, v: &Vector, w: &Vector) -> f64 {
-    self.vector_gramian.angle(v, w)
-  }
-}
-
-/// Inner product functionality on arbitrary elements.
-impl Gramian {
   pub fn inner(&self, v: &Vector, w: &Vector) -> f64 {
     (v.transpose() * self.matrix() * w).x
   }
@@ -422,7 +382,7 @@ mod tests {
 
   #[test]
   fn euclidean_angles_and_norms() {
-    let g = Gramian::euclidean(2);
+    let g = Metric::euclidean(2);
     let e0 = Vector::from_column_slice(&[1.0, 0.0]);
     let e1 = Vector::from_column_slice(&[0.0, 1.0]);
 
@@ -436,7 +396,10 @@ mod tests {
   fn nonstandard_metric_angle_matches_definition() {
     // A metric that stretches the second axis; the coordinate axes stay
     // g-orthogonal, but a diagonal vector no longer bisects them.
-    let g = Gramian::new(Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 4.0]));
+    let g = Metric::new(
+      Variance::Covariant,
+      Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 4.0]),
+    );
     let v = Vector::from_column_slice(&[1.0, 1.0]);
     let w = Vector::from_column_slice(&[1.0, 0.0]);
 
@@ -447,12 +410,12 @@ mod tests {
   }
 
   // 2 on the diagonal, 1 off it: SPD with eigenvalues `dim+1` (once) and 1.
-  fn spd(dim: Dim) -> Gramian {
+  fn spd(dim: Dim) -> Metric {
     let mut m = Matrix::from_element(dim, dim, 1.0);
     for i in 0..dim {
       m[(i, i)] = 2.0;
     }
-    Gramian::new_unchecked(m)
+    Metric::new_unchecked(Variance::Covariant, m)
   }
 
   // A deterministic full-column-rank `nrows x ncols` matrix (ncols <= nrows):
@@ -509,34 +472,56 @@ mod tests {
     }
   }
 
-  /// A pulled-back pseudo-Riemannian metric recomputes its covector Gramian as
-  /// the inverse of the pulled-back vector Gramian, rather than pushing the old
-  /// inverse forward.
+  /// $g$ and $g^(-1)$ are one datum: `dual` is an involution that flips the
+  /// variance, and `measuring` returns the same metric whichever of the two it
+  /// is handed. That is what makes a caller unable to pick the wrong one.
   #[test]
-  fn metric_pullback_inverts_the_pulled_back_metric() {
+  fn the_dual_is_an_involution_and_measuring_is_side_blind() {
     for n in 1..=4 {
-      let metric = Metric::new(spd(n));
-      let j = full_col_rank(n, n);
-      let pulled = metric.pullback(&j);
-      let expected_covector = pulled.vector_gramian().clone().inverse();
-      close(
-        pulled.covector_gramian().matrix(),
-        expected_covector.matrix(),
-      );
+      let g = spd(n);
+      let inverse = g.dual();
+
+      assert_eq!(g.variance(), Variance::Covariant);
+      assert_eq!(inverse.variance(), Variance::Contravariant);
+      close(inverse.dual().matrix(), g.matrix());
+      close(&(g.matrix() * inverse.matrix()), &Matrix::identity(n, n));
+
+      // Vectors are measured by g, covectors by g^-1, from either side.
+      for slot in [Variance::Contravariant, Variance::Covariant] {
+        close(g.measuring(slot).matrix(), inverse.measuring(slot).matrix());
+      }
+      close(g.measuring(Variance::Contravariant).matrix(), g.matrix());
+      close(g.measuring(Variance::Covariant).matrix(), inverse.matrix());
     }
   }
 
+  /// Taking the dual and pulling back do not commute in general, which is why
+  /// `pullback` preserves the variance instead of inverting: $(J^* g)^(-1)$ is
+  /// $J^(-1) g^(-1) J^(-top)$, equal to $J^* (g^(-1))$ only when $J$ is
+  /// orthogonal. They agree on the identity, and the general failure is what the
+  /// doc contract warns about.
   #[test]
-  fn metric_measures_tangent_vectors_with_g() {
-    let g = Gramian::new(Matrix::from_row_slice(2, 2, &[2.0, 0.0, 0.0, 3.0]));
-    let metric = Metric::new(g.clone());
-    let v = Vector::from_column_slice(&[1.0, 1.0]);
-    let w = Vector::from_column_slice(&[1.0, -1.0]);
+  fn the_dual_and_the_pullback_do_not_commute() {
+    for n in 1..=4 {
+      let g = spd(n);
+      let j = full_col_rank(n, n);
 
-    // Convenience methods on the metric agree with the tangent (vector) Gramian.
-    assert!((metric.inner(&v, &w) - g.inner(&v, &w)).abs() < 1e-12);
-    assert!((metric.norm(&v) - g.norm(&v)).abs() < 1e-12);
-    assert!((metric.angle(&v, &w) - g.angle(&v, &w)).abs() < 1e-12);
+      close(
+        g.pullback(&Matrix::identity(n, n)).dual().matrix(),
+        g.dual().pullback(&Matrix::identity(n, n)).matrix(),
+      );
+
+      let pull_then_dual = g.pullback(&j).dual();
+      let dual_then_pull = g.dual().pullback(&j);
+      assert_eq!(pull_then_dual.variance(), Variance::Contravariant);
+      assert_eq!(dual_then_pull.variance(), Variance::Contravariant);
+      if n > 1 {
+        assert!(
+          (pull_then_dual.matrix() - dual_then_pull.matrix()).amax() > 1e-9,
+          "the two orders must differ, or the law is vacuous"
+        );
+      }
+    }
   }
 
   /// The flat models carry their signature by construction: signature
@@ -548,7 +533,7 @@ mod tests {
     for dim in 0..=4 {
       for q in 0..=dim {
         let p = dim - q;
-        let g = Gramian::pseudo_euclidean(p, q);
+        let g = Metric::pseudo_euclidean(p, q);
         assert_eq!(g.signature(), (p, q));
         assert_eq!(g.is_riemannian(), q == 0);
         if dim > 0 {
@@ -565,7 +550,7 @@ mod tests {
   fn signature_is_congruence_invariant() {
     for dim in 1..=4 {
       for q in 0..=dim {
-        let g = Gramian::pseudo_euclidean(dim - q, q);
+        let g = Metric::pseudo_euclidean(dim - q, q);
         let j = full_col_rank(dim, dim);
         assert_eq!(g.pullback(&j).signature(), (dim - q, q));
       }
@@ -577,7 +562,7 @@ mod tests {
   /// is never NaN, on either side of the cone.
   #[test]
   fn minkowski_causal_types() {
-    let eta = Gramian::minkowski(4);
+    let eta = Metric::minkowski(4);
     assert_eq!(eta.signature(), (3, 1));
 
     let e0 = Vector::from_column_slice(&[1.0, 0.0, 0.0, 0.0]);
@@ -595,23 +580,26 @@ mod tests {
     let metric = Metric::minkowski(4);
     assert_eq!(metric.signature(), (3, 1));
     assert_eq!(metric.causal_type(&e0), CausalType::Timelike);
-    close(
-      metric.covector_gramian().matrix(),
-      metric.vector_gramian().matrix(),
-    );
+    close(metric.dual().matrix(), metric.matrix());
   }
 
   /// A symmetric but degenerate matrix is not a metric.
   #[test]
   #[should_panic(expected = "non-degenerate")]
   fn degenerate_is_rejected() {
-    Gramian::new(Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 0.0]));
+    Metric::new(
+      Variance::Covariant,
+      Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 0.0]),
+    );
   }
 
   /// A non-symmetric matrix is not a bilinear form of ours.
   #[test]
   #[should_panic(expected = "symmetric")]
   fn nonsymmetric_is_rejected() {
-    Gramian::new(Matrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0]));
+    Metric::new(
+      Variance::Covariant,
+      Matrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0]),
+    );
   }
 }
