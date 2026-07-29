@@ -101,6 +101,37 @@ pub trait HilbertComplex {
   }
 }
 
+/// The $L^2 Lambda^k$ pairing of two cochains of a discrete complex,
+/// $angle.l u, v angle.r_(L^2) = u^top M_k v$.
+///
+/// The **metric** duality, where [`pairing`](derham::cochain::pairing) is the
+/// metric-free one. A chain-cochain pairing needs nothing but the incidence;
+/// this needs the mass matrix, hence a geometry, and the two must not be
+/// conflated: the first is a statement about the complex, the second about the
+/// manifold it discretizes.
+///
+/// Symmetric and positive definite on a Riemannian geometry, indefinite on a
+/// Lorentzian one, exactly as the metric it is assembled from.
+///
+/// A free function, not a method: an inner product privileges neither argument.
+///
+/// # Panics
+/// If the grades disagree or either does not match the complex.
+pub fn l2_pairing(complex: &impl HilbertComplex, left: &Cochain, right: &Cochain) -> f64 {
+  assert_eq!(
+    left.grade(),
+    right.grade(),
+    "an L2 pairing is between cochains of one grade"
+  );
+  let mass = CsrMatrix::from(&complex.mass(left.grade()));
+  assert_eq!(
+    mass.ncols(),
+    left.coeffs().len(),
+    "an L2 pairing is over the complex's own degrees of freedom"
+  );
+  crate::linalg::bilinear_form_sparse(&mass, left.coeffs(), right.coeffs())
+}
+
 /// The discrete Hilbert complex of Whitney forms,
 ///
 /// $cal(W) Lambda^0 -> cal(W) Lambda^1 -> dots.c -> cal(W) Lambda^n$
@@ -738,6 +769,52 @@ mod test {
       assert_eq!((ldd_top.nrows(), ldd_top.ncols()), (ndofs_top, ndofs_top));
       let ldd_top = CsrMatrix::from(&ldd_top);
       assert!(ldd_top.values().iter().all(|&v| v == 0.0), "dim={dim}");
+    }
+  }
+
+  /// The $L^2$ pairing is symmetric and positive definite on a Riemannian
+  /// geometry, and it is *not* the chain-cochain pairing.
+  ///
+  /// The two dualities a discrete complex carries, kept apart. The metric-free
+  /// one integrates a cochain over a chain and needs only the incidence; this
+  /// one needs the mass matrix, hence a geometry. Asserting they disagree on a
+  /// nontrivial input is what stops a later refactor from quietly routing one
+  /// through the other.
+  #[test]
+  fn the_l2_pairing_is_the_metric_duality_and_the_other_is_not() {
+    use approx::assert_relative_eq;
+    use derham::cochain::pairing;
+    use simplicial::topology::homology::Chain;
+
+    for dim in 1..=3 {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let geometry = coords.to_edge_lengths_sq(&topology);
+      let complex = WhitneyComplex::new(&topology, &geometry);
+
+      for grade in 0..=dim {
+        let ndofs = complex.ndofs(grade);
+        let u = Cochain::new(grade, Vector::from_fn(ndofs, |i, _| ((i % 5) as f64) - 2.0));
+        let v = Cochain::new(grade, Vector::from_fn(ndofs, |i, _| ((i % 7) as f64) - 3.0));
+
+        assert_relative_eq!(
+          l2_pairing(&complex, &u, &v),
+          l2_pairing(&complex, &v, &u),
+          epsilon = 1e-10
+        );
+        assert!(
+          l2_pairing(&complex, &u, &u) > 0.0,
+          "dim {dim} grade {grade}: the L2 pairing is not positive definite"
+        );
+
+        // The same cochain against the chain with those coefficients: no
+        // geometry consulted, and a different number.
+        let chain = Chain::new(grade, v.coeffs().iter().map(|c| c.round() as i64).collect());
+        let combinatorial = pairing(&u, &chain);
+        assert!(
+          (combinatorial - l2_pairing(&complex, &u, &v)).abs() > 1e-9,
+          "dim {dim} grade {grade}: the two pairings coincide, so one is not what it claims"
+        );
+      }
     }
   }
 }
