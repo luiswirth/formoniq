@@ -23,15 +23,15 @@
 
 use coorder::{Ambient, CoordSpace, Coords, Vector};
 
-use exterior::{Contravariant, Covariant, Degree, Dim, ExteriorElement, ExteriorGrade, Variance};
+use multialgebra::{Degree, Dim, ExteriorGrade, Tensor, Variance};
 
 /// A field of exterior elements over a coordinate domain $Omega subset RR^m$,
 /// of the given [`Variance`]: a differential form when covariant, a
 /// multivector field when contravariant.
-pub trait CoordField<V: Variance, S: CoordSpace = Ambient> {
+pub trait CoordField<S: CoordSpace = Ambient> {
   fn dim(&self) -> Dim;
   fn grade(&self) -> ExteriorGrade;
-  fn at(&self, coord: &Coords<S>) -> ExteriorElement<V>;
+  fn at(&self, coord: &Coords<S>) -> Tensor;
 }
 
 /// A coordinate field given by a pointwise closure.
@@ -41,24 +41,24 @@ pub trait CoordField<V: Variance, S: CoordSpace = Ambient> {
 /// $(omega, dif omega, Delta omega)$ that want to sit in one collection. The
 /// dynamic call is one indirection per evaluation, off any hot inner loop -- a
 /// consumer that needs the speed monomorphizes over [`CoordField`] instead.
-pub struct FieldClosure<V: Variance, S: CoordSpace = Ambient> {
-  closure: Box<PointwiseFn<V, S>>,
+pub struct FieldClosure<S: CoordSpace = Ambient> {
+  closure: Box<PointwiseFn<S>>,
   dim: Dim,
   grade: ExteriorGrade,
 }
 
 /// The pointwise law of a [`FieldClosure`]: a function of a domain coordinate.
-type PointwiseFn<V, S> = dyn Fn(&Coords<S>) -> ExteriorElement<V> + Sync;
+type PointwiseFn<S> = dyn Fn(&Coords<S>) -> Tensor + Sync;
 
-/// A differential form on a coordinate domain: a covariant [`FieldClosure`].
-pub type DiffFormClosure<S = Ambient> = FieldClosure<Covariant, S>;
-/// A multivector field on a coordinate domain: a contravariant
-/// [`FieldClosure`].
-pub type MultiVectorFieldClosure<S = Ambient> = FieldClosure<Contravariant, S>;
+/// A differential form on a coordinate domain.
+///
+/// An alias, not a distinct type: the variance of the values a closure returns
+/// is theirs to state, so it names the intent rather than constraining it.
+pub type DiffFormClosure<S = Ambient> = FieldClosure<S>;
 
-impl<V: Variance, S: CoordSpace> FieldClosure<V, S> {
+impl<S: CoordSpace> FieldClosure<S> {
   pub fn new(
-    closure: impl Fn(&Coords<S>) -> ExteriorElement<V> + Sync + 'static,
+    closure: impl Fn(&Coords<S>) -> Tensor + Sync + 'static,
     dim: impl Into<Dim>,
     grade: impl Into<ExteriorGrade>,
   ) -> Self {
@@ -69,18 +69,22 @@ impl<V: Variance, S: CoordSpace> FieldClosure<V, S> {
     }
   }
 
-  /// A scalar field: grade 0, where the two variances coincide.
+  /// A scalar field: one slot at grade 0.
   pub fn scalar(f: impl Fn(&Coords<S>) -> f64 + Sync + 'static, dim: impl Into<Dim>) -> Self {
     let dim = dim.into();
     Self::new(
-      move |x| ExteriorElement::scalar(f(x), dim),
+      move |x| Tensor::multiform(Vector::from_element(1, f(x)), dim, Degree::ZERO),
       dim,
       Degree::ZERO,
     )
   }
-  /// A grade-1 field, from its coefficients in the standard basis.
+  /// A 1-form field, from its components in the standard dual basis.
   pub fn line(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: impl Into<Dim>) -> Self {
-    Self::new(move |x| ExteriorElement::line(f(x)), dim, Degree::ONE)
+    Self::new(
+      move |x| Tensor::line(f(x), Variance::Covariant),
+      dim,
+      Degree::ONE,
+    )
   }
 
   pub fn constant_scalar(value: f64, dim: impl Into<Dim>) -> Self {
@@ -105,24 +109,29 @@ impl<S: CoordSpace> DiffFormClosure<S> {
     Self::line(f, dim)
   }
 }
-impl<S: CoordSpace> MultiVectorFieldClosure<S> {
-  /// A vector field $v = sum_i v^i diff_i$.
+impl<S: CoordSpace> FieldClosure<S> {
+  /// A vector field $v = sum_i v^i diff_i$: contravariant, where
+  /// [`Self::line`] is the covariant 1-form.
   pub fn vector_field(
     f: impl Fn(&Coords<S>) -> Vector + Sync + 'static,
     dim: impl Into<Dim>,
   ) -> Self {
-    Self::line(f, dim)
+    Self::new(
+      move |x| Tensor::line(f(x), Variance::Contravariant),
+      dim,
+      Degree::ONE,
+    )
   }
 }
 
-impl<V: Variance, S: CoordSpace> CoordField<V, S> for FieldClosure<V, S> {
+impl<S: CoordSpace> CoordField<S> for FieldClosure<S> {
   fn dim(&self) -> Dim {
     self.dim
   }
   fn grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn at(&self, coord: &Coords<S>) -> ExteriorElement<V> {
+  fn at(&self, coord: &Coords<S>) -> Tensor {
     (self.closure)(coord)
   }
 }
@@ -200,7 +209,7 @@ mod tests {
     assert_eq!(omega.grade(), 1);
     assert_eq!(omega.at(&x).components(), &coeffs);
 
-    let v = MultiVectorFieldClosure::vector_field(
+    let v = FieldClosure::vector_field(
       {
         let c = coeffs.clone();
         move |_| c.clone()

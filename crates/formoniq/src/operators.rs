@@ -4,10 +4,8 @@ use {
     section::Section,
     trace::FaceTrace,
   },
-  exterior::{
-    Contravariant, Covariant, Dim, ExteriorGrade, MultiForm, exterior_power, multiform_gramian,
-  },
   gramian::{Gramian, Metric},
+  multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power, multiform_gramian},
   multiindex::{Combination, Sign},
   simplicial::{
     atlas::{
@@ -226,7 +224,7 @@ impl CellQuadrature {
   /// $[integral_K f(x, W_sigma (x)) vol]_sigma$.
   pub fn integrate<F>(&self, shapes: &LsfSamples, chart: Chart, vol: f64, f: F) -> ElVec
   where
-    F: Fn(&MeshPoint, &MultiForm) -> f64,
+    F: Fn(&MeshPoint, &Tensor) -> f64,
   {
     assert_eq!(shapes.nnodes(), self.nodes.len());
 
@@ -252,7 +250,7 @@ impl CellQuadrature {
     f: F,
   ) -> ElMat
   where
-    F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> f64,
+    F: Fn(&MeshPoint, &Tensor, &Tensor) -> f64,
   {
     assert_eq!(rows.nnodes(), self.nodes.len());
     assert_eq!(cols.nnodes(), self.nodes.len());
@@ -354,7 +352,7 @@ impl BoundaryQuadrature {
   /// continuum, the interpolation of a cochain, or a combinator over either is
   /// invisible here, which is what makes natural boundary data intrinsic by the
   /// same code path that serves an embedded source.
-  pub fn integrate_form(&self, chart: Chart, form: &impl Section<Covariant>) -> f64 {
+  pub fn integrate_form(&self, chart: Chart, form: &impl Section) -> f64 {
     assert_eq!(form.dim(), self.dim);
     assert_eq!(
       form.grade(),
@@ -382,7 +380,7 @@ impl BoundaryQuadrature {
   /// [`Self::integrate_form`].
   pub fn integrate_pair<F>(&self, rows: &LsfSamples, cols: &LsfSamples, chart: Chart, f: F) -> ElMat
   where
-    F: Fn(&MeshPoint, &MultiForm, &MultiForm) -> MultiForm,
+    F: Fn(&MeshPoint, &Tensor, &Tensor) -> Tensor,
   {
     assert_eq!(rows.nnodes(), self.nodes.len());
     assert_eq!(cols.nnodes(), self.nodes.len());
@@ -418,7 +416,7 @@ pub struct WeightedHodgeMassElmat<'a, F> {
   quad: CellQuadrature,
   shapes: LsfSamples,
 }
-impl<'a, F: Section<Covariant>> WeightedHodgeMassElmat<'a, F> {
+impl<'a, F: Section> WeightedHodgeMassElmat<'a, F> {
   /// Panics unless the coefficient is a grade-0 section: a weight is a scalar.
   pub fn new(
     coefficient: &'a F,
@@ -441,7 +439,7 @@ impl<'a, F: Section<Covariant>> WeightedHodgeMassElmat<'a, F> {
     }
   }
 }
-impl<F: Sync + Section<Covariant>> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
+impl<F: Sync + Section> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
   fn row_grade(&self) -> ExteriorGrade {
     self.grade
   }
@@ -505,7 +503,7 @@ pub struct LieDerivativeElmat<'a, V> {
   boundary_trial: LsfSamples,
 }
 
-impl<'a, V: Section<Contravariant>> LieDerivativeElmat<'a, V> {
+impl<'a, V: Section> LieDerivativeElmat<'a, V> {
   /// One `quad_degree` serves both integrals, at their own dimensions.
   ///
   /// Degree $2 + p$ is exact for a velocity of polynomial degree $p$: the
@@ -538,7 +536,7 @@ impl<'a, V: Section<Contravariant>> LieDerivativeElmat<'a, V> {
   }
 }
 
-impl<V: Sync + Section<Contravariant>> ElMatProvider for LieDerivativeElmat<'_, V> {
+impl<V: Sync + Section> ElMatProvider for LieDerivativeElmat<'_, V> {
   fn row_grade(&self) -> ExteriorGrade {
     self.grade
   }
@@ -567,7 +565,7 @@ impl<V: Sync + Section<Contravariant>> ElMatProvider for LieDerivativeElmat<'_, 
       |point, test, trial| {
         trial
           .interior_product(&self.velocity.at(point))
-          .wedge(&test.hodge_star(metric, Sign::Pos))
+          .wedge(&test.star(metric, Sign::Pos))
       },
     );
 
@@ -594,7 +592,7 @@ pub struct SourceElVec<'a, F> {
   quad: CellQuadrature,
   shapes: LsfSamples,
 }
-impl<'a, F: Section<Covariant>> SourceElVec<'a, F> {
+impl<'a, F: Section> SourceElVec<'a, F> {
   pub fn new(source: &'a F, qr: Option<SimplexQuadRule>) -> Self {
     let quad = CellQuadrature::new(source.dim(), qr);
     let shapes = LsfSamples::whitney(source.dim(), source.grade(), quad.nodes());
@@ -605,7 +603,7 @@ impl<'a, F: Section<Covariant>> SourceElVec<'a, F> {
     }
   }
 }
-impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
+impl<F: Sync + Section> ElVecProvider for SourceElVec<'_, F> {
   fn grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
@@ -623,6 +621,7 @@ impl<F: Sync + Section<Covariant>> ElVecProvider for SourceElVec<'_, F> {
 #[cfg(test)]
 mod test {
   use super::*;
+  use multialgebra::Variance;
   use multiindex::factorial;
   use simplicial::Dim;
   use simplicial::topology::complex::Complex;
@@ -631,7 +630,7 @@ mod test {
     cochain::Cochain,
     interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
-  use exterior::MultiVector;
+  use multialgebra::Tensor;
   use simplicial::{geometry::metric::simplex::SimplexLengthsSq, topology::simplex::unit_subsimps};
 
   use approx::assert_relative_eq;
@@ -678,16 +677,16 @@ mod test {
   /// A constant vector field in the cell's reference frame.
   struct ConstantVelocity {
     dim: Dim,
-    value: MultiVector,
+    value: Tensor,
   }
-  impl Section<Contravariant> for ConstantVelocity {
+  impl Section for ConstantVelocity {
     fn dim(&self) -> Dim {
       self.dim
     }
     fn grade(&self) -> ExteriorGrade {
       Dim::ONE
     }
-    fn at(&self, _point: &MeshPoint) -> MultiVector {
+    fn at(&self, _point: &MeshPoint) -> Tensor {
       self.value.clone()
     }
   }
@@ -696,12 +695,13 @@ mod test {
   /// lambda_(tau_j) beta_j$ and both $v$ and the blades $beta_j$ constant,
   /// $dif iota_v W_tau = k! sum_j (-1)^j dif lambda_(tau_j) wedge iota_v
   /// beta_j$.
-  fn dif_interior_of(dim: Dim, dof_simp: Combination, v: &MultiVector) -> MultiForm {
+  fn dif_interior_of(dim: Dim, dof_simp: Combination, v: &Tensor) -> Tensor {
     let nvertices = (dim + 1).index();
     let difbarys = unit_difbarys(dim);
     let grade = Dim::from(dof_simp.card() - 1);
 
-    let blade = |c| MultiForm::from_blade_signed(nvertices, multiindex::Sign::Pos, c);
+    let blade =
+      |c| Tensor::from_blade_signed(nvertices, multiindex::Sign::Pos, c, Variance::Covariant);
     dof_simp
       .deletions()
       .map(|(sign, vertex, rest)| {
@@ -711,7 +711,7 @@ mod test {
       })
       .reduce(|a, b| a + b)
       .map(|form| factorial(grade.index()) as f64 * form)
-      .unwrap_or_else(|| MultiForm::zero(dim, grade))
+      .unwrap_or_else(|| Tensor::multiform_zero(dim, grade))
   }
 
   /// The identity the Lie derivative element matrix rests on: with the shape
@@ -733,10 +733,13 @@ mod test {
 
       let velocity = ConstantVelocity {
         dim,
-        value: MultiVector::line(Vector::from_iterator(
-          dim.index(),
-          (0..dim.index()).map(|i| 0.4 * (i as f64) + 0.9),
-        )),
+        value: Tensor::line(
+          Vector::from_iterator(
+            dim.index(),
+            (0..dim.index()).map(|i| 0.4 * (i as f64) + 0.9),
+          ),
+          Variance::Contravariant,
+        ),
       };
 
       let volume = CellQuadrature::new(dim, Some(SimplexQuadRule::degree(dim, 2)));
@@ -755,7 +758,7 @@ mod test {
           |point, test, trial| {
             trial
               .interior_product(&velocity.at(point))
-              .wedge(&test.hodge_star(&metric, multiindex::Sign::Pos))
+              .wedge(&test.star(&metric, multiindex::Sign::Pos))
           },
         );
 
@@ -790,10 +793,13 @@ mod test {
 
       let velocity = ConstantVelocity {
         dim,
-        value: MultiVector::line(Vector::from_iterator(
-          dim.index(),
-          (0..dim.index()).map(|i| 1.3 - 0.6 * (i as f64)),
-        )),
+        value: Tensor::line(
+          Vector::from_iterator(
+            dim.index(),
+            (0..dim.index()).map(|i| 1.3 - 0.6 * (i as f64)),
+          ),
+          Variance::Contravariant,
+        ),
       };
 
       let elmat = LieDerivativeElmat::new(&velocity, Dim::ZERO, 2).eval(&metric, chart);
@@ -832,14 +838,17 @@ mod test {
 
       let velocity = ConstantVelocity {
         dim,
-        value: MultiVector::line(Vector::from_iterator(
-          dim.index(),
-          (0..dim.index()).map(|i| 0.8 - 0.3 * (i as f64)),
-        )),
+        value: Tensor::line(
+          Vector::from_iterator(
+            dim.index(),
+            (0..dim.index()).map(|i| 0.8 - 0.3 * (i as f64)),
+          ),
+          Variance::Contravariant,
+        ),
       };
       // $iota_v vol$, the flux form the defect integrates.
-      let flux = MultiForm::one(dim)
-        .hodge_star(&metric, multiindex::Sign::Pos)
+      let flux = Tensor::one(dim)
+        .star(&metric, multiindex::Sign::Pos)
         .interior_product(&velocity.value);
 
       let boundary = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));

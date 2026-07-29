@@ -33,8 +33,8 @@ use std::io;
 use std::path::Path;
 
 use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
-use exterior::{ExteriorGrade, MultiForm};
 use gramian::Metric;
+use multialgebra::{ExteriorGrade, Tensor};
 use simplicial::{
   Dim, Sign,
   atlas::MeshPoint,
@@ -332,7 +332,7 @@ fn sample_cells<T>(
   topology: &Complex,
   coords: &MeshCoords,
   cochain: &Cochain,
-  reduce: impl Fn(Cell, MultiForm, &Metric, Option<Sign>) -> T,
+  reduce: impl Fn(Cell, Tensor, &Metric, Option<Sign>) -> T,
 ) -> Vec<T> {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   topology
@@ -352,7 +352,7 @@ fn sample_cells<T>(
 /// composition the glyph mark draws.
 fn cell_vectors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<[f64; 3]> {
   sample_cells(topology, coords, cochain, |cell, form, metric, sign| {
-    let field = reduced_form(form, metric, sign.unwrap_or(Sign::Pos)).sharp(metric);
+    let field = reduced_form(form, metric, sign.unwrap_or(Sign::Pos)).musical(metric);
     let ambient = cell
       .coord_simplex(coords)
       .pushforward_vector(field.components());
@@ -663,7 +663,7 @@ mod tests {
       let form = interpolant.eval(&MeshPoint::barycenter(cell.idx()));
       let expected = cell.coord_simplex(&coords).pushforward_vector(
         reduced_form(form, &metric, sign)
-          .sharp(&metric)
+          .musical(&metric)
           .components(),
       );
       for (icomponent, &value) in ambient.iter().enumerate() {

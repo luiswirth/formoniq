@@ -2,7 +2,7 @@ use super::form::WhitneyLsf;
 use crate::cochain::Cochain;
 
 use {
-  exterior::MultiForm,
+  multialgebra::Tensor,
   simplicial::{
     atlas::MeshPoint,
     topology::{complex::Complex, simplex::unit_subsimps},
@@ -59,9 +59,9 @@ impl<'a> WhitneyInterpolant<'a> {
   }
 
   /// The value at a point of the manifold, in the reference frame of its cell.
-  pub fn eval(&self, point: &MeshPoint) -> MultiForm {
+  pub fn eval(&self, point: &MeshPoint) -> Tensor {
     let cell = point.chart(self.complex);
-    let mut value = MultiForm::zero(self.complex.dim(), self.cochain.grade());
+    let mut value = Tensor::multiform_zero(self.complex.dim(), self.cochain.grade());
     for (dof_simp, form) in cell.faces(self.cochain.grade()).zip(&self.forms) {
       value += self.cochain[dof_simp] * form.at_bary(point.bary());
     }
@@ -77,7 +77,7 @@ mod test {
   use crate::{cochain::Cochain, section::Section};
 
   use {
-    exterior::MultiForm,
+    multialgebra::Tensor,
     simplicial::linalg::Vector,
     simplicial::{atlas::MeshPoint, topology::complex::Complex},
   };
@@ -101,7 +101,7 @@ mod test {
         );
 
         // dif(W c) = sum_sigma c_sigma dif(W_sigma): elementwise constant.
-        let mut dif_of_interpolation = MultiForm::zero(dim, grade + 1);
+        let mut dif_of_interpolation = Tensor::multiform_zero(dim, grade + 1);
         for dof_simp in cell.faces(grade) {
           let form = WhitneyLsf::unit(dim, dof_simp.simplex().relative_to(cell.simplex()));
           dif_of_interpolation += cochain[dof_simp] * form.dif();

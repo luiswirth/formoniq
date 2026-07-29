@@ -3,7 +3,7 @@
 use super::form::WhitneyLsf;
 
 use {
-  exterior::{Dim, ExteriorGrade, MultiForm},
+  multialgebra::{Dim, ExteriorGrade, Tensor},
   simplicial::{atlas::Bary, topology::simplex::unit_subsimps},
 };
 
@@ -22,7 +22,7 @@ use {
 pub struct LsfSamples {
   grade: ExteriorGrade,
   /// `[node][dof]`.
-  values: Vec<Vec<MultiForm>>,
+  values: Vec<Vec<Tensor>>,
 }
 
 impl LsfSamples {
@@ -65,7 +65,7 @@ impl LsfSamples {
   }
 
   /// The values of every shape function at one node.
-  pub fn at_node(&self, inode: usize) -> &[MultiForm] {
+  pub fn at_node(&self, inode: usize) -> &[Tensor] {
     &self.values[inode]
   }
 }

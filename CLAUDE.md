@@ -56,13 +56,12 @@ Code should read the way a mathematician would write.
   one that panics is a hidden `if dim == ...` the design never admitted to.
 - Directions being explored, not commitments:
   - BEM and spectral methods within the same exterior-calculus frame
-  - higher-order (trimmed polynomial $P^-_r Lambda^k$) elements
   - curvature, higher-order Regge and isoparametric cells
 
 ## Architecture
 
 Crate ladder, each layer adding exactly one thing:
-`{ multiindex, gramian, coorder } → exterior → { simplicial, glatt } → derham → formoniq → realize → studio`,
+`{ multiindex, gramian, coorder } → multialgebra → { simplicial, glatt } → derham → formoniq → realize → studio`,
 where `multiindex`/`gramian`/`coorder` are foundational siblings
 and `simplicial`/`glatt` are siblings one level up.
 `iterative` is off to the side:
@@ -71,21 +70,21 @@ joining the ladder only where `formoniq` consumes it.
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
-| `multiindex` | combinatorial index structures      | `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
+| `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
+| `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, musicals, the Hodge star as the one non-uniform operation, `pullback`/`pushforward` of a value along a linear map |
 | `gramian`    | inner-product / metric structure    | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, any signature, Riemannian is $q = 0$), `CausalType` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
-| `exterior`   | the exterior algebra $Lambda^k$     | `ExteriorElement<V>`, `Variance` (`Covariant`/`Contravariant`), `exterior_power`, wedge, interior product, musicals, Hodge star, `pullback`/`pushforward` of a value along a linear map |
 | `simplicial` | the simplicial manifold $M_h$       | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`), `geometry::` (`MeshLengthsSq` the intrinsic Regge primitive the engine consumes, `MeshCoords` and `CellGramians` the sources that convert into it) and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses) |
-| `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<V, S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
-| `derham`     | discrete differential forms         | `Cochain`, `section::Section<V>` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `project::derham_map` |
+| `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
+| `derham`     | discrete differential forms         | `Cochain`, `section::Section` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `polynomial::` ($P_r Lambda^k$ and the trimmed $P^-_r Lambda^k$ as $"Sym"^r times.circle Lambda^k$ in barycentric coordinates), `decomposition::GeometricDecomposition` (the direct sum over subsimplices, hence the local-to-global map), `project::derham_map` |
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner. `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Backend is `nalgebra-sparse` alone, no faer |
-| `formoniq`   | the FEM engine                      | `assemble` and its matrix-free peer `matfree::ElementOperator`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver), `problems::` (elliptic, dirac, heat, wave, ...) |
+| `formoniq`   | the FEM engine                      | `assemble` (through an explicit local-to-global map, so every polynomial degree assembles by one routine) and its matrix-free peer `matfree::ElementOperator`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver), `whitney_complex::HilbertComplex` and its two implementations, the first-order `WhitneyComplex` and the `trimmed_complex::TrimmedComplex` of $P^-_r Lambda^k$ at any degree, `problems::` (elliptic, dirac, heat, wave, ...) |
 | `realize`    | intrinsic data made extrinsic       | `reduce::` (the grade reduction, a $k$-form to the scalar or vector of grade $min(k, n-k)$), `Surface`/`BakedMesh` (the dimension reduction to a render primitive and its $RR^3$ bake), the mark bakes (`glyph`, `advect`, `deposit`, `volume`), `io::` (the `.vtu`/`.obj`/`.mdd` exporters and readers). No graphics dependency |
 | `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), the gallery's `MeshSource × Study` product, a wgpu/winit/egui renderer over `realize`'s primitives, native and wasm |
 
 No crate exists solely to hold a shared type alias.
 `Vector`/`Matrix` (dense nalgebra) are trivial aliases with no nominal identity to share,
-so `gramian`, `coorder`, `exterior` and `glatt`
+so `gramian`, `coorder`, `multialgebra` and `glatt`
 each declare their own directly from `nalgebra` rather than depending on anything for them.
 `simplicial` is the lowest crate that needs *sparse* matrices (its boundary operators),
 so that is where `CsrMatrix`/`CooMatrix` and the extension traits built on them (`CooMatrixExt`) live,
@@ -101,7 +100,7 @@ and `formoniq` depends on it like any other building block.
 
 Dependencies flow strictly downward.
 A lower crate never learns about a higher one:
-`exterior` must never hear about meshes, `simplicial` never about forms.
+`multialgebra` must never hear about meshes, `simplicial` never about forms.
 `simplicial` (the simplicial $M_h$) and `glatt` (the smooth $M$ it approximates)
 are independent objects, so neither depends on the other.
 Their one relation, pulling continuum data onto the mesh and the error that costs,
@@ -135,13 +134,13 @@ A concept belongs in the lowest crate (or module) that can express it
 with the dependencies it already has.
 If expressing it there would need a new downward dependency,
 it belongs one level up instead, in the crate that joins the two,
-which is why `derham` exists, where `exterior`, `simplicial` and `glatt` all meet.
+which is why `derham` exists, where `multialgebra`, `simplicial` and `glatt` all meet.
 Never widen a lower crate's dependencies to make a method fit.
 
 **The building-block crates are standalone, and published as such.**
 Concepts floating up leaves each lower crate a self-contained mathematical object,
 not FEEC-internal plumbing:
-`exterior` is an exterior-algebra library,
+`multialgebra` is a multilinear-algebra library,
 `simplicial` a simplicial-topology-and-Regge-geometry one,
 `multiindex` colex combinatorics,
 `glatt` continuum differential geometry,
@@ -280,17 +279,27 @@ Breaking one is a bug even if it compiles and passes tests.
    and the wrong composition does not compile.
    A bare `Vector` is a displacement or raw linear algebra, never a point.
 
-4. **Variance is type-level.**
-   `ExteriorElement<Covariant>` (multiforms) and `ExteriorElement<Contravariant>` (multivectors)
-   stand on fully equal footing.
-   The type parameter is what makes the functorial direction (pullback vs. pushforward),
-   the duality pairing, the musical isomorphisms and the choice of $g$ vs. $g^(-1)$
-   correct *by construction*.
+4. **Variance is per-slot, and stated rather than derived.**
+   Covariant slots (forms) and contravariant ones (vectors) stand on fully equal footing,
+   and a `Tensor` may mix them: that is what an endomorphism, a torsion or a trace *is*.
+   Variance decides the functorial direction (pullback vs. pushforward),
+   the duality pairing, the musical isomorphisms and the choice of $g$ vs. $g^(-1)$.
    Never collapse the two, and never pick the Gramian by hand:
-   go through `V::gramian` / `multiform_gramian` / `multivector_gramian`.
-   Sections inherit this:
-   `Pullback` implements `Section` only for `Covariant`,
-   so the type system, not a convention, is what stops a multivector field from being pulled back.
+   go through `Variance::gramian` / `Slot::gramian` / `multiform_gramian` / `multivector_gramian`.
+
+   It is the one datum with **no representational footprint**:
+   $dim Lambda^k (V) = dim Lambda^k (V^*)$,
+   so no shape check catches a wrong one and nothing derives it.
+   Operations therefore check it (`pairing` demands the dual slot for slot,
+   `contract` the dual variance, `pullback` a uniformly covariant tensor),
+   and construction *states* it.
+   A constructor that guesses is a bug, and the guess will be plausible.
+
+   The uniform case is what buys functoriality along an arbitrary linear map.
+   A mixed tensor's covariant slots pull back while its contravariant ones push forward,
+   opposite directions, so it transports only along an isomorphism,
+   and `pullback`/`pushforward` refuse it.
+   That is mathematics, not a limitation of the encoding.
 
 5. **Depend on the weakest structure that determines the concept.**
    The exterior derivative, the boundary operator, the wedge, the interior product,
@@ -390,12 +399,22 @@ Breaking one is a bug even if it compiles and passes tests.
    HPC is a requirement, not an afterthought
    (`rayon`-parallel assembly is already the norm).
 
-**Invariants 3 and 4 are proofs, not conventions**, Lean 4 style:
-a precondition that is a property of a value
-(the space a coordinate lives in, the variance of a form)
+**Invariant 3 is a proof, not a convention**, Lean 4 style:
+a precondition that is a property of a value (the space a coordinate lives in)
 becomes a type-level witness, not an assertion repeated at each call.
 The type demands the property, the check happens once where the witness is built,
 and the wrong composition fails to compile.
+
+Variance (invariant 4) was once encoded this way and deliberately is not any more.
+A type parameter cannot carry a *per-slot* datum when the number of slots is runtime,
+and a mixed tensor is the point of having variance at all.
+What a type parameter bought there was never verification
+(the compiler cannot tell a covariant $RR^n$ from a contravariant one either)
+but *propagation* of an assertion made once,
+and the runtime checks inside the operations propagate it too.
+The residue is that omission is silent:
+a check not written is a check not made, where the compiler applied the rule everywhere.
+So the operations check, and construction states.
 Reach for this wherever a "trust me, this is an *X*" comment sits in a signature.
 The simplex roles of `topology::role` are the same pattern on a runtime dimension:
 a `Roled<R>` (`Cell`, `Facet`, ...) is a `SimplexRef` plus the proof of its dimension proposition,
@@ -419,7 +438,7 @@ A proof speaks only for the complex object it was built from.
 
 **Doc comments carry the math, in Typst notation.**
 This is the house style, match it exactly
-(`exterior/src/lib.rs` holds the canonical examples):
+(`multialgebra/src/tensor.rs` holds the canonical examples):
 
 ```rust
 /// The interior product (contraction)
@@ -470,19 +489,36 @@ The examples in `crates/formoniq/examples/` are the end-to-end check,
 convergence rates, spectra,
 but they are run and read by hand, not asserted by `cargo test`.
 
+**$Lambda$ and $"Sym"$ are siblings, and one construction.**
+They are the two quotients of the tensor algebra by the two ways adjacent
+factors commute, so a single `Parity` carries the whole distinction and every
+operation is written once over both.
+The Hodge star is the sole exception, and genuinely so: $"Sym"$ has no top
+degree to complement against, so the star exists on an alternating factor and
+refuses on a symmetric one.
+The exterior derivative and the Koszul operator are likewise one operation,
+`Tensor::transfer`, in its two directions.
+Never re-introduce a second implementation of either family.
+
 **Combinations and compositions are different objects.**
 A `Combination` is a subset, the basis of $Lambda^k$:
 repetition forbidden, order carrying a `Sign`.
 A `Composition` is an exponent vector, the basis of $"Sym"^d$:
 the graded monoid $x^k x^(k') = x^(k + k')$, no sign.
-Stars and bars bijects them and is kept as a theorem, never as a representation:
-it is not natural in the ambient size,
-absorbing an unbounded *degree* into an index count a combination bounds by the dimension,
-which is how a bitset ceiling leaks into a refinement level.
 A `Permutation` is a bijection, the group $S_n$:
 the one of the three carrying $"sgn"$ as a homomorphism
 rather than as the sign of a reordering.
-Each owns its representation.
+
+Stars and bars is the *representation* of `MonoIndex`, deliberately.
+The shift $w_i |-> w_i + i$ makes a weakly increasing word strictly increasing,
+so in shifted form both families are sets and one bitset serves both:
+ranking, enumeration, deletion and the complement become the same bit operations,
+and the family is consulted only for the sign.
+The cost is a ceiling on the *shifted* alphabet $n + k - 1$,
+so a degree is bounded where it was not,
+and the bound is $128$ rather than a `Combination`'s $64$.
+Taken with the numbers in hand: it is what closed a five-fold gap
+against the standalone exterior algebra to well under two.
 
 **The combinatorics is the library's own.**
 The enumeration order of these objects is load-bearing:

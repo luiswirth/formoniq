@@ -76,10 +76,10 @@ is enforced by the crate boundaries rather than by convention.
 - **[`coorder`](crates/coorder/README.md)**:
   affine coordinates tagged by the space they live in,
   so the maps between coordinate spaces are explicit and their confusion does not compile.
-- **[`exterior`](crates/exterior/README.md)**:
-  the exterior algebra, with variance (forms versus vectors) tracked at the type level,
-  so pullback, the musical isomorphisms and the Hodge star
-  take their direction and metric from the type rather than from a convention.
+- **[`multialgebra`](crates/multialgebra/README.md)**:
+  the exterior and symmetric algebras as one construction, and tensor products of them,
+  with the variance of each slot deciding pullback against pushforward,
+  the musical isomorphisms and which Gramian measures it.
 - **[`simplicial`](crates/simplicial/README.md)**:
   the simplicial manifold, keeping pure-combinatorial topology separate from geometry,
   which enters intrinsically as signed squared edge lengths,
@@ -97,7 +97,7 @@ is enforced by the crate boundaries rather than by convention.
 Because each concept lives in the lowest crate that can express it,
 the lower crates are self-contained mathematical objects rather than FEEC-internal plumbing,
 and are usable on their own.
-`exterior` is an exterior-algebra library that knows nothing of meshes or PDEs.
+`multialgebra` is a multilinear-algebra library that knows nothing of meshes or PDEs.
 `simplicial` carries combinatorial topology
 (boundary operators, homology, Betti numbers) alongside intrinsic Regge geometry,
 none of which needs a differential form.
@@ -160,7 +160,7 @@ The current version is a rebuild toward the more general library described above
 The crates are published on [crates.io](https://crates.io/crates/formoniq),
 with documentation on [docs.rs](https://docs.rs/formoniq).
 Depend on the engine with `cargo add formoniq`,
-or on any lower crate on its own (`cargo add exterior`, `cargo add simplicial`, ...).
+or on any lower crate on its own (`cargo add multialgebra`, `cargo add simplicial`, ...).
 
 To build from source:
 

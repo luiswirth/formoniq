@@ -4,7 +4,7 @@
 //! owns everything stateful (the gallery, the scene, the file dialog) that the
 //! panel itself never touches.
 
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 use simplicial::{Dim, topology::simplex::Simplex};
 
 use crate::gallery::{

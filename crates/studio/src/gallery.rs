@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use derham::cochain::Cochain;
-use exterior::ExteriorGrade;
+use multialgebra::ExteriorGrade;
 use simplicial::{
   Dim,
   geometry::coord::mesh::{MeshCoords, unit_coord_complex},

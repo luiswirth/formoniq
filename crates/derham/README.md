@@ -43,7 +43,7 @@ and functoriality of the composite pullback on a curved manifold.
 `derham` is the discrete-forms layer of
 [formoniq](https://github.com/luiswirth/formoniq),
 a finite element exterior calculus (FEEC) engine:
-the crate where the exterior algebra (`exterior`), the simplicial manifold (`simplicial`)
+the crate where the exterior algebra (`multialgebra`), the simplicial manifold (`simplicial`)
 and the continuum (`glatt`) meet.
 It assembles no global operators and solves nothing.
 Those live one crate up.
