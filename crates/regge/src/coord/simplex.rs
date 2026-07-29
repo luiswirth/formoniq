@@ -6,8 +6,8 @@
 //! (its default), whose vertices are points of $RR^N$:
 //!
 //! - constructing one from a mesh's [`MeshCoords`] and a topological
-//!   [`Simplex`] ([`SimplexCoords::from_simplex_and_coords`], the
-//!   [`SimplexRefExt`] handle method),
+//!   [`Simplex`] ([`simplex_coords`], or [`SimplexRefExt::coord_simplex`] on a
+//!   handle),
 //! - the metric it *induces* ([`metric_tensor`](SimplexCoords::metric_tensor))
 //!   and the Regge squared edge lengths it *realizes*
 //!   ([`to_lengths_sq`](SimplexCoords::to_lengths_sq)).
@@ -33,8 +33,6 @@ pub use simplicial::atlas::SimplexCoords;
 /// is the bridge this crate is for, so it reaches down as an extension: an
 /// embedding induces a metric, a metric induces no embedding.
 pub trait SimplexCoordsExt {
-  fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords;
-
   /// The metric a *Euclidean* ambient induces on this realization: the
   /// Gramian of the cell's spanning vectors. The general bridge is the
   /// pullback of the mesh's ambient inner product
@@ -48,15 +46,21 @@ pub trait SimplexCoordsExt {
   fn to_lengths_sq(&self) -> SimplexLengthsSq;
 }
 
-impl SimplexCoordsExt for SimplexCoords<Ambient> {
-  fn from_simplex_and_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
-    let mut vert_coords = Matrix::zeros(coords.dim().index(), simp.nvertices());
-    for (i, v) in simp.iter().enumerate() {
-      vert_coords.set_column(i, &coords.coord(v).view());
-    }
-    SimplexCoords::new(vert_coords)
+/// The affine parametrization a topological simplex has under an embedding:
+/// its vertices' coordinates, as the columns.
+///
+/// A free function rather than a constructor on [`SimplexCoordsExt`]: it takes
+/// the simplex and the coordinates on equal footing and has no receiver, so
+/// there is no method syntax for a trait to carry.
+pub fn simplex_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
+  let mut vert_coords = Matrix::zeros(coords.dim().index(), simp.nvertices());
+  for (i, v) in simp.iter().enumerate() {
+    vert_coords.set_column(i, &coords.coord(v).view());
   }
+  SimplexCoords::new(vert_coords)
+}
 
+impl SimplexCoordsExt for SimplexCoords<Ambient> {
   /// The metric a *Euclidean* ambient induces on this realization: the
   /// Gramian of the cell's spanning vectors. The general bridge is the
   /// pullback of the mesh's ambient inner product
@@ -84,7 +88,7 @@ pub trait SimplexRefExt {
 }
 impl SimplexRefExt for SimplexRef<'_> {
   fn coord_simplex(&self, coords: &MeshCoords) -> SimplexCoords {
-    SimplexCoords::from_simplex_and_coords(self.simplex(), coords)
+    simplex_coords(self.simplex(), coords)
   }
 }
 

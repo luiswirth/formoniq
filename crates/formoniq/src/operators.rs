@@ -1,11 +1,13 @@
-use gramian::tensor::{TensorExt, multiform_gramian};
 use {
   derham::{
     interpolate::{form::WhitneyExpansion, samples::LsfSamples},
     section::Section,
     trace::FaceTrace,
   },
-  gramian::{Gramian, Metric},
+  gramian::{
+    Metric,
+    tensor::{TensorExt, multiform_gramian},
+  },
   multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
   multiindex::{Combination, Sign},
   regge::cell_volume,
@@ -63,7 +65,7 @@ pub struct HodgeMassElmat {
   /// matrix taking formal barycentric $k$-blades to reference $k$-forms.
   difbarys_power: Matrix,
   /// $Q$, the barycentric half, at unit volume.
-  bary_gramian: Gramian,
+  bary_gramian: Matrix,
 }
 impl HodgeMassElmat {
   pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
@@ -94,10 +96,7 @@ impl ElMatProvider for HodgeMassElmat {
     let blade_gramian =
       &self.difbarys_power * form_gramian.matrix() * self.difbarys_power.transpose();
 
-    cell_volume(metric)
-      * self
-        .expansion
-        .pullback(&blade_gramian, self.bary_gramian.matrix())
+    cell_volume(metric) * self.expansion.pullback(&blade_gramian, &self.bary_gramian)
   }
 }
 
@@ -913,7 +912,7 @@ mod test {
       let hodge_mass =
         HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric(), refchart(&refcomplex));
       let metric = geo.metric();
-      let scalar_mass = cell_volume(&metric) * unit_bary_gramian(dim).matrix();
+      let scalar_mass = cell_volume(&metric) * unit_bary_gramian(dim);
       assert_relative_eq!(&hodge_mass, &scalar_mass);
     }
   }

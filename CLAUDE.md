@@ -77,6 +77,11 @@ the complex is combinatorics, a geometry is a genuinely second input,
 and the split runs through the meshers too --
 the Kuhn triangulation of a box is combinatorial (`CartesianTopology`),
 placing its vertices is not (`CartesianGrid`).
+Both boundaries are checkable in a manifest, which is the point of making them structural:
+`multialgebra` depends on neither the metric nor a mesh,
+and `simplicial` on neither the metric nor the algebra.
+A reference datum typed as a metric would reintroduce the edge,
+so `unit_bary_gramian` hands back a bare matrix.
 `iterative` is off to the side:
 a standalone Krylov/preconditioner crate depending on nothing but `nalgebra-sparse`,
 joining the ladder only where `formoniq` consumes it.
@@ -84,7 +89,7 @@ joining the ladder only where `formoniq` consumes it.
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
-| `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, musicals, the Hodge star as the one non-uniform operation, `pullback`/`pushforward` of a value along a linear map |
+| `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map |
 | `gramian`    | metric structure, and the operations needing one | `Gramian` (non-degenerate symmetric, any signature), `Metric` (the pseudo-Riemannian metric tensor, Riemannian is $q = 0$), `CausalType`, and the metric half of the algebra: the induced Gramians, `inner`, and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
 | `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
@@ -299,7 +304,7 @@ Breaking one is a bug even if it compiles and passes tests.
    Variance decides the functorial direction (pullback vs. pushforward),
    the duality pairing, the musical isomorphisms and the choice of $g$ vs. $g^(-1)$.
    Never collapse the two, and never pick the Gramian by hand:
-   go through `Variance::gramian` / `Slot::gramian` / `multiform_gramian` / `multivector_gramian`.
+   go through `variance_gramian` / `slot_gramian` / `multiform_gramian` / `multivector_gramian`.
 
    It is the one datum with **no representational footprint**:
    $dim Lambda^k (V) = dim Lambda^k (V^*)$,
@@ -614,12 +619,12 @@ It is generic over that space (invariant 3):
 `SimplexCoords<Ambient>`
 (the default, and the lowest module, `atlas::simplex_coords`, that defines it)
 is the extrinsic realization $hat(K) -> RR^N$, and only *it* presupposes an embedding.
-The metric and edge lengths it induces are the `geometry::coord` bridges
+The metric and edge lengths it induces are the `regge::coord` bridges
 bolted onto that instantiation.
 `SimplexCoords<LocalCartesian>` is the metric-free realization in a chart's own cartesian frame,
 the reference cell (`standard`) and a refinement child in its parent's frame,
-which is why the affine core lives in `atlas`, reachable by `topology`,
-not in `geometry::coord`.
+which is why the affine core lives in `simplicial::atlas`, reachable by `topology`,
+not in `regge::coord`.
 A curvilinear coordinate system on the manifold being approximated
 (spherical on $S^2$, polar on a disk) is likewise a parametrization:
 it is written $(theta, phi) |-> RR^3$,

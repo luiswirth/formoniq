@@ -61,7 +61,6 @@ use crate::Dim;
 
 use crate::linalg::{Matrix, RowVector, Vector};
 use coorder::{CoordSpace, Coords, CoordsRef};
-use gramian::Gramian;
 use multiindex::{Combination, Composition, factorial_f64};
 
 /// The barycentric coordinate space of a chart: the affine weights
@@ -183,12 +182,16 @@ pub fn unit_difbarys(dim: impl Into<Dim>) -> Matrix {
 /// polynomial content of the affine chart, the factor a mass matrix carries
 /// alongside the inner product on $Lambda^k$, and the one a higher-order space
 /// replaces by the barycentric moments of higher degree.
-pub fn unit_bary_gramian(dim: impl Into<Dim>) -> Gramian {
+///
+/// A bare matrix, not a metric: the $L^2$ inner product of the barycentric
+/// functions is a datum of the reference chart, and this crate never learns
+/// what a metric is.
+pub fn unit_bary_gramian(dim: impl Into<Dim>) -> Matrix {
   let nvertices = (dim.into() + 1).index();
   let scale = ((nvertices * (nvertices + 1)) as f64).recip();
   let mut gramian = Matrix::from_element(nvertices, nvertices, scale);
   gramian.fill_diagonal(2.0 * scale);
-  Gramian::new_unchecked(gramian)
+  gramian
 }
 
 /// The local coordinates of the vertices of the unit $n$-simplex, as the
