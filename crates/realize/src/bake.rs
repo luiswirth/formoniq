@@ -22,9 +22,10 @@
 
 use std::collections::HashMap;
 
+use crate::reach::vertex_reach;
 use crate::surface::Surface;
 use bytemuck::{Pod, Zeroable};
-use regge::coord::{mesh::MeshCoords, vertex_reach};
+use regge::coord::mesh::MeshCoords;
 use simplicial::Dim;
 use simplicial::linalg::Vector;
 use simplicial::topology::{complex::Complex, handle::KSimplexIdx, simplex::Simplex};
