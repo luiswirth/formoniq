@@ -2,7 +2,7 @@
 
 use multiindex::{Degree, Dim, MonoIndex, MultiIndex, Sign, Word};
 
-use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, induced};
+use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, basis_multiplicity, induced};
 
 /// The slots of a [`Tensor`], inline: one or two slots is the common case, and
 /// a heap allocation per element in the assembly loop would cost more than the
@@ -925,8 +925,17 @@ impl Tensor {
         "a contravariant tensor pushes forward, it does not pull back"
       );
     }
-    let components = self.induced_matrix(map).transpose() * &self.components;
     let slots: Slots = self.slots.iter().map(|s| s.with_dim(map.ncols())).collect();
+
+    // The pullback is the transpose of the functor, *conjugated by the basis
+    // multiplicity*: the unnormalized symmetric basis is not self-dual, so
+    // dualizing picks up alpha! on the codomain and drops it on the domain. On
+    // an alternating slot every factor is 1 and this is the bare transpose.
+    let codomain = basis_multiplicity(&self.slots, self.dim());
+    let domain = basis_multiplicity(&slots, map.ncols());
+    let weighted = self.components.component_mul(&codomain);
+    let components = (self.induced_matrix(map).transpose() * weighted).component_div(&domain);
+
     Self::new(slots, components)
   }
 }
@@ -941,6 +950,13 @@ impl Tensor {
 /// A free function, not a method: a pairing is a bilinear map on two spaces and
 /// privileges neither argument. It is symmetric in them, `pairing(a, b)` being
 /// `pairing(b, a)`, which method syntax would quietly deny.
+///
+/// Weighted by [`basis_multiplicity`], because the unnormalized symmetric basis
+/// is **not self-dual**: the dual of $x^alpha$ is $x^alpha \/ alpha!$, so
+/// pairing the packed components against each other bare would be off by
+/// $alpha!$ on every repeated symbol. The weight is $1$ throughout on
+/// $Lambda^k$, where the basis *is* self-dual, which is why the plain dot
+/// product is right there and only there.
 pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
   assert_eq!(
     left.slots().len(),
@@ -954,7 +970,11 @@ pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
       "a pairing is against the dual variance, slot for slot"
     );
   }
-  left.components().dot(right.components())
+  let multiplicity = basis_multiplicity(left.slots(), left.dim());
+  left
+    .components()
+    .component_mul(&multiplicity)
+    .dot(right.components())
 }
 
 /// The wedge pairing $Lambda^k times Lambda^(n-k) -> RR$,

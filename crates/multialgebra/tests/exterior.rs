@@ -1,8 +1,11 @@
 //! The exterior-algebra laws, on a single alternating slot.
 
 use approx::assert_relative_eq;
+use multialgebra::tensor::Slots;
 use multialgebra::tensor::{pairing, wedge_pairing};
-use multialgebra::{Matrix, Tensor, Variance, Vector, exterior_bases, exterior_dim};
+use multialgebra::{
+  Factor, Matrix, Slot, Symmetry, Tensor, Variance, Vector, exterior_bases, exterior_dim,
+};
 use multiindex::Sign;
 
 fn probe_matrix(nrows: usize, ncols: usize, seed: usize) -> Matrix {
@@ -58,18 +61,33 @@ fn interior_product_squares_to_zero() {
 }
 
 /// Pullback and pushforward are adjoint under the duality pairing.
+///
+/// Over **both** families, which is what pins the two halves of the symmetric
+/// multiplicity against each other: the pullback matrix is the transpose of the
+/// functor conjugated by $alpha!$, and the pairing carries $alpha!$, and the law
+/// holds exactly because the one cancels the other. Get either alone wrong and
+/// this fails; on $Lambda^k$ both weights are $1$ and it says nothing about them.
 #[test]
 fn pullback_pushforward_adjoint() {
-  for (n, m) in [(2, 2), (3, 3), (3, 2), (4, 3)] {
-    let a = probe_matrix(n, m, 4);
-    for k in 0..=n.min(m) {
-      let form = probe_element(n, k, 1, Variance::Covariant);
-      let vector = probe_element(m, k, 2, Variance::Contravariant);
-      assert_relative_eq!(
-        pairing(&form.pullback(&a), &vector),
-        pairing(&form, &vector.pushforward(&a)),
-        epsilon = 1e-12
-      );
+  for symmetry in [Symmetry::Alternating, Symmetry::Symmetric] {
+    for (n, m) in [(2, 2), (3, 3), (3, 2), (4, 3)] {
+      let a = probe_matrix(n, m, 4);
+      for k in 0..=n.min(m) {
+        let probe = |dim: usize, variance, seed: usize| {
+          let slot = Slot::new(Factor::new(symmetry, k), variance, dim);
+          Tensor::new(
+            Slots::from_iter([slot]),
+            Vector::from_fn(slot.multidim(), |i, _| ((seed + 5 * i) % 7) as f64 - 3.0),
+          )
+        };
+        let form = probe(n, Variance::Covariant, 1);
+        let vector = probe(m, Variance::Contravariant, 2);
+        assert_relative_eq!(
+          pairing(&form.pullback(&a), &vector),
+          pairing(&form, &vector.pushforward(&a)),
+          epsilon = 1e-12
+        );
+      }
     }
   }
 }
@@ -410,18 +428,31 @@ fn the_free_power_is_the_unquotiented_one() {
 /// The embedding is a map of representations, not a serialization, so a map
 /// acting on the quotient and then forgetting is the same as forgetting and
 /// then acting. That is what makes it belong inside the algebra.
+///
+/// Swept over **both** families and over rectangular maps, which is what the law
+/// actually claims. Restricted to $Lambda^k$ it is much weaker than it looks:
+/// every $alpha!$ is $1$ there, so the pullback matrix is the bare transpose of
+/// the functor and the multiplicity the symmetric basis carries never enters.
 #[test]
 fn forgetting_the_symmetry_commutes_with_pullback() {
-  for dim in 1..=3 {
-    for grade in 0..=dim {
-      let form = probe_element(dim, grade, 3, Variance::Covariant);
-      let map = probe_matrix(dim, dim, 4);
+  for symmetry in [Symmetry::Alternating, Symmetry::Symmetric] {
+    for dim in 1..=3 {
+      for degree in 0..=dim {
+        for cols in 1..=dim {
+          let slot = Slot::new(Factor::new(symmetry, degree), Variance::Covariant, dim);
+          let form = Tensor::new(
+            Slots::from_iter([slot]),
+            Vector::from_fn(slot.multidim(), |i, _| ((3 * i + 2) % 7) as f64 - 3.0),
+          );
+          let map = probe_matrix(dim, cols, 4);
 
-      assert_relative_eq!(
-        form.pullback(&map).to_free().components(),
-        form.to_free().pullback(&map).components(),
-        epsilon = 1e-9
-      );
+          assert_relative_eq!(
+            form.pullback(&map).to_free().components(),
+            form.to_free().pullback(&map).components(),
+            epsilon = 1e-9
+          );
+        }
+      }
     }
   }
 }

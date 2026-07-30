@@ -478,6 +478,33 @@ pub fn induced(slots: &[Slot], map: &Matrix) -> Matrix {
     .unwrap_or_else(|| Matrix::identity(1, 1))
 }
 
+/// The multiplicity $alpha!$ of each basis element of a shape, in component
+/// order: $1$ throughout on an alternating or free factor, $alpha!$ on a
+/// symmetric one.
+///
+/// It is $norm(x^alpha)^2$ under the Euclidean form, hence
+/// [`Factor::induced_form`] of the identity, read off there rather than
+/// recomputed so one convention serves both.
+///
+/// This is what makes the unnormalized symmetric basis **not self-dual**, and
+/// therefore what stands between the functor and its transpose: the matrix of a
+/// pullback on this basis is $D^(-1) (F A)^top D$, not $(F A)^top$. Every
+/// $alpha!$ is $1$ without repetition, which is why the distinction is
+/// invisible on $Lambda^k$ and why it has to be written down here.
+pub fn basis_multiplicity(slots: &[Slot], dim: impl Into<Dim>) -> Vector {
+  let dim = dim.into().index();
+  slots
+    .iter()
+    .map(|slot| {
+      slot
+        .factor
+        .induced_form(&Matrix::identity(dim, dim))
+        .diagonal()
+    })
+    .reduce(|acc, factor| acc.kronecker(&factor))
+    .unwrap_or_else(|| Vector::from_element(1, 1.0))
+}
+
 #[cfg(test)]
 mod test {
   use super::*;
