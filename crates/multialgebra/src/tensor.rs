@@ -2,7 +2,7 @@
 
 use multiindex::{Degree, Dim, MonoIndex, MultiIndex, Sign, Word};
 
-use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, basis_multiplicity, induced};
+use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, basis_multiplicity};
 
 /// The slots of a [`Tensor`], inline: one or two slots is the common case, and
 /// a heap allocation per element in the assembly loop would cost more than the
@@ -1012,14 +1012,22 @@ impl Tensor {
 /// at all rather than a bare $Lambda^k A$ matrix: a stored matrix applied to raw
 /// components is the pullback only where the multiplicative basis is self-dual,
 /// which is to say on the alternating family alone.
+///
+/// The per-slot functors are held apart and applied by [`apply_factorwise`]:
+/// $times.circle_i F_i (A)$ is the one thing not worth forming, and holding the
+/// factors is also what keeps the *shape* of the transport readable rather than
+/// flattened into one index.
 #[derive(Debug, Clone)]
 pub struct Transport {
   /// The shape in the domain $V$.
   domain: Slots,
   /// The shape in the codomain $W$: the same factors over the other space.
   codomain: Slots,
-  /// $times.circle_i F_i (A)$, the Kronecker product of the per-slot functors.
-  induced: Matrix,
+  /// $F_i (A)$ for each slot, the factors of $times.circle_i F_i (A)$.
+  induced: Vec<Matrix>,
+  /// Their transposes, the factors of the adjoint. Stored rather than taken at
+  /// every application, a transport being built once and applied many times.
+  adjoint: Vec<Matrix>,
 }
 
 impl Transport {
@@ -1031,10 +1039,12 @@ impl Transport {
   /// pullback of a form and the pushforward of a vector, which is exactly what
   /// makes the two adjoint (invariant 4).
   pub fn new(slots: &[Slot], map: &Matrix) -> Self {
+    let induced: Vec<Matrix> = slots.iter().map(|slot| slot.factor.induced(map)).collect();
     Self {
       domain: slots.iter().map(|s| s.with_dim(map.ncols())).collect(),
       codomain: slots.iter().map(|s| s.with_dim(map.nrows())).collect(),
-      induced: induced(slots, map),
+      adjoint: induced.iter().map(Matrix::transpose).collect(),
+      induced,
     }
   }
 
@@ -1047,10 +1057,19 @@ impl Transport {
   pub fn codomain(&self) -> &[Slot] {
     &self.codomain
   }
-  /// $times.circle_i F_i (A)$ itself, for a caller assembling it into a larger
-  /// matrix rather than applying it.
-  pub fn matrix(&self) -> &Matrix {
+  /// The per-slot functors $F_i (A)$, which is how the transport is stored and
+  /// applied.
+  pub fn factors(&self) -> &[Matrix] {
     &self.induced
+  }
+
+  /// $times.circle_i F_i (A)$ formed, for a caller that needs the matrix *as* a
+  /// matrix: a congruence, a factorization, a block of a larger assembly.
+  ///
+  /// Built on demand and deliberately not stored. To apply the transport, use
+  /// [`Self::pullback`] or [`Self::pushforward`], which never form it.
+  pub fn to_matrix(&self) -> Matrix {
+    factorwise_kronecker(&self.induced)
   }
 
   /// # Panics
@@ -1060,7 +1079,11 @@ impl Transport {
     self.check(tensor, &self.domain, Variance::Contravariant, "pushforward");
     Tensor::new(
       Self::carrying(&self.codomain, tensor),
-      &self.induced * tensor.components(),
+      apply_factorwise(
+        &self.induced,
+        &Self::dims(&self.domain),
+        tensor.components(),
+      ),
     )
   }
 
@@ -1076,8 +1099,17 @@ impl Transport {
     // conjugated by alpha! rather than the bare transpose.
     Tensor::from_reciprocal(
       Self::carrying(&self.domain, tensor),
-      self.induced.transpose() * tensor.reciprocal(),
+      apply_factorwise(
+        &self.adjoint,
+        &Self::dims(&self.codomain),
+        &tensor.reciprocal(),
+      ),
     )
+  }
+
+  /// The component layout of a shape, in slot order.
+  fn dims(shape: &Slots) -> Vec<usize> {
+    shape.iter().map(Slot::multidim).collect()
   }
 
   /// The target shape wearing the transported tensor's variance: the factors
@@ -1224,12 +1256,79 @@ pub fn covariant_slots(factors: impl IntoIterator<Item = Factor>, dim: impl Into
 /// shape and the wrong meaning, which no shape check catches.
 ///
 /// An empty product of slots is the scalars, on which the identity acts.
+///
+/// **Prefer [`apply_factorwise`] wherever the matrix is only going to be
+/// applied.** This builds $product_i d_i$ squared entries out of matrices
+/// holding $sum_i d_i^2$; applying the factors one slot at a time gives the
+/// same answer, allocates nothing of that size and costs
+/// $(product_i d_i)(sum_i d_i)$. Forming the product is for a caller that needs
+/// the matrix as a matrix -- a congruence, a factorization, a block of a larger
+/// assembly.
 pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
   per_slot
     .iter()
     .cloned()
     .reduce(|acc, slot| acc.kronecker(&slot))
     .unwrap_or_else(|| Matrix::identity(1, 1))
+}
+
+/// Apply one matrix per slot to a component vector: the multilinear product
+/// $(times.circle_i M_i) c$, evaluated without ever forming
+/// $times.circle_i M_i$.
+///
+/// The action of a factored operator on a tensor product, slot by slot. Each
+/// $M_i$ may be rectangular, taking its slot's dimension $d_i$ to a new one
+/// $e_i$, which is what lets one routine serve both a Gram matrix (square) and a
+/// functor along a map between spaces of different dimension.
+///
+/// Agrees with [`factorwise_kronecker`] followed by a matrix-vector product, by
+/// construction and by law, and is the form to reach for: forming the product
+/// costs $(product_i d_i)^2$ in space and time where this costs
+/// $(product_i d_i)(sum_i e_i)$. Never forming a Kronecker product is the
+/// point of a tensor product having factors at all.
+///
+/// `dims` is the component layout being consumed, in slot order, and must be
+/// the one [`tensor_strides`] implies: last factor fastest.
+///
+/// # Panics
+/// If the matrices, the dimensions and the component count disagree.
+pub fn apply_factorwise(per_slot: &[Matrix], dims: &[usize], components: &Vector) -> Vector {
+  assert_eq!(per_slot.len(), dims.len(), "one matrix per slot");
+  assert_eq!(
+    components.len(),
+    dims.iter().product::<usize>(),
+    "the components must be the product of the slot dimensions"
+  );
+
+  let mut current: Vec<usize> = dims.to_vec();
+  let mut values = components.clone();
+
+  for (slot, matrix) in per_slot.iter().enumerate() {
+    assert_eq!(
+      matrix.ncols(),
+      current[slot],
+      "a slot's matrix must consume that slot's dimension"
+    );
+    let (from, to) = (matrix.ncols(), matrix.nrows());
+    // The layout is last-factor-fastest, so a slot's index sits between an
+    // `outer` block of the slots before it and an `inner` stride of those after.
+    let outer: usize = current[..slot].iter().product();
+    let inner: usize = current[slot + 1..].iter().product();
+
+    let mut next = Vector::zeros(outer * to * inner);
+    for a in 0..outer {
+      for p in 0..to {
+        for b in 0..inner {
+          next[(a * to + p) * inner + b] = (0..from)
+            .map(|q| matrix[(p, q)] * values[(a * from + q) * inner + b])
+            .sum();
+        }
+      }
+    }
+    current[slot] = to;
+    values = next;
+  }
+  values
 }
 
 impl std::ops::Add for Tensor {
