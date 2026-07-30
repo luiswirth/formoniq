@@ -36,10 +36,11 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// standard mass-lumping convention.
 ///
 /// Intrinsic: reads the Regge edge lengths, not an embedding, since
-/// [`Metric::vertex_angle`](metric::Metric::vertex_angle) needs no
-/// coordinates, a Regge manifold given only as [`MeshLengthsSq`] has a
-/// Gaussian curvature exactly as well as an embedded one, which is why the
-/// primitive is what this consumes. This
+/// [`SimplexLengthsSq::vertex_angle`](lengths::simplex::SimplexLengthsSq::vertex_angle)
+/// is a function of three of them and needs no coordinates, so a Regge
+/// manifold given only as [`MeshLengthsSq`] has a Gaussian curvature exactly
+/// as well as an embedded one, which is why the primitive is what this
+/// consumes. This
 /// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the
 /// hinges are vertices, which is the one case implemented here. Generalizing
 /// to an $(n-2)$-dimensional hinge of an $n$-manifold needs dihedral angles
@@ -65,12 +66,12 @@ pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -
   let mut angle_sum = vec![0.0; nvertices];
   let mut areas = vec![0.0; nvertices];
   for cell in topology.cells().handle_iter() {
-    let metric = geometry.cell_metric(cell);
-    let vol = cell_volume(&metric);
+    let lengths_sq = geometry.simplex_lengths_sq(cell.get());
+    let vol = lengths_sq.vol();
     let verts = &cell.simplex().vertices;
     for m in 0..3 {
       let (a, b) = ((m + 1) % 3, (m + 2) % 3);
-      angle_sum[verts[m]] += metric.vertex_angle(m, a, b);
+      angle_sum[verts[m]] += lengths_sq.vertex_angle(m, a, b);
       areas[verts[m]] += vol / 3.0;
     }
   }

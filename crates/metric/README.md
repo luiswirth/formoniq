@@ -36,9 +36,6 @@ and the operations on multilinear algebra that need one.
   the inner product, the norm, the Hodge star and the musical isomorphisms.
   Each slot is measured by its own variance,
   so a mixed tensor raises and lowers the right indices.
-- In distance-geometry terms:
-  the metric of the spanning vectors of a simplex is its edge metric,
-  and interior vertex angles follow from the law of cosines, without coordinates.
 
 ## Place in the ecosystem
 

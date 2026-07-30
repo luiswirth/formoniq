@@ -8,9 +8,6 @@ use std::borrow::Cow;
 
 use multialgebra::{Factor, Slot, Variance};
 
-/// The dimension of a space or object.
-pub type Dim = usize;
-
 /// The signature $(p, q)$ of a non-degenerate symmetric bilinear form: the
 /// number of positive and negative eigenvalues. By Sylvester's law of inertia
 /// it is a basis invariant. $q = 0$ is Riemannian (positive definite);
@@ -119,7 +116,7 @@ impl Metric {
     Self::new_unchecked(Variance::Covariant, matrix)
   }
   /// Orthonormal euclidean metric. Self-dual, $g = g^(-1) = I$.
-  pub fn euclidean(dim: Dim) -> Self {
+  pub fn euclidean(dim: usize) -> Self {
     let matrix = Matrix::identity(dim, dim);
     Self::new_unchecked(Variance::Covariant, matrix)
   }
@@ -139,7 +136,7 @@ impl Metric {
   /// $n - 1$ are spacelike, signature $(n - 1, 1)$. The flat model of a
   /// Lorentzian manifold. Its spatial block is exactly `euclidean(n - 1)`, which
   /// is how the Riemannian world sits inside the Lorentzian one.
-  pub fn minkowski(dim: Dim) -> Self {
+  pub fn minkowski(dim: usize) -> Self {
     assert!(dim >= 1, "Minkowski space has at least the time axis.");
     let mut matrix = Matrix::identity(dim, dim);
     matrix[(0, 0)] = -1.0;
@@ -153,7 +150,7 @@ impl Metric {
   pub fn variance(&self) -> Variance {
     self.variance
   }
-  pub fn dim(&self) -> Dim {
+  pub fn dim(&self) -> usize {
     self.matrix.nrows()
   }
   pub fn det(&self) -> f64 {
@@ -292,37 +289,6 @@ impl Metric {
   pub fn basis_angle(&self, i: usize, j: usize) -> f64 {
     self.basis_angle_cos(i, j).acos()
   }
-
-  /// Squared distance between two of the $"dim"+1$ points this Gramian is the
-  /// edge metric of: vertex $0$ (the Gramian's own origin) and its $"dim"$
-  /// basis vectors, read as vertices $1..="dim"$. $d(0,j)^2$ is the basis
-  /// vector's own norm; $d(i,j)^2$ for $i,j >= 1$ follows from the law of
-  /// cosines applied to the two edges from the origin,
-  /// $d(i,j)^2 = g_(i-1,i-1) + g_(j-1,j-1) - 2 g_(i-1,j-1)$.
-  fn vertex_dist_sq(&self, i: usize, j: usize) -> f64 {
-    if i == j {
-      0.0
-    } else if i == 0 {
-      self.basis_norm_sq(j - 1)
-    } else if j == 0 {
-      self.basis_norm_sq(i - 1)
-    } else {
-      self.basis_norm_sq(i - 1) + self.basis_norm_sq(j - 1) - 2.0 * self.basis_inner(i - 1, j - 1)
-    }
-  }
-
-  /// The interior angle at vertex `v`, between its edges to vertices `a` and
-  /// `b` (all in $0..="dim"$, vertex $0$ the Gramian's own origin): the law
-  /// of cosines applied to the squared distance between any two of the
-  /// simplex's vertices (vertex $0$ the Gramian's own origin). Generalizes
-  /// [`Self::basis_angle`] (the case $v = 0$) to any of the simplex's
-  /// $"dim"+1$ corners, not just the one the Gramian is based at.
-  pub fn vertex_angle(&self, v: usize, a: usize, b: usize) -> f64 {
-    let d_va = self.vertex_dist_sq(v, a);
-    let d_vb = self.vertex_dist_sq(v, b);
-    let d_ab = self.vertex_dist_sq(a, b);
-    ((d_va + d_vb - d_ab) / (2.0 * (d_va * d_vb).sqrt())).acos()
-  }
 }
 impl std::ops::Index<(usize, usize)> for Metric {
   type Output = f64;
@@ -344,9 +310,10 @@ impl Metric {
   pub fn norm_sq(&self, v: &Vector) -> f64 {
     self.inner(v, v)
   }
-  /// Elementwise signed squared norms of a family of vectors (given as columns).
-  pub fn norm_sq_mat(&self, v: &Matrix) -> Matrix {
-    self.inner_mat(v, v)
+  /// The signed squared norms of a family of vectors (given as columns): the
+  /// diagonal of their Gram matrix.
+  pub fn norms_sq(&self, v: &Matrix) -> Vector {
+    self.inner_mat(v, v).diagonal()
   }
   /// Magnitude $sqrt(abs(g(v, v)))$. On an indefinite metric this is
   /// meaningful only together with the causal character
@@ -354,9 +321,9 @@ impl Metric {
   pub fn norm(&self, v: &Vector) -> f64 {
     self.norm_sq(v).abs().sqrt()
   }
-  /// Elementwise magnitudes of a family of vectors (given as columns).
-  pub fn norm_mat(&self, v: &Matrix) -> Matrix {
-    self.inner_mat(v, v).map(|x| x.abs().sqrt())
+  /// The magnitudes of a family of vectors (given as columns).
+  pub fn norms(&self, v: &Matrix) -> Vector {
+    self.norms_sq(v).map(|x| x.abs().sqrt())
   }
   /// The causal character of `v`: the sign of $g(v, v)$, in the mostly-plus
   /// convention of [`CausalType`].
@@ -410,7 +377,7 @@ mod tests {
   }
 
   // 2 on the diagonal, 1 off it: SPD with eigenvalues `dim+1` (once) and 1.
-  fn spd(dim: Dim) -> Metric {
+  fn spd(dim: usize) -> Metric {
     let mut m = Matrix::from_element(dim, dim, 1.0);
     for i in 0..dim {
       m[(i, i)] = 2.0;
