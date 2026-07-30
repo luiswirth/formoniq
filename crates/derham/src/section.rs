@@ -361,25 +361,16 @@ impl<F> MetricOp<'_, F> {
   }
 }
 
-/// The musical isomorphism $sharp$ applied pointwise: a differential form
-/// becomes a multivector field, on fully equal footing.
-pub struct Sharp<'a, F>(MetricOp<'a, F>);
-impl<F: Section> Section for Sharp<'_, F> {
-  fn dim(&self) -> Dim {
-    self.0.field.dim()
-  }
-  fn grade(&self) -> ExteriorGrade {
-    self.0.field.grade()
-  }
-  fn at(&self, point: &MeshPoint) -> Tensor {
-    self.0.field.at(point).musical(&self.0.cell_metric(point))
-  }
-}
-
-/// The musical isomorphism $flat$ applied pointwise: a multivector field
-/// becomes a differential form.
-pub struct Flat<'a, F>(MetricOp<'a, F>);
-impl<F: Section> Section for Flat<'_, F> {
+/// The musical isomorphism applied pointwise, raising a differential form to a
+/// multivector field or lowering one to a form.
+///
+/// $sharp$ and $flat$ are one map, not two: the variance of each slot decides
+/// which way that slot travels, and with it whether the metric enters as $g$ or
+/// as $g^(-1)$ (invariant 4). A field of mixed variance is raised and lowered
+/// slot by slot in the one pass, which is what makes them the same operation
+/// rather than a pair to choose between.
+pub struct Musical<'a, F>(MetricOp<'a, F>);
+impl<F: Section> Section for Musical<'_, F> {
   fn dim(&self) -> Dim {
     self.0.field.dim()
   }
@@ -426,6 +417,13 @@ pub trait SectionOps: Sized + Section {
   fn wedge<B: Section>(self, other: B) -> Wedge<Self, B> {
     Wedge::new(self, other)
   }
+  fn musical<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Musical<'a, Self> {
+    Musical(MetricOp {
+      field: self,
+      topology,
+      geometry,
+    })
+  }
   fn hodge_star<'a>(
     self,
     topology: &'a Complex,
@@ -443,30 +441,6 @@ pub trait SectionOps: Sized + Section {
   }
 }
 impl<F: Section> SectionOps for F {}
-
-/// The musicals, which change the variance and so cannot sit on the
-/// variance-generic [`SectionOps`].
-pub trait SharpOp: Sized + Section {
-  fn sharp<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Sharp<'a, Self> {
-    Sharp(MetricOp {
-      field: self,
-      topology,
-      geometry,
-    })
-  }
-}
-impl<F: Section> SharpOp for F {}
-
-pub trait FlatOp: Sized + Section {
-  fn flat<'a>(self, topology: &'a Complex, geometry: &'a MeshLengthsSq) -> Flat<'a, Self> {
-    Flat(MetricOp {
-      field: self,
-      topology,
-      geometry,
-    })
-  }
-}
-impl<F: Section> FlatOp for F {}
 
 /// The Whitney interpolation of a cochain, as a section of the manifold.
 impl Section for WhitneyInterpolant<'_> {
