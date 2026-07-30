@@ -86,8 +86,16 @@ impl Simplex {
 
   /// The subsimplices of the given dimension, in colexicographic order of
   /// their local positions.
+  ///
+  /// Total in the dimension: empty off the range $0 <= k <= dim sigma$, where
+  /// there is no face to name. The empty simplex is not among them, so a
+  /// vertex has no facets rather than one.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = Self> + use<'_> {
-    combinations(self.nvertices(), (sub_dim + 1).index()).map(|positions| self.select(positions))
+    sub_dim
+      .index_in(self.dim())
+      .into_iter()
+      .flat_map(move |_| combinations(self.nvertices(), (sub_dim + 1).index()))
+      .map(|positions| self.select(positions))
   }
 
   /// The boundary $diff sigma = sum_i (-1)^i (sigma without v_i)$:

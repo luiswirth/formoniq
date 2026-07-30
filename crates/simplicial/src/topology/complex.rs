@@ -6,7 +6,10 @@ use super::{
 };
 use crate::{Dim, Sign};
 
-use crate::linalg::{CooMatrix, CooMatrixExt};
+use crate::linalg::{
+  CooMatrix, CooMatrixExt,
+  exact::{IntegerMatrix, Selection},
+};
 
 use itertools::Itertools;
 
@@ -212,6 +215,47 @@ impl Complex {
   /// The Betti numbers of the complex are in [`homology`](super::homology).
   pub fn coboundary_operator(&self, dim: Dim) -> CooMatrix {
     self.boundary_operator(dim + 1).clone().transpose()
+  }
+
+  /// $diff_k$ as an exact integer matrix, and by transposition $dif^(k-1)$ too.
+  ///
+  /// The same incidence as [`boundary_operator`](Self::boundary_operator), over
+  /// $ZZ$ rather than $RR$, which is what the discrete invariants in
+  /// [`homology`](super::homology) and [`cohomology`](super::cohomology) are
+  /// computed from: a Betti number and a generator are exact, and a
+  /// floating-point rank would make them depend on a tolerance.
+  ///
+  /// Total over every grade with no case distinction, since the skeletons off
+  /// $0 <= k <= n$ are empty and the incidence rung between them is too: at the
+  /// ends it is the zero map to or from the zero module, of the right shape.
+  pub(crate) fn integral_boundary(&self, grade: Dim) -> IntegerMatrix {
+    IntegerMatrix::new(
+      self.nsimplices(grade - 1),
+      self.nsimplices(grade),
+      self
+        .incidences(grade - 1)
+        .map(|(sign, face, coface)| (face, coface, i64::from(sign.as_i32())))
+        .collect(),
+    )
+  }
+
+  /// The $k$-simplices that do not lie on $diff K$, as a selection of the
+  /// coordinates of $C_k$.
+  ///
+  /// They are a basis of the relative chain group $C_k (K, diff K) = C_k (K)
+  /// slash C_k (diff K)$, and dually of the relative cochains, which are the
+  /// cochains vanishing on the boundary. The [`Selection`] carries both
+  /// readings: the restriction that forms the relative operator, and the
+  /// extension by zero that writes a relative class back out as data on the
+  /// whole skeleton.
+  pub(crate) fn interior_selection(&self, grade: Dim) -> Selection {
+    Selection::excluding(
+      self.nsimplices(grade),
+      self
+        .boundary_simplices(grade)
+        .into_iter()
+        .map(|idx| idx.kidx),
+    )
   }
 }
 

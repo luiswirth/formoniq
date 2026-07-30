@@ -139,13 +139,10 @@ impl<'m> SimplexRef<'m> {
       .subsimps(dim)
       .map(move |sub| complex.skeleton(dim).handle_by_simplex(&sub))
   }
-  /// The facets: the codimension-1 faces. Empty for a vertex.
+  /// The facets: the codimension-1 faces. Empty for a vertex, since
+  /// [`faces`](Self::faces) is total in the dimension.
   pub fn facets(self) -> impl Iterator<Item = SimplexRef<'m>> {
-    let below = self.idx.dim - 1;
-    (below >= 0)
-      .then_some(below)
-      .into_iter()
-      .flat_map(move |d| self.faces(d))
+    self.faces(self.idx.dim - 1)
   }
   /// The signed boundary $diff sigma$: each facet with its incidence sign.
   pub fn boundary(self) -> impl Iterator<Item = (Sign, SimplexRef<'m>)> {

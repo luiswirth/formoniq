@@ -809,8 +809,8 @@ mod test {
 
         // The same cochain against the chain with those coefficients: no
         // geometry consulted, and a different number.
-        let chain = Chain::new(grade, v.coeffs().iter().map(|c| c.round() as i64).collect());
-        let combinatorial = pairing(&u, &chain);
+        let chain = Chain::from_vec(grade, v.coeffs().iter().map(|c| c.round() as i64).collect());
+        let combinatorial = pairing(&u, &chain.extend_scalars(|&c| c as f64));
         assert!(
           (combinatorial - l2_pairing(&complex, &u, &v)).abs() > 1e-9,
           "dim {dim} grade {grade}: the two pairings coincide, so one is not what it claims"
