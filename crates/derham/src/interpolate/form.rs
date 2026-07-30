@@ -1,5 +1,5 @@
 use {
-  multialgebra::{ExteriorGrade, Tensor, Variance, exterior_dim},
+  multialgebra::{ExteriorGrade, Tensor, Variance, exterior_dim, tensor::Transport},
   multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
@@ -45,16 +45,24 @@ pub struct WhitneyLsf {
   cell_dim: Dim,
   /// The local vertex set of the DOF subsimplex.
   dof_simp: Combination,
-  /// The differential of the barycentric coordinate map
-  /// $lambda: RR^n -> RR^(n+1)$: the rows are the $dif lambda_i$.
-  difbarys: Matrix,
+  /// $lambda^*$ at grade $k$, the pullback along the barycentric coordinate
+  /// map: what carries a formal barycentric blade to a reference $k$-form.
+  bary_pullback: Transport,
+  /// The same at grade $k+1$, where [`Self::dif`] lands.
+  bary_pullback_dif: Transport,
 }
 impl WhitneyLsf {
   pub fn unit(cell_dim: Dim, dof_simp: Combination) -> Self {
+    // The differential of the barycentric coordinate map
+    // $lambda: RR^n -> RR^(n+1)$: the rows are the $dif lambda_i$.
+    let difbarys = unit_difbarys(cell_dim);
+    let grade = Dim::from(dof_simp.card() - 1);
+    let covariant = |grade| Tensor::one_alternating(grade, Variance::Covariant, cell_dim);
     Self {
       cell_dim,
       dof_simp,
-      difbarys: unit_difbarys(cell_dim),
+      bary_pullback: Transport::new(&covariant(grade), &difbarys),
+      bary_pullback_dif: Transport::new(&covariant(grade + 1), &difbarys),
     }
   }
 
@@ -83,7 +91,7 @@ impl WhitneyLsf {
   pub fn at_bary<'a>(&self, bary: impl Into<BaryRef<'a>>) -> Tensor {
     let bary = Tensor::line(bary.into().view().into_owned(), Variance::Contravariant);
     let koszul = self.barycentric_blade().interior_product(&bary);
-    factorial_f64(self.grade().index()) * koszul.pullback(&self.difbarys)
+    factorial_f64(self.grade().index()) * self.bary_pullback.pullback(&koszul)
   }
 
   /// The constant exterior derivative
@@ -93,7 +101,8 @@ impl WhitneyLsf {
   /// Vanishes automatically for the top grade, where $Lambda^(k+1) (RR^n)$
   /// is the zero space.
   pub fn dif(&self) -> Tensor {
-    factorial_f64(self.grade().index() + 1) * self.barycentric_blade().pullback(&self.difbarys)
+    factorial_f64(self.grade().index() + 1)
+      * self.bary_pullback_dif.pullback(&self.barycentric_blade())
   }
 }
 

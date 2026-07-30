@@ -42,7 +42,7 @@ use crate::{
 };
 
 use {
-  multialgebra::{Dim, ExteriorGrade, Tensor},
+  multialgebra::{Dim, ExteriorGrade, Tensor, Variance, tensor::Transport},
   simplicial::{
     atlas::{Bary, MeshPoint, SimplexQuadRule},
     linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
@@ -92,11 +92,18 @@ pub fn prolongation_matrix(
     let (parent, bary_map) = &provenance[cell.kidx()];
     let jacobian = &subdivision.children()[cell.kidx()].jacobian;
 
+    // One child, one Jacobian, so its functor is built once and reused at every
+    // quadrature node of every basis form on the cell.
+    let transport = Transport::new(
+      &Tensor::one_alternating(grade, Variance::Covariant, dim),
+      jacobian,
+    );
+
     for (tau, form) in parent.handle(coarse_complex).faces(grade).zip(&basis_forms) {
       let block = ProlongedBasisForm {
         form,
         bary_map,
-        jacobian,
+        transport: &transport,
         dim,
         grade,
       };
@@ -182,7 +189,7 @@ struct ProlongedBasisForm<'a> {
   /// `parent_bary = bary_map * fine_bary`; see [`cell_provenance`].
   bary_map: &'a Matrix,
   /// The child's affine Jacobian into the parent chart.
-  jacobian: &'a Matrix,
+  transport: &'a Transport,
   dim: Dim,
   grade: ExteriorGrade,
 }
@@ -201,9 +208,8 @@ impl Section for ProlongedBasisForm<'_> {
     // expresses the value in the fine cell's frame, as the fine de Rham integral
     // over `point`'s simplex requires.
     self
-      .form
-      .at_bary(&Bary::new(parent_bary))
-      .pullback(self.jacobian)
+      .transport
+      .pullback(&self.form.at_bary(&Bary::new(parent_bary)))
   }
 }
 
