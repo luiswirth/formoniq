@@ -35,7 +35,8 @@ impl SimplexQuadRule {
   ///   f((2 beta + bb(1)) \/ (d + n - 2i))$
   /// over barycentric lattice points $beta in NN_0^(n+1)$, with
   /// $w_i = (-1)^i 2^(-2s) (d + n - 2i)^d \/ (i! (d + n - i)!)$.
-  pub fn grundmann_moeller(dim: Dim, s: usize) -> Self {
+  pub fn grundmann_moeller(dim: impl Into<Dim>, s: usize) -> Self {
+    let dim = dim.into();
     let n = dim.index();
     let d = 2 * s + 1;
 

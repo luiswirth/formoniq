@@ -63,7 +63,8 @@ pub struct UnitRefinement {
 }
 
 /// The reference edgewise subdivision of the $n$-simplex at refinement $R >= 1$.
-pub fn unit_refinement(dim: Dim, refinement: usize) -> UnitRefinement {
+pub fn unit_refinement(dim: impl Into<Dim>, refinement: usize) -> UnitRefinement {
+  let dim = dim.into();
   assert!(refinement >= 1, "A refinement is at least one.");
 
   let vertices: Vec<Vec<usize>> = Composition::all((dim + 1).index(), refinement)
@@ -216,7 +217,7 @@ mod test {
     /// order: the parent's vertices read through the lattice weights.
     fn refine_ordered(vertices: &[Vector], refinement: usize) -> Vec<Vec<Vector>> {
       let dim = vertices.len() - 1;
-      let pattern = unit_refinement(dim.into(), refinement);
+      let pattern = unit_refinement(dim, refinement);
       pattern
         .children()
         .iter()

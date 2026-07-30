@@ -320,7 +320,7 @@ mod test {
         let expected = if grade == 0 {
           Matrix::from_element(1, ndofs, scale)
         } else {
-          scale * unit_boundary_operator(dim, grade.into())
+          scale * unit_boundary_operator(dim, grade)
         };
         assert_relative_eq!(collapsed, expected);
       }

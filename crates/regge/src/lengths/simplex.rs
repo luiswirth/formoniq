@@ -266,7 +266,7 @@ impl SimplexLengthsSq {
   pub fn from_metric(metric: &Metric) -> Self {
     let dim = metric.dim();
 
-    let mut lengths_sq = Vector::zeros(nedges(dim.into()));
+    let mut lengths_sq = Vector::zeros(nedges(dim));
     for (iedge, edge) in combinations(dim + 1, 2).enumerate() {
       let (vi, vj) = (edge.index_at(0), edge.index_at(1));
       lengths_sq[iedge] = if vi == 0 {

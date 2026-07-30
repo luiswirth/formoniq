@@ -137,7 +137,8 @@ impl Complex {
   ///
   /// These span the boundary subcomplex. Their complement spans the
   /// relative cochain complex of the pair $(K, diff K)$.
-  pub fn boundary_simplices(&self, dim: Dim) -> Vec<SimplexIdx> {
+  pub fn boundary_simplices(&self, dim: impl Into<Dim>) -> Vec<SimplexIdx> {
+    let dim = dim.into();
     self
       .boundary_facets()
       .into_iter()
@@ -164,7 +165,8 @@ impl Complex {
   /// shape, which the total accessors give with no case distinction:
   /// [`nsimplices`](Self::nsimplices) and [`incidences`](Self::incidences)
   /// are both empty off the range.
-  pub fn boundary_operator(&self, dim: Dim) -> &CooMatrix {
+  pub fn boundary_operator(&self, dim: impl Into<Dim>) -> &CooMatrix {
+    let dim = dim.into();
     self.boundary_operators[dim.index()].get_or_init(|| self.compute_boundary_operator(dim))
   }
 
@@ -210,8 +212,8 @@ impl Complex {
   /// on cochains. It is the transpose of the boundary operator.
   ///
   /// The Betti numbers of the complex are in [`homology`](super::homology).
-  pub fn coboundary_operator(&self, dim: Dim) -> CooMatrix {
-    self.boundary_operator(dim + 1).clone().transpose()
+  pub fn coboundary_operator(&self, dim: impl Into<Dim>) -> CooMatrix {
+    self.boundary_operator(dim.into() + 1).clone().transpose()
   }
 
   /// $diff_k$ as an exact integer matrix, and by transposition $dif^(k-1)$ too.
@@ -249,7 +251,8 @@ impl Complex {
   /// The complement of the boundary subcomplex's
   /// [`inclusion`](super::subcomplex::Subcomplex::inclusion), which is the
   /// exactness of $0 -> C(K, diff K) -> C(K) -> C(diff K) -> 0$.
-  pub fn interior_selection(&self, grade: Dim) -> Selection {
+  pub fn interior_selection(&self, grade: impl Into<Dim>) -> Selection {
+    let grade = grade.into();
     Selection::excluding(
       self.nsimplices(grade),
       self

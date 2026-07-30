@@ -78,7 +78,8 @@ impl Complex {
   /// absolute [`Self::betti_number`]. Computed exactly from the
   /// incidence, so it needs no orientability assumption (unlike the
   /// Poincaré--Lefschetz shortcut $b_k (K, diff K) = b_(n - k) (K)$). Metric-free.
-  pub fn relative_betti_number(&self, grade: Dim) -> usize {
+  pub fn relative_betti_number(&self, grade: impl Into<Dim>) -> usize {
+    let grade = grade.into();
     let interior = self.interior_selection(grade);
     interior.len() - self.relative_boundary_rank(grade) - self.relative_boundary_rank(grade + 1)
   }
@@ -112,7 +113,8 @@ impl Complex {
   /// representatives chosen by the elimination order and never minimizers, and
   /// they span the free part over $QQ$ without necessarily generating its
   /// integral lattice.
-  pub fn homology_generators(&self, grade: Dim) -> Vec<Chain> {
+  pub fn homology_generators(&self, grade: impl Into<Dim>) -> Vec<Chain> {
+    let grade = grade.into();
     quotient_generators(
       &self.integral_boundary(grade),
       &self.integral_boundary(grade + 1),
@@ -134,7 +136,8 @@ impl Complex {
   ///
   /// The Kronecker dual of [`Self::relative_cohomology_generators`], and the
   /// cycles whose periods pin the relative harmonic basis.
-  pub fn relative_homology_generators(&self, grade: Dim) -> Vec<Chain> {
+  pub fn relative_homology_generators(&self, grade: impl Into<Dim>) -> Vec<Chain> {
+    let grade = grade.into();
     let interior = self.interior_selection(grade);
     let outgoing = self
       .integral_boundary(grade)
@@ -383,7 +386,7 @@ pub(super) mod test {
   #[test]
   fn annulus_generator_is_a_loop() {
     let complex = annulus();
-    let generators = complex.homology_generators(Dim::new(1));
+    let generators = complex.homology_generators(1);
     assert_eq!(generators.len(), 1);
     let loop_ = &generators[0];
     assert!(is_cycle(&complex, loop_));

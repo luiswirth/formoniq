@@ -52,7 +52,8 @@ impl Complex {
   /// The caveats of `quotient_generators` apply: representatives chosen by
   /// the elimination order, never minimizers, spanning the free part over $QQ$
   /// without necessarily generating its integral lattice.
-  pub fn cohomology_generators(&self, grade: Dim) -> Vec<Cochain<i64>> {
+  pub fn cohomology_generators(&self, grade: impl Into<Dim>) -> Vec<Cochain<i64>> {
+    let grade = grade.into();
     quotient_generators(
       &self.integral_coboundary(grade),
       &self.integral_coboundary(grade - 1),
@@ -74,7 +75,8 @@ impl Complex {
   ///
   /// These are the cocycles of the essential-boundary-condition de Rham
   /// complex, whose harmonic space they represent.
-  pub fn relative_cohomology_generators(&self, grade: Dim) -> Vec<Cochain<i64>> {
+  pub fn relative_cohomology_generators(&self, grade: impl Into<Dim>) -> Vec<Cochain<i64>> {
+    let grade = grade.into();
     let interior = self.interior_selection(grade);
     let outgoing = self
       .integral_coboundary(grade)

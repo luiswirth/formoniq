@@ -29,8 +29,11 @@ impl From<(Dim, KSimplexIdx)> for SimplexIdx {
   }
 }
 impl SimplexIdx {
-  pub fn new(dim: Dim, kidx: KSimplexIdx) -> Self {
-    Self { dim, kidx }
+  pub fn new(dim: impl Into<Dim>, kidx: KSimplexIdx) -> Self {
+    Self {
+      dim: dim.into(),
+      kidx,
+    }
   }
   pub fn dim(&self) -> Dim {
     self.dim
@@ -132,7 +135,8 @@ impl<'m> SimplexRef<'m> {
     self.faces(Dim::ONE).map(Roled::trusted)
   }
   /// The `dim`-dimensional faces (subsimplices) of this simplex.
-  pub fn faces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
+  pub fn faces(self, dim: impl Into<Dim>) -> impl Iterator<Item = SimplexRef<'m>> {
+    let dim = dim.into();
     let complex = self.complex;
     self
       .simplex()
@@ -183,7 +187,8 @@ impl<'m> SimplexRef<'m> {
       .map(move |kidx| Roled::trusted(SimplexIdx::new(top, kidx).handle(complex)))
   }
   /// The `dim`-dimensional cofaces (supersimplices) of this simplex.
-  pub fn cofaces(self, dim: Dim) -> impl Iterator<Item = SimplexRef<'m>> {
+  pub fn cofaces(self, dim: impl Into<Dim>) -> impl Iterator<Item = SimplexRef<'m>> {
+    let dim = dim.into();
     let complex = self.complex;
     let simplex = self.simplex();
     let mut sups: Vec<Simplex> = self
@@ -261,7 +266,8 @@ impl<'m> SkeletonRef<'m> {
   /// off either end and get nothing rather than a panic. The stored
   /// [`Skeleton`] cannot express that (it has no simplex to read its dimension
   /// from), which is why the dimension lives on the handle.
-  pub fn new(complex: &'m Complex, dim: Dim) -> Self {
+  pub fn new(complex: &'m Complex, dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
     Self { complex, dim }
   }
   /// Whether this dimension is one the complex stores simplices for.

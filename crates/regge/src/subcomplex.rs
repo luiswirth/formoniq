@@ -5,7 +5,6 @@
 //! it needs a metric, so it reaches down from here, as an extension trait
 //! because the trace reads as an operation on the subcomplex.
 
-use multiindex::Dim;
 use simplicial::{linalg::Matrix, topology::subcomplex::Subcomplex};
 
 use crate::{coord::mesh::MeshCoords, lengths::mesh::MeshLengthsSq};
@@ -33,7 +32,7 @@ impl SubcomplexExt for Subcomplex {
       Vec::new()
     } else {
       self
-        .parent_kidxs(Dim::ONE)
+        .parent_kidxs(1)
         .iter()
         .map(|&iedge| parent[iedge])
         .collect()
@@ -44,7 +43,7 @@ impl SubcomplexExt for Subcomplex {
   /// The vertex coordinates restricted to the boundary.
   fn trace_coords(&self, parent: &MeshCoords) -> MeshCoords {
     let columns: Vec<_> = self
-      .parent_kidxs(Dim::ZERO)
+      .parent_kidxs(0)
       .iter()
       .map(|&ivertex| parent.matrix().column(ivertex))
       .collect();
