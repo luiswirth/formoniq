@@ -83,7 +83,7 @@ const VOLUME_EMISSION: f32 = 1.4;
 /// scene's extent).
 ///
 /// It draws the mesh's own edges and vertices, so its scale is the mesh's local
-/// one ([`mean_edge_length`](regge::coord::mean_edge_length))
+/// one ([`mesh_width_mean`](regge::lengths::mesh::MeshLengthsSq::mesh_width_mean))
 /// rather than the object's global one. Against the extent it read correctly at
 /// one refinement only: refine the mesh and the cells shrink while the strokes
 /// stay put, until the wireframe is a solid mass with no surface visible between
@@ -648,7 +648,10 @@ impl FieldDisplay {
     // which sizes what should read the same at any resolution. A mesh with no
     // edges has no local length, and falls back on the global one.
     let mesh_scale = {
-      let mean = regge::coord::mean_edge_length(&scene.topology, &scene.coords);
+      let mean = scene
+        .coords
+        .to_edge_lengths_sq(&scene.topology)
+        .mesh_width_mean();
       if mean > 0.0 {
         mean as f32
       } else {
