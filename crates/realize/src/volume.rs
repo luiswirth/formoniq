@@ -31,7 +31,7 @@ use crate::reduce::{admitted_reduction_sign, scalarize};
 /// length and clamped to what a texture upload should carry. Derived from the
 /// object rather than asked of the reader, like every other mark scale: a
 /// finer mesh earns a finer grid until the ceiling, and the ceiling is where
-/// memory ($256^3$ scalars is 64 MB at `f32`) stops being reasonable on the web.
+/// memory ($128^3$ scalars is 8 MB at `f32`) stops being reasonable on the web.
 const MIN_RESOLUTION: usize = 32;
 const MAX_RESOLUTION: usize = 128;
 
@@ -121,11 +121,7 @@ fn sample_at(
 ) -> f64 {
   let cell = point.chart(topology);
   let signed = (k == n).then(|| admitted_reduction_sign(topology, cell, k));
-  scalarize(
-    interpolant.eval(point),
-    &coords.simplex_metric(cell.get()),
-    signed,
-  )
+  scalarize(interpolant.eval(point), &coords.cell_metric(cell), signed)
 }
 
 /// The ambient minimum corner and extent of the mesh, padded on each side by a
