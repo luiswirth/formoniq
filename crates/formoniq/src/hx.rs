@@ -169,32 +169,9 @@ impl GradeKHodgeHx {
     grade: impl Into<ExteriorGrade>,
   ) -> Self {
     let grade = grade.into();
-    let operator = complex.hdif_gram(grade);
-    let smoother = Jacobi::weighted(&operator, SMOOTHER_WEIGHT);
-    let mut preconditioner = AuxiliarySpace::new(smoother);
-
-    // Gradient correction: Pi_grad = D_{k-1}, auxiliary operator A_{k-1}. Absent
-    // at grade 0, where the lower space Lambda^{-1} is trivial.
-    let lower = grade - 1;
-    if complex.ndofs(lower) > 0 {
-      let prolong = complex.dif(lower);
-      preconditioner =
-        preconditioner.with_correction(prolong, Box::new(direct(complex.hdif_gram(lower))));
-    }
-
-    // Vector-nodal correction: Pi_vec, auxiliary operator the block diagonal of
-    // C(N,k) scalar nodal problems A_0. The blocks are identical, so one factor
-    // is shared across them. Absent where the space has no columns.
-    let prolong = vector_nodal_prolongation(complex.topology(), coords, grade);
-    if prolong.ncols() > 0 {
-      let ncovectors = prolong.ncols() / coords.nvertices();
-      let blocks = ReplicatedBlock::new(direct(complex.hdif_gram(0)), ncovectors);
-      preconditioner = preconditioner.with_correction(prolong, Box::new(blocks));
-    }
-
     Self {
-      operator,
-      preconditioner,
+      operator: complex.hdif_gram(grade),
+      preconditioner: hx_preconditioner(complex, coords, grade, &DirectBlocks(complex)),
     }
   }
 
@@ -231,11 +208,14 @@ impl GradeKHodgeHx {
     sweeps: usize,
   ) -> Self {
     let grade = grade.into();
-    let operator = tower.finest_whitney().hdif_gram(grade);
-    let preconditioner = hx_preconditioner(tower, coords, grade, sweeps);
+    let blocks = MultigridBlocks {
+      tower,
+      coords,
+      sweeps,
+    };
     Self {
-      operator,
-      preconditioner,
+      operator: tower.finest_whitney().hdif_gram(grade),
+      preconditioner: hx_preconditioner(&tower.finest_whitney(), coords, grade, &blocks),
     }
   }
 
@@ -261,64 +241,103 @@ fn direct(operator: CsrMatrix) -> DirectInverse {
   DirectInverse::try_new(operator).expect("auxiliary operator must be SPD")
 }
 
-/// The grade-`grade` HX auxiliary-space preconditioner over `tower`, with
-/// multigrid-inverted blocks, recursing in grade on the gradient block.
+/// The grade-`grade` HX auxiliary-space preconditioner on `complex`: the
+/// smoother and the two corrections, with `blocks` supplying the inverse of each
+/// auxiliary operator.
 ///
-/// At grade $0$ there is no gradient space and this is the nodal V-cycle wrapped
-/// as an auxiliary-space smoother; at grade $k$ the gradient block is this same
-/// function at grade $k - 1$, so the recursion bottoms out at grade $0$ with no
-/// special case. Returns `AuxiliarySpace<Jacobi>` uniformly, boxable as the
-/// gradient block of the grade above.
+/// The structure is the mathematics and lives here once; how a block is
+/// inverted is a solver choice and lives in [`AuxiliaryBlocks`]. Total on the
+/// degenerate boundary: at grade $0$ the gradient space $Lambda^(-1)$ is
+/// trivial and the correction is absent, so is the vector-nodal one wherever
+/// $binom(N,k) = 0$.
 fn hx_preconditioner(
-  tower: &RefinementTower,
+  complex: &WhitneyComplex,
   coords: &MeshCoords,
   grade: ExteriorGrade,
-  sweeps: usize,
+  blocks: &dyn AuxiliaryBlocks,
 ) -> AuxiliarySpace<Jacobi> {
-  let complex = tower.finest_whitney();
   let operator = complex.hdif_gram(grade);
-  let smoother = Jacobi::weighted(&operator, SMOOTHER_WEIGHT);
-  let mut preconditioner = AuxiliarySpace::new(smoother);
+  let mut preconditioner = AuxiliarySpace::new(Jacobi::weighted(&operator, SMOOTHER_WEIGHT));
 
-  // Gradient block: HX one grade down, so its own dif near-kernel is handled
-  // recursively rather than left to a stalling plain V-cycle. Absent at grade 0.
+  // Gradient correction: Pi_grad = D_{k-1}, auxiliary operator A_{k-1}.
   let lower = grade - 1;
   if complex.ndofs(lower) > 0 {
-    let prolong = complex.dif(lower);
-    let block = hx_preconditioner(tower, coords, lower, sweeps);
-    preconditioner = preconditioner.with_correction(prolong, Box::new(block));
+    preconditioner = preconditioner.with_correction(complex.dif(lower), blocks.gradient(lower));
   }
 
-  // Vector-nodal blocks: grade 0 by construction, so a plain nodal V-cycle,
-  // shared across the C(N,k) identical copies.
+  // Vector-nodal correction: Pi_vec, auxiliary operator the block diagonal of
+  // C(N,k) identical copies of the scalar nodal problem A_0, one inner solver
+  // shared across them.
   let prolong = vector_nodal_prolongation(complex.topology(), coords, grade);
   if prolong.ncols() > 0 {
     let ncovectors = prolong.ncols() / coords.nvertices();
-    let blocks = ReplicatedBlock::new(tower.grade_vcycle(0, sweeps), ncovectors);
-    preconditioner = preconditioner.with_correction(prolong, Box::new(blocks));
+    let replicated = ReplicatedBlock::new(blocks.nodal(), ncovectors);
+    preconditioner = preconditioner.with_correction(prolong, Box::new(replicated));
   }
 
   preconditioner
 }
 
+/// The inverses of the two auxiliary operators, which is all that separates one
+/// HX preconditioner here from the other.
+trait AuxiliaryBlocks {
+  /// The inverse of the grade-$g$ problem $A_g$ carried by the gradient space.
+  fn gradient(&self, grade: ExteriorGrade) -> Box<dyn SelfAdjoint<Space = Vector>>;
+  /// The inverse of one copy of the scalar nodal problem $A_0$.
+  fn nodal(&self) -> Box<dyn SelfAdjoint<Space = Vector>>;
+}
+
+/// Every block a direct faer factorization on a single mesh: exact, so the
+/// gradient block needs no recursion.
+struct DirectBlocks<'a>(&'a WhitneyComplex<'a>);
+
+impl AuxiliaryBlocks for DirectBlocks<'_> {
+  fn gradient(&self, grade: ExteriorGrade) -> Box<dyn SelfAdjoint<Space = Vector>> {
+    Box::new(direct(self.0.hdif_gram(grade)))
+  }
+  fn nodal(&self) -> Box<dyn SelfAdjoint<Space = Vector>> {
+    Box::new(direct(self.0.hdif_gram(0)))
+  }
+}
+
+/// Every block a multigrid solve over a refinement tower, the gradient one
+/// recursing in grade as [`GradeKHodgeHx::with_multigrid`] describes.
+struct MultigridBlocks<'a> {
+  tower: &'a RefinementTower,
+  coords: &'a MeshCoords,
+  sweeps: usize,
+}
+
+impl AuxiliaryBlocks for MultigridBlocks<'_> {
+  fn gradient(&self, grade: ExteriorGrade) -> Box<dyn SelfAdjoint<Space = Vector>> {
+    Box::new(hx_preconditioner(
+      &self.tower.finest_whitney(),
+      self.coords,
+      grade,
+      self,
+    ))
+  }
+  fn nodal(&self) -> Box<dyn SelfAdjoint<Space = Vector>> {
+    Box::new(self.tower.grade_vcycle(0, self.sweeps))
+  }
+}
+
 /// One approximate inverse applied to each of `count` contiguous blocks of equal
 /// size: the block-diagonal inverse of `count` identical copies of an operator,
 /// sharing a single inner solver. The vector-nodal auxiliary operator is exactly
-/// this, $binom(N,k)$ copies of the scalar nodal problem in a fixed frame; the
-/// shared inner solver is a direct factor ([`GradeKHodgeHx::new`]) or a grade-$0$
-/// V-cycle ([`GradeKHodgeHx::with_multigrid`]).
-struct ReplicatedBlock<B> {
-  inverse: B,
+/// this, $binom(N,k)$ copies of the scalar nodal problem in a fixed frame.
+struct ReplicatedBlock {
+  inverse: Box<dyn SelfAdjoint<Space = Vector>>,
   count: usize,
 }
 
-impl<B> ReplicatedBlock<B> {
-  fn new(inverse: B, count: usize) -> Self {
+impl ReplicatedBlock {
+  fn new(inverse: Box<dyn SelfAdjoint<Space = Vector>>, count: usize) -> Self {
     Self { inverse, count }
   }
 }
 
-impl<B: ApproxInverse<Space = Vector>> ApproxInverse for ReplicatedBlock<B> {
+impl ApproxInverse for ReplicatedBlock {
   type Space = Vector;
   fn dim(&self) -> usize {
     self.inverse.dim() * self.count
@@ -334,7 +353,7 @@ impl<B: ApproxInverse<Space = Vector>> ApproxInverse for ReplicatedBlock<B> {
   }
 }
 
-impl<B: SelfAdjoint<Space = Vector>> SelfAdjoint for ReplicatedBlock<B> {}
+impl SelfAdjoint for ReplicatedBlock {}
 
 #[cfg(test)]
 mod tests {
