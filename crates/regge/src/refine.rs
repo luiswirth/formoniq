@@ -20,11 +20,11 @@
 //!   one, and the metric it induces equals the intrinsic refinement, which is
 //!   the law that ties the two.
 
-use crate::{coord::mesh::MeshCoords, lengths::CellGramians, lengths::mesh::MeshLengthsSq};
-use simplicial::{
-  linalg::Vector,
-  topology::{complex::Complex, refine::Subdivision},
+use crate::{
+  coord::{Coord, mesh::MeshCoords},
+  lengths::{CellGramians, mesh::MeshLengthsSq},
 };
+use simplicial::topology::{complex::Complex, refine::Subdivision};
 
 /// The geometric half of a refinement.
 ///
@@ -40,10 +40,6 @@ pub trait SubdivisionExt {
 }
 
 impl SubdivisionExt for Subdivision {
-  /// Refine per-cell metrics: each child carries the pullback of its parent
-  /// cell's metric along the child's affine Jacobian. Exact and coordinate-free
-  ///, the intrinsic refinement of any geometry, once reduced to its per-cell
-  /// metrics ([`CellGramians`]).
   fn refine_gramians(&self, coarse: &CellGramians) -> CellGramians {
     let metrics = self
       .children()
@@ -88,11 +84,15 @@ impl MeshCoords {
       .view_range_mut(.., 0..sub.ncoarse_vertices())
       .copy_from(self.matrix());
     for (i, birth) in sub.new_births().iter().enumerate() {
-      let mut col = Vector::zeros(ambient.index());
-      for &(v, w) in &birth.combination {
-        col += w * self.matrix().column(v);
-      }
-      matrix.set_column(sub.ncoarse_vertices() + i, &col);
+      // The weights of a birth sum to one, so the new vertex is where it is
+      // independently of any origin: the one combination of points there is.
+      let born = Coord::affine_combination(
+        birth
+          .combination
+          .iter()
+          .map(|&(vertex, weight)| (weight, self.coord(vertex))),
+      );
+      matrix.set_column(sub.ncoarse_vertices() + i, born.vector());
     }
     MeshCoords::with_ambient(matrix, self.ambient().clone())
   }
