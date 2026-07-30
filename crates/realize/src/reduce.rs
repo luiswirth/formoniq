@@ -102,10 +102,10 @@ pub fn reduced_form(form: Tensor, metric: &Metric, sign: Sign) -> Tensor {
 /// face while carrying no global sign). `None` is the honest magnitude.
 pub fn scalarize(form: Tensor, metric: &Metric, signed: Option<Sign>) -> f64 {
   if form.grade() == 0 {
-    return form.components()[0];
+    return form.as_scalar();
   }
   match signed {
-    Some(sign) => form.star(metric, sign).components()[0],
+    Some(sign) => form.star(metric, sign).as_scalar(),
     None => form.norm(metric),
   }
 }

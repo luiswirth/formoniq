@@ -74,7 +74,7 @@ impl FaceTrace {
       self.grade, self.face_dim,
       "The top coefficient exists only at the face's own dimension."
     );
-    self.apply(form).components()[0]
+    self.apply(form).as_scalar()
   }
 }
 
