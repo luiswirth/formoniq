@@ -6,10 +6,7 @@ use super::{
 };
 use crate::{Dim, Sign};
 
-use crate::linalg::{
-  CooMatrix, CooMatrixExt,
-  exact::{IntegerMatrix, Selection},
-};
+use crate::linalg::{CooMatrix, CooMatrixExt, Selection, exact::IntegerMatrix};
 
 use itertools::Itertools;
 
@@ -248,7 +245,11 @@ impl Complex {
   /// readings: the restriction that forms the relative operator, and the
   /// extension by zero that writes a relative class back out as data on the
   /// whole skeleton.
-  pub(crate) fn interior_selection(&self, grade: Dim) -> Selection {
+  ///
+  /// The complement of the boundary subcomplex's
+  /// [`inclusion`](super::subcomplex::Subcomplex::inclusion), which is the
+  /// exactness of $0 -> C(K, diff K) -> C(K) -> C(diff K) -> 0$.
+  pub fn interior_selection(&self, grade: Dim) -> Selection {
     Selection::excluding(
       self.nsimplices(grade),
       self

@@ -9,6 +9,9 @@
 
 pub(crate) mod exact;
 
+mod selection;
+pub use selection::Selection;
+
 use std::mem;
 
 trait CumsumExt {

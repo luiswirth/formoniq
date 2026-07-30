@@ -24,7 +24,7 @@ use super::{
 };
 use crate::{Dim, topology::VertexIdx};
 
-use crate::linalg::CooMatrix;
+use crate::linalg::{CooMatrix, Selection};
 
 /// A codimension-1 subcomplex of $K$ as a complex in its own right, with
 /// its own (monotone) vertex numbering and the simplex-wise inclusion into
@@ -37,11 +37,10 @@ use crate::linalg::CooMatrix;
 #[derive(Debug, Clone)]
 pub struct Subcomplex {
   complex: Complex,
-  /// Per grade: boundary k-simplex index -> parent k-simplex index.
-  /// The inclusion is monotone, so no signs appear.
-  parent_kidxs: Vec<Vec<KSimplexIdx>>,
-  /// Per grade: number of k-simplices of the parent complex.
-  parent_nsimplices: Vec<usize>,
+  /// Per grade: which of the parent's $k$-simplices are the subcomplex's,
+  /// hence the inclusion $C_k (L) arrow.hook C_k (K)$ and the trace back down.
+  /// Both are needed, and a [`Selection`] is both.
+  inclusion: Vec<Selection>,
 }
 
 impl Complex {
@@ -88,40 +87,31 @@ impl Complex {
       .collect();
     let complex = Complex::from_cells(Skeleton::new(cells));
 
-    // Indexed by the full parent grade range $0..=n$, not just the boundary's
-    // own $0..=n-1$: at grade $n$ the $(n-1)$-dimensional boundary carries no
-    // simplices, so the trace is the zero map into an empty codomain. Storing
-    // that empty row explicitly keeps `trace_operator` total at top grade
-    // rather than indexing one past the boundary dimension.
-    let parent_kidxs = self
+    // Indexed by the full parent grade range $0..=n$, not just the
+    // subcomplex's own $0..=n-1$: at grade $n$ it carries no simplices, so the
+    // inclusion is the empty selection of the parent's $n$-simplices, which is
+    // what keeps every grade-keyed accessor total at the top rather than
+    // indexing one past the subcomplex's dimension.
+    let inclusion = self
       .dim()
       .range_inclusive()
       .map(|grade| {
-        if grade > complex.dim() {
-          return Vec::new();
-        }
-        complex
-          .skeleton(grade)
-          .iter()
-          .map(|boundary_simp| {
-            let parent_simp =
-              Simplex::new(boundary_simp.iter().map(|v| parent_vertices[v]).collect());
-            self.skeleton(grade).kidx_by_simplex(&parent_simp)
-          })
-          .collect()
+        let parent = self.skeleton(grade);
+        Selection::new(
+          parent.len(),
+          complex
+            .skeleton(grade)
+            .iter()
+            .map(|sub_simp| {
+              let parent_simp = Simplex::new(sub_simp.iter().map(|v| parent_vertices[v]).collect());
+              parent.kidx_by_simplex(&parent_simp)
+            })
+            .collect(),
+        )
       })
       .collect();
-    let parent_nsimplices = self
-      .dim()
-      .range_inclusive()
-      .map(|k| self.nsimplices(k))
-      .collect();
 
-    Subcomplex {
-      complex,
-      parent_kidxs,
-      parent_nsimplices,
-    }
+    Subcomplex { complex, inclusion }
   }
 }
 
@@ -132,29 +122,28 @@ impl Subcomplex {
   pub fn dim(&self) -> Dim {
     self.complex.dim()
   }
-  /// The parent indices of the boundary k-simplices.
-  pub fn parent_kidxs(&self, grade: Dim) -> &[KSimplexIdx] {
-    &self.parent_kidxs[grade.index()]
+  /// The inclusion $L arrow.hook K$ at one grade: which of the parent's
+  /// $k$-simplices are the subcomplex's.
+  ///
+  /// Its [`complement`](Selection::complement) is the relative chain group
+  /// $C_k (K, L)$, so this one datum carries the whole short exact sequence of
+  /// the pair.
+  pub fn inclusion(&self, grade: Dim) -> &Selection {
+    &self.inclusion[grade.index()]
   }
-  pub fn parent_idx(&self, boundary_idx: SimplexIdx) -> SimplexIdx {
-    SimplexIdx::new(
-      boundary_idx.dim,
-      self.parent_kidxs[boundary_idx.dim.index()][boundary_idx.kidx],
-    )
+  /// The parent indices of the subcomplex's k-simplices.
+  pub fn parent_kidxs(&self, grade: Dim) -> &[KSimplexIdx] {
+    self.inclusion(grade).indices()
+  }
+  pub fn parent_idx(&self, sub_idx: SimplexIdx) -> SimplexIdx {
+    SimplexIdx::new(sub_idx.dim, self.parent_kidxs(sub_idx.dim)[sub_idx.kidx])
   }
 
   /// The trace $"tr": C^k (K) -> C^k (diff K)$: restriction of cochains to
   /// the boundary simplices. A cochain map, $"tr" compose dif = dif compose "tr"$,
   /// and the cokernel projection of the relative inclusion.
   pub fn trace_operator(&self, grade: Dim) -> CooMatrix {
-    let mut trace = CooMatrix::new(
-      self.parent_kidxs[grade.index()].len(),
-      self.parent_nsimplices[grade.index()],
-    );
-    for (boundary_kidx, &parent_kidx) in self.parent_kidxs[grade.index()].iter().enumerate() {
-      trace.push(boundary_kidx, parent_kidx, 1.0);
-    }
-    trace
+    self.inclusion(grade).restriction()
   }
 }
 
@@ -210,18 +199,24 @@ mod test {
     }
   }
 
-  /// Exactness of 0 -> C(K, dK) -> C(K) -> C(dK) -> 0 at the level of
-  /// dimensions: interior and boundary DOFs partition the full complex.
+  /// Exactness of $0 -> C(K, diff K) -> C(K) -> C(diff K) -> 0$: the relative
+  /// chain group is the kernel of the trace, hence the complement of the
+  /// inclusion, coordinate for coordinate and not merely in dimension.
+  ///
+  /// The two sides reach the same selection by different routes, the inclusion
+  /// through the renumbered boundary complex and the relative basis through
+  /// the boundary facets of the parent, so their agreement is the sequence
+  /// being exact rather than a tautology.
   #[test]
-  fn trace_dimensions_are_exact() {
+  fn the_relative_complex_is_the_kernel_of_the_trace() {
     for dim in (1..=3usize).map(Dim::from) {
       let topology = CartesianTopology::cube(dim, 2).triangulate();
       let boundary = topology.boundary_complex().unwrap();
-      for k in dim.range() {
-        let nboundary = boundary.complex().nsimplices(k);
-        let ninterior = topology.nsimplices(k) - topology.boundary_simplices(k).len();
-        assert_eq!(nboundary + ninterior, topology.nsimplices(k));
-        assert_eq!(nboundary, topology.boundary_simplices(k).len());
+      for k in dim.range_inclusive() {
+        let inclusion = boundary.inclusion(k);
+        assert_eq!(inclusion.len(), boundary.complex().nsimplices(k));
+        assert_eq!(inclusion.total(), topology.nsimplices(k));
+        assert_eq!(&inclusion.complement(), &topology.interior_selection(k));
       }
     }
   }

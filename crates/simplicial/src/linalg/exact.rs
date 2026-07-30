@@ -13,6 +13,8 @@
 //! representatives of $ker A slash "im" B$ for a composable pair $A B = 0$,
 //! which is what a homology and a cohomology class each are.
 
+use super::Selection;
+
 use num_bigint::BigInt;
 use num_integer::Integer;
 use num_rational::BigRational;
@@ -221,69 +223,6 @@ pub fn quotient_generators(outgoing: &IntegerMatrix, incoming: &IntegerMatrix) -
     .into_iter()
     .filter_map(|cycle| span.insert(cycle).then(|| primitive(&span.last)))
     .collect()
-}
-
-/// A choice of coordinates out of `total`, retaining their order.
-///
-/// The inclusion of the subspace they span, together with the reindexing it
-/// induces: [`position`](Self::position) is the restriction that reads a
-/// coordinate in the subspace, [`scatter`](Self::scatter) the extension by zero
-/// that writes one back out.
-pub struct Selection {
-  total: usize,
-  position: Vec<Option<usize>>,
-  len: usize,
-}
-
-impl Selection {
-  /// Every coordinate but the excluded ones, which is how a relative complex
-  /// selects the simplices not in the subcomplex it is relative to.
-  pub fn excluding(total: usize, excluded: impl IntoIterator<Item = usize>) -> Self {
-    let mut kept = vec![true; total];
-    for coordinate in excluded {
-      kept[coordinate] = false;
-    }
-    let mut position = Vec::with_capacity(total);
-    let mut len = 0;
-    for keep in kept {
-      position.push(keep.then(|| {
-        len += 1;
-        len - 1
-      }));
-    }
-    Self {
-      total,
-      position,
-      len,
-    }
-  }
-
-  pub fn len(&self) -> usize {
-    self.len
-  }
-  /// The position of a coordinate within the selection, `None` if it is not
-  /// selected.
-  pub fn position(&self, coordinate: usize) -> Option<usize> {
-    self.position[coordinate]
-  }
-
-  /// A vector on the selection, extended by zero to the full coordinate space.
-  ///
-  /// # Panics
-  /// If the vector does not have one entry per selected coordinate.
-  pub fn scatter(&self, selected: &[i64]) -> Vec<i64> {
-    assert_eq!(
-      selected.len(),
-      self.len,
-      "one entry per selected coordinate"
-    );
-    (0..self.total)
-      .map(|coordinate| match self.position[coordinate] {
-        Some(position) => selected[position],
-        None => 0,
-      })
-      .collect()
-  }
 }
 
 /// An incrementally built row-echelon basis of a subspace of $QQ^n$, keyed by

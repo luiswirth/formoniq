@@ -880,7 +880,7 @@ mod test {
       let chart = refchart(&complex);
 
       for c in [1.0, 2.5] {
-        let cochain = Cochain::constant(c, complex.skeleton_raw(Dim::ZERO));
+        let cochain = Cochain::constant(c, complex.skeleton(Dim::ZERO));
         let coefficient = WhitneyInterpolant::new(cochain, &complex);
 
         for grade in dim.range_inclusive() {

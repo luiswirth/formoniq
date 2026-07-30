@@ -456,7 +456,7 @@ impl Scene {
   /// the instant placeholder and the per-grade solves that follow, rather than
   /// meshing twice.
   pub fn placeholder_on(topology: Complex, coords: MeshCoords) -> Self {
-    let nvertices = topology.skeleton_raw(0).len();
+    let nvertices = topology.skeleton(0).len();
     let fields = vec![ScalarField {
       name: "loading...".to_string(),
       grade: Dim::ZERO,
