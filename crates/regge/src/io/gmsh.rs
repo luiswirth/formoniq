@@ -1,8 +1,9 @@
 use simplicial::linalg::Matrix;
 
-use crate::coord::mesh::{MeshCoords, close_vertex_gaps};
+use crate::coord::mesh::MeshCoords;
 use simplicial::topology::{
-  VertexIdx, complex::Complex, ordering::CellOrdering, simplex::Simplex, skeleton::Skeleton,
+  VertexIdx, complex::Complex, ordering::CellOrdering, relabel::VertexRelabelling,
+  simplex::Simplex, skeleton::Skeleton,
 };
 
 pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshCoords) {
@@ -63,64 +64,56 @@ pub fn gmsh2coord_cells_ordered(bytes: &[u8]) -> (Skeleton, MeshCoords, Vec<Vec<
   let mesh_vertices = Matrix::from_columns(&mesh_vertices);
   let mesh_vertices = MeshCoords::new(mesh_vertices);
 
-  let mut points = Vec::new();
-  let mut edges = Vec::new();
-  let mut trias = Vec::new();
-  let mut quads = Vec::new();
+  // The elements of each simplex dimension the file carries, as the node words
+  // it lists them in: that order is the ordering datum, and its parity is the
+  // winding. The stored simplex sorts it.
+  let mut by_dim: [Vec<Vec<VertexIdx>>; 4] = Default::default();
 
   let elements = msh.data.elements.unwrap();
   for block in elements.element_blocks {
     type ElType = mshio::ElementType;
-    let simplex_acc = match block.element_type {
-      ElType::Pnt => &mut points,
-      ElType::Lin2 => &mut edges,
-      ElType::Tri3 => &mut trias,
-      ElType::Tet4 => &mut quads,
+    let dim = match block.element_type {
+      ElType::Pnt => 0,
+      ElType::Lin2 => 1,
+      ElType::Tri3 => 2,
+      ElType::Tet4 => 3,
       _ => {
         tracing::warn!("unsupported gmsh ElementType: {:?}", block.element_type);
         continue;
       }
     };
     for e in block.elements {
-      // The file's node order, kept: it is the ordering datum, and its parity
-      // is the winding. The stored simplex sorts it.
-      let word: Vec<VertexIdx> = e.nodes.iter().map(|tag| *tag as usize - 1).collect();
-      simplex_acc.push(word);
+      by_dim[dim].push(e.nodes.iter().map(|tag| *tag as usize - 1).collect());
     }
   }
 
-  let cells = if !quads.is_empty() {
-    quads
-  } else if !trias.is_empty() {
-    trias
-  } else if !edges.is_empty() {
-    edges
-  } else {
-    panic!("Failed to construct Triangulation from gmsh.");
-  };
+  // The cells are the elements of the highest dimension present: a file lists
+  // the lower-dimensional ones as its physical groups, and they are faces of
+  // the cells rather than cells of their own.
+  let cells = by_dim
+    .into_iter()
+    .rev()
+    .find(|elements| !elements.is_empty())
+    .expect("a gmsh file must carry elements of some supported type");
 
-  // Gmsh may carry nodes not referenced by any cell; drop them and renumber.
-  // The words are relabeled by the same map, so the ordering survives the
-  // renumbering rather than being invalidated by it.
-  let simplices: Vec<Simplex> = cells
+  // Gmsh may name nodes no cell references; drop them and renumber. The words
+  // are relabelled by the same map, so the ordering survives the renumbering
+  // rather than being invalidated by it.
+  let relabelling = VertexRelabelling::of_used(cells.iter().flatten().copied());
+  let words: Vec<Vec<VertexIdx>> = cells
+    .into_iter()
+    .map(|word| relabelling.relabel_word(word))
+    .collect();
+  let simplices = words
     .iter()
     .map(|word| Simplex::from_word(word.clone()).1)
     .collect();
-  let mut used: Vec<VertexIdx> = simplices.iter().flat_map(|cell| cell.iter()).collect();
-  used.sort_unstable();
-  used.dedup();
-  let words = cells
-    .into_iter()
-    .map(|word| {
-      word
-        .into_iter()
-        .map(|v| used.binary_search(&v).expect("vertex is used"))
-        .collect()
-    })
-    .collect();
 
-  let (cells, mesh_vertices) = close_vertex_gaps(simplices, &mesh_vertices);
-  (Skeleton::new(cells), mesh_vertices, words)
+  (
+    Skeleton::new(simplices),
+    mesh_vertices.relabelled(&relabelling),
+    words,
+  )
 }
 
 #[cfg(test)]
