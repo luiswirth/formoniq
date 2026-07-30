@@ -44,7 +44,8 @@ manifold with edge lengths a Regge manifold rather than an approximation of one.
   `Subdivision`.
 - `mesher`:
   generators — Cartesian/Kuhn grids, quotient tori, sphere surfaces — each
-  producing a complex and the coordinates that go with it.
+  producing a complex and the coordinates that go with it, plus the
+  hand-written meshes of `teaching`.
 - `io`:
   mesh formats, which are a topology and its coordinates together.
 - `vertex_gaussian_curvature`:

@@ -231,7 +231,7 @@ mod tests {
   /// two blocks overlap, a texel belongs to at most one cell.
   #[test]
   fn blocks_are_disjoint_and_in_bounds() {
-    let triforce = crate::demos::triforce();
+    let triforce = regge::mesher::teaching::triforce();
     let layout = DepositLayout::new(&triforce.0, &triforce.1);
     assert!(!layout.blocks.is_empty());
     for (i, a) in layout.blocks.iter().enumerate() {
@@ -252,7 +252,7 @@ mod tests {
   /// barycentric indicator: the affine map the fill's interpolation extends.
   #[test]
   fn corner_uvs_are_the_block_formula_at_the_corners() {
-    let (topology, coords) = crate::demos::triforce();
+    let (topology, coords) = regge::mesher::teaching::triforce();
     let layout = DepositLayout::new(&topology, &coords);
     let baked = crate::bake::BakedMesh::new(&topology, &coords);
     let crate::bake::PrimBatch::Triangles(triangles) = &baked.cells else {
