@@ -71,6 +71,13 @@ impl Jacobi {
     Self::from_diagonal(&diag, omega)
   }
 
+  /// The Jacobi *smoother*: the weight $omega = 2\/3$ above, which is the
+  /// classic optimum for a second-order operator on a regular grid and the
+  /// weight a multigrid level wants rather than the undamped one.
+  pub fn smoother(a: &CsrMatrix) -> Self {
+    Self::weighted(a, 2.0 / 3.0)
+  }
+
   /// The weighted Jacobi inverse of an operator given by its diagonal alone.
   ///
   /// The diagonal is the whole datum, so an operator that never forms its

@@ -41,11 +41,6 @@ use crate::{
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 
-/// The damping factor of the Jacobi smoother. Two-thirds is the classic optimum
-/// for a second-order operator on a regular grid: it damps the upper half of the
-/// spectrum, which is the error a coarser level cannot represent.
-const SMOOTHER_WEIGHT: f64 = 2.0 / 3.0;
-
 /// A refinement tower of Whitney complexes: a base mesh and `refinements`
 /// successive uniform subdivisions of it, coarse to fine, with the intrinsic
 /// geometry carried on every level.
@@ -145,7 +140,7 @@ impl RefinementTower {
       .rev()
       .map(|f| {
         let prolong = prolongation_matrix(grade, &self.complexes[f - 1], &self.subdivisions[f - 1]);
-        let smoother = Jacobi::weighted(&operators[f], SMOOTHER_WEIGHT);
+        let smoother = Jacobi::smoother(&operators[f]);
         Level::new(operators[f].clone(), smoother, prolong)
       })
       .collect();
