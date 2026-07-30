@@ -11,7 +11,7 @@ use simplicial::linalg::{Matrix, Vector};
 /// metric signature.
 ///
 /// The squared length $s_(i j) = norm(v_j - v_i)^2_g$ is the Regge primitive
-/// -- signed, exactly like [`Metric::norm_sq`]: positive on a spacelike
+///, signed, exactly like [`Metric::norm_sq`]: positive on a spacelike
 /// edge, zero on a null one, negative on a timelike one. Regge invented the
 /// calculus for Lorentzian spacetimes ("general relativity without
 /// coordinates"), and the squared length is what makes that work: the metric
@@ -34,8 +34,8 @@ pub fn edge_index(vi: usize, vj: usize) -> EdgeIdx {
   Combination::from_increasing([vi, vj]).rank()
 }
 impl SimplexLengthsSq {
-  /// The invariant is non-degeneracy of the induced metric tensor -- the
-  /// squared lengths must describe a simplex of *some* signature, Euclidean
+  /// The invariant is non-degeneracy of the induced metric tensor, the
+  /// squared lengths must describe a simplex of some signature, Euclidean
   /// realizability ([`Self::is_coordinate_realizable`]) being the Riemannian
   /// special case, not the requirement.
   pub fn new(lengths_sq: Vector, dim: Dim) -> Self {
@@ -79,7 +79,7 @@ impl SimplexLengthsSq {
     self[iedge]
   }
   /// The magnitude $sqrt(abs(s))$ of an edge. On an indefinite metric this is
-  /// meaningful only together with [`Self::causal_type`]; it is never NaN.
+  /// meaningful only together with [`Self::causal_type`]. It is never NaN.
   pub fn length(&self, iedge: EdgeIdx) -> f64 {
     self[iedge].abs().sqrt()
   }
@@ -90,7 +90,7 @@ impl SimplexLengthsSq {
 
   /// The diameter of this cell: the largest edge magnitude, which by
   /// convexity bounds the distance of any two points inside. A metric
-  /// quantity of the Riemannian case; on an indefinite metric it is a mesh
+  /// quantity of the Riemannian case. On an indefinite metric it is a mesh
   /// scale, not a distance.
   pub fn diameter(&self) -> f64 {
     self
@@ -186,9 +186,9 @@ pub fn cayley_menger_factor(dim: Dim) -> f64 {
 }
 
 /// The symmetric square $u_e dot.circle u_e$ of each edge vector of an
-/// $n$-simplex, in edge order: a **basis of $"Sym"^2$ indexed by the edges**.
+/// $n$-simplex, in edge order: a basis of $"Sym"^2$ indexed by the edges.
 ///
-/// The dimension count is the whole point and it is not a coincidence. An
+/// The dimension count is not a coincidence. An
 /// $n$-simplex has $binom(n+1, 2) = n(n+1)\/2$ edges and
 /// $dim "Sym"^2(RR^n) = n(n+1)\/2$, the same number, and these squares are
 /// linearly independent, hence a basis. Squared edge lengths are therefore
@@ -197,9 +197,9 @@ pub fn cayley_menger_factor(dim: Dim) -> f64 {
 /// [`SimplexLengthsSq::metric`] is that change of basis, the polarization
 /// identity being what it looks like written out.
 ///
-/// It is also why the geometry of a *subsimplex* costs nothing (invariant 2). A
+/// It is also why the geometry of a subsimplex costs nothing (invariant 2). A
 /// face's edges are a subset of the simplex's, so restricting the metric to a
-/// face is *selecting the components indexed by that face's edges* -- an index
+/// face is selecting the components indexed by that face's edges, an index
 /// selection, where the cartesian frame would need a projection. Totality over
 /// every grade is a property of this basis rather than of the code.
 ///
@@ -259,7 +259,7 @@ impl SimplexLengthsSq {
 
   /// Regge calculus: the metric tensor is the polarization identity in the
   /// signed squared lengths, $g_(i i) = s_(0, i+1)$ and
-  /// $g_(i j) = (s_(0, i+1) + s_(0, j+1) - s_(i+1, j+1)) \/ 2$ -- rational in
+  /// $g_(i j) = (s_(0, i+1) + s_(0, j+1) - s_(i+1, j+1)) \/ 2$, rational in
   /// the Regge data and valid on any signature, which is why the squared
   /// length, not the length, is the primitive.
   pub fn metric(&self) -> Metric {
@@ -300,7 +300,7 @@ mod test {
     )
   }
 
-  /// from_metric and metric are inverse -- on every
+  /// from_metric and metric are inverse, on every
   /// signature, the flat models pulled back to non-diagonal form included.
   /// The Regge representation loses nothing of a pseudo-Riemannian metric.
   #[test]
@@ -330,7 +330,7 @@ mod test {
 
   /// The causal trichotomy of Regge edges on a Minkowski cell: the reference
   /// simplex measured with $eta$ has its time edge timelike, its space edges
-  /// spacelike -- and the volume is the reference volume, $|det eta| = 1$.
+  /// spacelike, and the volume is the reference volume, $|det eta| = 1$.
   #[test]
   fn minkowski_regge_edges() {
     for dim in (2..=4usize).map(Dim::from) {
@@ -351,7 +351,7 @@ mod test {
     }
   }
 
-  /// The edge squares are a **basis** of $"Sym"^2$: as many as its dimension,
+  /// The edge squares are a basis of $"Sym"^2$: as many as its dimension,
   /// and independent. The count is $binom(n+1,2) = n(n+1)\/2 = dim "Sym"^2(RR^n)$,
   /// so a rank check is what separates "the right number" from "a basis".
   #[test]
@@ -363,7 +363,7 @@ mod test {
       assert_eq!(squares.len(), sym2);
 
       // The point simplex has no edges and a zero-dimensional Sym^2, so the
-      // empty family *is* its basis: the count above is the whole statement and
+      // empty family is its basis: the count above is the whole statement and
       // there is no rank to take.
       if sym2 > 0 {
         let components = Matrix::from_fn(sym2, squares.len(), |i, e| squares[e].components()[i]);
@@ -380,7 +380,7 @@ mod test {
   /// the edge squares: $s_e = angle.l g, u_e dot.circle u_e angle.r$.
   ///
   /// The polarization identity of [`SimplexLengthsSq::metric`] and
-  /// [`SimplexLengthsSq::from_metric`] is *that change of basis*, and this is
+  /// [`SimplexLengthsSq::from_metric`] is that change of basis, and this is
   /// what says so rather than asserting it in prose. Swept over every signature,
   /// since the pairing is metric-free and so must hold on all of them.
   #[test]
@@ -400,7 +400,7 @@ mod test {
     }
   }
 
-  /// Restricting the geometry to a face is an **index selection** in the edge
+  /// Restricting the geometry to a face is an index selection in the edge
   /// basis: the face's squared lengths are the parent's at the face's own edge
   /// indices, with nothing computed.
   ///

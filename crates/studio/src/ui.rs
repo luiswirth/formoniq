@@ -21,14 +21,14 @@ use crate::scene::{FieldOffers, dof_label};
 /// How much of the scene's light survives to the display.
 ///
 /// A ladder, not a product: each rung includes the one below it, and the fourth
-/// cell of the two-checkbox version -- bloom without the curve -- is not a
+/// cell of the two-checkbox version, bloom without the curve, is not a
 /// picture anyone wants. The glow would be added and then clipped, so the cores
 /// go flat white and only the fringes survive. Offering it would be a knob whose
 /// only use is to be wrong.
 ///
 /// The reason the choice exists at all is that there is no right answer. The
 /// scene target is unbounded and the display is not, so keeping the range above
-/// 1 *must* spend range below it -- see `display_transform` in the preamble.
+/// 1 must spend range below it, see `display_transform` in the preamble.
 /// Whether the dynamic range or the palette matters more is a question about
 /// what is being looked at, which is exactly the kind the code cannot settle
 /// from the object.
@@ -119,7 +119,7 @@ impl CameraView {
 }
 
 /// How one $k$-skeleton is drawn: whether it appears, and whether it reflects
-/// the field or is the structural geometry ink. The two are independent -- hiding
+/// the field or is the structural geometry ink. The two are independent, hiding
 /// a skeleton and coloring it are separate choices, and coloring is a no-op while
 /// it is hidden.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -131,16 +131,16 @@ pub(crate) struct SkeletonView {
 /// What of the mesh itself is drawn: [`crate::display::MeshDisplay`]'s items.
 ///
 /// The seam is `display.rs`'s own: the mesh is the object every scene has, and
-/// the field is read *on* it. So these are independent of which field is
-/// selected and unchanged by switching one -- and there is no availability rule
+/// the field is read on it. So these are independent of which field is
+/// selected and unchanged by switching one, and there is no availability rule
 /// to write, because a scene without geometry is not a scene.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) struct MeshView {
   /// The view of each $k$-skeleton, indexed by $k in {0, 1, 2}$: the points, the
-  /// edges, the faces. They are peers -- one uniform pair of questions (drawn?
+  /// edges, the faces. They are peers, one uniform pair of questions (drawn?
   /// colored?) asked of every skeleton the mesh has, no privileged "surface"
   /// among them. Which skeletons actually exist is the mesh's dimension's answer
-  /// ($k <= min(n, 2)$); a skeleton the mesh lacks is simply never offered.
+  /// ($k <= min(n, 2)$). A skeleton the mesh lacks is simply never offered.
   pub(crate) skeletons: [SkeletonView; 3],
 }
 
@@ -156,7 +156,7 @@ impl MeshView {
   /// geometry ink. Stated in $n$ rather than fixed at $k = 2$ so a curve or a
   /// point cloud colors its own cells instead of a skeleton it does not have.
   /// Above $n = 2$ the top skeleton is not drawn at all, so the boundary
-  /// 2-skeleton -- what a solid actually shows -- is what carries the field.
+  /// 2-skeleton, what a solid actually shows, is what carries the field.
   pub(crate) fn for_dim(dim: impl Into<Dim>) -> Self {
     let top = dim.into().min(Dim::new(2));
     let mut skeletons = [SkeletonView {
@@ -182,14 +182,14 @@ pub(crate) struct FieldView {
   /// The standing wave's displacement of the mesh along its normal.
   ///
   /// Not a mark: it is no item of the draw list but a deformation the mesh's
-  /// own items ride -- the field's material writing into the mesh's geometry,
+  /// own items ride, the field's material writing into the mesh's geometry,
   /// which is exactly what `wave_amplitude` already is. Hence "off" is an
   /// amplitude of zero, the same zero a field with no eigenvalue is given, and
   /// it costs no branch below the display.
   pub(crate) displacement: bool,
   pub(crate) marks: Marks,
   /// Whether a solid's interior is drawn as a medium. An item of the draw list,
-  /// so "off" drops it and costs no branch below the display -- unlike the
+  /// so "off" drops it and costs no branch below the display, unlike the
   /// displacement above, which is a deformation and switches off by going to
   /// zero.
   pub(crate) volume: bool,
@@ -197,7 +197,7 @@ pub(crate) struct FieldView {
   /// scalar. Unlike every other setting here it is not free: the medium is
   /// baked from the resulting cochain, so changing it rebuilds the field
   /// display the way switching fields does. It belongs here anyway, because it
-  /// is a question about how the field is *read*, and where the answer costs a
+  /// is a question about how the field is read, and where the answer costs a
   /// rebake is an implementation fact rather than a taxonomy.
   pub(crate) scalarization: crate::scene::Scalarization,
 }
@@ -215,15 +215,15 @@ impl Default for FieldView {
 
 /// Below this viewport width, in egui points, the two sidebars cannot dock
 /// beside a viewport worth looking at: 180 and 250 points of panel leave a
-/// phone with nothing in the middle. It is a threshold on the *window*, not a
-/// platform check -- a narrow desktop window gets the same layout, and that is
+/// phone with nothing in the middle. It is a threshold on the window, not a
+/// platform check, a narrow desktop window gets the same layout, and that is
 /// the point. Above it the docked layout is unchanged.
 pub(crate) const COMPACT_WIDTH: f32 = 720.0;
 
 /// Whether a sidebar is shown.
 ///
-/// [`Self::Auto`] defers to the layout -- open where there is room to dock it,
-/// closed where there is not -- and is what a session starts in, so neither a
+/// [`Self::Auto`] defers to the layout, open where there is room to dock it,
+/// closed where there is not, and is what a session starts in, so neither a
 /// phone nor a desktop needs the default written down for it. A toggle or a
 /// drag makes it explicit, and it stays explicit: once a reader has said what
 /// they want, the layout does not override them on the next resize.
@@ -267,11 +267,11 @@ pub(crate) struct Sidebars {
 ///
 /// The two are not a choice between renderings of one thing; they answer
 /// different questions about the same reduced grade-1 field. The glyphs are the
-/// blunt question: not what the field does over a distance, but what it *is* at
-/// a point -- read off the Whitney interpolant with no integration at all, at
+/// blunt question: not what the field does over a distance, but what it is at
+/// a point, read off the Whitney interpolant with no integration at all, at
 /// points the atlas places rather than a tracer's seeding chooses.
 ///
-/// The particles are the other question, the field's *dynamics* -- where the
+/// The particles are the other question, the field's dynamics, where the
 /// flow carries a point, and how fast, legible only in motion. Both are traced
 /// through the same atlas and the same transitions, one evaluated pointwise and
 /// one integrated on the GPU, so neither is the other's approximation.
@@ -291,7 +291,7 @@ impl Default for Marks {
       // The glyphs are the cheap reading and the one that always says
       // something: a lattice evaluated once per bake, then drawn.
       glyphs: true,
-      // The particles are the expensive one, and expensive *everywhere*: the
+      // The particles are the expensive one, and expensive everywhere: the
       // population is a fixed count (`PARTICLE_COUNT`), advected every frame
       // with the deposit atlas stepped alongside it, so a four-triangle mesh
       // costs what a hundred-thousand-cell one does. There is no mesh on which
@@ -310,7 +310,7 @@ impl Default for Marks {
 
 /// Which field of a scene is on display: its reduced grade decides the mark
 /// ([`crate::scene::Scene`]'s own rule), and this is that choice's UI-facing
-/// form -- a scalar field colors the surface with its own value; a line field
+/// form, a scalar field colors the surface with its own value; a line field
 /// colors the surface with its nodal magnitude and draws its glyphs and
 /// particles on top. `PartialEq` so `egui::Ui::radio_value` can bind directly to
 /// it.
@@ -335,10 +335,10 @@ pub(crate) struct Entry<'a> {
 }
 
 /// One degeneracy shell of an eigenmode list: a maximal run of consecutive
-/// modes whose eigenvalues agree up to the clustering tolerance -- one
+/// modes whose eigenvalues agree up to the clustering tolerance, one
 /// degenerate eigenspace. A row of the orbital pyramid.
 struct Shell {
-  /// A representative eigenvalue of the shell (its first member's), labelling
+  /// A representative eigenvalue of the shell (its first member's), labeling
   /// the row.
   eigenvalue: f64,
   /// Indices into the entry list this shell was grouped from.
@@ -346,15 +346,15 @@ struct Shell {
 }
 
 /// The relative gap above which two consecutive eigenvalues are taken to lie in
-/// *different* degeneracy shells. Within a shell the discrete eigenvalues of a
+/// different degeneracy shells. Within a shell the discrete eigenvalues of a
 /// degenerate eigenspace differ only by the mesh's small symmetry-breaking
 /// error, far below this; between distinct shells they jump by an order-one
 /// fraction, far above it.
 const SHELL_REL_GAP: f64 = 0.3;
 
 /// An absolute tolerance, as a fraction of the spectrum's scale, added to the
-/// relative one so a cluster of (near-)zero modes -- a harmonic space, e.g. the
-/// constant 0-mode or a flat torus's two 1-cocycles -- stays together instead
+/// relative one so a cluster of (near-)zero modes, a harmonic space, e.g. the
+/// constant 0-mode or a flat torus's two 1-cocycles, stays together instead
 /// of splitting on numerical noise, where the relative gap alone has no scale.
 const SHELL_ABS_FRAC: f64 = 1e-6;
 
@@ -372,9 +372,9 @@ fn round_for_display(x: f64, decimals: i32) -> f64 {
 /// Groups a list of eigenmodes into its degeneracy shells by clustering
 /// consecutive near-equal eigenvalues.
 ///
-/// The modes arrive sorted by eigenvalue; a run whose successive gaps stay
+/// The modes arrive sorted by eigenvalue. A run whose successive gaps stay
 /// within [`SHELL_ABS_FRAC`]$dot lambda_max + $[`SHELL_REL_GAP`]$dot lambda$ is
-/// one degenerate eigenspace -- a row of the pyramid. This reads the
+/// one degenerate eigenspace, a row of the pyramid. This reads the
 /// organization straight off the spectrum, with no geometry: on $S^2$ the
 /// near-equal clusters are exactly the $(2l+1)$ spherical-harmonic shells,
 /// while on a generic mesh with no symmetry the eigenvalues are simple, every
@@ -407,10 +407,10 @@ fn degeneracy_shells(eigenvalues: impl IntoIterator<Item = Option<f64>>) -> Opti
 /// (the harmonics) lay out as the orbital pyramid by degeneracy shell; raw
 /// Whitney basis functions (LSFs and GSFs alike) lay out as a grade tab row
 /// over a DOF dropdown instead, since they carry a DOF label but no
-/// eigenvalue; anything carrying neither -- not produced today, but the
-/// totality this dispatch is answering to -- falls back to one flat list.
+/// eigenvalue; anything carrying neither, not produced today, but the
+/// totality this dispatch is answering to, falls back to one flat list.
 /// The DOF picker's text for one entry: its DOF simplex formatted as a label,
-/// falling back to the field's name where there is no DOF -- not reached from
+/// falling back to the field's name where there is no DOF, not reached from
 /// the picker (which opens only when every entry has one), but total rather than
 /// a panic.
 fn dof_text(entry: &Entry) -> String {
@@ -439,7 +439,7 @@ fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection,
 /// tabs, but a view over one already-solved scene rather than a re-solve),
 /// then a dropdown over that grade's DOFs alone. A mesh's DOF count is
 /// unbounded (a reference cell has a handful, a built-in surface thousands),
-/// and every grade shown flat at once -- the previous layout -- grew the
+/// and every grade shown flat at once, the previous layout, grew the
 /// inspector to the mesh's simplex count; collapsed behind a dropdown, the
 /// panel's size no longer depends on the mesh. The active grade is read off
 /// the current selection, so switching tabs jumps to that grade's first DOF
@@ -496,15 +496,15 @@ fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
 }
 
 /// Lays out one grade's eigenmodes as the orbital pyramid: one centered row per
-/// degeneracy shell, rows ordered by ascending eigenvalue and labelled by it,
-/// each cell a mode selector labelled by its centered within-shell offset (the
+/// degeneracy shell, rows ordered by ascending eigenvalue and labeled by it,
+/// each cell a mode selector labeled by its centered within-shell offset (the
 /// magnetic index $m in -l..=l$ on the sphere's $2l+1$-fold grade-0 multiplet).
 /// Hovering a cell shows the mode's full name and eigenvalue.
 fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &mut Selection) {
   // A fixed cell size lines the columns up into a grid; a fixed-width label
   // gutter on the left holds the shell's eigenvalue and keeps the columns
   // aligned across rows. `vertical_centered` then centers each row within the
-  // panel, so the shorter shells sit symmetrically over the widest one -- the
+  // panel, so the shorter shells sit symmetrically over the widest one, the
   // pyramid. The widest shell (the sphere's five-member grade-0 $l = 2$
   // multiplet) is what sets the panel's minimum width, and it fills that width
   // exactly: there is no trailing spacer, so no dead padding on the right.
@@ -515,7 +515,7 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
       ui.horizontal(|ui| {
         ui.add_sized(
           [GUTTER, CELL[1]],
-          // A whole number for the row label -- distinct shells differ by an
+          // A whole number for the row label, distinct shells differ by an
           // order-one gap, so the integer part alone separates them, and the
           // precise eigenvalue lives in the cell hover and the transport bar.
           egui::Label::new(format!("λ~{:.0}", round_for_display(shell.eigenvalue, 0))),
@@ -626,10 +626,10 @@ pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
   }
 }
 
-/// A slider whose edit is *committed* only when the handle is released (or the
+/// A slider whose edit is committed only when the handle is released (or the
 /// value is typed and confirmed), never mid-drag. It edits `value` live so the
 /// readout tracks the pointer, but returns `true` only on the frame the gesture
-/// ends -- so a parameter that drives an expensive rebuild (an eigensolve, a
+/// ends, so a parameter that drives an expensive rebuild (an eigensolve, a
 /// trajectory) re-solves once on release rather than on every frame the handle
 /// sweeps through. `changed() && !dragged()` catches the keyboard/step edits a
 /// drag never emits.
@@ -650,12 +650,12 @@ fn commit_slider<Num: egui::emath::Numeric>(
 /// with no free parameters (the Whitney basis, the Hodge decomposition, an
 /// explicit cochain list) draws nothing and commits nothing.
 ///
-/// This is where [`Study`]'s variant parameters become editable -- the browser
-/// picks *which* study, and this edits the one picked, the split the crate's
+/// This is where [`Study`]'s variant parameters become editable, the browser
+/// picks which study, and this edits the one picked, the split the crate's
 /// `CLAUDE.md` draws between the two panels.
 /// One tab per grade of the de Rham complex, for a study posed at a single
 /// grade. Every grade is offered, the top grade through its Hodge star just
-/// like grade 0. A grade change commits at once -- it is a different problem,
+/// like grade 0. A grade change commits at once: it is a different problem,
 /// not a knob on the current one.
 fn grade_tabs(ui: &mut egui::Ui, grade: &mut ExteriorGrade, max_grade: Dim) -> bool {
   let mut commit = false;
@@ -765,7 +765,7 @@ fn study_equation(study: &Study) -> &'static str {
   }
 }
 
-/// Everything the panel reads to draw one frame -- a snapshot, not a live
+/// Everything the panel reads to draw one frame, a snapshot, not a live
 /// borrow, so building it and rendering the panel cannot conflict with the
 /// `&mut self` calls the caller makes to apply the response afterward.
 pub(crate) struct PanelModel<'a> {
@@ -787,7 +787,7 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) selection: Selection,
   pub(crate) mesh_view: MeshView,
   pub(crate) field_view: FieldView,
-  /// Which of `field_view`'s settings the selected field actually offers -- the
+  /// Which of `field_view`'s settings the selected field actually offers, the
   /// reduced grade's answer, decided in [`crate::scene::Scene::offers`] so the
   /// panel asks rather than dispatches.
   pub(crate) offers: FieldOffers,
@@ -839,24 +839,24 @@ pub(crate) struct PanelResponse {
   pub(crate) camera_view: Option<CameraView>,
   /// A solve-time the reader scrubbed the trajectory timeline to this frame, if
   /// any: the caller jumps its clock so the playhead lands there. `None` unless
-  /// the trajectory slider moved -- a static field and an eigenmode have no
+  /// the trajectory slider moved, a static field and an eigenmode have no
   /// timeline to scrub.
   pub(crate) scrub_time: Option<f64>,
   /// Whether "Restart" was clicked: the caller returns the clock to its start
-  /// -- a trajectory's first frame, a standing wave's crest -- keeping the
+  ///, a trajectory's first frame, a standing wave's crest, keeping the
   /// play/pause state.
   pub(crate) restart: bool,
-  /// Whether the standing wave should be running after this frame -- the
+  /// Whether the standing wave should be running after this frame, the
   /// play/pause toggle. Defaults to the model's own state when the control
   /// wasn't touched, like the other fields.
   pub(crate) playing: bool,
-  /// Whether "Load OBJ…" was clicked -- the one request the panel cannot
+  /// Whether "Load OBJ…" was clicked, the one request the panel cannot
   /// resolve itself, since opening the native file browser is the caller's
   /// (`app.rs`'s) stateful `egui_file_dialog`, not something a pure function
   /// of a snapshot can own. Native only, with the button that raises it.
   #[cfg(not(target_arch = "wasm32"))]
   pub(crate) load_obj_clicked: bool,
-  /// Whether "Export PNG…" was clicked -- opens the save dialog the caller
+  /// Whether "Export PNG…" was clicked, opens the save dialog the caller
   /// owns, and on a pick the current frame (this field, this camera, this
   /// instant) is written as a still. Same reason as `load_obj_clicked`: the
   /// dialog is stateful, so it cannot live in this pure function. Native only.
@@ -878,9 +878,9 @@ pub(crate) struct PanelResponse {
 pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   // The one layout decision, and it is a function of the viewport rather than a
   // mode anything stores: below this width the two sidebars cannot dock beside
-  // a viewport worth looking at, so they stop being docked. Their *content* is
-  // untouched -- the panel taxonomy still mirrors the two objects on screen
-  // (see this crate's CLAUDE.md); what changes is only whether a panel sits
+  // a viewport worth looking at, so they stop being docked. Their content is
+  // untouched, the panel taxonomy still mirrors the two objects on screen
+  // (see this crate's CLAUDE.md). What changes is only whether a panel sits
   // beside the scene or over it.
   let compact = ui.available_width() < COMPACT_WIDTH;
   // What the layout does when the reader has not said: dock both where there is
@@ -890,7 +890,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut browser_open = model.sidebars.browser.resolve(layout_default);
   let mut inspector_open = model.sidebars.inspector.resolve(layout_default);
   // What the panels were actually drawn with this frame. Anything that differs
-  // by the end of it -- a toggle, a panel dragged shut -- is the reader
+  // by the end of it, a toggle, a panel dragged shut, is the reader
   // speaking, and is what makes the visibility explicit.
   let drawn = (browser_open, inspector_open);
   let side_width = if compact {
@@ -918,7 +918,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut export_png_clicked = false;
 
   // Top menu bar: the commands that are not a property of either object on
-  // screen -- reading and writing files, and how the shell itself is laid out
+  // screen, reading and writing files, and how the shell itself is laid out
   // and lit. Drawn first so it spans the full width above the sidebars, the
   // conventional home a reader reaches for these by reflex.
   egui::Panel::top("menubar").show(ui, |ui| {
@@ -982,7 +982,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         ui.separator();
         ui.menu_button("Navigation", |ui| {
           // The controls the viewport reads, which no widget announces on its
-          // own -- so a reader who never guesses the drags never finds them.
+          // own, so a reader who never guesses the drags never finds them.
           // Phrased by projection, mirroring the input split in `app.rs`.
           ui.label(egui::RichText::new("Perspective (curved mesh)").strong());
           ui.label("Left-drag: orbit · Right-drag: look · Middle-drag: pan");
@@ -997,7 +997,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     });
   });
 
-  // Left sidebar: the browser -- what object to build. The curated presets on
+  // Left sidebar: the browser, what object to build. The curated presets on
   // top, each a whole point in the mesh × study product, then the two axes
   // below for free composition.
   egui::Panel::left("browser")
@@ -1011,7 +1011,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         section(ui, "Presets", |ui| {
           for (i, preset) in model.presets.iter().enumerate() {
             // A preset is lit when the platform is standing exactly on the
-            // point it names -- its mesh and study both current -- so the
+            // point it names, its mesh and study both current, so the
             // browser shows where the reader is, not just where they can go.
             // Editing an axis away from a preset unlights it; returning relights
             // it, with no state beyond the two axes themselves.
@@ -1028,7 +1028,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 
         // The mesh axis: every study runs on every mesh, so the picker is
         // always shown. A generated family resets to its default refinement
-        // when first chosen; its refinement sliders commit on release so a
+        // when first chosen. Its refinement sliders commit on release so a
         // drag re-solves once, not every frame it sweeps.
         //
         // "Mesh source", not "Mesh": this is which object to build, while the
@@ -1120,7 +1120,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 
         // The study axis: which computation to run on the mesh. Eigenmodes, the
         // Whitney basis, the Hodge decomposition and the two time-dependent
-        // solves are the generic studies picked here; an explicit cochain list
+        // solves are the generic studies picked here. An explicit cochain list
         // has no generic form to pick, so it shows as the selected study only
         // when a preset installed it. The parameters of the picked study are the
         // inspector's, not this list's.
@@ -1168,7 +1168,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
 
   // Right inspector: what is shown of the object the browser built. The study's
   // own parameters and its mode picker, then the display settings for the two
-  // objects on screen -- the mesh, and the field read on it.
+  // objects on screen, the mesh, and the field read on it.
   egui::Panel::right("inspector")
     .default_size(if compact { side_width } else { 250.0 })
     .show_collapsible(ui, &mut inspector_open, |ui| {
@@ -1178,13 +1178,13 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         ui.separator();
 
         // The study section: the equation it solves, then its own editable
-        // parameters. The grade tabs, the mode count, the sampling steps -- the
+        // parameters. The grade tabs, the mode count, the sampling steps, the
         // knobs of `Study`'s variant, edited here where the crate's CLAUDE.md
         // says they live. A committed edit re-requests the study, which
         // re-solves it; while it does, the spinner below replaces the picker.
         section(ui, "Study", |ui| {
           ui.weak(study_equation(&model.study));
-          // Edit a draft of the *live* study, not the value the browser may
+          // Edit a draft of the live study, not the value the browser may
           // have just replaced this frame: a type switch above and a parameter
           // edit here never both fire, and basing the draft on the live study
           // keeps the two from racing.
@@ -1215,7 +1215,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         //
         // The skeletons, as peers: one row per k-skeleton the mesh has
         // (k <= min(n, 2)), faces at the top, each with the same two questions
-        // -- drawn, and colored by the field or left as structural geometry.
+        //, drawn, and colored by the field or left as structural geometry.
         section(ui, "Mesh", |ui| {
           ui.weak(mesh_stats_line(&model.simplex_counts))
             .on_hover_text("Simplex count per skeleton dimension, read off the topology");
@@ -1233,7 +1233,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         // The field side is the only one gated, and it asks rather than
         // dispatches: which settings a field offers is its reduced grade's
         // answer (`Scene::offers`). A knob with nothing to toggle is a knob
-        // whose only use is to be wrong -- and a section with no knobs is one
+        // whose only use is to be wrong, and a section with no knobs is one
         // too, so a density that is no eigenmode shows no section at all.
         if model.offers.any() {
           section(ui, "Field", |ui| {
@@ -1412,7 +1412,7 @@ mod tests {
 
   /// The width threshold means what it claims: a phone falls below it, a
   /// desktop window above, and the two docked sidebars genuinely do not fit
-  /// beside a viewport at phone width -- which is the condition the compact
+  /// beside a viewport at phone width, which is the condition the compact
   /// layout exists to escape.
   #[test]
   fn the_threshold_separates_a_phone_from_a_desktop() {
@@ -1442,7 +1442,7 @@ mod tests {
   }
 
   /// The layout decides only what the reader has not. `Auto` follows the
-  /// width -- docked where there is room, closed where there is not -- and an
+  /// width, docked where there is room, closed where there is not, and an
   /// explicit choice outranks it at any width, which is what makes the panels
   /// collapsible on a desktop rather than only on a phone.
   #[test]
@@ -1457,7 +1457,7 @@ mod tests {
   }
 
   /// A toggle sticks. The first version of this compared the post-frame state
-  /// against the *resolved* value rather than the value the panels were drawn
+  /// against the resolved value rather than the value the panels were drawn
   /// with, so opening a closed panel was immediately undone and the button did
   /// nothing at all. The round trip is the test: resolve, toggle, write back,
   /// resolve again.
@@ -1485,7 +1485,7 @@ mod tests {
   }
 
   /// An untouched sidebar stays on `Auto`, so resizing the window still moves
-  /// it -- the state records a decision, not every frame's outcome.
+  /// it, the state records a decision, not every frame's outcome.
   #[test]
   fn an_untouched_sidebar_keeps_following_the_layout() {
     let stored = Visibility::Auto;
@@ -1530,7 +1530,7 @@ mod tests {
     assert_eq!(shell_sizes(&spectrum), vec![2, 2]);
   }
 
-  /// A generic simple spectrum -- no symmetry, no degeneracy -- degenerates the
+  /// A generic simple spectrum, no symmetry, no degeneracy, degenerates the
   /// pyramid to one member per row, ordered by eigenvalue.
   #[test]
   fn simple_spectrum_gives_singletons() {
@@ -1581,7 +1581,7 @@ mod tests {
 
   /// The size caption names every dimension present and totals over the whole
   /// range, so it reads right in any dimension rather than for a fixed few
-  /// skeletons -- the low dimensions by their classical names, higher ones by
+  /// skeletons, the low dimensions by their classical names, higher ones by
   /// the general "$k$-simplices".
   #[test]
   fn mesh_stats_line_names_each_dimension() {

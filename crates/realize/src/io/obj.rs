@@ -1,18 +1,18 @@
 //! A tolerant Wavefront OBJ reader for surface meshes.
 //!
-//! Enough of the format to load a triangulated surface out of the wild -- the
+//! Enough of the format to load a triangulated surface out of the wild, the
 //! built-in gallery's own assets and a mesh the user picks off disk alike. It
 //! reads vertex positions and faces and ignores everything else: texture
 //! coordinates, normals, materials, groups, smoothing and comments are skipped;
 //! a face vertex may carry `v`, `v/vt`, `v/vt/vn` or `v//vn` references and only
-//! the position index is taken; an index may be negative (relative to the
+//! the position index is taken. An index may be negative (relative to the
 //! current end of the vertex list), per the spec; and a polygon of more than
 //! three vertices is fan-triangulated.
 //!
 //! Two habits of a mesh from the wild are repaired rather than refused, because
 //! neither changes the surface: a degenerate face, whose corners are not three
 //! distinct vertices and which therefore is no simplex, is dropped; and vertices
-//! no face references are discarded, the rest relabelled onto the contiguous
+//! no face references are discarded, the rest relabeled onto the contiguous
 //! range a `Complex` requires.
 //!
 //! Fallible where a naive reader would panic: a malformed line, an out-of-range
@@ -76,9 +76,9 @@ pub fn parse(obj: &str) -> Result<(Complex, MeshCoords), ObjError> {
 /// As [`parse`], also recovering the winding the file's faces are written in,
 /// as an [`Orientation`].
 ///
-/// A face's corner order in an OBJ is *winding*: which way the surface normal
+/// A face's corner order in an OBJ is winding: which way the surface normal
 /// points. That is orientation data, not the vertex ordering a refinement
-/// inherits -- the same-shaped datum meaning a different thing -- so it is
+/// inherits, the same-shaped datum meaning a different thing, so it is
 /// returned as an `Orientation` and only its parity is read.
 ///
 /// `None` when the file is not consistently wound, and hence carries no
@@ -110,7 +110,7 @@ pub fn parse_wound(obj: &str) -> Result<(Complex, MeshCoords, Option<Orientation
     }
   }
 
-  // A face may name the same corner twice -- directly, or through a fan of an
+  // A face may name the same corner twice, directly, or through a fan of an
   // n-gon that does. The triangle carries no geometry, is not a simplex (its
   // vertices are not distinct), and would otherwise spuriously raise an edge's
   // incidence count, so it is dropped before the surface is judged.
@@ -176,7 +176,7 @@ fn parse_face<'a>(
       line: line_no,
       reason: format!("face vertex `{spec}`: {e}"),
     })?;
-    // OBJ indices are 1-based; a negative index counts back from the current
+    // OBJ indices are 1-based. A negative index counts back from the current
     // end of the vertex list ($-1$ is the last vertex).
     let resolved = if raw < 0 {
       nvertices as isize + raw
@@ -204,10 +204,10 @@ fn parse_face<'a>(
 /// contiguous range that remains, returning the surviving positions.
 ///
 /// A `Complex` requires its vertex labels to be exactly $0..n$, each used by
-/// some cell; an OBJ from the wild routinely carries loose points, or a `v`
+/// some cell. An OBJ from the wild routinely carries loose points, or a `v`
 /// block shared by an object whose faces were not exported. Closing the gap
-/// here rather than after the fact keeps the triangle list -- and hence the
-/// winding words read off it -- in one numbering throughout.
+/// here rather than after the fact keeps the triangle list, and hence the
+/// winding words read off it, in one numbering throughout.
 fn close_vertex_gaps(triangles: &mut [[usize; 3]], positions: Vec<[f64; 3]>) -> Vec<[f64; 3]> {
   let mut used: Vec<usize> = triangles.iter().flatten().copied().collect();
   used.sort_unstable();
@@ -245,7 +245,7 @@ mod tests {
   use super::*;
 
   /// A single triangle with texture/normal references and a trailing comment
-  /// reads as one face on three vertices -- the `v/vt/vn` groups and the `#`
+  /// reads as one face on three vertices, the `v/vt/vn` groups and the `#`
   /// comment are tolerated, not fatal.
   #[test]
   fn reads_slash_refs_and_comments() {
@@ -303,7 +303,7 @@ f 1 2 5
     assert!(matches!(parse("v 0 0 0\nv 1 0 0\n"), Err(ObjError::Empty)));
   }
 
-  /// A face naming a corner twice is no simplex; it is dropped, not fatal, and
+  /// A face naming a corner twice is no simplex. It is dropped, not fatal, and
   /// the surface around it still reads.
   #[test]
   fn drops_degenerate_faces() {
@@ -318,8 +318,8 @@ f 1 2 5
     ));
   }
 
-  /// A vertex no face references is discarded and the rest relabelled, so the
-  /// complex's vertices are the contiguous range it requires -- whether the
+  /// A vertex no face references is discarded and the rest relabeled, so the
+  /// complex's vertices are the contiguous range it requires, whether the
   /// orphan sits before the used vertices or after them.
   #[test]
   fn discards_orphan_vertices() {
@@ -330,7 +330,7 @@ f 1 2 5
       let (complex, coords) = parse(obj).unwrap();
       assert_eq!(complex.nsimplices(2), 1);
       assert_eq!(complex.nsimplices(0), 3);
-      assert_eq!(coords.nvertices(), 3, "coords follow the relabelling");
+      assert_eq!(coords.nvertices(), 3, "coords follow the relabeling");
     }
   }
 
@@ -338,7 +338,7 @@ f 1 2 5
   /// orientation; flipping one face's winding destroys it.
   ///
   /// Winding is read as parity and nothing else, and it is validated rather
-  /// than trusted -- a miswound file yields `None`, not a witness that lies.
+  /// than trusted, a miswound file yields `None`, not a witness that lies.
   #[test]
   fn winding_becomes_an_orientation_only_when_coherent() {
     let wound = "\

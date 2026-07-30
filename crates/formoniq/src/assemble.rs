@@ -24,7 +24,7 @@ pub fn assemble_galmat(
 
   let cells = topology.cells();
   // `flat_map_iter`, not `flat_map`: the parallelism is over cells, and each
-  // cell's triplets number $binom(n+1, k)^2$ -- single digits at the grades and
+  // cell's triplets number $binom(n+1, k)^2$, single digits at the grades and
   // dimensions in reach. `flat_map` would hand every such handful back to rayon
   // as a splittable parallel job, paying scheduler overhead per cell to divide
   // work that fits in cache. Measured ~2x on a 64k-cell 3D grid at grade 0.
@@ -103,7 +103,7 @@ mod test {
   use regge::{lengths::CellGramians, mesher::cartesian::CartesianGrid};
 
   /// Assembly consumes the edge-length primitive, so representation
-  /// independence is a property of the conversions *into* it: routing a
+  /// independence is a property of the conversions into it: routing a
   /// geometry through per-cell metrics
   /// ([`CellGramians`]) and reading them back as edge lengths reproduces the
   /// original lengths exactly, hence assembles identically. The derivation
@@ -131,10 +131,10 @@ mod test {
   }
 
   /// Every geometry source reduces to the same edge-length primitive on a
-  /// *Lorentzian* mesh too: a Minkowski embedding, and the per-cell metrics it
+  /// Lorentzian mesh too: a Minkowski embedding, and the per-cell metrics it
   /// induces read back as edge lengths, yield identical Regge data and hence
   /// identical Galerkin matrices. This is Regge calculus doing what it was
-  /// invented for -- a simplicial spacetime carried by edge data alone, no
+  /// invented for, a simplicial spacetime carried by edge data alone, no
   /// coordinates in the assembly path.
   #[test]
   fn lorentzian_sources_reduce_to_the_same_regge_data() {

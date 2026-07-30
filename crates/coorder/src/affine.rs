@@ -2,12 +2,12 @@ use std::marker::PhantomData;
 
 use crate::{CoordSpace, Coords, CoordsRef, Matrix};
 
-/// An affine map $x |-> A x + b$ **from** one coordinate space **to** another,
+/// An affine map $x |-> A x + b$ from one coordinate space to another,
 /// with linear part $A$ and translation $b$.
 ///
 /// The two spaces are type parameters, so a map carries its direction the way a
 /// [`Coords`] carries its space, and the wrong composition does not compile.
-/// This is what invariant 3 looks like on the *morphisms* rather than on the
+/// This is what invariant 3 looks like on the morphisms rather than on the
 /// points: a chart and a parametrization are inverse maps, and the difference
 /// between them is exactly which of `From` and `To` is which.
 ///
@@ -19,7 +19,7 @@ use crate::{CoordSpace, Coords, CoordsRef, Matrix};
 /// has a tall injective $A$, inverted in the least-squares sense by
 /// [`Self::apply_backward`] and [`Self::pseudo_inverse`].
 ///
-/// $A$ stays a bare [`Matrix`]. It maps *displacements*, which this crate leaves
+/// $A$ stays a bare [`Matrix`]. It maps displacements, which this crate leaves
 /// untagged on purpose (the difference of two points of one space is a tangent
 /// vector, not a point), so there is nothing for a tag to say about it.
 pub struct AffineTransform<From: CoordSpace, To: CoordSpace> {

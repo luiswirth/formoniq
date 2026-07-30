@@ -8,7 +8,7 @@
 //! - Jacobi-CG (a point smoother, which stalls on the dif near-kernel at grade
 //!   >= 1),
 //! - plain geometric multigrid CG (a V-cycle with a Jacobi smoother, no
-//!   auxiliary space -- the thing that is not enough at grade >= 1),
+//!   auxiliary space, the thing that is not enough at grade >= 1),
 //! - HX-CG with direct auxiliary blocks (the structure, faer-inverted),
 //! - HX-CG with multigrid auxiliary blocks (each block a V-cycle),
 //!
@@ -17,7 +17,7 @@
 //! is refined at grade >= 1 (both HX columns), and only the multigrid blocks keep
 //! the per-iteration cost from being dominated by the direct auxiliary solves, so
 //! the HX-MG wall time is what actually scales. There is no theorem for arbitrary
-//! (k, N); this is the empirical measurement.
+//! (k, N). This is the empirical measurement.
 //!
 //! Run with `cargo run --release --example hx`.
 

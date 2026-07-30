@@ -5,7 +5,7 @@
 //! chart the point lives in and its position there. A linear scan over all cells
 //! is $O(N)$ per query, which is fatal when sampling a field on a grid.
 //!
-//! [`PointLocator`] builds a **bounding-volume hierarchy** (BVH) once and then
+//! [`PointLocator`] builds a bounding-volume hierarchy (BVH) once and then
 //! answers containment queries in $O(log N)$: a binary tree of axis-aligned
 //! bounding boxes (AABBs), each internal node's box enclosing its children's.
 //! A query descends the tree, skipping any subtree whose box excludes $x$, and
@@ -13,8 +13,8 @@
 //! in the surviving leaves. Each cell's inverse affine map is cached, so the
 //! global-to-barycentric map is a single mat-vec.
 //!
-//! Point location is inherently a *coordinate* (extrinsic) operation -- it has
-//! no meaning without an embedding -- so it lives in the `coord` layer, apart
+//! Point location is inherently a coordinate (extrinsic) operation: it has
+//! no meaning without an embedding, so it lives in the `coord` layer, apart
 //! from the intrinsic metric machinery. On an embedded manifold (intrinsic
 //! dimension below ambient, e.g. a surface in space) a query point is accepted
 //! only if it also lies within tolerance of the cell's affine hull.

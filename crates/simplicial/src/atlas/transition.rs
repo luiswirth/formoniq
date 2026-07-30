@@ -2,7 +2,7 @@
 //!
 //! Two cells are two charts, and they overlap in the face they share. On that
 //! overlap the same point of the manifold has two representations, one per
-//! chart, and the map relating them is the **transition map**
+//! chart, and the map relating them is the transition map
 //! $psi_(K' K): hat(K) supset.eq sigma -> sigma subset.eq hat(K')$.
 //!
 //! It is the affine gluing of the shared face, and it is pure combinatorics: a
@@ -12,12 +12,12 @@
 //!
 //! $lambda'_j = cases(lambda_i & "if the" j"-th vertex of" K' "is the" i"-th of" K, 0 & "otherwise")$
 //!
-//! and it is defined precisely where the weights it must discard vanish -- on
+//! and it is defined precisely where the weights it must discard vanish, on
 //! the shared face. Metric-free, coordinate-free, exact.
 //!
 //! This is what makes the atlas an atlas, and it is what the reference-frame
 //! implementation of the de Rham map rests on: the integral of a form over a
-//! face may be computed in *either* adjacent chart because the two answers are
+//! face may be computed in either adjacent chart because the two answers are
 //! related by $psi$, and the pairing with the face's tangent blade is invariant
 //! under it.
 
@@ -36,7 +36,7 @@ use multiindex::Combination;
 pub struct Transition {
   source: SimplexIdx,
   target: SimplexIdx,
-  /// $P$: the $(n+1) times (n+1)$ relabelling of barycentric weights, with a
+  /// $P$: the $(n+1) times (n+1)$ relabeling of barycentric weights, with a
   /// zero row for each vertex only the target has and a zero column for each
   /// vertex only the source has.
   bary_map: Matrix,
@@ -45,9 +45,9 @@ pub struct Transition {
 impl Transition {
   /// The transition from `source` into `target`.
   ///
-  /// That the two are charts -- and hence cells -- is the [`Chart`] type's
+  /// That the two are charts, and hence cells, is the [`Chart`] type's
   /// business, not this one's. What remains to check is that they are charts of
-  /// the *same* atlas.
+  /// the same atlas.
   pub fn new(source: Chart, target: Chart) -> Self {
     assert!(
       source.belongs_to(target.complex()),
@@ -82,12 +82,12 @@ impl Transition {
     self.source.dim()
   }
 
-  /// $P$: the relabelling of the barycentric weights.
+  /// $P$: the relabeling of the barycentric weights.
   pub fn bary_map(&self) -> &Matrix {
     &self.bary_map
   }
 
-  /// The local vertex positions, in the *source* chart, of the vertices shared
+  /// The local vertex positions, in the source chart, of the vertices shared
   /// with the target: the overlap of the two charts, as a face of the source.
   pub fn overlap_positions(&self) -> Combination {
     Combination::from_increasing(
@@ -113,8 +113,8 @@ impl Transition {
 
   /// The same point of the manifold, in the target chart.
   ///
-  /// `None` when the point is not in the overlap: the weights the relabelling
-  /// would discard -- those on vertices the target does not have -- must vanish,
+  /// `None` when the point is not in the overlap: the weights the relabeling
+  /// would discard, those on vertices the target does not have, must vanish,
   /// and that is exactly the statement that the point lies on the shared face.
   pub fn apply(&self, point: &MeshPoint) -> Option<MeshPoint> {
     assert_eq!(
@@ -138,15 +138,15 @@ impl Transition {
   /// The differential $dif psi$ of the transition, in the local (cartesian)
   /// coordinates of the two charts.
   ///
-  /// Constant -- the transition is affine -- and metric-free. It is
+  /// Constant, the transition is affine, and metric-free. It is
   /// $dif psi = S P Lambda$, where $Lambda$ is the barycentric differential
   /// [`unit_difbarys`] of the source and $S$ drops the redundant zeroth weight of
   /// the target.
   ///
-  /// **It is the differential of $psi$ only on the tangent space of the
-  /// overlap**, which is all $psi$ is defined on. Transverse to the shared face
+  /// It is the differential of $psi$ only on the tangent space of the
+  /// overlap, which is all $psi$ is defined on. Transverse to the shared face
   /// the matrix is whatever the affine formula extends to, and means nothing.
-  /// This is why only the *tangential* part of a section is chart-independent,
+  /// This is why only the tangential part of a section is chart-independent,
   /// and it is the precise reason the de Rham map is well defined while a
   /// pointwise form value is not.
   pub fn differential(&self) -> Matrix {
@@ -210,7 +210,7 @@ mod test {
     pairs
   }
 
-  /// A point of the overlap, carried into the neighbouring chart and back, is
+  /// A point of the overlap, carried into the neighboring chart and back, is
   /// the point one started with: the transitions of an atlas are invertible on
   /// the overlap, and the two directions are mutually inverse.
   #[test]
@@ -247,8 +247,8 @@ mod test {
   /// $psi_(K'' K') compose psi_(K' K) = psi_(K'' K)$: the cocycle condition, on
   /// the triple overlap where all three charts see the point.
   ///
-  /// This is the coherence law of an atlas -- the statement that the charts
-  /// describe *one* manifold and not three.
+  /// This is the coherence law of an atlas, the statement that the charts
+  /// describe one manifold and not three.
   #[test]
   fn transition_cocycle() {
     for dim in (2..=3usize).map(Dim::from) {

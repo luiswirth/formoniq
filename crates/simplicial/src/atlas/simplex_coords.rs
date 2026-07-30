@@ -2,23 +2,23 @@
 //!
 //! A [`SimplexCoords<S>`] is the vertex coordinates of a simplex in the space
 //! `S`, and the map it carries is the affine parametrization $x |-> v_0 + A x$
-//! from the *reference chart* $hat(K)$ of the cell into `S`. It is a
+//! from the reference chart $hat(K)$ of the cell into `S`. It is a
 //! parametrization, not a chart: the chart runs the other way and is the
 //! barycentric one, which exists on every geometry ([`crate::atlas`]).
 //!
-//! The space is a type parameter, and that is the whole point. The same
+//! The space is a type parameter. The same
 //! construction is used in two genuinely different spaces:
 //!
-//! - `SimplexCoords<Ambient>` is a cell embedded in $RR^N$ -- the extrinsic
+//! - `SimplexCoords<Ambient>` is a cell embedded in $RR^N$, the extrinsic
 //!   realization, whose induced metric and edge lengths (`geometry::coord`) are
 //!   the bridges down into the intrinsic layer.
 //! - `SimplexCoords<LocalCartesian>` is a simplex realized in a chart's own
 //!   cartesian frame $RR^n$. [`unit`](SimplexCoords::unit) is the
-//!   reference cell itself ("its ambient coordinates *are* its local
+//!   reference cell itself ("its ambient coordinates are its local
 //!   coordinates"), and a sub-simplex of a refinement is the child realized in
-//!   its parent's frame -- the map its metric is pulled back along.
+//!   its parent's frame, the map its metric is pulled back along.
 //!
-//! Everything here is affine and metric-free: it needs coordinates in *some*
+//! Everything here is affine and metric-free: it needs coordinates in some
 //! space, never an inner product on that space. The metric a realization
 //! induces is a `geometry::coord` concern layered on the `Ambient`
 //! instantiation, and it is the only part that presupposes an embedding.
@@ -102,7 +102,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
     let a = self.spanning_vectors();
     // The signed volume factor: a determinant when the realization is square,
     // otherwise the Gram volume $sqrt(det(A^top A))$. Both are pure linear
-    // algebra on the coordinates -- no inner product is supplied.
+    // algebra on the coordinates, no inner product is supplied.
     let factor = if self.is_same_dim() {
       a.determinant()
     } else {
@@ -126,7 +126,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
   ///
   /// A genuine inverse only when the realization is full-dimensional. On an
   /// embedded submanifold it is the Moore-Penrose one, which annihilates the
-  /// normal space -- a metric-dependent choice, and hence not canonical.
+  /// normal space, a metric-dependent choice, and hence not canonical.
   pub fn inv_linear_transform(&self) -> Matrix {
     if self.dim_intrinsic() == 0 {
       Matrix::zeros(0, 0)
@@ -147,7 +147,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
   /// $psi_K$ as an affine map, typed by the two spaces it runs between: out of
   /// the chart's cartesian frame and into `S`.
   ///
-  /// A *parametrization*, and the type says so: its
+  /// A parametrization, and the type says so: its
   /// [`pseudo_inverse`](AffineTransform::pseudo_inverse) is an
   /// `AffineTransform<S, LocalCartesian>`, which is the chart.
   pub fn affine_transform(&self) -> AffineTransform<LocalCartesian, S> {
@@ -233,7 +233,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
 
 impl SimplexCoords<LocalCartesian> {
   /// The unit simplex: the coordinate realization of the reference cell,
-  /// whose local coordinates *are* the cartesian coordinates of its own chart.
+  /// whose local coordinates are the cartesian coordinates of its own chart.
   pub fn unit(ndim: Dim) -> Self {
     Self::new(unit_vertices(ndim))
   }
@@ -263,7 +263,7 @@ mod test {
   use approx::assert_relative_eq;
 
   /// The unit simplex is the coordinate realization of the reference chart:
-  /// its local coordinates *are* the barycentric-derived ones.
+  /// its local coordinates are the barycentric-derived ones.
   #[test]
   fn unit_barys() {
     for dim in (0..=4usize).map(Dim::from) {
@@ -280,7 +280,7 @@ mod test {
   }
 
   /// The barycentric differentials of the unit simplex are the metric-free
-  /// reference ones -- which is what lets any form built from them use
+  /// reference ones, which is what lets any form built from them use
   /// [`unit_difbarys`] and never touch coordinates.
   #[test]
   fn unit_difbarys_agree() {

@@ -31,7 +31,7 @@ impl SelfAdjoint for Identity {}
 
 /// The Jacobi approximate inverse $B = D^(-1)$, the reciprocal of the diagonal.
 ///
-/// The cheapest non-trivial approximate inverse, and the archetypal *smoother*:
+/// The cheapest non-trivial approximate inverse, and the archetypal smoother:
 /// applied to a symmetric operator it damps the high-frequency error modes and
 /// leaves the low-frequency ones nearly untouched, which is exactly what a
 /// multigrid level asks of it and exactly why it is a poor standalone solver. On
@@ -54,7 +54,7 @@ impl Jacobi {
   /// The weighted (damped) Jacobi inverse $B = omega D^(-1)$.
   ///
   /// Unit weight is the plain Jacobi inverse, exact on a diagonal operator. A
-  /// sub-unit weight is what makes Jacobi a *smoother*: undamped Jacobi barely
+  /// sub-unit weight is what makes Jacobi a smoother: undamped Jacobi barely
   /// touches the highest-frequency error of a second-order operator (its
   /// iteration matrix has eigenvalue near $-1$ there), while $omega approx 2\/3$
   /// damps the whole upper half of the spectrum, which is exactly the error a

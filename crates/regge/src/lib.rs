@@ -21,7 +21,7 @@ use self::lengths::mesh::MeshLengthsSq;
 /// $vol(K) = vol(hat(K)) sqrt(abs(det g))$.
 ///
 /// The chart contributes [`unit_simplex_volume`], the metric the factor
-/// $sqrt(abs(det g))$ -- the whole of the geometry, in one scalar: the same
+/// $sqrt(abs(det g))$, the whole of the geometry, in one scalar: the same
 /// formula on any signature, the absolute value doing nothing Riemannian-side.
 pub fn cell_volume(metric: &Metric) -> f64 {
   unit_simplex_volume(metric.dim()) * metric.det_sqrt()
@@ -30,27 +30,27 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// Discrete Gaussian curvature at every vertex of a 2-dimensional simplicial
 /// manifold, by the angle defect: $K(v) = (2 pi - sum_(f ni v) theta_f (v)) \/
 /// A(v)$ at an interior vertex, or $(pi - sum_f theta_f (v)) \/ A(v)$ at a
-/// boundary one -- the standard convention when a mesh has a rim, folding the
+/// boundary one, the standard convention when a mesh has a rim, folding the
 /// boundary's own geodesic curvature into $K$ rather than tracking it apart.
 /// $A(v)$ is the barycentric lumped area $sum_(K ni v) "vol"(K) \/ 3$, the
 /// standard mass-lumping convention.
 ///
 /// Intrinsic: reads the Regge edge lengths, not an embedding, since
 /// [`Metric::vertex_angle`](metric::Metric::vertex_angle) needs no
-/// coordinates -- a Regge manifold given only as [`MeshLengthsSq`] has a
+/// coordinates, a Regge manifold given only as [`MeshLengthsSq`] has a
 /// Gaussian curvature exactly as well as an embedded one, which is why the
 /// primitive is what this consumes. This
 /// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the
 /// hinges are vertices, which is the one case implemented here. Generalizing
 /// to an $(n-2)$-dimensional hinge of an $n$-manifold needs dihedral angles
 /// between codimension-1 facets, not corner angles between edges, and this
-/// crate does not yet carry that computation -- fixed at 2D for the same
+/// crate does not yet carry that computation, fixed at 2D for the same
 /// reason [`crate::mesher::sphere`] is: the concept itself, not a shortcut, is
 /// what is 2-dimensional here.
 ///
 /// Exact, not an approximation of the smooth quantity: this is what
 /// Gauss-Bonnet defines discrete curvature to be, with
-/// $sum_v K(v) A(v) = 2 pi chi$ on a closed surface -- no refinement limit to
+/// $sum_v K(v) A(v) = 2 pi chi$ on a closed surface, no refinement limit to
 /// converge under.
 pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -> Vec<f64> {
   assert_eq!(
@@ -92,7 +92,7 @@ mod tests {
   use super::*;
 
   /// Gauss-Bonnet on the unit sphere ($chi = 2$): $sum_v K(v) A(v) = 4 pi$
-  /// exactly, independent of the triangulation and of the area convention --
+  /// exactly, independent of the triangulation and of the area convention,
   /// a machine-checked identity, not a tolerance around a numerically
   /// approximated constant. Driven through [`lengths::mesh::MeshLengthsSq`], the
   /// Regge-only representation, to demonstrate this needs no embedding at

@@ -82,10 +82,10 @@ impl InnerProductSpace for Vector {
   }
 }
 
-/// A linear operator $A: V -> V$, applied as $x |-> A x$ --- the only
+/// A linear operator $A: V -> V$, applied as $x |-> A x$, the only
 /// thing a Krylov method asks of its system matrix.
 ///
-/// Distinct from [`ApproxInverse`] by intent, not by shape: this is $A$, that is
+/// Distinct from [`ApproxInverse`] by intent, not by shape: this is $A$: that is
 /// $B approx A^(-1)$. Entry-needing preconditioners (a diagonal, a triangular
 /// sweep) take the assembled [`CsrMatrix`] at construction instead, which keeps
 /// this interface at the matrix-free minimum a matvec needs.
@@ -101,8 +101,8 @@ pub trait LinearOperator {
 /// A cheap approximate inverse $B approx A^(-1)$, applied as $r |-> B r$.
 ///
 /// One object, three roles, differing only in which consumer holds it: iterated
-/// alone it is a *solver*; wrapped in a Krylov method it is a *preconditioner*;
-/// sitting on a level of a multigrid hierarchy it is a *smoother*. The exact
+/// alone it is a solver; wrapped in a Krylov method it is a preconditioner;
+/// sitting on a level of a multigrid hierarchy it is a smoother. The exact
 /// inverse $B = A^(-1)$ (a factorization) is the perfect special case, and the
 /// identity $B = I$ the trivial one.
 pub trait ApproxInverse {
@@ -203,7 +203,7 @@ mod testutil {
     })
   }
 
-  /// A symmetric *indefinite* operator: same construction as
+  /// A symmetric indefinite operator: same construction as
   /// [`spd_from_spectrum`] but with a prescribed mixed-sign spectrum, so it is
   /// the MINRES-shaped case CG cannot handle.
   pub fn symmetric_from_spectrum(eigs: &[f64]) -> DMatrix<f64> {
@@ -294,7 +294,7 @@ mod tests {
     assert!(rho < 1.0 && report.iters <= 3 * predicted + 10);
   }
 
-  /// A fixed number of Jacobi sweeps is itself self-adjoint --- the promise the
+  /// A fixed number of Jacobi sweeps is itself self-adjoint, the promise the
   /// `SelfAdjoint for Stationary` impl makes, and the basis of nesting it inside
   /// a Krylov method.
   #[test]
@@ -366,7 +366,7 @@ mod tests {
     assert!((x - x_true).norm() < 1e-7);
   }
 
-  /// MINRES solves a symmetric *indefinite* system --- the case CG cannot ---
+  /// MINRES solves a symmetric indefinite system, the case CG cannot,
   /// reproducing the direct solve, swept over orders including the degenerate
   /// $n = 0, 1$.
   #[test]
@@ -535,7 +535,7 @@ mod tests {
 
   /// The V-cycle used as a standalone stationary iteration contracts the error at
   /// a rate bounded well below one, and that rate is essentially independent of
-  /// the mesh --- the property that distinguishes multigrid from a one-level
+  /// the mesh, the property that distinguishes multigrid from a one-level
   /// smoother. Measured as the asymptotic residual reduction factor on two grids
   /// an octave apart.
   #[test]
@@ -626,7 +626,7 @@ mod space {
   /// A realization of the space sharing no code with nalgebra: a plain `Vec`
   /// and hand-written arithmetic.
   ///
-  /// The point of the second instance is that it is a *second* one. If the
+  /// The point of the second instance is that it is a second one. If the
   /// Krylov methods still reach the same iterate here, they read nothing about
   /// their vectors beyond [`InnerProductSpace`], which is what lets the same
   /// method run on vectors that never enter host memory.

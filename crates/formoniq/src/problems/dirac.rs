@@ -1,4 +1,4 @@
-//! Maxwell's equations as the Hodge–Dirac evolution on the *whole* de Rham
+//! Maxwell's equations as the Hodge–Dirac evolution on the whole de Rham
 //! complex, in the 3+1 split.
 //!
 //! One first-order operator collapses the two Maxwell field equations into one.
@@ -8,7 +8,7 @@
 //!   Lambda^bullet = plus.circle.big_(k=0)^n Lambda^k, $
 //!
 //! is the Dirac operator of the de Rham complex: metric-free $dif$ raising grade,
-//! its formal adjoint $delta$ lowering it, acting on the *full* mixed-grade
+//! its formal adjoint $delta$ lowering it, acting on the full mixed-grade
 //! field at once. It is the square root of the Hodge–Laplacian,
 //!
 //! $ sans(D)^2 = (dif - delta)^2 = -(dif delta + delta dif) = -Delta, $
@@ -30,30 +30,31 @@
 //! $diff_t u_0 = -delta E$ is the electric constraint $delta E = 0$ (no charge),
 //! the grade-$n$ component $diff_t u_n = dif B$ the magnetic constraint
 //! $dif B = 0$ (no monopoles). The four classical equations are the four grades
-//! of one Dirac evolution. The *field* itself is not mixed-grade --- it is
-//! $E + B$, living in grades 1 and 2 (a single Faraday 2-form before the split);
-//! the whole graded space is carried because $sans(D)$ is grade-mixing, so it maps the field out into the neighbouring grades,
-//! where the divergence/Gauss parts land.
+//! of one Dirac evolution. The field itself is not mixed-grade: it is
+//! $E + B$, living in grades 1 and 2 (a single Faraday 2-form before the split).
+//! The whole graded space is carried because $sans(D)$ is grade-mixing, so it
+//! maps the field out into the neighboring grades, where the divergence/Gauss
+//! parts land.
 //!
 //! # The sign, and the canonical Hodge–Dirac operator
 //!
-//! The textbook Hodge–Dirac operator is $dif + delta$, which is *self*-adjoint
+//! The textbook Hodge–Dirac operator is $dif + delta$, which is self-adjoint
 //! with $(dif + delta)^2 = +Delta$. A first-order energy-conserving flow on a
-//! Riemannian (positive-definite) slice needs a *skew*-adjoint generator, so the
-//! evolution operator is the skew $dif - delta$, with $sans(D)^2 = -Delta$. This
-//! is not a lesser cousin of $dif + delta$: the two are the same operator,
+//! Riemannian (positive-definite) slice needs a skew-adjoint generator, so the
+//! evolution operator is the skew $dif - delta$, with $sans(D)^2 = -Delta$. The
+//! two are the same operator,
 //! conjugate by the diagonal unitary $Q = i^"deg"$ (grade $k |-> i^k$), since
 //! $Q dif Q^(-1) = i dif$ and $Q delta Q^(-1) = -i delta$ give
 //! $Q (dif - delta) Q^(-1) = i (dif + delta)$. Under $psi = i^"deg" u$ the real
 //! flow $diff_t u = (dif - delta) u$ becomes the complex Schrödinger form
-//! $diff_t psi = i (dif + delta) psi$ --- the dimension-general Riemann–Silberstein
+//! $diff_t psi = i (dif + delta) psi$, the dimension-general Riemann–Silberstein
 //! ($E + i B$) picture. The real form is used here because it keeps the fields
 //! real and grade $1 = E$, grade $2 = B$ direct, in any dimension. The genuinely
-//! self-adjoint $dif + delta$ with $+Delta$ and no $i$ exists only *without* a
+//! self-adjoint $dif + delta$ with $+Delta$ and no $i$ exists only without a
 //! split: the 4D Lorentzian $sans(D) F = J$, where the signature makes it
 //! hyperbolic on its own. That covariant operator is [`HodgeDirac::assemble_selfadjoint`],
 //! and [`solve_dirac_source`] solves its static source problem on a spacetime
-//! mesh -- the same blocks as the evolution form, differing in exactly the one
+//! mesh, the same blocks as the evolution form, differing in exactly the one
 //! sign the conjugation predicts.
 //!
 //! # Discretization
@@ -70,23 +71,23 @@
 //!     , M_2 D_1, 0, dots.down;
 //!     , , dots.down, ), $
 //!
-//! with $M$ the SPD block-diagonal mass and $A$ *skew-symmetric by construction*:
+//! with $M$ the SPD block-diagonal mass and $A$ skew-symmetric by construction:
 //! the super-diagonal blocks are minus the transposes of the sub-diagonal ones,
 //! $(D_(k-1)^T M_k) = (M_k D_(k-1))^T$. The strong operator $M^(-1) A = dif -
 //! delta_h$ with the weak codifferential $delta_h = M_k^(-1) D_k^T M_(k+1)$ is
 //! the discrete Hodge–Dirac operator, and $dif compose dif = 0$ makes it square
 //! to the discrete Hodge–Laplacian exactly: $(M^(-1) A)^2 = -Delta_h$, the
-//! grade-shifting-by-two terms cancelling by nilpotency.
+//! grade-shifting-by-two terms canceling by nilpotency.
 //!
 //! Because $A + A^T = 0$, the quadratic energy $H = 1/2 thin u^T M u = 1/2
 //! norm(u)_(L^2)^2$ is a conserved invariant of the semi-discrete flow, and the
-//! Gauss–Legendre integrator [`solve_dirac`] conserves it *to roundoff* --- no
-//! drift, only the physical sloshing of energy between the electric grade 1 and
+//! Gauss–Legendre integrator [`solve_dirac`] conserves it to roundoff, with no
+//! secular drift: energy is exchanged between the electric grade 1 and the
 //! magnetic grade 2. The boundary condition is the choice of complex: essential
 //! (perfect electric conductor, $"tr" u = 0$ on every grade) on the
-//! [`RelativeWhitneyComplex`], natural on the full [`WhitneyComplex`] --- the
-//! same code either way, since the skew structure is algebraic and survives
-//! both.
+//! [`RelativeWhitneyComplex`], natural on the full [`WhitneyComplex`]. The
+//! code is the same either way, since the skew structure is algebraic and
+//! survives both.
 //!
 //! [`WhitneyComplex`]: crate::whitney_complex::WhitneyComplex
 //! [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
@@ -135,7 +136,7 @@ impl MixedField {
     Self { grades }
   }
 
-  /// A field with a single grade populated, the others zero --- e.g. an electric
+  /// A field with a single grade populated, the others zero, e.g. an electric
   /// field at `grade = 1` or a magnetic flux at `grade = 2` in the Maxwell
   /// reading.
   pub fn from_grade<C: HilbertComplex>(complex: &C, u: Cochain) -> Self {
@@ -163,20 +164,20 @@ impl MixedField {
 /// sub-diagonal, weak $delta$ on the super-diagonal.
 ///
 /// The operator comes in its two signs, one assembly parameterized by the
-/// other ([`Self::assemble`] / [`Self::assemble_selfadjoint`]): the *skew*
+/// other ([`Self::assemble`] / [`Self::assemble_selfadjoint`]): the skew
 /// $dif - delta$ ($A + A^T = 0$), the energy-conserving generator of the 3+1
-/// evolution $M dot(u) = A u$ on a Riemannian slice, and the *self-adjoint*
+/// evolution $M dot(u) = A u$ on a Riemannian slice, and the self-adjoint
 /// canonical $dif + delta$ ($A = A^T$), the covariant static operator of
-/// $sans(D) u = f$ -- on a Lorentzian spacetime mesh (indefinite $M$) this is
+/// $sans(D) u = f$, on a Lorentzian spacetime mesh (indefinite $M$) this is
 /// the hyperbolic spacetime-Maxwell operator, no split and no
-/// time integrator involved. Same blocks, same code; the sign of the
+/// time integrator involved. Same blocks, same code. The sign of the
 /// super-diagonal is the entire difference.
 ///
 /// Total at the degenerate grades without a special case: grade $0$ has no
 /// sub-diagonal coupling (no $Lambda^(-1)$), grade $n$ no super-diagonal one
 /// (no $Lambda^(n+1)$), and the tridiagonal loop simply never emits those
 /// blocks. Works on both the full and the relative complex through the
-/// [`HilbertComplex`] trait --- the boundary condition is the choice of complex.
+/// [`HilbertComplex`] trait, the boundary condition is the choice of complex.
 pub struct HodgeDirac {
   /// Per-grade DOF offsets into the flat field vector; length $n + 2$, the last
   /// entry the total DOF count.
@@ -366,7 +367,7 @@ fn extend_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField {
 ///
 /// The semi-discrete system $M dot(u) = A u$ has SPD $M$ and skew $A$, a linear
 /// Hamiltonian system whose quadratic energy $1/2 thin u^T M u$ Gauss–Legendre
-/// conserves *exactly* --- to roundoff, not merely bounded. `times` is assumed
+/// conserves exactly, to roundoff, not merely bounded. `times` is assumed
 /// evenly spaced (the stage system is factored once). The boundary condition is
 /// the `complex`: essential (PEC) on the [`RelativeWhitneyComplex`], natural on
 /// the full [`WhitneyComplex`]. `initial` is given in the ambient Whitney space
@@ -406,8 +407,8 @@ pub fn solve_dirac<C: HilbertComplex>(
 /// 2-colored by parity (the split under which $A$ is block-antidiagonal) and
 /// stepped by the symplectic [`Leapfrog`].
 ///
-/// Cheaper per step --- only the two color-block masses are factored, never the
-/// coupled operator --- but only *conditionally* stable: `times` must resolve the
+/// Cheaper per step, only the two color-block masses are factored, never the
+/// coupled operator, but only conditionally stable: `times` must resolve the
 /// CFL limit, $dif t lt.eq h_min \/ c$, or the staggered energy loses positive
 /// definiteness and the scheme blows up. Boundary conditions and the ambient
 /// restrict/extend are exactly as in [`solve_dirac`].
@@ -440,7 +441,7 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 /// affine lifting. This is the spacetime form of the equation: on a Lorentzian
 /// mesh it is the massive Hodge–Dirac equation with mass $m$ (squaring to
 /// Klein–Gordon, $sans(D)^2 = Delta$ the d'Alembertian), Maxwell with sources
-/// the middle grades of the massless case. No time integrator appears -- on a
+/// the middle grades of the massless case. No time integrator appears, on a
 /// spacetime mesh, time is one of the mesh directions and causality lives in
 /// the signature of the metric, not in a stepping loop.
 ///
@@ -460,15 +461,15 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 ///
 /// # The massless kernel
 ///
-/// At $m = 0$ the relative operator is *singular*, and not by accident: its
+/// At $m = 0$ the relative operator is singular, and not by accident: its
 /// kernel is the space of relative harmonic fields, which Poincaré--Lefschetz
 /// duality pins to $H^n (M, diff M) tilde.equiv H_0 (M) = RR$ on a connected
-/// mesh --- one dimension, in the top grade, on any geometry and any signature.
+/// mesh, one dimension, in the top grade, on any geometry and any signature.
 /// The Lorentzian signature does not remove it: it is topological, not
 /// spectral. [`top_harmonic`] writes that mode down in closed form, and this
 /// solve deflates it, returning the unique solution orthogonal to it. Grades
-/// $k < n$ are untouched, so a field living below the top grade --- the
-/// Faraday 2-form of Maxwell for $n > 2$ --- is unique outright.
+/// $k < n$ are untouched, so a field living below the top grade, the
+/// Faraday 2-form of Maxwell for $n > 2$, is unique outright.
 pub fn solve_dirac_source(
   relative: &RelativeWhitneyComplex,
   mass_term: f64,
@@ -515,8 +516,8 @@ pub fn solve_dirac_source(
 
   // At $m = 0$ border the system with the top-grade harmonic rather than
   // handing a singular matrix to LU. The mode is in the kernel exactly when the
-  // essential part is the *whole* boundary, where $H^n (M, diff M) = RR$; on a
-  // partial part -- the causal posing a hyperbolic problem needs -- that
+  // essential part is the whole boundary, where $H^n (M, diff M) = RR$; on a
+  // partial part, the causal posing a hyperbolic problem needs, that
   // relative cohomology vanishes, the operator is nonsingular, and bordering
   // with a non-kernel vector would over-constrain it. So the mode is tested,
   // not assumed.
@@ -542,11 +543,11 @@ pub fn solve_dirac_source(
 /// $dif + delta$ exactly when $D_(n-1)^T M_n u_n = 0$, i.e. when $M_n u_n$ is a
 /// relative $n$-cycle, and the relative $n$-cycles of a connected mesh are the
 /// multiples of the fundamental class. Hence $dim ker = dim H^n (M, diff M) = 1$
-/// --- the closed form of the Poincaré--Lefschetz statement, needing no
+///, the closed form of the Poincaré--Lefschetz statement, needing no
 /// eigensolve.
 ///
 /// `None` on a non-orientable mesh, where no fundamental class exists
-/// (invariant 6: holding the orientation *is* the proof of orientability).
+/// (invariant 6: holding the orientation is the proof of orientability).
 /// There the kernel is genuinely absent, $H^n (M, diff M) = 0$ over $RR$, and
 /// the operator is invertible without deflation.
 pub fn top_harmonic(relative: &RelativeWhitneyComplex) -> Option<Vector> {
@@ -627,7 +628,7 @@ mod test {
   /// The discrete codifferential is the adjoint of the exterior derivative:
   /// the assembled Hodge–Dirac operator is skew-symmetric, $A + A^T = 0$, to
   /// roundoff and at every dimension. This is integration by parts made
-  /// structural --- the super-diagonal blocks are the negated transposes of the
+  /// structural, the super-diagonal blocks are the negated transposes of the
   /// Poincaré--Lefschetz, discretely: the closed-form top-grade harmonic
   /// $h_n = M_n^(-1) z$ is annihilated by the massless self-adjoint
   /// Hodge--Dirac operator, in every dimension and on either signature. This is
@@ -658,7 +659,7 @@ mod test {
     }
   }
 
-  /// sub-diagonal ones by construction --- and it is what conserves energy.
+  /// sub-diagonal ones by construction, and it is what conserves energy.
   #[test]
   fn operator_is_skew_symmetric() {
     for dim in (1..=3).map(Dim::from) {
@@ -678,8 +679,8 @@ mod test {
 
   /// The defining Dirac law: $sans(D)^2 = -Delta$. The discrete Hodge–Dirac
   /// operator $M^(-1) A = dif - delta_h$ squared equals the negative discrete
-  /// Hodge–Laplacian, grade by grade --- the grade-shifting-by-two terms
-  /// cancelling by $dif compose dif = 0$. Checked against the independently
+  /// Hodge–Laplacian, grade by grade, the grade-shifting-by-two terms
+  /// canceling by $dif compose dif = 0$. Checked against the independently
   /// assembled up/down Laplacian blocks of [`HodgeBlocks`], at every grade.
   #[test]
   fn dirac_squared_is_negative_hodge_laplacian() {
@@ -740,7 +741,7 @@ mod test {
   /// The structure-preserving law, at every dimension: the total Hodge–Dirac
   /// energy $1/2 norm(u)_(L^2)^2 = 1/2 thin u^T M u$ is conserved to roundoff.
   /// Gauss–Legendre is symplectic and, on this linear skew system, conserves the
-  /// quadratic invariant exactly --- across all grades of the coupled complex
+  /// quadratic invariant exactly, across all grades of the coupled complex
   /// at once.
   #[test]
   fn energy_conserved_at_every_dimension() {
@@ -765,7 +766,7 @@ mod test {
 
   /// The explicit leapfrog is structure-preserving too. Built from the same
   /// Hodge–Dirac $M$ and skew $A$, 2-colored by grade parity, it conserves its
-  /// staggered invariant to roundoff at every dimension --- within CFL. The same
+  /// staggered invariant to roundoff at every dimension, within CFL. The same
   /// symplectic guarantee as Gauss–Legendre, for the cheap explicit scheme. This
   /// also exercises the coloring: [`Leapfrog::new`] asserts $A$ is
   /// block-antidiagonal under it, which holds iff $dif, delta$ never couple two
@@ -794,7 +795,7 @@ mod test {
   }
 
   /// The canonical Hodge–Dirac operator is self-adjoint: $A = A^T$ to
-  /// roundoff, on Riemannian and Lorentzian geometry alike -- the covariant
+  /// roundoff, on Riemannian and Lorentzian geometry alike, the covariant
   /// counterpart of [`operator_is_skew_symmetric`], the one sign flipped.
   #[test]
   fn selfadjoint_operator_is_symmetric() {
@@ -824,8 +825,8 @@ mod test {
   }
 
   /// The defining Dirac law in its covariant form, on a Lorentzian spacetime
-  /// mesh: $sans(D)^2 = Delta$ -- the discrete $dif + delta$ squared equals
-  /// the discrete Hodge–Laplacian, which on Minkowski geometry *is* the
+  /// mesh: $sans(D)^2 = Delta$, the discrete $dif + delta$ squared equals
+  /// the discrete Hodge–Laplacian, which on Minkowski geometry is the
   /// d'Alembertian, hyperbolic through the signature alone. Same
   /// grade-by-grade check as [`dirac_squared_is_negative_hodge_laplacian`],
   /// with the sign flipped and every solve LU, since the Lorentzian masses
@@ -887,7 +888,7 @@ mod test {
   /// [`solve_dirac_source`] reproduces a solution that lies in the Whitney
   /// space exactly: a constant mixed-grade form $u$ has $dif u = delta u = 0$,
   /// so $(sans(D) + m) u = m u$, and with load $m M u$ and essential data $u$
-  /// the discrete solution is $u$ itself to solver precision -- on Riemannian
+  /// the discrete solution is $u$ itself to solver precision, on Riemannian
   /// and Lorentzian geometry alike.
   #[test]
   fn dirac_source_reproduces_constant_field() {
@@ -954,7 +955,7 @@ mod test {
     }
   }
 
-  /// The explicit and implicit solvers integrate the *same* equation: over a
+  /// The explicit and implicit solvers integrate the same equation: over a
   /// short run at small $dif t$ they agree to the leapfrog's second order. This
   /// validates the [`solve_dirac_leapfrog`] wiring (restrict/extend, flatten,
   /// grade-parity coloring) against the trusted Gauss–Legendre [`solve_dirac`].

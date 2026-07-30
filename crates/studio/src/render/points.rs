@@ -1,6 +1,6 @@
 //! The point pass: the 0-skeleton, drawn as instanced billboard circles of
 //! constant world-space radius. The 0-dimensional sibling of the segment pass,
-//! sharing its `SegmentMaterial` and its two inks -- see `points.wgsl`.
+//! sharing its `SegmentMaterial` and its two inks, see `points.wgsl`.
 //!
 //! Alpha-blended and depth-testing without writing, exactly as the segments are:
 //! the discs are translucent and sit over the surface that already wrote depth.

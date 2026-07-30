@@ -83,7 +83,7 @@ A reduction that only one consumer can reach has been put in the wrong crate.
   Its **colormap** value is therefore read once *per rendered corner in the corner's own cell*
   (the fill's corners are unshared already, for the deposit atlas),
   so a cell the form vanishes on stays exactly black
-  instead of inheriting a neighbour's value through a shared vertex.
+  instead of inheriting a neighbor's value through a shared vertex.
   A per-vertex tint cannot state this and silently bleeds a DOF's magnitude into every incident cell.
 
   The **displacement height** follows the field's own continuity,
@@ -132,7 +132,7 @@ A reduction that only one consumer can reach has been put in the wrong crate.
   A per-vertex clamp is the wrong instrument:
   it binds at a different value at every vertex,
   so it flattens the field in patches
-  and seams the surface between clamped and unclamped neighbours,
+  and seams the surface between clamped and unclamped neighbors,
   that is not a bounded deformation but a different one.
   Scaling is the operation an eigenmode is indifferent to, being defined up to a scalar,
   so it bounds the picture without changing which mode the picture is of.

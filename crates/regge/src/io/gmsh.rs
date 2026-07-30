@@ -15,11 +15,11 @@ pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshCoords) {
 /// [`CellOrdering`].
 ///
 /// `None` when that ordering is not face-consistent. Gmsh promises nothing of
-/// the kind -- element node order is a storage convention, not a structure on
-/// the mesh -- so the check is real and a file may well fail it. Refinement
+/// the kind, element node order is a storage convention, not a structure on
+/// the mesh, so the check is real and a file may well fail it. Refinement
 /// falls back to the colex ordering without one
 /// ([`Complex::refine`](simplicial::topology::complex::Complex::refine)), which is
-/// always available and always valid; what is lost is only that a refinement
+/// always available and always valid. What is lost is only that a refinement
 /// tower composes.
 ///
 /// The ordering's parity is separately the winding, reachable through
@@ -100,7 +100,7 @@ pub fn gmsh2coord_cells_ordered(bytes: &[u8]) -> (Skeleton, MeshCoords, Vec<Vec<
   };
 
   // Gmsh may carry nodes not referenced by any cell; drop them and renumber.
-  // The words are relabelled by the same map, so the ordering survives the
+  // The words are relabeled by the same map, so the ordering survives the
   // renumbering rather than being invalidated by it.
   let simplices: Vec<Simplex> = cells
     .iter()
@@ -161,7 +161,7 @@ $EndElements
   ///
   /// The second triangle is stored as ${1, 2, 3}$ but written $(1, 3, 2)$, an
   /// odd permutation, so it winds `Neg` against its colex frame while the first
-  /// winds `Pos` -- and the two together are coherent, which is exactly what
+  /// winds `Pos`, and the two together are coherent, which is exactly what
   /// consistently counterclockwise faces mean.
   #[test]
   fn the_files_node_order_survives_as_an_ordering() {

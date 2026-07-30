@@ -1,26 +1,26 @@
 //! The render surface: the 2-manifold a field is actually seen on.
 //!
 //! The bake reduces an $n$-manifold to the render primitive $min(n, 2)$, and
-//! for a solid ($n >= 3$) that primitive is the boundary $diff M$ -- itself a
+//! for a solid ($n >= 3$) that primitive is the boundary $diff M$, itself a
 //! genuine closed $(n-1)$-manifold, carrying its own `Complex`, its own
 //! coherent orientation and its own metric, not a bag of faces. This type is
 //! that reduction named once, so every mark reads the object it is drawn on
 //! rather than the object it was solved on.
 //!
-//! Below $n = 3$ the reduction is the *identity*: the mesh is already its own
+//! Below $n = 3$ the reduction is the identity: the mesh is already its own
 //! render surface. That is why there is no dimension dispatch here beyond the
-//! single construction -- a caller asks the surface for its complex and gets
+//! single construction, a caller asks the surface for its complex and gets
 //! either the parent or the boundary, and cannot tell which.
 //!
-//! **A field reaches the surface by its trace.** $i^*: C^k (M) -> C^k (diff M)$
+//! A field reaches the surface by its trace. $i^*: C^k (M) -> C^k (diff M)$
 //! ([`BoundaryComplex::trace_operator`]) is a cochain map, so $i^* dif = dif i^*$
-//! and the traced coefficients are a genuine Whitney form on $diff M$ -- not a
+//! and the traced coefficients are a genuine Whitney form on $diff M$, not a
 //! resample, not a nodal recovery. This is what makes drawing it honest.
 //!
-//! **The trace is total in grade, but it is zero at the top.** $diff M$ has no
+//! The trace is total in grade, but it is zero at the top. $diff M$ has no
 //! $n$-simplices, so $C^n (diff M) = 0$ and an $n$-form's trace vanishes
 //! identically. That is the correct answer to the wrong question: the top-grade
-//! density of a solid is a *volume* quantity, and reading it on the boundary is
+//! density of a solid is a volume quantity, and reading it on the boundary is
 //! a sampling of the interior, never a trace. [`Surface::traces`] is the
 //! predicate that separates the two, and a mark that needs the volume must say
 //! so rather than trace to zero and draw nothing.
@@ -39,7 +39,7 @@ use simplicial::{
 /// The 2-manifold (or lower) a scene's marks are drawn on, together with the
 /// map back to the parent's vertex numbering.
 ///
-/// Holds only what the reduction *adds*: the parent it reduces is passed back
+/// Holds only what the reduction adds: the parent it reduces is passed back
 /// in at each access, so the identity case stores nothing and copies nothing.
 #[derive(Debug, Clone)]
 pub struct Surface {
@@ -54,7 +54,7 @@ impl Surface {
   /// The render surface of a mesh: the mesh itself for $n <= 2$, its boundary
   /// for a solid.
   ///
-  /// A *closed* solid reduces to the identity as well, and that is deliberate
+  /// A closed solid reduces to the identity as well, and that is deliberate
   /// rather than a fallback: it has no boundary, so there is no surface, and
   /// the honest response is to leave the parent in place and let the marks
   /// find nothing of dimension $<= 2$ to draw. Panicking on a manifold with no
@@ -84,12 +84,12 @@ impl Surface {
     self.coords.as_ref().unwrap_or(parent)
   }
 
-  /// The surface's intrinsic dimension -- the $n$ every *grade* reduction must
+  /// The surface's intrinsic dimension, the $n$ every grade reduction must
   /// be taken against, since a mark is chosen for the manifold it is drawn on.
   ///
   /// The distinction is not pedantic: a $2$-form on a solid has reduced grade
   /// $min(2, 1) = 1$ in the volume (a line field) but $min(2, 0) = 0$ on the
-  /// boundary (a density), because $2$ is the boundary's *top* grade. Reading
+  /// boundary (a density), because $2$ is the boundary's top grade. Reading
   /// the parent's $n$ here would draw arrows for a flux that has no direction
   /// on the surface it is shown on.
   pub fn dim(&self, parent: &Complex) -> simplicial::Dim {
@@ -109,7 +109,7 @@ impl Surface {
   /// cochain on $diff M$, borrowed unchanged where the reduction is the
   /// identity.
   ///
-  /// This *is* [`BoundaryComplex::trace_operator`] -- gathering the parent
+  /// This is [`BoundaryComplex::trace_operator`], gathering the parent
   /// coefficients at `parent_kidxs` is that matrix's definition, applied
   /// without materializing it, since a permutation-and-select needs no sparse
   /// product.
@@ -134,7 +134,7 @@ impl Surface {
   }
 
   /// The surface's vertices in the parent's numbering, or `None` where the
-  /// surface *is* the parent and the map is the identity.
+  /// surface is the parent and the map is the identity.
   ///
   /// The one place the reduction leaks, and it leaks for a concrete reason:
   /// the baked vertex table is the parent's, so a datum computed on the
@@ -155,7 +155,7 @@ mod tests {
   /// The reduction is the identity at and below the render primitive's own
   /// dimension: a surface is its own render surface, and nothing is copied or
   /// traced. This is the base case invariant "total on the degenerate boundary"
-  /// asks for -- the same code, returning the trivial answer.
+  /// asks for, the same code, returning the trivial answer.
   #[test]
   fn a_surface_is_its_own_render_surface() {
     let (topology, coords) = mesh_sphere_surface(2);
@@ -174,8 +174,8 @@ mod tests {
     );
   }
 
-  /// A solid reduces to its boundary, and the boundary is a *proper manifold
-  /// one dimension down*: it has its own complex of the right dimension, its
+  /// A solid reduces to its boundary, and the boundary is a proper manifold
+  /// one dimension down: it has its own complex of the right dimension, its
   /// own vertices, and strictly fewer of them than the solid.
   #[test]
   fn a_solid_reduces_to_its_boundary_manifold() {
@@ -193,7 +193,7 @@ mod tests {
     );
   }
 
-  /// The trace is the *restriction* of coefficients: each boundary simplex
+  /// The trace is the restriction of coefficients: each boundary simplex
   /// carries exactly its parent's value. Stated on a field that distinguishes
   /// every simplex, so an index permutation cannot pass.
   #[test]

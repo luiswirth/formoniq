@@ -52,7 +52,7 @@ impl Complex {
   /// part carrying mixed (Dirichlet/Neumann/Robin) boundary conditions.
   ///
   /// The [`Facet`] witness carries the codimension-1 precondition; what it
-  /// cannot carry is *which* complex it proves it for, hence the ownership
+  /// cannot carry is which complex it proves it for, hence the ownership
   /// check.
   pub fn facet_subcomplex(&self, facets: Vec<Facet>) -> BoundaryComplex {
     assert!(!facets.is_empty(), "Facet subcomplex must not be empty.");
@@ -168,7 +168,7 @@ mod test {
       let boundary = topology.boundary_complex().unwrap();
       assert!(!boundary.complex().has_boundary());
       for k in dim.range() {
-        // S^(n-1) betti numbers; the 0-sphere is two points.
+        // S^(n-1) betti numbers. The 0-sphere is two points.
         let expected = if dim == 1 {
           2
         } else {

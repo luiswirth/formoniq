@@ -3,7 +3,7 @@
 //!
 //! The batch is the field's own geometry, exactly as a [`super::item::SegmentBatch`]
 //! is: built when the field changes, held across frames. What makes it unlike
-//! the others is that it is *written by the GPU* -- the advection's compute pass
+//! the others is that it is written by the GPU, the advection's compute pass
 //! owns its contents, and nothing reads them back. The population is never on
 //! screen: it is stepped, and read only through the deposit atlas its splat
 //! inks, so a particle's position is never stored in any buffer.
@@ -40,7 +40,7 @@ pub struct ParticleBatch {
 impl ParticleBatch {
   /// A batch of `count` particles flowing the baked field.
   ///
-  /// The initial population *is* the seeds, drawn by the same rule a respawn
+  /// The initial population is the seeds, drawn by the same rule a respawn
   /// draws by, with the same jittered lives. The first generation is therefore
   /// not a special case: the field does not open on a uniform cohort that dies
   /// at once.
@@ -64,9 +64,9 @@ impl ParticleBatch {
 
     let particles = storage_buffer(device, "Advect Particles", &initial);
     let cells: Vec<Cell> = bake
-      .neighbours
+      .neighbors
       .iter()
-      .map(|&neighbour| Cell { neighbour })
+      .map(|&neighbor| Cell { neighbor })
       .collect();
     let cells = storage_buffer(device, "Advect Cells", &cells);
     let flows = storage_buffer(device, "Advect Flows", &bake.flows);

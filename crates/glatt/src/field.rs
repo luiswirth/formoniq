@@ -2,8 +2,8 @@
 //!
 //! A [`CoordField`] is mesh-independent analytic data on the continuum $M$: an
 //! exact solution, a source term, a boundary flux, given as a function of a
-//! point of a coordinate domain $Omega subset RR^m$. It is *not* the
-//! discrete-differential-form notion of a field -- a section of the exterior
+//! point of a coordinate domain $Omega subset RR^m$. It is not the
+//! discrete-differential-form notion of a field, a section of the exterior
 //! bundle over a simplicial manifold, which has no global coordinate to be a
 //! function of. The two are connected by a variance-directed functor: covariant
 //! coordinate fields pull back onto the mesh along the composite of the cell
@@ -13,13 +13,13 @@
 //! The domain is the coordinate space `S`. Its default,
 //! [`Ambient`], is the flat case $Omega = RR^N$ with
 //! $phi = id$: analytic data stated directly in the ambient coordinates of an
-//! embedding. A curvilinear chart of the continuum -- spherical $(theta, phi)$
-//! on $S^2$, polar on a disk -- is a different `S`, but the domain is
-//! deliberately *not* tagged by a per-parametrization marker: it derefs to a
+//! embedding. A curvilinear chart of the continuum, spherical $(theta, phi)$
+//! on $S^2$, polar on a disk, is a different `S`, but the domain is
+//! deliberately not tagged by a per-parametrization marker: it derefs to a
 //! bare vector, so a component read is untyped regardless, and the junction a
 //! marker would guard (two curvilinear charts of one manifold) does not arise in
-//! a manufactured-solution script. The type stays generic so a power user *can*
-//! bring markers; the default pays nothing.
+//! a manufactured-solution script. The type stays generic so a power user can
+//! bring markers. The default pays nothing.
 
 use coorder::{Ambient, CoordSpace, Coords, Vector};
 
@@ -39,7 +39,7 @@ pub trait CoordField<S: CoordSpace = Ambient> {
 /// The closure is boxed so that fields of the same variance and grade share a
 /// type: manufactured solutions come in heterogeneous families
 /// $(omega, dif omega, Delta omega)$ that want to sit in one collection. The
-/// dynamic call is one indirection per evaluation, off any hot inner loop -- a
+/// dynamic call is one indirection per evaluation, off any hot inner loop, a
 /// consumer that needs the speed monomorphizes over [`CoordField`] instead.
 pub struct FieldClosure<S: CoordSpace = Ambient> {
   closure: Box<PointwiseFn<S>>,

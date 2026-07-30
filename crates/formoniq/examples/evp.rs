@@ -15,7 +15,7 @@
 //! A row whose count disagrees is marked `!`.
 //!
 //! One loop body serves all three. A closed manifold's boundary subcomplex is
-//! empty, so the relative problem there *is* the absolute one: the torus is not
+//! empty, so the relative problem there is the absolute one: the torus is not
 //! a case the code excludes but one it cannot tell apart.
 //!
 //! Run with `-i` / `--interactive` to instead load an external mesh (`.msh`)
@@ -64,7 +64,7 @@ fn sweep() {
   // relative (essential / Dirichlet) on its boundary-vanishing subcomplex, so
   // the harmonic mode sits at grade $0$ for one and top grade for the other,
   // staging Poincare--Lefschetz duality. The torus is closed, so its boundary
-  // subcomplex is empty and the two conditions *are* the same problem -- not a
+  // subcomplex is empty and the two conditions are the same problem, not a
   // case the code excludes but one it cannot tell apart, which is the totality
   // claim rather than a special path. What the torus adds is a harmonic sector
   // that is genuinely large: $b_k (T^d) = binom(d, k)$, against $0$ or $1$ on the
@@ -83,7 +83,7 @@ fn sweep() {
       // ceiling.
       const MAX_DOFS: usize = 20_000;
 
-      // Each case owns its mesh, since the manifolds differ; the loop body that
+      // Each case owns its mesh, since the manifolds differ. The loop body that
       // refines and solves does not.
       for &(manifold, bc) in &cases {
         // A torus needs a dimension to be a torus: $T^0$ is a point, already

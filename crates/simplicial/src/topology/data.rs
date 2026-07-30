@@ -1,20 +1,20 @@
 //! Data attached to simplices, keyed by their id.
 //!
 //! The mesh is an entity-component store in disguise: the simplices are
-//! entities (identified by [`SimplexIdx`]), and everything defined *on* them
-//! -- vertex coordinates, edge lengths, a cochain's coefficients, per-cell
-//! metrics, markers -- is columnar data keyed by that id. This module holds
+//! entities (identified by [`SimplexIdx`]), and everything defined on them
+//!, vertex coordinates, edge lengths, a cochain's coefficients, per-cell
+//! metrics, markers, is columnar data keyed by that id. This module holds
 //! that idea as two traits and their dense implementations.
 //!
-//! - [`SkeletonData`] is data over the simplices of a *single* grade. It needs
+//! - [`SkeletonData`] is data over the simplices of a single grade. It needs
 //!   no [`Complex`](super::complex::Complex): it works on a bare skeleton,
 //!   including the cell skeleton a complex is derived from.
-//! - [`ComplexData`] is data over *all* grades at once, mirroring the complex's
+//! - [`ComplexData`] is data over all grades at once, mirroring the complex's
 //!   own graded storage.
 //!
 //! They are traits, not structs, because the backing storage varies: scalar or
 //! metric columns are plain `Vec`s (returning `&T`), while vertex coordinates
-//! are the columns of a matrix (returning a *view*). The associated
+//! are the columns of a matrix (returning a view). The associated
 //! `Item<'_>` accommodates both. [`SkeletonVec`]/[`ComplexVec`] are the
 //! `Vec`-backed implementations, and additionally support `store[id]` indexing
 //! for the common owned-data case.

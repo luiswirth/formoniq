@@ -90,7 +90,7 @@ pub fn cg<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
 
 /// Solve $A x = b$ by preconditioned MINRES, started from zero.
 ///
-/// The Krylov method for a symmetric *indefinite* operator: it minimizes the
+/// The Krylov method for a symmetric indefinite operator: it minimizes the
 /// preconditioned residual norm over the Krylov subspace by a Lanczos process
 /// with coupled Givens rotations, a short recurrence that never stores the
 /// basis. Where [`cg`] needs $A$ positive-definite, MINRES needs only symmetry,
@@ -118,7 +118,7 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   let mut y = precond.apply(&r1);
   let beta1_sq = r1.dot(&y);
   if beta1_sq <= 0.0 {
-    // b is zero (nothing to solve); a negative value would signal a
+    // b is zero (nothing to solve). A negative value would signal a
     // non-positive-definite preconditioner, which the SelfAdjoint bound forbids.
     return (
       x,

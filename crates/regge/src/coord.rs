@@ -1,6 +1,6 @@
 //! The extrinsic layer: a coordinate realization of the mesh.
 //!
-//! An embedding is *one* geometry among several (invariant 2), and everything
+//! An embedding is one geometry among several (invariant 2), and everything
 //! here is downstream of it: vertex coordinates, the affine parametrization of a
 //! cell, point location. A manifold given by Regge edge lengths has none of it,
 //! and the intrinsic geometry (invariant 2) must never ask for it.
@@ -17,22 +17,16 @@ pub mod simplex;
 
 pub use coorder::{Ambient, Coord, CoordRef};
 
-use simplicial::linalg::{RowVector, RowVectorView, Vector, VectorView};
+use simplicial::linalg::Vector;
 
 use self::mesh::MeshCoords;
 use super::cell_volume;
 use simplicial::{Dim, topology::complex::Complex};
 
-pub type TangentVector = Vector;
-pub type TangentVectorRef<'a> = VectorView<'a>;
-
-pub type CoTangentVector = RowVector;
-pub type CoTangentVectorRef<'a> = RowVectorView<'a>;
-
 /// The cotangent of the angle between two vectors, $cot theta = (u dot w) \/
 /// |u times w|$, read off their dot product and the (dimension-agnostic) Gram
 /// identity $|u times w|^2 = |u|^2 |w|^2 - (u dot w)^2$ rather than an actual
-/// cross product -- so this works in an embedding of any dimension, not just
+/// cross product, so this works in an embedding of any dimension, not just
 /// $RR^3$. The `max(0.0)` guards roundoff at a near-degenerate (collinear)
 /// corner, where the identity's right-hand side can dip fractionally below
 /// zero.
@@ -49,7 +43,7 @@ fn cot_angle(u: &Vector, w: &Vector) -> f64 {
 /// beta_(v j)) (x_j - x_v) = -2H(v) n(v)$: applying the Laplace-Beltrami
 /// operator to the embedding's own coordinate function returns the mean
 /// curvature normal directly, so no curvature-specific estimator is needed
-/// beyond the mesh's own cotangent weights. Only the magnitude is returned --
+/// beyond the mesh's own cotangent weights. Only the magnitude is returned:
 /// the sign of $H$ needs an outward-normal convention this function has no
 /// use for, since [`vertex_curvature_radius`] consumes it through $H^2$
 /// alone.
@@ -101,7 +95,7 @@ pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64
 
 /// A vertex's local radius of curvature: $1 \/ max(|kappa_1|, |kappa_2|)$,
 /// the distance along the normal at which the offset map $x |-> x + t n(x)$
-/// first develops a fold -- a focal point of the normal congruence, where its
+/// first develops a fold, a focal point of the normal congruence, where its
 /// differential $I - t S$ ($S$ the shape operator) degenerates. This is the
 /// principled bound on how far a surface may be displaced along its normal
 /// before self-intersecting: exactly "as far as the surface is locally big"
@@ -109,13 +103,13 @@ pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64
 ///
 /// Recovered from the two curvature invariants via $kappa_(1,2) = H
 /// plus.minus sqrt(H^2 - K)$, so $max_i |kappa_i| = |H| + sqrt(max(H^2 - K,
-/// 0))$; the clamp guards the near-umbilic vertex where discretization noise
+/// 0))$. The clamp guards the near-umbilic vertex where discretization noise
 /// can push $H^2$ fractionally below $K$ though the true value is $0$.
 ///
 /// Infinite at a flat vertex ($H = K = 0$) and, unconditionally, at a
 /// boundary vertex: both [`super::vertex_gaussian_curvature`] and
 /// [`vertex_mean_curvature`] are natural (Neumann) boundary quantities there,
-/// not curvature -- provably so, since the coordinate function is exactly
+/// not curvature, provably so, since the coordinate function is exactly
 /// linear yet $integral_diff.Omega phi_i thin n_x thin d s != 0$ for a
 /// boundary test function even on a flat domain. Using either at the rim
 /// would clamp displacement near a flat edge for no geometric reason, so a
@@ -138,8 +132,8 @@ pub fn vertex_curvature_radius(topology: &Complex, coords: &MeshCoords) -> Vec<f
     .collect()
 }
 
-/// The mean edge length of the embedded mesh: its characteristic *local* length,
-/// as distinct from the coordinate extent, which is the object's *global* one.
+/// The mean edge length of the embedded mesh: its characteristic local length,
+/// as distinct from the coordinate extent, which is the object's global one.
 ///
 /// The two are what a mark drawn on a mesh must choose between, and they answer
 /// different questions. A quantity that should read the same however finely the
@@ -178,13 +172,13 @@ pub fn mean_edge_length(topology: &Complex, coords: &MeshCoords) -> f64 {
 /// meets a box in a face rather than filling it.
 const REACH_SEARCH_EDGES: i32 = 8;
 
-/// The **reach** of the embedded surface at every vertex: the largest $r$ such
+/// The reach of the embedded surface at every vertex: the largest $r$ such
 /// that the normal offset by any $|d| <= r$ is still an embedding, so no fold
 /// and no self-intersection.
 ///
-/// Federer's reach, and it has two halves. The *local* one is the curvature
+/// Federer's reach, and it has two halves. The local one is the curvature
 /// radius ([`vertex_curvature_radius`]): offset past the focal point and the
-/// surface folds through itself. The *non-local* one is the bottleneck -- how
+/// surface folds through itself. The non-local one is the bottleneck, how
 /// far the surface is from a different sheet of itself, which curvature cannot
 /// see at all. A thin flat plate has infinite curvature radius and reach
 /// $t \/ 2$: its two faces meet in the middle however flat they are. Bounding a
@@ -198,42 +192,38 @@ const REACH_SEARCH_EDGES: i32 = 8;
 /// $r <= (|q - p|^2)/(-2 n dot (q - p))$ for every $q$ with $n dot (q - p) < 0$,
 ///
 /// and the mirrored statement with $-n$ bounds the outer ball. The minimum over
-/// both is the distance to the medial axis -- the local feature size -- and it
+/// both is the distance to the medial axis, the local feature size, and it
 /// degenerates to the normal curvature radius as $q -> p$, so it subsumes the
 /// local half rather than sitting beside it. On a sphere of radius $R$ every
-/// $q$ returns exactly $R$; on the thin plate the opposite face returns
+/// $q$ returns exactly $R$. On the thin plate the opposite face returns
 /// $t \/ 2$.
 ///
 /// Since $r >= |q - p| \/ 2$, a $q$ farther than twice the running best cannot
-/// improve it, which bounds the search to a ball that shrinks as the estimate
-/// does: a thin feature is found immediately and terminates the walk early. The
-/// initial bound is the curvature radius, itself capped by `max_reach` (pass
-/// the object's own extent), because a reach exceeding the object is not a
-/// meaningful cap.
+/// improve it, so the search is confined to a ball that shrinks as the estimate
+/// does and a thin feature terminates the walk early. The initial bound is the
+/// curvature radius, itself capped by `max_reach` (pass the object's own
+/// extent), since a reach exceeding the object bounds nothing.
 ///
-/// That shrinking ball is not enough on its own, and the reason is worth
-/// stating: on a *convex* surface nothing ever reduces the estimate below the
-/// curvature radius, so the ball stays as wide as the object while refinement
-/// shrinks the grid under it, and the walk pays $O(V)$ cells per vertex to
-/// confirm an absence -- $O(V^2)$ overall, seconds at ten thousand vertices.
-/// So the search is also capped at a fixed number of mean edge lengths,
-/// which makes it $O(V)$: a surface meets a box of side $s$ in $O(s^2)$ cells,
-/// so a bounded box is a bounded cost per vertex.
+/// The shrinking ball alone does not bound the cost. On a convex surface
+/// nothing ever reduces the estimate below the curvature radius, so the ball
+/// stays as wide as the object while refinement shrinks the grid under it, and
+/// the walk pays $O(V)$ cells per vertex to confirm an absence: $O(V^2)$
+/// overall. The search is therefore also capped at a fixed number of mean edge
+/// lengths, which restores $O(V)$, a surface meeting a box of side $s$ in
+/// $O(s^2)$ cells.
 ///
-/// What that trades away, precisely: a bottleneck *wider* than that
-/// neighborhood is not seen, and the curvature radius alone bounds there. This
-/// is a statement about the mesh's own resolution rather than an arbitrary
-/// cutoff -- a gap spanning many times the local edge length is not a thin
-/// feature at the scale the mesh resolves, and a feature thinner than the mesh
-/// is not represented in the first place. A shape with two sheets far apart in
-/// edge lengths but close relative to the object (a wide, finely meshed
-/// horseshoe) is the case this does not catch.
+/// The cap costs exactly this: a bottleneck wider than that neighborhood is
+/// not seen, and the curvature radius alone bounds there. The cutoff is set by
+/// the mesh's own resolution, since a gap spanning many times the local edge
+/// length is not a thin feature at the scale the mesh resolves, and a feature
+/// thinner than the mesh is not represented at all. The uncaught case is a
+/// shape with two sheets far apart in edge lengths but close relative to the
+/// object, such as a wide, finely meshed horseshoe.
 ///
-/// Defined for an embedded *surface* whose normal field exists: `INFINITY`
-/// (no bound) at every vertex of a complex that is not 2-dimensional or not
-/// orientable. That is not a dodge -- a non-orientable surface has no
-/// continuous normal field, so "displace along the normal" has no meaning to
-/// bound in the first place.
+/// Defined for an embedded surface whose normal field exists, returning
+/// `INFINITY` at every vertex of a complex that is not 2-dimensional or not
+/// orientable: a non-orientable surface has no continuous normal field, so
+/// "displace along the normal" has no meaning to bound.
 pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> Vec<f64> {
   use rayon::prelude::*;
 
@@ -265,7 +255,7 @@ pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> 
       let (p, n) = (points[v], normals[v]);
       let mut best = curvature[v].min(max_reach);
       // Shell by shell, stopping once even the nearest point of the next shell
-      // is farther than twice the running bound -- or once the neighborhood is
+      // is farther than twice the running bound, or once the neighborhood is
       // exhausted, whichever comes first.
       for shell in 0..=REACH_SEARCH_EDGES {
         if (shell as f64) * spacing > 2.0 * best {
@@ -309,7 +299,7 @@ fn embed3(coords: &MeshCoords, vertex: usize) -> Vector3 {
 
 /// Area-weighted vertex normals of an orientable embedded surface, each cell
 /// wound by the complex's coherent orientation so the 1-ring's face normals
-/// agree instead of cancelling. `None` if the surface is not orientable, where
+/// agree instead of canceling. `None` if the surface is not orientable, where
 /// no such field exists. The global sign is the orientation's own and does not
 /// matter to [`vertex_reach`], which minimizes over both sides.
 fn oriented_vertex_normals(topology: &Complex, points: &[Vector3]) -> Option<Vec<Vector3>> {
@@ -420,14 +410,14 @@ mod tests {
   /// the barycentric lumped area's discretization error (cruder than a mixed
   /// Voronoi area, but simpler and reused as-is for [`vertex_curvature_radius`]).
   /// That same area error enters $kappa_max = |H| + sqrt(max(H^2-K,0))$
-  /// asymmetrically -- squared through $H^2$, linear through $K$ -- so the
-  /// radius estimate carries a larger, but *conservative* (radius
+  /// asymmetrically, squared through $H^2$, linear through $K$, so the
+  /// radius estimate carries a larger, but conservative (radius
   /// underestimated, never overestimated), bias than $H$ alone. Underestimating
   /// the safe radius is exactly the safe direction for a fold-safety cap, so
   /// this is loose on purpose, not a correctness gap; the exact Gauss-Bonnet
   /// identity elsewhere is what checks correctness.
   /// The mesh's local length scale halves when every edge is split: it tracks
-  /// the *refinement*, which is exactly what distinguishes it from the
+  /// the refinement, which is exactly what distinguishes it from the
   /// coordinate extent, which does not move at all. A mark sized by one and a
   /// mark sized by the other therefore answer different questions, and this is
   /// the statement of that difference.
@@ -448,7 +438,7 @@ mod tests {
     }
   }
 
-  /// A point cloud has no edges and so no local length; the caller is told so
+  /// A point cloud has no edges and so no local length. The caller is told so
   /// rather than dividing by a count of zero.
   #[test]
   fn a_complex_without_edges_has_no_local_length() {
@@ -457,7 +447,7 @@ mod tests {
     assert_eq!(mean_edge_length(&complex, &coords), 0.0);
   }
 
-  /// On the unit sphere the reach is the radius, and it is the *curvature*
+  /// On the unit sphere the reach is the radius, and it is the curvature
   /// half that says so: the medial axis is the center point. The tangent-ball
   /// formula returns exactly $R$ for every pair on a sphere, so this also
   /// checks the estimator against its one closed form.
@@ -470,8 +460,8 @@ mod tests {
     }
   }
 
-  /// The half curvature cannot see. A thin flat slab has *infinite* curvature
-  /// radius on its faces -- they are planes -- and reach $t \/ 2$, because the
+  /// The half curvature cannot see. A thin flat slab has infinite curvature
+  /// radius on its faces: they are planes, and reach $t \/ 2$, because the
   /// opposite face is what the offset runs into. This is the case that
   /// collapses a mesh when a displacement is bounded by curvature alone, and
   /// the assertion is that the bound now comes from the thickness rather than
@@ -591,8 +581,8 @@ mod tests {
 
   /// A flat unit-square grid is developable: zero mean curvature at every
   /// interior vertex (a boundary vertex's raw $H$ is a natural boundary
-  /// term, not curvature -- see [`vertex_curvature_radius`]), so the
-  /// curvature radius is unbounded everywhere, boundary included -- curvature
+  /// term, not curvature, see [`vertex_curvature_radius`]), so the
+  /// curvature radius is unbounded everywhere, boundary included, curvature
   /// must never clamp displacement on a flat surface.
   #[test]
   fn flat_grid_has_unbounded_curvature_radius() {

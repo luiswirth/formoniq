@@ -115,7 +115,7 @@ impl Simplex {
   }
 }
 
-/// Simplices are ordered **colexicographically**: compare from the largest
+/// Simplices are ordered colexicographically: compare from the largest
 /// vertex downward. For same-cardinality simplices this is the order of their
 /// colex rank, so sorting a skeleton by this order is the canonical numbering.
 impl Ord for Simplex {

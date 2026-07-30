@@ -6,9 +6,9 @@ use crate::{ApproxInverse, InnerProductSpace, LinearOperator, Report, SelfAdjoin
 /// The prototype of every method in the crate: a Krylov solve is this with
 /// adaptive step coefficients, a multigrid cycle is this with $B$ the cycle
 /// itself. It converges iff the spectral radius of $I - B A$ is below one, and
-/// then geometrically at that rate --- global convergence, no line search, the
+/// then geometrically at that rate, global convergence, no line search, the
 /// affine structure paying off. As a standalone solver it is weak (that rate is
-/// mesh-dependent); its role is as the smoother and preconditioner other methods
+/// mesh-dependent). Its role is as the smoother and preconditioner other methods
 /// wrap.
 pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   op: &O,
@@ -44,7 +44,7 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   )
 }
 
-/// A fixed number of stationary sweeps, packaged as an approximate inverse ---
+/// A fixed number of stationary sweeps, packaged as an approximate inverse,
 /// the same object as [`solve`], read as a preconditioner rather than a solver.
 ///
 /// This is what makes the crate compose: a consumer is itself an implementor, so

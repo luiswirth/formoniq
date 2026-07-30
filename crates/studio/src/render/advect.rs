@@ -1,17 +1,17 @@
 //! The advection pass: the compute pipeline that flows every particle along the
 //! field, and the mirrors of the types it reads. See `advect.wgsl`.
 //!
-//! **The step count is the caller's, and that is the whole of this pass's
-//! relationship with time.** A frame's step is a fixed quantity of field time,
-//! because the bake exponentiated one; what varies is how many of them a frame
+//! The step count is the caller's, and that is the whole of this pass's
+//! relationship with time. A frame's step is a fixed quantity of field time,
+//! because the bake exponentiated one. What varies is how many of them a frame
 //! is worth. So [`AdvectPass::dispatch`] takes a number, an interactive loop
 //! derives it from an accumulated wall clock, and an exporter derives it from
 //! the instant it means to render. Neither can drift from the other, because
 //! neither owns a clock this pass can see.
 //!
 //! That is the stateful reading of the renderer's own contract. Time is still
-//! an argument, but a simulation cannot be *evaluated at* an instant the way a
-//! standing wave can -- it can only be *stepped to* one. So the argument is a
+//! an argument, but a simulation cannot be evaluated at an instant the way a
+//! standing wave can: it can only be stepped to one. So the argument is a
 //! count of steps rather than seconds, and the pass's deterministic seeding is
 //! what makes a given count mean the same picture to either caller.
 
@@ -30,11 +30,11 @@ pub struct Particle {
   pub _pad: u32,
 }
 
-/// One cell's neighbours: the WGSL `Cell`.
+/// One cell's neighbors: the WGSL `Cell`.
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Pod, Zeroable)]
 pub struct Cell {
-  pub neighbour: [u32; 4],
+  pub neighbor: [u32; 4],
 }
 
 /// The WGSL `AdvectParams`.

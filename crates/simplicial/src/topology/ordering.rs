@@ -1,7 +1,7 @@
 //! The vertex ordering of the cells: the third datum of a mesh.
 //!
 //! A [`Complex`] stores every simplex in colex vertex order, and that order is
-//! a *gauge* -- it is fixed by the global vertex numbering, which is a labelling
+//! a gauge: it is fixed by the global vertex numbering, which is a labeling
 //! and not a property of the mesh. A mesh generator, however, usually produces
 //! each cell with a vertex order of its own that carries structure: the maximal
 //! chain a Kuhn simplex is built from, or the node ordering an external mesher
@@ -13,9 +13,9 @@
 //! ([`Complex`]), geometry arrives separately
 //! (`MeshLengthsSq`), and the
 //! ordering arrives separately too: three orthogonal axes, none derivable from
-//! the others. Nothing in assembly, solving or homology may consult it -- those
-//! are invariant under relabelling, and a dependence on the ordering there is a
-//! bug. It exists for the algorithms whose *output* is a mesh, refinement above
+//! the others. Nothing in assembly, solving or homology may consult it, those
+//! are invariant under relabeling, and a dependence on the ordering there is a
+//! bug. It exists for the algorithms whose output is a mesh, refinement above
 //! all, where the generator's order is what makes uniform subdivision reproduce
 //! the generator's own family.
 //!
@@ -36,7 +36,7 @@ use crate::Dim;
 /// A vertex ordering on the cells of a [`Complex`]: for each cell, its vertices
 /// in the order its generator gave them.
 ///
-/// Metric-free, and a labelling rather than a geometric fact. Each word is a
+/// Metric-free, and a labeling rather than a geometric fact. Each word is a
 /// permutation of the cell's stored (colex) vertices, checked at construction,
 /// so a `CellOrdering` speaks only for the complex it was built from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -68,8 +68,8 @@ impl CellOrdering {
 
   /// A generator's ordering, as one vertex word per cell.
   ///
-  /// The words are matched to cells by their vertex *sets*, not by position, so
-  /// a generator need not know the complex's colex cell order -- it emits the
+  /// The words are matched to cells by their vertex sets, not by position, so
+  /// a generator need not know the complex's colex cell order, it emits the
   /// cells it built, in whatever order it built them.
   ///
   /// # Panics
@@ -133,9 +133,9 @@ impl CellOrdering {
   /// The orientation the ordering winds, or `None` if that winding is not
   /// coherent.
   ///
-  /// The *parity* of the datum: each cell's sign is the sign of the permutation
+  /// The parity of the datum: each cell's sign is the sign of the permutation
   /// taking its word to its stored colex order. A generator's per-cell vertex
-  /// word therefore carries two different things at once -- the full ordering,
+  /// word therefore carries two different things at once, the full ordering,
   /// which is what refinement inherits, and its sign quotient, which is the
   /// orientation a mesh file's winding means. They are independent: a
   /// face-consistent ordering need not be coherently wound, and a coherent
@@ -236,7 +236,7 @@ mod test {
   /// Face-consistency has teeth: transposing two vertices of a single cell
   /// breaks agreement with its neighbors across a shared facet.
   ///
-  /// Guards against the check being vacuously true -- the failure mode that
+  /// Guards against the check being vacuously true, the failure mode that
   /// would let a non-conforming refinement through.
   #[test]
   fn a_transposed_cell_is_detected() {
@@ -244,8 +244,8 @@ mod test {
       let complex = CartesianTopology::cube(dim, 2).triangulate();
       let mut ordering = CellOrdering::colex(&complex);
       // An interior facet, and one of the two cells meeting there. Transposing
-      // two vertices *of that facet* in the cell's word is what the neighbor
-      // must disagree with -- swapping a vertex the facet omits changes nothing
+      // two vertices of that facet in the cell's word is what the neighbor
+      // must disagree with, swapping a vertex the facet omits changes nothing
       // it can see.
       let facet = complex
         .facets()
@@ -268,7 +268,7 @@ mod test {
   }
 
   /// The colex ordering winds every cell positively, and that is coherent
-  /// exactly when the complex is orientable -- so on an orientable mesh the
+  /// exactly when the complex is orientable, so on an orientable mesh the
   /// parity of the trivial ordering is the trivial orientation.
   #[test]
   fn the_colex_ordering_winds_positively() {
@@ -276,7 +276,7 @@ mod test {
       let complex = CartesianTopology::cube(dim, 2).triangulate();
       let ordering = CellOrdering::colex(&complex);
       let oriented = ordering.induced_orientation(&complex);
-      // Colex gives every cell `Pos`; that is coherent only if no two adjacent
+      // Colex gives every cell `Pos`. That is coherent only if no two adjacent
       // cells induce the same orientation on their shared facet, which a Kuhn
       // grid does not generally satisfy. Either way the answer is honest: a
       // witness or `None`, never a forged one.
@@ -288,7 +288,7 @@ mod test {
   }
 
   /// Ordering and winding are independent: reversing a cell's word flips its
-  /// parity while leaving the ordering just as much an ordering -- and the
+  /// parity while leaving the ordering just as much an ordering, and the
   /// reversal is detected as a winding failure, not silently absorbed.
   #[test]
   fn winding_is_the_parity_and_nothing_more() {

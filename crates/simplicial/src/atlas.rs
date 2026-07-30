@@ -2,25 +2,25 @@
 //!
 //! The cells of the complex are an atlas: each cell is a chart, and the
 //! transition maps between overlapping cells are the affine gluings of the
-//! shared faces ([`Transition`]). The atlas is therefore **piecewise affine**
-//! -- a statement about the maps, which needs no metric. (Give it one, and the
-//! simplicial manifold it presents is piecewise *flat*: curvature vanishes on
+//! shared faces ([`Transition`]). The atlas is therefore piecewise affine
+//!, a statement about the maps, which needs no metric. (Give it one, and the
+//! simplicial manifold it presents is piecewise flat: curvature vanishes on
 //! the cell interiors and concentrates on the codimension-2 hinges. That is a
 //! statement about the geometry, and it is not this module's business.)
 //!
-//! A [`Chart`] *is* a cell -- top-dimensional by construction, since a face
+//! A [`Chart`] is a cell, top-dimensional by construction, since a face
 //! carries no chart. A point of the simplicial manifold is thus intrinsically a
-//! pair $(K, lambda)$ of a chart and the barycentric coordinates within it -- a
+//! pair $(K, lambda)$ of a chart and the barycentric coordinates within it, a
 //! [`MeshPoint`]. Integration over a cell is quadrature over its chart, whose
 //! nodes are such points ([`SimplexQuadRule`]).
 //!
-//! The chart's own structure -- the reference vertices, the barycentric
-//! differentials, the volume -- depends on the dimension alone and not on the
-//! cell: every chart of the atlas is the *same* chart up to the labelling of its
+//! The chart's own structure, the reference vertices, the barycentric
+//! differentials, the volume, depends on the dimension alone and not on the
+//! cell: every chart of the atlas is the same chart up to the labeling of its
 //! vertices. That is why the `unit_*` functions below take a [`Dim`] and no cell,
 //! and it is why any per-cell quantity fixed by the reference chart is computed
 //! once on the reference cell and reused on every cell of the mesh. What differs
-//! between charts is the labelling, and the labelling is exactly what a
+//! between charts is the labeling, and the labeling is exactly what a
 //! [`Transition`] is made of.
 //!
 //! Barycentric is the right chart: it is symmetric in the vertices, affine, and
@@ -36,8 +36,8 @@
 //! - [`Bary`]: barycentric $lambda in RR^(n+1)$ with $sum_i lambda_i = 1$, the
 //!   symmetric one;
 //! - [`Local`]: cartesian $x in RR^n$ with $x_i = lambda_(i+1)$ and
-//!   $lambda_0 = 1 - sum_i x_i$, the one in which the reference frame -- and
-//!   hence the value of a section -- is expressed.
+//!   $lambda_0 = 1 - sum_i x_i$, the one in which the reference frame, and
+//!   hence the value of a section, is expressed.
 //!
 //! Both are distinct from the [`Ambient`](coorder::Ambient) coordinates of
 //! an embedding, and the [`coorder::CoordSpace`] tags keep the
@@ -107,7 +107,7 @@ pub fn local2bary<'a>(local: impl Into<LocalRef<'a>>) -> Bary {
 /// Whether the barycentric weights lie in the closed reference cell, rather
 /// than in the affine extension of the chart beyond it.
 ///
-/// The weights sum to one -- that is what makes them barycentric -- so the
+/// The weights sum to one: that is what makes them barycentric, so the
 /// closed cell is cut out by their nonnegativity alone, and the upper bound
 /// $lambda_i <= 1$ is implied rather than tested. Nonnegativity is tested up to
 /// [`BARY_EPS`], because the weights vanishing on a face are only ever
@@ -159,7 +159,7 @@ pub fn unit_difbary(dim: impl Into<Dim>, ivertex: usize) -> RowVector {
 /// $lambda: RR^n -> RR^(n+1)$ of the unit simplex: the rows are the
 /// constant covectors $dif lambda_i$.
 ///
-/// Metric-free, and the same for every cell -- any form built from the
+/// Metric-free, and the same for every cell, any form built from the
 /// barycentric differentials is therefore constant on the cell and evaluable
 /// intrinsically, with no geometry at all.
 pub fn unit_difbarys(dim: impl Into<Dim>) -> Matrix {
@@ -217,19 +217,19 @@ pub fn unit_vertices(dim: impl Into<Dim>) -> Matrix {
 /// integers that would only be approximate equalities on the weights.
 ///
 /// Affine, hence metric-free and embedding-free, hence a function of [`Dim`]
-/// alone -- every chart of the atlas carries the *same* lattice, and a cell's
+/// alone, every chart of the atlas carries the same lattice, and a cell's
 /// share of it is uniform in the chart no matter the cell's size or shape. It
 /// is not uniform in any metric, and on a manifold with no global coordinates
 /// there is nothing else for "uniform" to mean.
 ///
 /// Two properties are what make it worth having:
 ///
-/// - **It closes on the faces.** A point with $k_i = 0$ lies on the face
-///   opposite vertex $i$, and the sub-lattice there *is* $L_R^(n-1)$ at the same
+/// - It closes on the faces. A point with $k_i = 0$ lies on the face
+///   opposite vertex $i$, and the sub-lattice there is $L_R^(n-1)$ at the same
 ///   $R$. Two cells sharing a facet therefore agree on the lattice points of it
-///   up to the vertex labelling -- which is exactly a [`Transition`] -- so the
+///   up to the vertex labeling, which is exactly a [`Transition`], so the
 ///   agreement is combinatorial and needs no spatial tolerance.
-/// - **It extends [`unit_vertices`].** $R = 1$ *is* the vertex set, in the same
+/// - It extends [`unit_vertices`]. $R = 1$ is the vertex set, in the same
 ///   order; $R$ refines it from there. $R = 0$ is not a refinement and admits no
 ///   point ($lambda = k \/ 0$), so $R >= 1$. The barycenter is a lattice point
 ///   only when $(n+1) | R$.
@@ -247,8 +247,8 @@ pub fn unit_lattice(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Ite
 ///
 /// $ mono(L)_R^n = { k in L_R^n : k > 0 } = 1 + L_(R - n - 1)^n $
 ///
-/// The shift *is* the enumeration -- an interior point is an arbitrary point
-/// with one unit already spent on each part -- so there are $binom(R - 1, n)$ of
+/// The shift is the enumeration, an interior point is an arbitrary point
+/// with one unit already spent on each part, so there are $binom(R - 1, n)$ of
 /// them, and no separate combinatorics. $R = n + 1$ spends every unit and leaves
 /// the barycenter alone; below that the interior is empty, which is the honest
 /// answer rather than an error: a refinement too coarse to have an inside has
@@ -256,7 +256,7 @@ pub fn unit_lattice(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Ite
 ///
 /// This, not [`unit_lattice`], is what a per-cell sample set wants, and for a
 /// mathematical reason rather than to dodge the double-count on a shared facet:
-/// a section is only chart-independent in its *tangential* part, so at a point
+/// a section is only chart-independent in its tangential part, so at a point
 /// of a facet the two incident charts genuinely disagree and the value there is
 /// not the cell's to report. The open cell is where a section has a value at
 /// all.
@@ -366,7 +366,7 @@ mod test {
     }
   }
 
-  /// $L_1^n$ *is* the vertex set of the reference cell, in the order
+  /// $L_1^n$ is the vertex set of the reference cell, in the order
   /// [`unit_vertices`] places it: the lattice extends the vertices rather than
   /// merely containing them.
   #[test]

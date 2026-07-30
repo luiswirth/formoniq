@@ -12,13 +12,13 @@ use {
   },
 };
 
-/// The *local* shape function of the Whitney form $W_sigma$: its restriction to
+/// The local shape function of the Whitney form $W_sigma$: its restriction to
 /// one cell, indexed by the DOF subsimplex's local vertex positions and written
 /// in the reference barycentric frame. The basis of the lowest-order trimmed
 /// space $P^-_1 Lambda^k$, dual to the degrees of freedom,
 /// $integral_tau W_sigma = delta_(sigma tau)$.
 ///
-/// The Whitney form itself is *global*: the $lambda_i$ of Whitney's
+/// The Whitney form itself is global: the $lambda_i$ of Whitney's
 /// construction are the barycentric coordinates of the whole complex, so
 /// $W_sigma$ is indexed by a simplex of the mesh and supported on its star.
 /// That object gets no type of its own because it is the special case of
@@ -41,7 +41,7 @@ use {
 ///
 /// Purely combinatorial: the barycentric differentials of the reference cell
 /// are the constant [`unit_difbarys`], so a Whitney form depends on nothing but
-/// the cell dimension and the DOF vertex set -- no coordinates, no metric.
+/// the cell dimension and the DOF vertex set, no coordinates, no metric.
 /// This is what lets them live on a bare Regge manifold.
 #[derive(Debug, Clone)]
 pub struct WhitneyLsf {
@@ -173,7 +173,7 @@ impl WhitneyExpansion {
   /// $W_sigma = k! sum_i (-1)^i lambda_(sigma_i) dif lambda_(sigma without sigma_i)$,
   /// as $(dif lambda$ blade, $lambda$ vertex, coefficient$)$.
   ///
-  /// **The single definition of this map.** Both readings of it, the explicit
+  /// The single definition of this map. Both readings of it, the explicit
   /// [`matrix`](Self::matrix) and the factored [`pullback`](Self::pullback),
   /// consume this rather than restating it, so the two cannot drift apart. The
   /// $k!$ lives here, which is why the pullback of a bilinear form carries
@@ -198,7 +198,7 @@ impl WhitneyExpansion {
   ///
   /// Not forming $H times.circle Q$ is the general rule
   /// ([`apply_factorwise`](multialgebra::tensor::apply_factorwise)), and not
-  /// what is special here. What is special is that $C$ is **sparse**: the
+  /// what is special here. What is special is that $C$ is sparse: the
   /// deletion formula gives it $k+1$ nonzeros per column, so an entry is a sum
   /// over $(k+1)^2$ pairs rather than over the $(n+1) binom(n+1,k)$ dimensions
   /// of the product space. That sparsity is a property of the Whitney basis, not
@@ -295,7 +295,7 @@ mod test {
   /// other. It is why the deletion formula of a Whitney form and the boundary
   /// of a simplex are the same combinatorics rather than an analogy.
   ///
-  /// At grade 0 the collapse is the *augmentation* onto the empty simplex,
+  /// At grade 0 the collapse is the augmentation onto the empty simplex,
   /// which [`unit_boundary_operator`] deliberately drops, so the law is read
   /// there against the all-ones row it must be.
   #[test]

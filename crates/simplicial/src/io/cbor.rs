@@ -3,8 +3,8 @@
 //!
 //! Self-describing (field-tagged, not positional like `bincode`) and
 //! schema-evolvable, which matters while the types it serializes are still
-//! being reshaped. Generic and type-agnostic on its own -- it knows nothing of
-//! the types it stores -- so it lives at the lowest crate that needs on-disk
+//! being reshaped. Generic and type-agnostic on its own, it knows nothing of
+//! the types it stores, so it lives at the lowest crate that needs on-disk
 //! persistence and is reused, unchanged, by every serializable type above it:
 //! one small helper, not a crate's worth of concept per consumer.
 

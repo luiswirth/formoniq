@@ -233,9 +233,9 @@ struct Particle {
 };
 
 // The per-cell topology half of the bake: the cell across the facet opposite
-// vertex $i$, or `NO_NEIGHBOUR` where the manifold has boundary.
+// vertex $i$, or `NO_NEIGHBOR` where the manifold has boundary.
 struct Cell {
-    neighbour: vec4<u32>,
+    neighbor: vec4<u32>,
 };
 
 struct AdvectParams {

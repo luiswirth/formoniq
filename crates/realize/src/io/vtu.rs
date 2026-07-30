@@ -8,15 +8,15 @@
 //! same data, which makes a disagreement between the viewer and ParaView a
 //! visible bug rather than a silent one.
 //!
-//! **VTU is hard-capped at three dimensions, and the cap is the format's, not
-//! this writer's.** Its points are always 3-tuples and its cell zoo stops at
+//! VTU is hard-capped at three dimensions, and the cap is the format's, not
+//! this writer's. Its points are always 3-tuples and its cell zoo stops at
 //! the tetrahedron ([`cell_type`]), so a 4-simplex has no faithful encoding.
 //! Reducing a manifold or an embedding above three dimensions is therefore a
 //! separate, reusable stage upstream, and this module refuses rather than
-//! projecting behind the caller's back: a choice of projection is a modelling
+//! projecting behind the caller's back: a choice of projection is a modeling
 //! decision and belongs where it can be stated.
 //!
-//! **The reduction is shared with the viewer, not reimplemented.** A field goes
+//! The reduction is shared with the viewer, not reimplemented. A field goes
 //! through the same `reduced_form`/`scalarize` rule the marks draw, so the
 //! two consumers cannot drift: $min(k, n-k)$ is the reduced grade, $0$ writes a
 //! scalar and $1$ a vector. Under the dimensional cap those two exhaust every

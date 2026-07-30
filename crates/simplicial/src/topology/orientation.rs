@@ -3,25 +3,25 @@
 //! A [`Skeleton`](super::skeleton::Skeleton) stores every simplex in its
 //! canonical colex vertex order, so each cell carries an orientation chosen by
 //! the indexing convention and unrelated to its neighbors'. That choice is a
-//! *gauge*: flipping cell $K$ replaces its basis Whitney form
+//! gauge: flipping cell $K$ replaces its basis Whitney form
 //! $omega_K |-> -omega_K$, so every assembled operator transforms by the
 //! diagonal congruence $A |-> S A S$ with $S = "diag"(plus.minus 1)$, and the
 //! chain complex, the spectrum and the homology are all invariant. Nothing in
 //! the FEEC core needs the gauge fixed.
 //!
-//! What does need it is any question asked about the manifold *as a whole*
+//! What does need it is any question asked about the manifold as a whole
 //! rather than cell by cell: a global volume form, hence the Hodge star of a
 //! top-grade form, hence $integral_M$. Those are the same question, and this
 //! module answers it.
 //!
 //! A coherent orientation is an assignment $sigma: "cells" -> {plus.minus 1}$
-//! such that adjacent cells induce *opposite* orientations on the facet they
+//! such that adjacent cells induce opposite orientations on the facet they
 //! share:
 //!
 //! $sigma_(K_1) diff[F, K_1] + sigma_(K_2) diff[F, K_2] = 0$
 //!
 //! for every interior facet $F$. Equivalently $diff_n (sum_K sigma_K K)$ is
-//! supported on the boundary facets alone -- on a closed connected manifold
+//! supported on the boundary facets alone, on a closed connected manifold
 //! that chain is the fundamental class, the generator of $H_n (K; ZZ) tilde.eq
 //! ZZ$. So orientability is not an extra structure bolted on: it is the
 //! statement $H_n != 0$, and the propagation here is the constructive form of
@@ -30,7 +30,7 @@
 //! The condition is a constraint between neighbors, so it propagates: fix
 //! $sigma$ on one cell and every cell reachable through interior facets
 //! follows. The complex is orientable iff the walk never returns to a cell
-//! demanding the sign opposite to the one already assigned -- which is exactly
+//! demanding the sign opposite to the one already assigned, which is exactly
 //! how a Möbius band or a Klein bottle fails. Orientability is a property of
 //! each connected component, and the sign of $sigma$ on a component is free;
 //! this is the usual ambiguity of a fundamental class, not an arbitrary choice
@@ -51,7 +51,7 @@ use multiindex::Sign;
 /// Obtainable only by a coherence check that can fail: intrinsically from
 /// [`Complex::orientation`], or by validating an externally supplied candidate
 /// with [`Complex::orient_by`]. Both return `None` on a non-orientable complex,
-/// so holding one *is* the proof that the mesh is orientable, in the sense of
+/// so holding one is the proof that the mesh is orientable, in the sense of
 /// the type-level witnesses in [`role`](super::role). Code that needs a global volume form should take an
 /// `&Orientation` rather than re-deriving or assuming the property.
 ///
@@ -67,8 +67,8 @@ impl Orientation {
   /// order already agrees with the coherent orientation, `Neg` if the cell's
   /// frame is flipped against it.
   ///
-  /// This is the factor a top-grade quantity read in the cell's own frame -- a
-  /// Hodge star $star: Lambda^n -> Lambda^0$, an integral over the cell --
+  /// This is the factor a top-grade quantity read in the cell's own frame, a
+  /// Hodge star $star: Lambda^n -> Lambda^0$, an integral over the cell,
   /// must be multiplied by to be comparable across cells.
   pub fn sign(&self, cell: Cell<'_>) -> Sign {
     self.signs[cell.idx().kidx]
@@ -117,8 +117,8 @@ impl Complex {
   /// Validate an externally supplied orientation: one [`Sign`] per cell,
   /// relative to that cell's colex order, as a mesh file's winding gives it.
   ///
-  /// `None` unless the candidate is *coherent* -- adjacent cells inducing
-  /// opposite orientations on every shared facet -- so the witness still means
+  /// `None` unless the candidate is coherent, adjacent cells inducing
+  /// opposite orientations on every shared facet, so the witness still means
   /// what it means and a miswound file cannot forge one. This is the only thing
   /// an external source adds over [`Complex::orientation`]: which of the $2^c$
   /// generators is intended, a choice the intrinsic computation cannot make
@@ -326,7 +326,7 @@ mod test {
 
   /// A combinatorial 2-sphere: the boundary of a tetrahedron.
   ///
-  /// `_subdivisions` is ignored; the point of this fixture is that a sphere is a
+  /// `_subdivisions` is ignored. The point of this fixture is that a sphere is a
   /// combinatorial object here, needing no coordinates to subdivide.
   fn two_sphere(_subdivisions: usize) -> Complex {
     Complex::from_cells(Skeleton::new(vec![
@@ -337,7 +337,7 @@ mod test {
     ]))
   }
 
-  /// The sphere is orientable, and its colex frames genuinely disagree -- the
+  /// The sphere is orientable, and its colex frames genuinely disagree, the
   /// orientation is doing work, not returning all-`Pos`.
   #[test]
   fn sphere_is_orientable_and_not_trivially_signed() {

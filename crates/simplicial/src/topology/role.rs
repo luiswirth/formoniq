@@ -1,19 +1,19 @@
 //! Role proofs on simplices: dimension preconditions as types.
 //!
-//! Several operations are only meaningful on a simplex in a specific role --
-//! the metric of a *cell*, the boundary status of a *facet*, the length of an
-//! *edge*. A role is a proposition about a simplex's dimension relative to its
+//! Several operations are only meaningful on a simplex in a specific role,
+//! the metric of a cell, the boundary status of a facet, the length of an
+//! edge. A role is a proposition about a simplex's dimension relative to its
 //! complex, and [`Roled`] is the witness: the check happens once, where the
 //! witness is built, and a signature demanding the witness states its own
 //! precondition instead of trusting a comment.
 //!
 //! Roles are propositions, not a partition. A simplex may carry several at
-//! once -- the edge of a 1-complex is an [`Edge`] and a [`Cell`], and both
-//! witnesses coexist. What cannot happen is *constructing* a role the simplex
+//! once, the edge of a 1-complex is an [`Edge`] and a [`Cell`], and both
+//! witnesses coexist. What cannot happen is constructing a role the simplex
 //! does not carry. Dimension stays fully runtime: the witness is a phantom
 //! checked against `complex.dim()`, never a const generic.
 //!
-//! The witness is pure topology -- a predicate on dimensions, no metric --
+//! The witness is pure topology, a predicate on dimensions, no metric,
 //! which is why this module sits in `topology`. Operations keyed on a role
 //! that need geometry stay on the geometry side, consuming the proof.
 
@@ -109,7 +109,7 @@ pub mod roles {
 
 /// A simplex together with the proof that it carries role `R`.
 ///
-/// A `Roled` is a [`SimplexRef`] plus a phantom witness -- no representation of
+/// A `Roled` is a [`SimplexRef`] plus a phantom witness, no representation of
 /// its own. It derefs to the plain ref, so all navigation is inherited; what
 /// the role adds are the operations whose precondition it proves.
 pub struct Roled<'m, R: SimplexRole> {
@@ -124,8 +124,8 @@ pub type Facet<'m> = Roled<'m, roles::Facet>;
 pub type Ridge<'m> = Roled<'m, roles::Ridge>;
 
 impl<'m, R: SimplexRole> Roled<'m, R> {
-  /// A proof established by construction -- navigation that only produces this
-  /// role -- rather than by checking.
+  /// A proof established by construction, navigation that only produces this
+  /// role, rather than by checking.
   pub(crate) fn trusted(simplex: SimplexRef<'m>) -> Self {
     debug_assert!(R::admits(simplex.dim(), simplex.complex().dim()));
     Self {
@@ -194,7 +194,7 @@ impl<R: SimplexRole> std::fmt::Debug for Roled<'_, R> {
 /// What the cell proof unlocks: the navigation whose meaning presupposes top
 /// dimension.
 impl<'m> Cell<'m> {
-  /// The facets of a cell are facets *of the complex*: the codim-1 faces of a
+  /// The facets of a cell are facets of the complex: the codim-1 faces of a
   /// codim-0 simplex. A proof-preserving override of [`SimplexRef::facets`].
   pub fn facets(self) -> impl Iterator<Item = Facet<'m>> {
     self.get().facets().map(Roled::trusted)
@@ -213,7 +213,7 @@ impl<'m> Cell<'m> {
 /// What the facet proof unlocks: the two-sidedness the manifold property
 /// grants exactly in codimension 1.
 impl<'m> Facet<'m> {
-  /// The at most two cells this facet bounds -- exactly one iff it lies on the
+  /// The at most two cells this facet bounds, exactly one iff it lies on the
   /// boundary. The manifold property, checked at
   /// [`Complex::from_cells`](super::complex::Complex::from_cells), is what
   /// makes the pair total.
@@ -339,7 +339,7 @@ mod test {
 
   /// The role predicates, swept over all dimensions and grades: a role is
   /// admitted exactly on its dimension, and roles coexist where their
-  /// dimensions coincide (the edge of a 1-complex is an edge and a cell) --
+  /// dimensions coincide (the edge of a 1-complex is an edge and a cell),
   /// propositions, not a partition.
   #[test]
   fn roles_are_admitted_exactly_on_their_dimension() {
@@ -358,7 +358,7 @@ mod test {
   }
 
   /// A face carries no cell proof: asserting one is a contract violation, and
-  /// the type -- not a convention -- is what says so.
+  /// the type, not a convention, is what says so.
   #[test]
   #[should_panic(expected = "is not a cell")]
   fn a_face_is_not_a_cell() {

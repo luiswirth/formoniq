@@ -5,11 +5,11 @@
 //! formula giving symmetric rules exact for polynomials of any odd degree on the
 //! n-simplex.
 //!
-//! The nodes are **barycentric**, which is what the rules natively are and what
+//! The nodes are barycentric, which is what the rules natively are and what
 //! makes them chart data rather than coordinate data: a quadrature rule needs no
 //! embedding and no metric, only the reference cell. Integrating over a cell of
-//! the manifold therefore hands the integrand [`MeshPoint`]s -- points of the
-//! manifold, in that cell's chart -- and the geometry enters through nothing but
+//! the manifold therefore hands the integrand [`MeshPoint`]s, points of the
+//! manifold, in that cell's chart, and the geometry enters through nothing but
 //! the scalar volume factor.
 
 use super::{Bary, BaryRef, Chart, ChartExt, MeshPoint};
@@ -101,7 +101,7 @@ impl SimplexQuadRule {
   /// barycentric coordinates of the reference cell, scaled by the volume of the
   /// domain it stands for.
   ///
-  /// The one place the weights are actually summed; every other method here is
+  /// The one place the weights are actually summed. Every other method here is
   /// this one with the nodes placed somewhere.
   pub fn integrate_unit<F>(&self, f: &F, vol: f64) -> f64
   where
@@ -122,7 +122,7 @@ impl SimplexQuadRule {
   /// is the frame that turns the reference nodes into points of the manifold,
   /// and the witness is what says the simplex has one.
   ///
-  /// The volume of the cell is the only thing the geometry contributes -- for a
+  /// The volume of the cell is the only thing the geometry contributes, for a
   /// metric $g$ it is `cell_volume(g)`, and for the chart alone it is
   /// [`unit_simplex_volume`](super::unit_simplex_volume).
   pub fn integrate_cell<F>(&self, chart: Chart, f: &F, vol: f64) -> f64
@@ -138,11 +138,11 @@ impl SimplexQuadRule {
   }
 
   /// $integral_sigma f$ over a face of a cell, of a function of the points of
-  /// the manifold, in the chart of that **cell**: the nodes are the face's
+  /// the manifold, in the chart of that cell: the nodes are the face's
   /// quadrature nodes, scattered onto the face's local vertex positions.
   ///
   /// A face carries no chart of its own, so this is the only way to integrate
-  /// over one -- and the answer does not depend on which supporting cell is
+  /// over one, and the answer does not depend on which supporting cell is
   /// used, because the two differ by a [`Transition`](super::Transition).
   pub fn integrate_face<F>(&self, chart: Chart, positions: &Combination, f: &F, vol: f64) -> f64
   where

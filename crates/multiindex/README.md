@@ -9,7 +9,7 @@ The shift w_i ↦ w_i + i takes a weakly increasing word to a strictly
 increasing one, so in shifted form a multiset is a set and one bitset serves
 both families: ranking, enumeration, deletion and the complement are the same
 bit operations either way, and the family is consulted only for the sign.
-`Combination` is the strictly increasing case on its own, labelling a basis
+`Combination` is the strictly increasing case on its own, labeling a basis
 element wherever ordered index subsets occur (a subset of vertices, a set of
 covector indices, a corner of a cube), and `Composition` the weakly increasing
 one, an exponent vector.

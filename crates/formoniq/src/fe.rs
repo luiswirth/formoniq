@@ -4,18 +4,18 @@
 //! A differential form on the manifold reaches the discrete space by one of
 //! three routes, and they are genuinely different maps:
 //!
-//! - $W: C^k -> cal(W) Lambda^k$, the Whitney *interpolation*
+//! - $W: C^k -> cal(W) Lambda^k$, the Whitney interpolation
 //!   ([`WhitneyInterpolant`]): the reconstruction of a form from a cochain, the
 //!   right inverse of $R$.
-//! - $R: L^2 Lambda^k -> C^k$, the *de Rham map*
+//! - $R: L^2 Lambda^k -> C^k$, the de Rham map
 //!   ([`derham_map`](derham::project::derham_map)): integration over the
-//!   simplices. Canonical and metric-free, and a cochain map --
-//!   $R compose dif = dif compose R$ -- which is exactly why the discrete
+//!   simplices. Canonical and metric-free, and a cochain map,
+//!   $R compose dif = dif compose R$, which is exactly why the discrete
 //!   complex inherits the cohomology of the continuous one. It needs the
 //!   traces to exist, so it is not defined on all of $L^2 Lambda^k$.
-//! - $P_h: L^2 Lambda^k -> cal(W) Lambda^k$, the $L^2$ *projection*
+//! - $P_h: L^2 Lambda^k -> cal(W) Lambda^k$, the $L^2$ projection
 //!   ([`l2_projection`]): the best approximation in the energy norm, defined on
-//!   all of $L^2 Lambda^k$ but *not* commuting with $dif$, and requiring a
+//!   all of $L^2 Lambda^k$ but not commuting with $dif$, and requiring a
 //!   global mass solve rather than local integration.
 //!
 //! $R$ is the one the theory is built on; $P_h$ is the one that is optimal in
@@ -42,7 +42,7 @@ use crate::{assemble::assemble_galvec, operators::SourceElVec, whitney_complex::
 ///
 /// Intrinsic: the pointwise difference is measured in the reference frame of
 /// each cell by the induced inner product $Lambda^k g^(-1)$ of that cell's
-/// metric. On a curved (embedded) mesh this is the only correct thing to do --
+/// metric. On a curved (embedded) mesh this is the only correct thing to do,
 /// the flat ambient Gramian would measure the wrong norm.
 pub fn fe_l2_error<F: Section>(
   fe_cochain: &Cochain,
@@ -95,7 +95,7 @@ pub fn l2_projection<F: Sync + Section>(
   );
 
   // The mass is SPD only on a Riemannian geometry. There conjugate gradients
-  // solves it far faster than a factorization -- the mass is well conditioned
+  // solves it far faster than a factorization, the mass is well conditioned
   // ($kappa = O(1)$, mesh-independent), so a fixed handful of Jacobi-CG
   // iterations suffices, with no fill. On an indefinite signature the mass is
   // symmetric non-degenerate but not definite, where CG does not apply and LU
@@ -182,7 +182,7 @@ mod test {
   /// The Whitney mass matrix is SPD on a Riemannian geometry, so the mass solve
   /// $M c = b$ is a genuine target for conjugate gradients. This pins that the
   /// iterative solve agrees with the direct Cholesky factorization to solver
-  /// tolerance, swept over dimension and grade --- the correctness half of
+  /// tolerance, swept over dimension and grade, the correctness half of
   /// wiring `iterative` against a real FEEC operator.
   #[test]
   fn cg_mass_solve_matches_cholesky() {

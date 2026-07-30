@@ -28,7 +28,7 @@ pub type Matrix<T = f64> = na::DMatrix<T>;
 ///
 /// The representation follows the mathematics exactly. An alternating index is
 /// a subset and a symmetric one a multiset, and the shift makes both a single
-/// bitset with an alphabet-independent rank. A free index is a *word*: no
+/// bitset with an alphabet-independent rank. A free index is a word: no
 /// symmetry to exploit, so nothing to compress and no way to rank it without
 /// knowing the alphabet. The cost of a family is its information content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -66,7 +66,7 @@ impl Symmetry {
 /// One tensor factor: $Lambda^k$ or $"Sym"^k$, of whichever space it is
 /// evaluated over.
 ///
-/// The dimension of that space is deliberately *not* carried here: a factor is
+/// The dimension of that space is deliberately not carried here: a factor is
 /// the functor, not its value on a particular space. That is what lets one
 /// factor describe both ends of a map between spaces of different dimensions,
 /// as [`Factor::induced`] does on a rectangular one.
@@ -81,7 +81,7 @@ impl Factor {
   ///
   /// The symmetry is never normalized away, not even where the degree makes the
   /// two functors agree. $Lambda^0 = "Sym"^0 = RR$ and $Lambda^1 = "Sym"^1 = V$
-  /// as spaces, but a factor is a *position in a shape* rather than the space
+  /// as spaces, but a factor is a position in a shape rather than the space
   /// it currently denotes, and operations move degree through that position:
   /// [`Tensor::transfer`] into a degree-zero symmetric factor must give
   /// $"Sym"^1$, not $Lambda^1$, and merging two degree-one factors gives
@@ -128,7 +128,7 @@ impl Factor {
   /// symmetry reduces.
   ///
   /// Total at both trivial ends with no case of its own. A negative degree
-  /// names the zero space; an alternating degree past the top gives
+  /// names the zero space. An alternating degree past the top gives
   /// $binom(n, k) = 0$ because the binomial already vanishes there, and a
   /// symmetric or free factor over the zero space gives $0$ in positive degree.
   pub fn multidim(&self, dim: impl Into<Dim>) -> usize {
@@ -166,7 +166,7 @@ impl Factor {
   /// the plain diagonal product when free.
   ///
   /// Takes a bare matrix and knows nothing of non-degeneracy or signature: this
-  /// crate is the metric-free half of the algebra, and an induced *form* needs
+  /// crate is the metric-free half of the algebra, and an induced form needs
   /// only a form. The `gramian` crate wraps this where those properties are
   /// wanted.
   ///
@@ -209,7 +209,7 @@ impl Factor {
   ///
   /// One construction read through the symmetry. The alternating entries are the
   /// $k times k$ minors under $det$, the symmetric ones the same minors under
-  /// $"per"$ -- the signed and unsigned sums over the same permutations, which
+  /// $"per"$, the signed and unsigned sums over the same permutations, which
   /// is the defining relation one level up.
   ///
   /// Functoriality $F(A B) = F(A) F(B)$ holds for both: Cauchy-Binet on the
@@ -232,12 +232,12 @@ impl Factor {
 ///
 /// A slot is simultaneously a value it holds and an argument it eats (of the
 /// dual), those being the same thing under $V tilde.equals V^(**)$, so "value"
-/// and "argument" are readings rather than structure. What *is* structure is
+/// and "argument" are readings rather than structure. What is structure is
 /// the [`Variance`], and the pattern of it across the slots.
 ///
 /// The dimension lives here rather than on the tensor so that slots may be over
 /// different spaces, which is what a rectangular map or a genuinely mixed
-/// tensor needs. It does *not* live on [`Factor`], which is the functor and
+/// tensor needs. It does not live on [`Factor`], which is the functor and
 /// must stay dimension-free for [`Factor::induced`] to describe both ends of a
 /// map from one value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -403,8 +403,8 @@ pub fn tensor_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
 /// colex-ordered monomials.
 ///
 /// The entry is $"per" A[alpha, beta] \/ alpha!$, the permanent mirroring the
-/// determinant of [`exterior_power`]. That is the *formula*; it is not the
-/// algorithm, and it must not become one -- the permanent is #P-hard, while
+/// determinant of [`exterior_power`]. That is the formula. It is not the
+/// algorithm, and it must not become one: the permanent is #P-hard, while
 /// expanding the image of a basis monomial,
 /// $product_j (sum_i A_(i j) f_i)^(beta_j)$, is polynomial and is what runs
 /// here.
@@ -486,7 +486,7 @@ pub fn induced(slots: &[Slot], map: &Matrix) -> Matrix {
 /// [`Factor::induced_form`] of the identity, read off there rather than
 /// recomputed so one convention serves both.
 ///
-/// **Deliberately not public.** It is the change of basis between the monomial
+/// Deliberately not public. It is the change of basis between the monomial
 /// basis and its reciprocal, and the only ways to spend it are
 /// [`Tensor::reciprocal`] and [`Tensor::from_reciprocal`], which say which basis
 /// they mean. Applying the weights by hand is how the two operations that
@@ -591,7 +591,7 @@ mod test {
     ];
     for factors in &factor_lists {
       for &(p, q, r) in &[(3, 3, 3), (4, 3, 3), (3, 4, 2)] {
-        // The slots name the *domain*; `induced` reads both ends off the map.
+        // The slots name the domain; `induced` reads both ends off the map.
         let slots = tensor::covariant_slots(factors.iter().copied(), q);
         let (a, b) = (probe(p, q, 3), probe(q, r, 4));
         let composed = induced(&slots, &(&a * &b));

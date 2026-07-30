@@ -1,13 +1,13 @@
 //! The renderer's uniforms: the binding helper, the values themselves, and the
 //! per-item pools.
 //!
-//! Every uniform in this crate is the same shape -- a `Pod` struct at
-//! `@group(_) @binding(0)` -- so the buffer/layout/bind-group triple is written
+//! Every uniform in this crate is the same shape, a `Pod` struct at
+//! `@group(_) @binding(0)`, so the buffer/layout/bind-group triple is written
 //! once here rather than at each pipeline. Each struct mirrors a WGSL struct of
 //! the same name in `preamble.wgsl`, field for field.
 //!
 //! The split is frame versus item: [`FrameUniform`] is where and when the scene
-//! is seen from, and every pipeline binds it at group 0; a *material* is what
+//! is seen from, and every pipeline binds it at group 0. A material is what
 //! one [`super::item::RenderItem`] is drawn like, at group 1, one binding per
 //! item out of a [`UniformPool`].
 
@@ -24,11 +24,11 @@ use super::camera::Camera;
 /// `#[repr(C)]` does not, so the padding is written out rather than left to the
 /// two languages to agree on by luck.
 ///
-/// Padding is written in *scalars*, never a vector: WGSL aligns a `vec3<f32>`
+/// Padding is written in scalars, never a vector: WGSL aligns a `vec3<f32>`
 /// to 16 bytes where Rust aligns `[f32; 3]` to 4, so a `vec3` tail does not pad
-/// a struct closed -- it opens a fresh slot and pads it wider than its mirror.
+/// a struct closed, it opens a fresh slot and pads it wider than its mirror.
 /// The rule that makes the mirroring real is that the two declarations agree on
-/// *bytes*, which reading them side by side does not establish and
+/// bytes, which reading them side by side does not establish and
 /// `render::tests::uniform_layouts_match_wgsl` does.
 pub struct UniformBinding<T: Pod> {
   buffer: wgpu::Buffer,
@@ -92,8 +92,8 @@ impl<T: Pod> UniformBinding<T> {
 ///
 /// A material belongs to an item and a bind group belongs to a buffer, so a
 /// frame drawing $m$ items of one kind needs $m$ bindings. The pool is what lets
-/// that count be a property of the scene -- several manifolds, several overlays
-/// -- rather than a fixed set the renderer declares up front.
+/// that count be a property of the scene, several manifolds, several overlays
+///, rather than a fixed set the renderer declares up front.
 pub struct UniformPool<T: Pod + Default> {
   label: &'static str,
   visibility: wgpu::ShaderStages,
@@ -138,8 +138,8 @@ impl<T: Pod + Default> UniformPool<T> {
 /// Where and when the scene is seen from: the one uniform every pipeline binds,
 /// at group 0.
 ///
-/// Time is here, not in a material, because it is the frame's -- the windowed
-/// loop passes wall-clock seconds, an exporter passes $t_k = k \/ "fps"$ -- while
+/// Time is here, not in a material, because it is the frame's, the windowed
+/// loop passes wall-clock seconds, an exporter passes $t_k = k \/ "fps"$, while
 /// the frequency $omega$ it is multiplied by belongs to the field on display,
 /// and so lives in that item's material.
 #[repr(C)]
@@ -184,8 +184,8 @@ impl FrameUniform {
 /// A field with no eigenvalue passes `wave_omega = 0` and `wave_amplitude = 0`,
 /// so $cos(0) = 1$ and the same code draws it static.
 ///
-/// Diverging vs. sequential is a property of the *field* -- a signed quantity
-/// centered at zero, or an unsigned magnitude -- not a global shader choice, so
+/// Diverging vs. sequential is a property of the field, a signed quantity
+/// centered at zero, or an unsigned magnitude, not a global shader choice, so
 /// it travels as material data alongside the range it is read against. `1.0`
 /// for diverging (`min_val`/`max_val` symmetric about zero), `0.0` for
 /// sequential. A scalar `f32`, never a `bool`: `Pod` requires it, and WGSL has
@@ -201,13 +201,13 @@ pub struct SurfaceMaterial {
   /// The fill's radiance is the colormap times
   /// `deposit_floor + deposit_gain * D`, with $D$ the deposit atlas sample:
   /// the trails illuminate the surface rather than painting over it, so hue
-  /// stays the field's and the flow carries luminance. Floor 1 and gain 0 --
-  /// the identity -- for a field with no deposit; "no trails" is a value,
+  /// stays the field's and the flow carries luminance. Floor 1 and gain 0,
+  /// the identity, for a field with no deposit; "no trails" is a value,
   /// never a second pipeline.
   pub deposit_floor: f32,
   pub deposit_gain: f32,
   /// Whether the faces reflect the field as a heatmap (`1.0`) or are the flat
-  /// structural geometry ink (`0.0`) -- the 2-skeleton's coloring toggle, the
+  /// structural geometry ink (`0.0`), the 2-skeleton's coloring toggle, the
   /// same one the segment and point marks carry, so all three skeletons are
   /// peers.
   pub colored: f32,
@@ -215,7 +215,7 @@ pub struct SurfaceMaterial {
 
 /// How the scene's radiance reaches the display: the WGSL `Post`.
 ///
-/// Not a material -- it is a property of no mark, and of the frame as a whole --
+/// Not a material: it is a property of no mark, and of the frame as a whole,
 /// so it arrives through [`super::FrameView`] beside `time`, and both callers
 /// state it. Held by the renderer as a value the window and an exporter cannot
 /// silently disagree on.
@@ -232,7 +232,7 @@ pub struct PostUniform {
 }
 
 /// How a segment mark is drawn. One material serves the wireframe, a line
-/// field's ribbons and a 1-manifold's own cells -- one technique at different
+/// field's ribbons and a 1-manifold's own cells, one technique at different
 /// ink and width, not three passes.
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default, Pod, Zeroable)]
@@ -242,7 +242,7 @@ pub struct SegmentMaterial {
   /// on, only the alpha is kept and the `rgb` is the colormap's.
   pub color: [f32; 4],
   /// Half-width in world space, in the same units the mesh's own coordinates
-  /// are in -- not a pixel count, so a line reads the same thickness whether the
+  /// are in, not a pixel count, so a line reads the same thickness whether the
   /// mesh fills the screen or sits in a corner of it.
   pub half_width_world: f32,
   /// Opacity at the standing wave's node, relative to the crest: an eigenmode's
@@ -252,7 +252,7 @@ pub struct SegmentMaterial {
   pub wave_amplitude: f32,
   pub wave_omega: f32,
   /// The colormap range the per-endpoint trace value normalizes against, and
-  /// whether it is diverging -- the segment's own, independent of the fill's,
+  /// whether it is diverging, the segment's own, independent of the fill's,
   /// since a $k$-skeleton traces a different-grade density on a different scale.
   /// Read only when `colored` is on.
   pub min_val: f32,
@@ -260,7 +260,7 @@ pub struct SegmentMaterial {
   pub diverging: f32,
   /// Whether the mark reflects the field as a heatmap (`1.0`) or is drawn in the
   /// structural geometry ink (`0.0`). The one bit that turns the wireframe into
-  /// a colored 1-skeleton and back -- a material flag, not a second pipeline.
+  /// a colored 1-skeleton and back, a material flag, not a second pipeline.
   pub colored: f32,
 }
 
@@ -276,7 +276,7 @@ pub struct GlyphMaterial {
   /// The arrowhead's half-width, as a fraction of the arrow's own length (which
   /// the bake carries per glyph). A proportion rather than a world width, so the
   /// arrow is one shape scaled by the cell it sits in and reads the same on a
-  /// coarse mesh and a refined one; the quad is sized from the same product in
+  /// coarse mesh and a refined one. The quad is sized from the same product in
   /// the bake.
   pub width_fraction: f32,
   /// Opacity at the standing wave's node, relative to the crest: the glyphs of
@@ -289,7 +289,7 @@ pub struct GlyphMaterial {
   /// arrow, self-similar since both are fractions.
   pub head_length_fraction: f32,
   pub shaft_width_fraction: f32,
-  /// The outline's rim width, as a fraction of the arrow's half-width -- so the
+  /// The outline's rim width, as a fraction of the arrow's half-width, so the
   /// rim scales with the arrow like every other proportion, drawn black so it
   /// separates from either colormap beneath it. Zero draws no rim.
   pub outline_width_fraction: f32,

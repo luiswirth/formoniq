@@ -14,7 +14,7 @@ use crate::ui::Selection;
 
 /// The field a freshly shown scene opens on: its first mode. A single mesh
 /// grade carries only one render mark, so exactly one of the two lists is
-/// nonempty; a scene with neither (never produced here) falls back harmlessly
+/// nonempty. A scene with neither (never produced here) falls back harmlessly
 /// to the first scalar slot.
 pub(crate) fn default_selection(scene: &Scene) -> Selection {
   if !scene.fields.is_empty() {
@@ -30,7 +30,7 @@ pub(crate) fn default_selection(scene: &Scene) -> Selection {
 /// triforce mesh, as data: each a [`CochainSpec::ByEdges`] whose coefficients
 /// reproduce the thesis figures' `constant`/`rot`/`div` cochains. Addressed by
 /// vertex pair rather than by the exporter's file order, since a mesh's own
-/// edge indexing need not agree with it -- resolving against the mesh is
+/// edge indexing need not agree with it, resolving against the mesh is
 /// [`CochainSpec`]'s own, at build time.
 pub fn triforce_examples() -> Vec<NamedCochain> {
   // (v0, v1, constant, curl, div), v0 < v1 matching the canonical (positively

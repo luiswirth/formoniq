@@ -16,11 +16,11 @@ pub type Basis = tinyvec::TinyVec<[MultiIndex; 2]>;
 /// An element of $times.circle_i F_i (V)$, each $F_i$ an alternating or
 /// symmetric power, all over one space of dimension $n$ and one [`Variance`].
 ///
-/// Components live on the product of the per-factor bases -- a
+/// Components live on the product of the per-factor bases, a
 /// [`Combination`](multiindex::Combination)-shaped index on an alternating
 /// factor, a [`Composition`](multiindex::Composition)-shaped one on a symmetric
-/// factor, both spelled [`MonoIndex`] -- in colexicographic order, with the
-/// **last factor running fastest**.
+/// factor, both spelled [`MonoIndex`], in colexicographic order, with the
+/// last factor running fastest.
 ///
 /// The convention does not follow from functoriality, which holds under any
 /// consistent reordering, so it is stated and tested as its own law.
@@ -101,7 +101,7 @@ impl Tensor {
   /// The value of a scalar, the inverse of [`Self::scalar`].
   ///
   /// A tensor of no slots is a number, and this is that identification. Note
-  /// that a tensor of *degree* zero in some slot is also one-dimensional, and
+  /// that a tensor of degree zero in some slot is also one-dimensional, and
   /// this accepts it too: $Lambda^0 = "Sym"^0 = RR$, so the slots are there but
   /// the space they span is the ground field either way.
   ///
@@ -191,7 +191,7 @@ impl Tensor {
   /// The unit of the exterior algebra: one covariant slot at grade 0, holding 1.
   ///
   /// Distinct from [`Self::scalar`], which is the empty tensor product. Both
-  /// are $RR$; they differ in arity, and only this one has a slot to wedge or
+  /// are $RR$. They differ in arity, and only this one has a slot to wedge or
   /// star.
   pub fn one(dim: impl Into<Dim>) -> Self {
     Self::multiform(Vector::from_element(1, 1.0), dim, Degree::ZERO)
@@ -211,13 +211,13 @@ impl Tensor {
   }
 
   /// The same tensor with one slot's variance flipped, components untouched:
-  /// $Lambda^k V$ relabelled as $Lambda^k V^*$ and back.
+  /// $Lambda^k V$ relabeled as $Lambda^k V^*$ and back.
   ///
-  /// Metric-free, and a relabelling rather than a map. Variance has no
+  /// Metric-free, and a relabeling rather than a map. Variance has no
   /// representational footprint ($dim Lambda^k (V) = dim Lambda^k (V^*)$), so
-  /// there is nothing to compute; what changes is which space the components
-  /// are read in. It is *not* a musical isomorphism, which applies $g$ or
-  /// $g^(-1)$ and does need a metric: the musical is this relabelling composed
+  /// there is nothing to compute. What changes is which space the components
+  /// are read in. It is not a musical isomorphism, which applies $g$ or
+  /// $g^(-1)$ and does need a metric: the musical is this relabeling composed
   /// with that application, and the two halves live in the two crates that
   /// need them.
   ///
@@ -318,18 +318,18 @@ impl Tensor {
     self.components
   }
 
-  /// The components in the **reciprocal basis**: the basis dual to the one a
+  /// The components in the reciprocal basis: the basis dual to the one a
   /// tensor stores its components in.
   ///
-  /// The stored basis is *multiplicative*, $x^alpha x^beta = x^(alpha + beta)$
+  /// The stored basis is multiplicative, $x^alpha x^beta = x^(alpha + beta)$
   /// and $e_I wedge e_J = plus.minus e_(I union J)$ with unit coefficients,
   /// which is what lets $Lambda$ and $"Sym"$ be one construction. The price is
   /// that it is not self-dual on a symmetric slot: $x^alpha$ sums over all $k!$
   /// orderings, so $norm(x^alpha)^2 = alpha!$ and the reciprocal basis element
-  /// is $x^alpha \/ alpha!$. Both bases are rational; only an *orthonormal* one
+  /// is $x^alpha \/ alpha!$. Both bases are rational; only an orthonormal one
   /// would need $sqrt(alpha!)$, and none is used here.
   ///
-  /// **Everything that dualizes a slot reads through this**: the duality
+  /// Everything that dualizes a slot reads through this: the duality
   /// pairing, and the pullback, which is the adjoint of the pushforward and so a
   /// pairing in disguise. The multiplicative operations use
   /// [`Self::components`] directly. On $Lambda^k$ the two coincide, every
@@ -435,7 +435,7 @@ impl Tensor {
   }
 
   /// The product of the graded tensor-product algebra: two tensors of the same
-  /// *shape* multiplied factor by factor, degrees adding.
+  /// shape multiplied factor by factor, degrees adding.
   ///
   /// One operation over every shape: the wedge on a single alternating factor,
   /// the polynomial product on a single symmetric one, and on
@@ -560,7 +560,7 @@ impl Tensor {
     let mut merged = Self::zero(merged_slots);
 
     // The combinatorics runs once per pair of indices of the two touched
-    // factors; the rest ride along as strides, counted as products rather than
+    // factors. The rest ride along as strides, counted as products rather than
     // by dividing the component count, so a factor naming the trivial space
     // leaves an empty sweep instead of a division by zero.
     let (left_dim, right_dim) = (left.multidim(), right.multidim());
@@ -708,7 +708,7 @@ impl Tensor {
   ///
   /// The embedding of the quotients back into the free power, and it stays
   /// inside the algebra rather than handing back a bare array. $Lambda$ and
-  /// $"Sym"$ *are* compressed representations of subspaces of
+  /// $"Sym"$ are compressed representations of subspaces of
   /// $V^(times.circle k)$, and this is the map that says so. It is also the way
   /// out to code that knows only dense arrays: the strides of an all-free
   /// tensor are the radix, so the components are row-major over
@@ -719,7 +719,7 @@ impl Tensor {
   /// permutation times the component of the sorted index, and zero where an
   /// alternating slot repeats a symbol.
   ///
-  /// **Unnormalized**, matching [`Factor::induced_form`]: a basis element is
+  /// Unnormalized, matching [`Factor::induced_form`]: a basis element is
   /// $e_I = sum_sigma "sgn"(sigma) e_(i_(sigma(1))) times.circle dots.c$ with
   /// no $1\/k!$, so the orderings that coincide on a symmetric slot are summed
   /// rather than assigned.
@@ -899,7 +899,7 @@ impl Tensor {
   /// By stride arithmetic rather than by materializing the Kronecker product,
   /// so a single slot costs exactly one application of `matrix`.
   ///
-  /// The map acts on the slot's *own* basis, not on the underlying space: it is
+  /// The map acts on the slot's own basis, not on the underlying space: it is
   /// already an induced map. [`Self::pullback`] and [`Self::pushforward`] are
   /// what take a map of the space.
   pub fn apply_to_slot(&self, which: usize, matrix: &Matrix) -> Self {
@@ -996,14 +996,14 @@ impl Tensor {
   }
 }
 
-/// The maps a linear map $A: V -> W$ induces on a *fixed* tensor shape,
+/// The maps a linear map $A: V -> W$ induces on a fixed tensor shape,
 /// materialized once and applied many times.
 ///
 /// $Lambda^k A$ and $"Sym"^r A$ cost a compound matrix to form and nothing to
-/// apply, so wherever one map transports a whole family of tensors --- the
+/// apply, so wherever one map transports a whole family of tensors, the
 /// trace onto a face at every quadrature node, a refinement child's Jacobian
-/// over every cell --- the functor is reference data and belongs outside the
-/// loop. This is that cache, and it is *the same* code path as
+/// over every cell: the functor is reference data and belongs outside the
+/// loop. This is that cache, and it is the same code path as
 /// [`Tensor::pullback`] and [`Tensor::pushforward`], which are one-shot uses of
 /// it rather than a second implementation.
 ///
@@ -1015,7 +1015,7 @@ impl Tensor {
 ///
 /// The per-slot functors are held apart and applied by [`apply_factorwise`]:
 /// $times.circle_i F_i (A)$ is the one thing not worth forming, and holding the
-/// factors is also what keeps the *shape* of the transport readable rather than
+/// factors is also what keeps the shape of the transport readable rather than
 /// flattened into one index.
 #[derive(Debug, Clone)]
 pub struct Transport {
@@ -1033,7 +1033,7 @@ pub struct Transport {
 impl Transport {
   /// The functor of `map` on the given shape.
   ///
-  /// Only the *factors* are read. The dimensions come from the map, and the
+  /// Only the factors are read. The dimensions come from the map, and the
   /// variance from the tensor being transported, never from here: a transport
   /// carries a variance rather than imposing one, so the same object serves the
   /// pullback of a form and the pushforward of a vector, which is exactly what
@@ -1063,7 +1063,7 @@ impl Transport {
     &self.induced
   }
 
-  /// $times.circle_i F_i (A)$ formed, for a caller that needs the matrix *as* a
+  /// $times.circle_i F_i (A)$ formed, for a caller that needs the matrix as a
   /// matrix: a congruence, a factorization, a block of a larger assembly.
   ///
   /// Built on demand and deliberately not stored. To apply the transport, use
@@ -1157,7 +1157,7 @@ impl Transport {
 /// privileges neither argument. It is symmetric in them, `pairing(a, b)` being
 /// `pairing(b, a)`, which method syntax would quietly deny.
 ///
-/// One side is read in the **reciprocal basis** ([`Tensor::reciprocal`]), which
+/// One side is read in the reciprocal basis ([`Tensor::reciprocal`]), which
 /// is what the pairing of a basis element with its dual means. Either side will
 /// do and the answer is the same, which is the pairing's symmetry stated in the
 /// implementation. A plain dot product of the stored components would be off by
@@ -1183,7 +1183,7 @@ pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
 /// $(alpha, beta) |-> alpha wedge beta$ read as a multiple of the basis volume
 /// element.
 ///
-/// Poincare duality at the level of the algebra, and **metric-free**: it needs
+/// Poincare duality at the level of the algebra, and metric-free: it needs
 /// only a top degree to land in and a basis to read the coefficient against,
 /// where the Hodge star needs a metric as well. That is the whole difference
 /// between the two dualities the exterior algebra carries, and it is why this
@@ -1257,12 +1257,12 @@ pub fn covariant_slots(factors: impl IntoIterator<Item = Factor>, dim: impl Into
 ///
 /// An empty product of slots is the scalars, on which the identity acts.
 ///
-/// **Prefer [`apply_factorwise`] wherever the matrix is only going to be
-/// applied.** This builds $product_i d_i$ squared entries out of matrices
+/// Prefer [`apply_factorwise`] wherever the matrix is only going to be
+/// applied. This builds $product_i d_i$ squared entries out of matrices
 /// holding $sum_i d_i^2$; applying the factors one slot at a time gives the
 /// same answer, allocates nothing of that size and costs
 /// $(product_i d_i)(sum_i d_i)$. Forming the product is for a caller that needs
-/// the matrix as a matrix -- a congruence, a factorization, a block of a larger
+/// the matrix as a matrix, a congruence, a factorization, a block of a larger
 /// assembly.
 pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
   per_slot
@@ -1421,7 +1421,7 @@ mod test {
   /// $"Gram"_F (A^T G A) = F(A)^T "Gram"_F (G) F(A)$.
   ///
   /// This is the law that decides the normalization, and it is stated on a
-  /// *rectangular* map so the two ends cannot coincide and hide a factor. The
+  /// rectangular map so the two ends cannot coincide and hide a factor. The
   /// alternating side is the familiar Cauchy-Binet statement; the symmetric one
   /// is its permanental counterpart, and it is what pins $"per"$ with nothing
   /// in front of it against the $"per" \/ d!$ that the symmetrized-tensor
@@ -1485,7 +1485,7 @@ mod test {
     }
   }
 
-  /// On a single factor the product *is* the merge of the tensor, which is what
+  /// On a single factor the product is the merge of the tensor, which is what
   /// ties the algebra structure back to the two primitives:
   /// $a b = "merge"_0 (a times.circle b)$.
   ///
@@ -1525,7 +1525,7 @@ mod test {
 
   /// The product is graded-commutative in the Koszul sense:
   /// $b a = (-1)^(abs(a) abs(b)) a b$, where the degree that counts is the
-  /// *alternating* one, symmetric factors being even.
+  /// alternating one, symmetric factors being even.
   ///
   /// Checked on a mixed shape, $"Sym" times.circle Lambda$, which is where the
   /// sign is a real claim: on one factor it is the wedge's antisymmetry, and on
@@ -1583,7 +1583,7 @@ mod test {
   /// Transferring twice in the same direction vanishes, both ways round:
   /// $dif compose dif = 0$ and $kappa compose kappa = 0$.
   ///
-  /// One law for two operators, which is the point of [`Tensor::transfer`] --
+  /// One law for two operators, which is the point of [`Tensor::transfer`],
   /// they are the same operation in opposite directions, so nilpotency is one
   /// statement about it rather than two coincidences.
   #[test]
@@ -1606,7 +1606,7 @@ mod test {
   /// The Koszul homotopy formula: on homogeneous $"Sym"^r times.circle
   /// Lambda^k$, $dif kappa + kappa dif = (r + k) id$.
   ///
-  /// The identity the whole polynomial de Rham complex rests on -- it is what
+  /// The identity the whole polynomial de Rham complex rests on: it is what
   /// makes that complex exact, and hence what the trimmed spaces
   /// $P^-_r Lambda^k$ are cut out by. Checking it here checks that both
   /// directions of the transfer carry the right signs and the right
@@ -1636,10 +1636,10 @@ mod test {
 
   /// What the pullback law does and does not pin.
   ///
-  /// A *global* constant cancels: scaling the Gramian by any $c$ scales both
+  /// A global constant cancels: scaling the Gramian by any $c$ scales both
   /// sides of $"Gram"(A^* g) = F(A)^* "Gram"(g)$ equally, so functoriality
   /// alone leaves the overall factor free and cannot choose between $"per"$ and
-  /// $"per" \/ d!$. What it does pin is the *shape* -- a normalization
+  /// $"per" \/ d!$. What it does pin is the shape, a normalization
   /// depending on the multi-index, such as the $alpha!$ that
   /// [`Factor::induced`] carries, breaks the law outright.
   ///

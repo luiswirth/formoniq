@@ -8,9 +8,9 @@
 //! $emptyset subset {a_1} subset {a_1, a_2} subset dots.c$ in this subset
 //! lattice, one for each permutation of the axes.
 //!
-//! This is the family with **no symmetry to exploit**, and the representation
+//! This is the family with no symmetry to exploit, and the representation
 //! says so. A monotone word is a set once shifted, hence a bitset with an
-//! alphabet-independent rank; a cartesian index is neither, and cannot be.
+//! alphabet-independent rank. A cartesian index is neither, and cannot be.
 //! There is no quotient here, so there is nothing to compress and no way to
 //! number the basis without knowing how wide it is.
 
@@ -27,7 +27,7 @@ use crate::monotone::Symbols;
 pub struct Word {
   /// The word packed as its own radix rank, most significant position first.
   ///
-  /// A word *is* a positional number, so storing the symbols separately would
+  /// A word is a positional number, so storing the symbols separately would
   /// be storing the same thing twice. The packing costs no generality: a word
   /// indexes a component of $V^(times.circle k)$, so $n^k$ has to fit in a
   /// `usize` for that component to exist at all.
@@ -331,7 +331,7 @@ pub fn cartesian2linear(cart_idx: &[usize], radix: usize) -> usize {
 }
 
 /// Converts a cartesian multi-index to a linear index when the axes carry
-/// *different* radices: the positional number of mixed base
+/// different radices: the positional number of mixed base
 /// $"radix"_0, dots, "radix"_(d-1)$, least significant axis first.
 ///
 /// The uniform [`cartesian2linear`] is the constant-radix case.
@@ -363,7 +363,7 @@ pub fn corner_offset(corner: Combination, strides: &[usize]) -> usize {
   corner.iter().map(|axis| strides[axis]).sum()
 }
 
-/// The per-axis strides of a *mixed*-radix linear index: the running product
+/// The per-axis strides of a mixed-radix linear index: the running product
 /// $"stride"_i = product_(j < i) "radix"_j$.
 ///
 /// The uniform [`strides`] is the constant-radix case, $"radix"^i$.

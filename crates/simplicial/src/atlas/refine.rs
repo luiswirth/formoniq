@@ -1,13 +1,13 @@
 //! The reference subdivision pattern of a chart.
 //!
-//! Refining a mesh is refining every chart the same way, up to the labelling of
-//! its vertices -- the atlas philosophy applied to $h$-refinement. So the whole
+//! Refining a mesh is refining every chart the same way, up to the labeling of
+//! its vertices, the atlas philosophy applied to $h$-refinement. So the whole
 //! combinatorics lives once on the reference cell, as a function of the
-//! dimension and the refinement level alone, and a mesh is refined by relabelling
+//! dimension and the refinement level alone, and a mesh is refined by relabeling
 //! this one pattern onto every cell (see
 //! [`Complex::refine`](crate::topology::complex::Complex::refine)).
 //!
-//! The pattern is the **edgewise (Freudenthal) subdivision** of the reference
+//! The pattern is the edgewise (Freudenthal) subdivision of the reference
 //! $n$-simplex into $R^n$ children, the canonical dimension-general
 //! generalization of the 2D red refinement (Bank) and its 3D analogue (Bey).
 //! It is affine and metric-free: a statement about the barycentric lattice, not
@@ -15,9 +15,9 @@
 //!
 //! # Construction
 //!
-//! The unit simplex maps affinely and bijectively onto the *order simplex*
+//! The unit simplex maps affinely and bijectively onto the order simplex
 //! $Delta = { t in RR^n : 1 >= t_1 >= dots.h.c >= t_n >= 0 }$ by the cumulative
-//! barycentric coordinates $t_j = sum_(i >= j) lambda_i$ -- itself a Kuhn
+//! barycentric coordinates $t_j = sum_(i >= j) lambda_i$, itself a Kuhn
 //! simplex of the unit cube. Scaling by $R$ and intersecting the integer
 //! Freudenthal (Kuhn) triangulation of $ZZ^n$ with $R Delta$ gives exactly the
 //! $R^n$ children. A Kuhn simplex is a base point $b in ZZ^n$ and a permutation
@@ -29,7 +29,7 @@
 //!
 //! Because the construction is driven only by the order of the cell's vertices,
 //! its restriction to a face depends only on that face's vertices and their
-//! order -- not on the opposite vertex. Two cells sharing a face carry the same
+//! order, not on the opposite vertex. Two cells sharing a face carry the same
 //! global order on it (simplices store vertices increasingly), so they subdivide
 //! the shared face identically, and the refined mesh is conforming. This is why
 //! the reference pattern is expressed on lattice points keyed by the vertices
@@ -172,11 +172,11 @@ impl UnitRefinement {
   }
 
   /// The `ichild`-th child realized in the parent chart's local frame, its
-  /// corners in reference order. Pure reference data -- a function of
+  /// corners in reference order. Pure reference data, a function of
   /// `(dim, refinement)` alone. Its [`linear_transform`] is the reference-order
   /// child Jacobian and its [`vol`] the child's share of the reference volume;
   /// the per-cell refinement path ([`Complex::refine`]) rebuilds this same
-  /// realization in the *sorted* global vertex order, the only ordering a stored
+  /// realization in the sorted global vertex order, the only ordering a stored
   /// cell's metric reads (see there).
   ///
   /// [`linear_transform`]: SimplexCoords::linear_transform
@@ -197,7 +197,7 @@ mod test {
   use crate::Dim;
   use crate::atlas::{unit_lattice, unit_simplex_volume};
 
-  /// Freudenthal subdivision *composes*: refining an ordered simplex $R$-fold
+  /// Freudenthal subdivision composes: refining an ordered simplex $R$-fold
   /// and then $R'$-fold again is the $R R'$-fold refinement, cell for cell.
   ///
   /// $ "refine"_(R') compose "refine"_R = "refine"_(R R') $
@@ -205,7 +205,7 @@ mod test {
   /// The semigroup law of the reference pattern, and the reason a refinement
   /// tower stays inside the Kuhn family: every child is similar to its parent,
   /// in every dimension, at every level. It holds only when each child is
-  /// refined in the order this pattern emits its corners -- that order carries
+  /// refined in the order this pattern emits its corners, that order carries
   /// Freudenthal's type, and it is the whole of what a child inherits. Sorting a
   /// child's vertices instead (by a global numbering, say) reproduces the
   /// pattern at the first level and drifts out of the family after, into a
@@ -265,7 +265,7 @@ mod test {
       // And a sheared image of it. The subdivision is defined by barycentric
       // weights, so it commutes with any affine map: the law is affine, not a
       // property of the Kuhn simplex, and therefore holds on an arbitrary mesh.
-      // What *is* special to Kuhn is similarity of the children -- an affine map
+      // What is special to Kuhn is similarity of the children, an affine map
       // preserves the composition but not the shape classes.
       let skewed: Vec<Vector> = kuhn
         .iter()
@@ -322,7 +322,7 @@ mod test {
   /// reference frame each child has volume $1 \/ (R^n n!)$, and they sum to the
   /// reference volume $1 \/ n!$. Equivalently every child is congruent to the
   /// $R^(-n)$-scaled reference cell. Read through the child's realization in the
-  /// parent frame -- vertex order is immaterial here, the volume being
+  /// parent frame, vertex order is immaterial here, the volume being
   /// order-invariant.
   #[test]
   fn volume_partition() {

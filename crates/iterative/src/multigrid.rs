@@ -2,8 +2,8 @@
 //! of levels.
 //!
 //! A single V-cycle is the composition, on each level from fine to coarse and
-//! back, of a *smoother* $S approx A^(-1)$ (any [`ApproxInverse`], a few Jacobi
-//! sweeps in the minimal case) with a coarse-grid *correction*: restrict the
+//! back, of a smoother $S approx A^(-1)$ (any [`ApproxInverse`], a few Jacobi
+//! sweeps in the minimal case) with a coarse-grid correction: restrict the
 //! residual, solve the coarser problem recursively, prolong the correction. At
 //! the coarsest level a direct solve $C$ replaces the recursion. It is exactly
 //! the [`Stationary`](crate::stationary) iteration with $B$ the cycle itself, so
@@ -13,15 +13,15 @@
 //! Its reason to exist over a one-level smoother is $h$-independence: the smoother
 //! damps the high-frequency error a level resolves, the coarse correction handles
 //! the low-frequency error it cannot see, and together they contract the whole
-//! spectrum at a rate bounded below one *uniformly in the mesh size*. That
+//! spectrum at a rate bounded below one uniformly in the mesh size. That
 //! uniformity is what a stationary or a Jacobi-preconditioned Krylov iteration
 //! lacks, and it is the property the cycle is validated against.
 //!
 //! The cycle here is geometric and generic: it asks only for the assembled
 //! operator, a smoother, and the intergrid transfer matrices on each level. What
-//! those transfers *are* --- for FEEC, the Whitney prolongation and its
-//! transpose --- is the consumer's business, supplied as plain
-//! [`CsrMatrix`]es; this crate stays backend-free and knows nothing of meshes or
+//! those transfers are, for FEEC, the Whitney prolongation and its
+//! transpose, is the consumer's business, supplied as plain
+//! [`CsrMatrix`]es. This crate stays backend-free and knows nothing of meshes or
 //! forms.
 
 use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
@@ -33,7 +33,7 @@ use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
 /// coarser space into this one; `restrict` is $R: RR^(n_"fine") ->
 /// RR^(n_"coarse")$, typically $P^T$. The operator is this level's $A$, and
 /// `smoother` any approximate inverse of it. The coarsest level carries no
-/// transfers --- it is the [`VCycle`]'s coarse solver, not a `Level`.
+/// transfers: it is the [`VCycle`]'s coarse solver, not a `Level`.
 pub struct Level<S> {
   operator: CsrMatrix,
   smoother: S,
@@ -77,7 +77,7 @@ impl<S> Level<S> {
 /// single V-cycle: `pre` smoothing sweeps down each level, the recursion, then
 /// `post` sweeps back up.
 ///
-/// With no levels at all it degrades to the coarse solver alone --- the totality
+/// With no levels at all it degrades to the coarse solver alone, the totality
 /// base case, a hierarchy of one grid being a plain direct solve with no
 /// special-casing.
 pub struct VCycle<S, C> {
@@ -103,7 +103,7 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<
   ///
   /// Equal counts with a self-adjoint smoother and $R = P^T$ make the whole
   /// cycle self-adjoint, the condition under which it may precondition
-  /// [`cg`](crate::krylov::cg) --- see the [`SelfAdjoint`] impl.
+  /// [`cg`](crate::krylov::cg), see the [`SelfAdjoint`] impl.
   pub fn symmetric(levels: Vec<Level<S>>, coarse: C, sweeps: usize) -> Self {
     Self::new(levels, coarse, sweeps, sweeps)
   }
@@ -126,7 +126,7 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<
 }
 
 /// Refine `x` toward solving `a x = r` by `sweeps` stationary steps of the
-/// smoother, continuing from the incoming `x` rather than restarting --- which
+/// smoother, continuing from the incoming `x` rather than restarting, which
 /// is what post-smoothing after the coarse correction needs.
 fn smooth<S: ApproxInverse<Space = Vector>>(
   a: &CsrMatrix,
@@ -163,7 +163,7 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> ApproxI
 /// self-adjoint whenever $C$ is.
 ///
 /// As everywhere in the crate, self-adjointness is the marker and positive
-/// definiteness the constructor's promise --- here also that `pre == post`,
+/// definiteness the constructor's promise, here also that `pre == post`,
 /// which [`VCycle::symmetric`] guarantees. It is what lets a V-cycle precondition
 /// [`cg`](crate::krylov::cg).
 impl<S: SelfAdjoint<Space = Vector>, C: SelfAdjoint<Space = Vector>> SelfAdjoint for VCycle<S, C> {}

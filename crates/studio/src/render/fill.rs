@@ -59,7 +59,7 @@ impl FillPass {
     Self { pipeline }
   }
 
-  /// `deposit` is the atlas read binding -- a batch's current texture, or the
+  /// `deposit` is the atlas read binding, a batch's current texture, or the
   /// renderer's 1x1 zero dummy for a frame without trails, which the material's
   /// floor-1/gain-0 makes the identity.
   pub fn draw(

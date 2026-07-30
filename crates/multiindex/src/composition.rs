@@ -8,16 +8,16 @@
 //! which indexes $Lambda^k$. The two are dual in structure, not variants of one
 //! thing: a combination forbids repetition and carries a
 //! [`Sign`](crate::Sign) under permutation, a composition mandates neither and
-//! carries no sign. Compositions form a graded monoid under addition --
-//! $x^k x^(k') = x^(k + k')$ -- where combinations instead carry the wedge,
+//! carries no sign. Compositions form a graded monoid under addition,
+//! $x^k x^(k') = x^(k + k')$, where combinations instead carry the wedge,
 //! which is partial and signed.
 //!
 //! Stars and bars bijects with the subsets of $d + p - 1$ slots in two
 //! complementary readings, the bars giving the $(p-1)$-subsets and the stars
 //! the $d$-subsets. Only the latter preserves colex, and both are proved as
 //! theorems here rather than used as the representation. Neither is natural in
-//! the ambient size: each absorbs the *degree* $d$, which is unbounded (a
-//! refinement level, a polynomial order), into the *index count* of a
+//! the ambient size: each absorbs the degree $d$, which is unbounded (a
+//! refinement level, a polynomial order), into the index count of a
 //! combination, which is bounded by a dimension. Enumerating compositions
 //! directly is what keeps the degree free.
 
@@ -32,7 +32,7 @@ use crate::{Repetition, binomial};
 /// between them by [`Repetition`].
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub struct Composition {
-  /// The parts. Their sum is the degree; the length is the number of parts.
+  /// The parts. Their sum is the degree. The length is the number of parts.
   parts: Vec<usize>,
 }
 
@@ -61,7 +61,7 @@ impl Composition {
   }
 
   /// The number of compositions of degree `degree` into `nparts` parts,
-  /// $binom(d + p - 1, p - 1)$ -- equivalently $dim "Sym"^d (RR^p)$.
+  /// $binom(d + p - 1, p - 1)$, equivalently $dim "Sym"^d (RR^p)$.
   ///
   /// Total at the degenerate corners: no parts admit only the empty
   /// composition of degree zero.
@@ -140,7 +140,7 @@ impl std::ops::Add for &Composition {
   /// degree the sum of the degrees.
   ///
   /// # Panics
-  /// If the shapes differ -- the two must be compositions into the same parts.
+  /// If the shapes differ, the two must be compositions into the same parts.
   fn add(self, other: &Composition) -> Composition {
     assert_eq!(
       self.nparts(),
@@ -225,7 +225,7 @@ mod test {
   /// existing composition where it was.
   ///
   /// This is what colex is for, and it is what the previous
-  /// reverse-lexicographic order did not have -- a word's position drifted
+  /// reverse-lexicographic order did not have, a word's position drifted
   /// upward as parts were appended, so widening the alphabet renumbered the
   /// basis. The formula makes it plain: the sum runs over the word and never
   /// mentions `nparts`.
@@ -247,13 +247,13 @@ mod test {
   /// $d$-subsets of $d + p - 1$, order for order, by the shift
   /// $w_i |-> w_i + i$ on the word.
   ///
-  /// The *stars* are the subset here, not the bars. Both readings biject, and
+  /// The stars are the subset here, not the bars. Both readings biject, and
   /// they are complementary, but only this one is order-preserving under the
   /// shared colex convention: a bar set has $p - 1$ elements, so its rank
   /// depends on the number of parts, while the word has $d$ and its rank does
   /// not.
   ///
-  /// A theorem about the two index sets, not the way either is built -- which
+  /// A theorem about the two index sets, not the way either is built, which
   /// is what leaves the degree unbounded here while a combination's index
   /// count stays bounded.
   #[test]

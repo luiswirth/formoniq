@@ -6,24 +6,24 @@
 //! derivation chain squared edge lengths $->$ per-simplex metric:
 //!
 //! - [`MeshLengthsSq`]: the Regge primitive, signed squared edge lengths
-//!   (grade-1 data) on the 1-skeleton, of any signature. It is *total over
-//!   every grade*: the metric of any subsimplex is the Gramian of that
+//!   (grade-1 data) on the 1-skeleton, of any signature. It is total over
+//!   every grade: the metric of any subsimplex is the Gramian of that
 //!   simplex's own edges ([`MeshLengthsSq::simplex_metric`]), so this is the
 //!   representation the whole engine speaks, and the one boundary traces and
 //!   curvature read.
-//! - [`CellGramians`]: the per-cell metric tensors as grade-n data -- the
+//! - [`CellGramians`]: the per-cell metric tensors as grade-n data, the
 //!   materialized cell column of the derivation chain, living natively on the
 //!   cell skeleton with no need of a global edge indexing. A convenience for a
 //!   source that arrives as raw per-cell metrics and the intermediary of
 //!   [`refine_gramians`](crate::refine::SubdivisionExt::refine_gramians);
-//!   it converts back to edge lengths losslessly on a *Regge-conforming*
+//!   it converts back to edge lengths losslessly on a Regge-conforming
 //!   geometry ([`CellGramians::is_regge_conforming`]), and only there. Not to be
 //!   confused with the face consistency of a
 //!   [`CellOrdering`](simplicial::topology::ordering::CellOrdering), which is about
-//!   how shared faces are *subdivided*, not about what metric they carry.
+//!   how shared faces are subdivided, not about what metric they carry.
 //!
 //! An embedding ([`MeshCoords`](crate::coord::mesh::MeshCoords),
-//! grade-0 data) is a *third* source, but it lives one layer up in
+//! grade-0 data) is a third source, but it lives one layer up in
 //! [`coord`](crate::coord): an embedding induces a metric, the metric
 //! layer knows nothing of embeddings and must not.
 //!
@@ -95,7 +95,7 @@ impl CellGramians {
   /// empty vector.
   ///
   /// Defined only on Regge-conforming data ([`Self::is_regge_conforming`]),
-  /// and panics otherwise. Per-cell metrics are the *broken* symmetric-tensor
+  /// and panics otherwise. Per-cell metrics are the broken symmetric-tensor
   /// field, strictly larger than the Regge space: off the conforming subspace
   /// a shared edge has two lengths and no canonical choice between them, so
   /// there is nothing to return. Use [`Self::try_to_edge_lengths_sq`] where
@@ -143,13 +143,13 @@ impl CellGramians {
   /// Whether these per-cell metrics lie in the Regge space: whether two cells
   /// sharing an edge induce the same signed squared length on it.
   ///
-  /// This is *tangential-tangential continuity*, the conformity condition of
+  /// This is tangential-tangential continuity, the conformity condition of
   /// the Regge element, in the form the edge degrees of freedom take. By
   /// polarization, agreeing on the squared lengths of a shared face's edges is
   /// the same as agreeing on $g(u, v)$ for all $u, v$ tangent to that face,
   /// while the normal components stay free to jump. It is what makes
   /// [`MeshLengthsSq`] able to carry the geometry at all: a single value per
-  /// edge of the global 1-skeleton *is* a conforming symmetric-tensor field,
+  /// edge of the global 1-skeleton is a conforming symmetric-tensor field,
   /// with conformity structural rather than enforced.
   ///
   /// Compared at a tolerance relative to each cell's own scale, so a null edge

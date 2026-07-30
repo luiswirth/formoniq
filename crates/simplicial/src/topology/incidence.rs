@@ -8,9 +8,9 @@ use crate::Dim;
 /// the position of the face within that cell's own enumeration.
 ///
 /// The position is what a converse lookup cannot do without.
-/// [`SimplexRef::cofaces`](super::handle::SimplexRef::cofaces) already answers *which* cells contain a simplex, but
+/// [`SimplexRef::cofaces`](super::handle::SimplexRef::cofaces) already answers which cells contain a simplex, but
 /// anything indexed by a cell's faces (a row of a local matrix, a local degree
-/// of freedom) needs to know *where* among them this one sits, and recovering
+/// of freedom) needs to know where among them this one sits, and recovering
 /// that means searching the cell.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Incidence {

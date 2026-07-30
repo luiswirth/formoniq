@@ -1,10 +1,10 @@
 //! The draw list: baked geometry uploaded to the GPU, and the items a frame is
 //! made of.
 //!
-//! A batch owns buffers and nothing else; an item is a batch plus the material
+//! A batch owns buffers and nothing else. An item is a batch plus the material
 //! it is drawn with. A surface, its wireframe overlay and a line field's arrow
 //! glyphs are three items over three batch kinds, and several manifolds in one
-//! scene are simply more items -- the renderer never learns how many there will
+//! scene are simply more items, the renderer never learns how many there will
 //! be.
 //!
 //! Each batch mirrors `bake.rs`'s static/per-field split: positions and index
@@ -96,14 +96,14 @@ const GLYPH: [wgpu::VertexAttribute; 8] = glyph_attributes();
 /// triangle, unshared.
 ///
 /// Unshared, unlike an indexed table, for two reasons that coincide. The
-/// deposit-atlas texel coordinate is per corner *per triangle* -- two triangles
+/// deposit-atlas texel coordinate is per corner per triangle, two triangles
 /// sharing a mesh vertex map it into two different atlas blocks. And the field's
-/// *colormap* value is likewise per corner *per cell*: a reduced-grade Whitney
+/// colormap value is likewise per corner per cell: a reduced-grade Whitney
 /// form is discontinuous across cells, so a shared vertex has no one value to
 /// carry, and reading it once per corner in the corner's own cell is what keeps
 /// a basis function's support from bleeding into cells it vanishes on. The
 /// colormap stream is therefore already in corner order and written straight
-/// through. The *displacement* height, in contrast, is a geometric height of
+/// through. The displacement height, in contrast, is a geometric height of
 /// one connected surface and must stay single-valued at a shared vertex, so it
 /// is the one stream given per mesh vertex and gathered into corner order here.
 pub struct SurfaceBatch {
@@ -111,7 +111,7 @@ pub struct SurfaceBatch {
   colors: wgpu::Buffer,
   heights: wgpu::Buffer,
   deposit_uvs: wgpu::Buffer,
-  /// The triangle list over the *mesh* vertex table, retained so a field change
+  /// The triangle list over the mesh vertex table, retained so a field change
   /// re-gathers the per-vertex displacement height into corner order.
   ncorners: u32,
 }
@@ -120,8 +120,8 @@ impl SurfaceBatch {
   /// The batch of a baked mesh whose cells are triangles; `None` for a bake that
   /// produced no fill (a curve, a point cloud), whose marks are its segments
   /// instead. `deposit_uvs` is the per-corner atlas texel coordinate stream
-  /// (normalized), three per triangle -- zeros for a mesh with no atlas. The
-  /// field streams start at zero; a field fills them through
+  /// (normalized), three per triangle, zeros for a mesh with no atlas. The
+  /// field streams start at zero. A field fills them through
   /// [`Self::write_attributes`].
   pub fn new(device: &wgpu::Device, baked: &BakedMesh, deposit_uvs: &[[f32; 2]]) -> Option<Self> {
     let PrimBatch::Triangles(triangles) = &baked.cells else {
@@ -145,7 +145,7 @@ impl SurfaceBatch {
 
   /// Rebinds the surface to a different field of the same mesh. Both streams
   /// are per corner (three per triangle, cell-local) and written straight
-  /// through: the height is *not* gathered from a per-vertex stream here,
+  /// through: the height is not gathered from a per-vertex stream here,
   /// because a cell-rigid displacement has no per-vertex preimage to gather
   /// from. Which strategy produced it is
   /// the scene's height reduction's to decide. One buffer write each, no rebake.
@@ -195,7 +195,7 @@ impl SurfaceBatch {
 }
 
 /// A segment mark: the wireframe overlay, a line field's ribbons, or a
-/// 1-manifold's own cells. One batch kind for all three -- the same instanced
+/// 1-manifold's own cells. One batch kind for all three, the same instanced
 /// billboard quad over a different index stream.
 ///
 /// A segment's two endpoints are expanded into two parallel per-instance streams
@@ -321,7 +321,7 @@ fn gather(values: &[f32], segments: &[[u32; 2]], end: usize) -> Vec<f32> {
 
 /// The 0-skeleton: one instanced billboard circle per mesh vertex, over the same
 /// per-vertex static/per-field split as the segments and reusing their
-/// `SegmentVertex` and locations. Everything is per vertex -- a 0-form is
+/// `SegmentVertex` and locations. Everything is per vertex, a 0-form is
 /// single-valued at a vertex, so unlike the edge colors there is nothing per
 /// simplex here. See `points.wgsl`.
 pub struct PointBatch {
@@ -362,7 +362,7 @@ impl PointBatch {
   }
 
   /// The instance's static stream at locations 0..=3, its displacement height at
-  /// 8, its colormap value at 10 -- the same locations the segment endpoints use.
+  /// 8, its colormap value at 10, the same locations the segment endpoints use.
   pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 3] {
     const fn value(
       attributes: &'static [wgpu::VertexAttribute],
@@ -396,7 +396,7 @@ impl PointBatch {
 }
 
 /// A glyph mark: the arrows of a line field, each a flat quad (two triangles,
-/// six corners) lying in its surface cell. One vertex buffer, drawn unindexed --
+/// six corners) lying in its surface cell. One vertex buffer, drawn unindexed,
 /// the corners are already expanded, since a quad's diagonal is not shared the
 /// way a mesh edge is, and the arrow-frame coordinate differs per corner anyway.
 pub struct GlyphBatch {
@@ -447,15 +447,15 @@ pub enum RenderItem<'a> {
 /// statement of what lies over what: the surface writes depth and the segment
 /// marks over it only test against it, so they blend in the order given.
 ///
-/// The advected population and the atlas it trails into sit *beside* the items,
+/// The advected population and the atlas it trails into sit beside the items,
 /// not among them: both are field state the frame advances before it draws, not
 /// marks it draws. The population is stepped by the compute pass and read only
-/// through the deposit it splats into -- it is never itself on screen.
+/// through the deposit it splats into: it is never itself on screen.
 #[derive(Default)]
 pub struct DrawList<'a> {
   pub items: Vec<RenderItem<'a>>,
   /// The population the frame steps, when it has one. Written by the GPU, read
-  /// by the deposit's splat -- so it is stepped, never drawn.
+  /// by the deposit's splat, so it is stepped, never drawn.
   pub particles: Option<&'a ParticleBatch>,
   /// The deposit atlas the particles trail into and the fill reads, when the
   /// frame has both. Beside the items for the same reason: it is stepped with
@@ -466,7 +466,7 @@ pub struct DrawList<'a> {
   /// Beside the items rather than among them because its place in the order is
   /// not the caller's to state: it is composited after everything opaque, and
   /// clamped by the depth those items wrote. An item's position in `items` says
-  /// what lies over what, and a medium lies over nothing -- it lies *between*.
+  /// what lies over what, and a medium lies over nothing, it lies between.
   pub volume: Option<(
     &'a super::volume::VolumeBatch,
     super::volume::VolumeMaterial,

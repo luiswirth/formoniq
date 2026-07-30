@@ -5,20 +5,20 @@ use crate::topology::role::Cell;
 
 use multiindex::Combination;
 
-/// A chart of the piecewise-affine atlas *is* a cell of the complex, and the
+/// A chart of the piecewise-affine atlas is a cell of the complex, and the
 /// type identity states it: the [`Cell`] witness carries the whole contract
-/// (top-dimensional by construction -- a face carries no chart, so there is no
+/// (top-dimensional by construction: a face carries no chart, so there is no
 /// frame on one in which to express the value of a section, and a point of a
 /// face is instead carried by a supporting cell, see [`MeshPoint`]).
 ///
-/// The chart *map* itself is not data: given the cell, the barycentric
-/// coordinates are canonical. Nor is the chart's local structure -- the
-/// reference vertices, the barycentric differentials, the volume -- since it
+/// The chart map itself is not data: given the cell, the barycentric
+/// coordinates are canonical. Nor is the chart's local structure, the
+/// reference vertices, the barycentric differentials, the volume, since it
 /// depends on the dimension alone and not on the cell. That is the fact that
-/// every chart of the atlas is the *same* chart up to the labelling of its
+/// every chart of the atlas is the same chart up to the labeling of its
 /// vertices, and it is why any per-cell quantity fixed by the reference chart is
 /// computed once on the reference cell and reused on every cell of the mesh. The
-/// labelling is what differs, and the labelling is precisely what a
+/// labeling is what differs, and the labeling is precisely what a
 /// [`Transition`] is made of.
 pub type Chart<'m> = Cell<'m>;
 

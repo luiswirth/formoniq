@@ -3,7 +3,7 @@
 //! `simplicial`'s matrix types.
 //!
 //! `formoniq` is the only crate in the workspace that actually solves a linear
-//! system, so this is where faer lives -- not a shared base crate every leaf
+//! system, so this is where faer lives, not a shared base crate every leaf
 //! would otherwise compile it for free.
 
 use simplicial::linalg::{CsrMatrix, Vector};
@@ -30,8 +30,8 @@ enum Factorization {
 /// A direct SPD factorization presented as an [`iterative::ApproxInverse`]: the
 /// exact inverse $B = A^(-1)$, the perfect approximate inverse.
 ///
-/// The bridge that lets a direct factorization serve as a *block* of a
-/// preconditioner --- an exact inner solve on one space of a saddle point ---
+/// The bridge that lets a direct factorization serve as a block of a
+/// preconditioner, an exact inner solve on one space of a saddle point,
 /// so a block-diagonal preconditioner over these makes MINRES converge in an
 /// iteration count independent of the mesh. Self-adjoint by construction: the
 /// inverse of an SPD matrix is SPD, whichever factorization computes it.
@@ -39,9 +39,9 @@ enum Factorization {
 /// Cholesky is the natural choice for an SPD system and the default here, but
 /// faer's sparse Cholesky (0.24) silently returns a grossly inaccurate
 /// factorization on some large SPD systems (a 3D grade-0 Hodge-Laplace at ~10^5
-/// DOFs solves to a relative residual of only ~10^-4, while faer's *LU* on the
+/// DOFs solves to a relative residual of only ~10^-4, while faer's LU on the
 /// same matrix is exact to machine precision). A wrong answer from a direct
-/// solver is the worst failure mode, so the factorization is *verified* at
+/// solver is the worst failure mode, so the factorization is verified at
 /// construction against a probe right-hand side and falls back to LU when the
 /// Cholesky solve does not reproduce it. The guard costs one extra triangular
 /// solve, negligible next to the factorization.
@@ -62,7 +62,7 @@ impl DirectInverse {
   ///
   /// Prefers Cholesky; verifies it and falls back to LU if faer's sparse
   /// Cholesky returned an inaccurate factor (see the type docs). `None` only when
-  /// the matrix is genuinely not positive definite -- Cholesky failing the PD
+  /// the matrix is genuinely not positive definite, Cholesky failing the PD
   /// check, not merely the accuracy probe.
   pub fn try_new(a: CsrMatrix) -> Option<Self> {
     let dim = a.nrows();

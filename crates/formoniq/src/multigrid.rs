@@ -11,8 +11,8 @@
 //! At grade $0$ this is the minimal, nodal case: a pointwise (Jacobi) smoother
 //! already damps the high-frequency error, since grade 0 has no large near-kernel
 //! of $dif$ to confound it, and [`Grade0Multigrid`] is exactly that. At grade
-//! $>= 1$ the same V-cycle is no longer enough on its own --- the near-kernel of
-//! $dif$ needs the auxiliary-space smoother of [`crate::hx`] --- but the cycle is
+//! $>= 1$ the same V-cycle is no longer enough on its own, the near-kernel of
+//! $dif$ needs the auxiliary-space smoother of [`crate::hx`], but the cycle is
 //! the same object at every grade, and the tower builds it uniformly through
 //! [`RefinementTower::grade_vcycle`], which the auxiliary-space preconditioner
 //! reuses for its blocks.
@@ -68,9 +68,9 @@ impl RefinementTower {
   /// Build the tower by refining `base_topology`/`base_geometry` `refinements`
   /// times, halving the mesh each step.
   ///
-  /// The base ordering is colex; each refined level inherits the ordering the
+  /// The base ordering is colex. Each refined level inherits the ordering the
   /// [`Subdivision`] carries, so the tower composes (invariant 7). Refinement is
-  /// metric-free and exact --- a flat cell subdivided stays flat --- so the tower
+  /// metric-free and exact, a flat cell subdivided stays flat, so the tower
   /// introduces no geometric error of its own.
   pub fn new(base_topology: Complex, base_geometry: MeshLengthsSq, refinements: usize) -> Self {
     let mut complexes = vec![base_topology];
@@ -291,8 +291,8 @@ mod tests {
   }
 
   /// The MG-CG iteration count stays essentially flat as the mesh is refined,
-  /// while unpreconditioned CG grows with the $O(h^(-2))$ condition number ---
-  /// the mesh-independence that is the whole point of multigrid.
+  /// while unpreconditioned CG grows with the $O(h^(-2))$ condition number,
+  /// the mesh-independence multigrid exists to provide.
   #[test]
   fn mg_cg_iterations_are_mesh_independent() {
     let iters = |refinements: usize| -> (usize, usize) {

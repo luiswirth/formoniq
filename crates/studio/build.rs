@@ -5,7 +5,7 @@
 //!
 //! Generated at build time, not scanned at run time, on purpose. The assets are
 //! embedded with `include_bytes!` so they travel inside the binary and need no
-//! filesystem when the viewer runs -- which is what lets the same code serve the
+//! filesystem when the viewer runs, which is what lets the same code serve the
 //! web build, where there is no filesystem to scan at all.
 
 use std::{env, fs, path::Path};
@@ -19,7 +19,7 @@ fn main() {
   let assets = Path::new(&manifest).join("assets/meshes");
 
   // A mesh added, removed or renamed changes the table, so the directory
-  // itself is the dependency -- not just this script.
+  // itself is the dependency, not just this script.
   println!("cargo:rerun-if-changed={}", assets.display());
 
   let mut meshes: Vec<(String, &str, String)> = Vec::new();

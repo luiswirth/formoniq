@@ -109,7 +109,7 @@ fn main() {
 
           let source = assemble_galvec(&topology, &metric, SourceElVec::new(&load, None));
           // Absolute BC is the full Whitney complex, relative BC its subcomplex of
-          // boundary-vanishing cochains; the solver is one piece of code over both.
+          // boundary-vanishing cochains. The solver is one piece of code over both.
           let (_, galsol, _) = match bc {
             BoundaryCondition::Absolute => elliptic::solve_source(&whitney, source, grade).unwrap(),
             BoundaryCondition::Relative => {

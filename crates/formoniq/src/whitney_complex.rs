@@ -7,7 +7,7 @@
 //! embedded mesh or raw per-cell metrics reach it by converting to edge
 //! lengths at the door. On an indefinite metric the
 //! $L^2 Lambda^k$ "inner products" are the indefinite $L^2$ pairings and the
-//! mass matrices are symmetric non-degenerate rather than s.p.d. -- which is
+//! mass matrices are symmetric non-degenerate rather than s.p.d., which is
 //! the honest structural difference, not a separate code path.
 
 use crate::{
@@ -38,7 +38,7 @@ use std::collections::HashSet;
 /// Implemented by both the full [`WhitneyComplex`] (absolute / natural boundary
 /// conditions, harmonic space $H^k (K)$) and its [`RelativeWhitneyComplex`]
 /// (essential / homogeneous Dirichlet, harmonic space $H^k (K, diff K)$), so the
-/// solver is one monomorphized piece of code over both --- the choice of
+/// solver is one monomorphized piece of code over both, the choice of
 /// boundary condition is just the choice of complex.
 ///
 /// The [`Self::inclusion`] $E: cal(W)^"rel" Lambda^k arrow.hook cal(W) Lambda^k$
@@ -81,13 +81,13 @@ pub trait HilbertComplex {
   /// i.e. the mass solve $M_(k-1) sigma = (D^(k-1))^T M_k u$.
   ///
   /// Total in grade: $delta$ maps $C^k$ into $C^(k-1)$, and where that codomain
-  /// is trivial --- at grade $0$, where it is $Lambda^(-1) = 0$, or past either
-  /// end of the complex --- the only element is the zero cochain, returned
+  /// is trivial, at grade $0$, where it is $Lambda^(-1) = 0$, or past either
+  /// end of the complex, the only element is the zero cochain, returned
   /// directly rather than through a degenerate empty solve. This is the
   /// $Z$-graded degree at work: $delta$ of a $0$-form is the empty cochain of
-  /// $Lambda^(-1)$, not a missing value. Unlike $dif$, $delta$ is *not*
+  /// $Lambda^(-1)$, not a missing value. Unlike $dif$, $delta$ is not
   /// metric-free (invariant 5): it carries the mass inverse, realized here as a
-  /// solve --- well conditioned, since the mass is. Total over signature (the
+  /// solve, well conditioned, since the mass is. Total over signature (the
   /// solve is an LU).
   fn codif(&self, u: &Cochain) -> Cochain {
     let grade = u.grade();
@@ -105,7 +105,7 @@ pub trait HilbertComplex {
 /// The $L^2 Lambda^k$ pairing of two cochains of a discrete complex,
 /// $angle.l u, v angle.r_(L^2) = u^top M_k v$.
 ///
-/// The **metric** duality, where [`pairing`](derham::cochain::pairing) is the
+/// The metric duality, where [`pairing`](derham::cochain::pairing) is the
 /// metric-free one. A chain-cochain pairing needs nothing but the incidence;
 /// this needs the mass matrix, hence a geometry, and the two must not be
 /// conflated: the first is a statement about the complex, the second about the
@@ -216,7 +216,7 @@ impl<'a> WhitneyComplex<'a> {
   ///
   /// Total in grade with no special case: at the top grade $dif: Lambda^n ->
   /// Lambda^(n+1)$ has a trivial codomain, so $M_(n+1)$ is $0 times 0$ and the
-  /// product is the honest $"ndofs"(n)^2$ zero; the same falls out past either
+  /// product is the honest $"ndofs"(n)^2$ zero. The same falls out past either
   /// end from the total [`Self::dif`] and [`Self::mass`].
   pub fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
@@ -268,7 +268,7 @@ impl<'a> WhitneyComplex<'a> {
     (self.norm_l2(u).powi(2) + self.seminorm_hcodif(u).powi(2)).sqrt()
   }
 
-  /// The Hodge-Laplace *energy* seminorm
+  /// The Hodge-Laplace energy seminorm
   /// $abs(u)^2 = norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2 =
   /// angle.l Delta u, u angle.r$: the form the Hodge-Laplacian is coercive in
   /// (modulo harmonics). The norm convergence rates are naturally measured in.
@@ -309,11 +309,11 @@ impl<'a> WhitneyComplex<'a> {
 }
 
 /// The trace geometry of the boundary is the restriction of the squared edge
-/// lengths, a pure data restriction that is total on any signature -- which is
+/// lengths, a pure data restriction that is total on any signature, which is
 /// the subsimplex-geometry generalization at work: the boundary facets are
 /// subsimplices of the cells, and their induced metric is read off the shared
-/// edge lengths directly. On an indefinite parent a *null* facet carries
-/// degenerate induced data -- the degeneracy surfaces where a facet metric is
+/// edge lengths directly. On an indefinite parent a null facet carries
+/// degenerate induced data, the degeneracy surfaces where a facet metric is
 /// actually built, which is the honest mathematical boundary of the concept.
 impl<'a> WhitneyComplex<'a> {
   /// The Whitney complex of the boundary $diff K$ with the induced metric,
@@ -450,19 +450,19 @@ impl<'a> RelativeWhitneyComplex<'a> {
         .collect()
     })
   }
-  /// Constrain the given simplices per grade: the *mixed* complex
+  /// Constrain the given simplices per grade: the mixed complex
   /// $C^k (K, Gamma)$ of cochains whose trace vanishes on a chosen part
   /// $Gamma subset.eq diff K$ only, the rest of the boundary carrying the
   /// natural condition.
   ///
-  /// `constrained` must return the simplices of the *closure* of $Gamma$ --- a
+  /// `constrained` must return the simplices of the closure of $Gamma$, a
   /// half-open part is not a subcomplex, and the conjugates $E^T A E$ would no
   /// longer restrict a cochain complex.
   ///
   /// The two extremes are the familiar ones: all of $diff K$ is
   /// [`Self::new`] (fully essential), the empty set the full
   /// [`WhitneyComplex`] (fully natural). The genuinely mixed choice is what a
-  /// *hyperbolic* problem needs: on a spacetime mesh the Dirichlet part is the
+  /// hyperbolic problem needs: on a spacetime mesh the Dirichlet part is the
   /// past face together with the timelike sides, the future face left free,
   /// because prescribing data on the whole boundary of a hyperbolic operator is
   /// the ill-posed Hadamard problem rather than a stricter one.
@@ -730,8 +730,8 @@ mod test {
   /// The de Rham operators are total at the trivial ends: a degree past either
   /// end of the complex names the zero space $Lambda^k = 0$ ($k in.not [0, n]$),
   /// so every accessor returns the correctly-shaped empty object rather than
-  /// panicking. This is the $Z$-graded degree cashed out --- one step past each
-  /// end runs the *same* code and returns the mathematically trivial answer.
+  /// panicking. This is the $Z$-graded degree cashed out, one step past each
+  /// end runs the same code and returns the mathematically trivial answer.
   #[test]
   fn operators_are_total_at_the_trivial_ends() {
     for dim in (1..=3).map(Dim::from) {
@@ -774,7 +774,7 @@ mod test {
   }
 
   /// The $L^2$ pairing is symmetric and positive definite on a Riemannian
-  /// geometry, and it is *not* the chain-cochain pairing.
+  /// geometry, and it is not the chain-cochain pairing.
   ///
   /// The two dualities a discrete complex carries, kept apart. The metric-free
   /// one integrates a cochain over a chain and needs only the incidence; this

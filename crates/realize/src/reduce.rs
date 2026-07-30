@@ -2,13 +2,13 @@
 //! can eat.
 //!
 //! The rule is one line and it is total over grade and dimension: reduce the
-//! $k$-form to its *reduced grade* $min(k, n-k)$ through the Hodge star, then
+//! $k$-form to its reduced grade $min(k, n-k)$ through the Hodge star, then
 //! dispatch on that. A reduced grade of 0 is a scalar density, a reduced grade
-//! of 1 a genuine tangent line field. Nothing here decides what to *do* with
+//! of 1 a genuine tangent line field. Nothing here decides what to do with
 //! the result, which is what lets a viewer's mark and a file's data array be
 //! the same reading of the same field.
 //!
-//! **The star needs a global volume form, not just a metric.** Where it fires
+//! The star needs a global volume form, not just a metric. Where it fires
 //! ($k > n-k$) the reduction takes the cell's coherent orientation alongside
 //! the metric: a cell's stored colex vertex order fixes a volume form only up
 //! to sign, so a per-cell star returns $plus.minus$ the true density with the
@@ -16,13 +16,13 @@
 //! parent's invariant 6, and it is why [`reduction_sign`] is a separate
 //! argument rather than something the reduction helps itself to.
 //!
-//! **Where a field is single-valued decides how it is read.** Only the
+//! Where a field is single-valued decides how it is read. Only the
 //! tangential part of a section is chart-independent, so a reduced-grade
 //! Whitney form is discontinuous across cells and has no single value at a
-//! shared vertex. A quantity on a *skeleton* simplex is therefore read through
-//! the **trace** $i^*$ ([`trace_value`]), exact by $H(dif)$ conformity and so
-//! single-valued with no averaging; a quantity read in a *cell's own* frame
-//! ([`reduced_value`]) is per cell and genuinely disagrees with its neighbour.
+//! shared vertex. A quantity on a skeleton simplex is therefore read through
+//! the trace $i^*$ ([`trace_value`]), exact by $H(dif)$ conformity and so
+//! single-valued with no averaging. A quantity read in a cell's own frame
+//! ([`reduced_value`]) is per cell and genuinely disagrees with its neighbor.
 //! Averaging the second into the first is a recovery, and presenting a recovery
 //! as the field is the thing to avoid.
 
@@ -63,15 +63,15 @@ pub fn corner_bounds(values: &[f64]) -> (f32, f32) {
 
 /// The reduced form at a point, in the reference frame of its cell: the Whitney
 /// value $W c$ if its grade is already $<= n-k$, else its Hodge star, so the
-/// result always has grade $min(k, n-k)$. The star is where -- and the only
-/// place -- a metric enters the reduction.
+/// result always has grade $min(k, n-k)$. The star is where, and the only
+/// place, a metric enters the reduction.
 ///
 /// `sign` is the cell's coherent orientation
 /// ([`Orientation::sign`](simplicial::topology::orientation::Orientation::sign)),
-/// and it is the *second* thing the star needs beyond the metric. A cell's
+/// and it is the second thing the star needs beyond the metric. A cell's
 /// stored colex vertex order fixes a volume form only up to sign, so
 /// $star: Lambda^n -> Lambda^0$ read cell by cell returns the density against
-/// each cell's own arbitrary frame -- $plus.minus$ the true one, flipping
+/// each cell's own arbitrary frame, $plus.minus$ the true one, flipping
 /// wherever colex disagrees with the manifold's orientation. Multiplying by
 /// `sign` is what makes the reduced value comparable across cells, and hence
 /// what makes a top-grade density or an $(n-1)$-form's direction mean anything
@@ -89,12 +89,12 @@ pub fn reduced_form(form: Tensor, metric: &Metric, sign: Sign) -> Tensor {
 
 /// The scalar a form reduces to, for every mark that consumes one.
 ///
-/// The one rule, total over grade and dimension: a $0$-form *is* a scalar and is
-/// read signed and metric-free; the manifold's top form is a pseudoscalar and
+/// The one rule, total over grade and dimension: a $0$-form is a scalar and is
+/// read signed and metric-free. The manifold's top form is a pseudoscalar and
 /// becomes a scalar through $star$; everything else reduces by its magnitude
 /// $|omega|_g$, the direction being the line-field mark's to carry.
 ///
-/// `signed` is `Some` exactly when the form is the manifold's own top form *and*
+/// `signed` is `Some` exactly when the form is the manifold's own top form and
 /// a coherent orientation fixes its volume form, so holding one is the proof
 /// invariant 6 demands: only then is a signed density comparable across cells.
 /// The caller states that condition, because only the caller knows whether the
@@ -115,10 +115,10 @@ pub fn scalarize(form: Tensor, metric: &Metric, signed: Option<Sign>) -> f64 {
 /// otherwise the cell's coherent orientation.
 ///
 /// Panics on a non-orientable complex, and the contract that makes it sound is
-/// the *caller's*: a field whose reduction needs the star must not be admitted
+/// the caller's: a field whose reduction needs the star must not be admitted
 /// on a mesh with no coherent orientation, so holding a field that reaches here
 /// is already the proof that the orientation exists. The refusal belongs where
-/// the field is admitted, once, rather than at every draw -- which is why this
+/// the field is admitted, once, rather than at every draw, which is why this
 /// is a panic and not a `Result`.
 ///
 /// A consumer that cannot make that promise up front asks
@@ -139,13 +139,13 @@ pub fn reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGrade) -> S
     .sign(cell)
 }
 
-/// The surface colormap scalar at every rendered triangle corner -- three per
-/// triangle, in [`CellCorner`] order -- as the [`trace_value`] of the field on
+/// The surface colormap scalar at every rendered triangle corner, three per
+/// triangle, in [`CellCorner`] order, as the [`trace_value`] of the field on
 /// the triangle's own 2-simplex (the fill is the 2-skeleton).
 ///
 /// The trace is single-valued across the cells incident at the face by tangential
 /// conformity, so no per-corner cell disambiguation and no averaging is needed:
-/// a face the form vanishes on colors to zero because its trace *is* zero, and a
+/// a face the form vanishes on colors to zero because its trace is zero, and a
 /// grade above 2 traces to zero on every face, leaving the fill black (its home
 /// is volumetric, deferred). At $n = 2$ the face is the cell and this reproduces
 /// the reduced-grade density exactly; at $n = 3$ it reads the face's own trace,
@@ -182,7 +182,7 @@ pub fn surface_corner_values(
 }
 
 /// The 1-skeleton colormap value at each segment's two endpoints, as two
-/// parallel arrays (`[i]` is segment `i`'s two ends) -- the [`trace_value`] of
+/// parallel arrays (`[i]` is segment `i`'s two ends), the [`trace_value`] of
 /// the field on each edge.
 ///
 /// The $k = 1$ counterpart of [`surface_corner_values`]'s $k = 2$: the same
@@ -223,14 +223,14 @@ pub fn segment_colors(
   ends
 }
 
-/// The 0-skeleton colormap value at every mesh vertex -- the [`trace_value`] of
+/// The 0-skeleton colormap value at every mesh vertex, the [`trace_value`] of
 /// the field on each 0-simplex.
 ///
 /// The $k = 0$ member of the same family as [`segment_colors`] and
 /// [`surface_corner_values`]. A vertex is the one skeleton simplex a field is
 /// always single-valued on with no reduction: a 0-form reads its own value
 /// there, and any higher grade traces to zero (a $k$-form has no restriction to
-/// a point). Per vertex, not per incident cell -- the 0-form is continuous, so
+/// a point). Per vertex, not per incident cell, the 0-form is continuous, so
 /// there is nothing to average.
 pub fn point_colors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<f64> {
   let bary = Bary::new(Vector::from_element(1, 1.0));
@@ -242,30 +242,30 @@ pub fn point_colors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) 
 }
 
 /// The surface's displacement height per rendered corner, by the strategy the
-/// field's own continuity calls for -- the same reduction that picks the mark,
+/// field's own continuity calls for, the same reduction that picks the mark,
 /// asked once more.
 ///
 /// $cal(W) Lambda^0$ is $P_1$ and continuous, so a vertex has one value and the
-/// nodal recovery below *is* the field: the surface displaces as one connected
+/// nodal recovery below is the field: the surface displaces as one connected
 /// sheet, exactly. $cal(W) Lambda^n$ is $P_0$: the reduced density is constant
 /// on each cell and genuinely discontinuous across it, so there is no
-/// continuous height to displace by, and the nodal average would invent one --
+/// continuous height to displace by, and the nodal average would invent one,
 /// showing a $P_0$ field flat-shaded in color and smooth in shape, two
 /// contradictory claims about one field in one frame. Instead each cell
-/// displaces *rigidly*, by its own constant value.
+/// displaces rigidly, by its own constant value.
 ///
-/// **A rigidly displaced surface tears, and that is the point.** The cells
+/// A rigidly displaced surface tears, and that is the point. The cells
 /// separate by exactly the jump in the density across their shared face, so the
 /// discontinuity becomes visible space rather than being smoothed away, and the
 /// surface visibly re-closes under refinement as the jump vanishes. It is the
 /// displacement counterpart of reading the colormap per corner.
 ///
-/// The direction stays the *vertex* normal, so a cell translates rather than
+/// The direction stays the vertex normal, so a cell translates rather than
 /// moving exactly along its own normal. On a resolved mesh the two differ by
 /// the normal's variation across one cell. What this costs is stated in
 /// [`reduced_form`]'s terms: $d_K n_K$ with the orientation-induced cell normal
 /// would be invariant under the orientation gauge outright, whereas the
-/// embedding's outward normal fixes that gauge only up to one *global* sign --
+/// embedding's outward normal fixes that gauge only up to one global sign,
 /// the same ambiguity an eigenvector already carries, and not the per-cell
 /// scrambling that made the star wrong.
 pub fn surface_corner_heights(
@@ -301,7 +301,7 @@ pub fn surface_corner_heights(
 /// Exact for a continuous field ($cal(W) Lambda^0$), where the incident cells
 /// already agree and this is the identity on the DOFs; a smoothing recovery
 /// wherever the reduction stars, which is why the surface does not use it there
-/// (see [`surface_corner_heights`]). It stays the height of the *segment* marks
+/// (see [`surface_corner_heights`]). It stays the height of the segment marks
 /// at every grade: the 1-skeleton is shared between cells and cannot tear
 /// without duplicating it, so the wireframe rides the continuous recovery and
 /// reads as the reference the fill's torn cells sit around.
@@ -349,26 +349,26 @@ pub fn reduced_value(
 /// simplex's own metric.
 ///
 /// The trace is exact by tangential ($H(dif)$) conformity, so it is
-/// single-valued across the cells incident at a shared simplex -- no averaging,
+/// single-valued across the cells incident at a shared simplex, no averaging,
 /// no tearing. The trace of a grade-$k$ form onto a $d$-simplex is a $k$-form on
-/// it, and $Lambda^k(tau) = 0$ for $d < k$: a form colors a skeleton *below* its
+/// it, and $Lambda^k(tau) = 0$ for $d < k$: a form colors a skeleton below its
 /// grade with an honest zero. On the diagonal $d = k$ the trace is the constant
 /// top-form of density $c_tau \/ vol_g(tau)$, flat-shading the simplex by its
 /// cochain density; above it ($d > k$) the trace varies and the norm reads the
 /// magnitude.
 ///
-/// The scalar is *signed* only where the sign is intrinsic, and its *magnitude*
-/// otherwise -- because a $k$-cochain value ($k >= 1$) is defined relative to the
+/// The scalar is signed only where the sign is intrinsic, and its magnitude
+/// otherwise, because a $k$-cochain value ($k >= 1$) is defined relative to the
 /// simplex's orientation, which here is the colex bookkeeping convention, so a
 /// signed color would paint that artifact on the screen. Two cases escape it:
 /// $k = 0$, where a vertex has trivial orientation and the value is a genuine
 /// scalar; and $k = d = n$, the manifold's own top form, where the coherent
-/// [`Complex::orientation`] fixes the global density -- consulted here exactly as
+/// [`Complex::orientation`] fixes the global density, consulted here exactly as
 /// invariant 6 demands, and refused on a non-orientable mesh. Nothing fixes the
-/// sign for $0 < k < n$: a manifold orientation induces *opposite*
+/// sign for $0 < k < n$: a manifold orientation induces opposite
 /// co-orientations on an interior facet ($diff compose diff = 0$), so it cannot
 /// reach the sub-top skeletons, and the honest reading there is the magnitude.
-/// The direction a magnitude drops is not lost -- it lives in the line-field
+/// The direction a magnitude drops is not lost, it lives in the line-field
 /// mark, as a genuine vector.
 pub fn trace_value(
   topology: &Complex,
@@ -387,7 +387,7 @@ pub fn trace_value(
   let interpolant = WhitneyInterpolant::new(cochain.trace(simplex), &sub);
   let cell = sub.cells().handle_iter().next().unwrap();
   let form = interpolant.eval(&MeshPoint::new(cell.idx(), bary.clone()));
-  // A top form is the manifold's own only on a cell ($d = n$); on a face it is
+  // A top form is the manifold's own only on a cell ($d = n$). On a face it is
   // top for the face while no coherent orientation reaches it, so it reduces by
   // magnitude like every other grade.
   let signed = (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k));
@@ -399,7 +399,7 @@ mod tests {
   use super::*;
   /// The magnitude branch of [`scalarize`] is Hodge-invariant:
   /// $|omega|_g = |star omega|_g$, the star being an isometry on a Riemannian
-  /// metric. So a field and its reduction ([`reduced_form`]) read the *same*
+  /// metric. So a field and its reduction ([`reduced_form`]) read the same
   /// scalar, and which side of $k <-> n-k$ a mark happens to hold cannot change
   /// the color on screen. Swept over every dimension and every strictly
   /// intermediate grade, which is exactly where the magnitude branch applies.
@@ -425,7 +425,7 @@ mod tests {
   }
 
   /// The extremal grades are the signed ones, and they are signed for different
-  /// reasons: a $0$-form *is* a scalar (metric-free, no orientation involved),
+  /// reasons: a $0$-form is a scalar (metric-free, no orientation involved),
   /// while an $n$-form is a pseudoscalar whose sign is the coherent
   /// orientation's. Flipping that orientation negates the readout and nothing
   /// else, which is precisely invariant 6's gauge acting on the picture.
@@ -446,7 +446,7 @@ mod tests {
 
   /// On the diagonal $d = k$ the trace-colored value is the cochain density
   /// $c_tau \/ vol_g(tau)$, and constant across the simplex however the point is
-  /// chosen -- the flat-shaded DOF the lowest-order element forces. Single-valued
+  /// chosen, the flat-shaded DOF the lowest-order element forces. Single-valued
   /// with no averaging: the trace onto a $k$-simplex reads only that simplex's
   /// own DOF.
   #[test]
@@ -461,7 +461,7 @@ mod tests {
           Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i + 1) as f64)),
         );
         for tau in topology.skeleton(k).handle_iter() {
-          // Magnitude of the density; its sign, where it has one, is governed by
+          // Magnitude of the density. Its sign, where it has one, is governed by
           // orientation, not the point on the simplex, which is what this pins.
           let expected = (cochain[tau] / cell_volume(&coords.simplex_metric(tau))).abs();
           for shift in [0.0, 0.13] {
