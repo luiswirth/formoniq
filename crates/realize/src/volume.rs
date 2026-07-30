@@ -168,7 +168,7 @@ fn bounding_box(coords: &MeshCoords) -> ([f64; 3], [f64; 3]) {
 /// voxel is a cube and the medium is isotropic, clamped to the memory ceiling.
 fn resolution_for(topology: &Complex, coords: &MeshCoords, size: [f64; 3]) -> [usize; 3] {
   let longest = size.iter().copied().fold(0.0, f64::max);
-  let mean_edge = mean_edge_length(topology, coords);
+  let mean_edge = coords.to_edge_lengths_sq(topology).mesh_width_mean();
   let per_axis = if mean_edge > 0.0 {
     (longest / mean_edge).ceil() as usize
   } else {
@@ -179,20 +179,6 @@ fn resolution_for(topology: &Complex, coords: &MeshCoords, size: [f64; 3]) -> [u
   // Cubic voxels: a short axis gets proportionally fewer of them, never fewer
   // than one, so a flat mesh keeps a single layer instead of collapsing.
   size.map(|s| ((s / voxel).ceil() as usize).max(1))
-}
-
-fn mean_edge_length(topology: &Complex, coords: &MeshCoords) -> f64 {
-  let nedges = topology.skeleton_raw(1).len();
-  if nedges == 0 {
-    return 0.0;
-  }
-  let lengths = coords.to_edge_lengths_sq(topology);
-  let total: f64 = topology
-    .skeleton(1)
-    .handle_iter()
-    .map(|edge| lengths.simplex_volume(edge))
-    .sum();
-  total / nedges as f64
 }
 
 fn voxel_center(

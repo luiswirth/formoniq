@@ -132,40 +132,6 @@ pub fn vertex_curvature_radius(topology: &Complex, coords: &MeshCoords) -> Vec<f
     .collect()
 }
 
-/// The mean edge length of the embedded mesh: its characteristic local length,
-/// as distinct from the coordinate extent, which is the object's global one.
-///
-/// The two are what a mark drawn on a mesh must choose between, and they answer
-/// different questions. A quantity that should read the same however finely the
-/// object is triangulated (how far a standing wave swells, how fast a tracer
-/// crosses) is a fraction of the extent. A quantity that draws the mesh's own
-/// features (the stroke of an edge, the size of a per-cell mark) is a fraction
-/// of this: tie it to the extent instead and refining the mesh leaves the
-/// strokes at their old width while the cells shrink underneath them, until the
-/// wireframe is a solid mass and the glyphs are stubs.
-///
-/// Zero for a complex with no edges (a point cloud), where there is no local
-/// length to speak of and a caller falls back on the extent.
-pub fn mean_edge_length(topology: &Complex, coords: &MeshCoords) -> f64 {
-  // The total accessor: a 0-complex has no edges, which is the answer rather
-  // than a case to exclude.
-  let Some(edges) = topology.role_skeleton::<simplicial::topology::role::roles::Edge>() else {
-    return 0.0;
-  };
-  let mut total = 0.0;
-  let mut count = 0usize;
-  for edge in edges.handle_iter() {
-    let v = &edge.simplex().vertices;
-    total += (coords.coord(v[1]) - coords.coord(v[0])).norm();
-    count += 1;
-  }
-  if count == 0 {
-    0.0
-  } else {
-    total / count as f64
-  }
-}
-
 /// How far [`vertex_reach`] looks for a bottleneck, in mean edge lengths. Sets
 /// the thickest feature the non-local term can detect, and with it the cost:
 /// the walk visits $O("this"^2)$ occupied cells per vertex, since a surface
@@ -240,7 +206,7 @@ pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> 
 
   // A grid sized by the mean edge length: fine enough that a shell is a thin
   // layer, coarse enough that a cell holds a few vertices.
-  let spacing = mean_edge_length(topology, coords);
+  let spacing = coords.to_edge_lengths_sq(topology).mesh_width_mean();
   if spacing <= 0.0 {
     return unbounded;
   }
@@ -405,48 +371,6 @@ mod tests {
   use super::*;
   use multiindex::Dim;
 
-  /// The unit sphere has constant curvature $K = H^2 = 1$ and curvature
-  /// radius $1$ everywhere. The discrete estimators recover $|H|$ to within
-  /// the barycentric lumped area's discretization error (cruder than a mixed
-  /// Voronoi area, but simpler and reused as-is for [`vertex_curvature_radius`]).
-  /// That same area error enters $kappa_max = |H| + sqrt(max(H^2-K,0))$
-  /// asymmetrically, squared through $H^2$, linear through $K$, so the
-  /// radius estimate carries a larger, but conservative (radius
-  /// underestimated, never overestimated), bias than $H$ alone. Underestimating
-  /// the safe radius is exactly the safe direction for a fold-safety cap, so
-  /// this is loose on purpose, not a correctness gap; the exact Gauss-Bonnet
-  /// identity elsewhere is what checks correctness.
-  /// The mesh's local length scale halves when every edge is split: it tracks
-  /// the refinement, which is exactly what distinguishes it from the
-  /// coordinate extent, which does not move at all. A mark sized by one and a
-  /// mark sized by the other therefore answer different questions, and this is
-  /// the statement of that difference.
-  #[test]
-  fn mean_edge_length_halves_under_subdivision() {
-    let mut previous: Option<f64> = None;
-    for subdivisions in 1..=4 {
-      let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(subdivisions);
-      let mean = mean_edge_length(&topology, &coords);
-      if let Some(previous) = previous {
-        let ratio = mean / previous;
-        assert!(
-          (ratio - 0.5).abs() < 0.05,
-          "subdivision {subdivisions}: edge length scaled by {ratio}, expected ~0.5"
-        );
-      }
-      previous = Some(mean);
-    }
-  }
-
-  /// A point cloud has no edges and so no local length. The caller is told so
-  /// rather than dividing by a count of zero.
-  #[test]
-  fn a_complex_without_edges_has_no_local_length() {
-    let complex = Complex::unit(Dim::new(0));
-    let coords = MeshCoords::unit(Dim::new(0));
-    assert_eq!(mean_edge_length(&complex, &coords), 0.0);
-  }
-
   /// On the unit sphere the reach is the radius, and it is the curvature
   /// half that says so: the medial axis is the center point. The tangent-ball
   /// formula returns exactly $R$ for every pair on a sphere, so this also
@@ -563,6 +487,17 @@ mod tests {
     (complex, coords)
   }
 
+  /// The unit sphere has constant curvature $K = H^2 = 1$ and curvature
+  /// radius $1$ everywhere. The discrete estimators recover $|H|$ to within
+  /// the barycentric lumped area's discretization error (cruder than a mixed
+  /// Voronoi area, but simpler and reused as-is for [`vertex_curvature_radius`]).
+  /// That same area error enters $kappa_max = |H| + sqrt(max(H^2-K,0))$
+  /// asymmetrically, squared through $H^2$, linear through $K$, so the
+  /// radius estimate carries a larger, but conservative (radius
+  /// underestimated, never overestimated), bias than $H$ alone. Underestimating
+  /// the safe radius is exactly the safe direction for a fold-safety cap, so
+  /// this is loose on purpose, not a correctness gap; the exact Gauss-Bonnet
+  /// identity elsewhere is what checks correctness.
   #[test]
   fn sphere_mean_curvature_and_radius_match_unit_radius() {
     let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(3);

@@ -290,7 +290,7 @@ mod tests {
       let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
       assert!(!instances.is_empty(), "the sweep must produce glyphs");
 
-      let edge = regge::coord::mean_edge_length(&topology, &coords);
+      let edge = coords.to_edge_lengths_sq(&topology).mesh_width_mean();
       let longest = instances
         .iter()
         .map(|g| f64::from(g.length))

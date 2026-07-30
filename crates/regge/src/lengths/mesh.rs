@@ -134,6 +134,19 @@ impl MeshLengthsSq {
       .sqrt()
   }
 
+  /// The mean edge magnitude $h_"mean"$: the mesh's characteristic local
+  /// length, as distinct from $h_max$, which is set by its single worst edge,
+  /// and from the extent of an embedding, which is the object's global size.
+  ///
+  /// Zero on a mesh with no edges (a point cloud), where there is no local
+  /// length to speak of.
+  pub fn mesh_width_mean(&self) -> f64 {
+    if self.nedges() == 0 {
+      return 0.0;
+    }
+    self.iter().map(|s| s.abs().sqrt()).sum::<f64>() / self.nedges() as f64
+  }
+
   /// The shape regularity measure $rho$ of the whole mesh, which is the largest
   /// shape regularity measure over all cells.
   pub fn shape_regularity(&self, topology: &Complex) -> f64 {
@@ -306,6 +319,33 @@ mod test {
   use super::*;
   use crate::mesher::cartesian::CartesianGrid;
   use multiindex::Dim;
+
+  /// The mesh's local length scale halves when every edge is split: it tracks
+  /// the refinement, which is exactly what distinguishes it from the extent of
+  /// an embedding, which does not move at all.
+  #[test]
+  fn mean_width_halves_under_subdivision() {
+    let mut previous: Option<f64> = None;
+    for subdivisions in 1..=4 {
+      let (topology, coords) = crate::mesher::sphere::mesh_sphere_surface(subdivisions);
+      let mean = coords.to_edge_lengths_sq(&topology).mesh_width_mean();
+      if let Some(previous) = previous {
+        let ratio = mean / previous;
+        assert!(
+          (ratio - 0.5).abs() < 0.05,
+          "subdivision {subdivisions}: edge length scaled by {ratio}, expected ~0.5"
+        );
+      }
+      previous = Some(mean);
+    }
+  }
+
+  /// A point cloud has no edges and so no local length. The caller is told so
+  /// rather than dividing by a count of zero.
+  #[test]
+  fn a_mesh_without_edges_has_no_local_length() {
+    assert_eq!(MeshLengthsSq::unit(Dim::new(0)).mesh_width_mean(), 0.0);
+  }
 
   /// Coordinates and squared edge lengths read uniformly as data on simplices:
   /// coords (grade 0) return a column view, squared lengths (grade 1) a
