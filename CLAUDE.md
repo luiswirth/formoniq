@@ -520,6 +520,18 @@ The exterior derivative and the Koszul operator are likewise one operation,
 `Tensor::transfer`, in its two directions.
 Never re-introduce a second implementation of either family.
 
+**The symmetric basis is unnormalized, and therefore not self-dual.**
+$x^alpha$ sums over all $k!$ orderings, so $norm(x^alpha)^2 = alpha!$
+and the dual of $x^alpha$ is $x^alpha \/ alpha!$.
+Every operation that *dualizes* a symmetric slot therefore carries that multiplicity:
+the duality pairing weights by it,
+and a pullback is the transpose of the functor conjugated by it, not the bare transpose.
+Never write the factorial: `basis_multiplicity` reads it off
+`Factor::induced_form` of the identity, one convention in one place at any degree.
+Every $alpha!$ is $1$ on $Lambda^k$,
+so a law swept over the alternating family alone says nothing about any of this,
+and a law that dualizes is swept over both.
+
 **Combinations and compositions are different objects.**
 A `Combination` is a subset, the basis of $Lambda^k$:
 repetition forbidden, order carrying a `Sign`.
