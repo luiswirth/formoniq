@@ -195,6 +195,29 @@ mod test {
     }
   }
 
+  /// Kronecker duality for the pair: the relative cohomology generators pair
+  /// nonsingularly with the relative homology ones, which is what lets the
+  /// relative harmonic basis be pinned by periods exactly as the absolute one
+  /// is.
+  #[test]
+  fn relative_kronecker_pairing_is_nonsingular() {
+    for complex in test_complexes() {
+      for k in complex.dim().range_inclusive() {
+        let cocycles = complex.relative_cohomology_generators(k);
+        let cycles = complex.relative_homology_generators(k);
+        let pairing = kronecker_matrix(&cocycles, &cycles);
+
+        let b = complex.relative_betti_number(k);
+        let triplets = pairing
+          .iter()
+          .enumerate()
+          .flat_map(|(i, row)| row.iter().enumerate().map(move |(j, &v)| (i, j, v)))
+          .collect();
+        assert_eq!(IntegerMatrix::new(b, b, triplets).rank(), b, "grade {k}");
+      }
+    }
+  }
+
   /// The relative generators match the relative Betti numbers and vanish on the
   /// boundary.
   #[test]
