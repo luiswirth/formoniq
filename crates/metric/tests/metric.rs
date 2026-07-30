@@ -7,8 +7,9 @@
 use approx::assert_relative_eq;
 use metric::Metric;
 use metric::tensor::{TensorExt, inner};
+use multialgebra::tensor::Slots;
 use multialgebra::tensor::{pairing, wedge_pairing};
-use multialgebra::{Matrix, Tensor, Variance, Vector, exterior_bases, exterior_dim};
+use multialgebra::{Factor, Matrix, Slot, Tensor, Variance, Vector, exterior_bases, exterior_dim};
 use multiindex::Sign;
 
 fn probe_matrix(nrows: usize, ncols: usize, seed: usize) -> Matrix {
@@ -229,4 +230,107 @@ fn a_free_slot_has_no_hodge_star() {
   let slots = uniform_slots([Factor::new(Symmetry::Free, 2)], Variance::Covariant, dim);
   let tensor = Tensor::zero(slots);
   let _ = tensor.star(&Metric::euclidean(dim), Sign::Pos);
+}
+
+/// A metric *is* a $"Sym"^2$ element: the two readings round-trip, in both
+/// variances and at every dimension including the empty one.
+///
+/// The probe is deliberately not symmetric-looking -- distinct off-diagonal
+/// entries and a distinct diagonal -- because a wrong symmetric multiplicity is
+/// exactly the error a probe with equal entries hides.
+#[test]
+fn a_metric_round_trips_through_its_sym2_tensor() {
+  for dim in 0..=4 {
+    for metric in [probe_metric(dim), probe_metric(dim).dual()] {
+      let tensor = metric.tensor();
+      assert_eq!(tensor.slots().len(), 1);
+      assert_eq!(tensor.slots()[0].variance, metric.variance());
+      assert_eq!(tensor.slots()[0].dim.index(), dim);
+      // Packed: the upper triangle, not the full square.
+      assert_eq!(tensor.components().len(), dim * (dim + 1) / 2);
+
+      let back = Metric::from_tensor(&tensor);
+      assert_eq!(back.variance(), metric.variance());
+      assert_relative_eq!(back.matrix(), metric.matrix(), epsilon = 1e-12);
+    }
+  }
+}
+
+/// The multiplicity is real: the packed components are *not* the matrix entries,
+/// differing by $alpha!$ on the diagonal. Without this the round-trip law above
+/// would also pass on an implementation that ignored the convention entirely.
+#[test]
+fn the_sym2_components_carry_the_multiplicity() {
+  for dim in 1..=4 {
+    let metric = probe_metric(dim);
+    let tensor = metric.tensor();
+
+    // The diagonal of the free (dense) form is twice the packed component: both
+    // orderings of a repeated symbol land on it and are summed.
+    let free = tensor.to_free();
+    for i in 0..dim {
+      let packed = tensor.components()[tensor.flat_index(&[multiindex::MultiIndex::Mono(
+        multiindex::MonoIndex::new(multiindex::Repetition::Allowed, [i, i]),
+      )])];
+      assert_relative_eq!(metric.matrix()[(i, i)], 2.0 * packed, epsilon = 1e-12);
+      assert_relative_eq!(
+        free.components()[free.flat_index(&[multiindex::MultiIndex::Word(multiindex::Word::new(
+          dim,
+          [i, i]
+        ))])],
+        metric.matrix()[(i, i)],
+        epsilon = 1e-12
+      );
+    }
+  }
+}
+
+/// The metric pullback is `Tensor::pullback` on the $"Sym"^2$ reading: one
+/// functor, not a hand-rolled $J^top g J$ beside it.
+#[test]
+fn the_metric_pullback_is_the_tensor_pullback() {
+  for dim in 1..=4 {
+    let metric = probe_metric(dim);
+    let jacobian = probe_matrix(dim, dim, 3);
+
+    let by_matrix = metric.pullback(&jacobian);
+    let by_functor = Metric::from_tensor(&metric.tensor().pullback(&jacobian));
+
+    assert_relative_eq!(by_matrix.matrix(), by_functor.matrix(), epsilon = 1e-12);
+  }
+}
+
+/// The metric evaluated on two vectors is the duality pairing of its $"Sym"^2$
+/// reading against their symmetric product, $g(v, w) = angle.l g, v dot.circle w
+/// angle.r$: the multiplicity cancels between the two sides exactly when the
+/// convention is uniform. Checked with $v != w$, where a stray factor of two
+/// survives.
+#[test]
+fn the_metric_is_the_pairing_against_a_symmetric_product() {
+  for dim in 1..=4 {
+    let metric = probe_metric(dim);
+    let v = Vector::from_fn(dim, |i, _| ((3 * i + 1) % 5) as f64 - 2.0);
+    let w = Vector::from_fn(dim, |i, _| ((7 * i + 2) % 5) as f64 - 1.0);
+
+    // Degree-one *symmetric* slots, so the product lands in Sym^2 rather than
+    // Lambda^2: at degree one the two families agree as spaces and differ only
+    // in which quotient the product then takes.
+    let as_slot = |x: &Vector| {
+      Tensor::new(
+        Slots::from_iter([Slot::new(
+          Factor::symmetric(1),
+          Variance::Contravariant,
+          dim,
+        )]),
+        x.clone(),
+      )
+    };
+    let product = as_slot(&v).product(&as_slot(&w));
+
+    assert_relative_eq!(
+      pairing(&metric.tensor(), &product),
+      metric.inner(&v, &w),
+      epsilon = 1e-12
+    );
+  }
 }
