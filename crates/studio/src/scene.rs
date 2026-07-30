@@ -758,10 +758,7 @@ impl Scene {
     final_time: f64,
   ) -> Self {
     let grade = grade.into();
-    use derham::{
-      interpolate::interpolant::WhitneyInterpolant,
-      section::{SectionOps, SharpOp},
-    };
+    use derham::{interpolate::interpolant::WhitneyInterpolant, section::SectionOps};
     use formoniq::problems::advection::{Transport, solve_transport};
 
     let metric = coords.to_edge_lengths_sq(&topology);
@@ -773,7 +770,7 @@ impl Scene {
     let flux = mean_speed_flux(&topology, &coords, &metric, &orientation);
     let velocity = WhitneyInterpolant::new(flux, &topology)
       .hodge_star(&topology, &metric, &orientation)
-      .sharp(&topology, &metric);
+      .musical(&topology, &metric);
 
     let initial = ambient_bump(&topology, &coords, grade);
     let dt = final_time / nsteps.max(1) as f64;
@@ -1369,13 +1366,13 @@ fn mean_speed_flux(
   orientation: &Orientation,
 ) -> Cochain {
   use derham::interpolate::interpolant::WhitneyInterpolant;
-  use derham::section::{Section, SectionOps, SharpOp};
+  use derham::section::{Section, SectionOps};
   use simplicial::atlas::ChartExt;
 
   let flux = solenoidal_flux(topology, coords, metric);
   let probe = WhitneyInterpolant::new(flux.clone(), topology)
     .hodge_star(topology, metric, orientation)
-    .sharp(topology, metric);
+    .musical(topology, metric);
 
   let cells = topology.cells();
   // The magnitude of a vector field is its metric norm, not the Euclidean
@@ -1466,10 +1463,7 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
 #[cfg(test)]
 mod tests {
   use super::*;
-  use derham::{
-    interpolate::interpolant::WhitneyInterpolant,
-    section::{SectionOps, SharpOp},
-  };
+  use derham::{interpolate::interpolant::WhitneyInterpolant, section::SectionOps};
   use realize::reduce::{nodal_heights, surface_corner_heights, surface_corner_values};
   use simplicial::topology::handle::SimplexIdx;
 
@@ -1517,7 +1511,7 @@ mod tests {
     let metric = coords.to_edge_lengths_sq(&topology);
     let velocity = WhitneyInterpolant::new(solenoidal_flux(&topology, &coords, &metric), &topology)
       .hodge_star(&topology, &metric, topology.orientation().unwrap())
-      .sharp(&topology, &metric);
+      .musical(&topology, &metric);
 
     let transport = Transport {
       grade: Dim::ZERO,

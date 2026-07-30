@@ -27,7 +27,7 @@
 use {
   derham::{
     project::derham_map,
-    section::{CoordFieldExt, SharpOp},
+    section::{CoordFieldExt, SectionOps},
   },
   formoniq::problems::advection::{Transport, assemble_transport, solve_transport},
   glatt::field::DiffFormClosure,
@@ -67,7 +67,7 @@ fn main() {
     );
     let velocity = velocity_form
       .pullback_on(&topology, &coords)
-      .sharp(&topology, &geometry);
+      .musical(&topology, &geometry);
 
     // A bump at 0.3 traveling 0.2, so it stays well inside the box.
     let travel = 0.2;
