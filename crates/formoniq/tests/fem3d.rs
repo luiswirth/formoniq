@@ -1,5 +1,5 @@
 use approx::assert_relative_eq;
-use formoniq::whitney_complex::WhitneyComplex;
+use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
 use regge::mesher::cartesian::CartesianGrid;
 use simplicial::Dim;
 use simplicial::linalg::{Matrix, Vector};

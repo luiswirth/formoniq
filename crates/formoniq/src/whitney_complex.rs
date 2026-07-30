@@ -127,6 +127,73 @@ pub trait HilbertComplex {
     let sigma = FaerLu::new(mass_lower).solve(&(coupling * u.coeffs()));
     Cochain::new(lower, sigma)
   }
+
+  /// $dif u$, the exterior derivative of a cochain of this complex.
+  ///
+  /// Total in grade: at the top the codomain is trivial and the result is the
+  /// empty cochain of $Lambda^(n+1) = 0$.
+  fn dif_cochain(&self, u: &Cochain) -> Cochain {
+    let grade = u.grade();
+    Cochain::new(grade + 1, self.dif(grade) * u.coeffs())
+  }
+
+  /// $L^2 Lambda^k$ norm of a discrete differential form.
+  fn norm_l2(&self, u: &Cochain) -> f64 {
+    quadratic_form_sparse(&CsrMatrix::from(&self.mass(u.grade())), u.coeffs()).sqrt()
+  }
+
+  /// $H Lambda^k (dif)$ seminorm: the $L^2$ norm of the exterior derivative.
+  ///
+  /// Total at the top grade with no guard: $dif u$ there is the empty cochain of
+  /// $Lambda^(n+1) = 0$, and its $L^2$ norm against the total $0 times 0$ mass is
+  /// $0$.
+  fn seminorm_hdif(&self, u: &Cochain) -> f64 {
+    self.norm_l2(&self.dif_cochain(u))
+  }
+
+  /// The full $H Lambda^k (dif)$ (graph) norm
+  /// $norm(u)_(H Lambda(dif))^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2$.
+  ///
+  /// The norm the mixed Hodge-Laplacian is well-posed in (Arnold-Falk-Winther),
+  /// hence the one its stable block preconditioner is built from. Unlike the
+  /// $H^*(delta)$ norm it is sparse: $dif$ is metric-free, so no mass inverse
+  /// enters. Its Gram matrix is [`Self::hdif_gram`].
+  fn norm_hdif(&self, u: &Cochain) -> f64 {
+    self.norm_l2(u).hypot(self.seminorm_hdif(u))
+  }
+
+  /// $H^* Lambda^k (delta)$ seminorm: the $L^2$ norm of the codifferential,
+  /// $norm(delta u)_(L^2 Lambda^(k-1))$.
+  ///
+  /// $0$ at grade $0$ ($delta$ maps into the trivial space, so $delta u$ is the
+  /// empty cochain and its norm is $0$ with no guard). Unlike
+  /// [`Self::seminorm_hdif`] it costs a mass solve, since $delta$ carries the
+  /// mass inverse.
+  fn seminorm_hcodif(&self, u: &Cochain) -> f64 {
+    self.norm_l2(&self.codif(u))
+  }
+
+  /// The full $H^* Lambda^k (delta)$ norm
+  /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(delta u)_(L^2)^2$.
+  fn norm_hcodif(&self, u: &Cochain) -> f64 {
+    self.norm_l2(u).hypot(self.seminorm_hcodif(u))
+  }
+
+  /// The Hodge-Laplace energy seminorm
+  /// $abs(u)^2 = norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2 =
+  /// angle.l Delta u, u angle.r$: the form the Hodge-Laplacian is coercive in
+  /// (modulo harmonics). The norm convergence rates are naturally measured in.
+  fn seminorm_energy(&self, u: &Cochain) -> f64 {
+    self.seminorm_hdif(u).hypot(self.seminorm_hcodif(u))
+  }
+
+  /// The full $H Lambda^k$ (Hodge-Dirac graph) norm
+  /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2$:
+  /// the graph norm of $D = dif + delta$, the complete energy space of the de
+  /// Rham complex, $H Lambda(dif) sect H^* Lambda(delta)$.
+  fn norm_full(&self, u: &Cochain) -> f64 {
+    self.norm_l2(u).hypot(self.seminorm_energy(u))
+  }
 }
 
 /// The $L^2 Lambda^k$ pairing of two cochains of a discrete complex,
@@ -182,134 +249,11 @@ impl<'a> WhitneyComplex<'a> {
     Self { topology, geometry }
   }
 
-  pub fn dim(&self) -> Dim {
-    self.topology.dim()
-  }
   pub fn topology(&self) -> &'a Complex {
     self.topology
   }
   pub fn geometry(&self) -> &'a MeshLengthsSq {
     self.geometry
-  }
-
-  /// $dim cal(W) Lambda^k$: one DOF per $k$-simplex.
-  ///
-  /// Total in grade: $0$ outside $[0, n]$, where the space $Lambda^k$ is trivial
-  /// and there are no $k$-simplices to carry a DOF.
-  pub fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
-    let grade = grade.into();
-    if grade.in_range(self.dim()) {
-      self.topology.nsimplices(grade)
-    } else {
-      0
-    }
-  }
-
-  /// Galerkin mass matrix of the $L^2 Lambda^k$ inner product,
-  ///
-  /// $M = [inner(lambda_tau, lambda_sigma)_(L^2 Lambda^k)]_(sigma tau)$
-  ///
-  /// Total in grade: the $0 times 0$ empty matrix outside $[0, n]$, the mass on
-  /// the trivial space $Lambda^k = 0$.
-  pub fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    if !grade.in_range(self.dim()) {
-      return GalMat::new(0, 0);
-    }
-    assemble_galmat(
-      self.topology,
-      self.geometry,
-      HodgeMassElmat::new(self.dim(), grade),
-    )
-  }
-
-  /// Exterior derivative $dif: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$.
-  ///
-  /// Purely topological: the coboundary operator on cochains. Total in grade:
-  /// the zero map of shape $"ndofs"(k+1) times "ndofs"(k)$ outside $[0, n]$,
-  /// where one of $Lambda^k$, $Lambda^(k+1)$ is trivial (the interior top-grade
-  /// case $k = n$ is the coboundary's own, already zero-columned codomain).
-  pub fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
-    let grade = grade.into();
-    if !grade.in_range(self.dim()) {
-      return CsrMatrix::zeros(self.ndofs(grade + 1), self.ndofs(grade));
-    }
-    CsrMatrix::from(&self.topology.coboundary_operator(grade))
-  }
-
-  /// Galerkin matrix of the bilinear form $(dif u, dif v)_(L^2 Lambda^(k+1))$,
-  ///
-  /// the stiffness matrix $D^T M_(k+1) D$ of the up-part of the Hodge-Laplacian.
-  ///
-  /// Total in grade with no special case: at the top grade $dif: Lambda^n ->
-  /// Lambda^(n+1)$ has a trivial codomain, so $M_(n+1)$ is $0 times 0$ and the
-  /// product is the honest $"ndofs"(n)^2$ zero. The same falls out past either
-  /// end from the total [`Self::dif`] and [`Self::mass`].
-  pub fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let dif = self.dif(grade);
-    let mass = CsrMatrix::from(&self.mass(grade + 1));
-    GalMat::from(&(dif.transpose() * mass * dif))
-  }
-
-  /// $L^2 Lambda^k$ norm of a discrete differential form.
-  pub fn norm_l2(&self, u: &Cochain) -> f64 {
-    let mass = CsrMatrix::from(&self.mass(u.grade()));
-    quadratic_form_sparse(&mass, u.coeffs()).sqrt()
-  }
-
-  /// $H Lambda^k (dif)$ seminorm: the $L^2$ norm of the exterior derivative.
-  ///
-  /// Total at the top grade with no guard: $dif u$ there is the empty cochain of
-  /// $Lambda^(n+1) = 0$, and its $L^2$ norm against the total $0 times 0$ mass is
-  /// $0$.
-  pub fn seminorm_hdif(&self, u: &Cochain) -> f64 {
-    self.norm_l2(&u.dif(self.topology))
-  }
-
-  /// The full $H Lambda^k (dif)$ (graph) norm
-  /// $norm(u)_(H Lambda(dif))^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2$.
-  ///
-  /// The norm the mixed Hodge-Laplacian is well-posed in (Arnold-Falk-Winther),
-  /// hence the one its stable block preconditioner is built from. Unlike the
-  /// $H^*(delta)$ norm it is sparse: $dif$ is metric-free, so no mass inverse
-  /// enters. Its Gram matrix is [`Self::hdif_gram`].
-  pub fn norm_hdif(&self, u: &Cochain) -> f64 {
-    (self.norm_l2(u).powi(2) + self.seminorm_hdif(u).powi(2)).sqrt()
-  }
-
-  /// $H^* Lambda^k (delta)$ seminorm: the $L^2$ norm of the codifferential,
-  /// $norm(delta u)_(L^2 Lambda^(k-1))$.
-  ///
-  /// $0$ at grade $0$ ($delta$ maps into the trivial space, so $delta u$ is the
-  /// empty cochain and its norm is $0$ with no guard). Unlike
-  /// [`Self::seminorm_hdif`] it costs a mass solve, since $delta$ carries the
-  /// mass inverse.
-  pub fn seminorm_hcodif(&self, u: &Cochain) -> f64 {
-    self.norm_l2(&self.codif(u))
-  }
-
-  /// The full $H^* Lambda^k (delta)$ norm
-  /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(delta u)_(L^2)^2$.
-  pub fn norm_hcodif(&self, u: &Cochain) -> f64 {
-    (self.norm_l2(u).powi(2) + self.seminorm_hcodif(u).powi(2)).sqrt()
-  }
-
-  /// The Hodge-Laplace energy seminorm
-  /// $abs(u)^2 = norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2 =
-  /// angle.l Delta u, u angle.r$: the form the Hodge-Laplacian is coercive in
-  /// (modulo harmonics). The norm convergence rates are naturally measured in.
-  pub fn seminorm_energy(&self, u: &Cochain) -> f64 {
-    (self.seminorm_hdif(u).powi(2) + self.seminorm_hcodif(u).powi(2)).sqrt()
-  }
-
-  /// The full $H Lambda^k$ (Hodge-Dirac graph) norm
-  /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2$:
-  /// the graph norm of $D = dif + delta$, the complete energy space of the de
-  /// Rham complex, $H Lambda(dif) sect H^* Lambda(delta)$.
-  pub fn norm_full(&self, u: &Cochain) -> f64 {
-    (self.norm_l2(u).powi(2) + self.seminorm_hdif(u).powi(2) + self.seminorm_hcodif(u).powi(2))
-      .sqrt()
   }
 
   /// The relative complex of the pair $(K, diff K)$.
@@ -362,23 +306,67 @@ impl<'a> WhitneyComplex<'a> {
 
 impl HilbertComplex for WhitneyComplex<'_> {
   fn dim(&self) -> Dim {
-    WhitneyComplex::dim(self)
+    self.topology.dim()
   }
+
+  /// $dim cal(W) Lambda^k$: one DOF per $k$-simplex.
+  ///
+  /// Total in grade: $0$ outside $[0, n]$, where the space $Lambda^k$ is trivial
+  /// and there are no $k$-simplices to carry a DOF.
   fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    WhitneyComplex::ndofs(self, grade)
+    if grade.in_range(self.dim()) {
+      self.topology.nsimplices(grade)
+    } else {
+      0
+    }
   }
+
+  /// Galerkin mass matrix of the $L^2 Lambda^k$ inner product,
+  ///
+  /// $M = [inner(lambda_tau, lambda_sigma)_(L^2 Lambda^k)]_(sigma tau)$
+  ///
+  /// Total in grade: the $0 times 0$ empty matrix outside $[0, n]$, the mass on
+  /// the trivial space $Lambda^k = 0$.
   fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    WhitneyComplex::mass(self, grade)
+    if !grade.in_range(self.dim()) {
+      return GalMat::new(0, 0);
+    }
+    assemble_galmat(
+      self.topology,
+      self.geometry,
+      HodgeMassElmat::new(self.dim(), grade),
+    )
   }
+
+  /// Exterior derivative $dif: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$.
+  ///
+  /// Purely topological: the coboundary operator on cochains. Total in grade:
+  /// the zero map of shape $"ndofs"(k+1) times "ndofs"(k)$ outside $[0, n]$,
+  /// where one of $Lambda^k$, $Lambda^(k+1)$ is trivial (the interior top-grade
+  /// case $k = n$ is the coboundary's own, already zero-columned codomain).
   fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
-    WhitneyComplex::dif(self, grade)
+    if !grade.in_range(self.dim()) {
+      return CsrMatrix::zeros(self.ndofs(grade + 1), self.ndofs(grade));
+    }
+    CsrMatrix::from(&self.topology.coboundary_operator(grade))
   }
+
+  /// Galerkin matrix of the bilinear form $(dif u, dif v)_(L^2 Lambda^(k+1))$,
+  ///
+  /// the stiffness matrix $D^T M_(k+1) D$ of the up-part of the Hodge-Laplacian.
+  ///
+  /// Total in grade with no special case: at the top grade $dif: Lambda^n ->
+  /// Lambda^(n+1)$ has a trivial codomain, so $M_(n+1)$ is $0 times 0$ and the
+  /// product is the honest $"ndofs"(n)^2$ zero. The same falls out past either
+  /// end from the total [`Self::dif`] and [`Self::mass`].
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    WhitneyComplex::codif_dif(self, grade)
+    let dif = self.dif(grade);
+    let mass = CsrMatrix::from(&self.mass(grade + 1));
+    GalMat::from(&(dif.transpose() * mass * dif))
   }
   /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
@@ -536,65 +524,6 @@ impl<'a> RelativeWhitneyComplex<'a> {
   pub fn full(&self) -> WhitneyComplex<'a> {
     self.full
   }
-  pub fn dim(&self) -> Dim {
-    self.full.dim()
-  }
-  /// Total in grade: $0$ outside $[0, n]$, where the relative complex is trivial.
-  pub fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
-    let grade = grade.into();
-    if grade.in_range(self.dim()) {
-      self.interior_simps[grade.index()].len()
-    } else {
-      0
-    }
-  }
-
-  /// The inclusion $E: C^k (K, diff K) arrow.hook C^k (K)$,
-  /// extending interior cochains by zero onto the boundary.
-  ///
-  /// A cochain map: $D E_k = E_(k+1) dif_k$. Its transpose restricts
-  /// cochains to the interior DOFs. Total in grade: the $0$-columned (or empty)
-  /// matrix outside $[0, n]$, since both DOF counts vanish there.
-  pub fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
-    let grade = grade.into();
-    let mut coo = CooMatrix::new(self.full.ndofs(grade), self.ndofs(grade));
-    if grade.in_range(self.dim()) {
-      for (relative, &full) in self.interior_simps[grade.index()].iter().enumerate() {
-        coo.push(full, relative, 1.0);
-      }
-    }
-    CsrMatrix::from(&coo)
-  }
-
-  /// Galerkin mass matrix on the relative complex: $E^T M E$.
-  pub fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let incl = self.inclusion(grade);
-    let mass = CsrMatrix::from(&self.full.mass(grade));
-    GalMat::from(&(incl.transpose() * mass * incl))
-  }
-
-  /// Exterior derivative on the relative complex: $E_(k+1)^T D E_k$.
-  ///
-  /// The boundary-vanishing cochains form a subcomplex, so this is a
-  /// genuine restriction of the full exterior derivative.
-  pub fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
-    let grade = grade.into();
-    self.inclusion(grade + 1).transpose() * self.full.dif(grade) * self.inclusion(grade)
-  }
-
-  /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^(k+1))$ on the
-  /// relative complex.
-  ///
-  /// Total in grade with no special case, exactly as [`WhitneyComplex::codif_dif`]:
-  /// the top-grade and out-of-range zeros fall out of the total [`Self::dif`] and
-  /// [`Self::mass`].
-  pub fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let dif = self.dif(grade);
-    let mass = CsrMatrix::from(&self.mass(grade + 1));
-    GalMat::from(&(dif.transpose() * mass * dif))
-  }
 
   /// Extension by zero of a relative cochain to the full mesh.
   pub fn extend_by_zero(&self, u: &Cochain) -> Cochain {
@@ -612,23 +541,46 @@ impl<'a> RelativeWhitneyComplex<'a> {
 
 impl HilbertComplex for RelativeWhitneyComplex<'_> {
   fn dim(&self) -> Dim {
-    RelativeWhitneyComplex::dim(self)
+    self.full.dim()
   }
+  /// Total in grade: $0$ outside $[0, n]$, where the relative complex is trivial.
   fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
-    RelativeWhitneyComplex::ndofs(self, grade)
+    if grade.in_range(self.dim()) {
+      self.interior_simps[grade.index()].len()
+    } else {
+      0
+    }
   }
+
+  /// Galerkin mass matrix on the relative complex: $E^T M E$.
   fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    RelativeWhitneyComplex::mass(self, grade)
+    let incl = self.inclusion(grade);
+    let mass = CsrMatrix::from(&self.full.mass(grade));
+    GalMat::from(&(incl.transpose() * mass * incl))
   }
+
+  /// Exterior derivative on the relative complex: $E_(k+1)^T D E_k$.
+  ///
+  /// The boundary-vanishing cochains form a subcomplex, so this is a
+  /// genuine restriction of the full exterior derivative.
   fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
-    RelativeWhitneyComplex::dif(self, grade)
+    self.inclusion(grade + 1).transpose() * self.full.dif(grade) * self.inclusion(grade)
   }
+
+  /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^(k+1))$ on the
+  /// relative complex.
+  ///
+  /// Total in grade with no special case, exactly as [`WhitneyComplex`]'s:
+  /// the top-grade and out-of-range zeros fall out of the total [`Self::dif`] and
+  /// [`Self::mass`].
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    RelativeWhitneyComplex::codif_dif(self, grade)
+    let dif = self.dif(grade);
+    let mass = CsrMatrix::from(&self.mass(grade + 1));
+    GalMat::from(&(dif.transpose() * mass * dif))
   }
   /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
@@ -693,9 +645,21 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
       })
       .collect()
   }
+  /// The inclusion $E: C^k (K, diff K) arrow.hook C^k (K)$,
+  /// extending interior cochains by zero onto the boundary.
+  ///
+  /// A cochain map: $D E_k = E_(k+1) dif_k$. Its transpose restricts
+  /// cochains to the interior DOFs. Total in grade: the $0$-columned (or empty)
+  /// matrix outside $[0, n]$, since both DOF counts vanish there.
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
-    RelativeWhitneyComplex::inclusion(self, grade)
+    let mut coo = CooMatrix::new(self.full.ndofs(grade), self.ndofs(grade));
+    if grade.in_range(self.dim()) {
+      for (relative, &full) in self.interior_simps[grade.index()].iter().enumerate() {
+        coo.push(full, relative, 1.0);
+      }
+    }
+    CsrMatrix::from(&coo)
   }
 }
 

@@ -29,7 +29,10 @@
 mod util;
 
 use {
-  formoniq::{problems::elliptic, whitney_complex::WhitneyComplex},
+  formoniq::{
+    problems::elliptic,
+    whitney_complex::{HilbertComplex, WhitneyComplex},
+  },
   util::{BoundaryCondition, Manifold, algebraic_convergence_rate, report},
 };
 

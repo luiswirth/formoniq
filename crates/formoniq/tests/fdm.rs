@@ -29,7 +29,7 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-use formoniq::whitney_complex::WhitneyComplex;
+use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
 use regge::mesher::cartesian::CartesianGrid;
 use simplicial::{
   Dim,

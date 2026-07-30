@@ -35,7 +35,11 @@ use {
   },
 };
 
-use crate::{assemble::assemble_galvec, operators::SourceElVec, whitney_complex::WhitneyComplex};
+use crate::{
+  assemble::assemble_galvec,
+  operators::SourceElVec,
+  whitney_complex::{HilbertComplex, WhitneyComplex},
+};
 
 /// The $L^2 Lambda^k$ error $norm(omega - W c)_(L^2)$ between an exact form on
 /// the manifold and the Whitney reconstruction of a cochain.

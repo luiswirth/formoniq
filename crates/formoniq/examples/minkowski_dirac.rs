@@ -80,7 +80,7 @@ use formoniq::{
   fe::fe_l2_error,
   operators::SourceElVec,
   problems::dirac::{MixedField, solve_dirac_source},
-  whitney_complex::WhitneyComplex,
+  whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 use glatt::field::DiffFormClosure;
 use metric::tensor::{TensorExt, inner};

@@ -26,7 +26,9 @@ mod util;
 use {
   derham::{Cochain, project::derham_map, section::CoordFieldExt},
   formoniq::{
-    linalg::quadratic_form_sparse, problems::heat::solve_heat, whitney_complex::WhitneyComplex,
+    linalg::quadratic_form_sparse,
+    problems::heat::solve_heat,
+    whitney_complex::{HilbertComplex, WhitneyComplex},
   },
   regge::mesher::cartesian::CartesianGrid,
   simplicial::linalg::{CsrMatrix, Vector},

@@ -28,8 +28,11 @@ mod util;
 use {
   derham::section::CoordFieldExt,
   formoniq::{
-    assemble::assemble_galvec, fe::fe_l2_error, operators::SourceElVec, problems::elliptic,
-    whitney_complex::WhitneyComplex,
+    assemble::assemble_galvec,
+    fe::fe_l2_error,
+    operators::SourceElVec,
+    problems::elliptic,
+    whitney_complex::{HilbertComplex, WhitneyComplex},
   },
   regge::mesher::cartesian::CartesianGrid,
   simplicial::topology::ordering::CellOrdering,
