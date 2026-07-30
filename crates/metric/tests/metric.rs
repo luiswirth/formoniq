@@ -368,9 +368,10 @@ fn the_tensor_gramian_measures_each_slot_by_its_own_variance() {
         Slot::new(Factor::alternating(grade), Variance::Covariant, dim),
         Slot::new(Factor::alternating(grade), Variance::Contravariant, dim),
       ]);
-      let expected = multiform_metric(&g, grade)
-        .matrix()
-        .kronecker(multivector_metric(&g, grade).matrix());
+      let expected = multialgebra::tensor::factorwise_kronecker(&[
+        multiform_metric(&g, grade).matrix().clone(),
+        multivector_metric(&g, grade).matrix().clone(),
+      ]);
       assert_relative_eq!(&tensor_gramian(&mixed, &g), &expected, epsilon = 1e-12);
 
       // And the two factors genuinely differ, or the law says nothing.

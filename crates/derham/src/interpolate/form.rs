@@ -218,8 +218,8 @@ impl WhitneyExpansion {
   }
 
   /// The map written out, its rows laid out on the basis of
-  /// [`slots`](Self::slots): blade index in colex order, vertex index running
-  /// fastest.
+  /// [`slots`](Self::slots): both indices in colex order, the blade index (the
+  /// first slot) running fastest.
   ///
   /// That layout is [`tensor_strides`] and not arithmetic of its own, which is
   /// what makes this agree with the Kronecker product
@@ -243,7 +243,7 @@ mod test {
   use approx::assert_relative_eq;
   use metric::Metric;
   use metric::tensor::inner;
-  use multialgebra::{exterior_bases, exterior_dim};
+  use multialgebra::{exterior_bases, exterior_dim, tensor::factorwise_kronecker};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
   use simplicial::linalg::Vector;
@@ -278,7 +278,8 @@ mod test {
         let bary = Matrix::from_fn(nvertices, nvertices, entry);
 
         let matrix = expansion.matrix();
-        let expected = matrix.transpose() * blade.kronecker(&bary) * &matrix;
+        let product = factorwise_kronecker(&[blade.clone(), bary.clone()]);
+        let expected = matrix.transpose() * product * &matrix;
         assert_relative_eq!(expansion.pullback(&blade, &bary), expected);
       }
     }
@@ -308,9 +309,10 @@ mod test {
         let ndofs = expansion.dofs().len();
         let nblades = exterior_dim(nvertices, grade);
 
+        let strides = tensor_strides(expansion.slots());
         let collapsed = Matrix::from_fn(nblades, ndofs, |blade, dof| {
           (0..nvertices)
-            .map(|vertex| matrix[(blade * nvertices + vertex, dof)])
+            .map(|vertex| matrix[(blade * strides[0] + vertex * strides[1], dof)])
             .sum()
         });
 

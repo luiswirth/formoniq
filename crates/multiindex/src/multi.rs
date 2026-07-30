@@ -111,8 +111,8 @@ impl MultiIndex {
 /// Every index of a family, degree and alphabet.
 ///
 /// An enum rather than a boxed trait object: the monotone path allocates
-/// nothing, and both variants are now the same size, so nothing is paid for
-/// the family that is not in use.
+/// nothing and both variants are the same size, so nothing is paid for the
+/// family that is not in use.
 #[derive(Debug, Clone)]
 pub enum MultiIndices {
   Mono(MonoIndices),

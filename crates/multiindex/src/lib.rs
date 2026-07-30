@@ -10,7 +10,7 @@ pub mod multi;
 pub mod permutation;
 pub mod sign;
 
-pub use cartesian::{Word, WordDeletions, Words};
+pub use cartesian::{Radix, Word, WordDeletions, Words};
 pub use combination::{Combination, MAX_NINDICES, combinations};
 pub use composition::Composition;
 pub use count::{binomial, factorial, factorial_f64};

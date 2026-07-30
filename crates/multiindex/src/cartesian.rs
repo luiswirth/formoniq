@@ -1,6 +1,6 @@
 //! Cartesian multi-indices: positional (radix) numbers.
 //!
-//! Elements of the product ${0, dots, "radix"-1}^d$, the index sets of
+//! Elements of a product $product_i {0, dots, r_i - 1}$, the index sets of
 //! tensor-product structures, and so the basis of the free tensor power
 //! $V^(times.circle d)$ itself. A cartesian index with radix 2 is exactly a
 //! subset of the axes: the corners of the $d$-cube are [`Combination`]s,
@@ -13,19 +13,148 @@
 //! alphabet-independent rank. A cartesian index is neither, and cannot be.
 //! There is no quotient here, so there is nothing to compress and no way to
 //! number the basis without knowing how wide it is.
+//!
+//! [`Radix`] is the shape of such an index set and owns the arithmetic; a
+//! [`Word`] is one index of a shape whose axes all agree, and delegates. The
+//! order is colexicographic on the digits, as everywhere in this crate: axis
+//! $0$ runs fastest and $s_i = product_(j < i) r_j$.
 
 use super::Combination;
 use crate::monotone::Symbols;
 
-/// A word over an alphabet: a basis element of $V^(times.circle k)$.
+/// The shape of a cartesian index set: the radix of each axis.
+///
+/// The index set is $product_i {0, dots, r_i - 1}$, whose elements are the
+/// digit tuples and whose cardinality is [`Self::count`]. A grid of cells, the
+/// vertices of a box, the component index of a tensor product of spaces of
+/// differing dimension: each is a shape, held once, against which individual
+/// indices are linearized and delinearized.
+///
+/// The shape belongs to the index *set*, not to an index, which is why it lives
+/// here rather than inside every digit tuple. [`Word`] is the exception, an
+/// index of a uniform shape that carries enough to rank itself.
+///
+/// Total at the degenerate corners: no axes give the one empty index (the single
+/// point of an empty product), and an axis of radix zero gives none.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub struct Radix {
+  radices: Symbols,
+}
+
+impl Radix {
+  pub fn new(radices: impl IntoIterator<Item = usize>) -> Self {
+    Self {
+      radices: radices.into_iter().collect(),
+    }
+  }
+  /// The shape whose `naxes` axes all have the same radix: the index set
+  /// ${0, dots, "radix" - 1}^"naxes"$, hence the basis of a tensor power.
+  pub fn uniform(radix: usize, naxes: usize) -> Self {
+    Self::new(std::iter::repeat_n(radix, naxes))
+  }
+
+  pub fn naxes(&self) -> usize {
+    self.radices.len()
+  }
+  pub fn radices(&self) -> &[usize] {
+    &self.radices
+  }
+  /// The radix common to every axis, if there is one.
+  pub fn uniform_radix(&self) -> Option<usize> {
+    let first = *self.radices.first()?;
+    self.radices.iter().all(|&r| r == first).then_some(first)
+  }
+
+  /// The number of indices, $product_i r_i$: the dimension of the product.
+  pub fn count(&self) -> usize {
+    self.radices.iter().product()
+  }
+
+  /// The stride of each axis in the linear index, the running product
+  /// $s_i = product_(j < i) r_j$.
+  ///
+  /// Axis $0$ has stride $1$ and so runs fastest, which is what makes the
+  /// linear order colexicographic on the digits.
+  pub fn strides(&self) -> Symbols {
+    self
+      .radices
+      .iter()
+      .scan(1, |stride, &radix| {
+        let this = *stride;
+        *stride *= radix;
+        Some(this)
+      })
+      .collect()
+  }
+
+  /// The linear index of a digit tuple, $sum_i d_i s_i$.
+  ///
+  /// # Panics
+  /// If the tuple has the wrong number of axes.
+  pub fn linearize(&self, digits: &[usize]) -> usize {
+    assert_eq!(
+      digits.len(),
+      self.naxes(),
+      "digit tuple has the wrong shape"
+    );
+    let mut linear = 0;
+    for (&digit, &radix) in digits.iter().zip(&self.radices).rev() {
+      linear = linear * radix + digit;
+    }
+    linear
+  }
+
+  /// The digit tuple of a linear index. Inverse to [`Self::linearize`].
+  pub fn delinearize(&self, mut linear: usize) -> Symbols {
+    self
+      .radices
+      .iter()
+      .map(|&radix| {
+        let digit = linear % radix;
+        linear /= radix;
+        digit
+      })
+      .collect()
+  }
+
+  /// Every index of the shape, in linear order: the $i$-th item is
+  /// [`Self::delinearize`]`(i)`.
+  pub fn all(&self) -> impl Iterator<Item = Symbols> + Clone + use<> {
+    let shape = self.clone();
+    (0..shape.count()).map(move |linear| shape.delinearize(linear))
+  }
+
+  /// The linear index of a cube corner, a set of axes with digit $1$ and the
+  /// rest $0$: $sum_(i in "corner") s_i$.
+  ///
+  /// The radix-2 reading of a [`Combination`], and the offset a Kuhn cell's
+  /// vertices are found at within a grid.
+  pub fn corner_offset(&self, corner: Combination) -> usize {
+    let strides = self.strides();
+    corner.iter().map(|axis| strides[axis]).sum()
+  }
+}
+
+impl FromIterator<usize> for Radix {
+  fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
+    Self::new(iter)
+  }
+}
+
+/// A word over one alphabet: a basis element of $V^(times.circle k)$.
 ///
 /// Carries its own alphabet, unlike [`MonoIndex`](crate::MonoIndex), because a
 /// radix rank cannot be taken without one. That asymmetry is forced: the colex
 /// rank of a monotone index is a sum of binomials in its symbols alone, while
 /// the rank of a word is a positional number and positions have a base.
+///
+/// One radix rather than a [`Radix`] of its own, so it stays [`Copy`] and
+/// allocation-free: a word indexes a power of a single space, where the axes
+/// agree by construction. A product of *differing* spaces is a shape, and the
+/// shape is held once by whoever owns the index set.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct Word {
-  /// The word packed as its own radix rank, most significant position first.
+  /// The word packed as its own radix rank.
   ///
   /// A word is a positional number, so storing the symbols separately would
   /// be storing the same thing twice. The packing costs no generality: a word
@@ -42,16 +171,14 @@ impl Word {
   /// # Panics
   /// If any symbol is not below the radix.
   pub fn new(radix: usize, symbols: impl IntoIterator<Item = usize>) -> Self {
-    let mut degree = 0;
-    let mut rank = 0;
-    for symbol in symbols {
-      assert!(symbol < radix, "a word's symbols lie below its radix");
-      rank = rank * radix + symbol;
-      degree += 1;
-    }
+    let symbols: Symbols = symbols.into_iter().collect();
+    assert!(
+      symbols.iter().all(|&symbol| symbol < radix),
+      "a word's symbols lie below its radix"
+    );
     Self {
-      rank,
-      degree,
+      rank: Radix::uniform(radix, symbols.len()).linearize(&symbols),
+      degree: symbols.len(),
       radix,
     }
   }
@@ -72,19 +199,17 @@ impl Word {
   pub fn radix(&self) -> usize {
     self.radix
   }
+  /// The shape this word is an index of.
+  pub fn shape(&self) -> Radix {
+    Radix::uniform(self.radix, self.degree)
+  }
   /// The symbols, in position order, unpacked from the rank.
   pub fn symbols(&self) -> Symbols {
-    let mut symbols = Symbols::from_iter(std::iter::repeat_n(0, self.degree));
-    let mut rank = self.rank;
-    for symbol in symbols.iter_mut().rev() {
-      *symbol = rank % self.radix;
-      rank /= self.radix;
-    }
-    symbols
+    self.shape().delinearize(self.rank)
   }
   pub fn symbol(&self, position: usize) -> usize {
-    let from_the_end = self.degree - 1 - position;
-    (self.rank / self.radix.pow(from_the_end as u32)) % self.radix
+    assert!(position < self.degree, "position out of range");
+    (self.rank / self.radix.pow(position as u32)) % self.radix
   }
   pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
     (0..self.degree).map(move |position| self.symbol(position))
@@ -101,8 +226,7 @@ impl Word {
     radix.pow(degree as u32)
   }
 
-  /// The radix rank, last position running fastest:
-  /// $sum_j w_j space n^(k-1-j)$.
+  /// The radix rank, position $0$ running fastest: $sum_j w_j space n^j$.
   ///
   /// Depends on the alphabet, necessarily. The monotone families rank
   /// independently of it, so widening the ambient space renumbers nothing
@@ -148,7 +272,7 @@ impl Word {
       "a concatenation is over one alphabet"
     );
     Self {
-      rank: self.rank * self.radix.pow(other.degree as u32) + other.rank,
+      rank: self.rank + other.rank * self.radix.pow(self.degree as u32),
       degree: self.degree + other.degree,
       radix: self.radix,
     }
@@ -197,8 +321,6 @@ impl Iterator for Words {
 impl ExactSizeIterator for Words {}
 
 /// Every single-position deletion of a [`Word`].
-///
-/// Owns the index, which is [`Copy`] now that it is a packed rank.
 #[derive(Debug, Clone)]
 pub struct WordDeletions {
   index: Word,
@@ -214,17 +336,16 @@ impl Iterator for WordDeletions {
     let position = self.position;
     self.position += 1;
 
-    // Split the rank at the position: the digits above it keep their place
-    // once the removed one is taken out, and those below shift up.
-    let below_width = self.index.degree - 1 - position;
-    let scale = self.index.radix.pow(below_width as u32);
-    let above = self.index.rank / (scale * self.index.radix);
-    let symbol = (self.index.rank / scale) % self.index.radix;
-    let below = self.index.rank % scale;
+    // Split the rank at the position: the digits below it keep their place once
+    // the removed one is taken out, and those above slide down one stride.
+    let stride = self.index.radix.pow(position as u32);
+    let below = self.index.rank % stride;
+    let symbol = (self.index.rank / stride) % self.index.radix;
+    let above = self.index.rank / (stride * self.index.radix);
     Some((
       symbol,
       Word {
-        rank: above * scale + below,
+        rank: below + above * stride,
         degree: self.index.degree - 1,
         radix: self.index.radix,
       },
@@ -235,6 +356,8 @@ impl Iterator for WordDeletions {
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::combinations;
+  use itertools::Itertools;
 
   /// Ranking is a bijection onto `0..n^k`, and enumeration walks it in order.
   #[test]
@@ -246,20 +369,36 @@ mod test {
         for (rank, word) in words.iter().enumerate() {
           assert_eq!(word.rank(), rank);
           assert_eq!(word.degree(), degree);
+          assert_eq!(Word::new(radix, word.symbols()), *word);
         }
       }
     }
   }
 
-  /// The last position runs fastest, matching the stride convention every
-  /// graded structure in the workspace uses.
+  /// Position zero runs fastest, the colex convention of the whole crate.
   #[test]
-  fn the_last_position_runs_fastest() {
+  fn the_first_position_runs_fastest() {
     let radix = 3;
-    let first = Word::new(radix, [1, 0]);
-    let last = Word::new(radix, [0, 1]);
-    assert_eq!(first.rank(), radix);
-    assert_eq!(last.rank(), 1);
+    assert_eq!(Word::new(radix, [1, 0]).rank(), 1);
+    assert_eq!(Word::new(radix, [0, 1]).rank(), radix);
+  }
+
+  /// A word is one index of a uniform shape, and the two agree on the
+  /// arithmetic: the word ranks itself exactly as its shape linearizes it.
+  #[test]
+  fn a_word_is_an_index_of_its_shape() {
+    for radix in 1..=3 {
+      for degree in 0..=3 {
+        let shape = Radix::uniform(radix, degree);
+        assert_eq!(shape.count(), Word::count(radix, degree));
+        for (linear, digits) in shape.all().enumerate() {
+          let word = Word::new(radix, digits.iter().copied());
+          assert_eq!(word.rank(), linear);
+          assert_eq!(word.symbols(), digits);
+          assert_eq!(shape.linearize(&digits), linear);
+        }
+      }
+    }
   }
 
   /// Concatenation is associative with the empty word as its unit, and unlike
@@ -280,6 +419,11 @@ mod test {
           assert_ne!(a.concat(&b), b.concat(&a));
         }
       }
+      // Concatenation is the juxtaposition of the symbols, in order.
+      for b in Word::all(radix, 1) {
+        let joined: Symbols = a.iter().chain(b.iter()).collect();
+        assert_eq!(a.concat(&b), Word::new(radix, joined));
+      }
     }
   }
 
@@ -288,202 +432,81 @@ mod test {
   /// multiplicity a contraction must count.
   #[test]
   fn deletions_are_positional() {
-    let word = Word::new(3, [2, 0, 2]);
-    let deletions: Vec<(usize, Word)> = word.deletions().collect();
-    assert_eq!(deletions.len(), 3);
-    assert_eq!(deletions[0], (2, Word::new(3, [0, 2])));
-    assert_eq!(deletions[1], (0, Word::new(3, [2, 2])));
-    assert_eq!(deletions[2], (2, Word::new(3, [2, 0])));
-
+    for radix in 1..=3 {
+      for degree in 0..=3 {
+        for word in Word::all(radix, degree) {
+          let deletions: Vec<(usize, Word)> = word.deletions().collect();
+          assert_eq!(deletions.len(), degree);
+          for (position, &(symbol, reduced)) in deletions.iter().enumerate() {
+            assert_eq!(symbol, word.symbol(position));
+            let expected: Symbols = word
+              .iter()
+              .enumerate()
+              .filter_map(|(i, s)| (i != position).then_some(s))
+              .collect();
+            assert_eq!(reduced, Word::new(radix, expected));
+          }
+        }
+      }
+    }
     assert_eq!(Word::empty(3).deletions().count(), 0);
   }
-}
 
-/// Converts a linear index in `0..radix^dim` to a cartesian multi-index in
-/// ${0, dots, "radix"-1}^"dim"$ (least significant axis first).
-pub fn linear2cartesian(mut lin_idx: usize, radix: usize, dim: usize) -> Vec<usize> {
-  let mut cart_idx = vec![0; dim];
-  for icomp in cart_idx.iter_mut() {
-    *icomp = lin_idx % radix;
-    lin_idx /= radix;
-  }
-  cart_idx
-}
-
-/// The whole grid ${0, dots, "radix"-1}^"dim"$, in linear-index order.
-///
-/// Colexicographic on the digits, the crate-wide convention: the least
-/// significant axis varies fastest. The $i$-th item is
-/// [`linear2cartesian`]`(i, radix, dim)`.
-///
-/// Total at the degenerate ends: dimension $0$ yields the one empty index (the
-/// single point of a $0$-fold product), radix $0$ in positive dimension yields
-/// nothing.
-pub fn grid(radix: usize, dim: usize) -> impl Iterator<Item = Vec<usize>> {
-  (0..radix.pow(dim as u32)).map(move |i| linear2cartesian(i, radix, dim))
-}
-
-/// Converts a cartesian multi-index in ${0, dots, "radix"-1}^"dim"$ to a
-/// linear index in `0..radix^dim`.
-pub fn cartesian2linear(cart_idx: &[usize], radix: usize) -> usize {
-  let mut lin_idx = 0;
-  for &icomp in cart_idx.iter().rev() {
-    lin_idx *= radix;
-    lin_idx += icomp;
-  }
-  lin_idx
-}
-
-/// Converts a cartesian multi-index to a linear index when the axes carry
-/// different radices: the positional number of mixed base
-/// $"radix"_0, dots, "radix"_(d-1)$, least significant axis first.
-///
-/// The uniform [`cartesian2linear`] is the constant-radix case.
-pub fn cartesian2linear_mixed(cart_idx: &[usize], radices: &[usize]) -> usize {
-  let mut lin_idx = 0;
-  for (&icomp, &radix) in cart_idx.iter().zip(radices).rev() {
-    lin_idx *= radix;
-    lin_idx += icomp;
-  }
-  lin_idx
-}
-
-/// The inverse of [`cartesian2linear_mixed`]: the mixed-radix digits of a
-/// linear index in `0..radices.product()`.
-pub fn linear2cartesian_mixed(mut lin_idx: usize, radices: &[usize]) -> Vec<usize> {
-  radices
-    .iter()
-    .map(|&radix| {
-      let digit = lin_idx % radix;
-      lin_idx /= radix;
-      digit
-    })
-    .collect()
-}
-
-/// The linear-index offset of a cube corner (a set of axes with coordinate 1)
-/// under the given per-axis strides.
-pub fn corner_offset(corner: Combination, strides: &[usize]) -> usize {
-  corner.iter().map(|axis| strides[axis]).sum()
-}
-
-/// The per-axis strides of a mixed-radix linear index: the running product
-/// $"stride"_i = product_(j < i) "radix"_j$.
-///
-/// The uniform [`strides`] is the constant-radix case, $"radix"^i$.
-pub fn mixed_strides(radices: &[usize]) -> Vec<usize> {
-  radices
-    .iter()
-    .scan(1, |stride, &radix| {
-      let this = *stride;
-      *stride *= radix;
-      Some(this)
-    })
-    .collect()
-}
-
-/// The per-axis strides of the linear index of a cartesian grid:
-/// $"stride"_i = "radix"^i$.
-pub fn strides(radix: usize, dim: usize) -> Vec<usize> {
-  (0..dim)
-    .scan(1, |stride, _| {
-      let this = *stride;
-      *stride *= radix;
-      Some(this)
-    })
-    .collect()
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::combinations;
-  use itertools::Itertools;
-
-  /// The grid enumerates every multi-index exactly once, in linear-index
-  /// order, and is total at the degenerate ends.
+  /// Linearization is a bijection onto `0..count`, every digit stays in range,
+  /// and the enumeration walks it in order. Includes the degenerate shapes:
+  /// no axes give the one empty index, an axis of radix zero give none.
   #[test]
-  fn grid_enumerates_the_product() {
-    for radix in 0usize..=4 {
-      for dim in 0..=4 {
-        let all: Vec<Vec<usize>> = grid(radix, dim).collect();
-        assert_eq!(all.len(), radix.pow(dim as u32), "radix {radix}, dim {dim}");
-        for (i, cart) in all.iter().enumerate() {
-          assert_eq!(cart.len(), dim);
-          assert_eq!(cartesian2linear(cart, radix), i);
-        }
-        let mut distinct = all.clone();
-        distinct.sort();
-        distinct.dedup();
-        assert_eq!(distinct.len(), all.len());
-      }
-    }
-    assert_eq!(grid(0, 0).collect::<Vec<_>>(), vec![Vec::<usize>::new()]);
-  }
-
-  /// Linear and cartesian indexing are mutually inverse over the whole grid
-  /// $0.."radix"^"dim"$, and every cartesian component stays in
-  /// ${0, dots, "radix"-1}$. Includes the degenerate $"dim" = 0$ grid, whose
-  /// single point is the empty tuple at linear index 0.
-  #[test]
-  fn linear_cartesian_round_trip() {
-    for radix in 1usize..=4 {
-      for dim in 0..=4 {
-        let count = radix.pow(dim as u32);
-        for lin in 0..count {
-          let cart = linear2cartesian(lin, radix, dim);
-          assert_eq!(cart.len(), dim);
-          assert!(cart.iter().all(|&c| c < radix));
-          assert_eq!(cartesian2linear(&cart, radix), lin);
-        }
-      }
-    }
-  }
-
-  /// Mixed-radix linearization is a bijection onto `0..radices.product()`, and
-  /// reduces to the uniform one when every radix agrees.
-  #[test]
-  fn mixed_radix_round_trip() {
+  fn linearization_is_the_mixed_radix_bijection() {
     for radices in [
       vec![],
+      vec![0],
       vec![1],
       vec![4],
       vec![2, 3],
       vec![3, 1, 4],
       vec![2, 2, 2],
     ] {
-      let count: usize = radices.iter().product();
-      for lin in 0..count {
-        let cart = linear2cartesian_mixed(lin, &radices);
-        assert!(cart.iter().zip(&radices).all(|(&c, &r)| c < r));
-        assert_eq!(cartesian2linear_mixed(&cart, &radices), lin);
+      let shape = Radix::new(radices.iter().copied());
+      assert_eq!(shape.count(), radices.iter().product::<usize>());
+      let all: Vec<Symbols> = shape.all().collect();
+      assert_eq!(all.len(), shape.count());
+      for (linear, digits) in all.iter().enumerate() {
+        assert!(digits.iter().zip(&radices).all(|(&d, &r)| d < r));
+        assert_eq!(shape.linearize(digits), linear);
+        assert_eq!(shape.delinearize(linear), *digits);
       }
-      if let Ok(&radix) = radices.iter().all_equal_value() {
-        for lin in 0..count {
-          assert_eq!(
-            linear2cartesian_mixed(lin, &radices),
-            linear2cartesian(lin, radix, radices.len())
-          );
-        }
-      }
+      let mut distinct = all.clone();
+      distinct.sort();
+      distinct.dedup();
+      assert_eq!(distinct.len(), all.len());
     }
+    assert_eq!(
+      Radix::new([]).all().collect::<Vec<_>>(),
+      vec![Symbols::new()]
+    );
   }
 
-  /// The strides are the radix powers $"radix"^i$, and the linear index is the
-  /// stride-weighted sum of the cartesian components.
+  /// The strides are the running product, reconstruct the linear index as
+  /// $sum_i d_i s_i$, and reduce to the radix powers on a uniform shape.
   #[test]
-  fn strides_are_radix_powers_and_reconstruct_linear_index() {
-    for radix in 1usize..=4 {
-      for dim in 0..=4 {
-        let strides = strides(radix, dim);
-        assert_eq!(strides.len(), dim);
-        for (i, &stride) in strides.iter().enumerate() {
-          assert_eq!(stride, radix.pow(i as u32));
-        }
-        for lin in 0..radix.pow(dim as u32) {
-          let cart = linear2cartesian(lin, radix, dim);
-          let weighted: usize = cart.iter().zip(&strides).map(|(&c, &s)| c * s).sum();
-          assert_eq!(weighted, lin);
+  fn strides_are_the_running_product() {
+    for radices in [vec![], vec![4], vec![2, 3], vec![3, 1, 4], vec![2, 2, 2]] {
+      let shape = Radix::new(radices.iter().copied());
+      let strides = shape.strides();
+      assert_eq!(strides.len(), shape.naxes());
+      for (axis, &stride) in strides.iter().enumerate() {
+        assert_eq!(stride, radices[..axis].iter().product::<usize>());
+      }
+      for (linear, digits) in shape.all().enumerate() {
+        let weighted: usize = digits.iter().zip(&strides).map(|(&d, &s)| d * s).sum();
+        assert_eq!(weighted, linear);
+      }
+      if let Ok(&radix) = radices.iter().all_equal_value() {
+        let uniform = Radix::uniform(radix, radices.len());
+        assert_eq!(uniform, shape);
+        assert_eq!(shape.uniform_radix(), Some(radix));
+        for (axis, &stride) in strides.iter().enumerate() {
+          assert_eq!(stride, radix.pow(axis as u32));
         }
       }
     }
@@ -494,16 +517,13 @@ mod tests {
   #[test]
   fn corner_offset_is_the_indicator_linear_index() {
     for dim in 0..=4 {
-      let strides = strides(2, dim);
+      let shape = Radix::uniform(2, dim);
       for card in 0..=dim {
         for corner in combinations(dim, card) {
-          let indicator: Vec<usize> = (0..dim)
+          let indicator: Symbols = (0..dim)
             .map(|axis| usize::from(corner.contains(axis)))
             .collect();
-          assert_eq!(
-            corner_offset(corner, &strides),
-            cartesian2linear(&indicator, 2)
-          );
+          assert_eq!(shape.corner_offset(corner), shape.linearize(&indicator));
         }
       }
     }

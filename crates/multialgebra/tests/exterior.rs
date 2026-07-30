@@ -154,18 +154,18 @@ fn endomorphism(matrix: &Matrix) -> Tensor {
     ]
     .as_slice(),
   );
-  // Last slot fastest: the argument index is the outer one.
+  // First slot fastest, and the argument is that slot, so it is the inner index.
   Tensor::new(
     slots,
-    Vector::from_fn(n * n, |flat, _| matrix[(flat % n, flat / n)]),
+    Vector::from_fn(n * n, |flat, _| matrix[(flat / n, flat % n)]),
   )
 }
 
 /// The trace of an endomorphism is the matrix trace, and it takes no metric.
 ///
-/// The operation the uniform-variance design could not express: reaching it
-/// there meant raising an index through $g^(-1)$ first, so the answer depended
-/// on a metric the concept does not need.
+/// A uniform variance cannot express it: reaching the trace under one would mean
+/// raising an index through $g^(-1)$ first, so the answer would depend on a
+/// metric the concept does not need.
 #[test]
 fn the_trace_of_an_endomorphism_is_metric_free() {
   for dim in 1..=4 {
@@ -193,10 +193,11 @@ fn composition_is_a_contraction() {
     // The surviving slots are a's value and b's argument, in that order.
     assert_eq!(composed.slots().len(), 2);
     let product = &a * &b;
+    let strides = composed.strides();
     for value in 0..dim {
       for argument in 0..dim {
         assert_relative_eq!(
-          composed.components()[value * dim + argument],
+          composed.components()[value * strides[0] + argument * strides[1]],
           product[(value, argument)],
           epsilon = 1e-12
         );
@@ -246,7 +247,8 @@ fn multi_contraction_is_order_independent() {
 /// The dense form of an alternating slot is antisymmetric, vanishes on a
 /// repeated index, and reproduces the packed component at an increasing one.
 ///
-/// The shape claim as well: one axis per unit of degree, C-order.
+/// The shape claim as well: one axis per unit of degree, indexed by the word's
+/// own radix rank, so the first position runs fastest.
 #[test]
 fn the_dense_embedding_is_antisymmetric_on_an_alternating_slot() {
   let dim = 4;
@@ -257,7 +259,7 @@ fn the_dense_embedding_is_antisymmetric_on_an_alternating_slot() {
   assert!(dense.slots()[0].symmetry().is_free());
   assert_eq!(dense.components().len(), dim * dim);
 
-  let at = |i: usize, j: usize| dense.components()[i * dim + j];
+  let at = |i: usize, j: usize| dense.components()[multiindex::Word::new(dim, [i, j]).rank()];
   for i in 0..dim {
     assert_relative_eq!(at(i, i), 0.0, epsilon = 1e-12);
     for j in 0..dim {
@@ -351,13 +353,12 @@ fn the_wedge_pairing_is_graded_symmetric_and_nondegenerate() {
 /// product of $d$ copies of $V$ is what a $d$-slot tensor is.
 ///
 /// Its basis is exactly the cartesian (radix) multi-index, and the strides are
-/// the radix, so
-/// [`cartesian::cartesian2linear`](multiindex::cartesian::cartesian2linear)
-/// and [`Tensor::flat_index`] are one map. That is why a third `Symmetry` would
+/// the radix, so [`Radix::linearize`](multiindex::Radix::linearize) and
+/// [`Tensor::flat_index`] are one map. That is why a third `Symmetry` would
 /// add arity bookkeeping rather than mathematics.
 #[test]
 fn the_full_tensor_power_is_slots_of_degree_one() {
-  use multiindex::{MonoIndex, Repetition, cartesian};
+  use multiindex::{MonoIndex, Radix, Repetition};
 
   for dim in 1usize..=3 {
     for degree in 0usize..=3 {
@@ -376,15 +377,15 @@ fn the_full_tensor_power_is_slots_of_degree_one() {
 
       // Slot ranks are the symbols themselves at degree one, so a basis element
       // is a word, and the flat index is that word read as a radix number.
-      for word in cartesian::grid(dim, degree) {
+      let shape = Radix::uniform(dim, degree);
+      for word in shape.all() {
         let basis: Vec<multiindex::MultiIndex> = word
           .iter()
-          .rev()
           .map(|&symbol| MonoIndex::single(Repetition::Forbidden, symbol).into())
           .collect();
         assert_eq!(
           tensor.flat_index(&basis),
-          cartesian::cartesian2linear(&word, dim),
+          shape.linearize(&word),
           "dim {dim} degree {degree}: strides are not the radix"
         );
       }

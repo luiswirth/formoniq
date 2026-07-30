@@ -230,11 +230,10 @@ mod test {
   /// A rank is independent of the number of parts: adding parts leaves every
   /// existing composition where it was.
   ///
-  /// This is what colex is for, and it is what the previous
-  /// reverse-lexicographic order did not have, a word's position drifted
-  /// upward as parts were appended, so widening the alphabet renumbered the
-  /// basis. The formula makes it plain: the sum runs over the word and never
-  /// mentions `nparts`.
+  /// This is what colex is for. Under a reverse-lexicographic order a word's
+  /// position drifts upward as parts are appended, so widening the alphabet
+  /// renumbers the basis. The formula makes it plain: the sum runs over the word
+  /// and never mentions `nparts`.
   #[test]
   fn rank_does_not_depend_on_the_number_of_parts() {
     for degree in 0..=4 {

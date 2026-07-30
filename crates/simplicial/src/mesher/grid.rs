@@ -6,11 +6,7 @@
 //! and belongs with the topology. `regge::mesher::cartesian` places the
 //! vertices in space.
 
-use multiindex::{
-  Combination, Dim, Permutation,
-  cartesian::{cartesian2linear_mixed, corner_offset, linear2cartesian_mixed, mixed_strides},
-  factorial,
-};
+use multiindex::{Combination, Dim, Permutation, Radix, factorial};
 
 use crate::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
 
@@ -18,7 +14,7 @@ use crate::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton};
 /// simplices of its Kuhn triangulation, with no notion of where any vertex is.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CartesianTopology {
-  ncells: Vec<usize>,
+  cells: Radix,
 }
 
 impl CartesianTopology {
@@ -28,7 +24,9 @@ impl CartesianTopology {
       ncells.iter().all(|&n| n > 0),
       "a grid has at least one cell per axis"
     );
-    Self { ncells }
+    Self {
+      cells: Radix::new(ncells),
+    }
   }
 
   /// A cube of `ncells_axis` cells along each of `dim` axes.
@@ -37,38 +35,40 @@ impl CartesianTopology {
   }
 
   pub fn dim(&self) -> usize {
-    self.ncells.len()
+    self.cells.naxes()
   }
 
+  /// The shape of the cell grid: the cell count of each axis.
+  pub fn cell_shape(&self) -> &Radix {
+    &self.cells
+  }
+  /// The shape of the vertex grid: one more vertex than cells along each axis.
+  pub fn vertex_shape(&self) -> Radix {
+    self.cells.radices().iter().map(|&n| n + 1).collect()
+  }
   /// The cell count of each axis.
   pub fn ncells_per_axis(&self) -> &[usize] {
-    &self.ncells
-  }
-  /// The vertex count of each axis: one more than its cells.
-  pub fn nvertices_per_axis(&self) -> Vec<usize> {
-    self.ncells.iter().map(|&n| n + 1).collect()
+    self.cells.radices()
   }
   pub fn ncells(&self) -> usize {
-    self.ncells.iter().product()
+    self.cells.count()
   }
   pub fn nvertices(&self) -> usize {
-    self.nvertices_per_axis().iter().product()
+    self.vertex_shape().count()
   }
   pub fn vertex_cart_idx(&self, ivertex: usize) -> Vec<usize> {
-    linear2cartesian_mixed(ivertex, &self.nvertices_per_axis())
+    self.vertex_shape().delinearize(ivertex).to_vec()
   }
   pub fn is_vertex_on_boundary(&self, vertex: usize) -> bool {
     self
       .vertex_cart_idx(vertex)
       .iter()
-      .zip(&self.ncells)
+      .zip(self.cells.radices())
       .any(|(&c, &n)| c == 0 || c == n)
   }
   pub fn boundary_vertices(&self) -> Vec<usize> {
-    let nvertices = self.nvertices_per_axis();
     (0..self.nvertices())
       .filter(|&v| self.is_vertex_on_boundary(v))
-      .map(|v| cartesian2linear_mixed(&self.vertex_cart_idx(v), &nvertices))
       .collect()
   }
   /// Kuhn (Freudenthal) triangulation.
@@ -80,13 +80,11 @@ impl CartesianTopology {
   /// in this subset lattice, one per permutation of the axes.
   pub fn cell_skeleton(&self) -> Skeleton {
     let dim = self.dim();
-    let nvertices = self.nvertices_per_axis();
-    let strides = mixed_strides(&nvertices);
+    let vertices_shape = self.vertex_shape();
 
     let mut simplices: Vec<Simplex> = Vec::with_capacity(factorial(dim) * self.ncells());
     for ibox in 0..self.ncells() {
-      let box_cart = linear2cartesian_mixed(ibox, &self.ncells);
-      let origin = cartesian2linear_mixed(&box_cart, &nvertices);
+      let origin = vertices_shape.linearize(&self.cells.delinearize(ibox));
 
       for axes in Permutation::all(dim) {
         let chain = axes.iter().scan(Combination::empty(), |corner, axis| {
@@ -94,7 +92,7 @@ impl CartesianTopology {
           Some(*corner)
         });
         let vertices = std::iter::once(origin)
-          .chain(chain.map(|corner| origin + corner_offset(corner, &strides)))
+          .chain(chain.map(|corner| origin + vertices_shape.corner_offset(corner)))
           .collect();
         simplices.push(Simplex::new(vertices));
       }
