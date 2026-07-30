@@ -190,16 +190,7 @@ fn expand(
 ) {
   let mut w = lu.solve(&bbasis[idx]);
 
-  let mut h = vec![0.0; basis.len()];
-  // Two passes of modified Gram-Schmidt ("twice is enough") in the B-inner
-  // product.
-  for _pass in 0..2 {
-    for (j, (vj, bvj)) in basis.iter().zip(bbasis.iter()).enumerate() {
-      let c = w.dot(bvj);
-      h[j] += c;
-      w.axpy(-c, vj, 1.0);
-    }
-  }
+  let h = b_orthogonalize(&mut w, basis, bbasis);
   for (j, &hj) in h.iter().enumerate() {
     proj[(j, idx)] = hj;
     proj[(idx, j)] = hj;
@@ -231,12 +222,7 @@ fn seed_block(
   while basis.len() < bs && seed < bs as u64 * 32 + 32 {
     let mut v = Vector::from_iterator(n, (0..n).map(|i| pseudo_random(seed, i as u64)));
     seed += 1;
-    for _pass in 0..2 {
-      for (vj, bvj) in basis.iter().zip(bbasis.iter()) {
-        let c: f64 = v.dot(bvj);
-        v.axpy(-c, vj, 1.0);
-      }
-    }
+    b_orthogonalize(&mut v, &basis, &bbasis);
     let bv = b * &v;
     let norm_sq: f64 = v.dot(&bv);
     const SEED_TOL: f64 = 1e-24;
@@ -250,6 +236,22 @@ fn seed_block(
     return Err(EigenError::NoFiniteEigenvalue);
   }
   Ok((basis, bbasis))
+}
+
+/// Two passes of modified Gram-Schmidt ("twice is enough") against a
+/// $B$-orthonormal basis, returning the accumulated coefficients: the
+/// projection of `v` onto the basis, which is the row of the projected operator
+/// where the caller wants one.
+fn b_orthogonalize(v: &mut Vector, basis: &[Vector], bbasis: &[Vector]) -> Vec<f64> {
+  let mut coeffs = vec![0.0; basis.len()];
+  for _pass in 0..2 {
+    for (j, (vj, bvj)) in basis.iter().zip(bbasis).enumerate() {
+      let c = v.dot(bvj);
+      coeffs[j] += c;
+      v.axpy(-c, vj, 1.0);
+    }
+  }
+  coeffs
 }
 
 /// A deterministic splitmix64-style fill, so the solve is reproducible without
