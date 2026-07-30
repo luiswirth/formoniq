@@ -135,40 +135,9 @@ impl<S: SelfAdjoint<Space = Vector>> SelfAdjoint for AuxiliarySpace<S> {}
 #[cfg(test)]
 mod tests {
   use super::*;
+  use crate::testutil::{DenseInverse, csr};
   use crate::{Identity, Jacobi};
   use nalgebra::DMatrix;
-  use nalgebra_sparse::CooMatrix;
-
-  /// The exact inverse of a fixed SPD matrix as a [`SelfAdjoint`] approximate
-  /// inverse, for testing corrections against a known solve.
-  struct DenseInverse(DMatrix<f64>);
-  impl DenseInverse {
-    fn spd(inv: DMatrix<f64>) -> Self {
-      Self(inv.clone().try_inverse().unwrap())
-    }
-  }
-  impl ApproxInverse for DenseInverse {
-    type Space = Vector;
-    fn dim(&self) -> usize {
-      self.0.nrows()
-    }
-    fn apply(&self, r: &Vector) -> Vector {
-      &self.0 * r
-    }
-  }
-  impl SelfAdjoint for DenseInverse {}
-
-  fn csr(m: &DMatrix<f64>) -> CsrMatrix {
-    let mut coo = CooMatrix::new(m.nrows(), m.ncols());
-    for i in 0..m.nrows() {
-      for j in 0..m.ncols() {
-        if m[(i, j)] != 0.0 {
-          coo.push(i, j, m[(i, j)]);
-        }
-      }
-    }
-    CsrMatrix::from(&coo)
-  }
 
   fn spd(n: usize, seed: f64) -> DMatrix<f64> {
     let b = DMatrix::from_fn(n, n, |i, j| ((i * 7 + j * 13) as f64 * seed).sin());
@@ -183,7 +152,7 @@ mod tests {
     let prolong = DMatrix::from_fn(n, 3, |i, j| ((i + 2 * j) as f64).cos());
 
     let b = AuxiliarySpace::new(Identity::new(n))
-      .with_correction(csr(&prolong), Box::new(DenseInverse::spd(m.clone())));
+      .with_correction(csr(&prolong), Box::new(DenseInverse::new(&m)));
 
     let r = Vector::from_fn(n, |i, _| (i as f64 + 1.0).sqrt());
     let expected = &r + &prolong * m.try_inverse().unwrap() * (prolong.transpose() * &r);
@@ -198,11 +167,11 @@ mod tests {
     let b = AuxiliarySpace::new(Jacobi::weighted(&csr(&spd(n, 0.5)), 0.7))
       .with_correction(
         csr(&DMatrix::from_fn(n, 4, |i, j| ((3 * i + j) as f64).sin())),
-        Box::new(DenseInverse::spd(spd(4, 0.9))),
+        Box::new(DenseInverse::new(&spd(4, 0.9))),
       )
       .with_correction(
         csr(&DMatrix::from_fn(n, 2, |i, j| ((i + 5 * j) as f64).cos())),
-        Box::new(DenseInverse::spd(spd(2, 0.2))),
+        Box::new(DenseInverse::new(&spd(2, 0.2))),
       );
 
     let r = Vector::from_fn(n, |i, _| (i as f64 - 3.0).tanh());
