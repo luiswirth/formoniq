@@ -277,15 +277,20 @@ impl HodgeDirac {
     &self.op
   }
 
+  /// Where grade $k$ sits in the flat layout: its offset and its DOF count,
+  /// the one place the layout is read.
+  fn block(&self, grade: impl Into<ExteriorGrade>) -> (usize, usize) {
+    let grade = grade.into();
+    let offset = self.offsets[grade.index()];
+    (offset, self.offsets[(grade + 1).index()] - offset)
+  }
+
   /// Pack a field's per-grade coefficients into the flat vector, in grade order.
   /// The field must already live in this complex's DOFs.
   pub fn flatten(&self, field: &MixedField) -> Vector {
     let mut y = Vector::zeros(self.ndofs_total());
     for k in self.dim().range_inclusive() {
-      let (off, n) = (
-        self.offsets[k.index()],
-        self.offsets[(k + 1).index()] - self.offsets[k.index()],
-      );
+      let (off, n) = self.block(k);
       y.rows_mut(off, n).copy_from(field.grade(k).coeffs());
     }
     y
@@ -297,10 +302,7 @@ impl HodgeDirac {
       .dim()
       .range_inclusive()
       .map(|k| {
-        let (off, n) = (
-          self.offsets[k.index()],
-          self.offsets[(k + 1).index()] - self.offsets[k.index()],
-        );
+        let (off, n) = self.block(k);
         Cochain::new(k, y.rows(off, n).into_owned())
       })
       .collect();
@@ -331,7 +333,8 @@ impl HodgeDirac {
   pub fn grade_parity_coloring(&self) -> Vec<bool> {
     let mut color = vec![false; self.ndofs_total()];
     for k in (1..=self.dim().index()).step_by(2).map(Dim::from) {
-      color[self.offsets[k.index()]..self.offsets[(k + 1).index()]].fill(true);
+      let (off, n) = self.block(k);
+      color[off..off + n].fill(true);
     }
     color
   }
@@ -504,7 +507,7 @@ pub fn solve_dirac_source(
   for k in relative.dim().range_inclusive() {
     let e_k = relative.inclusion(k);
     for (r, c, &v) in e_k.triplet_iter() {
-      inclusion.push(dirac.offsets[k.index()] + r, col_offset + c, v);
+      inclusion.push(dirac.block(k).0 + r, col_offset + c, v);
     }
     col_offset += relative.ndofs(k);
   }
@@ -613,7 +616,7 @@ mod test {
       .dim()
       .range_inclusive()
       .map(|k| {
-        let n = dirac.offsets[(k + 1).index()] - dirac.offsets[k.index()];
+        let n = dirac.block(k).1;
         Cochain::new(
           k,
           Vector::from_fn(n, |i, _| ((7 * i + 3 * k.index() + 1) % 11) as f64 - 5.0),
@@ -699,10 +702,7 @@ mod test {
         let grades = dim
           .range_inclusive()
           .map(|k| {
-            let (off, n) = (
-              dirac.offsets[k.index()],
-              dirac.offsets[(k + 1).index()] - dirac.offsets[k.index()],
-            );
+            let (off, n) = dirac.block(k);
             Cochain::new(k, chol[k.index()].solve(&mv.rows(off, n).into_owned()))
           })
           .collect();
@@ -841,10 +841,7 @@ mod test {
         let grades = dim
           .range_inclusive()
           .map(|k| {
-            let (off, n) = (
-              dirac.offsets[k.index()],
-              dirac.offsets[(k + 1).index()] - dirac.offsets[k.index()],
-            );
+            let (off, n) = dirac.block(k);
             Cochain::new(k, lu[k.index()].solve(&mv.rows(off, n).into_owned()))
           })
           .collect();
