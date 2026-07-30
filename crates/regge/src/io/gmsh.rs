@@ -28,13 +28,9 @@ pub fn gmsh2coord_complex(bytes: &[u8]) -> (Complex, MeshCoords) {
 pub fn gmsh2coord_complex_ordered(bytes: &[u8]) -> (Complex, MeshCoords, Option<CellOrdering>) {
   let (cells, coords, words) = gmsh2coord_cells_ordered(bytes);
   let complex = Complex::from_cells(cells);
-  // A file may list a cell twice, which the skeleton dedups; then the words do
-  // not name the cells one for one and there is no ordering to speak of.
-  let ordering = (words.len() == complex.cells().len()).then(|| {
-    let ordering = CellOrdering::new(&complex, words);
-    ordering.is_face_consistent(&complex).then_some(ordering)
-  });
-  (complex, coords, ordering.flatten())
+  let ordering =
+    CellOrdering::try_new(&complex, words).filter(|ordering| ordering.is_face_consistent(&complex));
+  (complex, coords, ordering)
 }
 
 /// Load Gmesh `.msh` file (version 4.1).

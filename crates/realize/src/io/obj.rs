@@ -141,11 +141,8 @@ pub fn parse_wound(obj: &str) -> Result<(Complex, MeshCoords, Option<Orientation
   let words: Vec<Vec<usize>> = triangles.iter().map(|t| t.to_vec()).collect();
   let (complex, coords) = TriangleSurface3D::new(triangles, coords).into_coord_complex();
 
-  // A file may list a face twice, which the skeleton dedups; then the words do
-  // not name the cells one for one and there is no winding to read.
-  let orientation = (words.len() == complex.cells().len())
-    .then(|| CellOrdering::new(&complex, words).induced_orientation(&complex))
-    .flatten();
+  let orientation = CellOrdering::try_new(&complex, words)
+    .and_then(|ordering| ordering.induced_orientation(&complex));
   Ok((complex, coords, orientation))
 }
 

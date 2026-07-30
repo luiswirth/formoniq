@@ -73,13 +73,27 @@ impl CellOrdering {
   /// cells it built, in whatever order it built them.
   ///
   /// # Panics
-  /// If a word is not a permutation of the vertices of a cell of `complex`, if
-  /// two words name the same cell, or if a cell is left unnamed. An ordering is
-  /// total over the cells or it is not an ordering.
+  /// If a word is not a permutation of the vertices of a cell of `complex`, or
+  /// if the words do not name each cell exactly once. An ordering is total over
+  /// the cells or it is not an ordering; [`Self::try_new`] is the reading for
+  /// words that may fail to be one.
   pub fn new(complex: &Complex, words: impl IntoIterator<Item = Vec<VertexIdx>>) -> Self {
+    Self::try_new(complex, words).expect("every cell needs exactly one ordering word")
+  }
+
+  /// The ordering the words describe, or `None` if they describe none.
+  ///
+  /// A generator or a mesh file may emit the same cell twice, which the
+  /// skeleton dedups; then the words no longer name the cells one for one and
+  /// there is no ordering to speak of. That is a property of the input, not a
+  /// malformed one, so it is answered rather than raised. A word that is not a
+  /// cell of `complex` at all still panics.
+  pub fn try_new(
+    complex: &Complex,
+    words: impl IntoIterator<Item = Vec<VertexIdx>>,
+  ) -> Option<Self> {
     let dim = complex.dim();
-    let ncells = complex.cells().len();
-    let mut slots: Vec<Option<Vec<VertexIdx>>> = vec![None; ncells];
+    let mut slots: Vec<Option<Vec<VertexIdx>>> = vec![None; complex.cells().len()];
     for word in words {
       let (_, simplex) = Simplex::from_word(word.clone());
       assert_eq!(
@@ -88,16 +102,12 @@ impl CellOrdering {
         "an ordering word must have as many vertices as a cell"
       );
       let kidx = complex.skeleton(dim).kidx_by_simplex(&simplex);
-      assert!(
-        slots[kidx].replace(word).is_none(),
-        "two ordering words name the same cell"
-      );
+      if slots[kidx].replace(word).is_some() {
+        return None;
+      }
     }
-    let words = slots
-      .into_iter()
-      .map(|word| word.expect("every cell needs an ordering word"))
-      .collect();
-    Self { dim, words }
+    let words = slots.into_iter().collect::<Option<_>>()?;
+    Some(Self { dim, words })
   }
 
   pub fn dim(&self) -> Dim {
