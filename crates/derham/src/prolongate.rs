@@ -44,9 +44,7 @@ use {
   simplicial::{
     atlas::{Bary, MeshPoint, SimplexQuadRule},
     linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
-    topology::{
-      VertexIdx, complex::Complex, handle::SimplexIdx, refine::Subdivision, simplex::unit_subsimps,
-    },
+    topology::{VertexIdx, complex::Complex, handle::SimplexIdx, refine::Subdivision},
   },
 };
 
@@ -75,9 +73,7 @@ pub fn prolongation_matrix(
 
   // The coarse cell's Whitney basis forms, standard on the reference cell, in
   // the colex order its faces come in, so they zip against `faces(grade)`.
-  let basis_forms: Vec<WhitneyLsf> = unit_subsimps(dim, grade)
-    .map(|dof_simp| WhitneyLsf::unit(dim, dof_simp))
-    .collect();
+  let basis_forms: Vec<WhitneyLsf> = WhitneyLsf::basis(dim, grade).collect();
   let qr = SimplexQuadRule::degree(grade, 1);
 
   let ncoarse = coarse_complex.nsimplices(grade);

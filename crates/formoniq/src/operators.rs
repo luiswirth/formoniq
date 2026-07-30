@@ -960,9 +960,7 @@ mod test {
       for grade in dim.range() {
         let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
 
-        let difwhitneys: Vec<_> = unit_subsimps(dim, grade)
-          .map(|simp| WhitneyLsf::unit(dim, simp).dif())
-          .collect();
+        let difwhitneys: Vec<_> = WhitneyLsf::basis(dim, grade).map(|lsf| lsf.dif()).collect();
         let mut gramian = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {

@@ -4,7 +4,7 @@ use super::form::WhitneyLsf;
 
 use {
   multialgebra::{Dim, ExteriorGrade, Tensor},
-  simplicial::{atlas::Bary, topology::simplex::unit_subsimps},
+  simplicial::atlas::Bary,
 };
 
 /// The values of a DOF-indexed family of shape forms at a sequence of points,
@@ -29,9 +29,7 @@ impl LsfSamples {
   /// The Whitney shape functions of a grade, at the given points.
   pub fn whitney(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>, nodes: &[Bary]) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    let lsfs: Vec<_> = unit_subsimps(dim, grade)
-      .map(|dof_simp| WhitneyLsf::unit(dim, dof_simp))
-      .collect();
+    let lsfs: Vec<_> = WhitneyLsf::basis(dim, grade).collect();
     let values = nodes
       .iter()
       .map(|bary| lsfs.iter().map(|lsf| lsf.at_bary(bary)).collect())
@@ -45,9 +43,7 @@ impl LsfSamples {
   /// The resulting family has grade $k+1$.
   pub fn whitney_dif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>, nnodes: usize) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    let difs: Vec<_> = unit_subsimps(dim, grade)
-      .map(|dof_simp| WhitneyLsf::unit(dim, dof_simp).dif())
-      .collect();
+    let difs: Vec<_> = WhitneyLsf::basis(dim, grade).map(|lsf| lsf.dif()).collect();
     Self {
       grade: grade + 1,
       values: vec![difs; nnodes],

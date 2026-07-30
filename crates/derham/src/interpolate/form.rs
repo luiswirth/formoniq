@@ -69,6 +69,20 @@ impl WhitneyLsf {
     }
   }
 
+  /// The whole basis of one grade on the reference cell, in the colex order of
+  /// the DOF vertex sets, which is the order the faces of a cell come in.
+  ///
+  /// Reference data: every chart of the atlas is the same chart up to the
+  /// labelling of its vertices, so this family is built once and read on every
+  /// cell of the mesh.
+  pub fn basis(
+    cell_dim: impl Into<Dim>,
+    grade: impl Into<ExteriorGrade>,
+  ) -> impl Iterator<Item = Self> {
+    let cell_dim = cell_dim.into();
+    unit_subsimps(cell_dim, grade.into()).map(move |dof_simp| Self::unit(cell_dim, dof_simp))
+  }
+
   pub fn cell_dim(&self) -> Dim {
     self.cell_dim
   }
