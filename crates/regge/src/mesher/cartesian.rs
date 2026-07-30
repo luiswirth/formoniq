@@ -1,6 +1,7 @@
 use simplicial::linalg::{Matrix, Vector};
 
 use crate::coord::mesh::MeshCoords;
+use crate::mesher::quasi_uniform_counts;
 use metric::Metric;
 use simplicial::{
   Dim,
@@ -86,20 +87,12 @@ impl CartesianGrid {
       rect,
     }
   }
-  /// A grid whose cells are as near cubical as the counts allow: the count on
-  /// each axis is scaled by that axis's length, so the spacing is
-  /// quasi-uniform. `ncells_longest` fixes the resolution of the longest axis.
-  ///
-  /// This is what keeps a long, thin box from being meshed into slivers, and it
-  /// agrees with the isotropic constructors on a cube.
+  /// A grid whose cells are as near cubical as the counts allow
+  /// ([`quasi_uniform_counts`]), agreeing with the isotropic constructors on a
+  /// cube.
   pub fn new_quasi_uniform(min: Vector, max: Vector, ncells_longest: usize) -> Self {
     let rect = Rect::new_min_max(min, max);
-    let sides = rect.side_lengths();
-    let longest = sides.iter().copied().fold(0.0_f64, f64::max);
-    let ncells = sides
-      .iter()
-      .map(|&side| ((side / longest * ncells_longest as f64).round() as usize).max(1))
-      .collect();
+    let ncells = quasi_uniform_counts(&rect.side_lengths(), ncells_longest);
     Self {
       topology: CartesianTopology::new(ncells),
       rect,

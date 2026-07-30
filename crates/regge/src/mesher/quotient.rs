@@ -30,6 +30,7 @@ use multiindex::Radix;
 
 use crate::lengths::mesh::MeshLengthsSq;
 use crate::mesher::cartesian::CartesianGrid;
+use crate::mesher::quasi_uniform_counts;
 use simplicial::{
   Dim,
   linalg::Vector,
@@ -161,9 +162,9 @@ impl FlatQuotient {
     }
   }
 
-  /// A quotient whose cells are as near equilateral as the counts allow: the
-  /// count on each axis is scaled by that axis's period, so the spacing is
-  /// quasi-uniform. `ncells_longest` fixes the resolution of the longest axis.
+  /// A quotient whose cells are as near equilateral as the counts allow
+  /// ([`quasi_uniform_counts`]), raising each axis to the cells its
+  /// identification needs.
   ///
   /// This is the constructor to reach for whenever the periods differ, which is
   /// most of the family: a Möbius band is a long strip, and giving its
@@ -174,13 +175,10 @@ impl FlatQuotient {
     identifications: Vec<Identification>,
     ncells_longest: usize,
   ) -> Self {
-    let longest = side_lengths.iter().copied().fold(0.0_f64, f64::max);
-    let ncells = side_lengths
-      .iter()
+    let ncells = quasi_uniform_counts(&side_lengths, ncells_longest)
+      .into_iter()
       .zip(&identifications)
-      .map(|(&side, id)| {
-        ((side / longest * ncells_longest as f64).round() as usize).max(id.min_cells())
-      })
+      .map(|(ncells, id)| ncells.max(id.min_cells()))
       .collect();
     Self::new_anisotropic(side_lengths, identifications, ncells)
   }
