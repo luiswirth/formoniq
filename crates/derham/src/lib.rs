@@ -11,7 +11,6 @@ extern crate nalgebra as na;
 pub use simplicial::topology::chain::{Chain, Cochain, pairing};
 
 pub mod interpolate;
-pub mod io;
 pub mod project;
 pub mod prolongate;
 pub mod section;
