@@ -13,7 +13,7 @@
 //! either the parent or the boundary, and cannot tell which.
 //!
 //! A field reaches the surface by its trace. $i^*: C^k (M) -> C^k (diff M)$
-//! ([`BoundaryComplex::trace_operator`]) is a cochain map, so $i^* dif = dif i^*$
+//! ([`Subcomplex::trace_operator`]) is a cochain map, so $i^* dif = dif i^*$
 //! and the traced coefficients are a genuine Whitney form on $diff M$, not a
 //! resample, not a nodal recovery. This is what makes drawing it honest.
 //!
@@ -25,7 +25,7 @@
 //! predicate that separates the two, and a mark that needs the volume must say
 //! so rather than trace to zero and draw nothing.
 
-use regge::boundary::BoundaryComplexExt;
+use regge::subcomplex::SubcomplexExt;
 use std::borrow::Cow;
 
 use derham::Cochain;
@@ -33,7 +33,7 @@ use multialgebra::ExteriorGrade;
 use regge::coord::mesh::MeshCoords;
 use simplicial::{
   linalg::Vector,
-  topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx},
+  topology::{complex::Complex, handle::KSimplexIdx, subcomplex::Subcomplex},
 };
 
 /// The 2-manifold (or lower) a scene's marks are drawn on, together with the
@@ -45,7 +45,7 @@ use simplicial::{
 pub struct Surface {
   /// `None` exactly when the mesh is already its own render surface: either
   /// $n <= 2$, or a closed solid, which has no boundary to draw at all.
-  boundary: Option<BoundaryComplex>,
+  boundary: Option<Subcomplex>,
   /// The boundary's own vertex coordinates, restricted from the parent's.
   coords: Option<MeshCoords>,
 }
@@ -73,10 +73,7 @@ impl Surface {
   /// The surface's own complex. A proper manifold in its own right, whichever
   /// branch the reduction took.
   pub fn complex<'a>(&'a self, parent: &'a Complex) -> &'a Complex {
-    self
-      .boundary
-      .as_ref()
-      .map_or(parent, BoundaryComplex::complex)
+    self.boundary.as_ref().map_or(parent, Subcomplex::complex)
   }
 
   /// The surface's own vertex coordinates.
@@ -109,7 +106,7 @@ impl Surface {
   /// cochain on $diff M$, borrowed unchanged where the reduction is the
   /// identity.
   ///
-  /// This is [`BoundaryComplex::trace_operator`], gathering the parent
+  /// This is [`Subcomplex::trace_operator`], gathering the parent
   /// coefficients at `parent_kidxs` is that matrix's definition, applied
   /// without materializing it, since a permutation-and-select needs no sparse
   /// product.

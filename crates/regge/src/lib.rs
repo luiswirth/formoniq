@@ -3,10 +3,10 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-pub mod boundary;
 pub mod coord;
 pub mod lengths;
 pub mod refine;
+pub mod subcomplex;
 
 pub mod io;
 pub mod mesher;
