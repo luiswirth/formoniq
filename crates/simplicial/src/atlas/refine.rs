@@ -36,7 +36,7 @@
 //! they are supported on: the key is what a shared point agrees on across
 //! charts.
 
-use super::{Bary, LocalCartesian, SimplexCoords, bary2local};
+use super::{Bary, LocalCartesian, SimplexCoords, bary2local, lattice_bary};
 use crate::Dim;
 use crate::linalg::{Matrix, Vector};
 
@@ -165,11 +165,7 @@ impl UnitRefinement {
   /// The barycentric coordinates $lambda = k \/ R$ of the `ivertex`-th lattice
   /// vertex.
   pub fn vertex_bary(&self, ivertex: usize) -> Bary {
-    let scale = (self.refinement as f64).recip();
-    Bary::new(Vector::from_iterator(
-      (self.dim + 1).index(),
-      self.vertices[ivertex].iter().map(|&k| k as f64 * scale),
-    ))
+    lattice_bary(&self.vertices[ivertex], self.refinement)
   }
 
   /// The `ichild`-th child realized in the parent chart's local frame, its
