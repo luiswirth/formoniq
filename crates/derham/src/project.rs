@@ -31,7 +31,7 @@
 use crate::{cochain::Cochain, section::Section, trace::FaceTrace};
 
 use {
-  multialgebra::{Tensor, exterior_power},
+  multialgebra::{Tensor, Variance},
   multiindex::Combination,
   simplicial::{
     Dim,
@@ -70,8 +70,7 @@ pub fn derham_map(field: &impl Section, topology: &Complex, quad_degree: usize) 
 }
 
 /// The tangent blade $v_1 wedge dots.c wedge v_k$ of a face of the reference
-/// cell, in the cell's reference frame: the single column
-/// $Lambda^k V in RR^(binom(n,k) times 1)$ of the $k$-minors of its spanning
+/// cell, in the cell's reference frame: the [`Tensor::blade_of`] its spanning
 /// vectors.
 ///
 /// An `exterior` construction on `simplicial` combinatorics, and so it lives here
@@ -79,10 +78,10 @@ pub fn derham_map(field: &impl Section, topology: &Complex, quad_degree: usize) 
 /// cell has spanning vectors in the cell's chart whatever geometry the mesh
 /// carries, and none at all if it carries none.
 pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> Tensor {
-  let grade = positions.card() - 1;
-  let spanning = unit_face_spanning_vectors(cell_dim, positions);
-  let coeffs = exterior_power(&spanning, grade).column(0).into_owned();
-  Tensor::multivector(coeffs, cell_dim, grade)
+  Tensor::blade_of(
+    &unit_face_spanning_vectors(cell_dim, positions),
+    Variance::Contravariant,
+  )
 }
 
 /// $integral_sigma omega$ over a face of a cell, expressed in that cell's

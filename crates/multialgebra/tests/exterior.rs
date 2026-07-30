@@ -536,3 +536,75 @@ fn dualizing_a_slot_is_a_relabelling() {
     }
   }
 }
+
+/// The blade of a frame is the wedge of its columns, and that identification is
+/// what makes it functorial: pushing the frame forward along a map and taking
+/// the blade is taking the blade and pushing it forward, $Lambda^k (A F) =
+/// (Lambda^k A)(Lambda^k F)$, which is Cauchy-Binet read on one column.
+///
+/// Stated together with the fold over `wedge`, because the two being the same
+/// object is the whole content: one is the definition, the other is what the
+/// implementation computes.
+#[test]
+fn the_blade_of_a_frame_is_the_wedge_of_its_columns() {
+  for dim in 1..=4 {
+    for grade in 0..=dim {
+      let frame = probe_matrix(dim, grade, 3);
+      let blade = Tensor::blade_of(&frame, Variance::Contravariant);
+
+      assert_eq!(blade.slots()[0].variance, Variance::Contravariant);
+      assert_eq!(blade.components().len(), exterior_dim(dim, grade));
+
+      // The fold: the empty wedge is the unit, so grade 0 is covered too.
+      let folded =
+        frame
+          .column_iter()
+          .fold(Tensor::one(dim).dualize_slot(0), |acc: Tensor, column| {
+            acc.wedge(&Tensor::line(column.into_owned(), Variance::Contravariant))
+          });
+      assert_relative_eq!(blade.components(), folded.components(), epsilon = 1e-12);
+
+      // Functoriality along a map of the underlying space.
+      let map = probe_matrix(dim, dim, 5);
+      let pushed_frame = Tensor::blade_of(&(&map * &frame), Variance::Contravariant);
+      assert_relative_eq!(
+        pushed_frame.components(),
+        blade.pushforward(&map).components(),
+        epsilon = 1e-10
+      );
+    }
+  }
+}
+
+/// A blade vanishes exactly when its frame is dependent: that is the statement
+/// that a decomposable blade *is* the subspace its frame spans, and it is the
+/// half of the law that can fail --- an implementation returning zero always
+/// would pass the vanishing side alone.
+#[test]
+fn a_blade_vanishes_exactly_on_a_dependent_frame() {
+  for dim in 1..=4 {
+    for grade in 1..=dim {
+      let independent = probe_matrix(dim, grade, 3);
+      assert!(
+        Tensor::blade_of(&independent, Variance::Contravariant)
+          .components()
+          .norm()
+          > 1e-9
+      );
+
+      // Repeat the first column: dependent as soon as there are two of them.
+      let mut dependent = independent.clone();
+      if grade >= 2 {
+        let first = dependent.column(0).into_owned();
+        dependent.set_column(1, &first);
+        assert_relative_eq!(
+          Tensor::blade_of(&dependent, Variance::Contravariant)
+            .components()
+            .norm(),
+          0.0,
+          epsilon = 1e-12
+        );
+      }
+    }
+  }
+}
