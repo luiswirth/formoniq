@@ -20,13 +20,14 @@
 //! only if it also lies within tolerance of the cell's affine hull.
 
 use super::{CoordRef, simplex::SimplexRefExt};
+use coorder::{Ambient, affine::AffineTransform};
 use simplicial::{
   Dim,
-  atlas::{Bary, Local, MeshPoint, local2bary},
+  atlas::{Bary, LocalCartesian, MeshPoint, is_bary_inside, local2bary},
   topology::{complex::Complex, handle::SimplexIdx},
 };
 
-use simplicial::linalg::{Matrix, Vector};
+use simplicial::linalg::Vector;
 
 /// An axis-aligned bounding box in $RR^d$.
 #[derive(Debug, Clone)]
@@ -83,17 +84,18 @@ impl BvhNode {
   }
 }
 
-/// The cached affine data of one cell: the barycentric coordinates of a global
-/// point are $lambda(x) = "local2bary"(A^+ (x - v_0))$, and the residual
-/// $norm(x - v_0 - A A^+ (x - v_0))$ is its distance from the cell's affine
-/// hull (nonzero only on embedded manifolds).
+/// The affine maps of one cell, held rather than derived per query: its
+/// parametrization out of the reference chart and the chart inverting it.
+///
+/// The barycentric coordinates of a global point are `local2bary` of the chart
+/// applied to it, and the residual of the round trip through both maps is its
+/// distance from the cell's affine hull, nonzero only on an embedded manifold.
+/// The chart costs a pseudo-inverse to form, which is what a spatial index
+/// exists to pay once.
 struct CellAffine {
   kidx: usize,
-  base: Vector,
-  /// The spanning vectors $A$ (ambient x intrinsic).
-  spanning: Matrix,
-  /// The pseudo-inverse $A^+$ (intrinsic x ambient).
-  inv: Matrix,
+  parametrization: AffineTransform<LocalCartesian, Ambient>,
+  chart: AffineTransform<Ambient, LocalCartesian>,
 }
 
 /// A bounding-volume hierarchy over the cells of a coordinate mesh, answering
@@ -106,10 +108,16 @@ pub struct PointLocator {
   order: Vec<usize>,
   nodes: Vec<BvhNode>,
   root: usize,
-  eps: f64,
+  /// The slack of the bounding-box and affine-hull tests, a length, hence read
+  /// off the mesh. The containment test proper is barycentric and needs none.
+  length_tolerance: f64,
 }
 
 const LEAF_SIZE: usize = 4;
+
+/// How far outside a cell a query point may lie and still be located in it, as
+/// a fraction of the diameter of the whole mesh.
+const RELATIVE_TOLERANCE: f64 = 1e-9;
 
 impl PointLocator {
   /// Build the hierarchy over the cells of `topology` with the geometry
@@ -133,15 +141,18 @@ impl PointLocator {
       total = total.union(&bbox);
       centroids.push(0.5 * (&bbox.min + &bbox.max));
       boxes.push(bbox);
+      let parametrization = simp.affine_transform();
       cells.push(CellAffine {
         kidx: cell.kidx(),
-        base: simp.base_vertex().view().into_owned(),
-        spanning: simp.linear_transform(),
-        inv: simp.inv_linear_transform(),
+        chart: parametrization.pseudo_inverse(),
+        parametrization,
       });
     }
 
-    let eps = 1e-9 * total.diagonal().max(1.0);
+    // A containment test on a face is decided by roundoff, so the tolerance is
+    // read off the mesh's own extent: a query on a mesh scaled by a factor
+    // must answer what it answered before the scaling.
+    let length_tolerance = RELATIVE_TOLERANCE * total.diagonal();
 
     let mut order: Vec<usize> = (0..cells.len()).collect();
     let mut nodes = Vec::new();
@@ -163,7 +174,7 @@ impl PointLocator {
       order,
       nodes,
       root,
-      eps,
+      length_tolerance,
     }
   }
 
@@ -182,7 +193,7 @@ impl PointLocator {
     let mut stack = vec![self.root];
     while let Some(node) = stack.pop() {
       let node = &self.nodes[node];
-      if !node.bbox().contains(x, self.eps) {
+      if !node.bbox().contains(x, self.length_tolerance) {
         continue;
       }
       match node {
@@ -207,19 +218,17 @@ impl PointLocator {
   /// (and, on an embedded manifold, within tolerance of its affine hull).
   fn try_barycentric(&self, prim: usize, x: CoordRef) -> Option<Bary> {
     let cell = &self.cells[prim];
-    let offset = x.view() - &cell.base;
-    let local = Local::new(&cell.inv * &offset);
+    let local = cell.chart.apply_forward(x);
 
     if self.embedded {
-      let residual = (&offset - &cell.spanning * local.vector()).norm();
-      if residual > self.eps {
+      let hull_point = cell.parametrization.apply_forward(local.as_view());
+      if (x.view() - hull_point.view()).norm() > self.length_tolerance {
         return None;
       }
     }
 
     let bary = local2bary(&local);
-    let inside = bary.iter().all(|&b| b >= -self.eps && b <= 1.0 + self.eps);
-    inside.then_some(bary)
+    is_bary_inside(&bary).then_some(bary)
   }
 }
 
@@ -289,43 +298,51 @@ mod test {
 
   /// The BVH locator agrees with the brute-force linear scan on every query,
   /// and reports points outside the mesh as such.
+  ///
+  /// Swept over the scale of the mesh as well as its dimension: which cell
+  /// holds a point is invariant under scaling the geometry and the query
+  /// together, so the tolerances the locator applies must be too.
   #[test]
   fn locator_matches_brute_force() {
     for dim in (1..=3usize).map(Dim::from) {
-      let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
-      let locator = PointLocator::new(&topology, &coords);
+      for scale in [1e-4, 1.0, 1e4] {
+        let (topology, mut coords) = CartesianGrid::new_unit(dim, 3).triangulate();
+        *coords.matrix_mut() *= scale;
+        let locator = PointLocator::new(&topology, &coords);
 
-      // A grid of probe points covering the unit cube and a margin outside it.
-      // A distinct per-axis phase keeps the points off cell faces and off the
-      // triangulation diagonals, where the strict and tolerant tests would
-      // legitimately disagree on measure-zero boundary sets.
-      let samples: usize = 5;
-      let phase = [0.041, 0.113, 0.237];
-      let probe = |i: usize, d: usize| -0.2 + 1.4 * (i as f64 + phase[d]) / samples as f64;
-      for flat in 0..samples.pow(dim.index() as u32) {
-        let x = Coord::from_iterator(
-          dim.index(),
-          (0..dim.index()).map(|d| probe(flat / samples.pow(d as u32) % samples, d)),
-        );
+        // A grid of probe points covering the unit cube and a margin outside it.
+        // A distinct per-axis phase keeps the points off cell faces and off the
+        // triangulation diagonals, where the strict and tolerant tests would
+        // legitimately disagree on measure-zero boundary sets.
+        let samples: usize = 5;
+        let phase = [0.041, 0.113, 0.237];
+        let probe =
+          |i: usize, d: usize| scale * (-0.2 + 1.4 * (i as f64 + phase[d]) / samples as f64);
+        for flat in 0..samples.pow(dim.index() as u32) {
+          let x = Coord::from_iterator(
+            dim.index(),
+            (0..dim.index()).map(|d| probe(flat / samples.pow(d as u32) % samples, d)),
+          );
 
-        let brute = coords.find_cell_containing(&topology, x.as_view());
-        let found = locator.locate(&x);
+          let brute = coords.find_cell_containing(&topology, x.as_view());
+          let found = locator.locate(&x);
 
-        match (brute, &found) {
-          (Some(_), Some(loc)) => {
-            // The located cell must actually contain x, and its barycentric
-            // coordinates must reconstruct the point.
-            let simp = loc.chart(&topology).coord_simplex(&coords);
-            assert!(simp.is_global_inside(x.as_view()), "dim={dim} x={x:?}");
-            let reconstructed = simp.bary2global(loc.bary());
-            assert!((&reconstructed - &x).norm() < 1e-9);
+          match (brute, &found) {
+            (Some(_), Some(loc)) => {
+              // The located cell must actually contain x, and its barycentric
+              // coordinates must reconstruct the point.
+              let simp = loc.chart(&topology).coord_simplex(&coords);
+              assert!(simp.is_global_inside(x.as_view()), "dim={dim} x={x:?}");
+              let reconstructed = simp.bary2global(loc.bary());
+              assert!((&reconstructed - &x).norm() < 1e-9 * scale);
+            }
+            (None, None) => {}
+            (a, b) => panic!(
+              "disagreement at x={x:?}: brute={} bvh={}",
+              a.is_some(),
+              b.is_some()
+            ),
           }
-          (None, None) => {}
-          (a, b) => panic!(
-            "disagreement at x={x:?}: brute={} bvh={}",
-            a.is_some(),
-            b.is_some()
-          ),
         }
       }
     }
