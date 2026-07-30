@@ -21,14 +21,14 @@
 mod util;
 
 use {
-  derham::{Cochain, project::derham_map, section::CoordFieldExt},
+  derham::Cochain,
   formoniq::{
     problems::wave::{WaveState, cfl_dt, solve_wave},
     whitney_complex::{HilbertComplex, WhitneyComplex},
   },
   regge::mesher::cartesian::CartesianGrid,
   simplicial::linalg::Vector,
-  util::{BoundaryCondition, BoxEigenform},
+  util::relative_eigenform_cochain,
 };
 
 use std::f64::consts::{PI, TAU};
@@ -60,15 +60,9 @@ fn main() {
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     for grade in 0..=dim {
-      // Released from rest with a boundary-compatible bump: the relative
-      // eigenform vanishes on $diff K$, so homogeneous Dirichlet conditions are
-      // exactly the relative complex.
-      let form = BoxEigenform::new(dim, grade, BoundaryCondition::Relative);
-      let initial = derham_map(
-        &form.solution().pullback_on(&topology, &coords),
-        &topology,
-        3,
-      );
+      // Released from rest, with the boundary-compatible bump the relative
+      // complex admits.
+      let initial = relative_eigenform_cochain(dim, grade, &topology, &coords);
       let state = WaveState::new(initial.into_coeffs(), Vector::zeros(whitney.ndofs(grade)));
       let relative = whitney.relative();
 

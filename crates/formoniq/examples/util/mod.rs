@@ -271,6 +271,24 @@ impl BoxEigenform {
   }
 }
 
+/// The relative eigenform of the box as a cochain on the mesh: the
+/// boundary-compatible state the evolution examples start from.
+///
+/// It vanishes on $diff K$, so homogeneous Dirichlet conditions are exactly the
+/// relative complex, and it reaches the mesh the way every continuum datum
+/// does: pulled back along the affine cell charts, then integrated by the de
+/// Rham map.
+pub fn relative_eigenform_cochain(
+  dim: usize,
+  grade: usize,
+  topology: &Complex,
+  coords: &regge::coord::mesh::MeshCoords,
+) -> derham::Cochain {
+  use derham::section::CoordFieldExt;
+  let form = BoxEigenform::new(dim, grade, BoundaryCondition::Relative);
+  derham::project::derham_map(&form.solution().pullback_on(topology, coords), topology, 3)
+}
+
 /// Whether coordinate $i$ carries a $sin$ factor: for the absolute BC that is
 /// the tangential indices ($i < k$), for the relative BC the normal ones. The
 /// two problems are the $sin arrow.l.r cos$ swap.
