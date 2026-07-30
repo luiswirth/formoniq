@@ -2,7 +2,8 @@ use super::EdgeIdx;
 use simplicial::{Dim, topology::simplex::nedges};
 
 use metric::{CausalType, Metric};
-use multialgebra::Variance;
+use multialgebra::tensor::Slots;
+use multialgebra::{Factor, Slot, Tensor, Variance};
 use multiindex::{Combination, combinations, factorial};
 use simplicial::linalg::{Matrix, Vector};
 
@@ -184,6 +185,52 @@ pub fn cayley_menger_factor(dim: Dim) -> f64 {
     / 2f64.powi(dim.index() as i32)
 }
 
+/// The symmetric square $u_e dot.circle u_e$ of each edge vector of an
+/// $n$-simplex, in edge order: a **basis of $"Sym"^2$ indexed by the edges**.
+///
+/// The dimension count is the whole point and it is not a coincidence. An
+/// $n$-simplex has $binom(n+1, 2) = n(n+1)\/2$ edges and
+/// $dim "Sym"^2(RR^n) = n(n+1)\/2$, the same number, and these squares are
+/// linearly independent, hence a basis. Squared edge lengths are therefore
+/// exactly the components of the metric in the basis dual to this one:
+/// $s_e = angle.l g, u_e dot.circle u_e angle.r$, and
+/// [`SimplexLengthsSq::metric`] is that change of basis, the polarization
+/// identity being what it looks like written out.
+///
+/// It is also why the geometry of a *subsimplex* costs nothing (invariant 2). A
+/// face's edges are a subset of the simplex's, so restricting the metric to a
+/// face is *selecting the components indexed by that face's edges* -- an index
+/// selection, where the cartesian frame would need a projection. Totality over
+/// every grade is a property of this basis rather than of the code.
+///
+/// Metric-free: the edge vectors are read off the chart, $e_(i-1)$ pointing from
+/// vertex $0$ to vertex $i$, and no length is taken. A function of `dim` alone,
+/// like every other datum of the reference cell.
+pub fn unit_edge_squares(dim: impl Into<Dim>) -> Vec<Tensor> {
+  let dim = dim.into();
+  let n = dim.index();
+  combinations(n + 1, 2)
+    .map(|edge| {
+      let (vi, vj) = (edge.index_at(0), edge.index_at(1));
+      // The edge from vi to vj in the chart's frame, vertex 0 being the origin.
+      let mut u = Vector::zeros(n);
+      if vi > 0 {
+        u[vi - 1] -= 1.0;
+      }
+      if vj > 0 {
+        u[vj - 1] += 1.0;
+      }
+      let line = |u: Vector| {
+        Tensor::new(
+          Slots::from_iter([Slot::new(Factor::symmetric(1), Variance::Contravariant, n)]),
+          u,
+        )
+      };
+      line(u.clone()).product(&line(u))
+    })
+    .collect()
+}
+
 impl SimplexLengthsSq {
   /// Regge calculus: the squared lengths a metric tensor induces on the
   /// edges of the unit simplex, on any signature.
@@ -238,9 +285,20 @@ impl SimplexLengthsSq {
 #[cfg(test)]
 mod test {
   use super::*;
+  use multialgebra::tensor::pairing;
   use multiindex::Dim;
 
   use approx::assert_relative_eq;
+
+  /// A metric with distinct entries throughout: an equal-entry probe hides a
+  /// wrong weight in a basis change.
+  fn probe_metric(dim: usize) -> Metric {
+    let a = Matrix::from_fn(dim, dim, |i, j| ((3 * i + 7 * j) % 5) as f64 / 5.0);
+    Metric::new(
+      Variance::Covariant,
+      a.transpose() * &a + Matrix::identity(dim, dim),
+    )
+  }
 
   /// from_metric and metric are inverse -- on every
   /// signature, the flat models pulled back to non-diagonal form included.
@@ -290,6 +348,101 @@ mod test {
         SimplexLengthsSq::unit(dim).vol(),
         epsilon = 1e-12
       );
+    }
+  }
+
+  /// The edge squares are a **basis** of $"Sym"^2$: as many as its dimension,
+  /// and independent. The count is $binom(n+1,2) = n(n+1)\/2 = dim "Sym"^2(RR^n)$,
+  /// so a rank check is what separates "the right number" from "a basis".
+  #[test]
+  fn the_edge_squares_are_a_basis_of_sym2() {
+    for dim in (0..=4usize).map(Dim::from) {
+      let squares = unit_edge_squares(dim);
+      let sym2 = Factor::symmetric(2).multidim(dim);
+      assert_eq!(squares.len(), nedges(dim));
+      assert_eq!(squares.len(), sym2);
+
+      // The point simplex has no edges and a zero-dimensional Sym^2, so the
+      // empty family *is* its basis: the count above is the whole statement and
+      // there is no rank to take.
+      if sym2 > 0 {
+        let components = Matrix::from_fn(sym2, squares.len(), |i, e| squares[e].components()[i]);
+        assert_eq!(
+          components.rank(1e-9),
+          sym2,
+          "the squares must be independent"
+        );
+      }
+    }
+  }
+
+  /// Squared edge lengths are the components of the metric in the basis dual to
+  /// the edge squares: $s_e = angle.l g, u_e dot.circle u_e angle.r$.
+  ///
+  /// The polarization identity of [`SimplexLengthsSq::metric`] and
+  /// [`SimplexLengthsSq::from_metric`] is *that change of basis*, and this is
+  /// what says so rather than asserting it in prose. Swept over every signature,
+  /// since the pairing is metric-free and so must hold on all of them.
+  #[test]
+  fn the_squared_lengths_are_the_metric_paired_with_the_edge_squares() {
+    for dim in (1..=4usize).map(Dim::from) {
+      for q in 0..=dim.index() {
+        let metric = Metric::pseudo_euclidean(dim.index() - q, q);
+        let lengths = SimplexLengthsSq::from_metric(&metric);
+        for (iedge, square) in unit_edge_squares(dim).iter().enumerate() {
+          assert_relative_eq!(
+            lengths[iedge],
+            pairing(&metric.tensor(), square),
+            epsilon = 1e-12
+          );
+        }
+      }
+    }
+  }
+
+  /// Restricting the geometry to a face is an **index selection** in the edge
+  /// basis: the face's squared lengths are the parent's at the face's own edge
+  /// indices, with nothing computed.
+  ///
+  /// This is why geometry is defined on every simplex and not only on the cells
+  /// (invariant 2). In the cartesian frame the same restriction is a projection
+  /// $J^top g J$; here the two agree, which is the statement that the edge basis
+  /// is the one adapted to the face lattice.
+  #[test]
+  fn restricting_to_a_face_selects_edge_components() {
+    for dim in (1..=4usize).map(Dim::from) {
+      let metric = probe_metric(dim.index());
+      let lengths = SimplexLengthsSq::from_metric(&metric);
+
+      for face in combinations(dim.index() + 1, dim.index()) {
+        // The face's own squared lengths, read off the parent by index alone.
+        let selected: Vec<f64> = combinations(face.card(), 2)
+          .map(|pair| {
+            lengths[edge_index(
+              face.index_at(pair.index_at(0)),
+              face.index_at(pair.index_at(1)),
+            )]
+          })
+          .collect();
+        let face_lengths = SimplexLengthsSq::new(selected.into(), (dim.index() - 1).into());
+
+        // The same restriction done the cartesian way: pull the metric back
+        // along the inclusion of the face's spanning vectors.
+        let inclusion = Matrix::from_fn(dim.index(), dim.index() - 1, |i, k| {
+          let (base, other) = (face.index_at(0), face.index_at(k + 1));
+          let mut column = 0.0;
+          if other == i + 1 {
+            column += 1.0;
+          }
+          if base == i + 1 {
+            column -= 1.0;
+          }
+          column
+        });
+        let pulled = SimplexLengthsSq::from_metric(&metric.pullback(&inclusion));
+
+        assert_relative_eq!(face_lengths.vector(), pulled.vector(), epsilon = 1e-12);
+      }
     }
   }
 }
