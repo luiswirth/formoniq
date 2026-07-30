@@ -9,7 +9,10 @@
 //! - **Intrinsic** ([`Subdivision::refine_gramians`]): each child's metric is
 //!   the parent metric pulled back along the child's Jacobian. This is the
 //!   coordinate-free refinement, and the primitive the extrinsic case must
-//!   agree with.
+//!   agree with. It is the functor and not a formula resembling it:
+//!   [`Metric::pullback`](metric::Metric::pullback) is `Tensor::pullback` on the metric's $"Sym"^2$
+//!   reading, which `metric`'s laws state, so refining a geometry is the same
+//!   operation as transporting any other covariant tensor.
 //! - **Extrinsic** ([`MeshCoords::refine`]): each new vertex is placed by the
 //!   affine combination of coarse vertices recorded in its
 //!   [`VertexBirth`](simplicial::topology::refine::VertexBirth). An embedding is not
