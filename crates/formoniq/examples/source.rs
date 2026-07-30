@@ -34,6 +34,7 @@ use {
     problems::elliptic,
     whitney_complex::{HilbertComplex, WhitneyComplex},
   },
+  multialgebra::ExteriorGrade,
   regge::mesher::cartesian::CartesianGrid,
   simplicial::topology::ordering::CellOrdering,
   util::{BoundaryCondition, BoxEigenform, algebraic_convergence_rate, report},
@@ -90,12 +91,7 @@ fn main() {
         }
         let whitney = WhitneyComplex::new(&topology, &metric);
 
-        let ndofs = whitney.ndofs(grade)
-          + if grade > 0 {
-            whitney.ndofs(grade - 1)
-          } else {
-            0
-          };
+        let ndofs = whitney.ndofs(grade) + whitney.ndofs(ExteriorGrade::from(grade) - 1);
         if !errors_l2[0].is_empty() && ndofs > MAX_DOFS {
           break;
         }
