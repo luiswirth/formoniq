@@ -78,10 +78,24 @@ impl<S: CoordSpace> FieldClosure<S> {
       Degree::ZERO,
     )
   }
-  /// A 1-form field, from its components in the standard dual basis.
-  pub fn line(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: impl Into<Dim>) -> Self {
+  /// A covector field $omega = sum_i omega_i dif x^i$, from its components in
+  /// the standard dual basis: the covariant grade-1 field, of which
+  /// [`Self::vector_field`] is the contravariant one.
+  pub fn one_form(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: impl Into<Dim>) -> Self {
     Self::new(
       move |x| Tensor::line(f(x), Variance::Covariant),
+      dim,
+      Degree::ONE,
+    )
+  }
+  /// A vector field $v = sum_i v^i diff_i$: the contravariant grade-1 field, of
+  /// which [`Self::one_form`] is the covariant one.
+  pub fn vector_field(
+    f: impl Fn(&Coords<S>) -> Vector + Sync + 'static,
+    dim: impl Into<Dim>,
+  ) -> Self {
+    Self::new(
+      move |x| Tensor::line(f(x), Variance::Contravariant),
       dim,
       Degree::ONE,
     )
@@ -96,31 +110,10 @@ impl<S: CoordSpace> FieldClosure<S> {
     assert!(icomp < dim, "Component index out of bounds");
     Self::scalar(move |x| x[icomp], dim)
   }
-  /// The scalar field of the radial distance from a center point.
+  /// The scalar field of the radial distance from a center point: the norm of
+  /// the displacement between two points of the domain.
   pub fn radial_scalar(center: Coords<S>, dim: impl Into<Dim>) -> Self {
-    let center = center.into_vector();
-    Self::scalar(move |x| (&center - x.vector()).norm(), dim)
-  }
-}
-
-impl<S: CoordSpace> DiffFormClosure<S> {
-  /// A covector field $omega = sum_i omega_i dif x^i$.
-  pub fn one_form(f: impl Fn(&Coords<S>) -> Vector + Sync + 'static, dim: impl Into<Dim>) -> Self {
-    Self::line(f, dim)
-  }
-}
-impl<S: CoordSpace> FieldClosure<S> {
-  /// A vector field $v = sum_i v^i diff_i$: contravariant, where
-  /// [`Self::line`] is the covariant 1-form.
-  pub fn vector_field(
-    f: impl Fn(&Coords<S>) -> Vector + Sync + 'static,
-    dim: impl Into<Dim>,
-  ) -> Self {
-    Self::new(
-      move |x| Tensor::line(f(x), Variance::Contravariant),
-      dim,
-      Degree::ONE,
-    )
+    Self::scalar(move |x| (x - &center).norm(), dim)
   }
 }
 

@@ -61,7 +61,11 @@ impl CoordVector for VectorView<'_> {
 /// Derefs to the storage, so all read-only linear algebra is available directly.
 pub struct Coords<S: CoordSpace, V: CoordVector = Vector> {
   entries: V,
-  space: PhantomData<S>,
+  /// The tag is a label on the value, not data it holds, so it is phantom
+  /// *output* rather than phantom ownership: what a point can be sent or
+  /// shared across is decided by its coordinates alone, exactly as for the
+  /// bare vector it tags, and never by the marker naming its space.
+  space: PhantomData<fn() -> S>,
 }
 
 /// A borrowed point of the affine space `S`: a view, for coordinates stored as
