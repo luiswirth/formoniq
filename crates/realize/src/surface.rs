@@ -95,7 +95,7 @@ impl Surface {
 
   /// Whether a grade-`k` field has a nonzero trace on the surface.
   ///
-  /// False exactly at the parent's top grade, where $C^k (diff M) = 0$. A
+  /// False above the surface's own top grade, where $C^k (diff M) = 0$. A
   /// caller that gets `false` is holding a volume quantity and must reach for
   /// a volume mark, not trace it to zero.
   pub fn traces(&self, parent: &Complex, grade: ExteriorGrade) -> bool {

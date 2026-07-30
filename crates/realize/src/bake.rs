@@ -48,10 +48,10 @@ pub struct BakedVertex {
   /// $RR^3$ has a rank-2 normal bundle, so no canonical axis), which makes the
   /// displacement the identity there rather than a case to exclude.
   pub normal: [f32; 3],
-  /// The per-vertex cap on normal displacement magnitude: a fraction of the
-  /// local curvature radius (`f32::INFINITY` where curvature imposes no bound),
-  /// clamping the shared global wave amplitude down wherever it would otherwise
-  /// fold a thin or sharply curved feature.
+  /// The per-vertex cap on normal displacement magnitude: a fraction
+  /// of the local [`reach`](vertex_reach), so it
+  /// bounds the fold through a focal point and the meeting of two sheets alike.
+  /// `f32::INFINITY` where the bake has no surface and nothing to fold.
   pub max_displacement: f32,
 }
 
@@ -124,17 +124,16 @@ pub enum PrimBatch {
   Points(Vec<u32>),
 }
 
-/// Which cell one rendered triangle's field is read in, and where its corners
-/// sit in that cell.
+/// Which cell one rendered triangle belongs to, and where its corners sit in
+/// that cell's own vertex tuple.
 ///
-/// A reduced-grade field is discontinuous across cells, only the tangential
-/// part of a section is chart-independent, so incident cells genuinely disagree
-/// at a shared vertex, and there is no single value to interpolate. The honest
-/// readout is therefore per corner, in the corner's own cell: this map is what
-/// the per-corner sampling is written against. For a surface mesh the cell is
-/// the triangle itself. For a solid's rendered boundary face it is the unique
-/// cell that face bounds. The dimension reduction stays confined here, in the
-/// bake, exactly as the primitive choice is.
+/// The triangle's position in the atlas of charts, and hence what a per-cell
+/// quantity is placed by: a barycentric lattice is a lattice of *its cell*, so
+/// laying one out (the deposit atlas) needs the corner's local index and not
+/// merely its vertex. For a surface mesh the cell is the triangle itself; for a
+/// solid's rendered boundary face it is the unique cell that face bounds. The
+/// dimension reduction stays confined here, in the bake, exactly as the
+/// primitive choice is.
 #[derive(Debug, Clone, Copy)]
 pub struct CellCorner {
   /// The cell (colex rank in the top skeleton) whose chart the field is read in.
@@ -210,16 +209,15 @@ impl BakedMesh {
         )
       }
       // A solid ($n >= 3$) has no visible interior and no slicing tool yet, so
-      // the fill is its boundary surface alone. The full interior 2-skeleton
-      // the previous rule drew was unseeable clutter, and its faces, shared by
-      // two cells, hence non-manifold, left the winding and the vertex normals
-      // meaningless. The boundary $diff M$ is a closed 2-manifold, so the fill
-      // is literally the $n = 2$ bake run on it: [`oriented_surface`] winds and
-      // normals it from $diff M$'s own coherent orientation (invariant 6),
-      // outward by its signed volume, and [`vertex_reach`] gives a real reach,
-      // all in $diff M$'s local numbering, then scattered back to the shared
-      // parent vertex table, where interior vertices keep `INFINITY` and never
-      // displace.
+      // the fill is its boundary surface alone. An interior face is shared by
+      // two cells, hence non-manifold, and both a winding and a vertex normal
+      // are meaningless on one. The boundary $diff M$ is a closed 2-manifold,
+      // so the fill is literally the $n = 2$ bake run on it: `oriented_surface`
+      // winds and normals it from $diff M$'s own coherent orientation
+      // (invariant 6), outward by its signed volume, and `vertex_reach` gives a
+      // real reach, all in $diff M$'s local numbering, then scattered back to
+      // the shared parent vertex table, where interior vertices keep `INFINITY`
+      // and never displace.
       //
       // The 1-skeleton stays the whole mesh's, not the boundary's: shown on
       // its own it is how the interior is inspected, which the fill no longer
@@ -286,6 +284,17 @@ impl BakedMesh {
       cells,
       edges,
       cell_corners,
+    }
+  }
+
+  /// The wound triangles of the fill, empty where the reduction produced no
+  /// surface ($n <= 1$, or a closed solid). The stream every per-corner
+  /// quantity of the fill is read against, the corners in the order the
+  /// rasterizer draws them.
+  pub fn fill_triangles(&self) -> &[[u32; 3]] {
+    match &self.cells {
+      PrimBatch::Triangles(triangles) => triangles,
+      _ => &[],
     }
   }
 

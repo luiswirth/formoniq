@@ -338,12 +338,7 @@ impl MeshDisplay {
     let deposit_layout = DepositLayout::new(&scene.topology, &scene.coords);
     let locator =
       (scene.topology.dim() >= 3).then(|| PointLocator::new(&scene.topology, &scene.coords));
-    let deposit_uvs = match &baked.cells {
-      realize::bake::PrimBatch::Triangles(triangles) => {
-        deposit_layout.corner_uvs(&scene.topology, triangles)
-      }
-      _ => Vec::new(),
-    };
+    let deposit_uvs = deposit_layout.corner_uvs(&baked.cell_corners);
     let vertices = baked.segment_vertices();
     let heights = vec![0.0; vertices.len()];
     let segments = match &baked.cells {
@@ -391,10 +386,10 @@ impl MeshDisplay {
     self.baked.positions.iter().map(|v| v.max_displacement)
   }
 
-  /// The rendered triangles' cell-corner map, for reading a field per corner in
-  /// its own cell (see [`realize::reduce::surface_corner_values`]).
-  pub(crate) fn cell_corners(&self) -> &[realize::bake::CellCorner] {
-    &self.baked.cell_corners
+  /// The wound triangles of the fill: what the per-corner field streams are
+  /// read against (see [`realize::reduce::corner_values`]).
+  pub(crate) fn fill_triangles(&self) -> &[[u32; 3]] {
+    self.baked.fill_triangles()
   }
 
   /// Rebinds the mesh to a different field: one buffer write per stream, no
@@ -519,32 +514,41 @@ pub(crate) fn field_attributes(
   topology: &simplicial::topology::complex::Complex,
   coords: &regge::coord::mesh::MeshCoords,
   cochain: &derham::Cochain,
-  cell_corners: &[realize::bake::CellCorner],
+  triangles: &[[u32; 3]],
   segments: &[[u32; 2]],
 ) -> (FieldAttributes, FieldRanges) {
-  let colors = realize::reduce::surface_corner_values(topology, coords, cochain, cell_corners);
+  use realize::reduce::corner_values;
+  let colors = corner_values(topology, coords, cochain, triangles.iter().copied());
   let surface_heights =
-    realize::reduce::surface_corner_heights(topology, coords, cochain, cell_corners);
+    realize::reduce::surface_corner_heights(topology, coords, cochain, triangles);
   let wire_heights = realize::reduce::nodal_heights(topology, coords, cochain);
-  let segment_colors = realize::reduce::segment_colors(topology, coords, cochain, segments);
-  let point_colors = realize::reduce::point_colors(topology, coords, cochain);
+  let segment_colors = corner_values(topology, coords, cochain, segments.iter().copied());
+  let point_colors = corner_values(
+    topology,
+    coords,
+    cochain,
+    (0..topology.nsimplices(0) as u32).map(|v| [v]),
+  );
   // Each skeleton normalizes against its own values: a k-skeleton traces a
   // different-grade density on a different scale, so a shared range would
   // flatten one to read the other.
   let fill = realize::reduce::corner_bounds(&colors);
-  let segment = realize::reduce::corner_bounds(
-    &[segment_colors[0].clone(), segment_colors[1].clone()].concat(),
-  );
+  let segment = realize::reduce::corner_bounds(&segment_colors);
   let point = realize::reduce::corner_bounds(&point_colors);
+  // The segments' corner stream carries both ends of each; the mark's vertex
+  // shader reads them as two parallel per-segment streams.
+  let segment_end = |end: usize| {
+    bake::attributes(&segment_colors[end..])
+      .into_iter()
+      .step_by(2)
+      .collect::<Vec<f32>>()
+  };
   (
     FieldAttributes {
       color: bake::attributes(&colors),
       surface_height: bake::attributes(&surface_heights),
       wire_height: bake::attributes(&wire_heights),
-      segment_colors: [
-        bake::attributes(&segment_colors[0]),
-        bake::attributes(&segment_colors[1]),
-      ],
+      segment_colors: [segment_end(0), segment_end(1)],
       point_colors: bake::attributes(&point_colors),
     },
     FieldRanges {
@@ -638,7 +642,7 @@ impl FieldDisplay {
       &scene.topology,
       &scene.coords,
       cochain,
-      mesh.cell_corners(),
+      mesh.fill_triangles(),
       mesh.segments(),
     );
     let (raw_min, raw_max) = ranges.fill;

@@ -1469,7 +1469,7 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
 mod tests {
   use super::*;
   use derham::{interpolate::interpolant::WhitneyInterpolant, section::SectionOps};
-  use realize::reduce::{nodal_heights, surface_corner_heights, surface_corner_values};
+  use realize::reduce::{corner_values, nodal_heights, surface_corner_heights};
   use simplicial::topology::handle::SimplexIdx;
 
   /// The medium is offered exactly where there is an interior to march, and
@@ -1639,7 +1639,7 @@ mod tests {
       &scene.topology,
       &scene.coords,
       &top.cochain,
-      &baked.cell_corners,
+      baked.fill_triangles(),
     );
     for corner in heights.chunks(3) {
       assert_eq!(
@@ -1667,18 +1667,12 @@ mod tests {
       &scene.topology,
       &scene.coords,
       &scalar.cochain,
-      &baked.cell_corners,
+      baked.fill_triangles(),
     );
     let mut seen: std::collections::HashMap<usize, f64> = std::collections::HashMap::new();
-    for (cc, corner) in baked.cell_corners.iter().zip(heights.chunks(3)) {
-      let vertices = SimplexIdx::new(scene.topology.dim(), cc.cell)
-        .handle(&scene.topology)
-        .simplex()
-        .vertices
-        .clone();
-      for (slot, &ilocal) in cc.local.iter().enumerate() {
-        let previous = seen.insert(vertices[ilocal], corner[slot]);
-        if let Some(previous) = previous {
+    for (triangle, corner) in baked.fill_triangles().iter().zip(heights.chunks(3)) {
+      for (slot, &vertex) in triangle.iter().enumerate() {
+        if let Some(previous) = seen.insert(vertex as usize, corner[slot]) {
           assert!((previous - corner[slot]).abs() < 1e-12);
         }
       }
@@ -2120,11 +2114,11 @@ mod tests {
     let scene = Scene::whitney_basis(2);
     let density = scene.fields.last().unwrap();
     let baked = realize::bake::BakedMesh::new(&scene.topology, &scene.coords);
-    let colors = surface_corner_values(
+    let colors = corner_values(
       &scene.topology,
       &scene.coords,
       &density.cochain,
-      &baked.cell_corners,
+      baked.fill_triangles().iter().copied(),
     );
     assert!(!colors.is_empty());
     assert!(colors.iter().all(|&v| v.abs() > 1e-9));
@@ -2168,8 +2162,12 @@ mod tests {
         .simplex_by_kidx(idof)
         .vertices;
 
-      let colors =
-        surface_corner_values(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
+      let colors = corner_values(
+        &scene.topology,
+        &scene.coords,
+        cochain,
+        baked.fill_triangles().iter().copied(),
+      );
       for (cc, corners) in baked.cell_corners.iter().zip(colors.chunks_exact(3)) {
         let cell = SimplexIdx::new(n, cc.cell).handle(&scene.topology);
         let supported = dof_vertices
@@ -2191,7 +2189,7 @@ mod tests {
   #[test]
   fn every_whitney_basis_field_bakes() {
     use realize::bake::{BakedMesh, PrimBatch};
-    use realize::reduce::{nodal_heights, surface_corner_heights, surface_corner_values};
+    use realize::reduce::{corner_values, nodal_heights, surface_corner_heights};
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
       assert!(!scene.fields.is_empty());
@@ -2208,11 +2206,19 @@ mod tests {
         .map(|f| &f.cochain)
         .chain(scene.line_fields.iter().map(|f| &f.cochain));
       for cochain in cochains {
-        let colors =
-          surface_corner_values(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
+        let colors = corner_values(
+          &scene.topology,
+          &scene.coords,
+          cochain,
+          baked.fill_triangles().iter().copied(),
+        );
         assert_eq!(colors.len(), ncorners);
-        let surface_heights =
-          surface_corner_heights(&scene.topology, &scene.coords, cochain, &baked.cell_corners);
+        let surface_heights = surface_corner_heights(
+          &scene.topology,
+          &scene.coords,
+          cochain,
+          baked.fill_triangles(),
+        );
         assert_eq!(surface_heights.len(), ncorners);
         let heights = nodal_heights(&scene.topology, &scene.coords, cochain);
         assert_eq!(heights.len(), baked.positions.len());

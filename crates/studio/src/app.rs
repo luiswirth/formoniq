@@ -406,7 +406,7 @@ impl State {
       &self.scene.topology,
       &self.scene.coords,
       &cochain,
-      self.mesh_display.cell_corners(),
+      self.mesh_display.fill_triangles(),
       self.mesh_display.segments(),
     );
     self
