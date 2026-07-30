@@ -1,9 +1,9 @@
 //! The trace of a form onto a face of a cell.
 
 use {
-  multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
+  multialgebra::{Dim, ExteriorGrade, Tensor, Variance, tensor::Transport},
   multiindex::Combination,
-  simplicial::{atlas::unit_face_spanning_vectors, linalg::Matrix},
+  simplicial::atlas::unit_face_spanning_vectors,
 };
 
 /// The trace $tr_tau = iota_tau^*: Lambda^k (T^* K) -> Lambda^k (T^* tau)$ onto
@@ -23,8 +23,8 @@ use {
 /// being reference data.
 #[derive(Debug, Clone)]
 pub struct FaceTrace {
-  /// $Lambda^k (iota_tau)^T$, of shape $binom(d, k) times binom(n, k)$.
-  map: Matrix,
+  /// The functor of $iota_tau$ on one covariant alternating slot, materialized.
+  transport: Transport,
   face_dim: Dim,
   grade: ExteriorGrade,
 }
@@ -39,7 +39,10 @@ impl FaceTrace {
     let face_dim = Dim::from(positions.card() - 1);
     let inclusion = unit_face_spanning_vectors(cell_dim, positions);
     Self {
-      map: exterior_power(&inclusion, grade).transpose(),
+      transport: Transport::new(
+        &Tensor::one_alternating(grade, Variance::Covariant, cell_dim),
+        &inclusion,
+      ),
       face_dim,
       grade,
     }
@@ -52,14 +55,15 @@ impl FaceTrace {
     self.grade
   }
 
-  /// $tr_tau omega$, valued on the face's tangent space.
+  /// $tr_tau omega$, valued on the face's tangent space: the pullback along the
+  /// inclusion, which is what a trace is.
   pub fn apply(&self, form: &Tensor) -> Tensor {
     assert_eq!(
       form.grade(),
       self.grade,
       "Trace applied at the wrong grade."
     );
-    Tensor::multiform(&self.map * form.components(), self.face_dim, self.grade)
+    self.transport.pullback(form)
   }
 
   /// The single coefficient of a trace at the face's *top* grade, $k = d$,

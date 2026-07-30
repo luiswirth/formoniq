@@ -933,12 +933,6 @@ impl Tensor {
     Self::new(slots, components)
   }
 
-  /// The functorial action of a linear map on every factor at once: the
-  /// Kronecker product of the per-factor induced maps.
-  fn induced_matrix(&self, map: &Matrix) -> Matrix {
-    induced(&self.slots, map)
-  }
-
   /// The variance every slot shares, or a panic naming why a mixed tensor has
   /// no functorial transport along an arbitrary map.
   fn transport_variance(&self, what: &str) -> Option<Variance> {
@@ -975,9 +969,7 @@ impl Tensor {
         "a covariant tensor pulls back, it does not push forward"
       );
     }
-    let components = self.induced_matrix(map) * &self.components;
-    let slots: Slots = self.slots.iter().map(|s| s.with_dim(map.nrows())).collect();
-    Self::new(slots, components)
+    Transport::new(&self.slots, map).pushforward(self)
   }
 
   /// Pullback along $A: V -> W$: the contravariant action of the functor.
@@ -1000,14 +992,125 @@ impl Tensor {
         "a contravariant tensor pushes forward, it does not pull back"
       );
     }
-    let slots: Slots = self.slots.iter().map(|s| s.with_dim(map.ncols())).collect();
+    Transport::new(&self.slots, map).pullback(self)
+  }
+}
+
+/// The maps a linear map $A: V -> W$ induces on a *fixed* tensor shape,
+/// materialized once and applied many times.
+///
+/// $Lambda^k A$ and $"Sym"^r A$ cost a compound matrix to form and nothing to
+/// apply, so wherever one map transports a whole family of tensors --- the
+/// trace onto a face at every quadrature node, a refinement child's Jacobian
+/// over every cell --- the functor is reference data and belongs outside the
+/// loop. This is that cache, and it is *the same* code path as
+/// [`Tensor::pullback`] and [`Tensor::pushforward`], which are one-shot uses of
+/// it rather than a second implementation.
+///
+/// Uniform over the slots, so it transports a $"Sym"^r times.circle Lambda^k$
+/// exactly as it does a bare multiform. That is the reason to have the object
+/// at all rather than a bare $Lambda^k A$ matrix: a stored matrix applied to raw
+/// components is the pullback only where the multiplicative basis is self-dual,
+/// which is to say on the alternating family alone.
+#[derive(Debug, Clone)]
+pub struct Transport {
+  /// The shape in the domain $V$.
+  domain: Slots,
+  /// The shape in the codomain $W$: the same factors over the other space.
+  codomain: Slots,
+  /// $times.circle_i F_i (A)$, the Kronecker product of the per-slot functors.
+  induced: Matrix,
+}
+
+impl Transport {
+  /// The functor of `map` on the given shape.
+  ///
+  /// Only the *factors* are read. The dimensions come from the map, and the
+  /// variance from the tensor being transported, never from here: a transport
+  /// carries a variance rather than imposing one, so the same object serves the
+  /// pullback of a form and the pushforward of a vector, which is exactly what
+  /// makes the two adjoint (invariant 4).
+  pub fn new(slots: &[Slot], map: &Matrix) -> Self {
+    Self {
+      domain: slots.iter().map(|s| s.with_dim(map.ncols())).collect(),
+      codomain: slots.iter().map(|s| s.with_dim(map.nrows())).collect(),
+      induced: induced(slots, map),
+    }
+  }
+
+  /// The shape this transport takes to [`Self::codomain`] under
+  /// [`Self::pushforward`], and lands in under [`Self::pullback`].
+  pub fn domain(&self) -> &[Slot] {
+    &self.domain
+  }
+  /// The shape [`Self::pushforward`] lands in, and [`Self::pullback`] consumes.
+  pub fn codomain(&self) -> &[Slot] {
+    &self.codomain
+  }
+  /// $times.circle_i F_i (A)$ itself, for a caller assembling it into a larger
+  /// matrix rather than applying it.
+  pub fn matrix(&self) -> &Matrix {
+    &self.induced
+  }
+
+  /// # Panics
+  /// If the tensor's shape is not the domain shape, or it is not uniformly
+  /// contravariant.
+  pub fn pushforward(&self, tensor: &Tensor) -> Tensor {
+    self.check(tensor, &self.domain, Variance::Contravariant, "pushforward");
+    Tensor::new(
+      Self::carrying(&self.codomain, tensor),
+      &self.induced * tensor.components(),
+    )
+  }
+
+  /// # Panics
+  /// If the tensor's shape is not the codomain shape, or it is not uniformly
+  /// covariant.
+  pub fn pullback(&self, tensor: &Tensor) -> Tensor {
+    self.check(tensor, &self.codomain, Variance::Covariant, "pullback");
 
     // A pullback dualizes: it is the adjoint of the pushforward, so it acts on
     // the reciprocal components and lands in the reciprocal basis of the domain.
     // On a symmetric slot that is what makes it the transpose of the functor
     // conjugated by alpha! rather than the bare transpose.
-    let transported = self.induced_matrix(map).transpose() * self.reciprocal();
-    Self::from_reciprocal(slots, transported)
+    Tensor::from_reciprocal(
+      Self::carrying(&self.domain, tensor),
+      self.induced.transpose() * tensor.reciprocal(),
+    )
+  }
+
+  /// The target shape wearing the transported tensor's variance: the factors
+  /// and dimensions are the transport's, the variance is the value's.
+  fn carrying(shape: &Slots, tensor: &Tensor) -> Slots {
+    shape
+      .iter()
+      .zip(tensor.slots())
+      .map(|(slot, source)| Slot::new(slot.factor, source.variance, slot.dim))
+      .collect()
+  }
+
+  fn check(&self, tensor: &Tensor, shape: &Slots, wanted: Variance, what: &str) {
+    assert!(
+      tensor
+        .slots()
+        .iter()
+        .zip(shape)
+        .all(|(a, b)| a.factor == b.factor && a.dim == b.dim)
+        && tensor.slots().len() == shape.len(),
+      "a transport applies to the shape it was built for"
+    );
+    if let Some(variance) = tensor.transport_variance(what) {
+      assert_eq!(
+        variance,
+        wanted,
+        "a {} tensor does not {what}",
+        match wanted {
+          Variance::Contravariant => "covariant",
+          Variance::Covariant => "contravariant",
+        }
+      );
+    }
   }
 }
 

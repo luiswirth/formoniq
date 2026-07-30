@@ -608,3 +608,51 @@ fn a_blade_vanishes_exactly_on_a_dependent_frame() {
     }
   }
 }
+
+/// A materialized [`Transport`] is adjoint in the same sense the one-shot
+/// transport is: $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$,
+/// with the pullback and the pushforward read off *one* stored functor.
+///
+/// Stated on a **mixed-family** shape $Lambda^k times.circle "Sym"^r$, which is
+/// the case a stored $Lambda^k A$ applied to raw components gets wrong: the
+/// multiplicative basis is self-dual on the alternating side only, so the
+/// symmetric factor is where the adjoint picks up its $alpha!$ and where an
+/// implementation that transposes without dualizing fails. A non-square map
+/// keeps the two shapes distinct so a transpose in the wrong place cannot hide.
+#[test]
+fn a_materialized_transport_is_adjoint_on_both_families() {
+  use multialgebra::tensor::{Transport, tensor_dim, uniform_slots};
+
+  for dim in 1..=3 {
+    for codim in 1..=dim {
+      let map = probe_matrix(dim, codim, 4);
+      for grade in 0..=codim {
+        for degree in 0..=2 {
+          let factors = [Factor::alternating(grade), Factor::symmetric(degree)];
+          let build = |variance, ndim, seed: usize| {
+            let slots = uniform_slots(factors, variance, ndim);
+            let len = tensor_dim(&slots);
+            Tensor::new(
+              slots,
+              Vector::from_fn(len, |i, _| ((seed + 5 * i) % 7) as f64 - 3.0),
+            )
+          };
+          // The form lives upstairs, the vector downstairs: the pullback brings
+          // the first down, the pushforward takes the second up.
+          let form = build(Variance::Covariant, dim, 1);
+          let vector = build(Variance::Contravariant, codim, 2);
+          if form.components().is_empty() || vector.components().is_empty() {
+            continue;
+          }
+
+          let transport = Transport::new(&uniform_slots(factors, Variance::Covariant, codim), &map);
+          assert_relative_eq!(
+            pairing(&transport.pullback(&form), &vector),
+            pairing(&form, &transport.pushforward(&vector)),
+            epsilon = 1e-10
+          );
+        }
+      }
+    }
+  }
+}
