@@ -23,10 +23,9 @@
 //! solve is exact), assembled as a genuinely sparse block Kronecker system and
 //! factored once for repeated stepping at a fixed $dt$.
 
-use crate::linalg::{
-  faer::{FaerCholesky, FaerLu},
-  quadratic_form_sparse,
-};
+use iterative::ApproxInverse;
+
+use crate::linalg::{DirectInverse, faer::FaerLu, quadratic_form_sparse};
 use simplicial::linalg::{CooMatrix, CsrMatrix, Matrix, Vector};
 
 /// A Butcher tableau $(A, b, c)$ for an $s$-stage Runge-Kutta method.
@@ -297,8 +296,8 @@ pub struct Leapfrog {
   idx1: Vec<usize>,
   mass0: CsrMatrix,
   mass1: CsrMatrix,
-  chol0: FaerCholesky,
-  chol1: FaerCholesky,
+  chol0: DirectInverse,
+  chol1: DirectInverse,
   /// $A_(0 1)$: the color-0 $<-$ color-1 coupling, shape $n_0 times n_1$.
   a01: CsrMatrix,
   /// $A_(1 0) = -A_(0 1)^T$: the color-1 $<-$ color-0 coupling.
@@ -362,8 +361,8 @@ impl Leapfrog {
     Self {
       idx0,
       idx1,
-      chol0: FaerCholesky::new(mass0.clone()),
-      chol1: FaerCholesky::new(mass1.clone()),
+      chol0: DirectInverse::new(mass0.clone()),
+      chol1: DirectInverse::new(mass1.clone()),
       mass0,
       mass1,
       a01,
@@ -388,9 +387,9 @@ impl Leapfrog {
     let mut q = self.gather(y0, &self.idx0);
     let mut p = self.gather(y0, &self.idx1);
 
-    p += 0.5 * self.dt * self.chol1.solve(&(&self.a10 * &q));
-    q += self.dt * self.chol0.solve(&(&self.a01 * &p));
-    p += 0.5 * self.dt * self.chol1.solve(&(&self.a10 * &q));
+    p += 0.5 * self.dt * self.chol1.apply(&(&self.a10 * &q));
+    q += self.dt * self.chol0.apply(&(&self.a01 * &p));
+    p += 0.5 * self.dt * self.chol1.apply(&(&self.a10 * &q));
 
     let mut y1 = Vector::zeros(self.ndofs);
     self.scatter(&mut y1, &self.idx0, &q);
@@ -411,7 +410,7 @@ impl Leapfrog {
     let q = self.gather(y, &self.idx0);
     let p = self.gather(y, &self.idx1);
     let a10q = &self.a10 * &q;
-    let defect = a10q.dot(&self.chol1.solve(&a10q));
+    let defect = a10q.dot(&self.chol1.apply(&a10q));
     0.5 * quadratic_form_sparse(&self.mass0, &q) + 0.5 * quadratic_form_sparse(&self.mass1, &p)
       - self.dt * self.dt / 8.0 * defect
   }

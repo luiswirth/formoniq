@@ -28,6 +28,8 @@
 //!
 //! [`WhitneyComplex::relative_to`]: crate::whitney_complex::WhitneyComplex::relative_to
 
+use iterative::ApproxInverse;
+
 use crate::{
   assemble::assemble_galvec,
   operators::SourceElVec,
@@ -35,7 +37,7 @@ use crate::{
 };
 
 use {
-  crate::linalg::faer::FaerCholesky,
+  crate::linalg::DirectInverse,
   derham::{Cochain, section::Section},
   multialgebra::ExteriorGrade,
   simplicial::{
@@ -55,7 +57,7 @@ pub struct LiftedSystem {
   system: CsrMatrix,
   inclusion: CsrMatrix,
   lift: Vector,
-  cholesky: FaerCholesky,
+  inverse: DirectInverse,
   grade: ExteriorGrade,
 }
 
@@ -72,19 +74,19 @@ impl LiftedSystem {
     let lift = boundary.extend_cochain(boundary_values).into_coeffs();
     let inclusion = relative.inclusion(grade);
     let system_relative = inclusion.transpose() * &system * &inclusion;
-    let cholesky = FaerCholesky::new(system_relative);
+    let inverse = DirectInverse::new(system_relative);
     Self {
       system,
       inclusion,
       lift,
-      cholesky,
+      inverse,
       grade,
     }
   }
 
   pub fn solve(&self, rhs: &Vector) -> Cochain {
     let rhs_relative = self.inclusion.transpose() * (rhs - &self.system * &self.lift);
-    let solution_relative = self.cholesky.solve(&rhs_relative);
+    let solution_relative = self.inverse.apply(&rhs_relative);
     Cochain::new(self.grade, &self.inclusion * solution_relative + &self.lift)
   }
 }

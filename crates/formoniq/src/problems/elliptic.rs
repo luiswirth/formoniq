@@ -4,13 +4,13 @@ use {
   crate::linalg::{
     DirectInverse,
     eigen::{EigenError, sparse_shift_invert_eigen},
-    faer::{FaerCholesky, FaerLu},
+    faer::FaerLu,
   },
   derham::Cochain,
   multialgebra::ExteriorGrade,
 };
 
-use iterative::{BlockDiagonal, StopCriterion, krylov::minres};
+use iterative::{ApproxInverse, BlockDiagonal, StopCriterion, krylov::minres};
 use itertools::Itertools;
 use simplicial::Dim;
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Matrix, Vector};
@@ -324,7 +324,7 @@ impl HodgeBlocks {
     if self.n_sigma == 0 {
       return Vector::zeros(0);
     }
-    FaerCholesky::new(self.mass_sigma.clone()).solve(&(self.codif_dn() * u))
+    DirectInverse::new(self.mass_sigma.clone()).apply(&(self.codif_dn() * u))
   }
 
   /// The mixed Hodge-Laplacian $mat(M_(k-1), -(D^(k-1))^T M_k; M_k D^(k-1), K)$
