@@ -31,7 +31,7 @@
 use crate::{
   assemble::assemble_galvec,
   operators::SourceElVec,
-  whitney_complex::{BoundaryWhitneyComplex, RelativeWhitneyComplex},
+  whitney_complex::{BoundaryWhitneyComplex, HilbertComplex, RelativeWhitneyComplex},
 };
 
 use {

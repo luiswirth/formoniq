@@ -24,7 +24,7 @@ use {
   derham::{Cochain, project::derham_map, section::CoordFieldExt},
   formoniq::{
     problems::wave::{WaveState, cfl_dt, solve_wave},
-    whitney_complex::WhitneyComplex,
+    whitney_complex::{HilbertComplex, WhitneyComplex},
   },
   regge::mesher::cartesian::CartesianGrid,
   simplicial::linalg::Vector,

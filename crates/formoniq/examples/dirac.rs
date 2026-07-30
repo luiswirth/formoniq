@@ -42,7 +42,7 @@ extern crate nalgebra as na;
 use derham::{project::derham_map, section::CoordFieldExt};
 use formoniq::{
   problems::dirac::{HodgeDirac, MixedField, solve_dirac},
-  whitney_complex::WhitneyComplex,
+  whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 use glatt::field::DiffFormClosure;
 use regge::mesher::cartesian::CartesianGrid;

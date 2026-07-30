@@ -10,7 +10,11 @@ extern crate nalgebra as na;
 
 use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
-use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
+use formoniq::{
+  assemble, bc,
+  operators::SourceElVec,
+  whitney_complex::{HilbertComplex, WhitneyComplex},
+};
 use glatt::field::DiffFormClosure;
 use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;
