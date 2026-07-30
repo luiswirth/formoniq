@@ -3,9 +3,9 @@
 //! (`ui.rs`), builds the current selection's display (`display.rs`), and
 //! hands its draw list to the [`Renderer`], which owns every pipeline.
 //!
-//! What is here is what a *window* adds, and nothing else: the surface, the
+//! What is here is what a window adds, and nothing else: the surface, the
 //! event loop, the input, egui, and the clock. Everything from a [`Scene`] to a
-//! draw list is `display.rs`, which a headless export drives identically -- the
+//! draw list is `display.rs`, which a headless export drives identically, the
 //! two differ only in where the frame's time comes from, and time is the
 //! renderer's argument.
 //!
@@ -20,7 +20,7 @@ use winit::{
   event_loop::{ActiveEventLoop, ControlFlow},
   window::{Window, WindowId},
 };
-// The event loop is constructed only by the native `run`; the web build enters
+// The event loop is constructed only by the native `run`. The web build enters
 // through `web::start`, which owns its own loop.
 #[cfg(not(target_arch = "wasm32"))]
 use winit::event_loop::EventLoop;
@@ -71,38 +71,38 @@ const SPRINT_FACTOR: f32 = 3.0;
 /// Orthographic keyboard navigation: `WASD` pans this many view-heights per
 /// second, `Space`/`Shift` zoom at this many e-folds per second. Screen-relative
 /// rather than world-relative like the perspective fly, because a flat view has
-/// a natural on-screen scale -- its half-extent -- and no depth to fly into, so
+/// a natural on-screen scale, its half-extent, and no depth to fly into, so
 /// panning a fraction of the visible region per second is what keeps the feel
 /// constant across zoom.
 const PAN_SCREENS_PER_SECOND: f32 = 1.2;
 const KEY_ZOOM_PER_SECOND: f32 = 2.5;
 
 /// What a held mouse button means. The three are one rotation primitive and one
-/// translation: orbit and look differ *only* in the center they rotate about
+/// translation: orbit and look differ only in the center they rotate about
 /// ([`Camera::rotate`]), and pan is the translation that keeps the pivot's depth
 /// under the cursor.
 #[derive(Clone, Copy)]
 enum Drag {
-  /// Rotate about where the *view axis* meets the mesh, picked when the drag
-  /// began and held for its duration -- re-deriving it mid-drag would move the
+  /// Rotate about where the view axis meets the mesh, picked when the drag
+  /// began and held for its duration, re-deriving it mid-drag would move the
   /// center the gesture is defined by, since the eye is what the gesture moves.
   ///
   /// Neither of the two tempting alternatives:
   ///
-  /// *Not the point under the cursor.* That center is off the view axis, so the
+  /// Not the point under the cursor. That center is off the view axis, so the
   /// object swings across the viewport instead of spinning in place, and it
   /// moves with every press, so no two drags agree.
   ///
-  /// *Not a depth along the axis* ([`Camera::pivot`]). That is the object's
+  /// Not a depth along the axis ([`Camera::pivot`]). That is the object's
   /// centroid at the default framing and follows a zoom, but it is a point in
   /// air: fly toward the mesh and the depth goes stale, leaving the center
   /// buried behind the surface and the orbit swinging about the inside of the
   /// object. Re-picking against the geometry is what makes flying and orbiting
-  /// compose -- it is derived from what is actually there, so nothing it depends
+  /// compose: it is derived from what is actually there, so nothing it depends
   /// on can drift.
   ///
   /// The cost, paid knowingly: on a solid framed whole, the axis meets the
-  /// *near* surface rather than the centroid, so the bulk swings a little more
+  /// near surface rather than the centroid, so the bulk swings a little more
   /// than a true turntable would.
   Orbit {
     pivot: nalgebra::Point3<f32>,
@@ -125,7 +125,7 @@ pub(crate) struct State {
 
   /// What of the mesh is drawn, and how the selected field is read on it: the
   /// two objects on screen, settled separately because they are separate. Viewer
-  /// state, not either object's -- everything is built whatever these say, so a
+  /// state, not either object's, everything is built whatever these say, so a
   /// toggle costs a draw call (or, for the displacement, a material field) and
   /// never a rebake.
   mesh_view: crate::ui::MeshView,
@@ -142,8 +142,8 @@ pub(crate) struct State {
   post: crate::ui::Post,
 
   /// Whether the one-time welcome modal is still up. Seeded from the persisted
-  /// first-run marker (`welcome::should_show`), cleared -- and the marker
-  /// written -- the frame the reader dismisses it. Purely a viewer concern, so
+  /// first-run marker (`welcome::should_show`), cleared, and the marker
+  /// written, the frame the reader dismisses it. Purely a viewer concern, so
   /// it lives here beside the other shell state.
   show_welcome: bool,
 
@@ -156,25 +156,25 @@ pub(crate) struct State {
 
   /// Advection steps already taken by the particles on display.
   ///
-  /// The renderer steps a population forward; it cannot evaluate one at an
+  /// The renderer steps a population forward. It cannot evaluate one at an
   /// instant. So the window remembers how far it has stepped and asks only for
   /// the difference. Reset to the clock's current count whenever the field
   /// changes, because a fresh `FieldDisplay` is a fresh population sitting at
-  /// its seeds -- not one that owes the whole elapsed history at once.
+  /// its seeds, not one that owes the whole elapsed history at once.
   steps_taken: u32,
 
   /// The drag in progress, if any: which gesture the held button means.
   drag: Option<Drag>,
-  /// The cursor's position, tracked whether or not a button is down -- a press
+  /// The cursor's position, tracked whether or not a button is down, a press
   /// does not carry one, and a press is exactly when the pivot must be picked
   /// from under it.
   cursor: Option<winit::dpi::PhysicalPosition<f64>>,
   last_mouse_pos: Option<winit::dpi::PhysicalPosition<f64>>,
 
   /// The fingers currently touching the surface, in the order they landed.
-  /// Touch has no hover -- a finger exists only while down -- so this is both
+  /// Touch has no hover, a finger exists only while down, so this is both
   /// the pointer state and the gesture's arity: one finger looks, two pinch.
-  /// The mouse path is untouched by it; the two input sources are independent
+  /// The mouse path is untouched by it. The two input sources are independent
   /// and a device that emits one never emits the other for the same motion.
   touches: Vec<(u64, winit::dpi::PhysicalPosition<f64>)>,
   /// The touch gesture's baseline from the previous move: the centroid every
@@ -191,7 +191,7 @@ pub(crate) struct State {
   keys_held: std::collections::HashSet<winit::keyboard::KeyCode>,
   /// Wall-clock time of the last frame, for the fly controls' `dt`. Distinct
   /// from [`WaveClock`]: that one is the pausable animation clock the
-  /// renderer is handed, this is real elapsed time, which movement must
+  /// renderer is handed: this is real elapsed time, which movement must
   /// always follow even while the wave is paused.
   last_frame: web_time::Instant,
 
@@ -212,7 +212,7 @@ pub(crate) struct State {
   pending_selection: Option<Selection>,
   /// Fixed at scene-build time: the object's coordinate extent (its radius),
   /// which sets the standing-wave displacement scale for whichever field is on
-  /// display and the world-space width of the segment marks -- an
+  /// display and the world-space width of the segment marks, an
   /// object-intrinsic length, so the lobes read at orbital scale on any mesh,
   /// however finely triangulated.
   amplitude_scale: f32,
@@ -367,7 +367,7 @@ impl State {
   /// control: a stall, a paused window or a debugger breakpoint would otherwise
   /// present a frame with thousands of dispatches to catch up on, and the catch-up
   /// would itself stall the next frame. Dropping the excess lets the flow fall
-  /// behind the wave clock rather than freezing the viewer -- the honest failure
+  /// behind the wave clock rather than freezing the viewer, the honest failure
   /// for a mark whose whole job is to be watched.
   fn pending_steps(&mut self) -> u32 {
     let owed = crate::display::steps_at(self.clock.time()).saturating_sub(self.steps_taken);
@@ -393,7 +393,7 @@ impl State {
   /// Re-bakes the displayed field's stream from its interpolated frame at the
   /// current clock time, when that field is a trajectory. A no-op otherwise:
   /// a static field and a standing wave are baked once and re-timed on the GPU,
-  /// so only a sampled trajectory owes a per-frame CPU rewrite -- exactly the
+  /// so only a sampled trajectory owes a per-frame CPU rewrite, exactly the
   /// "scrubbing a trajectory rewrites only the field stream" the bake draws.
   fn rebake_trajectory(&self) {
     let time_model = self.scene.field_time(self.selection);
@@ -414,8 +414,8 @@ impl State {
       .write_attributes(&self.ctx.queue, &attributes);
   }
 
-  /// Displays `selection` of the *current* scene, rebuilding exactly the pieces
-  /// that depend on it and restarting the wave clock. Unconditional -- callers
+  /// Displays `selection` of the current scene, rebuilding exactly the pieces
+  /// that depend on it and restarting the wave clock. Unconditional, callers
   /// that only want to act on an actual change (the common case) go through
   /// [`Self::set_field`] instead.
   fn apply_field(&mut self, selection: Selection) {
@@ -448,8 +448,8 @@ impl State {
   }
 
   /// Requests that `study` be shown on the current mesh. A cached pair (an
-  /// already-solved grade) installs instantly; an uncached one -- a grade's
-  /// eigensolve -- runs on a background thread via `gallery`, and
+  /// already-solved grade) installs instantly. An uncached one, a grade's
+  /// eigensolve, runs on a background thread via `gallery`, and
   /// [`Self::poll_view_load`] installs the result once it lands, so this call
   /// never blocks the UI.
   fn set_study(&mut self, study: Study) {
@@ -459,9 +459,9 @@ impl State {
   }
 
   /// Switches the gallery's mesh to a regenerable source and installs the scene
-  /// it hands back -- a cache hit, or a placeholder on the new mesh shown at
+  /// it hands back, a cache hit, or a placeholder on the new mesh shown at
   /// once while the current study re-solves in the background. A no-op source
-  /// change installs nothing; a build failure is recorded on the gallery and
+  /// change installs nothing. A build failure is recorded on the gallery and
   /// shown in the panel, leaving the current mesh in place.
   fn set_mesh_source(&mut self, source: MeshSource) {
     match self.gallery.select_mesh(source) {
@@ -479,7 +479,7 @@ impl State {
   ///
   /// The marks apply at once rather than pending: they are a view setting, not
   /// a fact about the scene, so there is nothing to wait for. A preset that
-  /// names none leaves the reader's current toggles alone -- only an explicit
+  /// names none leaves the reader's current toggles alone, only an explicit
   /// opening view overrides them.
   fn set_preset(&mut self, index: usize) {
     self.pending_selection = self.presets[index].selection;
@@ -519,8 +519,8 @@ impl State {
     }
   }
 
-  /// Installs a scene the gallery just handed over -- a cache hit or a finished
-  /// build -- opening it on its first mode. The selection and camera from the
+  /// Installs a scene the gallery just handed over, a cache hit or a finished
+  /// build, opening it on its first mode. The selection and camera from the
   /// old scene are never reused here (unlike [`Self::set_field`]'s early-out):
   /// a selection valid in one grade can be out of range in another, and a
   /// camera tuned for the sphere is not a natural start for the flat reference
@@ -599,7 +599,7 @@ impl State {
           // A flat, face-on view does not rotate: tumbling it would only tilt
           // the plane away from the observer, which is the one thing the
           // orthographic view exists to keep square. So every button pans and
-          // the view stays a 2D map -- the one place the interaction reads the
+          // the view stays a 2D map, the one place the interaction reads the
           // projection, mirrored in the keyboard split below.
           Some(Drag::Pan)
         } else {
@@ -637,7 +637,7 @@ impl State {
         self.last_mouse_pos = Some(*position);
 
         match drag {
-          // One primitive, two centers -- the whole content of the
+          // One primitive, two centers, the whole content of the
           // orbit/look distinction.
           // `pivot_distance` needs no update: a rigid rotation about the pivot
           // conserves the distance to it, which is the invariant that keeps the
@@ -677,7 +677,7 @@ impl State {
   }
 
   /// Touch navigation, the finger counterpart to the mouse split above and
-  /// built on the same camera primitives -- one finger looks (pans, in the
+  /// built on the same camera primitives, one finger looks (pans, in the
   /// orthographic view that does not rotate), two fingers pinch to zoom and
   /// drag to pan. Nothing here is web-only: winit delivers `Touch` on every
   /// platform that has a touchscreen, so a touch laptop gets the same gestures
@@ -744,7 +744,7 @@ impl State {
 
   /// Turns the current finger configuration into a camera motion, relative to
   /// the baseline the last move (or [`Self::reseat_touch`]) left. One finger
-  /// rotates about the eye -- the look gesture, or a pan in the orthographic
+  /// rotates about the eye, the look gesture, or a pan in the orthographic
   /// view that declines rotation, mirroring the mouse. Two fingers pinch about
   /// their centroid and pan by its translation, the two composing the way a map
   /// does.
@@ -766,7 +766,7 @@ impl State {
             .rotate(dx * RADIANS_PER_PIXEL, dy * RADIANS_PER_PIXEL, eye);
         }
         _ => {
-          // One finger in the orthographic view, or two in either -- both pan.
+          // One finger in the orthographic view, or two in either, both pan.
           let scale = self.camera.world_per_pixel(self.size.height);
           self.camera.eye += (self.camera.up() * dy - self.camera.right() * dx) * scale;
         }
@@ -789,8 +789,8 @@ impl State {
     self.touch_spread = self.touch_spread_now();
   }
 
-  /// Where a ray meets the mesh, or -- on a miss, and for a bake with no
-  /// surface at all -- the point at the current pivot depth along it. The
+  /// Where a ray meets the mesh, or, on a miss, and for a bake with no
+  /// surface at all, the point at the current pivot depth along it. The
   /// fallback is what keeps the gestures built on this total: pointing at empty
   /// space still yields a point, rather than making every caller conditional on
   /// having hit something.
@@ -831,7 +831,7 @@ impl State {
   ///
   /// The one zoom primitive, shared by the wheel and the orthographic keys.
   /// Multiplicative, so the step is a fraction of the remaining distance and the
-  /// approach is asymptotic -- the surface cannot be zoomed through, which is
+  /// approach is asymptotic, the surface cannot be zoomed through, which is
   /// what makes a fixed clamp unnecessary. The pivot depth scales with it: that
   /// is the orthographic frustum's only sense of scale, so this is exactly what
   /// makes a parallel projection zoom at all rather than sit at a fixed
@@ -844,9 +844,9 @@ impl State {
 
   /// Keyboard navigation, dispatched by projection.
   ///
-  /// The two views have different natural motions -- a perspective camera flies
+  /// The two views have different natural motions, a perspective camera flies
   /// through the scene, an orthographic one slides across a flat view and zooms
-  /// -- so this is where the interaction reads the projection, the keyboard
+  ///, so this is where the interaction reads the projection, the keyboard
   /// counterpart to the mouse split at the button press. The primitives beneath
   /// (the eye translation, the multiplicative zoom) are shared; only which key
   /// drives which is chosen here.
@@ -862,7 +862,7 @@ impl State {
   }
 
   /// Orthographic navigation: `WASD` pans the flat view, `Space`/`Shift` zoom
-  /// out/in, `Ctrl` sprints. No motion along the view -- a parallel projection
+  /// out/in, `Ctrl` sprints. No motion along the view, a parallel projection
   /// has no depth to move into, so a "forward" key would change nothing but the
   /// clip planes.
   fn apply_ortho_movement(&mut self, dt: f32) {
@@ -877,7 +877,7 @@ impl State {
 
     // Pan in the view plane, screen-relative: a fraction of the visible height
     // per second, so a keypress covers the same on-screen distance however far
-    // zoomed -- the same scale the mouse pan reads, one from seconds and one
+    // zoomed, the same scale the mouse pan reads, one from seconds and one
     // from pixels.
     let pan = self.camera.right() * axis(KeyCode::KeyD, KeyCode::KeyA)
       + self.camera.up() * axis(KeyCode::KeyW, KeyCode::KeyS);
@@ -888,7 +888,7 @@ impl State {
     }
 
     // Zoom about the view center: `Space` out, `Shift` in. About the center and
-    // not the cursor because a key is not a pointing gesture -- the wheel is the
+    // not the cursor because a key is not a pointing gesture, the wheel is the
     // one that zooms where you point.
     let zoom_in = f32::from(held(KeyCode::ShiftLeft) || held(KeyCode::ShiftRight));
     let e_folds = (zoom_in - f32::from(held(KeyCode::Space))) * KEY_ZOOM_PER_SECOND * sprint * dt;
@@ -901,15 +901,15 @@ impl State {
   /// Fly the eye: `WASD` along the view, `Space`/`Shift` along world up, `Ctrl`
   /// to sprint.
   ///
-  /// Forward is where the camera *looks*, pitch included -- not the yaw-only
+  /// Forward is where the camera looks, pitch included, not the yaw-only
   /// level flight a first-person game uses. That split exists to respect a
   /// ground plane, and a mesh in $RR^3$ has none: nothing here is standing on
   /// anything, so flight has no reason to stay level.
   ///
-  /// Ascent is the exception and is deliberately *world* up, not the screen's:
+  /// Ascent is the exception and is deliberately world up, not the screen's:
   /// panning the view up-screen is what the middle button already does, so
-  /// leaving `Space` to mean the one thing that survives any orientation --
-  /// actually ascending -- is what keeps a pitched-over camera navigable.
+  /// leaving `Space` to mean the one thing that survives any orientation,
+  /// actually ascending, is what keeps a pitched-over camera navigable.
   fn apply_fly_movement(&mut self, dt: f32) {
     use winit::keyboard::KeyCode;
     let held = |code| self.keys_held.contains(&code);
@@ -957,7 +957,7 @@ impl State {
     let study = self.gallery.study.clone();
 
     // The current scene's modes, as the picker needs them. Scalar and line
-    // fields both feed in; for a single mesh grade exactly one list is
+    // fields both feed in. For a single mesh grade exactly one list is
     // populated, so the pyramid is over that grade alone.
     let entries: Vec<Entry> = self
       .scene
@@ -1030,7 +1030,7 @@ impl State {
     // Borrow only the file dialogs into the closure: the rest of the panel is
     // driven by `model`, so these disjoint fields can be touched inside the
     // closure without conflicting with the `&mut self` calls after it. Their own
-    // borrow ends with the closure, before those calls. Native only -- the web
+    // borrow ends with the closure, before those calls. Native only, the web
     // panel raises neither dialog.
     #[cfg(not(target_arch = "wasm32"))]
     let file_dialog = &mut self.file_dialog;
@@ -1070,7 +1070,7 @@ impl State {
       }
 
       // Both browsers draw as their own windows and open on the panel's
-      // request; each must be updated within the frame, after the panel. `Ui`
+      // request. Each must be updated within the frame, after the panel. `Ui`
       // derefs to `Context`, which is what `FileDialog::update` takes.
       #[cfg(not(target_arch = "wasm32"))]
       {
@@ -1087,14 +1087,14 @@ impl State {
     });
     let response = response.expect("the closure always runs exactly once");
 
-    // Persist the dismissal once, the frame it happens, so the next launch --
-    // this session's or a later one's -- skips the greeting.
+    // Persist the dismissal once, the frame it happens, so the next launch,
+    // this session's or a later one's, skips the greeting.
     if welcome_dismissed {
       self.show_welcome = false;
       crate::welcome::mark_seen();
     }
 
-    // The two view settings are applied *before* the pair can change, for the same
+    // The two view settings are applied before the pair can change, for the same
     // reason `selection` is not applied after: it describes the mesh the panel
     // was drawn on, and a mesh of a different dimension derives its own default
     // ([`crate::ui::MeshView::for_dim`]). Applied afterward it would write the
@@ -1109,7 +1109,7 @@ impl State {
     // A finished file pick, a preset, a mesh-source change and a study switch
     // each replace the field set and the camera's natural orientation
     // wholesale, so the `selection`/`orthographic` picked this same frame belong to
-    // the pair being left and must not be applied afterward -- the setters
+    // the pair being left and must not be applied afterward, the setters
     // choose both anew for what they land on. They are mutually exclusive in
     // priority (at most one such widget moves per frame anyway); a preset sets
     // both axes at once, so it precedes the individual axis switches.
@@ -1140,7 +1140,7 @@ impl State {
       }
     }
 
-    // These are orthogonal to which field is shown -- pausing the wave, hiding a
+    // These are orthogonal to which field is shown, pausing the wave, hiding a
     // mark, changing the display transform: none of them touches the pair, the
     // selection or a buffer. So they apply regardless of the branch above, where
     // being inside it would silently drop a toggle that happened to fire on the
@@ -1182,7 +1182,7 @@ impl State {
     // Re-framing the scene reads only its coordinates and the current aspect,
     // touching neither the shown pair nor a buffer, so it applies here with the
     // other orthogonal view changes. It discards a fly-through's pose, which is
-    // the whole point -- the way back when the object has gone off screen.
+    // the whole point, the way back when the object has gone off screen.
     if response.reset_camera {
       self.camera = default_camera(&self.scene, self.camera.aspect);
     }
@@ -1226,7 +1226,7 @@ impl State {
     )
   }
 
-  /// Writes the current view -- this field, this camera, this wave phase -- to
+  /// Writes the current view, this field, this camera, this wave phase, to
   /// `path` as a PNG still, at the window's own resolution. The same draw list
   /// and camera the window is rendering, handed to the headless path, so the
   /// still is exactly what is on screen (minus the egui panels). A write failure
@@ -1289,8 +1289,8 @@ impl State {
         self.resize(self.size);
         return Ok(NextFrame::Now);
       }
-      // `Occluded` here is normally moot -- `about_to_wait` already stops
-      // chasing redraws once `WindowEvent::Occluded(true)` lands -- but
+      // `Occluded` here is normally moot, `about_to_wait` already stops
+      // chasing redraws once `WindowEvent::Occluded(true)` lands, but
       // `Timeout`/`Validation` are surface trouble that isn't occlusion (e.g.
       // a transient GPU stall) and `about_to_wait` will immediately request
       // another frame regardless. A short sleep here is the backstop against
@@ -1319,7 +1319,7 @@ impl State {
       });
 
     // A trajectory's field stream is re-baked from its current frame before the
-    // draw list is built; a static field or standing wave rebakes nothing (the
+    // draw list is built. A static field or standing wave rebakes nothing (the
     // GPU re-times those), so this is a no-op away from a trajectory.
     self.rebake_trajectory();
 
@@ -1395,18 +1395,18 @@ impl State {
   /// The redraw-on-demand policy for the frame just presented: whether the loop
   /// must chase another frame, park until an event, or wake at an egui deadline.
   ///
-  /// A frame is *live* -- and so asks for the next one immediately -- when the
+  /// A frame is live, and so asks for the next one immediately, when the
   /// scene is moving on its own: a background solve still running (its result
   /// arrives off the event loop, so only continued polling sees it), a held fly
   /// key, or a playing clock driving a field that actually varies in time (a
   /// standing wave, a trajectory, or a line field's advected particles). A static
-  /// field with the clock paused and no input is *not* live: nothing on screen
+  /// field with the clock paused and no input is not live: nothing on screen
   /// will change until the reader acts, so the loop parks. egui's own repaint
   /// need is folded in last, so a widget animation still runs over a still scene.
   fn next_frame(&self, egui_repaint: std::time::Duration) -> NextFrame {
     let field_animates = match self.selection {
       // Particles advect through a line field while the clock runs, whatever its
-      // `FieldTime`; a scalar field moves only if its own time model does.
+      // `FieldTime`. A scalar field moves only if its own time model does.
       Selection::Line(_) => true,
       Selection::Scalar(i) => self.scene.fields[i].time.animates(),
     };
@@ -1420,7 +1420,7 @@ impl State {
       NextFrame::Wait
     } else {
       // On the web the browser's animation-frame callback paces the loop, so
-      // there is no `WaitUntil` to honour -- fall back to chasing the next frame
+      // there is no `WaitUntil` to honour, fall back to chasing the next frame
       // and let the rAF cadence throttle it.
       #[cfg(target_arch = "wasm32")]
       {
@@ -1438,7 +1438,7 @@ impl State {
 /// without losing the phase reached. Time advances only while `playing`; a
 /// pause freezes the accumulated total and a resume starts a fresh wall-clock
 /// span from it, so the wave holds still under the cursor and picks up exactly
-/// where it stopped -- the phase is never discontinuous across a toggle.
+/// where it stopped: the phase is never discontinuous across a toggle.
 struct WaveClock {
   playing: bool,
   /// Animation seconds accumulated before the current play span.
@@ -1493,7 +1493,7 @@ impl WaveClock {
   }
 }
 
-/// Whether `selection` indexes a field the scene actually has -- the guard a
+/// Whether `selection` indexes a field the scene actually has, the guard a
 /// preset's opening field goes through, since a placeholder (one scalar field)
 /// cannot satisfy a line-field selection and a selection valid in one study can
 /// be out of range in another.
@@ -1508,8 +1508,8 @@ fn selection_in_range(scene: &Scene, selection: Selection) -> bool {
 ///
 /// Redraw-on-demand: a still frame over static content asks for nothing and the
 /// loop parks in `ControlFlow::Wait` until an event wakes it, so a paused viewer
-/// costs no GPU and no battery. A live frame -- an animating field, a held fly
-/// key, a background solve, or a pending egui animation -- asks for the next one.
+/// costs no GPU and no battery. A live frame, an animating field, a held fly
+/// key, a background solve, or a pending egui animation, asks for the next one.
 #[derive(Clone, Copy, Default)]
 enum NextFrame {
   /// Redraw as soon as possible: something on screen is moving. Also the
@@ -1519,7 +1519,7 @@ enum NextFrame {
   /// Park until a window event arrives; nothing is changing.
   Wait,
   /// Redraw at a deadline: egui wants a repaint after a delay (a fade, a
-  /// tooltip) but nothing else is live. Native only; on the web the browser's
+  /// tooltip) but nothing else is live. Native only. On the web the browser's
   /// animation-frame callback paces the loop and `Now` stands in.
   #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
   At(web_time::Instant),
@@ -1531,7 +1531,7 @@ pub(crate) struct App {
   state: Option<State>,
   // Whether the window is currently fully covered/minimized/off-screen. While
   // occluded, `get_current_texture` can never succeed, so there is no vsync
-  // to pace the render loop against -- unconditionally chasing another
+  // to pace the render loop against, unconditionally chasing another
   // `RedrawRequested` (the naive `about_to_wait` pattern) turns into an
   // unbounded busy-spin of GPU driver calls for as long as the window stays
   // hidden (locked screen, closed lid, switched away), which is exactly the
@@ -1610,7 +1610,7 @@ impl ApplicationHandler for App {
         // Redraw-on-demand: any input may have moved the camera, toggled a
         // control, or started an egui animation, so a frame is asked for to
         // reflect it. When no events arrive nothing is requested, which is the
-        // whole point -- a still viewer over static content renders nothing.
+        // whole point, a still viewer over static content renders nothing.
         window.request_redraw();
       }
     }

@@ -7,7 +7,7 @@
 //! where the frame's time comes from: the standing wave's own period, sampled
 //! at $t_k = k T \/ N$, instead of a clock. If
 //! a material were constructed here, the two callers could disagree about what
-//! a field looks like -- which is the whole reason the display layer is not in
+//! a field looks like, which is the whole reason the display layer is not in
 //! `app.rs`.
 //!
 //! Native-only: there is no filesystem to write to on wasm, and no subprocess
@@ -37,7 +37,7 @@ const EXPORT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 /// reason the window is lower: an export is not bound by a frame-rate budget,
 /// so the only question is what the image should look like, and the answer to
 /// that does not vary per invocation. It is therefore a property of exporting,
-/// not a knob -- nobody asks for a worse still.
+/// not a knob, nobody asks for a worse still.
 const EXPORT_SSAA_SCALE_MAX: u32 = 4;
 
 /// The supersampled pixel count one export may allocate its scene pass at.
@@ -49,13 +49,13 @@ const EXPORT_SSAA_SCALE_MAX: u32 = 4;
 /// the factor steps down rather than the export dying: the cost is quadratic in
 /// the factor, so a resolution high enough to exhaust a GPU is reachable by
 /// asking for one (a 4K frame at 4x is 132 megapixels), and it is the pixels
-/// that are wanted, not the samples per pixel -- a large export is oversampled
+/// that are wanted, not the samples per pixel, a large export is oversampled
 /// by its own size.
 const EXPORT_SSAA_PIXEL_BUDGET: u64 = 64 << 20;
 
 /// The largest supersampling factor `size` fits inside
 /// [`EXPORT_SSAA_PIXEL_BUDGET`], never above [`EXPORT_SSAA_SCALE_MAX`] and
-/// never below 1 -- an export resolution so large that even a single sample per
+/// never below 1, an export resolution so large that even a single sample per
 /// pixel exceeds the budget is the caller's own request, and is passed through
 /// rather than silently shrunk into a smaller image than was asked for.
 ///
@@ -75,15 +75,15 @@ pub struct ExportSpec {
   pub study: Study,
   pub mesh_source: MeshSource,
   /// Which field of the built scene to show, indexed over the scene's scalar
-  /// fields and then its line fields -- the picker's own order. `None` opens on
+  /// fields and then its line fields, the picker's own order. `None` opens on
   /// the same first mode the viewer does.
   pub field: Option<usize>,
   pub size: (u32, u32),
   /// How many frames to sample the period with. `None` picks the count that
   /// makes playback at `fps` run at wall-clock speed.
   pub frames: Option<u32>,
-  /// Playback rate of the written clip. It does not decide *which* instants are
-  /// rendered -- the period does -- only how fast they are played back.
+  /// Playback rate of the written clip. It does not decide which instants are
+  /// rendered (the period does), only how fast they are played back.
   pub fps: u32,
 }
 
@@ -288,11 +288,11 @@ impl Displayed {
   /// The instants one clip renders: $t_k = k T \/ N$, for $k in {0, ..., N-1}$.
   ///
   /// The period is what is sampled, and `fps` is only the rate it is played
-  /// back at -- which is the way round that makes the loop exact. Sampling
+  /// back at, which is the way round that makes the loop exact. Sampling
   /// $t_k = k \/ "fps"$ instead would divide the period by a number it has no
   /// reason to divide evenly: the wrap from the last frame to the first would
   /// jump by whatever phase the rounding left over, up to half a frame. Here
-  /// $N$ divides $T$ by construction, so frame $N$ *is* frame $0$ and the clip
+  /// $N$ divides $T$ by construction, so frame $N$ is frame $0$ and the clip
   /// closes on itself.
   ///
   /// `frames` therefore chooses how densely the period is sampled; its default
@@ -311,7 +311,7 @@ impl Displayed {
   }
 }
 
-/// The scene's fields in the picker's order -- scalars, then line fields --
+/// The scene's fields in the picker's order, scalars, then line fields,
 /// indexed flat, which is what `--field N` names.
 fn selection_at(scene: &Scene, index: usize) -> Option<Selection> {
   if index < scene.fields.len() {
@@ -346,8 +346,8 @@ pub fn export(spec: &ExportSpec, path: &Path) -> Result<(), String> {
   }
 }
 
-/// Renders one already-built frame -- the window's live camera, field and clock
-/// time -- to a PNG at `path`. Unlike [`export`], nothing is rebuilt from a
+/// Renders one already-built frame, the window's live camera, field and clock
+/// time, to a PNG at `path`. Unlike [`export`], nothing is rebuilt from a
 /// spec: the caller's own draw list and camera are rendered exactly as they are
 /// on screen, so the still is the current view.
 ///
@@ -388,7 +388,7 @@ fn render_at(
     size: target.size,
     time,
     steps,
-    // An export has no viewer to ask, so it takes the display's own default --
+    // An export has no viewer to ask, so it takes the display's own default,
     // the same rung the window opens on.
     post: crate::display::post_uniform(crate::ui::Post::default()),
   };
@@ -506,7 +506,7 @@ mod tests {
   }
 
   /// A headless render of a known view produces an image that is not a single
-  /// flat color -- i.e. the frame graph actually drew the scene, rather than
+  /// flat color, i.e. the frame graph actually drew the scene, rather than
   /// clearing and presenting the background.
   ///
   /// Pointed at grade 1, not the viewer's starting grade 0: a grade-1 field
@@ -547,7 +547,7 @@ mod tests {
     let displayed = Displayed::build(&ctx, &spec).expect("the triforce scene builds");
 
     // Stepped, not merely drawn. A line field carries an advected population,
-    // and with zero steps its compute pass never runs -- so the dispatch, its
+    // and with zero steps its compute pass never runs, so the dispatch, its
     // bind group and the layout the pipeline was built against would all go
     // unexercised while this test still passed. wgpu validates on submit, so a
     // mismatch here is a panic rather than a silent pass.

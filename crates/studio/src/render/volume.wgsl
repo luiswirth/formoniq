@@ -101,7 +101,7 @@ fn field_at(m: VolumeMaterial, x: vec3<f32>) -> f32 {
 }
 
 // A per-pixel dither in `[0, 1)`, Jimenez's interleaved-gradient noise: a cheap
-// hash whose values are spatially well-distributed, so neighbouring pixels get
+// hash whose values are spatially well-distributed, so neighboring pixels get
 // decorrelated offsets rather than the same one. Used to jitter each ray's first
 // sample. Deliberately a pure function of the pixel and nothing else -- no time,
 // no frame counter -- so a re-rendered static frame is bit-identical and the

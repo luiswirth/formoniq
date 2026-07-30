@@ -12,7 +12,7 @@ use simplicial::topology::{complex::Complex, simplex::Simplex, skeleton::Skeleto
 /// The "triforce" teaching mesh: a central equilateral triangle with one
 /// congruent triangle mirrored outward across each of its three edges, four
 /// cells in all. The layout of the thesis figures' worked example of a global
-/// shape function -- reused here rather than invented anew, so the
+/// shape function, reused here rather than invented anew, so the
 /// Whitney-basis study on it reproduces those figures.
 /// Every interior edge is shared by exactly two cells and the one interior
 /// vertex by three, enough to show a global shape function's multi-cell support

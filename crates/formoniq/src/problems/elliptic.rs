@@ -25,8 +25,8 @@ use std::mem;
 /// harmonic multiplier (the harmonics are mass-orthonormal). Each block is a
 /// direct SPD solve.
 ///
-/// `None` when a block is not positive definite --- an indefinite mass on a
-/// Lorentzian geometry --- signalling the caller to fall back to a whole-system
+/// `None` when a block is not positive definite, an indefinite mass on a
+/// Lorentzian geometry, signaling the caller to fall back to a whole-system
 /// indefinite factorization. This is the signature guard, read off the
 /// factorization itself rather than a separate metric test.
 fn mixed_block_preconditioner<C: HilbertComplex>(
@@ -105,7 +105,7 @@ fn assemble_mixed_kkt<C: HilbertComplex>(
   // form assembles the antisymmetric $sigma$-$u$ coupling ($-B^T$ above, $B$
   // below); negating the $sigma$ block-row turns it into the symmetric
   // $mat(-M, B^T; B, K)$. The $sigma$ right-hand side is zero, so the solution
-  // is unchanged --- and the symmetry is what lets MINRES solve it, while the
+  // is unchanged, and the symmetry is what lets MINRES solve it, while the
   // direct factorization is indifferent to it.
   let mut sign = CooMatrix::zeros(system_matrix.nrows(), system_matrix.nrows());
   for i in 0..system_matrix.nrows() {
@@ -118,10 +118,10 @@ fn assemble_mixed_kkt<C: HilbertComplex>(
 /// The mixed Hodge-Laplace source problem $Delta u = f$ on any discrete Hilbert
 /// complex: absolute (natural / Neumann) boundary conditions on the full
 /// [`WhitneyComplex`], essential (homogeneous Dirichlet) on the
-/// [`RelativeWhitneyComplex`] --- the same code either way.
+/// [`RelativeWhitneyComplex`], the same code either way.
 ///
 /// The right-hand side `source_galvec` is assembled in the ambient
-/// $cal(W) Lambda^k$; it is restricted to this complex's DOFs internally, and
+/// $cal(W) Lambda^k$. It is restricted to this complex's DOFs internally, and
 /// the returned $(sigma, u, p)$ cochains are extended back to the ambient space,
 /// so the caller is oblivious to the boundary condition. `p` is the harmonic
 /// component of $u$, fixed to zero against the harmonic space $cal(H)^k$.
@@ -146,7 +146,7 @@ pub fn solve_source<C: HilbertComplex>(
   // it in an iteration count bounded independently of the mesh (the
   // Arnold-Falk-Winther norm equivalence), beating a direct factorization at
   // scale and avoiding its fill. On a Lorentzian geometry a block is indefinite,
-  // the preconditioner cannot be built, and sparse LU carries the solve --- so
+  // the preconditioner cannot be built, and sparse LU carries the solve, so
   // the method stays total over signature. LU also catches the rare
   // non-convergence of the iterative path.
   let galsol = match mixed_block_preconditioner(complex, grade, harmonics.ncols()) {
@@ -169,7 +169,7 @@ pub fn solve_source<C: HilbertComplex>(
     .into_owned();
   let p_coeffs = galsol.view_range(sigma_len + u_len.., 0).into_owned();
 
-  // At grade 0 the $sigma in Lambda^(-1)$ space is empty; there is nothing to
+  // At grade 0 the $sigma in Lambda^(-1)$ space is empty. There is nothing to
   // extend and no grade $-1$ to name it.
   let sigma = if grade > 0 {
     Cochain::new(grade - 1, complex.inclusion(grade - 1) * sigma_coeffs)
@@ -192,7 +192,7 @@ pub fn solve_harmonics<C: HilbertComplex>(
   // theorem: $cal(H)^k tilde.equ H^k tilde.equ H_k$), an exact topological
   // invariant of the complex — not a number the caller has to know. Absolute
   // $b_k (K)$ on the full complex, relative $b_k (K, diff K)$ on the relative
-  // one; the trait picks the right invariant.
+  // one. The trait picks the right invariant.
   let homology_dim = complex.harmonic_dim(grade);
   if homology_dim == 0 {
     let nwhitneys = complex.ndofs(grade);
@@ -235,16 +235,16 @@ pub fn solve_evp<C: HilbertComplex>(
 }
 
 /// The factored per-grade blocks of the Hodge-Laplace differential complex
-/// around grade $k$ --- the mass matrices $M_(k-1), M_k, M_(k+1)$ and the
-/// metric-free coboundaries $D^(k-1), D^k$ --- assembled on any
+/// around grade $k$, the mass matrices $M_(k-1), M_k, M_(k+1)$ and the
+/// metric-free coboundaries $D^(k-1), D^k$, assembled on any
 /// [`HilbertComplex`], so the trait alone decides natural (full complex) versus
 /// essential (relative complex) boundary conditions.
 ///
-/// These are the pieces the mixed *evolution* problems ([`crate::problems::heat`],
+/// These are the pieces the mixed evolution problems ([`crate::problems::heat`],
 /// [`crate::problems::wave`]) build their block systems from: the down-coupling
 /// $sigma = delta u in Lambda^(k-1)$ and the up-coupling $omega = dif u in
-/// Lambda^(k+1)$. The two degenerate grades --- $k = 0$ has no $sigma$ space,
-/// $k = n$ has no $omega$ space --- are carried as correctly shaped *empty*
+/// Lambda^(k+1)$. The two degenerate grades ($k = 0$ has no $sigma$ space,
+/// $k = n$ has no $omega$ space) are carried as correctly shaped empty
 /// blocks rather than special-cased, so the block systems assemble uniformly at
 /// every grade.
 pub struct HodgeBlocks {
@@ -447,7 +447,7 @@ mod test {
   }
 
   /// Bench, not an assertion: block-preconditioned MINRES against the direct LU
-  /// on the mixed Hodge-Laplace system. Both are timed end to end --- the
+  /// on the mixed Hodge-Laplace system. Both are timed end to end, the
   /// iterative side pays for factoring its SPD blocks, the direct side for
   /// factoring the whole indefinite system. Run with
   /// `cargo test -p formoniq --release bench_mixed_solve -- --nocapture --ignored`.

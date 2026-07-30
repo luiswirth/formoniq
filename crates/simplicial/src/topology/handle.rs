@@ -80,7 +80,7 @@ impl<'m> SimplexRef<'m> {
   pub fn complex(&self) -> &'m Complex {
     self.complex
   }
-  /// Whether this handle borrows `complex` -- the object, by identity, never
+  /// Whether this handle borrows `complex`, the object, by identity, never
   /// a structural equal: a clone of a complex is a different complex, and
   /// handles and role proofs do not transfer to it.
   pub fn belongs_to(&self, complex: &Complex) -> bool {
@@ -116,7 +116,7 @@ impl<'m> SimplexRef<'m> {
 /// combinatorics on the vertex set; up-incidence is looked up through the
 /// stored cell incidence.
 impl<'m> SimplexRef<'m> {
-  // --- down-incidence ---
+  //, down-incidence,
 
   /// The vertices of this simplex, with their [`Vertex`] proofs by
   /// construction.
@@ -164,7 +164,7 @@ impl<'m> SimplexRef<'m> {
       })
   }
 
-  // --- up-incidence ---
+  //, up-incidence,
 
   /// The cells (top-dimensional cofaces) containing this simplex, with their
   /// [`Cell`] proofs by construction: the intersection of the vertex-cell
@@ -203,7 +203,7 @@ impl<'m> SimplexRef<'m> {
       .map(move |sup| complex.skeleton(dim).handle_by_simplex(&sup))
   }
 
-  // --- neighborhoods ---
+  //, neighborhoods,
 
   /// The open star: every coface of every dimension (this simplex included).
   pub fn star(self) -> impl Iterator<Item = SimplexRef<'m>> {

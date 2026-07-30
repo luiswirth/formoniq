@@ -14,7 +14,7 @@ pub type Matrix<T = f64> = na::DMatrix<T>;
 pub type VectorView<'a, T = f64> = na::DVectorView<'a, T>;
 
 /// A flat coordinate space: the tag that distinguishes coordinate systems at
-/// compile time. Uninhabited -- it is a name, never a value.
+/// compile time. Uninhabited: it is a name, never a value.
 pub trait CoordSpace: 'static {
   /// The name of the space, for diagnostics.
   const NAME: &'static str;

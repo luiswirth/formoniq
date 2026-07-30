@@ -4,26 +4,26 @@
 //! These exist for visualization and for I/O, never for the core path: the
 //! engine consumes the intrinsic [`MeshLengthsSq`][crate::lengths::mesh::MeshLengthsSq]
 //! the quotient itself
-//! produces (invariant 2), and an embedding is a *second*, independent object.
+//! produces (invariant 2), and an embedding is a second, independent object.
 //! Where the embedding is not isometric the two are genuinely different
-//! manifolds -- the coordinates carry curvature the flat quotient does not --
+//! manifolds, the coordinates carry curvature the flat quotient does not,
 //! so deriving edge lengths from these coordinates gives a mesh whose spectra
 //! and convergence rates are not the flat ones. Do not cross the two.
 //!
 //! Two constructions live here, and they do not unify.
 //!
-//! The first is the **equivariant embedding** [`equivariant`], which is
+//! The first is the equivariant embedding [`equivariant`], which is
 //! general: it realizes the quotient in $RR^m$ by mapping each identified axis
 //! to a harmonic of its own deck transformation, so the map descends to the
 //! quotient by construction. A periodic axis becomes a circle factor, costing
-//! two ambient dimensions; a *reflected* axis is split into its even and odd
+//! two ambient dimensions. A reflected axis is split into its even and odd
 //! parts under the reflection, the odd part being carried by the half-angle
 //! frame $(cos(theta\/2), sin(theta\/2))$, which reverses sign after one turn
 //! and so realizes the twist. With every axis periodic this is the Clifford
-//! torus $T^d subset RR^(2d)$, and it is then a genuine **isometry**: the flat
+//! torus $T^d subset RR^(2d)$, and it is then a genuine isometry: the flat
 //! quotient's own geometry, exactly. Any reflected axis makes it curved.
 //!
-//! The second is the pair of **surfaces of revolution** [`donut_r3`] and
+//! The second is the pair of surfaces of revolution [`donut_r3`] and
 //! [`moebius_r3`], which are not instances of the first: they are the
 //! two-dimensional pictures that fit in $RR^3$, and they exist only because
 //! that is where a viewer draws. Neither is isometric, and neither generalizes.
@@ -40,7 +40,7 @@ use simplicial::linalg::{Matrix, Vector};
 
 /// The equivariant embedding of a flat quotient, the general construction.
 ///
-/// **Isometric exactly when no axis is reflected**, i.e. on the flat torus and
+/// Isometric exactly when no axis is reflected, i.e. on the flat torus and
 /// its open-axis relatives, where it is the Clifford embedding
 /// $T^d arrow.r.hook RR^(2d)$. A twist forces the half-angle frame, which
 /// bends the fiber as it goes around, so the twisted members are curved
@@ -49,7 +49,7 @@ use simplicial::linalg::{Matrix, Vector};
 ///
 /// `radius_slack` scales the distance the twisted axis's circle keeps from its
 /// own axis of revolution. It must exceed `1.0` for the embedding to be
-/// injective; the reflected fiber sweeps a tube of the natural radius, and a
+/// injective. The reflected fiber sweeps a tube of the natural radius, and a
 /// circle that small would pass through itself.
 ///
 /// Panics if an axis is reflected by more than one twisted axis: the two
@@ -176,8 +176,8 @@ impl Emitter {
 /// The even and odd parts of a reflected axis under its reflection.
 ///
 /// A periodic axis is a circle, whose reflection $theta |-> -theta$ splits it
-/// into $cos$ and $sin$; an open axis is an interval, reflected about its
-/// midpoint, so it is purely odd once centred.
+/// into $cos$ and $sin$. An open axis is an interval, reflected about its
+/// midpoint, so it is purely odd once centered.
 fn reflected_parts(quotient: &FlatQuotient, cart: &[usize], axis: usize) -> (f64, f64) {
   if quotient.identifications()[axis].is_closed() {
     let angle = TAU * fraction(quotient, cart, axis);
@@ -191,7 +191,7 @@ fn reflected_parts(quotient: &FlatQuotient, cart: &[usize], axis: usize) -> (f64
 
 /// The radius of the circle an identified axis of period $L$ becomes.
 ///
-/// **Chord-matched, not arc-matched.** What is embedded is the simplicial
+/// Chord-matched, not arc-matched. What is embedded is the simplicial
 /// manifold, not the smooth one: its vertices lie on the circle but its edges
 /// are the straight chords between them, and a chord is shorter than the arc it
 /// subtends. Taking the smooth radius $L \/ 2 pi$ would inscribe a polygon of
@@ -217,15 +217,15 @@ fn fraction(quotient: &FlatQuotient, cart: &[usize], axis: usize) -> f64 {
   cart[axis] as f64 / quotient.ncells_per_axis()[axis] as f64
 }
 
-/// The torus of revolution in $RR^3$ -- the donut -- for a two-dimensional
+/// The torus of revolution in $RR^3$, the donut, for a two-dimensional
 /// flat torus.
 ///
 /// $(u, v) |-> ((R + r cos v) cos u, (R + r cos v) sin u, r sin v)$, with $u$
 /// the first axis and $v$ the second.
 ///
-/// **Not isometric, and not an instance of [`equivariant`].** This is a surface
+/// Not isometric, and not an instance of [`equivariant`]. This is a surface
 /// of revolution, a construction of its own that happens to be topologically
-/// $T^2$; it carries genuine Gaussian curvature, positive on the outer rim and
+/// $T^2$. It carries genuine Gaussian curvature, positive on the outer rim and
 /// negative on the inner one, where the flat torus has none. A flat torus
 /// admits no isometric embedding in $RR^3$ at all, which is why the isometric
 /// one needs $RR^4$. Two-dimensional by nature: revolution does not generalize.
@@ -257,10 +257,10 @@ pub fn donut_r3(quotient: &FlatQuotient, tube_ratio: f64) -> MeshCoords {
 /// while rotating by half a turn.
 ///
 /// $(u, y) |-> ((R + y cos(u\/2)) cos u, (R + y cos(u\/2)) sin u,
-/// y sin(u\/2))$, with $u$ the twisted axis and $y$ the open fiber, centred.
+/// y sin(u\/2))$, with $u$ the twisted axis and $y$ the open fiber, centered.
 ///
-/// **Not isometric.** The pure equivariant Möbius band needs $RR^4$ (a circle
-/// and a half-angle frame, two dimensions each); this one folds into $RR^3$ by
+/// Not isometric. The pure equivariant Möbius band needs $RR^4$ (a circle
+/// and a half-angle frame, two dimensions each). This one folds into $RR^3$ by
 /// borrowing the revolution trick, at the cost of the geometry. Flat Möbius
 /// bands do embed in $RR^3$ (Wunderlich), but not by any expression as simple
 /// as this, and the isometric case is served by [`equivariant`] instead.
@@ -301,7 +301,7 @@ mod test {
   use multiindex::Dim;
   use simplicial::linalg::Vector;
 
-  /// The Clifford embedding is an **isometry**: the edge lengths it induces are
+  /// The Clifford embedding is an isometry: the edge lengths it induces are
   /// the flat quotient's own, in every dimension.
   ///
   /// This is the law that ties the two constructions together, and it checks
@@ -395,8 +395,8 @@ mod test {
     }
   }
 
-  /// The $RR^3$ pictures are three-dimensional, injective, and -- the point
-  /// worth asserting -- **not** isometric: their induced lengths are a
+  /// The $RR^3$ pictures are three-dimensional, injective, and, the point
+  /// worth asserting, not isometric: their induced lengths are a
   /// different manifold from the flat quotient that produced the topology.
   #[test]
   fn the_r3_pictures_are_curved() {

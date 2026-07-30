@@ -19,7 +19,7 @@
 // A facet crossing is the same operation again. Barycentric weights are
 // non-negative exactly inside their own cell, so a negative component *is* the
 // exit test -- exact, from the state already being integrated, with no search.
-// The `Transition` into the neighbouring chart is a relabelling of those
+// The `Transition` into the neighboring chart is a relabeling of those
 // weights, hence a linear map, hence another mat-vec by a permutation matrix.
 // Step and crossing are one instruction.
 //
@@ -44,7 +44,7 @@
 @group(0) @binding(1) var<storage, read> cells: array<Cell>;
 // $e^(M h 2^k)$ for each cell and level, indexed `cell * (depth + 1) + level`.
 @group(0) @binding(2) var<storage, read> flows: array<mat4x4<f32>>;
-// The `Transition` matrices, indexed `4 * cell + facet`: the relabelling of
+// The `Transition` matrices, indexed `4 * cell + facet`: the relabeling of
 // barycentric weights into the chart across that facet.
 @group(0) @binding(3) var<storage, read> transitions: array<mat4x4<f32>>;
 // Where a particle is born. Sampled by the metric volume of the cells on the
@@ -53,7 +53,7 @@
 @group(0) @binding(4) var<storage, read> seeds: array<Particle>;
 @group(0) @binding(5) var<uniform> params: AdvectParams;
 
-const NO_NEIGHBOUR: u32 = 0xffffffffu;
+const NO_NEIGHBOR: u32 = 0xffffffffu;
 const NO_FACET: u32 = 4u;
 // A step spends its ticks over at most this many cells. A curve that would
 // cross more has met a feature far finer than the step, and stopping short
@@ -133,7 +133,7 @@ fn advance_within_cell(cell: u32, lambda: vec4<f32>, budget: u32) -> Advance {
     return reached;
 }
 
-// The particle relabelled into the chart across `facet`.
+// The particle relabeled into the chart across `facet`.
 //
 // The overshoot is one tick, so clamping it away and renormalizing lands the
 // particle on the facet it left through, which is where the transition is
@@ -145,7 +145,7 @@ fn cross_facet(particle: Particle, facet: u32) -> Particle {
     let clamped = max(particle.lambda, vec4<f32>(0.0));
     let on_facet = clamped / dot(clamped, vec4<f32>(1.0));
     crossed.lambda = transitions[4u * particle.cell + facet] * on_facet;
-    crossed.cell = cells[particle.cell].neighbour[facet];
+    crossed.cell = cells[particle.cell].neighbor[facet];
     return crossed;
 }
 
@@ -191,14 +191,14 @@ fn advect(@builtin(global_invocation_id) global_id: vec3<u32>) {
         particle.lambda = flow(particle.cell, 0u) * particle.lambda;
         ticks_left -= 1u;
         particle = cross_facet(particle, exit_facet(particle.lambda));
-        if particle.cell == NO_NEIGHBOUR {
+        if particle.cell == NO_NEIGHBOR {
             break;
         }
     }
 
     // Reaching the boundary ends a life early: the curve has left the manifold,
     // and there is no chart on the other side to continue it in.
-    let escaped = particle.cell == NO_NEIGHBOUR;
+    let escaped = particle.cell == NO_NEIGHBOR;
     if escaped || particle.life == 0u {
         particle = respawn(id, particle.epoch);
     } else {

@@ -14,7 +14,7 @@
 //!   [`crate::interpolate::interpolant`]).
 //!
 //! The integral $integral_sigma omega$ of a $k$-form over a $k$-simplex is
-//! **metric-free** -- it pairs the form with the tangent blade of the simplex,
+//! metric-free, it pairs the form with the tangent blade of the simplex,
 //! and no length, angle or volume is ever needed. The implementation is
 //! correspondingly intrinsic, and needs no embedding either: it works entirely
 //! in the chart of a cell supporting $sigma$, where the face is an affine
@@ -24,7 +24,7 @@
 //! Which supporting cell is chosen does not matter. Two charts containing
 //! $sigma$ differ by a [`Transition`](simplicial::atlas::Transition), whose
 //! differential carries the tangent blade of $sigma$ in one chart to the tangent
-//! blade in the other; the pairing sees only the part of $omega$ tangential to
+//! blade in the other. The pairing sees only the part of $omega$ tangential to
 //! $sigma$, on which the two charts agree by exactly that map. The law is
 //! `derham_map_is_independent_of_supporting_cell` below.
 
@@ -44,7 +44,7 @@ use {
 /// manifold into a $k$-cochain by integrating it over each $k$-simplex, with
 /// quadrature exact for polynomial integrands of the given degree.
 ///
-/// Metric-free, and defined on any geometry -- including none at all. An
+/// Metric-free, and defined on any geometry, including none at all. An
 /// analytic form given in coordinates reaches this through the pullback, so
 /// that $R (phi^* omega)$ reads as the composition it is:
 ///
@@ -90,7 +90,7 @@ pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> Tensor {
 /// The pullback of $omega$ to the reference $k$-simplex is
 /// $angle.l omega, v_1 wedge dots.c wedge v_k angle.r dif x^1 wedge dots.c wedge dif x^k$
 /// for the spanning vectors $v_i$ of the face, so the integral is the
-/// quadrature of the duality pairing against the face's tangent blade --
+/// quadrature of the duality pairing against the face's tangent blade,
 /// no metric anywhere.
 pub fn integrate_face(
   field: &impl Section,
@@ -230,10 +230,10 @@ mod test {
   /// The tangent blade of a shared face transforms by $Lambda^k (dif psi)$
   /// under the transition between the two charts that see it.
   ///
-  /// This is *why* the de Rham map is well defined: the duality pairing
+  /// This is why the de Rham map is well defined: the duality pairing
   /// $angle.l omega, tau angle.r$ is invariant because the form pulls back along
   /// $dif psi$ exactly as the blade pushes forward along it, and the two cancel.
-  /// The well-definedness above is the consequence; this is the cause.
+  /// The well-definedness above is the consequence. This is the cause.
   #[test]
   fn tangent_blade_transforms_by_the_transition_differential() {
     use simplicial::atlas::ChartExt;

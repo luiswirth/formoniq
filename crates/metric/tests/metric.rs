@@ -232,11 +232,11 @@ fn a_free_slot_has_no_hodge_star() {
   let _ = tensor.star(&Metric::euclidean(dim), Sign::Pos);
 }
 
-/// A metric *is* a $"Sym"^2$ element: the two readings round-trip, in both
+/// A metric is a $"Sym"^2$ element: the two readings round-trip, in both
 /// variances and at every dimension including the empty one.
 ///
-/// The probe is deliberately not symmetric-looking -- distinct off-diagonal
-/// entries and a distinct diagonal -- because a wrong symmetric multiplicity is
+/// The probe is deliberately not symmetric-looking, distinct off-diagonal
+/// entries and a distinct diagonal, because a wrong symmetric multiplicity is
 /// exactly the error a probe with equal entries hides.
 #[test]
 fn a_metric_round_trips_through_its_sym2_tensor() {
@@ -256,7 +256,7 @@ fn a_metric_round_trips_through_its_sym2_tensor() {
   }
 }
 
-/// The multiplicity is real: the packed components are *not* the matrix entries,
+/// The multiplicity is real: the packed components are not the matrix entries,
 /// differing by $alpha!$ on the diagonal. Without this the round-trip law above
 /// would also pass on an implementation that ignored the convention entirely.
 #[test]
@@ -312,7 +312,7 @@ fn the_metric_is_the_pairing_against_a_symmetric_product() {
     let v = Vector::from_fn(dim, |i, _| ((3 * i + 1) % 5) as f64 - 2.0);
     let w = Vector::from_fn(dim, |i, _| ((7 * i + 2) % 5) as f64 - 1.0);
 
-    // Degree-one *symmetric* slots, so the product lands in Sym^2 rather than
+    // Degree-one symmetric slots, so the product lands in Sym^2 rather than
     // Lambda^2: at degree one the two families agree as spaces and differ only
     // in which quotient the product then takes.
     let as_slot = |x: &Vector| {
@@ -335,8 +335,8 @@ fn the_metric_is_the_pairing_against_a_symmetric_product() {
   }
 }
 
-/// The Gram matrix of a tensor's own basis measures each slot by *its own*
-/// variance, so a **mixed** tensor draws on g and g⁻¹ at once and no single
+/// The Gram matrix of a tensor's own basis measures each slot by its own
+/// variance, so a mixed tensor draws on g and g⁻¹ at once and no single
 /// variance describes the result. That is why it is a bare matrix and not a
 /// `Metric`: a constructor supplying one would be guessing.
 ///

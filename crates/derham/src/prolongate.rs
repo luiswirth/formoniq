@@ -1,7 +1,7 @@
 //! Cochain prolongation across a uniform refinement.
 //!
 //! Under uniform refinement the coarse Whitney space is a subspace of the fine
-//! one -- every coarse Whitney form is, on each fine cell, an affine form and so
+//! one, every coarse Whitney form is, on each fine cell, an affine form and so
 //! lies in $P^-_1 Lambda^k$ of the refined mesh. The inclusion has a canonical
 //! matrix on cochains, the prolongation
 //! $P: C^k("coarse") -> C^k("fine")$, obtained by expressing the coarse form in
@@ -9,8 +9,8 @@
 //!
 //! $ (P c)_sigma = R_sigma (W c) = integral_sigma W("coarse") c $
 //!
-//! for each fine simplex $sigma$ -- the coarse Whitney interpolant re-sampled by
-//! the de Rham map of the fine complex. It is **metric-free**: every fine
+//! for each fine simplex $sigma$, the coarse Whitney interpolant re-sampled by
+//! the de Rham map of the fine complex. It is metric-free: every fine
 //! simplex sits inside a coarse cell with barycentric coordinates fixed by the
 //! [`Subdivision`] provenance alone (invariant 2), and the de Rham integral is
 //! itself metric-free.
@@ -33,8 +33,8 @@
 //! nonzeros are the de Rham integrals $integral_sigma W_tau$ of the coarse
 //! Whitney basis forms supported on $sigma$'s parent cell. The action of $P$ on a
 //! single cochain ([`prolongate`]) is then just the matrix-vector product against
-//! [`prolongation_matrix`] -- one code path, the matrix, with the cochain map its
-//! application. Both cost $O("nnz")$; the earlier column-by-column build was
+//! [`prolongation_matrix`], one code path, the matrix, with the cochain map its
+//! application. Both cost $O("nnz")$. The earlier column-by-column build was
 //! $O(N^2)$.
 
 use crate::{
@@ -76,7 +76,7 @@ pub fn prolongation_matrix(
   let provenance = cell_provenance(coarse_complex, subdivision);
 
   // The coarse cell's Whitney basis forms, standard on the reference cell, in
-  // the colex order its faces come in -- so they zip against `faces(grade)`.
+  // the colex order its faces come in, so they zip against `faces(grade)`.
   let basis_forms: Vec<WhitneyLsf> = unit_subsimps(dim, grade)
     .map(|dof_simp| WhitneyLsf::unit(dim, dof_simp))
     .collect();
@@ -176,7 +176,7 @@ fn cell_provenance(
     .collect()
 }
 
-/// A single coarse Whitney basis form seen as a section of the *fine* manifold:
+/// A single coarse Whitney basis form seen as a section of the fine manifold:
 /// at a fine mesh point it maps into the parent coarse cell, evaluates that basis
 /// form there, and pulls the value back into the fine cell's reference frame.
 ///
@@ -245,7 +245,7 @@ mod test {
   ///
   /// The definition made a theorem, checked against an independent route: rather
   /// than the affine provenance `prolongate` rides, this evaluates the coarse
-  /// interpolant through an *embedding* -- the fine mesh point placed in ambient
+  /// interpolant through an embedding, the fine mesh point placed in ambient
   /// coordinates, located back in the coarse mesh, sampled there, and pulled
   /// into the fine cell's frame. Refinement is affine so the two agree exactly,
   /// but the two share no code, so a bug in the provenance path cannot hide.
@@ -300,7 +300,7 @@ mod test {
   /// cochain map.
   ///
   /// The coarse and fine exterior derivatives are the coboundary operators of
-  /// their complexes, and $P$ intertwines them -- the Whitney space nesting
+  /// their complexes, and $P$ intertwines them, the Whitney space nesting
   /// respects the de Rham differential, since $W$ and $R$ each do.
   #[test]
   fn prolongation_is_a_cochain_map() {

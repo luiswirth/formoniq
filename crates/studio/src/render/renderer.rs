@@ -24,11 +24,11 @@ use super::{
 /// The background the scene is cleared to: a near-black the lit surface and the
 /// light glyph halo both separate from.
 ///
-/// Stated *linearly*, because that is what the scene target is -- radiance, in
-/// [`SCENE_FORMAT`] -- and the resolve is what carries it across to the display.
+/// Stated linearly, because that is what the scene target is, radiance, in
+/// [`SCENE_FORMAT`], and the resolve is what carries it across to the display.
 /// This is the linear value whose sRGB encoding is the dark 0.1 the background
 /// is meant to be: $0.1^(2.2) approx 0.0079$. The tone map bends it a little on
-/// the way out, as it bends everything; a background this near zero barely
+/// the way out, as it bends everything. A background this near zero barely
 /// moves.
 const CLEAR_COLOR: wgpu::Color = wgpu::Color {
   r: 0.0079,
@@ -38,7 +38,7 @@ const CLEAR_COLOR: wgpu::Color = wgpu::Color {
 };
 
 /// One frame, as the caller states it: what to draw, and where and when it is
-/// seen from. Borrowed, not owned -- the renderer holds no scene, no camera and
+/// seen from. Borrowed, not owned, the renderer holds no scene, no camera and
 /// no clock between frames.
 pub struct FrameView<'a> {
   /// The batches and their materials, in submission order.
@@ -56,8 +56,8 @@ pub struct FrameView<'a> {
   /// Advection steps to take before this frame is drawn.
   ///
   /// The stateful counterpart of `time`, and separate from it on purpose: a
-  /// standing wave is a *function* of an instant, so the renderer can evaluate
-  /// it at any; a particle population is a simulation, so it can only be
+  /// standing wave is a function of an instant, so the renderer can evaluate
+  /// it at any. A particle population is a simulation, so it can only be
   /// stepped to one. A caller that draws no particles passes 0 and nothing
   /// reads this.
   pub steps: u32,
@@ -138,8 +138,8 @@ impl Targets {
 /// The renderer: every pipeline, every uniform, and the frame graph, over any
 /// target of the format it was built for.
 ///
-/// It knows nothing of a window, a surface or a clock -- the target view, its
-/// size and the time are all arguments to [`Self::render`] -- so the
+/// It knows nothing of a window, a surface or a clock, the target view, its
+/// size and the time are all arguments to [`Self::render`], so the
 /// interactive viewer and a headless export drive one implementation and cannot
 /// drift.
 pub struct Renderer {
@@ -171,7 +171,7 @@ impl Renderer {
   /// A renderer for `format`, supersampling the scene pass by `ssaa` per axis.
   ///
   /// The factor is fixed here rather than per frame because it is baked into
-  /// every pipeline as the WGSL `SSAA_SCALE` override; a caller that wants a
+  /// every pipeline as the WGSL `SSAA_SCALE` override. A caller that wants a
   /// different one builds a different renderer. See [`super::DEFAULT_SSAA_SCALE`]
   /// for the interactive choice.
   pub fn new(ctx: &GpuContext, format: wgpu::TextureFormat, ssaa: u32) -> Self {
@@ -310,7 +310,7 @@ impl Renderer {
     // is stepped from beside the items: a frame with no population contributes
     // no dispatch.
     //
-    // The deposit is stepped *inside* the step loop, after each dispatch, not
+    // The deposit is stepped inside the step loop, after each dispatch, not
     // once per frame: the trail must be a function of the step count alone, so
     // a frame owing several steps lays several splats, and a window and an
     // exporter that reach the same count show the same trail.
@@ -324,8 +324,8 @@ impl Renderer {
     }
 
     // The scene, at the supersampled resolution: the draw list, in the order
-    // the caller gave it. One linear sequence for every field -- the reduced
-    // grade and the baked dimension decide which *items* exist, never a branch
+    // the caller gave it. One linear sequence for every field, the reduced
+    // grade and the baked dimension decide which items exist, never a branch
     // through the graph.
     {
       let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
@@ -403,12 +403,12 @@ impl Renderer {
 
     // The medium, after every opaque mark and before the glow. Here rather than
     // among the items because it reads the depth those items wrote, which a
-    // pass cannot do while that depth is its own attachment -- and because
+    // pass cannot do while that depth is its own attachment, and because
     // front-to-back accumulation makes its own order, so it has no place in the
     // caller's.
     if let Some((batch, mut material)) = view.items.volume {
       // The unprojection is the camera's, not the material's: the display layer
-      // decides how the medium reads, and where it is read *from* is a fact
+      // decides how the medium reads, and where it is read from is a fact
       // about this frame. Filled here so the two cannot come apart, and so an
       // export and a window unproject with the matrix they each drew with.
       material.inv_view_proj = view

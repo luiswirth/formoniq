@@ -2,7 +2,7 @@
 //!
 //! The linear solution $u(x) = x_1$ lies exactly in the Whitney 0-form
 //! space and all loads are affine, so both the Dirichlet and the Neumann
-//! discretizations reproduce it up to solver tolerance -- validating the
+//! discretizations reproduce it up to solver tolerance, validating the
 //! affine lifting, the trace complex geometry and the natural boundary
 //! load.
 
@@ -146,8 +146,8 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
 
 /// Robin boundary condition $diff u \/ diff n + alpha "tr" u = h$ with
 /// $alpha = 1$ and $h$ manufactured from $u = x_1$. In 1d on the whole
-/// boundary; in higher dimensions on the faces $x_1 = 0, 1$ (where $h$ is
-/// per-face constant), combined with Dirichlet on the remaining faces --
+/// boundary. In higher dimensions on the faces $x_1 = 0, 1$ (where $h$ is
+/// per-face constant), combined with Dirichlet on the remaining faces,
 /// all three condition kinds in one problem. The exact solution is
 /// reproduced.
 #[test]

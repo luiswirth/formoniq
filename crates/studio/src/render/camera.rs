@@ -1,29 +1,29 @@
 use nalgebra::{Matrix3, Matrix4, Orthographic3, Perspective3, Point3, Vector3};
 use std::f32::consts::FRAC_PI_2;
 
-/// Sends nalgebra's OpenGL-style clip space to wgpu's, *reversed*: $z in [-1, 1]$
+/// Sends nalgebra's OpenGL-style clip space to wgpu's, reversed: $z in [-1, 1]$
 /// with the near plane at $-1$ becomes $z in [0, 1]$ with the near plane at $1$
 /// and the far plane at $0$.
 ///
 /// The reversal is what makes the depth buffer usable at range, and it is not a
-/// bias or a tolerance -- it is the observation that the two sources of error
+/// bias or a tolerance: it is the observation that the two sources of error
 /// cancel. Perspective depth is a hyperbola, $d(z) approx 1 - z_"near" \/ z$, so
 /// its resolution decays like $z^2 \/ z_"near"$; float32's resolution decays in
 /// the opposite direction, being densest at $0$. Unreversed the two compound,
 /// concentrating precision where the hyperbola already had it and starving the
 /// far field, where a wireframe's depth bias then loses to roundoff. Reversed
 /// they very nearly cancel, and the relative precision is roughly uniform in $z$
-/// -- which is why $z_"near"$ may stay aggressively small, as the framing
+///, which is why $z_"near"$ may stay aggressively small, as the framing
 /// deliberately sets it, at almost no cost.
 ///
 /// The flip must live in the matrix and not in the shader. As a row operation it
 /// is $"row"_3 |-> "row"_4 - "row"_3$, acting on the clip-space coefficients
-/// *before* the perspective divide; the same $1 - d$ applied afterwards, to the
+/// before the perspective divide; the same $1 - d$ applied afterwards, to the
 /// already-quantized depth, would flip the picture and recover none of the
 /// precision.
 ///
 /// The orthographic branch inherits the reversal unchanged. Its depth is affine
-/// in $z$, so reversing neither gains nor loses precision there -- but the sense
+/// in $z$, so reversing neither gains nor loses precision there, but the sense
 /// of the depth test is a property of the target, not of the projection, so
 /// there is one constant and no case distinction.
 #[rustfmt::skip]
@@ -42,39 +42,39 @@ pub const WORLD_UP: Vector3<f32> = Vector3::new(0.0, 0.0, 1.0);
 /// A roll-free camera: a position and a viewing direction, the direction given
 /// in the spherical chart $(psi, theta)$ about [`WORLD_UP`].
 ///
-/// **The eye is the primary state and the pivot is derived**, not the other way
-/// round. An orbit camera that stores its target makes flying incoherent -- the
+/// The eye is the primary state and the pivot is derived, not the other way
+/// round. An orbit camera that stores its target makes flying incoherent, the
 /// pivot drifts off whatever is being looked at, and a subsequent orbit swings
 /// about a point with no relation to the scene. Here every gesture is a rotation
 /// of $(psi, theta)$, and what distinguishes orbiting from looking is only the
-/// *center* it is applied about ([`Self::rotate`]).
+/// center it is applied about ([`Self::rotate`]).
 ///
-/// **Roll-free costs exactly two poles, and that is a theorem, not a defect.**
+/// Roll-free costs exactly two poles, and that is a theorem, not a defect.
 /// A roll-free framing is a choice of $u(d) perp d$ for every direction
-/// $d in S^2$ -- a nowhere-zero section of $T S^2$ -- and the hairy-ball theorem
+/// $d in S^2$, a nowhere-zero section of $T S^2$, and the hairy-ball theorem
 /// says none exists. So the singularity is forced; `pitch` is where it was put.
 /// The alternative is a camera carrying the third degree of freedom, whose price
 /// is holonomy: a closed loop of the cursor enclosing solid angle $Omega$
 /// returns the frame rolled by $Omega$, which reads as unprompted drift.
 ///
-/// This is *not* gimbal lock, and nothing here is clamped to avoid any. `pitch`
+/// This is not gimbal lock, and nothing here is clamped to avoid any. `pitch`
 /// ranges over the closed $[-pi/2, pi/2]$, poles included, because the frame is
 /// built forward from the angles ([`Self::right`]) rather than recovered from
-/// the direction by `look_at`. The degeneracy is in that *inverse* map alone,
+/// the direction by `look_at`. The degeneracy is in that inverse map alone,
 /// and `yaw` is carried state, so it is never lost. Beyond $|theta| = pi/2$
-/// there is no new view to reach -- it is $psi + pi$ upside down, i.e. the roll
+/// there is no new view to reach: it is $psi + pi$ upside down, i.e. the roll
 /// this camera declines.
 pub struct Camera {
   /// The camera's world-space position: the primary state.
   pub eye: Point3<f32>,
-  /// Azimuth $psi$ about [`WORLD_UP`]. Unbounded and never normalized -- it is
+  /// Azimuth $psi$ about [`WORLD_UP`]. Unbounded and never normalized: it is
   /// the carried state that makes the frame total at the poles.
   pub yaw: f32,
   /// Elevation $theta in [-pi/2, pi/2]$, poles included.
   pub pitch: f32,
   /// Distance to the pivot: how far along [`Self::forward`] the point of
-  /// interest sits. Not a degree of freedom of the view -- the eye and the
-  /// angles already fix that -- but the scale the gestures that need a depth
+  /// interest sits. Not a degree of freedom of the view, the eye and the
+  /// angles already fix that, but the scale the gestures that need a depth
   /// read: orbiting, panning, and the orthographic frustum, which has no focal
   /// distance of its own.
   pub pivot_distance: f32,
@@ -84,12 +84,12 @@ pub struct Camera {
   pub zfar: f32,
   /// Orthographic vs. perspective, selecting both the projection and the
   /// navigation it is paired with. A flat mesh viewed face-on wants parallel
-  /// projection -- nothing in it has depth for a vanishing point to act on --
+  /// projection, nothing in it has depth for a vanishing point to act on,
   /// and wants a 2D-map interaction to match: it does not rotate, since tumbling
   /// a face-on plane only tilts it away, so it pans and zooms where a
   /// perspective view orbits and flies. The primitives are shared and only the
   /// input binding differs, which is chosen in the window's input handler, not
-  /// here; this flag is the one bit both read.
+  /// here. This flag is the one bit both read.
   pub orthographic: bool,
 }
 
@@ -119,7 +119,7 @@ impl Camera {
   ///
   /// This is the whole reason the camera is total at the poles. The roll-free
   /// right vector is $hat(f) times hat(z)$ normalized, which is
-  /// $cos theta (sin psi, -cos psi, 0)$ -- and the $cos theta$ divides out. What
+  /// $cos theta (sin psi, -cos psi, 0)$, and the $cos theta$ divides out. What
   /// remains is a function of `yaw` alone, defined on all of $[-pi/2, pi/2]$
   /// including where $hat(f) parallel hat(z)$ and the cross product vanishes.
   /// It is the analytic continuation of `look_at_rh`'s own right vector through
@@ -131,19 +131,19 @@ impl Camera {
   }
 
   /// The screen's up axis. Not [`WORLD_UP`]: that is the axis the framing is
-  /// *gauged* against, this is where up ends up on screen once pitched.
+  /// gauged against: this is where up ends up on screen once pitched.
   pub fn up(&self) -> Vector3<f32> {
     self.right().cross(&self.forward())
   }
 
   /// The point of interest: where [`Self::pivot_distance`] along the view lands.
-  /// Derived, never stored -- see the type's own note on why.
+  /// Derived, never stored, see the type's own note on why.
   pub fn pivot(&self) -> Point3<f32> {
     self.eye + self.forward() * self.pivot_distance
   }
 
   /// The camera's orientation as a rotation matrix, its columns the frame
-  /// $(hat(r), hat(u), hat(f))$ -- the change of basis from view coordinates to
+  /// $(hat(r), hat(u), hat(f))$, the change of basis from view coordinates to
   /// world ones.
   pub fn frame(&self) -> Matrix3<f32> {
     Matrix3::from_columns(&[self.right(), self.up(), self.forward()])
@@ -157,23 +157,23 @@ impl Camera {
   /// rigid motion about different centers, which is why they compose without
   /// fighting.
   ///
-  /// The eye's *offset* from the center is rotated, never rebuilt from
+  /// The eye's offset from the center is rotated, never rebuilt from
   /// [`Self::forward`]. Rebuilding it silently assumes the center lies on the
-  /// view axis and snaps the eye onto that axis when it does not -- and an
-  /// off-axis center is the whole point of a picked pivot. Rotating the offset
+  /// view axis and snaps the eye onto that axis when it does not, and an
+  /// off-axis center is what a picked pivot is for. Rotating the offset
   /// makes this a rigid motion of the camera about `center`, whose conserved
   /// quantity is the center's own view-space coordinate: it holds still on
   /// screen, exactly where it was grabbed (`orbit_pins_its_center_on_screen`).
   pub fn rotate(&mut self, dyaw: f32, dpitch: f32, center: Point3<f32>) {
     let before = self.frame();
     // Both subtract, which is what makes the axes consistent: `forward` sweeps
-    // toward $+y$ as `yaw` grows, i.e. to the *left* of the screen, so a
-    // rightward drag must lower it -- matching pitch, where a drag up raises
+    // toward $+y$ as `yaw` grows, i.e. to the left of the screen, so a
+    // rightward drag must lower it, matching pitch, where a drag up raises
     // the view.
     self.yaw -= dyaw;
     self.pitch = (self.pitch - dpitch).clamp(-FRAC_PI_2, FRAC_PI_2);
     // $R = F_1 F_0^T$ carries the old frame to the new one, whatever the two
-    // are -- so it stays the exact rotation between them even on the frame
+    // are, so it stays the exact rotation between them even on the frame
     // where the pitch clamp saturates and swallows part of the requested delta.
     let rotation = self.frame() * before.transpose();
     self.eye = center + rotation * (self.eye - center);
@@ -183,7 +183,7 @@ impl Camera {
   /// keeping the point it was looking at fixed under the view.
   ///
   /// What entering orthographic mode needs: a face-on 2D view is only face-on
-  /// from directly above, so the projection change alone is not enough -- an
+  /// from directly above, so the projection change alone is not enough, an
   /// oblique perspective pose reprojected orthographically is a skewed
   /// parallelogram, not the square plan the flat view is for. The pivot is held
   /// as the anchor, and `yaw` snaps to $pi/2$ so screen-right lands on world
@@ -194,7 +194,7 @@ impl Camera {
 
   /// Snaps the orientation to $(psi, theta)$ while holding the pivot fixed, so
   /// the object stays framed and only the vantage changes. The one primitive
-  /// behind every canned pose -- [`Self::snap_top_down`] and the axis-aligned
+  /// behind every canned pose, [`Self::snap_top_down`] and the axis-aligned
   /// standard views are each a choice of angles fed through here, the eye
   /// re-derived from the held pivot exactly as it is on entering the flat view.
   pub fn snap_to(&mut self, yaw: f32, pitch: f32) {
@@ -332,7 +332,7 @@ mod tests {
     camera
   }
 
-  /// The frame is an orthonormal right-handed basis on the *closed* pitch
+  /// The frame is an orthonormal right-handed basis on the closed pitch
   /// range: total at the poles, which is the whole claim.
   #[test]
   fn frame_is_orthonormal_everywhere() {
@@ -429,7 +429,7 @@ mod tests {
     }
   }
 
-  /// Orbiting holds the pivot fixed however far it is turned -- the property
+  /// Orbiting holds the pivot fixed however far it is turned, the property
   /// the old target-primary camera lost the moment anything moved the eye.
   #[test]
   fn orbit_fixes_its_center() {
@@ -441,12 +441,12 @@ mod tests {
     }
   }
 
-  /// The center holds still *on screen*, not merely in space: its view-space
+  /// The center holds still on screen, not merely in space: its view-space
   /// coordinate is conserved, so the grabbed point does not jump out from under
   /// the cursor on the first pixel of the drag.
   ///
   /// This is what a rigid rotation buys and what rebuilding the eye from
-  /// `forward` destroys -- and it holds for an off-axis center too, which is
+  /// `forward` destroys, and it holds for an off-axis center too, which is
   /// exactly the case that exposed the difference.
   #[test]
   fn orbit_pins_its_center_on_screen() {
@@ -494,7 +494,7 @@ mod tests {
   }
 
   /// The center of the viewport looks along the view direction under either
-  /// projection -- the shared contract that lets one picking path serve both.
+  /// projection, the shared contract that lets one picking path serve both.
   #[test]
   fn center_ray_looks_forward() {
     for orthographic in [false, true] {
@@ -507,7 +507,7 @@ mod tests {
   }
 
   /// The depth a point at `dist` along the view direction lands on, after the
-  /// divide -- what the depth test actually compares.
+  /// divide, what the depth test actually compares.
   fn depth_at(c: &Camera, dist: f32) -> f32 {
     let p = c.eye + c.forward() * dist;
     let clip = c.build_view_projection_matrix() * p.to_homogeneous();
@@ -526,7 +526,7 @@ mod tests {
     }
   }
 
-  /// Nearer is larger, everywhere in the frustum -- the law `CompareFunction::
+  /// Nearer is larger, everywhere in the frustum, the law `CompareFunction::
   /// Greater` and the clear to `DEPTH_CLEAR` are the two halves of.
   #[test]
   fn depth_decreases_with_distance() {
@@ -543,12 +543,12 @@ mod tests {
     }
   }
 
-  /// The theorem the reversal exists for: a fixed *world* separation stays
+  /// The theorem the reversal exists for: a fixed world separation stays
   /// resolvable in float32 depth however far out it is viewed.
   ///
   /// This is what an unreversed buffer fails. Sweeping the eye out to the far
   /// field, two points a wireframe's bias apart must still differ by many
-  /// float32 ulps -- the quantity that decayed like $z^2$ before, and is the
+  /// float32 ulps, the quantity that decayed like $z^2$ before, and is the
   /// z-fighting when it reaches zero.
   #[test]
   fn a_world_scale_bias_survives_depth_quantization() {

@@ -6,18 +6,18 @@
 //! boundary is what a triangle can carry, and the inside is a medium the eye ray
 //! integrates through.
 //!
-//! It runs *after* the scene pass rather than among its items, and that is not a
+//! It runs after the scene pass rather than among its items, and that is not a
 //! scheduling convenience. The march is clamped by the scene's depth buffer, and
 //! a texture cannot be sampled in the pass that writes it as an attachment. The
 //! ordering is also what makes the compositing right: front-to-back
 //! emission-absorption needs no sorting because the ray is the depth order, and
 //! the one thing it must know is where the opaque geometry cut it off.
 //!
-//! **Several volumes would be one march, not several passes.** Two overlapping
+//! Several volumes would be one march, not several passes. Two overlapping
 //! media composite correctly only if a single ray interleaves their samples in
 //! depth order; running this pass twice blends one wholly over the other and is
-//! wrong wherever they intersect. Nothing here forecloses that -- it is a longer
-//! loop over more bound textures -- but it is not what a second `VolumeBatch`
+//! wrong wherever they intersect. Nothing here forecloses that: it is a longer
+//! loop over more bound textures, but it is not what a second `VolumeBatch`
 //! would give.
 
 use bytemuck::{Pod, Zeroable};
@@ -36,7 +36,7 @@ const COARSE_BLOCK: usize = 4;
 /// `COARSE_BLOCK`-cubed fine voxels, normalized by the grid's peak magnitude and
 /// `ceil`-encoded into `R8Unorm`. Returned with its extent for upload.
 ///
-/// The normalization matches the shader's occupancy scale (the peak *is* that
+/// The normalization matches the shader's occupancy scale (the peak is that
 /// scale, being `max |value|`), so a texel decodes straight to the block's
 /// maximum occupancy. `ceil` rounds any nonzero block up rather than down, so the
 /// bound is conservative: a block the grid calls empty has every fine sample
@@ -172,7 +172,7 @@ impl Default for VolumeMaterial {
 /// Stored `R8Unorm`, which is a deliberate trade and the reason the material
 /// carries `value_min`/`value_range`. Eight bits is 1/255 of the field's own
 /// range, imperceptible in a fog whose opacity is an integral along a ray, and
-/// it is the only widely *filterable* single-channel format: `R32Float` needs
+/// it is the only widely filterable single-channel format: `R32Float` needs
 /// the optional `float32-filterable` feature, without which the medium would be
 /// blocky, and `Rgba16Float` costs eight bytes a voxel, which at this grid size
 /// is tens of megabytes the web build should not pay.
@@ -258,7 +258,7 @@ impl VolumeBatch {
     // its `COARSE_BLOCK`-cubed fine voxels, `max |value|` normalized by the
     // grid's peak so it decodes to the same `[0, 1]` occupancy the shader
     // compares against `MIN_OCCUPANCY`. `ceil`-encoded, so a block with any
-    // content is never rounded down to empty -- the skip stays conservative.
+    // content is never rounded down to empty, the skip stays conservative.
     let (coarse, coarse_extent) = coarse_occupancy(grid);
     let coarse_texture = device.create_texture(&wgpu::TextureDescriptor {
       label: Some("Volume Coarse Texture"),
@@ -336,7 +336,7 @@ impl VolumeBatch {
   }
 }
 
-/// The pipeline and the bind group layouts; the texture lives in a
+/// The pipeline and the bind group layouts. The texture lives in a
 /// [`VolumeBatch`], the per-frame scalars in the material binding.
 pub struct VolumePass {
   pipeline: wgpu::RenderPipeline,

@@ -9,7 +9,7 @@
 //!   scheduler rather than a blocking `run_app`;
 //! - mounting the winit-created `<canvas>` into the document, since winit builds
 //!   it but does not attach it;
-//! - bridging the *async* GPU bootstrap back into the event loop. Adapter,
+//! - bridging the async GPU bootstrap back into the event loop. Adapter,
 //!   device and surface creation are async and must yield to the browser instead
 //!   of blocking it, so [`State::new`] runs on the microtask queue via
 //!   [`init_state`] and the finished [`State`] is parked in a slot the loop
@@ -41,7 +41,7 @@ thread_local! {
 #[wasm_bindgen]
 pub fn start() {
   console_error_panic_hook::set_once();
-  // `Info` and above; the render loop's per-frame chatter stays at `debug` and
+  // `Info` and above. The render loop's per-frame chatter stays at `debug` and
   // is filtered out by default.
   let _ = console_log::init_with_level(log::Level::Info);
 
@@ -119,20 +119,20 @@ fn mount_canvas(window: &Window) {
 /// The browser's answer to "run this off the main thread": a dedicated worker.
 ///
 /// This is the whole of the web's solve transport, and it is deliberately the
-/// *only* place any of it appears. [`crate::solve`] knows a build is a value
-/// that produces an outcome later; it does not know what a `Worker` is, and the
+/// only place any of it appears. [`crate::solve`] knows a build is a value
+/// that produces an outcome later. It does not know what a `Worker` is, and the
 /// native build never compiles a line of this.
 ///
 /// A worker, not `SharedArrayBuffer` threads. Sharing memory with the main
 /// thread would need cross-origin isolation (`COOP`/`COEP` response headers)
-/// and a nightly toolchain built with the `atomics` target feature -- neither
+/// and a nightly toolchain built with the `atomics` target feature, neither
 /// available on a static host, and both a large cost for what is wanted here.
 /// Message passing needs nothing: the request is CBOR in, the outcome CBOR out,
 /// and the tab keeps rendering throughout.
 ///
 /// One worker per build, torn down when the handle drops. A build abandoned
 /// mid-flight (the reader picks another pair) therefore stops occupying a core
-/// instead of running to completion for an answer nobody will read -- which is
+/// instead of running to completion for an answer nobody will read, which is
 /// also why the handle owns the worker rather than sharing a long-lived one.
 #[cfg(target_arch = "wasm32")]
 pub(crate) mod worker {
@@ -145,7 +145,7 @@ pub(crate) mod worker {
 
   /// A build running in its own worker. The outcome lands in `slot` from the
   /// message callback; [`Self::poll`] takes it. A plain `RefCell` is sound
-  /// because `wasm32` is single-threaded -- the callback and the event loop
+  /// because `wasm32` is single-threaded, the callback and the event loop
   /// never run at once, the same reasoning [`super::init_state`]'s slot rests
   /// on.
   pub(crate) struct Handle {
@@ -162,13 +162,13 @@ pub(crate) mod worker {
     }
   }
 
-  /// The worker script, carrying this build's stamp so it loads the *same*
+  /// The worker script, carrying this build's stamp so it loads the same
   /// glue and wasm the page did.
   ///
   /// The page puts the stamp on the global object (see `index.html`), which is
   /// the only way it can reach here: it is substituted into the HTML at deploy
-  /// time, long after this code is compiled. Absent -- a page served without
-  /// it -- the URL is bare, which is what it was before stamping and is no
+  /// time, long after this code is compiled. Absent, a page served without
+  /// it: the URL is bare, which is what it was before stamping and is no
   /// worse.
   fn worker_url() -> String {
     let stamp = js_sys::Reflect::get(&js_sys::global(), &JsValue::from_str("__FORMONIQ_BUILD__"))
@@ -223,7 +223,7 @@ pub(crate) mod worker {
 ///
 /// Exported for `solve_worker.js` to call. It runs inside the worker's own
 /// instance of this same module, so the solver here is the identical code the
-/// native build runs on a thread -- the boundary is the transport, never a
+/// native build runs on a thread: the boundary is the transport, never a
 /// second implementation.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]

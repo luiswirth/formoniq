@@ -2,18 +2,18 @@
 //!
 //! Refinement is where a single mesh becomes a nested family of meshes, and it
 //! respects the topology/geometry split: this module produces only the refined
-//! *topology* and the affine, metric-free record of how each new cell sits
+//! topology and the affine, metric-free record of how each new cell sits
 //! inside a coarse one (a [`Child`]). Transporting a geometry across that record
-//! -- pulling each coarse cell's metric back onto its children, or placing the
-//! new vertices of an embedding -- is the geometry layer's job (see
+//!, pulling each coarse cell's metric back onto its children, or placing the
+//! new vertices of an embedding, is the geometry layer's job (see
 //! `geometry::refine`), keyed off the same [`Subdivision`].
 //!
 //! Every cell is subdivided by the one reference pattern
 //! ([`UnitRefinement`](crate::atlas::refine::UnitRefinement)),
-//! relabelled onto the cell's vertices. New vertices
+//! relabeled onto the cell's vertices. New vertices
 //! shared between cells are identified by the coarse simplex they are supported
-//! on together with their barycentric weights there -- a key both incident
-//! charts compute identically -- so the refined mesh closes up conformingly, and
+//! on together with their barycentric weights there, a key both incident
+//! charts compute identically, so the refined mesh closes up conformingly, and
 //! [`Complex::from_cells`] rederives every skeleton and boundary operator from
 //! the new cells, its manifold check standing as the conformity assertion.
 
@@ -40,12 +40,12 @@ pub struct Subdivision {
   /// The number of coarse vertices, which keep their labels in the refined
   /// complex: the refined vertices $0..\"ncoarse\"$ are the coarse ones.
   ncoarse_vertices: usize,
-  /// Per *new* refined vertex (labels $"ncoarse"..$): a coarse cell it lies in
+  /// Per new refined vertex (labels $"ncoarse"..$): a coarse cell it lies in
   /// and its barycentric coordinates there, enough to place it from any
-  /// coarse-cell data. A coarse vertex needs no birth -- it maps to itself.
+  /// coarse-cell data. A coarse vertex needs no birth, it maps to itself.
   new_births: Vec<VertexBirth>,
   /// The refined complex's own vertex ordering: each child in the order the
-  /// reference pattern emitted its corners. Refining the next level in *this*
+  /// reference pattern emitted its corners. Refining the next level in this
   /// ordering is what makes refinement compose.
   ordering: CellOrdering,
 }
@@ -57,7 +57,7 @@ pub struct Child {
   /// The coarse cell (by kidx) this child subdivides.
   pub parent: KSimplexIdx,
   /// The Jacobian of the child's affine embedding into the parent chart's local
-  /// frame, its columns ordered by the child's sorted global vertices -- the
+  /// frame, its columns ordered by the child's sorted global vertices, the
   /// same basis the refined cell's own metric is read in. Metric-free, and the
   /// map a geometry is transported (pulled back) along.
   pub jacobian: Matrix,
@@ -65,9 +65,9 @@ pub struct Child {
 
 /// The birth of a new refined vertex, as an affine combination of coarse
 /// vertices: pairs of a coarse vertex (global index) and its weight, the weights
-/// summing to one. Metric-free and chart-consistent -- the combination is the
-/// same read from any incident coarse cell -- so it places the new vertex in
-/// *any* coarse-vertex data (an embedding, a field) by a weighted sum.
+/// summing to one. Metric-free and chart-consistent, the combination is the
+/// same read from any incident coarse cell, so it places the new vertex in
+/// any coarse-vertex data (an embedding, a field) by a weighted sum.
 #[derive(Debug, Clone)]
 pub struct VertexBirth {
   pub combination: Vec<(VertexIdx, f64)>,
@@ -82,7 +82,7 @@ impl Complex {
   /// is transported along.
   ///
   /// Refines in the colex ordering, the one a mesh carries implicitly. Prefer
-  /// [`Complex::refine_with`] when an ordering is available: composing *this*
+  /// [`Complex::refine_with`] when an ordering is available: composing this
   /// with itself does not give the $R R'$-fold refinement above dimension two,
   /// because each level re-derives a child's order by sorting rather than
   /// inheriting it.
@@ -102,9 +102,9 @@ impl Complex {
   ///
   /// # Panics
   /// If the ordering is not an ordering of this complex's cells. It must also
-  /// be face-consistent ([`CellOrdering::is_face_consistent`]) -- two cells that
+  /// be face-consistent ([`CellOrdering::is_face_consistent`]), two cells that
   /// order a shared face differently subdivide it differently, and the result
-  /// is non-conforming; that is checked by `from_cells` when the refined
+  /// is non-conforming. That is checked by `from_cells` when the refined
   /// complex is built, not assumed here.
   pub fn refine_with(&self, ordering: &CellOrdering, refinement: usize) -> Subdivision {
     assert_eq!(
@@ -117,7 +117,7 @@ impl Complex {
     let ncoarse_vertices = self.vertices().len();
 
     // Global labels for the new (non-coarse) vertices, keyed by the coarse
-    // simplex a lattice point is supported on and its weights there -- the key
+    // simplex a lattice point is supported on and its weights there, the key
     // both incident charts agree on.
     let mut new_index: HashMap<Vec<(VertexIdx, usize)>, usize> = HashMap::new();
     let mut new_births: Vec<VertexBirth> = Vec::new();
@@ -148,7 +148,7 @@ impl Complex {
           .map(|(i, &w)| (cverts[i], w))
           .collect();
         support.sort_unstable();
-        // Supported on a single coarse vertex: it *is* that vertex.
+        // Supported on a single coarse vertex: it is that vertex.
         if support.len() == 1 {
           return support[0].0;
         }
@@ -177,9 +177,9 @@ impl Complex {
         // Each corner as (global vertex, its parent-local coordinate). The
         // stored cell sorts its vertices globally, and the induced metric reads
         // that sorted order as its basis, so the child's realization in the
-        // parent frame must too -- hence the sort, and hence the lattice weights
+        // parent frame must too, hence the sort, and hence the lattice weights
         // are read through `slot` rather than through the pattern's own frame,
-        // whose axes follow the *ordering*. The two agree only when the ordering
+        // whose axes follow the ordering. The two agree only when the ordering
         // is the colex one. This is why the Jacobian is per-cell and not pure
         // reference data.
         let mut corners: Vec<(VertexIdx, Vector)> = child
@@ -203,9 +203,9 @@ impl Complex {
         corners.sort_by_key(|&(global, _)| global);
 
         // The child realized in the parent chart's local frame, in the stored
-        // (sorted) vertex order; its linear part is the affine map the parent's
+        // (sorted) vertex order. Its linear part is the affine map the parent's
         // metric is pulled back along. The degenerate 0-cell is the empty map,
-        // handled by the realization itself -- no special case here.
+        // handled by the realization itself, no special case here.
         let local: Vec<Vector> = corners.iter().map(|(_, x)| x.clone()).collect();
         let jacobian =
           SimplexCoords::<LocalCartesian>::new(Matrix::from_columns(&local)).linear_transform();

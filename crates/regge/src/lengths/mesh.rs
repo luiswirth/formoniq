@@ -21,8 +21,8 @@ use std::{io, path::Path};
 /// The signed squared lengths of the edges of the mesh: the Regge geometry,
 /// on any metric signature.
 ///
-/// One scalar per edge is the whole geometry of the simplicial manifold --
-/// Regge's "general relativity without coordinates" -- and the squared length
+/// One scalar per edge is the whole geometry of the simplicial manifold,
+/// Regge's "general relativity without coordinates", and the squared length
 /// is the primitive that keeps it signature-blind: positive spacelike, zero
 /// null, negative timelike, exactly the [`Metric::norm_sq`] convention. A
 /// Riemannian mesh is the all-positive, Euclidean-realizable corner; a
@@ -50,7 +50,7 @@ impl SkeletonData for MeshLengthsSq {
 }
 impl MeshLengthsSq {
   /// The invariant is per-cell non-degeneracy of the induced metric, checked
-  /// over the cell skeleton; the signature is whatever the data describes.
+  /// over the cell skeleton. The signature is whatever the data describes.
   pub fn new(vector: Vector, complex: &Complex) -> Self {
     let this = Self { vector };
     assert!(
@@ -81,7 +81,7 @@ impl MeshLengthsSq {
     self[iedge]
   }
   /// The magnitude $sqrt(abs(s))$ of an edge. On an indefinite metric this is
-  /// meaningful only together with [`Self::causal_type`]; it is never NaN.
+  /// meaningful only together with [`Self::causal_type`]. It is never NaN.
   pub fn length(&self, iedge: EdgeIdx) -> f64 {
     self[iedge].abs().sqrt()
   }
@@ -155,18 +155,18 @@ impl MeshLengthsSq {
     SimplexLengthsSq::new_unchecked(lengths_sq, simplex.dim())
   }
 
-  /// The intrinsic metric tensor of *any* simplex, of any grade: the Gramian
+  /// The intrinsic metric tensor of any simplex, of any grade: the Gramian
   /// of that simplex's own edges. Geometry is defined on the whole skeleton,
-  /// not only the cells -- an edge has a length, a facet has an area, a hinge
-  /// has a metric -- because every subsimplex's metric is the restriction of
+  /// not only the cells: an edge has a length, a facet has an area, a hinge
+  /// has a metric, because every subsimplex's metric is the restriction of
   /// any containing cell's, equivalently the Gramian built from its edges. A
   /// containing cell need not be consulted: the edge lengths are shared, so
   /// every cell induces the same metric on a shared face, and this is well
   /// defined from the edge data alone.
   ///
   /// This is the metric, not the chart. Only a top-dimensional simplex carries
-  /// a [`Chart`](simplicial::atlas::Chart) -- a frame in which to express a section
-  /// -- but *every* simplex has a metric to measure it by.
+  /// a [`Chart`](simplicial::atlas::Chart), a frame in which to express a section
+  ///, but every simplex has a metric to measure it by.
   pub fn simplex_metric(&self, simplex: SimplexRef) -> Metric {
     self.simplex_lengths_sq(simplex).metric()
   }
@@ -179,7 +179,7 @@ impl MeshLengthsSq {
 
   /// The volume of any simplex, of any grade and signature:
   /// $vol(hat(K)) sqrt(abs(det g))$ read off its own edge lengths. An edge's
-  /// length, a facet's area, a cell's volume -- one formula, total over the
+  /// length, a facet's area, a cell's volume, one formula, total over the
   /// skeleton.
   pub fn simplex_volume(&self, simplex: SimplexRef) -> f64 {
     self.simplex_lengths_sq(simplex).vol()
@@ -206,9 +206,9 @@ impl MeshLengthsSq {
   ///
   /// On a Riemannian mesh every edge is spacelike and the census is trivial.
   /// It carries content only on an indefinite signature, where it is the
-  /// well-posedness diagnostic of spacetime FEEC: a *null* edge degenerates the
+  /// well-posedness diagnostic of spacetime FEEC: a null edge degenerates the
   /// indefinite $L^2$ pairing on Whitney 1-forms exactly (the mass rank-deficient
-  /// by the null count), so a Lorentzian mesh is *causally generic*
+  /// by the null count), so a Lorentzian mesh is causally generic
   /// ([`Self::is_causally_generic`]) precisely when the null count is zero.
   pub fn causal_census(&self, topology: &Complex) -> CausalCensus {
     let mut census = CausalCensus::default();
@@ -253,7 +253,7 @@ impl std::ops::Index<EdgeIdx> for MeshLengthsSq {
 
 /// The count of edges of each causal character in a mesh: the output of
 /// [`MeshLengthsSq::causal_census`]. On a Lorentzian spacetime the `null` field
-/// is the obstruction to well-posedness; on a Riemannian mesh every edge falls
+/// is the obstruction to well-posedness. On a Riemannian mesh every edge falls
 /// in `spacelike`.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct CausalCensus {
@@ -273,7 +273,7 @@ impl std::fmt::Display for CausalCensus {
 
 /// Geometry read on a topology witness: the signed squared length an [`Edge`]
 /// proof keys in the grade-1 Regge data, `edge.length_sq(&lengths_sq)`.
-/// Reaches down from the metric side -- the topology never learns of metrics.
+/// Reaches down from the metric side, the topology never learns of metrics.
 pub trait EdgeRefExt {
   /// The signed squared length: the Regge primitive.
   fn length_sq(self, lengths_sq: &MeshLengthsSq) -> f64;

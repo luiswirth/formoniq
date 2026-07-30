@@ -7,13 +7,13 @@
 //! $
 //!
 //! with $P_K$ the gather of a cell's degrees of freedom. Assembly performs that
-//! sum once and stores the result; a matrix-free apply performs it on every
+//! sum once and stores the result. A matrix-free apply performs it on every
 //! matvec instead, and stores no element matrix and no sparsity pattern.
 //!
 //! The trade is memory for arithmetic. Where the assembled operator holds a
 //! coefficient per nonzero, this holds only the cell metrics and the incidence,
 //! and rebuilds each $M_K$ from them. On a CPU that is the losing direction for
-//! *speed* and the winning one for *size*: it is how a problem whose assembled
+//! speed and the winning one for size: it is how a problem whose assembled
 //! matrix does not fit still gets solved. What it costs in capability is that a
 //! direct factorization and an eigensolve need entries, so those still want
 //! [`assemble_galmat`](crate::assemble::assemble_galmat).
@@ -21,9 +21,9 @@
 //! # Gather, not scatter
 //!
 //! Performing the sum by visiting cells and adding each contribution into the
-//! global result is a *scatter*, and two cells sharing a face write the same
+//! global result is a scatter, and two cells sharing a face write the same
 //! entry. Visiting degrees of freedom and pulling in the cells at each is a
-//! *gather*, where every output element is the property of one task and the
+//! gather, where every output element is the property of one task and the
 //! race is absent rather than synchronized away.
 //!
 //! Which direction is available is a property of the traversal, not of the
@@ -67,7 +67,7 @@ pub struct ElementOperator<'a, E> {
 }
 
 impl<'a, E: ElMatProvider> ElementOperator<'a, E> {
-  /// Walk the mesh once, here; every later apply is arithmetic on what this
+  /// Walk the mesh once, here. Every later apply is arithmetic on what this
   /// produced.
   pub fn new(topology: &'a Complex, geometry: &MeshLengthsSq, elmat: E) -> Self {
     let metrics = topology
@@ -94,7 +94,7 @@ impl<'a, E: ElMatProvider> ElementOperator<'a, E> {
   /// $y = sum_K P_K^top M_K P_K x$, by gather.
   ///
   /// The first stage is over cells and writes each $M_K P_K x$ to that cell's
-  /// own slot; the second is over degrees of freedom and sums the slots at
+  /// own slot. The second is over degrees of freedom and sums the slots at
   /// each. Both are data-parallel without a lock, which is the point of taking
   /// the incidence in its two readings rather than one.
   pub fn apply(&self, x: &Vector) -> Vector {

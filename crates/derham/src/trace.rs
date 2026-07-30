@@ -16,7 +16,7 @@ use {
 /// [`face_tangent_blade`](crate::project::face_tangent_blade).
 ///
 /// The result lives on the face's own tangent space, so the normal components
-/// are not discarded but **absent**: there is no space left for them. Trivial
+/// are not discarded but absent: there is no space left for them. Trivial
 /// below the grade, where $Lambda^k (T^* tau) = 0$.
 ///
 /// Materialized once and applied at every point, $Lambda^k$ of the inclusion
@@ -66,7 +66,7 @@ impl FaceTrace {
     self.transport.pullback(form)
   }
 
-  /// The single coefficient of a trace at the face's *top* grade, $k = d$,
+  /// The single coefficient of a trace at the face's top grade, $k = d$,
   /// where $Lambda^d (T^* tau)$ is one-dimensional.
   ///
   /// This is the integrand of the de Rham map: $tr_tau omega$ at top grade is

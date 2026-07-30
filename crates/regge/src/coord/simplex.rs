@@ -2,14 +2,14 @@
 //!
 //! The affine realization itself is generic over the coordinate space and lives
 //! in [`simplicial::atlas::simplex_coords`]. What is added here is everything that
-//! presupposes an *embedding* -- the `Ambient` instantiation `SimplexCoords`
+//! presupposes an embedding, the `Ambient` instantiation `SimplexCoords`
 //! (its default), whose vertices are points of $RR^N$:
 //!
 //! - constructing one from a mesh's [`MeshCoords`] and a topological
 //!   [`Simplex`] ([`simplex_coords`], or [`SimplexRefExt::coord_simplex`] on a
 //!   handle),
-//! - the metric it *induces* ([`metric_tensor`](SimplexCoords::metric_tensor))
-//!   and the Regge squared edge lengths it *realizes*
+//! - the metric it induces ([`metric_tensor`](SimplexCoords::metric_tensor))
+//!   and the Regge squared edge lengths it realizes
 //!   ([`to_lengths_sq`](SimplexCoords::to_lengths_sq)).
 //!
 //! These are the two bridges down into the intrinsic layer, and they run
@@ -33,7 +33,7 @@ pub use simplicial::atlas::SimplexCoords;
 /// is the bridge this crate is for, so it reaches down as an extension: an
 /// embedding induces a metric, a metric induces no embedding.
 pub trait SimplexCoordsExt {
-  /// The metric a *Euclidean* ambient induces on this realization: the
+  /// The metric a Euclidean ambient induces on this realization: the
   /// Gramian of the cell's spanning vectors. The general bridge is the
   /// pullback of the mesh's ambient inner product
   /// ([`MeshCoords::cell_metric`](crate::coord::mesh::MeshCoords::cell_metric)),
@@ -61,7 +61,7 @@ pub fn simplex_coords(simp: &Simplex, coords: &MeshCoords) -> SimplexCoords {
 }
 
 impl SimplexCoordsExt for SimplexCoords<Ambient> {
-  /// The metric a *Euclidean* ambient induces on this realization: the
+  /// The metric a Euclidean ambient induces on this realization: the
   /// Gramian of the cell's spanning vectors. The general bridge is the
   /// pullback of the mesh's ambient inner product
   /// ([`MeshCoords::cell_metric`](crate::coord::mesh::MeshCoords::cell_metric)),

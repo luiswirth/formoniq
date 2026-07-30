@@ -20,7 +20,7 @@ use std::{io, path::Path};
 /// c_sigma$ of a cochain with a chain of the same grade.
 ///
 /// The pairing that makes $C^k$ the dual of $C_k$, and the discrete reading of
-/// $integral_c omega$: a cochain *is* the assignment of an integral to each
+/// $integral_c omega$: a cochain is the assignment of an integral to each
 /// simplex, so summing against a chain's coefficients integrates over the
 /// chain.
 ///
@@ -124,7 +124,7 @@ impl Cochain {
   /// positions, the same order the DOFs of the reference cell take, and colex is
   /// preserved under passing to a subset, so each face's coefficient is read off
   /// with no sign. A grade exceeding `simplex.dim()` has no faces of that grade
-  /// and traces to the empty cochain -- the zero of $Lambda^k(tau) = 0$ -- which
+  /// and traces to the empty cochain, the zero of $Lambda^k(tau) = 0$, which
   /// is how the trace stays total below the form's grade.
   ///
   /// Whitney interpolation commutes with it, $tr_tau compose W = W_tau compose
@@ -158,13 +158,13 @@ impl Cochain {
 ///
 /// The storage stays an algebraic [`Vector`], not a
 /// [`SkeletonVec`](simplicial::topology::data::SkeletonVec), because a cochain
-/// *is* a vector: the coboundary multiplies it and the mass matrices pair it.
+/// is a vector: the coboundary multiplies it and the mass matrices pair it.
 /// The trait carries the reading, the type keeps its own representation.
 ///
 /// Shape alone does not make two such columns the same object. Signed squared
 /// edge lengths
 /// ([`MeshLengthsSq`](regge::lengths::mesh::MeshLengthsSq)) are
-/// grade-1 columns too, but their datum $g(t_e, t_e)$ is *quadratic* in the
+/// grade-1 columns too, but their datum $g(t_e, t_e)$ is quadratic in the
 /// edge tangent and so blind to its reversal, while a cochain's $integral_e
 /// omega$ is linear and changes sign with it. They sit on the two sides of
 /// $Lambda^1 times.circle Lambda^1 = Lambda^2 plus.circle "Sym"^2$: the

@@ -1,7 +1,7 @@
-//! Heat equation on the flat box $[0, pi]^n$: a parabolic flow *dissipates*.
+//! Heat equation on the flat box $[0, pi]^n$: a parabolic flow dissipates.
 //!
-//! The method of lines --- Radau IIA in time over the Whitney space of
-//! $k$-forms --- run at every dimension $1 <= n <= 3$ and grade $0 <= k <= n$
+//! The method of lines, Radau IIA in time over the Whitney space of
+//! $k$-forms, run at every dimension $1 <= n <= 3$ and grade $0 <= k <= n$
 //! from one loop: the scalar heat equation at $k = 0$, the vector one at
 //! $k = 1$, the top-form flow at $k = n$, all the same code.
 //!
@@ -17,7 +17,7 @@
 //! zero on $diff K$ via the relative complex).
 //!
 //! At top grade $dif u = 0$ and $sigma = delta u$ is the only term; at grade
-//! $0$ there is no $sigma$ and $Delta = delta dif$ --- both the trivial total
+//! $0$ there is no $sigma$ and $Delta = delta dif$, both the trivial total
 //! cases, run by the same code.
 
 #[path = "util/mod.rs"]

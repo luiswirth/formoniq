@@ -50,7 +50,7 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 // under 1.0 therefore does not soften the selection, it *breaks* it -- at
 // `KNEE = 0.6` against `THRESHOLD = 1.0` the ramp opened at 0.4 and the fill's
 // own bright end bled a sixth of itself into the glow, haloing the heatmap into
-// its neighbours.
+// its neighbors.
 //
 // These put the ramp at exactly $[1.0, 1.6]$: nothing displayable glows, and
 // what overflows glows in proportion to its overflow.
@@ -80,7 +80,7 @@ fn box_4(uv: vec2<f32>, texel: vec2<f32>) -> vec3<f32> {
 // The scene, thresholded, into the top of the chain.
 //
 // The four taps are averaged by Karis's weighting, $w = 1 \/ (1 + "luma")$,
-// rather than evenly. A single texel far brighter than its neighbours would
+// rather than evenly. A single texel far brighter than its neighbors would
 // otherwise dominate its own 2x2 and, as the filament drifts sub-pixel between
 // frames, flicker the whole blurred halo it seeds -- the firefly. Weighting by
 // the inverse of brightness is what makes the average stable under that motion,

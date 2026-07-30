@@ -1,13 +1,13 @@
 //! The gallery model: which mesh and which study of it are shown, and the
 //! lazy, memoized loader that builds a `(mesh, study)` pair's
-//! [`crate::scene::Scene`] -- possibly on a background thread. Free of any GPU
-//! type; the windowed wrapper (`app.rs`) owns the `Scene` this produces.
+//! [`crate::scene::Scene`], possibly on a background thread. Free of any GPU
+//! type. The windowed wrapper (`app.rs`) owns the `Scene` this produces.
 //!
 //! The two axes are independent. What is shown is a point in the product
 //! [`MeshSource`] × [`Study`]: every study runs on every mesh, and the cache,
 //! the background load and the placeholder machinery all key on the pair. A
 //! `Preset` is only a named point in that product together with the field it
-//! opens on -- a value the browser fills the two axes from, never a build path
+//! opens on, a value the browser fills the two axes from, never a build path
 //! of its own.
 
 use std::path::PathBuf;
@@ -27,11 +27,11 @@ use crate::ui::{Marks, Selection};
 
 // Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
 // eigensolve is dense in the vertex count, so keep this modest for an instant
-// startup; the mesh slider goes up to `SPHERE_SUBDIVISIONS_MAX` for fidelity.
+// startup. The mesh slider goes up to `SPHERE_SUBDIVISIONS_MAX` for fidelity.
 pub(crate) const SPHERE_SUBDIVISIONS: usize = 3;
 // Upper end of the sphere refinement slider. The per-grade solve is dense
 // ($O(n^3)$), and at grade 1 the edge count is what enters, so a step past this
-// turns the background solve from seconds into minutes -- the cap keeps every
+// turns the background solve from seconds into minutes, the cap keeps every
 // reachable mesh solvable while the window stays responsive.
 pub(crate) const SPHERE_SUBDIVISIONS_MAX: usize = 4;
 // Cells per axis the unit-cube grid opens on, and the upper end of its
@@ -40,7 +40,7 @@ pub(crate) const SPHERE_SUBDIVISIONS_MAX: usize = 4;
 pub(crate) const GRID_CELLS_DEFAULT: usize = 8;
 pub(crate) const GRID_CELLS_MAX: usize = 20;
 
-// Cells on the *longest* axis a quotient surface opens on, and the ends of its
+// Cells on the longest axis a quotient surface opens on, and the ends of its
 // refinement slider. The shorter axes are scaled down from it, so the cells stay
 // near equilateral rather than inheriting the fundamental domain's aspect ratio.
 // Three is the floor the generator imposes on a closed axis.
@@ -48,15 +48,15 @@ pub(crate) const GRID_CELLS_MAX: usize = 20;
 // Calibrated against the sphere, which is the mesh every cost here was reasoned
 // about: its default carries 1280 cells and 1920 edges, so a donut of 40 (800
 // cells, 1200 edges) sits comfortably inside it while a donut of 12 carried 72
-// cells -- eighteen times coarser than the mesh beside it in the same picker,
+// cells, eighteen times coarser than the mesh beside it in the same picker,
 // too coarse to resolve anything a field does.
 pub const QUOTIENT_CELLS_DEFAULT: usize = 40;
 pub(crate) const QUOTIENT_CELLS_MIN: usize = 3;
 pub(crate) const QUOTIENT_CELLS_MAX: usize = 64;
 
 // The donut's tube as a fraction of its revolution radius. The binding
-// constraint is not self-intersection of the mesh -- the generator already
-// bounds that -- but the *displaced* surface: a field's displacement is
+// constraint is not self-intersection of the mesh, the generator already
+// bounds that, but the displaced surface: a field's displacement is
 // amplitude-bounded by the mesh's reach, which here is the tube radius, so a
 // full-amplitude mode can grow the tube to twice its size. The hole, of radius
 // $1 - t$, therefore has to survive a tube of $2 t$, which needs $t < 1\/3$.
@@ -69,8 +69,8 @@ const MOEBIUS_RADIUS_SLACK: f64 = 2.0;
 // an order of magnitude smaller reads wrong on every one of them.
 const QUOTIENT_CIRCUMFERENCE: f64 = std::f64::consts::TAU;
 // The band's width as a fraction of the revolution radius. Wide enough that
-// the quasi-uniform resolution puts several cells across it -- a band one cell
-// wide has no interior and nothing to show a field on -- and still well inside
+// the quasi-uniform resolution puts several cells across it, a band one cell
+// wide has no interior and nothing to show a field on, and still well inside
 // `MOEBIUS_RADIUS_SLACK`, which keeps the swept strip clear of its own axis.
 const MOEBIUS_WIDTH_RATIO: f64 = 1.5;
 
@@ -105,7 +105,7 @@ pub const EIGENMODES_NMODES_MAX: usize = 36;
 // as continuous motion at the trajectory's playback rate.
 pub const DEFAULT_TRAJECTORY_STEPS: usize = 160;
 // The trajectory-sampling slider's range. The lower end still reads as motion
-// under interpolation; the upper end is where the sampled frames stop earning
+// under interpolation. The upper end is where the sampled frames stop earning
 // their memory against the linear interpolant between them.
 pub const TRAJECTORY_STEPS_MIN: usize = 10;
 pub const TRAJECTORY_STEPS_MAX: usize = 400;
@@ -116,7 +116,7 @@ pub const TRAJECTORY_STEPS_MAX: usize = 400;
 pub const HEAT_FINAL_TIME: f64 = 0.5;
 pub const WAVE_FINAL_TIME: f64 = 12.0;
 // The advection field carries unit mean speed, so a unit of time is a unit of
-// distance travelled: the gallery's surfaces are unit-scale with a revolution
+// distance traveled: the gallery's surfaces are unit-scale with a revolution
 // of about `QUOTIENT_CIRCUMFERENCE`, and this is a couple of laps.
 pub const ADVECTION_FINAL_TIME: f64 = 13.0;
 // The final-time sliders' ranges, one per equation because the two evolve on
@@ -136,11 +136,11 @@ pub(crate) type Mesh = (Complex, MeshCoords);
 /// One of the surface meshes the studio ships, embedded in the binary (see
 /// `assets/meshes`, and its `SOURCES.md` for provenance and topology).
 ///
-/// The set is *not* written down here: `build.rs` enumerates the asset
+/// The set is not written down here: `build.rs` enumerates the asset
 /// directory and generates the table below, so a mesh dropped into
 /// `assets/meshes` is selectable with no code to change, and there is no list
 /// that can fall out of step with what actually ships. A handle is an index
-/// into that table -- the meshes are fixed for the life of the binary, so an
+/// into that table: the meshes are fixed for the life of the binary, so an
 /// index is a name, and comparing two is comparing which mesh they are.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct BuiltinMesh(usize);
@@ -152,9 +152,9 @@ pub struct BuiltinMesh(usize);
 pub(crate) enum Format {
   Obj,
   // Constructed only by `build.rs`, from the extension of whatever is in the
-  // asset directory -- so it goes unconstructed whenever no `.msh` ships, and
+  // asset directory, so it goes unconstructed whenever no `.msh` ships, and
   // that is not a reason to drop the reader. The directory is the source of
-  // truth for which meshes exist; the formats are what it may contain.
+  // truth for which meshes exist. The formats are what it may contain.
   #[allow(dead_code)]
   Gmsh,
 }
@@ -189,7 +189,7 @@ impl BuiltinMesh {
   }
 
   /// The picker's label: the name, capitalized. Prose is not derivable from a
-  /// filename, so the filename *is* the label -- renaming the asset is how a
+  /// filename, so the filename is the label, renaming the asset is how a
   /// mesh is renamed, rather than a second table of display strings that the
   /// first one could disagree with.
   pub(crate) fn label(self) -> String {
@@ -221,17 +221,17 @@ impl BuiltinMesh {
 
 /// Which flat quotient of the square, among those with an $RR^3$ realization.
 ///
-/// Both are [`regge::mesher::quotient::FlatQuotient`]s -- one generator, two
-/// per-axis identifications -- and both are drawn through the surfaces of
+/// Both are [`regge::mesher::quotient::FlatQuotient`]s, one generator, two
+/// per-axis identifications, and both are drawn through the surfaces of
 /// revolution of `mesher::quotient_embed`, the constructions that fit the fixed
 /// ambient $RR^3$. The rest of the family does not fit and so is not offered:
 /// the Klein bottle has no $RR^3$ embedding at all, and the isometric Clifford
 /// realization of the torus needs $RR^4$.
 ///
-/// **The surface the viewer shows is the curved one, not the flat quotient.**
+/// The surface the viewer shows is the curved one, not the flat quotient.
 /// A `MeshSource` produces coordinates, and every geometric quantity downstream
 /// is induced by them, so the donut here carries the Gaussian curvature of a
-/// torus of revolution -- positive on the outer rim, negative on the inner --
+/// torus of revolution, positive on the outer rim, negative on the inner,
 /// and its spectrum is that surface's, not the flat torus's. This is the
 /// inversion of the parent's invariant 2 doing exactly what it says: the viewer
 /// is extrinsic by necessity, and the honest reading is that these are
@@ -241,8 +241,8 @@ pub enum QuotientSurface {
   /// The torus of revolution: both axes periodic. Orientable and closed, with
   /// the Betti numbers $1, 2, 1$ of $T^2$.
   Donut,
-  /// The Möbius band: one axis twisted about an open fiber. **Non-orientable**,
-  /// and the one mesh in the gallery that is -- so it is where the reduced-grade
+  /// The Möbius band: one axis twisted about an open fiber. Non-orientable,
+  /// and the one mesh in the gallery that is, so it is where the reduced-grade
   /// marks that need a coherent orientation are refused rather than drawn with
   /// a per-cell sign.
   Moebius,
@@ -301,7 +301,7 @@ impl QuotientSurface {
   }
 }
 
-/// The chosen source of the mesh a study runs on -- a runtime input, not a
+/// The chosen source of the mesh a study runs on, a runtime input, not a
 /// fixed sphere. A generated family carries its refinement (moved by a slider);
 /// a built-in, the reference cell, the triforce or a user-loaded file each
 /// carry their own fixed geometry.
@@ -313,8 +313,8 @@ impl QuotientSurface {
 /// sphere's spherical harmonics are then one mesh's spectrum among others, not
 /// a privileged case.
 ///
-/// [`Self::Custom`] is not regenerable -- the loaded mesh lives in the gallery,
-/// keyed by this descriptor for the picker -- so it is the one variant
+/// [`Self::Custom`] is not regenerable, the loaded mesh lives in the gallery,
+/// keyed by this descriptor for the picker, so it is the one variant
 /// `build` cannot serve.
 #[derive(Clone, PartialEq)]
 pub enum MeshSource {
@@ -323,7 +323,7 @@ pub enum MeshSource {
   /// A triangulated unit cube of the given intrinsic dimension, with the given
   /// number of cells per axis: a manifold with boundary in arbitrary dimension.
   /// The Kuhn triangulation is dimension-general, so `dim = 1` is an interval,
-  /// `dim = 2` a square of triangles, `dim = 3` a cube of tetrahedra -- one
+  /// `dim = 2` a square of triangles, `dim = 3` a cube of tetrahedra, one
   /// generator, no special case. `dim` ranges over $1..=3$, the intrinsic
   /// dimensions the fixed ambient $RR^3$ embeds.
   Grid { dim: usize, cells_axis: usize },
@@ -341,7 +341,7 @@ pub enum MeshSource {
   },
   /// The triforce teaching mesh ([`crate::demos::triforce`]): four cells around
   /// one interior vertex, flat in the $z = 0$ plane. The multi-cell counterpart
-  /// of the reference cell -- the Whitney-basis study on it is the global shape
+  /// of the reference cell, the Whitney-basis study on it is the global shape
   /// functions.
   Triforce,
   /// One of the embedded CC0 gallery meshes.
@@ -351,8 +351,8 @@ pub enum MeshSource {
   /// A mesh saved by the engine's own serialization: a directory holding
   /// `topology.cbor` ([`Complex::save`]) and `coords.cbor`
   /// ([`MeshCoords::save`]). The general escape hatch for anything the
-  /// gallery does not generate itself -- a solve's output mesh, a mesh
-  /// exported for a paper figure -- regenerable from the path alone, unlike
+  /// gallery does not generate itself, a solve's output mesh, a mesh
+  /// exported for a paper figure, regenerable from the path alone, unlike
   /// [`Self::Custom`].
   File(PathBuf),
 }
@@ -381,7 +381,7 @@ impl MeshSource {
   }
 
   /// Builds the mesh for a regenerable source. `Err` carries a human-readable
-  /// reason (a malformed embedded asset -- e.g. an unfetched LFS pointer),
+  /// reason (a malformed embedded asset, e.g. an unfetched LFS pointer),
   /// which the caller surfaces without disturbing the current mesh.
   ///
   /// Panics on [`Self::Custom`]: a loaded mesh is installed directly and never
@@ -394,7 +394,7 @@ impl MeshSource {
       MeshSource::Grid { dim, cells_axis } => {
         let (topology, coords) =
           regge::mesher::cartesian::CartesianGrid::new_unit(*dim, *cells_axis).triangulate();
-        // The renderer draws in 3D; a grid of intrinsic dimension below 3 lifts
+        // The renderer draws in 3D. A grid of intrinsic dimension below 3 lifts
         // into $RR^3$ (a curve or a $z = 0$ surface), a no-op once `dim >= 3`,
         // exactly as the flat reference-cell scenes do.
         Ok((topology, coords.embed_euclidean((*dim).max(3))))
@@ -428,7 +428,7 @@ impl MeshSource {
 /// What is computed on the mesh: the second axis of the platform. Parameters
 /// live in the variant; a `Preset` fills them with concrete values, and the
 /// inspector edits them. Every study builds on every [`MeshSource`], and the
-/// build goes through the general [`Scene`] constructors -- there is no
+/// build goes through the general [`Scene`] constructors: there is no
 /// per-study display path.
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum Study {
@@ -441,7 +441,7 @@ pub enum Study {
   /// functions and a multi-cell mesh's global ones are the same construction,
   /// differing only in whether a DOF simplex's support is one cell or several.
   WhitneyBasis,
-  /// A named list of explicit cochains -- the triforce worked examples today, a
+  /// A named list of explicit cochains, the triforce worked examples today, a
   /// loaded cochain file later.
   Cochains(Vec<NamedCochain>),
   /// The grade-1 Hodge decomposition of a probe field, exposed as four
@@ -486,7 +486,7 @@ impl Study {
   }
 
   /// The form grade the study is posed at, for the studies that are posed at
-  /// one -- the eigenproblem and the two evolutions. `None` where the study
+  /// one, the eigenproblem and the two evolutions. `None` where the study
   /// spans every grade at once (the Whitney basis, the Hodge decomposition) or
   /// reads the grade off its data (an explicit cochain list).
   pub(crate) fn grade(&self) -> Option<ExteriorGrade> {
@@ -512,8 +512,8 @@ impl Study {
   }
 
   /// Builds the study's scene on `mesh`. For an eigenmode grade this runs that
-  /// grade's dense eigensolve -- the expensive path the caller runs on a
-  /// background thread and memoizes; the Whitney basis and the explicit
+  /// grade's dense eigensolve, the expensive path the caller runs on a
+  /// background thread and memoizes. The Whitney basis and the explicit
   /// cochains are cheap.
   pub fn build(&self, mesh: &Mesh) -> Scene {
     let (topology, coords) = mesh;
@@ -572,11 +572,11 @@ pub struct NamedCochain {
 #[derive(Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum CochainSpec {
   /// A grade-1 cochain given as a coefficient per edge, each edge addressed by
-  /// its ordered vertex pair $(v_0, v_1)$ with $v_0 < v_1$ -- the canonical
-  /// (positively oriented) edge orientation -- so the value lands on the mesh's
+  /// its ordered vertex pair $(v_0, v_1)$ with $v_0 < v_1$, the canonical
+  /// (positively oriented) edge orientation, so the value lands on the mesh's
   /// own edge regardless of that mesh's internal edge indexing.
   ByEdges(Vec<(usize, usize, f64)>),
-  /// A cochain saved by [`Cochain::save`], loaded by path -- the general
+  /// A cochain saved by [`Cochain::save`], loaded by path, the general
   /// counterpart to [`MeshSource::File`], for a cochain the gallery did not
   /// itself solve.
   File(PathBuf),
@@ -585,7 +585,7 @@ pub enum CochainSpec {
 impl CochainSpec {
   /// Resolves the spec to a cochain on `topology`. Panics if a
   /// [`Self::File`] cochain fails to load or is incompatible with
-  /// `topology` -- a build-time failure the caller surfaces the same way as
+  /// `topology`, a build-time failure the caller surfaces the same way as
   /// any other malformed input, not a silent placeholder.
   pub(crate) fn resolve(&self, topology: &Complex) -> Cochain {
     match self {
@@ -614,14 +614,14 @@ impl CochainSpec {
 /// A named point in the [`MeshSource`] × [`Study`] product, plus the field it
 /// opens on. Selecting a preset sets the two axes and the selection;
 /// everything afterward is the ordinary platform. A preset is a
-/// *configuration*, never a code path of its own -- the moment a curated
-/// example would need its own branch to build or display, it has stopped being
+/// configuration, never a code path of its own, the moment a curated
+/// example would need its own branch to build or display: it has stopped being
 /// a preset.
 pub(crate) struct Preset {
   pub(crate) name: &'static str,
   /// A one-line gloss of what the preset shows, for the browser's hover. It
-  /// names the point in the product in the reader's terms -- the mathematics on
-  /// the mesh -- so the curated set is legible before it is clicked.
+  /// names the point in the product in the reader's terms, the mathematics on
+  /// the mesh, so the curated set is legible before it is clicked.
   pub(crate) description: &'static str,
   pub(crate) mesh: MeshSource,
   pub(crate) study: Study,
@@ -759,7 +759,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       // A genus-1 surface, so the harmonic shell is genuinely 2-dimensional
       // ($b_1 = 2$) rather than empty: the decomposition is the full
       // exact + coexact + harmonic, not the contractible Helmholtz special
-      // case. Opens on the harmonic shell -- the component that sees the hole.
+      // case. Opens on the harmonic shell, the component that sees the hole.
       name: "Hodge decomposition",
       description: "A grade-1 field split into exact, coexact and harmonic parts on a genus-1 surface; opens on the harmonic shell",
       mesh: MeshSource::Builtin(bob),
@@ -780,11 +780,11 @@ pub(crate) struct Shown {
 }
 
 /// The gallery's lazy, memoized loader. Owns the current mesh; each
-/// `(mesh, study)` pair's scene is built at most once -- the expensive
-/// eigensolves on a background thread -- and cached, so revisiting a pair is
+/// `(mesh, study)` pair's scene is built at most once, the expensive
+/// eigensolves on a background thread, and cached, so revisiting a pair is
 /// instant and only the pairs actually viewed are ever solved.
 ///
-/// Kept free of any GPU type; the windowed wrapper owns the `Scene` it
+/// Kept free of any GPU type. The windowed wrapper owns the `Scene` it
 /// produces. Only one build is ever in flight: requesting a pair while another
 /// is loading replaces the pending build, and a landed result is only ever
 /// installed for the pair it was built for.
@@ -885,7 +885,7 @@ impl Gallery {
 
   /// Switches to a regenerable mesh source, building its mesh first so a
   /// failure leaves the current one untouched. `Ok(Some(scene))` installs now
-  /// -- a cache hit, or a solve-free placeholder on the new mesh to show while
+  ///, a cache hit, or a solve-free placeholder on the new mesh to show while
   /// its study re-solves; `Ok(None)` is a no-op source change; `Err` is a build
   /// failure to surface.
   pub(crate) fn select_mesh(&mut self, source: MeshSource) -> Result<Option<Scene>, String> {
@@ -898,7 +898,7 @@ impl Gallery {
 
   /// Installs a mesh loaded from an OBJ file as the [`MeshSource::Custom`]
   /// source, named for the picker. Unlike a regenerable source there is nothing
-  /// to build -- the mesh is already in hand -- so this always takes effect.
+  /// to build: the mesh is already in hand, so this always takes effect.
   ///
   /// Native only: the web build has no OBJ picker (see `app.rs`).
   #[cfg(not(target_arch = "wasm32"))]
@@ -955,7 +955,7 @@ impl Gallery {
   /// `Some` exactly once, the frame a background build lands: memoizes it and
   /// hands it back to be installed.
   pub(crate) fn poll(&mut self) -> Option<Scene> {
-    // The outcome carries only the fields; the mesh it was solved on is the
+    // The outcome carries only the fields. The mesh it was solved on is the
     // one still held here, so the scene is reassembled rather than returned.
     let (shown, scene) = self.loading.as_ref().and_then(|(shown, pending)| {
       pending
@@ -973,7 +973,7 @@ mod tests {
   use super::*;
 
   /// The particles are opt-in, everywhere. Their cost does not scale with the
-  /// mesh -- the population is a fixed count -- so there is no mesh on which
+  /// mesh: the population is a fixed count, so there is no mesh on which
   /// assuming them is cheap, and a weak GPU should not spend it unasked. The
   /// glyphs stay on, so a line field still has a mark.
   #[test]
@@ -995,7 +995,7 @@ mod tests {
   }
 
   /// Both quotient surfaces build, in $RR^3$, with the topology their gluing
-  /// says -- and the Möbius band is the gallery's **non-orientable** mesh,
+  /// says, and the Möbius band is the gallery's non-orientable mesh,
   /// which the donut is not.
   ///
   /// That contrast is the reason the band is offered at all: the reduced-grade
@@ -1033,8 +1033,8 @@ mod tests {
   }
 
   /// The opening preset resolves to the field it means. Its selection is an
-  /// *index* into the scene's line fields, so it is exactly the kind of thing
-  /// that goes quietly wrong when the study's cochains are reordered -- this
+  /// index into the scene's line fields, so it is exactly the kind of thing
+  /// that goes quietly wrong when the study's cochains are reordered, this
   /// pins it to the field's name instead, which is what the preset is really
   /// choosing.
   #[test]
@@ -1057,7 +1057,7 @@ mod tests {
   /// error. Building each one here is the check that the directory and the
   /// readers agree.
   ///
-  /// A closed surface is not asserted -- a shipped mesh need not be closed --
+  /// A closed surface is not asserted, a shipped mesh need not be closed,
   /// but a mesh with no cells is either an unfetched LFS pointer or a file that
   /// is not a mesh at all, and neither belongs in the picker.
   #[test]
@@ -1084,7 +1084,7 @@ mod tests {
     }
   }
 
-  /// The names the CLI accepts are the picker's, and they are unique -- the
+  /// The names the CLI accepts are the picker's, and they are unique, the
   /// file stems, so two assets differing only by extension would collide and
   /// `from_name` would silently resolve to whichever sorted first.
   #[test]
@@ -1103,13 +1103,13 @@ mod tests {
 
   /// The other preset that names a field explicitly. Its `Line(3)` is an index
   /// into the scene its study builds, so it breaks silently when the shells are
-  /// reordered -- pinned here to the shell's name instead.
+  /// reordered, pinned here to the shell's name instead.
   ///
   /// Checked on the generated donut rather than on its own mesh (Bob): what the
   /// index depends on is the shell ordering of `Study::HodgeDecomposition` and
   /// the surface's first Betti number, and the donut has the same $b_1 = 2$ at
   /// a few dozen vertices instead of ~3000. It is a faithful stand-in for what
-  /// is being tested, not a weaker one -- and it keeps Bob's harmonic solve out
+  /// is being tested, not a weaker one, and it keeps Bob's harmonic solve out
   /// of the test suite.
   #[test]
   fn the_hodge_preset_opens_on_the_harmonic_shell() {

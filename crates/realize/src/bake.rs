@@ -1,21 +1,21 @@
 //! The seam out: a simplicial complex, embedded in $RR^3$, reduced to the
 //! primitives a rasterizer draws.
 //!
-//! Deliberately dimension-specific and coordinate-full -- winding and embedding
+//! Deliberately dimension-specific and coordinate-full, winding and embedding
 //! fixed at 3, the two things the core keeps out, because a graphics API needs
 //! both. Downstream of here there are no FEEC types, only ambient geometry.
 //!
-//! This is where the viewer's *dimension* reduction lives, the mirror of the
-//! *grade* reduction `scene.rs` performs: a $k$-form reduces to a render mark
+//! This is where the viewer's dimension reduction lives, the mirror of the
+//! grade reduction `scene.rs` performs: a $k$-form reduces to a render mark
 //! via $min(k, n-k)$, and an $n$-manifold reduces to a render primitive via
-//! $min(n, 2)$ -- a surface bakes to wound triangles, a curve to segments, a
+//! $min(n, 2)$, a surface bakes to wound triangles, a curve to segments, a
 //! point cloud to points, and anything above 2 to the 2-simplices of its
 //! boundary, which is all of it an observer in $RR^3$ can see. The case
 //! distinction is confined here, exactly as the grade's is confined to the
 //! mark.
 //!
-//! The vertex table is split in two. A `BakedMesh` is the static half -- a
-//! function of the mesh and its embedding, and of no field on it -- and
+//! The vertex table is split in two. A `BakedMesh` is the static half, a
+//! function of the mesh and its embedding, and of no field on it, and
 //! [`attributes`] is the other, one scalar per vertex. Switching fields (or
 //! scrubbing a trajectory) therefore rewrites only the attribute stream, never
 //! positions, normals, curvature or winding.
@@ -62,7 +62,7 @@ pub struct BakedVertex {
 pub struct SegmentVertex {
   pub vertex: BakedVertex,
   /// Opacity multiplier in $[0, 1]$, for a mark that wants to fade part of
-  /// itself out (none does today -- every producer emits 1). Kept as a
+  /// itself out (none does today, every producer emits 1). Kept as a
   /// per-vertex factor rather than a flat material constant, since a future
   /// mark's reason to fade (unlike a traced curve's arbitrary tracer cutoff,
   /// which is not such a reason) would vary along its length.
@@ -75,7 +75,7 @@ pub struct SegmentVertex {
 /// corners are `@builtin(vertex_index)` arithmetic in the vertex shader, and
 /// every dimension of the arrow is a proportion of its own length
 /// (the renderer's `GlyphMaterial`), so nothing about
-/// a corner needs storing -- only what distinguishes one arrow from another.
+/// a corner needs storing, only what distinguishes one arrow from another.
 ///
 /// The one datum that looks per-corner is the barycentric coordinate the
 /// fragment clips against, and it is not: the quad is planar and `global2bary`
@@ -118,7 +118,7 @@ pub enum PrimBatch {
   Triangles(Vec<[u32; 3]>),
   /// An $n = 1$ mesh's cells.
   Segments(Vec<[u32; 2]>),
-  /// An $n = 0$ mesh's cells. Baked, but carrying no mark yet -- a future mark,
+  /// An $n = 0$ mesh's cells. Baked, but carrying no mark yet, a future mark,
   /// not a case to route around.
   Points(Vec<u32>),
 }
@@ -126,12 +126,12 @@ pub enum PrimBatch {
 /// Which cell one rendered triangle's field is read in, and where its corners
 /// sit in that cell.
 ///
-/// A reduced-grade field is discontinuous across cells -- only the *tangential*
+/// A reduced-grade field is discontinuous across cells, only the tangential
 /// part of a section is chart-independent, so incident cells genuinely disagree
 /// at a shared vertex, and there is no single value to interpolate. The honest
-/// readout is therefore per corner, in the corner's *own* cell: this map is what
+/// readout is therefore per corner, in the corner's own cell: this map is what
 /// the per-corner sampling is written against. For a surface mesh the cell is
-/// the triangle itself; for a solid's rendered boundary face it is the unique
+/// the triangle itself. For a solid's rendered boundary face it is the unique
 /// cell that face bounds. The dimension reduction stays confined here, in the
 /// bake, exactly as the primitive choice is.
 #[derive(Debug, Clone, Copy)]
@@ -146,17 +146,17 @@ pub struct CellCorner {
 /// One complex, baked: a shared vertex table plus the index streams over it.
 ///
 /// One `BakedMesh` per complex, never merged across complexes. Cross-mesh
-/// merging is batching -- a draw-call optimization, not an abstraction -- and it
+/// merging is batching, a draw-call optimization, not an abstraction, and it
 /// destroys per-object identity (visibility, bounds, colormap, picking).
 #[derive(Debug, Clone)]
 pub struct BakedMesh {
   /// Static per-vertex data, one entry per mesh vertex.
   pub positions: Vec<BakedVertex>,
   pub cells: PrimBatch,
-  /// The mesh's full 1-skeleton. An overlay over the fill, and -- rendered on
-  /// its own through the mesh display -- the way a solid's interior structure
+  /// The mesh's full 1-skeleton. An overlay over the fill, and, rendered on
+  /// its own through the mesh display, the way a solid's interior structure
   /// is inspected, since the fill shows only the boundary surface. Empty where
-  /// the cells already *are* the 1-skeleton ($n <= 1$), so a curve's edges are
+  /// the cells already are the 1-skeleton ($n <= 1$), so a curve's edges are
   /// drawn once rather than twice.
   pub edges: Vec<[u32; 2]>,
   /// One entry per rendered triangle, in the same order as
@@ -209,24 +209,24 @@ impl BakedMesh {
         )
       }
       // A solid ($n >= 3$) has no visible interior and no slicing tool yet, so
-      // the fill is its boundary surface alone; the full interior 2-skeleton
-      // the previous rule drew was unseeable clutter, and its faces -- shared by
-      // two cells, hence non-manifold -- left the winding and the vertex normals
-      // meaningless. The boundary $diff M$ *is* a closed 2-manifold, so the fill
+      // the fill is its boundary surface alone. The full interior 2-skeleton
+      // the previous rule drew was unseeable clutter, and its faces, shared by
+      // two cells, hence non-manifold, left the winding and the vertex normals
+      // meaningless. The boundary $diff M$ is a closed 2-manifold, so the fill
       // is literally the $n = 2$ bake run on it: [`oriented_surface`] winds and
       // normals it from $diff M$'s own coherent orientation (invariant 6),
-      // outward by its signed volume, and [`vertex_reach`] gives a real reach --
+      // outward by its signed volume, and [`vertex_reach`] gives a real reach,
       // all in $diff M$'s local numbering, then scattered back to the shared
       // parent vertex table, where interior vertices keep `INFINITY` and never
       // displace.
       //
-      // The 1-skeleton stays the *whole* mesh's, not the boundary's: shown on
+      // The 1-skeleton stays the whole mesh's, not the boundary's: shown on
       // its own it is how the interior is inspected, which the fill no longer
       // can.
       _ => {
         // The render surface is the same object the field marks are drawn on
         // and traced onto, so the fill and the glyphs cannot disagree about
-        // which triangles exist. A *closed* solid has no boundary and no
+        // which triangles exist. A closed solid has no boundary and no
         // surface: it draws no fill rather than panicking, since being closed
         // is a property of a manifold, not an error.
         let surface = Surface::of(topology, coords);
@@ -303,12 +303,12 @@ impl BakedMesh {
 
   /// The nearest hit of the ray `origin + t * dir` ($t > 0$) on the baked
   /// surface, as that `t`. `None` when the ray misses, and for a bake with no
-  /// surface to hit -- a curve or a point cloud, whose measure-zero image in
+  /// surface to hit, a curve or a point cloud, whose measure-zero image in
   /// $RR^3$ no ray meets in general position, so a miss is the honest answer
   /// rather than a case to exclude.
   ///
   /// Ambient geometry on the bake, which is exactly what a bake is for and what
-  /// `studio`'s extrinsic license covers. Against the *undisplaced* positions:
+  /// `studio`'s extrinsic license covers. Against the undisplaced positions:
   /// the standing wave is a vertex-shader displacement, and the caller wants
   /// the point of the object, not of the frame it happened to be caught in.
   pub fn raycast(&self, origin: na::Vector3<f32>, dir: na::Vector3<f32>) -> Option<f32> {
@@ -326,7 +326,7 @@ impl BakedMesh {
 }
 
 /// Möller-Trumbore: the ray `origin + t * dir` against one triangle, as that
-/// `t`. Two-sided -- a pick must land on a surface seen from its back exactly
+/// `t`. Two-sided: a pick must land on a surface seen from its back exactly
 /// as on one seen from its front, and a mesh whose winding says otherwise is
 /// still a mesh the user is pointing at.
 fn ray_triangle(
@@ -361,7 +361,7 @@ fn ray_triangle(
 }
 
 /// The per-field half of the vertex table: the colormap scalar, one per entry of
-/// [`BakedMesh::positions`] -- a scalar field's 0-form value, or a line field's
+/// [`BakedMesh::positions`], a scalar field's 0-form value, or a line field's
 /// nodal magnitude tinting the surface its glyphs are drawn on. The one stream a
 /// field change rewrites.
 pub fn attributes(values: &[f64]) -> Vec<f32> {
@@ -370,7 +370,7 @@ pub fn attributes(values: &[f64]) -> Vec<f32> {
 
 /// An ambient vector in the viewer's one ambient space: $RR^3$, so a mesh
 /// embedded in fewer dimensions embeds as itself in the missing ones' zero
-/// planes -- the codimension case, not a special case.
+/// planes, the codimension case, not a special case.
 pub fn to_vec3(v: &Vector) -> na::Vector3<f64> {
   na::Vector3::from_iterator((0..3).map(|i| v.get(i).copied().unwrap_or(0.0)))
 }
@@ -381,7 +381,7 @@ fn embed_r3(coords: &MeshCoords, vertex: usize) -> na::Vector3<f64> {
 }
 
 /// The vertex tuples of the complex's cells, as indices into the baked vertex
-/// table -- which is the vertex skeleton itself, so a simplex's vertices *are*
+/// table, which is the vertex skeleton itself, so a simplex's vertices are
 /// its indices.
 fn cell_indices<const N: usize>(topology: &Complex) -> Vec<[u32; N]> {
   skeleton_indices(topology, topology.dim())
@@ -392,7 +392,7 @@ fn cell_indices<const N: usize>(topology: &Complex) -> Vec<[u32; N]> {
 /// The owning cell is the one coface of the triangle's 2-simplex: itself when
 /// the mesh is a surface (a 2-simplex is a cell), the unique cell it bounds when
 /// the mesh is a solid whose boundary is what got baked. Reads the local indices
-/// off the *wound* triangle, so they track the corner order the vertex streams
+/// off the wound triangle, so they track the corner order the vertex streams
 /// are built in.
 fn cell_corners(topology: &Complex, triangles: &[[u32; 3]]) -> Vec<CellCorner> {
   let faces = topology.skeleton(2);
@@ -450,12 +450,12 @@ fn directed_edges(t: [u32; 3]) -> [(u32, u32); 3] {
 }
 
 /// Coherently wound triangles and unit vertex normals of an embedded surface
-/// complex, taken from the complex's *own* orientation (invariant 6) rather
+/// complex, taken from the complex's own orientation (invariant 6) rather
 /// than rediscovered geometrically: the manifold already knows how its cells
 /// glue, so the winding is `Complex::orientation`'s, and the normals follow it.
 ///
-/// A *closed* surface is then flipped to face outward -- its signed volume
-/// fixes the one global sign the intrinsic orientation leaves free -- so a
+/// A closed surface is then flipped to face outward, its signed volume
+/// fixes the one global sign the intrinsic orientation leaves free, so a
 /// constant mode inflates rather than collapses. An open surface has no inside
 /// and a non-orientable one no coherent normal field at all, so there the
 /// geometric flood-fill ([`orient_triangles`]) stands, with its arbitrary but
@@ -513,8 +513,8 @@ fn signed_volume(triangles: &[[u32; 3]], points: &[na::Vector3<f64>]) -> f64 {
 /// triangles sharing an edge are consistent iff they traverse that edge in
 /// opposite directions.
 ///
-/// A `Complex`'s cells carry no winding -- vertices are colex-sorted, per the
-/// crate's one indexing convention -- so a triangle list read off one has an
+/// A `Complex`'s cells carry no winding, vertices are colex-sorted, per the
+/// crate's one indexing convention, so a triangle list read off one has an
 /// essentially arbitrary, alternating winding per triangle. Per-vertex normals
 /// of such a list are meaningless without first running this pass: consistent
 /// orientation is topological data, recoverable from the manifold's face
@@ -566,8 +566,8 @@ pub fn orient_triangles(triangles: &[[u32; 3]]) -> Vec<[u32; 3]> {
 /// the unit normals of a vertex's incident triangles.
 ///
 /// Meaningful only on a consistently wound list; see [`orient_triangles`]. Not
-/// itself renormalized -- at a crease or on a coarse mesh the average of unit
-/// vectors falls short of one -- so a caller needing a unit axis normalizes
+/// itself renormalized, at a crease or on a coarse mesh the average of unit
+/// vectors falls short of one, so a caller needing a unit axis normalizes
 /// itself.
 pub fn vertex_normals(
   triangles: &[[u32; 3]],
@@ -613,7 +613,7 @@ mod tests {
         (0, PrimBatch::Points(p)) => assert_eq!(p.len(), ncells),
         (1, PrimBatch::Segments(s)) => assert_eq!(s.len(), ncells),
         (2, PrimBatch::Triangles(t)) => assert_eq!(t.len(), ncells),
-        // A solid bakes its boundary surface; a single tetrahedron's boundary
+        // A solid bakes its boundary surface. A single tetrahedron's boundary
         // is its four faces (no face is shared, so all are boundary).
         (3, PrimBatch::Triangles(t)) => assert_eq!(t.len(), 4),
         (d, b) => panic!("dim {d} baked to {b:?}"),
@@ -675,8 +675,8 @@ mod tests {
   /// A solid bakes its boundary surface, not its full 2-skeleton: the fill is
   /// the facets bounding one cell, so a multi-cell grid draws strictly fewer
   /// triangles than its interior-inclusive 2-skeleton. Every boundary vertex
-  /// gets a nonzero displacement normal, and -- the boundary being closed --
-  /// one that points *outward*, so a constant mode inflates rather than
+  /// gets a nonzero displacement normal, and, the boundary being closed,
+  /// one that points outward, so a constant mode inflates rather than
   /// collapses.
   #[test]
   fn a_solid_bakes_only_its_boundary() {
@@ -695,7 +695,7 @@ mod tests {
       "the interior was dropped"
     );
 
-    // The unit cube's centroid; a boundary vertex's outward normal has a
+    // The unit cube's centroid. A boundary vertex's outward normal has a
     // positive component along the ray from it.
     let centroid = na::Vector3::repeat(0.5);
     let boundary = topology.boundary_complex().unwrap();

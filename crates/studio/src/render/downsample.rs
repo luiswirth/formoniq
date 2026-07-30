@@ -2,7 +2,7 @@
 //! map, from the offscreen HDR scene target into the caller's own view. The only
 //! pass that writes the render target directly. See `downsample.wgsl`.
 //!
-//! The three are one pass because they are one operation -- the crossing from
+//! The three are one pass because they are one operation, the crossing from
 //! linear, unbounded radiance to a bounded sRGB display. Filtering and adding
 //! light both have to happen on the radiance side of that crossing; the tone map
 //! is the crossing itself.
@@ -38,7 +38,7 @@ impl DownsamplePass {
           binding: 0,
           visibility: wgpu::ShaderStages::FRAGMENT,
           // Unfiltered: the box filter loads the subsamples it is averaging, and
-          // averaging them is the whole job -- a bilinear tap would be the
+          // averaging them is the whole job, a bilinear tap would be the
           // hardware guessing at the same mean with the wrong weights.
           ty: wgpu::BindingType::Texture {
             sample_type: wgpu::TextureSampleType::Float { filterable: false },

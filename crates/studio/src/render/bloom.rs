@@ -8,20 +8,20 @@
 //!
 //! The chain halves down and adds back up. Each level is a wider blur over a
 //! quarter of the pixels, and their sum is a Gaussian far wider than any single
-//! pass would afford -- which is what a glow is: not a halo of fixed radius, but
+//! pass would afford, which is what a glow is: not a halo of fixed radius, but
 //! light falling off over the whole frame.
 
 use super::{SCENE_FORMAT, color_target, primitive, shader_module};
 
 /// How many halvings the chain takes below the scene's own resolution.
 ///
-/// The widest level is what sets the glow's reach, so this is the *radius* knob
+/// The widest level is what sets the glow's reach, so this is the radius knob
 /// in disguise: each level doubles it. Five puts the broadest halo at 1/32 of
 /// the frame, which reads as light in the air rather than an outline around a
 /// speck. Levels stop early rather than degenerate when a dimension runs out.
 const LEVELS: usize = 5;
 
-/// The pipelines and the sampler; the textures live in a [`BloomChain`], which is
+/// The pipelines and the sampler. The textures live in a [`BloomChain`], which is
 /// reallocated on resize.
 pub struct BloomPass {
   prefilter: wgpu::RenderPipeline,
@@ -113,7 +113,7 @@ impl BloomPass {
         "fs_downsample",
         wgpu::BlendState::REPLACE,
       ),
-      // Additive, which is what makes the upward pass a *sum* of blurs rather
+      // Additive, which is what makes the upward pass a sum of blurs rather
       // than the widest one alone.
       upsample: stage(
         "Bloom Upsample",

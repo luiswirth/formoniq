@@ -1,8 +1,8 @@
 //! The smooth parametrization of the continuum, and the chart it induces.
 //!
-//! The one required datum of a continuum $M$ is its **forward** map
-//! $phi: Omega -> RR^N$, from a coordinate domain out into the ambient space --
-//! a *parametrization*, pointing into the manifold, exactly opposite to a chart.
+//! The one required datum of a continuum $M$ is its forward map
+//! $phi: Omega -> RR^N$, from a coordinate domain out into the ambient space,
+//! a parametrization, pointing into the manifold, exactly opposite to a chart.
 //! Everything else is derived, because requiring the inverse would ask for data
 //! the mathematics already fixes:
 //!
@@ -11,15 +11,15 @@
 //! - the chart $chi = phi^(-1) compose r$ by Gauss-Newton on
 //!   $min_u norm(phi(u) - p)_2^2$, unless a closed form is supplied.
 //!
-//! Least-squares in the ambient Euclidean norm *is* the orthogonal (nearest
+//! Least-squares in the ambient Euclidean norm is the orthogonal (nearest
 //! point) projection onto $op("im") phi$, so the derived retraction $r$ is not
-//! *a* retraction but *the* geometrically optimal one -- which is what makes the
+//! a retraction but the geometrically optimal one, which is what makes the
 //! domain gap $O(h^2)$ rather than $O(h)$ (Dziuk, Demlow). The chart
 //! differential $dif chi = (dif phi)^+$ is the pseudo-inverse of the forward
 //! Jacobian: a genuine left inverse because $phi$ is an immersion.
 //!
 //! Metric-independent by construction: the pseudo-inverse here is the
-//! Moore-Penrose one for the ambient *Euclidean* metric, which is what "nearest
+//! Moore-Penrose one for the ambient Euclidean metric, which is what "nearest
 //! point" means, and no `Metric` of the continuum enters.
 
 use coorder::{Ambient, Coord, CoordSpace, Coords, Matrix, Vector};
@@ -98,7 +98,7 @@ impl<S: CoordSpace> Parametrization<S> {
     self
   }
 
-  /// Supply a seed *heuristic* $p |-> u_0$ that guesses a domain point from an
+  /// Supply a seed heuristic $p |-> u_0$ that guesses a domain point from an
   /// ambient one, for the chart's Gauss-Newton solve. A good heuristic (e.g. the
   /// vertical drop of a graph) keeps the solve in-basin from any point, which a
   /// single fixed seed cannot across an extended domain.
@@ -196,7 +196,7 @@ impl<S: CoordSpace> Parametrization<S> {
   /// the continuum unlocks downstream: a parametrization-induced cell metric
   /// (sampling $g$ at the barycenter, closer to $g_M$ than the chord metric),
   /// and metric-aware meshing (placing cells so they are well-shaped in $g$, not
-  /// in the flat coordinates). It presupposes no inverse and no closed form --
+  /// in the flat coordinates). It presupposes no inverse and no closed form,
   /// only the Jacobian, which is always available.
   pub fn induced_metric(&self, u: &Coords<S>) -> Metric {
     Metric::from_euclidean_vectors(self.jacobian(u))
@@ -226,7 +226,7 @@ impl Parametrization<Ambient> {
   ///   x_(n+1) = r product_(j=1)^n sin phi_j. $
   ///
   /// The chart is its closed form. The angles are scale-invariant, so the same
-  /// inverse serves every radius and *is* the radial nearest-point projection
+  /// inverse serves every radius and is the radial nearest-point projection
   /// onto the sphere: the orthogonal retraction, with no Gauss-Newton. The
   /// Jacobian is left to the finite difference.
   pub fn sphere(dim: Dim, radius: f64) -> Self {
@@ -241,8 +241,8 @@ impl Parametrization<Ambient> {
   /// The graph of a height function $h: Omega -> RR$ over an $n$-dimensional
   /// domain, as the surface $u |-> (u, h(u)) subset RR^(n+1)$. Dimension-general.
   ///
-  /// A graph is an immersion with a full-rank Jacobian *everywhere* -- no
-  /// coordinate singularity -- so unlike the sphere it needs no closed-form
+  /// A graph is an immersion with a full-rank Jacobian everywhere, no
+  /// coordinate singularity, so unlike the sphere it needs no closed-form
   /// chart: the derived path (finite-difference Jacobian, Gauss-Newton) is
   /// robust. The seed heuristic is the vertical drop $p |-> p_(1..n)$, which is
   /// $O(norm(dif h))$ from the true footpoint and keeps the solve in-basin from
@@ -259,7 +259,7 @@ impl Parametrization<Ambient> {
   /// $(r, phi_1, dots, phi_(n-1)) |-> RR^n$, dimension-general: the disk in polar
   /// coordinates at $n = 2$, the ball in spherical coordinates at $n = 3$.
   ///
-  /// A flat region of $RR^n$ written in a *curvilinear* chart: the metric is
+  /// A flat region of $RR^n$ written in a curvilinear chart: the metric is
   /// Euclidean and a mesh of it is exact, so pulling a form stated in these
   /// coordinates isolates the curvilinear-chart Jacobian from any $M_h != M$
   /// domain gap. Its boundary is a [`Self::sphere`]. The chart is closed form,
@@ -294,8 +294,8 @@ impl Parametrization<Ambient> {
   /// `major` from the axis: $(theta, phi) |-> ((R + r cos theta) cos phi,
   /// (R + r cos theta) sin phi, r sin theta)$.
   ///
-  /// The first curved geometry past the sphere with *varying* Gaussian curvature
-  /// (positive on the outer rim, negative on the inner) and *nontrivial*
+  /// The first curved geometry past the sphere with varying Gaussian curvature
+  /// (positive on the outer rim, negative on the inner) and nontrivial
   /// cohomology, $dim H^1 = 2$: it carries genuine harmonic 1-forms, which is
   /// what exercises the harmonic-projection path a simply connected sphere leaves
   /// untouched. The chart is the closed-form toroidal-angle inverse.
@@ -403,7 +403,7 @@ mod test {
     }
   }
 
-  /// The Gauss-Newton chart lands *on* the manifold when the target is off it:
+  /// The Gauss-Newton chart lands on the manifold when the target is off it:
   /// the nearest-point projection of an inflated point returns the radial
   /// footpoint.
   #[test]

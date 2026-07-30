@@ -29,7 +29,7 @@ mod test {
   /// The de Rham map is a left inverse of the Whitney interpolation, which is
   /// to say the Whitney forms are the basis dual to the degrees of freedom,
   /// $integral_tau W_sigma = delta_(sigma tau)$. Running it on every basis
-  /// cochain checks that duality matrix entry by entry -- including the signs,
+  /// cochain checks that duality matrix entry by entry, including the signs,
   /// since a DOF carries the orientation of its simplex.
   ///
   /// Both sides are intrinsic: no coordinates enter, only the topology.

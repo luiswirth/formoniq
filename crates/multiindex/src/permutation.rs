@@ -10,8 +10,8 @@ use crate::{Sign, factorial};
 /// (the exponent vectors, basis of $"Sym"^d$): the bijections, carrying the
 /// sign homomorphism $"sgn": S_n -> {plus.minus 1}$.
 ///
-/// Enumeration and [`rank`](Self::rank) are **colexicographic**, the crate-wide
-/// convention: $p$ precedes $q$ iff the *reversed* word of $p$ precedes that of
+/// Enumeration and [`rank`](Self::rank) are colexicographic, the crate-wide
+/// convention: $p$ precedes $q$ iff the reversed word of $p$ precedes that of
 /// $q$ lexicographically. Equivalently the last entry is the most significant.
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Permutation(Vec<usize>);
@@ -137,7 +137,7 @@ impl Permutation {
   /// Colex on the word is lex on the reversed word, which is how this is
   /// generated: the standard lexicographic successor drives a reversed buffer.
   pub fn all(n: usize) -> impl Iterator<Item = Self> {
-    // `word` runs through $S_n$ lexicographically; the emitted permutation is
+    // `word` runs through $S_n$ lexicographically. The emitted permutation is
     // its reversal.
     let mut word: Option<Vec<usize>> = Some((0..n).collect());
     std::iter::from_fn(move || {
@@ -193,7 +193,7 @@ mod test {
     );
   }
 
-  /// Colex is lex on the reversed word --- the defining property.
+  /// Colex is lex on the reversed word, the defining property.
   #[test]
   fn colex_is_lex_on_reversed_word() {
     for n in 0..=6 {

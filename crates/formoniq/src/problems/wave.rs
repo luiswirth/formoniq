@@ -24,7 +24,7 @@ impl WaveState {
   /// The full Hodge wave energy
   /// $E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(diff_t u)^2)
   ///    = 1/2 (sigma^T M_sigma sigma + u^T K u + w^T M w)$, assembled from the
-  /// mixed [`HodgeBlocks`] of the `complex` at `grade` --- the invariant
+  /// mixed [`HodgeBlocks`] of the `complex` at `grade`, the invariant
   /// [`solve_wave`] conserves. The down-part $norm(delta u)^2$ needs the
   /// codifferential $sigma = delta u$, recovered by the same $M_sigma$ solve
   /// the solver uses.
@@ -63,9 +63,9 @@ impl WaveState {
 /// system with the full $Delta$, whose quadratic energy
 /// $ E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(diff_t u)^2)
 ///     = 1/2 (sigma^T M_sigma sigma + u^T K u + w^T M w) $
-/// Gauss-Legendre conserves *exactly* --- to roundoff, not merely bounded. This
+/// Gauss-Legendre conserves exactly, to roundoff, not merely bounded. This
 /// is the same conserved energy as the three-field $(sigma, mu, omega)$ Hodge
-/// wave system; the linear constraint makes the two algebraically equivalent,
+/// wave system. The linear constraint makes the two algebraically equivalent,
 /// and the $(sigma, u, w)$ form is chosen here because it carries $u$ itself.
 ///
 /// `times` is assumed evenly spaced (the stage system is factored once).
@@ -162,7 +162,7 @@ mod test {
 
   /// The hyperbolic law, at every dimension and grade: the full Hodge wave
   /// energy is conserved to roundoff. Gauss-Legendre is symplectic and, on this
-  /// linear system, conserves the quadratic invariant exactly --- through the
+  /// linear system, conserves the quadratic invariant exactly, through the
   /// algebraic $sigma$ constraint and across the degenerate grades ($k = 0$: no
   /// $sigma$; $k = n$: $dif u = 0$, energy is pure kinetic).
   #[test]

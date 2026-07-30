@@ -33,22 +33,22 @@ pub struct MeshCoords {
 }
 
 impl MeshCoords {
-  /// The metric an embedding *induces* on a cell: the pullback $J^top eta J$
-  /// of the ambient inner product along the cell's spanning vectors -- the
+  /// The metric an embedding induces on a cell: the pullback $J^top eta J$
+  /// of the ambient inner product along the cell's spanning vectors, the
   /// first fundamental form, of whatever signature the ambient carries.
   ///
   /// This lives here, not in the metric layer, and that is the whole point:
   /// coordinates know about the metric they induce, the metric knows nothing
   /// of coordinates (invariant 2). An embedding reaches the intrinsic engine
-  /// as a *source* -- it converts to edge lengths ([`Self::to_edge_lengths_sq`])
+  /// as a source, it converts to edge lengths ([`Self::to_edge_lengths_sq`])
   /// or per-cell metrics ([`Self::to_cell_gramians`]) at the boundary of the
-  /// API; the core never asks an embedding for anything.
+  /// API. The core never asks an embedding for anything.
   pub fn cell_metric(&self, cell: Cell) -> Metric {
     self.simplex_metric(cell.get())
   }
 
-  /// The metric of any simplex -- an edge's length, a facet's area, the
-  /// flat metric of a cell -- as the Gramian of that simplex's own spanning
+  /// The metric of any simplex, an edge's length, a facet's area, the
+  /// flat metric of a cell, as the Gramian of that simplex's own spanning
   /// vectors under the ambient inner product.
   ///
   /// The embedding counterpart of
@@ -85,7 +85,7 @@ impl MeshCoords {
     Self::with_ambient(matrix, ambient)
   }
   /// Vertices of an embedding into the flat pseudo-Euclidean space the given
-  /// ambient Gramian describes -- e.g. [`Metric::minkowski`] for a mesh of a
+  /// ambient Gramian describes, e.g. [`Metric::minkowski`] for a mesh of a
   /// Lorentzian spacetime.
   pub fn with_ambient(matrix: Matrix, ambient: Metric) -> Self {
     assert_eq!(
@@ -133,7 +133,7 @@ impl MeshCoords {
 }
 
 /// Vertex coordinates are grade-0 data on the mesh, stored as the columns of a
-/// matrix: `at` returns a column *view*, not an owned point.
+/// matrix: `at` returns a column view, not an owned point.
 impl SkeletonData for MeshCoords {
   type Item<'a> = CoordRef<'a>;
   fn grade(&self) -> Dim {
@@ -184,7 +184,7 @@ impl MeshCoords {
 
   /// The Regge geometry this embedding realizes: the signed squared length
   /// of each edge under the ambient inner product, of whatever signature the
-  /// ambient carries -- an embedding into Minkowski space yields Lorentzian
+  /// ambient carries, an embedding into Minkowski space yields Lorentzian
   /// Regge data, causal signs included.
   pub fn to_edge_lengths_sq(&self, topology: &Complex) -> MeshLengthsSq {
     // A 0-manifold is a discrete set of points: its 1-skeleton is empty, so the
@@ -241,7 +241,7 @@ impl MeshCoords {
 
 /// Geometry read on a topology witness: the coordinate a [`Vertex`] proof
 /// names in an embedding, `vertex.coord(&coords)`. Reaches down from the
-/// coord side -- the topology never learns of embeddings.
+/// coord side, the topology never learns of embeddings.
 pub trait VertexRefExt {
   fn coord<'c>(self, coords: &'c MeshCoords) -> CoordRef<'c>;
 }
@@ -308,7 +308,7 @@ mod test {
   /// lengths equals the metric the embedding induces on that subsimplex (the
   /// ambient inner product pulled back along its spanning vectors), at every
   /// grade. The subsimplex generalization is exact, and well defined from the
-  /// edge data alone -- no containing cell is consulted.
+  /// edge data alone, no containing cell is consulted.
   #[test]
   fn simplex_metric_matches_induced_at_every_grade() {
     for dim in (1..=3usize).map(Dim::from) {
@@ -353,7 +353,7 @@ mod test {
   /// A mesh embedded in Minkowski ambient space induces Lorentzian cell
   /// metrics: on a coordinate-aligned mesh the induced metric of every cell
   /// is congruent to $eta$ itself, so its signature is $(n - 1, 1)$ by
-  /// Sylvester's law of inertia -- the same code path as the Euclidean
+  /// Sylvester's law of inertia, the same code path as the Euclidean
   /// ambient, one signature among all.
   #[test]
   fn minkowski_ambient_induces_lorentzian_cell_metrics() {
@@ -374,7 +374,7 @@ mod test {
   /// A Minkowski embedding realizes Lorentzian Regge data: the signed
   /// squared edge lengths carry the causal character of every edge, and the
   /// per-cell metric reconstructed from them is the same Lorentzian metric
-  /// the embedding induces -- Regge calculus doing exactly what it was
+  /// the embedding induces, Regge calculus doing exactly what it was
   /// invented for.
   #[test]
   fn lorentzian_ambient_realizes_lorentzian_regge_data() {

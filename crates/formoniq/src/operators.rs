@@ -192,7 +192,7 @@ impl ElMatProvider for CodifDifElmat {
 /// An element integral over a cell: a quadrature rule and the mesh points its
 /// nodes sit at.
 ///
-/// The shape functions are not held here; they arrive as [`LsfSamples`] built
+/// The shape functions are not held here. They arrive as [`LsfSamples`] built
 /// against this rule's [`nodes`](Self::nodes), so one routine serves the
 /// Whitney basis, its differentials, or two grades at once. What stays per-cell
 /// is the chart, the metric and the volume, a coefficient being a [`Section`]
@@ -284,7 +284,7 @@ struct BoundaryFacet {
 /// integrated in the cell's chart and weighted by the sign the boundary
 /// operator induces.
 ///
-/// **Metric-free**, because the integrand is an $(n-1)$-*form* rather than a
+/// Metric-free, because the integrand is an $(n-1)$-form rather than a
 /// scalar against $vol$: a form over a simplex of its own grade carries its own
 /// geometry. An integrand reads whatever metric it wants for itself.
 ///
@@ -376,7 +376,7 @@ impl BoundaryQuadrature {
   /// against the two shape functions.
   ///
   /// It is a family indexed by pairs of degrees of freedom, so it cannot be one
-  /// [`Section`]; that is the whole difference between this and
+  /// [`Section`]. That is the whole difference between this and
   /// [`Self::integrate_form`].
   pub fn integrate_pair<F>(&self, rows: &LsfSamples, cols: &LsfSamples, chart: Chart, f: F) -> ElMat
   where
@@ -407,7 +407,7 @@ impl BoundaryQuadrature {
 ///
 /// The varying-coefficient counterpart of [`HodgeMassElmat`], which is exact
 /// where this is a quadrature: with $alpha equiv 1$ the two agree to the
-/// accuracy of the rule. Intrinsic, like every element integral here -- the
+/// accuracy of the rule. Intrinsic, like every element integral here, the
 /// coefficient is a grade-0 section of the manifold, so a metric never enters
 /// through it, only through the inner product on $Lambda^k$.
 pub struct WeightedHodgeMassElmat<'a, F> {
@@ -469,21 +469,21 @@ impl<F: Sync + Section> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
 /// terms are the two degenerate grades, and so cover the classical pair:
 /// advective form at $k = 0$, conservation form at $k = n$.
 ///
-/// The boundary term's star is taken in the cell's *reference* frame, and needs
+/// The boundary term's star is taken in the cell's reference frame, and needs
 /// no coherent orientation: flipping that frame flips both the star and the
 /// induced orientation of $diff K$, and the product is what the term is. So
 /// assembly stays independent of a gauge it must not depend on, and the
 /// operator exists on a non-orientable mesh.
 ///
-/// `velocity` is a **vector field**, not a 1-form, and nothing is sharped here:
+/// `velocity` is a vector field, not a 1-form, and nothing is sharped here:
 /// $iota_v$ and $dif$ are metric-free, and the metric enters only through the
 /// $L^2$ pairing and the star.
 ///
-/// **Central and unstabilized**: each cell integrates its own trace of a shared
+/// Central and unstabilized: each cell integrates its own trace of a shared
 /// facet, so no numerical flux is chosen. Conservative at both ends of the
 /// grade range, where the defect $integral_(diff K) inner(omega, eta) iota_v
 /// vol$ vanishes: the shape functions are continuous at $k = 0$ and constant
-/// per cell at $k = n$. Dispersive throughout -- it damps nothing, so the phase
+/// per cell at $k = n$. Dispersive throughout, it damps nothing, so the phase
 /// error of barely resolved modes persists as oscillation, which conservation
 /// does not see.
 pub struct LieDerivativeElmat<'a, V> {
@@ -685,7 +685,7 @@ mod test {
     }
   }
 
-  /// $dif iota_v W_tau$ for a **constant** $v$: with $W_tau = k! sum_j (-1)^j
+  /// $dif iota_v W_tau$ for a constant $v$: with $W_tau = k! sum_j (-1)^j
   /// lambda_(tau_j) beta_j$ and both $v$ and the blades $beta_j$ constant,
   /// $dif iota_v W_tau = k! sum_j (-1)^j dif lambda_(tau_j) wedge iota_v
   /// beta_j$.
@@ -809,12 +809,12 @@ mod test {
   /// For a constant $v$ on a flat cell $cal(L)_v$ is a derivation of the inner
   /// product and annihilates $vol$, so $inner(cal(L)_v omega, eta) +
   /// inner(omega, cal(L)_v eta) = iota_v dif inner(omega, eta)$, which Cartan
-  /// and Stokes carry to the boundary. The operator is therefore skew *up to
-  /// exactly this*, and on a closed manifold with a Killing field the term
+  /// and Stokes carry to the boundary. The operator is therefore skew up to
+  /// exactly this, and on a closed manifold with a Killing field the term
   /// telescopes away and the spectrum is imaginary.
   ///
   /// This is the statement worth asserting rather than the spectrum itself: it
-  /// is exact at every grade and dimension, it needs no mesh, and it says *why*
+  /// is exact at every grade and dimension, it needs no mesh, and it says why
   /// the eigenvalues leave the imaginary axis instead of measuring by how much.
   #[test]
   fn the_lie_derivative_is_skew_up_to_its_boundary_term() {

@@ -62,7 +62,7 @@ fn interior_product_squares_to_zero() {
 
 /// Pullback and pushforward are adjoint under the duality pairing.
 ///
-/// Over **both** families, which is what pins the two halves of the symmetric
+/// Over both families, which is what pins the two halves of the symmetric
 /// multiplicity against each other: the pullback matrix is the transpose of the
 /// functor conjugated by $alpha!$, and the pairing carries $alpha!$, and the law
 /// holds exactly because the one cancels the other. Get either alone wrong and
@@ -123,7 +123,7 @@ fn the_trivial_ends_are_total() {
       let zero = Tensor::zero(Tensor::one_alternating(grade, Variance::Covariant, dim));
       assert_eq!(zero.components().len(), 0);
     }
-    // A degree-zero *slot*, not the empty tensor product: contracting out of it
+    // A degree-zero slot, not the empty tensor product: contracting out of it
     // must land in the trivial space rather than underflow the slot list.
     let scalar = Tensor::multiform(Vector::from_element(1, 2.5), dim, 0);
     let vector = Tensor::line(Vector::from_element(dim, 1.5), Variance::Contravariant);
@@ -396,7 +396,7 @@ fn the_full_tensor_power_is_slots_of_degree_one() {
 /// two quotients embed into it.
 ///
 /// Λ^k and Sym^k are subspaces of V^⊗k, so forgetting the symmetry must not
-/// change what the object *is*: the free form of a form has the same pairing
+/// change what the object is: the free form of a form has the same pairing
 /// with the free form of a vector, up to the factorials the unnormalized
 /// convention carries.
 #[test]
@@ -429,7 +429,7 @@ fn the_free_power_is_the_unquotiented_one() {
 /// acting on the quotient and then forgetting is the same as forgetting and
 /// then acting. That is what makes it belong inside the algebra.
 ///
-/// Swept over **both** families and over rectangular maps, which is what the law
+/// Swept over both families and over rectangular maps, which is what the law
 /// actually claims. Restricted to $Lambda^k$ it is much weaker than it looks:
 /// every $alpha!$ is $1$ there, so the pullback matrix is the bare transpose of
 /// the functor and the multiplicity the symmetric basis carries never enters.
@@ -516,7 +516,7 @@ fn the_tensor_product_spans_spaces() {
 /// is what makes the duality pairing defined: a tensor pairs with its own
 /// dualization, and that pairing is nondegenerate.
 #[test]
-fn dualizing_a_slot_is_a_relabelling() {
+fn dualizing_a_slot_is_a_relabeling() {
   for dim in 1..=4 {
     for grade in 0..=dim {
       let form = probe_element(dim, grade, 2, Variance::Covariant);
@@ -526,7 +526,7 @@ fn dualizing_a_slot_is_a_relabelling() {
       assert_eq!(dualized.components(), form.components());
       assert_eq!(dualized.clone().dualize_slot(0).slots(), form.slots());
 
-      // Nondegenerate, which is what a relabelling has to buy to be worth
+      // Nondegenerate, which is what a relabeling has to buy to be worth
       // having: the pairing is the sum of the squared components.
       assert_relative_eq!(
         pairing(&form, &dualized),
@@ -577,8 +577,8 @@ fn the_blade_of_a_frame_is_the_wedge_of_its_columns() {
 }
 
 /// A blade vanishes exactly when its frame is dependent: that is the statement
-/// that a decomposable blade *is* the subspace its frame spans, and it is the
-/// half of the law that can fail --- an implementation returning zero always
+/// that a decomposable blade is the subspace its frame spans, and it is the
+/// half of the law that can fail, an implementation returning zero always
 /// would pass the vanishing side alone.
 #[test]
 fn a_blade_vanishes_exactly_on_a_dependent_frame() {
@@ -611,9 +611,9 @@ fn a_blade_vanishes_exactly_on_a_dependent_frame() {
 
 /// A materialized [`Transport`] is adjoint in the same sense the one-shot
 /// transport is: $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$,
-/// with the pullback and the pushforward read off *one* stored functor.
+/// with the pullback and the pushforward read off one stored functor.
 ///
-/// Stated on a **mixed-family** shape $Lambda^k times.circle "Sym"^r$, which is
+/// Stated on a mixed-family shape $Lambda^k times.circle "Sym"^r$, which is
 /// the case a stored $Lambda^k A$ applied to raw components gets wrong: the
 /// multiplicative basis is self-dual on the alternating side only, so the
 /// symmetric factor is where the adjoint picks up its $alpha!$ and where an

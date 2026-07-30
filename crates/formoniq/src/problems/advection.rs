@@ -27,7 +27,7 @@ use simplicial::{
 /// The mass matrix and the discrete Lie derivative of the semidiscrete
 /// transport system $M dot(u) = -A u$.
 ///
-/// $A$ is the *central* discretization: conservative, and dispersive for it.
+/// $A$ is the central discretization: conservative, and dispersive for it.
 /// See [`LieDerivativeElmat`].
 pub fn assemble_transport<V: Sync + Section>(
   topology: &Complex,

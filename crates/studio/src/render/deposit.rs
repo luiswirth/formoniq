@@ -3,7 +3,7 @@
 //! and `realize::deposit` for the layout.
 //!
 //! The state-on-the-manifold invariant is enforced structurally here: the
-//! atlas is the *only* texture in the renderer that survives a frame, and it
+//! atlas is the only texture in the renderer that survives a frame, and it
 //! is indexed by (cell, barycentric lattice), never by screen position. The
 //! screen-side passes read it exactly as they read any other field datum.
 //!
@@ -35,7 +35,7 @@ pub struct DepositParams {
 }
 
 /// The atlas texel format: float because deposits accumulate without bound
-/// (the whole point -- the overflow is what blooms), 16 bits because the
+/// (the whole point: the overflow is what blooms), 16 bits because the
 /// range matters and the precision does not, single channel because a deposit
 /// is a density. Renderable, blendable and filterable in core WebGPU.
 pub const DEPOSIT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
@@ -139,7 +139,7 @@ pub fn dummy_read_bind_group(device: &wgpu::Device) -> wgpu::BindGroup {
 
 /// One field's trail state: the two atlas textures, and every binding the
 /// stepping pair and the fill need. `current` is which texture holds the
-/// latest step -- interior mutability because stepping happens during an
+/// latest step, interior mutability because stepping happens during an
 /// immutably borrowed frame, exactly like the particle buffer the GPU writes.
 pub struct DepositBatch {
   views: [wgpu::TextureView; 2],
@@ -153,7 +153,7 @@ pub struct DepositBatch {
 impl DepositBatch {
   /// The atlas of `layout`, splatted by the particles of `particle_buffer`
   /// fading by `decay` per step and inking `energy` per texel of path.
-  /// `depth` is the advection's own dyadic depth -- the splat reads the
+  /// `depth` is the advection's own dyadic depth, the splat reads the
   /// population's whole-step flow level to derive each particle's
   /// displacement, exactly as the head speck's motion blur does. `None` for
   /// the empty layout: a manifold with no atlas has no trails, and draws none.
@@ -255,7 +255,7 @@ impl DepositBatch {
 }
 
 /// The splat footprint's radius in texels. Texel density is uniform per metric
-/// area by construction, so this is a world-space radius in disguise -- and
+/// area by construction, so this is a world-space radius in disguise, and
 /// small: the trail's continuity comes from consecutive splats overlapping,
 /// not from a wide stamp.
 const SPLAT_RADIUS_TEXELS: f32 = 1.5;
@@ -356,7 +356,7 @@ impl DepositPass {
   /// splat this step's particle positions on top, flip which is current.
   ///
   /// Recorded once per advection step, after that step's dispatch, so the
-  /// trail is a pure function of the step count -- a frame owing several steps
+  /// trail is a pure function of the step count, a frame owing several steps
   /// records several of these, and a window and an exporter that reach the
   /// same count show the same trail.
   pub fn record(&self, encoder: &mut wgpu::CommandEncoder, batch: &DepositBatch) {

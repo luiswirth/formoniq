@@ -20,15 +20,15 @@ use crate::Metric;
 
 /// A metric read as the $"Sym"^2$ element it is, and back.
 ///
-/// A symmetric bilinear form on $V$ *is* an element of $"Sym"^2(V^*)$, and one
+/// A symmetric bilinear form on $V$ is an element of $"Sym"^2(V^*)$, and one
 /// on $V^*$ an element of $"Sym"^2(V)$, so the variance is the slot's variance
 /// and nothing is chosen here. The matrix stays the representation; this is the
 /// identity, computed on demand.
 ///
-/// **The reciprocal basis is a metric's home.** A metric's components there are
+/// The reciprocal basis is a metric's home. A metric's components there are
 /// its matrix entries, exactly, with no weight anywhere: $g_(i j)$ is the
-/// component at $x^(e_i + e_j)$. That is not a convenience, it is what a
-/// bilinear form is -- an object that eats vectors, hence a dual one -- and it is
+/// component at $x^(e_i + e_j)$. That is not a convenience: it is what a
+/// bilinear form is, an object that eats vectors, hence a dual one, and it is
 /// why both directions here go through [`Tensor::reciprocal`] and
 /// [`Tensor::from_reciprocal`] rather than touching the stored components. Read
 /// in the multiplicative basis the same metric carries $1 \/ alpha!$ on its
@@ -88,12 +88,12 @@ impl Metric {
 /// mixed tensor is measured correctly where a single global choice would not be.
 ///
 /// A bare matrix, and not a [`Metric`], for exactly that reason. A mixed tensor's
-/// Gramian has factors from $g$ *and* from $g^(-1)$, so no single variance
+/// Gramian has factors from $g$ and from $g^(-1)$, so no single variance
 /// describes it, and a constructor that supplied one would be guessing. Nothing
-/// about this object is a metric on the underlying space; it is the Gram matrix
+/// about this object is a metric on the underlying space. It is the Gram matrix
 /// of a basis, which is all an inner product needs.
 ///
-/// **Formed, and usually not what you want.** The Gram matrix of a product is
+/// Formed, and usually not what you want. The Gram matrix of a product is
 /// the product of the Gram matrices, so measuring anything applies
 /// [`per_slot_gramians`] slot by slot and never builds this: see
 /// [`apply_factorwise`]. Reach for the formed matrix only where a matrix is the
@@ -105,7 +105,7 @@ pub fn tensor_gramian(slots: &[Slot], metric: &Metric) -> Matrix {
 /// The Gram matrix of each slot separately, in slot order: the factors of
 /// [`tensor_gramian`], and the form the measuring operations actually use.
 ///
-/// Each slot is measured by [`Metric::measuring`] against *its own* variance,
+/// Each slot is measured by [`Metric::measuring`] against its own variance,
 /// which is the whole reason these stay apart rather than collapsing into one
 /// induced metric: on a mixed tensor some factors come from $g$ and some from
 /// $g^(-1)$.

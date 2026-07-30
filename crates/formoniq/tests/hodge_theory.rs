@@ -214,7 +214,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 /// alternating sum of all dimensions to vanish, and the three Betti
 /// families have their known values: absolute $(1, 1, 0)$, relative
 /// $(0, 1, 1)$ (Lefschetz duality) and boundary $(2, 2)$ (two circles).
-/// Both the absolute and the relative harmonic spaces match -- including a
+/// Both the absolute and the relative harmonic spaces match, including a
 /// genuinely nontrivial harmonic 1-form around the hole.
 #[test]
 fn long_exact_sequence_of_the_pair_annulus() {

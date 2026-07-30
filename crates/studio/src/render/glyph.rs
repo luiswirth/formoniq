@@ -3,14 +3,14 @@
 //!
 //! Not billboarded, unlike the segment pass: an arrow has a plane, its cell's,
 //! so the quad is baked into it once and never turned toward the camera. That is
-//! also what lets the arrow clip itself to the cell -- each corner's barycentric
-//! coordinate is known in the plane -- which a section needs, since it has a
+//! also what lets the arrow clip itself to the cell, each corner's barycentric
+//! coordinate is known in the plane, which a section needs, since it has a
 //! value only on the open cell it was sampled in.
 //!
 //! Alpha-blended and depth-testing but not depth-writing, exactly as the segment
 //! marks: the arrows are translucent and lie over the fill they are coplanar
-//! with. The tie is broken in *depth* by the pipeline's bias, never by moving
-//! the quad -- see the depth-bias state the pass is built with.
+//! with. The tie is broken in depth by the pipeline's bias, never by moving
+//! the quad, see the depth-bias state the pass is built with.
 
 use super::{
   MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS, color_target, depth_stencil_biased,

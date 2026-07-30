@@ -19,7 +19,7 @@ use simplicial::{
 /// A Kuhn edge of the box spans a set $S$ of axes; under the Minkowski metric
 /// its signed squared length is $s = -rho^2 [t in S] + abs(S sect "space")$,
 /// null exactly when $t in S$ and $abs(S sect "space") = rho^2$. So no edge is
-/// lightlike iff $rho^2$ is not an integer in $[0, "dim")$ -- and $rho = 0.7$
+/// lightlike iff $rho^2$ is not an integer in $[0, "dim")$, and $rho = 0.7$
 /// ($rho^2 = 0.49$) misses that integer set in every dimension. Uniform
 /// refinement scales every edge by the same factor, so a refinement tower stays
 /// causally generic. See [`CartesianGrid::minkowski`].
@@ -61,14 +61,14 @@ impl Rect {
   }
 }
 
-/// A structured grid on an axis-aligned box: a cell count *per axis*, their
+/// A structured grid on an axis-aligned box: a cell count per axis, their
 /// product many boxes in all, each Kuhn-triangulated into $d!$ simplices.
 /// [`triangulate`](Self::triangulate) produces the simplicial `Complex` and its
 /// vertex `MeshCoords`.
 ///
 /// The resolution is per-axis because the box's sides are: one count over a
 /// box whose sides differ produces cells as anisotropic as the box, and the
-/// shape regularity a mesh is judged by is a property of the *spacing*, not of
+/// shape regularity a mesh is judged by is a property of the spacing, not of
 /// the count. A cube meshed with one count everywhere is the isotropic special
 /// case, and [`Self::new_unit`] and friends are that case named.
 pub struct CartesianGrid {
@@ -194,11 +194,11 @@ impl CartesianGrid {
   /// ambient inner product, `ncells_axis` cells per side.
   ///
   /// The time axis is scaled by [`CAUSAL_TIME_SCALE`] so no mesh edge is
-  /// lightlike -- the well-posedness condition of spacetime FEEC, a null edge
+  /// lightlike, the well-posedness condition of spacetime FEEC, a null edge
   /// degenerating the indefinite $L^2$ pairing on Whitney 1-forms. The returned
   /// coordinates carry the Minkowski ambient, so
   /// [`MeshCoords::to_edge_lengths_sq`] yields the signed Regge geometry
-  /// directly; a Euclidean comparison view (to norm errors, which the indefinite
+  /// directly. A Euclidean comparison view (to norm errors, which the indefinite
   /// pairing cannot) is [`MeshCoords::new`] on the same vertex matrix.
   pub fn minkowski(dim: impl Into<Dim>, ncells_axis: usize) -> (Complex, MeshCoords) {
     let dim = dim.into();

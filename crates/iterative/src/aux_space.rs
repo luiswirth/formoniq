@@ -1,10 +1,10 @@
 //! The additive auxiliary-space preconditioner, one [`ApproxInverse`] built from
-//! a smoother and a list of *auxiliary corrections*.
+//! a smoother and a list of auxiliary corrections.
 //!
 //! A correction is a cheaper space $W_i$ carrying its own approximate inverse
-//! $B_i$, tied to the main space by a transfer $Pi_i: W_i -> V$; it acts on a
+//! $B_i$, tied to the main space by a transfer $Pi_i: W_i -> V$. It acts on a
 //! residual by pulling it back, solving there, and pushing the result forward,
-//! $r |-> Pi_i B_i Pi_i^T r$. The preconditioner is the *additive* (parallel)
+//! $r |-> Pi_i B_i Pi_i^T r$. The preconditioner is the additive (parallel)
 //! sum of a smoother $S$ on $V$ itself with every correction,
 //!
 //! $ B = S + sum_i Pi_i B_i Pi_i^T, $
@@ -16,10 +16,10 @@
 //! where a solver is effective.
 //!
 //! It is the natural counterpart of [`VCycle`](crate::VCycle): a V-cycle
-//! coarsens in *space* along a mesh hierarchy, an auxiliary space coarsens in
-//! *structure* onto a different discretization of the same problem, and the two
-//! compose --- each $B_i$ may itself be a V-cycle. This crate stays backend-free:
-//! what the spaces $W_i$ and the transfers $Pi_i$ *are* is the consumer's
+//! coarsens in space along a mesh hierarchy, an auxiliary space coarsens in
+//! structure onto a different discretization of the same problem, and the two
+//! compose, each $B_i$ may itself be a V-cycle. This crate stays backend-free:
+//! what the spaces $W_i$ and the transfers $Pi_i$ are is the consumer's
 //! business, supplied as plain [`CsrMatrix`]es and boxed approximate inverses.
 //!
 //! Additive, not multiplicative: every piece reads the same residual $r$ and
@@ -56,11 +56,11 @@ impl Correction {
 ///
 /// Holds a smoother $S$ on the main space and any number of auxiliary
 /// corrections, and applies their sum. With no corrections it degrades to the
-/// smoother alone --- the totality base case, an auxiliary-space preconditioner
+/// smoother alone, the totality base case, an auxiliary-space preconditioner
 /// of an empty auxiliary set being a plain smoother with no special-casing. The
 /// smoother is kept generic (it is the same type applied every call), the
 /// corrections boxed (they differ in type: a discrete-gradient block and a
-/// vector-nodal block are not the same solver); the dispatch is off the assembly
+/// vector-nodal block are not the same solver). The dispatch is off the assembly
 /// hot path, one apply per Krylov step against matvec-dominated cost.
 pub struct AuxiliarySpace<S> {
   smoother: S,

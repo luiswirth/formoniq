@@ -6,7 +6,7 @@ use std::fmt;
 /// Why [`sparse_shift_invert_eigen`] could not produce the wanted eigenpairs.
 ///
 /// Not every failure is a bug in the caller's pencil: exceeding the iteration
-/// budget says only that *this* budget was too small, which an interactive
+/// budget says only that this budget was too small, which an interactive
 /// caller can report and move on from.
 #[derive(Debug, Clone, PartialEq)]
 pub enum EigenError {
@@ -304,7 +304,7 @@ fn inf_norm(m: &CsrMatrix) -> f64 {
 }
 
 /// The shift `attempt` tries: the requested one first, then a geometrically
-/// growing perturbation alternating in sign, so the search stays centred on
+/// growing perturbation alternating in sign, so the search stays centered on
 /// the target instead of drifting off one side.
 fn perturbed_shift(shift: f64, eps0: f64, attempt: usize) -> f64 {
   if attempt == 0 {

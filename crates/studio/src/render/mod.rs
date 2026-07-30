@@ -1,8 +1,8 @@
 //! The renderer: pipelines, transient targets and the frame graph, recorded
 //! into any caller-supplied `TextureView`.
 //!
-//! Nothing here knows about a window, a surface or a clock -- the target
-//! format, the target size and the time are all inputs -- so the interactive
+//! Nothing here knows about a window, a surface or a clock, the target
+//! format, the target size and the time are all inputs, so the interactive
 //! viewer and a headless export drive one frame graph and cannot drift.
 
 pub mod advect;
@@ -35,15 +35,15 @@ const DEPTH_CLEAR: f32 = 0.0;
 
 /// The format every scene pass draws into, and the bloom chain with it.
 ///
-/// Float, and therefore *unbounded*, which is the whole of the point: a dense
+/// Float, and therefore unbounded, which is the whole of the point: a dense
 /// trail lifts the surface's radiance above 1, so a filament where the flow
 /// bunches carries many times a still region's light. An 8-bit target saturates
-/// at 1.0 and throws that away -- a bright filament and a faint one come out the
-/// same white -- so the overflow that is meant to be the image is destroyed at
+/// at 1.0 and throws that away, a bright filament and a faint one come out the
+/// same white, so the overflow that is meant to be the image is destroyed at
 /// the blend, before any pass could shade it. Here it survives to the resolve,
 /// which is the only place that has to fit it into a display.
 ///
-/// The range is what matters, not the precision: a 16-bit *unorm* target would
+/// The range is what matters, not the precision: a 16-bit unorm target would
 /// give 256 times the levels and clip at 1.0 just the same.
 pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 
@@ -52,7 +52,7 @@ pub const SCENE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
 /// actually exceed 1, as opposed to one that is clamped to `[0, 1]` by
 /// construction (a colormapped fill, a wireframe or glyph ribbon).
 ///
-/// Only a deposit-lifted fill overflows -- see the invariant in `bloom.wgsl` --
+/// Only a deposit-lifted fill overflows, see the invariant in `bloom.wgsl`,
 /// so this is the material-specific fact the resolve needs to decide, per pixel,
 /// whether the tone curve or a plain clamp is the correct crossing. A single
 /// scalar is enough: coverage, not radiance, so `R8Unorm` rather than a float
@@ -85,7 +85,7 @@ const PREAMBLE: &str = include_str!("preamble.wgsl");
 /// The `SSAA_SCALE` declaration prepended to the one shader that reads it (the
 /// downsample resolve, whose box filter divides by it). Baked as a plain `const`
 /// from the same `ssaa` that sizes the targets, so the filter's divisor and the
-/// target allocation are one number -- NOT a pipeline-overridable `override`,
+/// target allocation are one number, NOT a pipeline-overridable `override`,
 /// which WebGPU on WebKit fails to specialize ("Vertex library failed
 /// creation"). The factor is fixed for a pipeline's life anyway, so nothing is
 /// lost by baking it at shader-build instead of pipeline-build.
@@ -104,8 +104,8 @@ fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::Shader
 /// alpha-blended segment marks only test against it.
 ///
 /// `Greater`, and the pass clears to [`DEPTH_CLEAR`], because depth is reversed:
-/// nearer is *larger*. See [`OPENGL_TO_REVERSED_WGPU_MATRIX`] for why. The three
-/// -- the projection's sign, the comparison, the clear -- are one decision, and
+/// nearer is larger. See [`OPENGL_TO_REVERSED_WGPU_MATRIX`] for why. The three
+///, the projection's sign, the comparison, the clear, are one decision, and
 /// any two of them agreeing without the third is a scene drawn inside out.
 ///
 /// [`OPENGL_TO_REVERSED_WGPU_MATRIX`]: camera::OPENGL_TO_REVERSED_WGPU_MATRIX
@@ -113,23 +113,23 @@ fn depth_stencil(write: bool) -> wgpu::DepthStencilState {
   depth_stencil_biased(write, 0)
 }
 
-/// Depth bias in *units of depth*, which is the only place a mark drawn on a
+/// Depth bias in units of depth, which is the only place a mark drawn on a
 /// surface may be nudged.
 ///
-/// A mark that lies in a surface -- a glyph in its cell, a wireframe edge along
-/// its simplex -- is coplanar with the fill and would z-fight it. The fix is to
+/// A mark that lies in a surface, a glyph in its cell, a wireframe edge along
+/// its simplex, is coplanar with the fill and would z-fight it. The fix is to
 /// win the depth comparison, and that is a statement about depth alone: the
 /// rasterizer offsets the fragment's $z$ after the mark's screen position is
 /// already fixed, so the mark stays welded to the geometry it belongs to.
 ///
-/// **Never displace the mark in world space to achieve this.** Translating a
+/// Never displace the mark in world space to achieve this. Translating a
 /// corner toward the camera does make it draw in front, and it is wrong in two
-/// ways that no amount of tuning fixes. It puts the mark at a different *depth*
+/// ways that no amount of tuning fixes. It puts the mark at a different depth
 /// than the surface it claims to lie on, so the two exhibit parallax and the
 /// mark visibly slides across its own face as the camera orbits. And the offset
 /// is measured in the mark's own size rather than in the distance to whatever
-/// is in front, so on a closed surface -- a solid's boundary, where a near face
-/// and a far face both exist -- a far face's marks translate straight through
+/// is in front, so on a closed surface, a solid's boundary, where a near face
+/// and a far face both exist, a far face's marks translate straight through
 /// the near one. A single open sheet hides both faults, having nothing to slide
 /// against and nothing in front to pierce, which is why this survived until a
 /// solid was drawn.
@@ -144,9 +144,9 @@ fn depth_stencil_biased(write: bool, units: i32) -> wgpu::DepthStencilState {
     depth_write_enabled: Some(write),
     depth_compare: Some(wgpu::CompareFunction::Greater),
     stencil: wgpu::StencilState::default(),
-    // Depth is reversed, so *nearer is larger* and drawing over the fill means
+    // Depth is reversed, so nearer is larger and drawing over the fill means
     // biasing the depth up. A negative constant here would push the mark behind
-    // the very surface it is meant to sit on -- the sign is tied to the
+    // the very surface it is meant to sit on, the sign is tied to the
     // `Greater` comparison above, not free.
     bias: wgpu::DepthBiasState {
       constant: units,
@@ -156,7 +156,7 @@ fn depth_stencil_biased(write: bool, units: i32) -> wgpu::DepthStencilState {
   }
 }
 
-/// The bias a mark lying *in* the surface takes. Small: it has to beat
+/// The bias a mark lying in the surface takes. Small: it has to beat
 /// coplanar z-fighting and nothing more, since it no longer has to compensate
 /// for a world-space displacement.
 const SURFACE_MARK_DEPTH_BIAS: i32 = 64;
@@ -186,7 +186,7 @@ fn color_target(
 #[cfg(test)]
 mod tests {
   /// Every WGSL source in this module parses and validates against naga's own
-  /// frontend -- the one wgpu itself uses to build a pipeline -- so a broken
+  /// frontend, the one wgpu itself uses to build a pipeline, so a broken
   /// shader fails `cargo test` instead of the pipeline-creation panic at
   /// startup a syntax or type error would otherwise cause. Validated as the
   /// preamble/body concatenation the pipelines are actually built from, never
@@ -225,11 +225,11 @@ mod tests {
   }
 
   /// Every uniform's WGSL struct has the size its `#[repr(C)]` Rust mirror
-  /// does, as naga lays it out -- the same computation wgpu validates a bind
+  /// does, as naga lays it out, the same computation wgpu validates a bind
   /// group against.
   ///
   /// The two languages do not share an alignment rule (a WGSL vector is
-  /// 16-aligned; a Rust array is aligned as its element), so "mirrors it field
+  /// 16-aligned. A Rust array is aligned as its element), so mirrors it field"
   /// for field" is a claim about bytes that reading the two declarations
   /// side by side does not check. A mismatch is otherwise invisible until a
   /// draw call fails validation at runtime, which is exactly the error this

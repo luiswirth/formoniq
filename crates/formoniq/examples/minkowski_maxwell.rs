@@ -9,7 +9,7 @@
 //! there is no time-stepping loop, the hyperbolicity living entirely in the
 //! signature.
 //!
-//! This is the *grade-2 sector* of the covariant Hodge--Dirac equation
+//! This is the grade-2 sector of the covariant Hodge--Dirac equation
 //! $sans(D) F = J$, $sans(D) = dif + delta$, at zero mass. By grade,
 //!
 //! $ sans(D) F = underbrace(dif F, in Lambda^3) + underbrace(delta F, in Lambda^1)
@@ -17,22 +17,22 @@
 //!
 //! so the two Maxwell equations are two components of one equation: $dif F = 0$
 //! (Bianchi, no magnetic monopoles) and $delta F = J$ (Gauss--Ampère). The field
-//! is a single 2-form; the whole de Rham complex is carried because $sans(D)$ is
+//! is a single 2-form. The whole de Rham complex is carried because $sans(D)$ is
 //! grade-mixing.
 //!
 //! # This example does not converge
 //!
 //! It is kept as the reproducer for the massless obstruction, not as a working
-//! solve. The Galerkin posing below puts essential data on the *whole* spacetime
+//! solve. The Galerkin posing below puts essential data on the whole spacetime
 //! boundary, which for a hyperbolic operator is the Hadamard ill-posed problem:
 //! the discrete systems are solved to a residual of $10^(-15)$ but their limit is
-//! not the solution. In dimension 3 that stays hidden -- the error tracks the
-//! interpolation floor -- and in dimension 4 the two columns separate. A causal
+//! not the solution. In dimension 3 that stays hidden, the error tracks the
+//! interpolation floor, and in dimension 4 the two columns separate. A causal
 //! essential part and an $L^2$ least-squares formulation were both tried and
 //! both fail, for reasons recorded in the issue.
 //!
 //! The obstruction is the inf-sup constant degenerating as $m -> 0$, not the
-//! signature or the elements: the *massive* problem of `minkowski_dirac.rs`
+//! signature or the elements: the massive problem of `minkowski_dirac.rs`
 //! converges at rate 1 in every dimension on the same machinery.
 //!
 //! See <https://github.com/luiswirth/formoniq/issues/117>.
@@ -40,7 +40,7 @@
 //! # Manufactured plane wave
 //!
 //! The exact field is an electromagnetic plane wave built from a null covector
-//! $a$, $inner(a, a)_(eta^(-1)) = 0$ -- the massless dispersion relation
+//! $a$, $inner(a, a)_(eta^(-1)) = 0$, the massless dispersion relation
 //! $sans(D)^2 F = square F = 0$. With a constant grade-1 polarization $omega$,
 //!
 //! $ F = sin(a dot x + phi) thin (a wedge omega), quad
@@ -117,7 +117,7 @@ fn convergence(dim: usize, nsubs: &[usize]) {
 
   // The constant field bivector $Phi = a wedge omega$ and the current bivector
   // $-iota_(a^sharp) Phi$. Faraday: $dif F = cos(dot) thin a wedge Phi = 0$ since
-  // $a wedge a = 0$, so $F$ is closed identically -- a genuine Maxwell field.
+  // $a wedge a = 0$, so $F$ is closed identically, a genuine Maxwell field.
   let phi = a.wedge(&polarization(dim));
   let current = -1.0 * phi.interior_product(&a_sharp);
 

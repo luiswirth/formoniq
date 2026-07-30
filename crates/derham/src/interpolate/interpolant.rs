@@ -10,13 +10,13 @@ use {
 };
 
 /// The Whitney interpolation $W c = sum_sigma c_sigma W_sigma$ of a cochain: a
-/// differential form on the simplicial manifold, affine on each cell -- an
+/// differential form on the simplicial manifold, affine on each cell, an
 /// element of the Whitney space $P^-_1 Lambda^k$.
 ///
 /// This is the FEEC representation formula, reconstructing a genuine
-/// differential form from a cochain. It is intrinsic -- the cochain and the
+/// differential form from a cochain. It is intrinsic, the cochain and the
 /// [`Complex`] are all it takes, since the [`WhitneyLsf`]s are pure
-/// combinatorics of the reference cell -- so the interpolant exists on a mesh
+/// combinatorics of the reference cell, so the interpolant exists on a mesh
 /// that carries only Regge edge lengths, or no geometry at all.
 ///
 /// Evaluation in ambient coordinates is a strictly separate concern:
@@ -52,7 +52,7 @@ impl<'a> WhitneyInterpolant<'a> {
     self.complex
   }
 
-  /// The exterior derivative: since $W$ is a cochain map, this is the
+  /// The exterior derivative: since $W$ is a cochain map: this is the
   /// interpolation of the coboundary, $dif (W c) = W (dif c)$.
   pub fn dif(&self) -> Self {
     Self::new(self.cochain.dif(self.complex), self.complex)
@@ -121,7 +121,7 @@ mod test {
   /// with the trace onto a subsimplex.
   ///
   /// Pulling the reconstructed field back onto a face equals reconstructing, on
-  /// that face as its own reference cell, the traced (restricted) cochain -- so
+  /// that face as its own reference cell, the traced (restricted) cochain, so
   /// the trace of a Whitney form is the Whitney form of the trace. Swept over
   /// every cell dimension, every grade, and every subsimplex whose dimension can
   /// still carry the grade ($d >= k$; below it the trace is the zero of the empty

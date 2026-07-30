@@ -16,11 +16,11 @@
 //! with $S$ a weighted-Jacobi smoother of $A_k$ and two corrections realizing the
 //! regular decomposition $omega = dif phi + "(vector-nodal remainder)"$:
 //!
-//! - the *gradient* space, tied in by $Pi_"grad" = D_(k-1)$ (the discrete
+//! - the gradient space, tied in by $Pi_"grad" = D_(k-1)$ (the discrete
 //!   exterior derivative, [`HilbertComplex::dif`]) with auxiliary operator the
 //!   grade-$(k-1)$ problem $A_(k-1)$: it captures the $dif$-range part of the
 //!   near-kernel exactly, since $A_k dif phi = M_k dif phi$ there;
-//! - the *vector-nodal* space $[cal(W) Lambda^0]^(binom(N,k))$, tied in by the
+//! - the vector-nodal space $[cal(W) Lambda^0]^(binom(N,k))$, tied in by the
 //!   interpolation $Pi_"vec"$ of [`vector_nodal_prolongation`] with auxiliary
 //!   operator $L_"vec"$, the block diagonal of $binom(N,k)$ copies of the scalar
 //!   nodal problem $A_0$: it captures the regular remainder, whose components in
@@ -38,7 +38,7 @@
 //!
 //! ## Extrinsic ingredient (invariant 2)
 //!
-//! The vector-nodal space needs the constant $k$-covectors $e_I$ to be the *same*
+//! The vector-nodal space needs the constant $k$-covectors $e_I$ to be the same
 //! covectors at every vertex, i.e. one global frame. On an intrinsic Regge
 //! manifold there is none without a discrete connection, only the per-cell frames
 //! glued by [`Transition`](simplicial::atlas). [`vector_nodal_prolongation`]
@@ -140,8 +140,8 @@ fn tangent_blade(coords: &MeshCoords, vertices: &[usize], ambient: usize, k: usi
 /// only in how they invert the auxiliary operators:
 ///
 /// - [`new`](Self::new) inverts each auxiliary block by a direct faer solve on a
-///   single mesh. This isolates the HX *structure* --- the iteration count it
-///   buys --- and is what the correctness tests check, but the direct blocks
+///   single mesh. This isolates the HX structure, the iteration count it
+///   buys, and is what the correctness tests check, but the direct blocks
 ///   dominate the wall time as the mesh grows.
 /// - [`with_multigrid`](Self::with_multigrid) replaces each direct block by a
 ///   V-cycle over a [`RefinementTower`], the recursion that makes the whole
@@ -206,10 +206,10 @@ impl GradeKHodgeHx {
   /// pre- and post-smoothing steps.
   ///
   /// The gradient block is the crux. Its operator is the grade-$(k-1)$ problem,
-  /// which for $k >= 2$ has the *same* $dif$ near-kernel that made the grade-$k$
+  /// which for $k >= 2$ has the same $dif$ near-kernel that made the grade-$k$
   /// problem hard, so a plain grade-$(k-1)$ V-cycle stalls on it exactly as the
   /// point smoother did. The block therefore has to be HX again: the preconditioner
-  /// *recurses in grade*, the gradient block one grade down being itself a
+  /// recurses in grade, the gradient block one grade down being itself a
   /// [`with_multigrid`](Self::with_multigrid) preconditioner, until grade $0$,
   /// where there is no gradient space and a nodal V-cycle suffices. This is the
   /// same totality as everywhere else, grade $0$ the base case reached with no
@@ -220,7 +220,7 @@ impl GradeKHodgeHx {
   /// V-cycles, one cycle shared across the $binom(N,k)$ identical copies. The main
   /// operator and the transfers are read off the tower's finest level, so it must
   /// be the mesh `coords` describes. Recursion is what turns the mesh-independent
-  /// iteration count into a mesh-independent solve *cost*: each block is inverted
+  /// iteration count into a mesh-independent solve cost: each block is inverted
   /// in work linear in its size.
   ///
   /// # Panics

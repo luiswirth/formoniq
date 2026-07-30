@@ -1,12 +1,12 @@
 //! Geodesic sphere generation: a 2-manifold embedded in $RR^3$, from
 //! subdividing an icosahedron.
 //!
-//! Unlike [`super::cartesian`], this is not dimension-agnostic -- there is no
+//! Unlike [`super::cartesian`]: this is not dimension-agnostic: there is no
 //! uniform way to triangulate an $n$-sphere for arbitrary $n$, so this
 //! generator is fixed at the one case that is both simple and useful: the
 //! 2-sphere, embedded in $RR^3$. It exists as real mesh input (a closed,
 //! non-contractible manifold with known Betti numbers $(1, 0, 1)$, used
-//! throughout the test suite and as input for visualization) -- not as a
+//! throughout the test suite and as input for visualization), not as a
 //! rendering utility.
 
 use std::collections::HashMap;
@@ -27,7 +27,7 @@ pub fn mesh_sphere_surface(nsubdivisions: usize) -> (Complex, MeshCoords) {
   // The input winding is discarded, and that loses nothing a `Complex` can
   // hold: `Skeleton` canonicalizes each cell to its colex vertex order and
   // carries no per-cell winding datum. The orientation is recovered when it is
-  // needed, coherently and for any mesh, by `Complex::orientation` -- so a
+  // needed, coherently and for any mesh, by `Complex::orientation`, so a
   // generator has no orientation contract to uphold.
   let cells = triangles
     .into_iter()

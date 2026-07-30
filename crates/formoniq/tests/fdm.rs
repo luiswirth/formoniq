@@ -6,7 +6,7 @@
 //! resulting in $h=1$, making $h$-scaling irrelevant.
 //! The Mesh vertices are ordered lexicographically.
 //!
-//! The equivalence holds on *interior* nodes only. There the Kuhn/Freudenthal
+//! The equivalence holds on interior nodes only. There the Kuhn/Freudenthal
 //! triangulation reproduces the FDM stencil exactly: the piecewise-affine FEM
 //! and FDM give the same LSE, since both solve for values at the mesh vertices.
 //! The LSE rows might be scaled differently between the two, so we convert the
@@ -14,7 +14,7 @@
 //! makes the system matrices be the same for FEM and FDM. FDM is already in
 //! normalized form; FEM needs to be normalized.
 //!
-//! At a *boundary* corner the two discretizations genuinely diverge and no
+//! At a boundary corner the two discretizations genuinely diverge and no
 //! normalization repairs it: FEM computes a cotangent-type Laplacian on the
 //! partial simplex star, which equals the tensor FDM graph Laplacian only up
 //! to a global scalar in $d <= 2$, and not up to any row scaling in $d >= 3$.
@@ -219,7 +219,7 @@ fn cast_int(mat: Matrix) -> Matrix<i32> {
     "Failed to round matrix:\n{mat:.2}"
   );
   // Round before casting: `try_cast` truncates toward zero, which would turn
-  // an entry a few ulps below an integer into the integer beneath it --
+  // an entry a few ulps below an integer into the integer beneath it,
   // inconsistent with the tolerance just asserted.
   mat.map(f64::round).try_cast().unwrap()
 }

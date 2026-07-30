@@ -4,13 +4,13 @@
 //!
 //! All of the exterior calculus lives here, in `f64`, on the CPU. What crosses
 //! to the GPU is linear algebra on a simplex: a matrix per cell per dyadic
-//! level, a permutation matrix per facet, a neighbour table, and a list of
+//! level, a permutation matrix per facet, a neighbor table, and a list of
 //! points to be born at. The shader has no Whitney basis, no metric and no
-//! integrator, and that asymmetry is the design -- the flow is *exact* at every
+//! integrator, and that asymmetry is the design: the flow is exact at every
 //! level, so there is nothing left for the shader to approximate except the
 //! instant a curve leaves its cell.
 //!
-//! **The generator.** Inside a cell the sharped reduced field $V$ is affine, so
+//! The generator. Inside a cell the sharped reduced field $V$ is affine, so
 //! it is the barycentric interpolation of its own values at the cell's
 //! vertices: $V = sum_i lambda_i V_i$, i.e. $V = hat(V) lambda$ with $hat(V)$
 //! the $n times (n+1)$ matrix of those values in the chart's local frame. The
@@ -20,22 +20,22 @@
 //!
 //! $ M = (dif lambda \/ dif x) hat(V), quad dot(lambda) = M lambda. $
 //!
-//! Its columns sum to zero, because $bb(1)^T dif lambda \/ dif x = 0$ -- which
+//! Its columns sum to zero, because $bb(1)^T dif lambda \/ dif x = 0$, which
 //! is the statement that the flow preserves $sum_i lambda_i = 1$, and hence
 //! that a particle stays a point of the manifold rather than drifting off the
 //! affine hull it lives on.
 //!
-//! **The levels are one exponential and then squaring.** A frame's step is
+//! The levels are one exponential and then squaring. A frame's step is
 //! $2^d$ ticks of $h = Delta t \/ 2^d$, and the shader reaches any whole number
 //! of ticks by multiplying the levels its binary expansion names. Those levels
-//! are $e^(M h 2^k) = (e^(M h))^(2^k)$, so the bake exponentiates *once* per
+//! are $e^(M h 2^k) = (e^(M h))^(2^k)$, so the bake exponentiates once per
 //! cell and squares $d$ times. The nesting is exact and free.
 //!
-//! **The padding is a dimension, not a filler.** Every matrix is emitted
+//! The padding is a dimension, not a filler. Every matrix is emitted
 //! $4 times 4$ and every weight vector `vec4`, so one buffer serves an
 //! intrinsic dimension up to the ambient's own $3$: a triangle uses the leading
-//! $3 times 3$ block, a tetrahedron all of it. The trailing block is *zero*,
-//! never identity -- which is why the exponential is taken on the honest
+//! $3 times 3$ block, a tetrahedron all of it. The trailing block is zero,
+//! never identity, which is why the exponential is taken on the honest
 //! $(n+1) times (n+1)$ generator and padded afterwards. Padding first would
 //! exponentiate a zero block into a one, and an unused weight would spring to
 //! life.
@@ -59,8 +59,8 @@ use crate::reduce::reduced_form;
 const MAX_VERTICES: usize = 4;
 
 /// A facet with no cell on the other side: the manifold has boundary there.
-/// Mirrors `NO_NEIGHBOUR` in `advect.wgsl`.
-pub const NO_NEIGHBOUR: u32 = u32::MAX;
+/// Mirrors `NO_NEIGHBOR` in `advect.wgsl`.
+pub const NO_NEIGHBOR: u32 = u32::MAX;
 
 /// A $4 times 4$ matrix in WGSL's column-major order.
 pub type Mat4 = [f32; 16];
@@ -78,9 +78,9 @@ pub struct AdvectBake {
   pub depth: u32,
   /// $e^(M h 2^k)$, indexed `cell * (depth + 1) + level`.
   pub flows: Vec<Mat4>,
-  /// Per cell, the neighbour across the facet opposite each local vertex.
-  pub neighbours: Vec<[u32; 4]>,
-  /// The `Transition` relabellings, indexed `4 * cell + facet`.
+  /// Per cell, the neighbor across the facet opposite each local vertex.
+  pub neighbors: Vec<[u32; 4]>,
+  /// The `Transition` relabelings, indexed `4 * cell + facet`.
   pub transitions: Vec<Mat4>,
   pub seeds: Vec<Seed>,
 }
@@ -106,7 +106,7 @@ impl AdvectBake {
     let tick = step / f64::from(1u32 << depth);
 
     let mut flows = Vec::with_capacity(topology.cells().len() * (depth as usize + 1));
-    let mut neighbours = Vec::with_capacity(topology.cells().len());
+    let mut neighbors = Vec::with_capacity(topology.cells().len());
     let mut transitions = Vec::with_capacity(topology.cells().len() * MAX_VERTICES);
 
     for cell in topology.cells().handle_iter() {
@@ -123,28 +123,28 @@ impl AdvectBake {
         level = &level * &level;
       }
 
-      let mut cell_neighbours = [NO_NEIGHBOUR; MAX_VERTICES];
-      for (opposite, slot) in cell_neighbours.iter_mut().enumerate().take(dim + 1) {
-        let Some(neighbour) = facet_neighbour(topology, cell.idx(), opposite) else {
+      let mut cell_neighbors = [NO_NEIGHBOR; MAX_VERTICES];
+      for (opposite, slot) in cell_neighbors.iter_mut().enumerate().take(dim + 1) {
+        let Some(neighbor) = facet_neighbor(topology, cell.idx(), opposite) else {
           transitions.push(pad_mat4(&Matrix::zeros(dim + 1, dim + 1)));
           continue;
         };
-        *slot = neighbour.kidx() as u32;
-        let transition = cell.transition_to(neighbour);
+        *slot = neighbor.kidx() as u32;
+        let transition = cell.transition_to(neighbor);
         transitions.push(pad_mat4(transition.bary_map()));
       }
       // A cell of sub-maximal dimension has fewer facets than the buffer has
-      // slots; the missing ones are boundary, which is what they mean.
+      // slots. The missing ones are boundary, which is what they mean.
       for _ in (dim + 1)..MAX_VERTICES {
         transitions.push(pad_mat4(&Matrix::zeros(dim + 1, dim + 1)));
       }
-      neighbours.push(cell_neighbours);
+      neighbors.push(cell_neighbors);
     }
 
     Self {
       depth,
       flows,
-      neighbours,
+      neighbors,
       transitions,
       seeds: seeds(topology, coords, seed_count),
     }
@@ -159,7 +159,7 @@ impl AdvectBake {
 /// everywhere gives zero, and the caller decides what a still field looks like.
 ///
 /// Sampled at barycenters rather than integrated: the peak of an affine field on
-/// a simplex is at a vertex, so this underestimates slightly -- which sets the
+/// a simplex is at a vertex, so this underestimates slightly, which sets the
 /// speed a hair low and never a hair high, the safe direction for a mark whose
 /// whole legibility is that it is slow enough.
 pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> f64 {
@@ -176,14 +176,14 @@ pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
     .fold(0.0, f64::max)
 }
 
-/// The field's *mean* magnitude over the manifold, area-weighted: the
+/// The field's mean magnitude over the manifold, area-weighted: the
 /// barycenter samples of [`peak_speed`], averaged by the cells' metric volume
 /// instead of maximized.
 ///
 /// What the deposit's ink calibration divides by: with splats inked by arc
-/// length, the equilibrium trail brightness is set by the *average* speed of
+/// length, the equilibrium trail brightness is set by the average speed of
 /// the population, not the peak, and the average is the field's own
-/// area-weighted mean -- an exact quantity of the field, not a tuned ratio.
+/// area-weighted mean, an exact quantity of the field, not a tuned ratio.
 pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> f64 {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
   let (mut weighted, mut total) = (0.0, 0.0);
@@ -200,7 +200,7 @@ pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) ->
 
 /// The generator $M = (dif lambda \/ dif x) hat(V)$ of one cell.
 ///
-/// $hat(V)$ is read off the *reference vertices*, which is not a sampling
+/// $hat(V)$ is read off the reference vertices, which is not a sampling
 /// choice: the sharped reduced field is affine on the cell, and an affine map
 /// on a simplex is exactly the barycentric interpolation of its vertex values.
 /// The $n + 1$ evaluations are the field, not an approximation of it.
@@ -223,7 +223,7 @@ fn flow_generator(
 }
 
 /// The cell across the facet opposite local vertex `opposite`, if any.
-fn facet_neighbour<'a>(
+fn facet_neighbor<'a>(
   topology: &'a Complex,
   cell: SimplexIdx,
   opposite: usize,
@@ -252,7 +252,7 @@ fn facet_neighbour<'a>(
 /// `seed_count` birth sites, distributed by the cells' own metric volume.
 ///
 /// The cell is chosen by stratified inversion of the cumulative volume, which
-/// is deterministic and exactly proportional -- no rejection, no alias table,
+/// is deterministic and exactly proportional, no rejection, no alias table,
 /// no clock. The weight is $sqrt(det g)$ rather than the volume proper because
 /// the $1 \/ n!$ every cell of one dimension shares cancels in the normalization.
 ///
@@ -289,7 +289,7 @@ fn seeds(topology: &Complex, coords: &MeshCoords, seed_count: usize) -> Vec<Seed
 /// A point drawn uniformly from the unit simplex, as barycentric weights.
 ///
 /// The spacings of $n$ sorted uniforms on $[0, 1]$ are a `Dirichlet(1, ..., 1)`
-/// draw, which is the uniform distribution on the simplex -- not the normalized
+/// draw, which is the uniform distribution on the simplex, not the normalized
 /// uniforms, which crowd the barycenter.
 fn uniform_bary(dim: usize, index: u32) -> [f32; 4] {
   let mut cuts: Vec<f64> = (0..dim)
@@ -340,8 +340,8 @@ mod tests {
 
   /// The generator preserves $sum_i lambda_i = 1$: its columns sum to zero, so
   /// $bb(1)^T dot(lambda) = 0$ and a particle never leaves the affine hull its
-  /// weights live on. This is the law the whole pass rests on -- if it failed,
-  /// the flow would carry points off the manifold -- and it holds in every
+  /// weights live on. This is the law the whole pass rests on, if it failed,
+  /// the flow would carry points off the manifold, and it holds in every
   /// dimension the ambient admits.
   #[test]
   fn generator_columns_sum_to_zero() {

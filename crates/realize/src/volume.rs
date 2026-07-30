@@ -5,16 +5,16 @@
 //! the model half of that: pure sampling, no device and no buffer.
 //!
 //! The grid is legitimate here for a reason particular to $n = 3$ in ambient
-//! $3$: a codimension-zero embedded manifold *is* an open subset of the ambient
+//! $3$: a codimension-zero embedded manifold is an open subset of the ambient
 //! space, so it carries one global coordinate system, and a voxel is indexed by
 //! the manifold's own coordinate rather than by the camera. It is manifold
 //! state, not screen state.
 //!
-//! Resampling is a *recovery* and is stated as one: $cal(W) Lambda^n$ is $P_0$,
+//! Resampling is a recovery and is stated as one: $cal(W) Lambda^n$ is $P_0$,
 //! genuinely discontinuous across cells, and trilinear filtering smooths exactly
 //! the jump the surface bake tears open. An absorption integral averages along
 //! the ray regardless, so the medium is not claiming pointwise values the way a
-//! flat-shaded cell does -- but the concession is real and belongs here rather
+//! flat-shaded cell does, but the concession is real and belongs here rather
 //! than in a reader's surprise.
 
 use coorder::Coord;
@@ -39,7 +39,7 @@ const MAX_RESOLUTION: usize = 128;
 /// box: what the ray march integrates.
 ///
 /// Values outside the mesh are $0$, which is the physically right answer rather
-/// than a sentinel -- empty space neither emits nor absorbs, so the medium ends
+/// than a sentinel, empty space neither emits nor absorbs, so the medium ends
 /// exactly where the manifold does and no explicit boundary is needed.
 pub struct VolumeGrid {
   /// Voxels per axis, $x$ fastest.
@@ -59,14 +59,14 @@ pub struct VolumeGrid {
 
 impl VolumeGrid {
   /// Sample `cochain` over the mesh's bounding box, inverting the embedding
-  /// through a locator the *mesh* owns.
+  /// through a locator the mesh owns.
   ///
   /// The locator is an argument rather than a local because building it is the
   /// expensive half by an order of magnitude, and it depends on nothing this
-  /// call varies: a field switch re-samples, it does not re-triangulate.
+  /// call varies: a field switch re-samples: it does not re-triangulate.
   ///
   /// The scalar at a voxel is `scalarize` of the Whitney value there, read in
-  /// the containing cell's own frame with that cell's metric -- the same
+  /// the containing cell's own frame with that cell's metric, the same
   /// reduction the surface marks use, so a field cannot mean one thing on a
   /// boundary face and another a millimetre inside it.
   pub fn sample(
@@ -88,7 +88,7 @@ impl VolumeGrid {
       for iy in 0..resolution[1] {
         for ix in 0..resolution[0] {
           let x = voxel_center([ix, iy, iz], resolution, origin, size);
-          // The probe carries the *mesh's* ambient dimension, not 3: a planar
+          // The probe carries the mesh's ambient dimension, not 3: a planar
           // mesh lives in R^2 and the locator would refuse a 3-vector.
           let probe = Coord::from_iterator(ambient, x.iter().copied().take(ambient));
           let value = locator.locate(&probe).map_or(0.0, |point| {
@@ -141,7 +141,7 @@ fn bounding_box(coords: &MeshCoords) -> ([f64; 3], [f64; 3]) {
       hi[axis] = hi[axis].max(c);
     }
   }
-  // An empty mesh leaves the bounds inverted; a degenerate axis (a flat mesh in
+  // An empty mesh leaves the bounds inverted. A degenerate axis (a flat mesh in
   // the z = 0 plane) leaves one of them zero. Both collapse to a unit box rather
   // than producing a division by zero downstream.
   let mut origin = [0.0; 3];
@@ -214,7 +214,7 @@ mod tests {
   use super::*;
   use regge::mesher::cartesian::CartesianGrid;
 
-  /// A constant 0-form samples to that constant everywhere *inside* the mesh
+  /// A constant 0-form samples to that constant everywhere inside the mesh
   /// and to zero outside it: the interpolation is exact on $cal(W) Lambda^0$'s
   /// own constants, so any deviation is the sampler's error and not the field's.
   #[test]

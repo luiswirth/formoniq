@@ -1,19 +1,19 @@
 //! The deposit atlas: where a particle population's trails live.
 //!
-//! The trail a moving speck leaves is *state*, and state belongs to the
-//! manifold, not to the screen -- a screen-space accumulation would bake the
+//! The trail a moving speck leaves is state, and state belongs to the
+//! manifold, not to the screen, a screen-space accumulation would bake the
 //! camera into it, and every orbit or export would smear history that was never
 //! the field's. So the accumulation texture is laid out in the atlas's own
-//! charts: each 2-cell owns a square block, and a texel of that block *is* a
+//! charts: each 2-cell owns a square block, and a texel of that block is a
 //! point of the cell's barycentric lattice, $lambda = (i, j, R - i - j) \/ R$
 //! (the `unit_lattice` of `simplicial::atlas`, stored as texels so that splatting
 //! and filtered sampling are hardware). There is no UV unwrapping anywhere:
 //! the map $("cell", lambda) -> "texel"$ is the one formula
-//! $O_c + R_c (lambda_0, lambda_1)$, and because it is *affine*, the
+//! $O_c + R_c (lambda_0, lambda_1)$, and because it is affine, the
 //! rasterizer's own interpolation of the three corner texel coordinates
 //! reproduces it exactly at every fragment of the fill.
 //!
-//! Texel density is allocated by metric area -- $R_c prop sqrt("area"_c)$ --
+//! Texel density is allocated by metric area, $R_c prop sqrt("area"_c)$,
 //! for the same reason the advection's seeding is: the resolution of the trail
 //! is a property of the manifold, not of its triangulation. A sliver and a
 //! large cell get the density their area earns, quantized and clamped, then
@@ -31,7 +31,7 @@ use regge::coord::mesh::MeshCoords;
 /// The atlas texture's side, in texels. One fixed square texture: the budget
 /// the per-cell resolutions are allocated out of. The trail is sampled from
 /// this atlas by the fill and magnified onto whatever screen area the cell
-/// covers, so it is this budget -- not the particle count or the splat -- that
+/// covers, so it is this budget, not the particle count or the splat, that
 /// sets how sharp a filament reads when a cell fills the view. R16Float at this
 /// side is ~33 MB per texture, ~67 MB across the ping-pong pair: comfortably
 /// within core WebGPU limits, and the passes that touch it are the per-step
@@ -41,14 +41,14 @@ use regge::coord::mesh::MeshCoords;
 pub const ATLAS_SIZE: u32 = 4096;
 
 /// Bounds on one cell's lattice resolution. The floor keeps a sliver from
-/// degenerating below the splat kernel's own footprint; the cap keeps one huge
+/// degenerating below the splat kernel's own footprint. The cap keeps one huge
 /// cell (a coarse mesh's) from spending the whole budget on itself.
 const MIN_RESOLUTION: u32 = 4;
 const MAX_RESOLUTION: u32 = 1024;
 
 /// Empty texels around each block, so a bilinear read at a cell's edge touches
-/// only the cell's own block -- the neighbouring block in the *atlas* belongs
-/// to an unrelated cell of the *manifold*.
+/// only the cell's own block, the neighboring block in the atlas belongs
+/// to an unrelated cell of the manifold.
 const GUTTER: u32 = 1;
 
 /// One cell's block: the texel origin of its lattice, and the resolution $R_c$.
@@ -60,7 +60,7 @@ pub struct Block {
   pub resolution: u32,
 }
 
-/// The atlas layout: one [`Block`] per cell, in cell (colex) order -- the same
+/// The atlas layout: one [`Block`] per cell, in cell (colex) order, the same
 /// order the advection bake indexes cells by, which is what lets a particle's
 /// `cell` index the block table directly.
 pub struct DepositLayout {
@@ -120,14 +120,14 @@ impl DepositLayout {
   }
 
   /// The atlas texel coordinate of each triangle corner, three per triangle in
-  /// the triangles' own order, *normalized* to $[0, 1]$ texture coordinates.
+  /// the triangles' own order, normalized to $[0, 1]$ texture coordinates.
   ///
   /// `triangles` must be the bake's cell triangles in cell order (each a
-  /// permutation of its cell's vertices -- the winding pass may have swapped
+  /// permutation of its cell's vertices, the winding pass may have swapped
   /// two). A corner's coordinate is the block formula at the corner's own
   /// barycentric indicator: vertex $0 -> O + (R, 0)$, $1 -> O + (0, R)$,
   /// $2 -> O$, where the local index is the vertex's position in the cell's
-  /// colex-sorted tuple. Affine interpolation of these three values *is* the
+  /// colex-sorted tuple. Affine interpolation of these three values is the
   /// map $O + R (lambda_0, lambda_1)$ at every interior point, which is why no
   /// per-fragment lookup exists.
   ///
@@ -228,7 +228,7 @@ mod tests {
   }
 
   /// Every block lies inside the atlas, respects the resolution bounds, and no
-  /// two blocks overlap -- a texel belongs to at most one cell.
+  /// two blocks overlap, a texel belongs to at most one cell.
   #[test]
   fn blocks_are_disjoint_and_in_bounds() {
     let triforce = crate::demos::triforce();

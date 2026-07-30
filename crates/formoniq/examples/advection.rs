@@ -1,5 +1,5 @@
 //! Linear advection $diff_t omega + cal(L)_v omega = 0$ on the flat box, with
-//! the *central* discretization, to measure what it does wrong.
+//! the central discretization, to measure what it does wrong.
 //!
 //! Cartan's $cal(L)_v = iota_v dif + dif iota_v$ makes one operator out of the
 //! classical pair: advective form at $k = 0$, conservation form at $k = n$, the
@@ -12,7 +12,7 @@
 //! the range violation at grade 0, which transport cannot produce.
 //!
 //! The velocity is a genuine constant field, the sharp of a constant $1$-form
-//! pulled back onto the mesh; constant *components in every reference frame*
+//! pulled back onto the mesh; constant components in every reference frame
 //! would be a different and discontinuous field. No boundary condition is
 //! imposed, so the bump stops short of the boundary.
 //!
@@ -69,7 +69,7 @@ fn main() {
       .pullback_on(&topology, &coords)
       .sharp(&topology, &geometry);
 
-    // A bump at 0.3 travelling 0.2, so it stays well inside the box.
+    // A bump at 0.3 traveling 0.2, so it stays well inside the box.
     let travel = 0.2;
     let bump = |x: &Vector| {
       let r2: f64 = x.iter().map(|xi| (xi - 0.3).powi(2)).sum();

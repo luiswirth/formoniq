@@ -3,21 +3,21 @@
 //! A [`Subdivision`] carries only topology and affine provenance; the geometry
 //! is followed here, on the geometry side of the topology/geometry split. Every
 //! child cell is an affine subcell of a flat parent, so its geometry is an exact
-//! *pullback* of the parent's -- no approximation is introduced by refining, on
+//! pullback of the parent's, so no approximation is introduced by refining, on
 //! either representation:
 //!
-//! - **Intrinsic** ([`Subdivision::refine_gramians`]): each child's metric is
+//! - Intrinsic ([`Subdivision::refine_gramians`]): each child's metric is
 //!   the parent metric pulled back along the child's Jacobian. This is the
 //!   coordinate-free refinement, and the primitive the extrinsic case must
 //!   agree with. It is the functor and not a formula resembling it:
 //!   [`Metric::pullback`](metric::Metric::pullback) is `Tensor::pullback` on the metric's $"Sym"^2$
 //!   reading, which `metric`'s laws state, so refining a geometry is the same
 //!   operation as transporting any other covariant tensor.
-//! - **Extrinsic** ([`MeshCoords::refine`]): each new vertex is placed by the
+//! - Extrinsic ([`MeshCoords::refine`]): each new vertex is placed by the
 //!   affine combination of coarse vertices recorded in its
 //!   [`VertexBirth`](simplicial::topology::refine::VertexBirth). An embedding is not
-//!   needed to refine -- it is refined only because visualization and I/O want
-//!   one -- and the metric it induces equals the intrinsic refinement, which is
+//!   needed to refine: it is refined only because visualization and I/O want
+//!   one, and the metric it induces equals the intrinsic refinement, which is
 //!   the law that ties the two.
 
 use crate::{coord::mesh::MeshCoords, lengths::CellGramians, lengths::mesh::MeshLengthsSq};
@@ -29,12 +29,12 @@ use simplicial::{
 /// The geometric half of a refinement.
 ///
 /// `simplicial`'s [`Subdivision`] is the combinatorial record of which child
-/// belongs to which parent; pulling a *geometry* back through it needs a metric,
+/// belongs to which parent; pulling a geometry back through it needs a metric,
 /// so it reaches down from here as an extension.
 pub trait SubdivisionExt {
   /// Refine per-cell metrics: each child carries the pullback of its parent
   /// cell's metric along the child's affine Jacobian. Exact and coordinate-free
-  /// -- the intrinsic refinement of any geometry, once reduced to its per-cell
+  ///, the intrinsic refinement of any geometry, once reduced to its per-cell
   /// metrics ([`CellGramians`]).
   fn refine_gramians(&self, coarse: &CellGramians) -> CellGramians;
 }
@@ -42,7 +42,7 @@ pub trait SubdivisionExt {
 impl SubdivisionExt for Subdivision {
   /// Refine per-cell metrics: each child carries the pullback of its parent
   /// cell's metric along the child's affine Jacobian. Exact and coordinate-free
-  /// -- the intrinsic refinement of any geometry, once reduced to its per-cell
+  ///, the intrinsic refinement of any geometry, once reduced to its per-cell
   /// metrics ([`CellGramians`]).
   fn refine_gramians(&self, coarse: &CellGramians) -> CellGramians {
     let metrics = self
@@ -58,7 +58,7 @@ impl SubdivisionExt for Subdivision {
 impl MeshLengthsSq {
   /// Refine intrinsic Regge geometry: the refined squared edge lengths of the flat
   /// subdivision. Routed through the metric primitive
-  /// ([`Subdivision::refine_gramians`]) rather than reimplemented -- coarse
+  /// ([`Subdivision::refine_gramians`]) rather than reimplemented, coarse
   /// lengths give per-cell metrics, those are pulled back onto the children, and
   /// the fine metrics are read back as edge lengths. Exact; refinement of a flat
   /// cell introduces no geometric error.
@@ -74,7 +74,7 @@ impl MeshCoords {
   /// Refine an embedding: the coarse vertices keep their coordinates and label,
   /// and each new vertex is the affine combination of coarse vertices its
   /// [`VertexBirth`](simplicial::topology::refine::VertexBirth) records. Extrinsic,
-  /// for I/O and visualization; the intrinsic refinement is
+  /// for I/O and visualization. The intrinsic refinement is
   /// [`Subdivision::refine_gramians`].
   pub fn refine(&self, sub: &Subdivision) -> MeshCoords {
     assert_eq!(
@@ -129,9 +129,9 @@ mod test {
 
   /// Refining a Kuhn-triangulated grid reproduces the finer grid the generator
   /// would have built: $"refine"("grid"(n), r) tilde.equiv "grid"(n r)$, up to
-  /// vertex relabelling. Freudenthal subdivision of a Kuhn cube *is* the Kuhn
+  /// vertex relabeling. Freudenthal subdivision of a Kuhn cube is the Kuhn
   /// triangulation of its $2^n$ subcubes, so the general refinement algorithm
-  /// loses none of the regularity of the structured generator -- in every
+  /// loses none of the regularity of the structured generator, in every
   /// dimension, not just the 2D case where red refinement happens to be
   /// self-similar. Congruence is tested on the intrinsic invariant: the multiset
   /// over cells of each cell's sorted squared edge lengths.
@@ -190,7 +190,7 @@ mod test {
 
   /// Intrinsic equals extrinsic: refining the embedding and then inducing its
   /// metric gives the same per-cell metric as pulling the coarse metric back
-  /// intrinsically. The one test that certifies the coordinate-free transport --
+  /// intrinsically. The one test that certifies the coordinate-free transport,
   /// it says the flat-cell subdivision loses nothing.
   #[test]
   fn intrinsic_equals_extrinsic() {
@@ -236,7 +236,7 @@ mod test {
     }
   }
 
-  /// A refinement *tower* built on the inherited ordering is the single
+  /// A refinement tower built on the inherited ordering is the single
   /// refinement of the product: refining twice by $R$ gives the same mesh as
   /// once by $R^2$, cells and geometry alike.
   ///
@@ -246,7 +246,7 @@ mod test {
   /// sweep may now be built level on level rather than from the base each time:
   /// every cell stays similar to the coarse cell it descends from. Refining in
   /// the colex ordering instead re-derives each child's order by sorting, which
-  /// agrees with the pattern only at the first level and drifts after -- into a
+  /// agrees with the pattern only at the first level and drifts after, into a
   /// growing number of congruence classes above dimension two.
   #[test]
   fn a_tower_on_the_inherited_ordering_is_the_product_refinement() {
@@ -279,7 +279,7 @@ mod test {
   /// class, at every level, in every dimension.
   ///
   /// The property the ordering exists to preserve, stated where it is visible.
-  /// Shape alone -- scale is divided out -- so it is a statement about mesh
+  /// Shape alone, scale is divided out, so it is a statement about mesh
   /// quality rather than about which mesh was built.
   #[test]
   fn a_tower_stays_self_similar() {
@@ -313,7 +313,7 @@ mod test {
       let mut ordering = CellOrdering::colex(&complex);
 
       // Two levels already exhibit the drift the ordering prevents (the colex
-      // tower leaves one class at level two); the top dimension is capped there
+      // tower leaves one class at level two). The top dimension is capped there
       // because a third level is ~10^5 cells for no further statement.
       let levels = if dim <= 3 { 3 } else { 2 };
       for level in 1..=levels {

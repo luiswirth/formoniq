@@ -180,33 +180,33 @@ impl From<Word> for MultiIndex {
 pub use permutation::Permutation;
 
 /// The degree of a graded structure: the dimension of a simplex, the grade of an
-/// exterior form, the degree of a cochain --- one $ZZ$-grading index. The de
-/// Rham complex is graded by it; the boundary lowers it by one, the exterior
+/// exterior form, the degree of a cochain, one $ZZ$-grading index. The de
+/// Rham complex is graded by it. The boundary lowers it by one, the exterior
 /// derivative raises it.
 ///
-/// A signed integer, so a value outside $[0, n]$ names a *trivial* space at the
+/// A signed integer, so a value outside $[0, n]$ names a trivial space at the
 /// end of a finite complex ($Lambda^(-1) = Lambda^(n+1) = 0$). That totality at
 /// the degenerate boundary is the point: the codifferential of a $0$-form and
 /// the differential of an $n$-form both land in an empty space rather than
 /// underflowing. [`Self::index_in`] is the total accessor into a structure of a
-/// given top degree, `None` off the range --- exactly the shape of
+/// given top degree, `None` off the range, exactly the shape of
 /// `RoleDim::dim_in`.
 ///
 /// `Dim` and [`ExteriorGrade`](Degree) are aliases: the simplex-dimension and
 /// form-grade vocabulary for the one type. Accessors keep the domain word
-/// (`dim()`, `grade()`); the type is what unifies them.
+/// (`dim()`, `grade()`). The type is what unifies them.
 ///
 /// The type follows one pattern, worth naming because it recurs wherever an
-/// index space has a degenerate boundary: *totalize the arithmetic, relationize
-/// the bound, trivialize the out-of-range*. The representation is a full $ZZ$,
+/// index space has a degenerate boundary: totalize the arithmetic, relationize
+/// the bound, trivialize the out-of-range. The representation is a full $ZZ$,
 /// so `+`/`-` are total and a computation may pass through $-1$ or $n+1$ with no
-/// special case; validity is *not* baked into the representation (as it would be
-/// in an unsigned type) but checked *relationally* against a supplied top degree
+/// special case; validity is not baked into the representation (as it would be
+/// in an unsigned type) but checked relationally against a supplied top degree
 /// at the point of use ([`Self::index_in`], `None` off range); and a value off
 /// $[0, n]$ denotes the trivial object rather than trapping or saturating. This
 /// is the pragmatic encoding of what a dependent type would carry as a proof
-/// (`Fin (n+1)`): the bound is runtime and non-local -- a degree does not know
-/// its own $n$ -- so it cannot live in the type, and the `Option` at the
+/// (`Fin (n+1)`): the bound is runtime and non-local: a degree does not know
+/// its own $n$, so it cannot live in the type, and the `Option` at the
 /// boundary is where it lives instead.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -262,7 +262,7 @@ impl Degree {
 /// A [`Degree`] is constructed freely from any integer: `usize` for the counts
 /// that name it in practice, signed types so a bare literal (which defaults to
 /// `i32`) lifts with no annotation and `(-1).into()` names the trivial degree.
-/// Construction is one-directional: an integer lifts *into* a `Degree`, never
+/// Construction is one-directional: an integer lifts into a `Degree`, never
 /// the reverse, so the signed grading logic stays sealed inside the type.
 macro_rules! impl_degree_from_int {
   ($($t:ty),*) => {$(
@@ -499,7 +499,7 @@ pub fn sort_count_swaps<T: Ord>(a: &mut [T]) -> usize {
 /// A newtype over [`MonoIndex`] at [`Repetition::Forbidden`], which is what it
 /// has always been: a subset is a monotone word that may not repeat, and
 /// forbidding repetition makes the shift zero, so the shifted word a
-/// `MonoIndex` stores *is* the set. The wrapper adds nothing to the
+/// `MonoIndex` stores is the set. The wrapper adds nothing to the
 /// representation and enforces the family, so a multiset cannot be handed to a
 /// subset's operations.
 ///
@@ -569,7 +569,7 @@ impl Combination {
   }
   /// From a raw bitset, each set bit an index.
   ///
-  /// Every bitset denotes a combination, so this is total; the name marks that
+  /// Every bitset denotes a combination, so this is total. The name marks that
   /// the caller is working at the bit level, where the set is the bits.
   pub fn from_bits(bits: u128) -> Self {
     Self(MonoIndex::from_shifted(Repetition::Forbidden, bits))

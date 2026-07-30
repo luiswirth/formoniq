@@ -3,15 +3,15 @@
 //!
 //! This is the model-to-GPU layer, and it is deliberately not the windowed
 //! one. It holds no window, no surface and no clock, so the interactive viewer
-//! and a headless export build the *same* display from the same
+//! and a headless export build the same display from the same
 //! `(Scene, Selection, extent)` and differ only in where the frame's time comes
-//! from -- which is the renderer's argument, not this layer's business. A
+//! from, which is the renderer's argument, not this layer's business. A
 //! material constructed here rather than at a caller is a material the two
 //! cannot disagree on.
 //!
 //! The split within is by what a datum depends on: [`MeshDisplay`] is the bake
 //! of the mesh, rebuilt only when the scene changes, and [`FieldDisplay`] is
-//! what one field decides -- its materials, its own geometry, its attribute
+//! what one field decides, its materials, its own geometry, its attribute
 //! stream. Switching modes rewrites the second alone.
 
 use crate::render::{
@@ -36,7 +36,7 @@ use regge::coord::locate::PointLocator;
 /// their own ink and count. Exposure is the knob for when that stops being true.
 const EXPOSURE: f32 = 1.0;
 
-/// How much of the blurred glow is added back -- how far the light that will not
+/// How much of the blurred glow is added back, how far the light that will not
 /// fit is allowed to spread, rather than how bright it is.
 const BLOOM_INTENSITY: f32 = 0.85;
 
@@ -44,7 +44,7 @@ const BLOOM_INTENSITY: f32 = 0.85;
 /// numbers.
 ///
 /// The ladder is the model's, the strengths are the display's, and the renderer
-/// sees neither -- only the uniform. Which is why bloom's "off" is an intensity
+/// sees neither, only the uniform. Which is why bloom's "off" is an intensity
 /// of zero rather than a flag: the resolve multiplies by it unconditionally, so
 /// the frame graph can skip the chain without the image knowing.
 pub(crate) fn post_uniform(post: Post) -> PostUniform {
@@ -57,7 +57,7 @@ pub(crate) fn post_uniform(post: Post) -> PostUniform {
 }
 
 /// Peak standing-wave displacement, as a fraction of the scene's own coordinate
-/// extent (its radius) -- an object-intrinsic scale, independent of how finely
+/// extent (its radius), an object-intrinsic scale, independent of how finely
 /// the object is meshed. At this fraction a grade-$l$ eigenmode swells its
 /// positive lobes to nearly twice the radius and pinches its negative lobes
 /// almost to the center, so the deformed surface reads as the familiar
@@ -79,7 +79,7 @@ const VOLUME_DENSITY_PER_EXTENT: f32 = 6.0;
 const VOLUME_EMISSION: f32 = 1.4;
 
 /// The stroke half-width shared by the 1-skeleton's segments and the
-/// 0-skeleton's discs, as a fraction of the mesh's *mean edge length* (not the
+/// 0-skeleton's discs, as a fraction of the mesh's mean edge length (not the
 /// scene's extent).
 ///
 /// It draws the mesh's own edges and vertices, so its scale is the mesh's local
@@ -91,11 +91,11 @@ const VOLUME_EMISSION: f32 = 1.4;
 ///
 /// Shared by both skeletons on purpose: a disc of this radius is exactly as wide
 /// as an edge is thick, so a vertex reads as a rounded node capping the edges
-/// that meet it, and the two skeletons combine into one graph-style drawing --
+/// that meet it, and the two skeletons combine into one graph-style drawing,
 /// nodes and links of a single stroke weight.
 ///
 /// Still world-space, so a line reads the same whether the mesh fills the screen
-/// or sits in a corner of it. Only which length it is a fraction *of* has
+/// or sits in a corner of it. Only which length it is a fraction of has
 /// changed.
 const SKELETON_WIDTH_FRACTION: f32 = 0.012;
 
@@ -104,12 +104,12 @@ const SKELETON_WIDTH_FRACTION: f32 = 0.012;
 /// count, but a target density, so a coarse mesh's large cells earn several
 /// glyphs (see [`realize::glyph::glyph_refinement`]) and a fine mesh's small
 /// ones collapse back to one without either being tuned by hand. Also the
-/// glyph's own length -- each arrow is centered on its sample and sized to its
-/// lattice's realized spacing, so neighbouring arrows meet rather than
+/// glyph's own length: each arrow is centered on its sample and sized to its
+/// lattice's realized spacing, so neighboring arrows meet rather than
 /// overshooting past each other or leaving gaps (see `glyph.rs`).
 const GLYPH_SPACING_FRACTION: f32 = 0.06;
 
-/// The glyph's half-width as a fraction of the arrow's *own length*: the
+/// The glyph's half-width as a fraction of the arrow's own length: the
 /// arrowhead's, which its base spans in full, and which
 /// [`GLYPH_SHAFT_WIDTH_FRACTION`] narrows the shaft down from.
 ///
@@ -132,7 +132,7 @@ const GLYPH_SHAFT_WIDTH_FRACTION: f32 = 0.32;
 /// field rather than as a wall of marks. Drawn over the fill.
 const GLYPH_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.75];
 
-/// The outline's rim, as a fraction of the arrow's half-width -- so it is a
+/// The outline's rim, as a fraction of the arrow's half-width, so it is a
 /// constant rim around the silhouette rather than one that thins toward the tip
 /// along with the arrow it traces, and it scales with the arrow like every other
 /// proportion. The color is fixed black in `segments.wgsl`: the one color that
@@ -141,7 +141,7 @@ const GLYPH_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.75];
 const GLYPH_OUTLINE_WIDTH_FRACTION: f32 = 0.27;
 
 /// The opacity the glyphs of an eigenmode fade to at the standing wave's node,
-/// where the field vanishes and an arrow is meaningless -- never fully, since
+/// where the field vanishes and an arrow is meaningless, never fully, since
 /// the glyph lattice of a standing mode is the same set at every phase, and
 /// blinking it out entirely would read as the geometry changing.
 const GLYPH_NODE_OPACITY: f32 = 0.25;
@@ -159,7 +159,7 @@ const PARTICLE_SPEED_FRACTION: f64 = 0.10;
 /// The advection's fixed rate, in steps per second of animation time.
 ///
 /// The bake exponentiates one step's worth of field time, so the step is fixed
-/// and only their *number* varies with elapsed time. Tied to the animation
+/// and only their number varies with elapsed time. Tied to the animation
 /// clock rather than the frame rate: a slow frame takes more steps, not shorter
 /// ones, and the flow runs at the same speed on any machine.
 pub(crate) const STEPS_PER_SECOND: f32 = 60.0;
@@ -172,19 +172,19 @@ const ADVECT_DEPTH: u32 = 10;
 
 /// How many particles, and how many distinct sites they are born at.
 ///
-/// The count chooses the *collective* regime: no individual speck is meant to
+/// The count chooses the collective regime: no individual speck is meant to
 /// be followed, and the picture is the density the population piles into and
-/// the trails it lays in the deposit atlas -- which is why the radius and ink
+/// the trails it lays in the deposit atlas, which is why the radius and ink
 /// above sit far below what a followable speck would want. The three are one
 /// setting: move the count and they move with it.
 ///
-/// The seeds are far fewer than the particles: a seed is a *place* to be born,
+/// The seeds are far fewer than the particles: a seed is a place to be born,
 /// not a particle, and many pass through each over a session.
 const PARTICLE_COUNT: u32 = 1_000_000;
 const PARTICLE_SEEDS: usize = 65_536;
 
 /// How long a laid trail survives, as the time for one deposit to decay to
-/// $1\/e$. Together with [`PARTICLE_SPEED_FRACTION`] this *is* the streak
+/// $1\/e$. Together with [`PARTICLE_SPEED_FRACTION`] this is the streak
 /// length: the fastest particles draw tails of about their speed times this,
 /// $approx 0.15$ object radii, long enough to read as flow lines and short
 /// enough not to smear the whole surface uniform.
@@ -197,9 +197,9 @@ const DEPOSIT_DECAY_SECONDS: f32 = 1.5;
 const DEPOSIT_FLOOR: f32 = 0.3;
 
 /// The equilibrium trail brightness the gain is calibrated to: the lift
-/// `floor + gain * D` at the *average* deposit density, were the population
+/// `floor + gain * D` at the average deposit density, were the population
 /// spread uniformly. 1 makes the average trail exactly restore the plain
-/// radiance -- so still regions sit at the floor, ordinary streaks at nominal,
+/// radiance, so still regions sit at the floor, ordinary streaks at nominal,
 /// and the filaments where the flow bunches overshoot 1 and bloom. The
 /// calibration is arithmetic over the actual count, decay and atlas budget,
 /// never a hand-tuned brightness.
@@ -208,17 +208,17 @@ const DEPOSIT_MEAN_LIFT: f32 = 1.0;
 /// The advection steps that have elapsed by `time`.
 ///
 /// The count is a function of the instant, not an accumulator, so it is the
-/// same number for the window and for an exporter aiming at that instant --
+/// same number for the window and for an exporter aiming at that instant,
 /// which is what makes the two agree on where a particle is.
 pub(crate) fn steps_at(time: f32) -> u32 {
   (time.max(0.0) * STEPS_PER_SECOND) as u32
 }
 
 /// The scene's coordinate extent: the largest distance of any vertex from the
-/// mesh's own centroid -- its intrinsic radius, independent of where the mesh
+/// mesh's own centroid, its intrinsic radius, independent of where the mesh
 /// sits in space. Measured about the centroid, not the origin, so a mesh
 /// nowhere near the origin (a unit grid on $\[0,1\]^2$, an off-center loaded OBJ)
-/// still reports its true size; an origin-centered unit sphere gives 1 either
+/// still reports its true size. An origin-centered unit sphere gives 1 either
 /// way. Both the camera framing and the standing-wave amplitude scale off this,
 /// so neither is tuned to the sphere.
 pub(crate) fn scene_extent(scene: &Scene) -> f64 {
@@ -226,7 +226,7 @@ pub(crate) fn scene_extent(scene: &Scene) -> f64 {
 }
 
 /// The mesh's own centroid, in the same 3-vector coordinates as
-/// [`scene_extent`] -- the point the camera should target so an off-center
+/// [`scene_extent`], the point the camera should target so an off-center
 /// mesh (a unit grid on $\[0,1\]^2$, an off-center loaded OBJ) still ends up in
 /// the middle of the view, not just correctly sized.
 fn scene_centroid_and_extent(scene: &Scene) -> (na::DVector<f64>, f64) {
@@ -245,7 +245,7 @@ fn scene_centroid_and_extent(scene: &Scene) -> (na::DVector<f64>, f64) {
 }
 
 /// The camera's natural starting orientation for a scene, derived purely from
-/// its own coordinates -- not which `Demo` built it, so a future flat or 3D
+/// its own coordinates, not which `Demo` built it, so a future flat or 3D
 /// scene gets the same sensible default without adding another `match` arm
 /// here.
 pub(crate) fn default_camera(scene: &Scene, aspect: f32) -> Camera {
@@ -257,7 +257,7 @@ pub(crate) fn default_camera(scene: &Scene, aspect: f32) -> Camera {
   // displaced off it yet) is looked down onto from straight above, along its own
   // normal and in parallel projection, rather than from the angled perspective
   // orbit a fully 3D shape like the sphere wants. Only the pose and the
-  // projection differ; the controls are the same camera's either way.
+  // projection differ. The controls are the same camera's either way.
   let z_extent = scene
     .coords
     .coord_iter()
@@ -265,7 +265,7 @@ pub(crate) fn default_camera(scene: &Scene, aspect: f32) -> Camera {
     .fold(0.0, f64::max);
   let is_planar = z_extent < 1e-9 * extent;
   // Straight down ($theta = -pi/2$) is an ordinary pose, reachable and framed
-  // like any other -- it is the pole the old `look_at` camera could not go to,
+  // like any other: it is the pole the old `look_at` camera could not go to,
   // and having to stop short of it is what made top-down a mode of its own.
   // `yaw = pi/2` puts screen-right on world $+x$ (`Camera::right`), so a plane
   // seen from above keeps its own axes; the 3D default's $-pi/2$ is the
@@ -312,7 +312,7 @@ pub(crate) struct MeshDisplay {
   /// bake could only disagree with what is on screen.
   baked: BakedMesh,
   /// The deposit atlas layout: a function of the mesh and its metric alone
-  /// (like the bake's static half), so it lives here; the trail *state* over
+  /// (like the bake's static half), so it lives here. The trail state over
   /// it is a field's, and is built by [`FieldDisplay`]. Empty away from
   /// intrinsic dimension 2.
   deposit_layout: DepositLayout,
@@ -321,7 +321,7 @@ pub(crate) struct MeshDisplay {
   /// same reason the deposit layout does. Building it dominates the bake by an
   /// order of magnitude (a BVH over every cell, against a sampling pass that is
   /// linear in voxels), so rebuilding it to change fields would be the static
-  /// half leaking into the field half -- the one thing the split exists to
+  /// half leaking into the field half, the one thing the split exists to
   /// prevent. `None` below intrinsic dimension 3, where nothing marches and the
   /// hierarchy would be built for no reader.
   locator: Option<PointLocator>,
@@ -379,7 +379,7 @@ impl MeshDisplay {
   }
 
   /// Where a world-space ray meets the mesh, as a distance along it. `None` on
-  /// a miss, which every caller must have an answer for -- a curve and a point
+  /// a miss, which every caller must have an answer for, a curve and a point
   /// cloud have no surface to hit at all.
   pub(crate) fn raycast(&self, origin: na::Point3<f32>, dir: na::Vector3<f32>) -> Option<f32> {
     self.baked.raycast(origin.coords, dir)
@@ -417,9 +417,9 @@ impl MeshDisplay {
 }
 
 /// The field streams a [`FieldDisplay`] hands back for the GPU. Split because
-/// they answer different questions -- the honest (discontinuous) field readout,
+/// they answer different questions, the honest (discontinuous) field readout,
 /// the height the fill's cells ride, and the single-valued height the shared
-/// 1-skeleton must ride -- and they coincide only for a genuine 0-form.
+/// 1-skeleton must ride, and they coincide only for a genuine 0-form.
 pub(crate) struct FieldAttributes {
   /// Per rendered corner (three per triangle), in the bake's triangle order.
   pub(crate) color: Vec<f32>,
@@ -438,32 +438,32 @@ pub(crate) struct FieldAttributes {
   pub(crate) point_colors: Vec<f32>,
 }
 
-/// The largest *uniform* amplitude at which no vertex displaces past its own
+/// The largest uniform amplitude at which no vertex displaces past its own
 /// reach: $A = min_v ("ceiling"_v \/ max_t |h_v (t)|)$.
 ///
 /// A single global scalar, and that is the whole point. The per-vertex clamp in
 /// the shader can only bound the displacement by discarding the field's shape
-/// where it binds, and it binds at a *different* value at every vertex -- so on
+/// where it binds, and it binds at a different value at every vertex, so on
 /// a mesh whose reach varies (any real shape: thin ears, sharp creases, a
 /// smooth belly) it flattens the mode in patches and leaves a visible seam
-/// between clamped and unclamped neighbours. That is not a bound on the
-/// deformation, it is a different deformation.
+/// between clamped and unclamped neighbors. That is not a bound on the
+/// deformation: it is a different deformation.
 ///
 /// Scaling instead is the one operation an eigenmode is indifferent to: it is
-/// defined up to a scalar, so a global $A$ changes nothing about *which* mode is
+/// defined up to a scalar, so a global $A$ changes nothing about which mode is
 /// shown, only how far it swings. The displaced surface stays exactly $x + A f
 /// (x) n(x)$ with the field's own shape intact, and the reach bound
 /// ([`vertex_reach`](regge::coord::vertex_reach)) is what makes
-/// that map an embedding -- no fold, no self-intersection.
+/// that map an embedding, no fold, no self-intersection.
 ///
 /// The maximum is over the field's whole evolution, not its representative
 /// frame: a trajectory's later frame can exceed its first, and an amplitude fit
 /// to frame zero would clamp exactly when the wave gets interesting. A standing
-/// wave rides $cos(sqrt(lambda) t) in [-1, 1]$, so its representative *is* its
+/// wave rides $cos(sqrt(lambda) t) in [-1, 1]$, so its representative is its
 /// peak.
 ///
 /// With this in force the shader's clamp is a guard that does not fire in
-/// normal operation, rather than the mechanism -- it stays for the case no
+/// normal operation, rather than the mechanism, it stays for the case no
 /// bound anticipates (a mesh whose reach the estimator could not resolve).
 fn safe_amplitude(scene: &Scene, mesh: &MeshDisplay, selection: Selection) -> f32 {
   amplitude_bound(
@@ -510,8 +510,8 @@ fn peak_heights(scene: &Scene, selection: Selection) -> Vec<f32> {
 /// by what reads well, so the playback maps that interval onto a watchable one.
 pub(crate) const TRAJECTORY_LOOP_SECONDS: f64 = 6.0;
 
-/// The two field streams for a cochain -- the per-corner cell-local colormap
-/// value and the per-vertex continuous displacement height -- together with the
+/// The two field streams for a cochain, the per-corner cell-local colormap
+/// value and the per-vertex continuous displacement height, together with the
 /// colormap's raw range. Extracted from [`FieldDisplay::build`] so a trajectory's
 /// caller can recompute them per frame from an interpolated frame and rewrite
 /// them into the mesh, which is the whole of scrubbing a trajectory.
@@ -565,17 +565,17 @@ pub(crate) struct FieldRanges {
 
 /// The material parameters for showing one field of a scene, and the geometry
 /// only that field has: the one place a [`Selection`] turns into something
-/// drawable. Everything here is static per field -- the renderer only re-times
+/// drawable. Everything here is static per field, the renderer only re-times
 /// it per frame.
 ///
-/// The field's own half of the bake's vertex split -- its attribute stream --
-/// is *returned* by [`Self::build`] rather than written from inside it: a
+/// The field's own half of the bake's vertex split, its attribute stream,
+/// is returned by [`Self::build`] rather than written from inside it: a
 /// [`MeshDisplay`] is the static half, the two halves meet on the GPU, and
 /// which of them does the writing is the caller's to see rather than a
 /// constructor's to hide.
 pub(crate) struct FieldDisplay {
   /// The arrow glyphs of a line field, `None` for a scalar field: the field
-  /// evaluated -- at points the atlas places (the barycentric lattice of each
+  /// evaluated, at points the atlas places (the barycentric lattice of each
   /// cell, boundary included: see [`realize::glyph`]) rather than a tracer's
   /// seeding or a population's respawn.
   glyphs: Option<GlyphBatch>,
@@ -611,7 +611,7 @@ pub(crate) struct VolumeDisplay {
 }
 
 impl FieldDisplay {
-  /// The field's display and the attribute streams it decides -- which a caller
+  /// The field's display and the attribute streams it decides, which a caller
   /// writes into a [`MeshDisplay`] with [`MeshDisplay::write_attributes`].
   /// Returned rather than written here: see the type's own doc.
   pub(crate) fn build(
@@ -624,11 +624,11 @@ impl FieldDisplay {
   ) -> (Self, FieldAttributes) {
     // The field is read once per rendered corner, each in its own cell, so a
     // reduced-grade Whitney form's discontinuity across cells reaches the
-    // colormap intact -- a basis function's support ends on cell edges and does
+    // colormap intact, a basis function's support ends on cell edges and does
     // not bleed into the cells it vanishes on. The displacement height is the
     // continuous nodal recovery of that same value, single-valued per vertex so
     // the surface does not tear. Both are functions of the field, computed once
-    // here for either mark; the colormap range follows from the colors so it
+    // here for either mark. The colormap range follows from the colors so it
     // spans exactly what is drawn.
     let cochain = match selection {
       Selection::Scalar(index) => &scene.fields[index].cochain,
@@ -644,7 +644,7 @@ impl FieldDisplay {
     let (raw_min, raw_max) = ranges.fill;
 
     // The mesh's own local length, which the marks that draw its features are
-    // sized by -- as against `amplitude_scale`, the object's global extent,
+    // sized by, as against `amplitude_scale`, the object's global extent,
     // which sizes what should read the same at any resolution. A mesh with no
     // edges has no local length, and falls back on the global one.
     let mesh_scale = {
@@ -668,7 +668,7 @@ impl FieldDisplay {
         let wave_omega = field.time.wave_omega();
         // Two ceilings, and the amplitude is whichever binds first. The
         // aesthetic one normalizes by the field's own peak so every mode
-        // reaches the same displacement -- a fraction of the object's extent,
+        // reaches the same displacement, a fraction of the object's extent,
         // not its mesh width, so the lobes read at orbital scale regardless of
         // resolution. The geometric one is the mesh's reach, and it is what
         // keeps a shape with thin features from displacing through itself.
@@ -679,7 +679,7 @@ impl FieldDisplay {
           0.0
         };
         // An eigenmode's color pulses by $cos(sqrt(lambda) t)$ through zero, so
-        // its colormap range is symmetric $[-s, s]$ about the midpoint -- the
+        // its colormap range is symmetric $[-s, s]$ about the midpoint, the
         // same reasoning as the line field's tint. A static field keeps its own
         // asymmetric range.
         let (min_val, max_val) = if field.time.animates() {
@@ -710,14 +710,14 @@ impl FieldDisplay {
       }
       Selection::Line(index) => {
         let field = &scene.line_fields[index];
-        // An eigenmode's tint is the *signed* $|V| cos(sqrt(lambda) t)$, so its
-        // colormap range is symmetric $[-m, m]$ about zero -- the pulse runs
+        // An eigenmode's tint is the signed $|V| cos(sqrt(lambda) t)$, so its
+        // colormap range is symmetric $[-m, m]$ about zero, the pulse runs
         // through the midpoint and flips as the cosine crosses zero. A static
         // field has no such pulse (wave_omega below is 0, cos(0) = 1), so its
         // tint is the unsigned $|V|_g$ itself: using its true range instead of
         // widening to symmetric keeps the colormap from spending half its
         // span on negative values the field never takes. The glyphs are static
-        // either way, so there is no geometric displacement --
+        // either way, so there is no geometric displacement,
         // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
         // the mode's frequency.
         let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
@@ -743,7 +743,7 @@ impl FieldDisplay {
         // triangles are the very ones the fill draws. A line field always
         // traces (its grade is 1, and any render surface has dimension >= 1
         // where cells exist), so the `None` arm is the degenerate mesh with no
-        // surface at all -- no triangles, hence no arrows.
+        // surface at all, no triangles, hence no arrows.
         let surface_topology = scene.surface.complex(&scene.topology);
         let surface_coords = scene.surface.coords(&scene.coords);
         let vertices = scene
@@ -779,7 +779,7 @@ impl FieldDisplay {
           .flatten();
 
         // The population's mean speed as a fraction of the peak the step is
-        // normalized to: with splats inked by arc length, this is what the
+        // normalized to: with splats inked by arc length: this is what the
         // equilibrium trail brightness actually scales with, and it is an
         // exact area-weighted quantity of the field, not a tuned ratio.
         let speed_ratio = if peak > 0.0 {
@@ -812,12 +812,12 @@ impl FieldDisplay {
     };
 
     // The trails, where both halves exist: a population to lay them and an
-    // atlas to hold them. The decay is per step -- the deposit's determinism
-    // contract is the advection's own -- and the fill's gain is *calibrated*,
+    // atlas to hold them. The decay is per step, the deposit's determinism
+    // contract is the advection's own, and the fill's gain is calibrated,
     // not tuned: splats ink by arc length, so the equilibrium a uniformly
     // spread population reaches is count times one splat's texels times the
     // mean step length in texels times the decay's lifetime, over the texels
-    // the atlas covers -- and at that mean the lift is [`DEPOSIT_MEAN_LIFT`].
+    // the atlas covers, and at that mean the lift is [`DEPOSIT_MEAN_LIFT`].
     // Every factor is an exact quantity of the field, the population or the
     // layout; whatever the count or budget becomes, the picture keeps its
     // exposure.
@@ -853,8 +853,8 @@ impl FieldDisplay {
     });
 
     // A skeleton's colormap range, by the same rule the fill uses: an eigenmode
-    // pulses through zero, so its range is symmetric; a static field keeps its
-    // own. Diverging where the trace is signed (values cross zero -- a 0-form, or
+    // pulses through zero, so its range is symmetric. A static field keeps its
+    // own. Diverging where the trace is signed (values cross zero, a 0-form, or
     // the manifold top form) or the mode pulses. One rule for every colored
     // skeleton, applied to each one's own range.
     let animates = scene.field_time(selection).animates();
@@ -874,7 +874,7 @@ impl FieldDisplay {
     // primitive already carries the whole manifold, and a bounding box of fog
     // around a surface would be a claim about an interior it does not have.
     // Gated on the locator rather than on the dimension: the mesh builds one
-    // exactly where something marches, so holding it *is* the proof there is an
+    // exactly where something marches, so holding it is the proof there is an
     // interior, and the dimension is asked once, where the hierarchy is built.
     let volume = mesh.locator().map(|locator| {
       // The operator, applied to the cochain before it is sampled. Metric-free
@@ -885,7 +885,7 @@ impl FieldDisplay {
       let grid =
         realize::volume::VolumeGrid::sample(&scene.topology, &scene.coords, &read, locator);
       let batch = VolumeBatch::new(&ctx.device, &ctx.queue, &grid);
-      // The colormap is the surface's only where the medium draws the *same*
+      // The colormap is the surface's only where the medium draws the same
       // field. Read through an operator it is a different one, with its own
       // range, and borrowing the surface's would map it against a scale it
       // never takes. The wave carries over either way: $dif$ is linear, so
@@ -928,8 +928,8 @@ impl FieldDisplay {
       surface,
       // The 1-skeleton rides the surface's own wave, so it tracks the displaced
       // mesh rather than the flat rest one, and it has no node to fade at. Its
-      // colormap range is its own (a diverging map when the trace is signed -- a
-      // 0-form, or the pulse through zero -- else sequential); `colored` is left
+      // colormap range is its own (a diverging map when the trace is signed, a
+      // 0-form, or the pulse through zero, else sequential); `colored` is left
       // off here and set per frame from the view toggle, since whether the
       // skeleton reflects the field is a view choice, not the field's.
       edges: SegmentMaterial {
@@ -943,7 +943,7 @@ impl FieldDisplay {
         diverging: segment_diverging,
         colored: 0.0,
       },
-      // The 0-skeleton rides the same wave and clock; its disc is a few edge
+      // The 0-skeleton rides the same wave and clock. Its disc is a few edge
       // fractions wide, and its colormap range is its own. `colored`, like the
       // 1-skeleton's, is the view's to set per frame.
       points: SegmentMaterial {
@@ -959,7 +959,7 @@ impl FieldDisplay {
       },
       // The glyphs share the surface's clock but not its displacement: the
       // samples sit on the undisplaced surface, so only the node fade reads the
-      // mode. The outline rides the same material -- `glyph.wgsl` composites the
+      // mode. The outline rides the same material, `glyph.wgsl` composites the
       // rim under the ink in one pass. Every dimension here is a proportion of
       // the arrow's own length, which the bake sets per cell, so the mark is
       // self-similar at any refinement and none of it is a world size.
@@ -980,7 +980,7 @@ impl FieldDisplay {
   }
 
   /// The frame's items, in submission order: the surface writes depth, and the
-  /// marks over it -- a line field's glyphs, then the wireframe -- only test
+  /// marks over it, a line field's glyphs, then the wireframe, only test
   /// against it, so they blend in the order given.
   ///
   /// The advected population is not among them: it is never on screen. It flows
@@ -992,7 +992,7 @@ impl FieldDisplay {
   /// tell from a field that never had one; the `Option`s stay the structural
   /// truth beneath it, since a mark with no batch is unavailable whatever the
   /// bool says. Displacement is the one that drops nothing: it is a material,
-  /// so its "off" is an amplitude of zero -- the same zero [`Self::build`]
+  /// so its "off" is an amplitude of zero, the same zero [`Self::build`]
   /// already gives a field with no eigenvalue, and the same shape as bloom's
   /// intensity of zero. Either way the toggle costs no branch below this line.
   pub(crate) fn draw_list<'a>(
@@ -1002,7 +1002,7 @@ impl FieldDisplay {
     field_view: FieldView,
   ) -> DrawList<'a> {
     // The 1-skeleton rides the surface's wave, so the two amplitudes are one
-    // setting; the glyphs sample the undisplaced surface and carry a zero
+    // setting. The glyphs sample the undisplaced surface and carry a zero
     // amplitude already.
     let (mut surface, mut edges, mut points) = (self.surface, self.edges, self.points);
     if !field_view.displacement {
@@ -1066,8 +1066,8 @@ mod tests {
 
   /// The law the amplitude bound exists to enforce: at the chosen amplitude no
   /// vertex displaces past its own reach, so the deformation stays an
-  /// embedding. Checked where it actually bites -- a slab thin enough that the
-  /// bound is set by its thickness -- and stated as the displacement, not as
+  /// embedding. Checked where it actually bites, a slab thin enough that the
+  /// bound is set by its thickness, and stated as the displacement, not as
   /// the scalar, since that is the quantity that folds a surface.
   #[test]
   fn no_vertex_displaces_past_its_reach() {
@@ -1099,9 +1099,9 @@ mod tests {
       );
     }
 
-    // And the bound is the *thickness*, not the curvature. The faces are flat,
+    // And the bound is the thickness, not the curvature. The faces are flat,
     // so a curvature-only ceiling permits a displacement exceeding the slab's
-    // own half-thickness -- which is the two faces passing through each other,
+    // own half-thickness, which is the two faces passing through each other,
     // stated as the concrete failure rather than as a ratio between bounds.
     let curvature: Vec<f32> = vertex_curvature_radius(&topology, &coords)
       .iter()
@@ -1120,7 +1120,7 @@ mod tests {
   }
 
   /// A field that vanishes everywhere constrains nothing, and the bound says so
-  /// rather than dividing by zero -- the caller's aesthetic ceiling then
+  /// rather than dividing by zero, the caller's aesthetic ceiling then
   /// decides alone.
   #[test]
   fn a_vanishing_field_is_unconstrained() {

@@ -1,7 +1,7 @@
 //! A triangle surface embedded in $RR^3$: the thin intermediate the `.obj` and
 //! `.mdd` paths read and write through.
 //!
-//! Not a seam -- `bake.rs` is the one place the viewer commits to a rasterizer's
+//! Not a seam, `bake.rs` is the one place the viewer commits to a rasterizer's
 //! primitives. This is an interchange format's own shape, which happens to want
 //! the same two things a graphics API does and the core keeps out: an explicit
 //! winding, and an explicit embedding, fixed at 3.

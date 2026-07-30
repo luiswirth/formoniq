@@ -13,7 +13,7 @@
 //! more than an order of magnitude faster than Jacobi-CG, whose iteration count
 //! has grown into the thousands while MG-CG's stays flat.
 //!
-//! Against the *direct* solve the dimension is the whole story. In 2D the sparse
+//! Against the direct solve the dimension is the whole story. In 2D the sparse
 //! Cholesky is very strong (near-linear fill under nested dissection, a tiny
 //! back-solve), and MG-CG does not overtake it at these sizes. In 3D the
 //! factorization is $O(N^2)$ in time and its fill superlinear in memory, while
@@ -25,7 +25,7 @@
 //! LU there, and the 3D sweep is capped just below that regime).
 //!
 //! The setup is linear in the DOF count (the Whitney prolongation is assembled in
-//! one pass, #118); what remains of it is the finest-level operator assembly,
+//! one pass, #118). What remains of it is the finest-level operator assembly,
 //! which the direct solve reuses for free, so the setup column overstates MG's
 //! true marginal cost. Run by hand:
 //!
@@ -92,7 +92,7 @@ fn bench(dim: usize, base_cells: usize, max_refinements: usize) {
   for refinements in 1..=max_refinements {
     let (topology, geometry) = unit_cube(dim, base_cells);
 
-    // The multigrid solver owns the tower; its finest operator is the shared
+    // The multigrid solver owns the tower. Its finest operator is the shared
     // system every method solves, so the comparison is apples to apples.
     let (mg, mg_setup) =
       timed(|| Grade0Multigrid::new(topology, geometry, refinements, SMOOTHING_SWEEPS));
@@ -115,8 +115,8 @@ fn bench(dim: usize, base_cells: usize, max_refinements: usize) {
     // Correctness is checked by the residual (backward error), not the forward
     // error against `x_true`: the latter is bounded by the condition number, which
     // grows like $h^{-2}$ and inflates even the exact solve's forward error at the
-    // finest 3D levels. The residual is conditioning-free -- did we solve the
-    // system? -- and all three must drive it to zero.
+    // finest 3D levels. The residual is conditioning-free, did we solve the
+    // system?, and all three must drive it to zero.
     // Correctness by the residual (backward error), not the forward error against
     // `x_true`: the latter is bounded by the condition number, which grows like
     // $h^{-2}$. All three must drive the residual to zero. (`DirectInverse` guards

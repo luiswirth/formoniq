@@ -1,28 +1,28 @@
 //! Flat-quotient generation in arbitrary dimension: the Cartesian mesh with
 //! its opposite faces identified, axis by axis.
 //!
-//! A *flat quotient* is $RR^d \/ Gamma$ for a group $Gamma$ acting by
+//! A flat quotient is $RR^d \/ Gamma$ for a group $Gamma$ acting by
 //! isometries of the Kuhn-triangulated grid. Each axis carries one
-//! [`Identification`], and the whole family -- flat tori, Möbius bands, Klein
-//! bottles, orientable twisted tori -- is that one construction with different
+//! [`Identification`], and the whole family, flat tori, Möbius bands, Klein
+//! bottles, orientable twisted tori, is that one construction with different
 //! per-axis choices. There is no separate torus generator and no separate
-//! Möbius generator; there is one quotient with a flag per axis.
+//! Möbius generator. There is one quotient with a flag per axis.
 //!
-//! The gluing is *purely topological*: a relabelling of vertices, so the
+//! The gluing is purely topological: a relabeling of vertices, so the
 //! piecewise-flat geometry is untouched and no coordinates are involved. The
 //! seam edges have the same lengths as the interior ones, and the result is
 //! delivered as [`MeshLengthsSq`], the intrinsic Regge primitive (invariant 2).
 //! Most of these manifolds have no isometric realization in $RR^d$ and need
-//! none; the optional embeddings of [`super::quotient_embed`] are for
-//! visualization and are a *different*, curved manifold wherever they are not
+//! none. The optional embeddings of [`super::quotient_embed`] are for
+//! visualization and are a different, curved manifold wherever they are not
 //! isometric.
 //!
 //! These are the closed, flat, dimension-agnostic test manifolds: $M_h = M$
 //! exactly (so refinement introduces no geometric error), and with cohomology
-//! rich enough to exercise the *full* mixed Hodge--Laplace problem, harmonic
+//! rich enough to exercise the full mixed Hodge--Laplace problem, harmonic
 //! sector included, at every intermediate grade. The twisted members add the
-//! non-orientable case, which is how invariant 6 -- that no assembly, solve or
-//! homology computation may depend on a coherent orientation -- becomes
+//! non-orientable case, which is how invariant 6, that no assembly, solve or
+//! homology computation may depend on a coherent orientation, becomes
 //! checkable rather than merely asserted.
 
 use itertools::Itertools;
@@ -48,14 +48,14 @@ pub enum Identification {
   Open,
   /// Glued by pure translation, $x_i |-> x_i + L_i$. The circle factor.
   Periodic,
-  /// Glued by translation composed with a *reflection* of the listed transverse
+  /// Glued by translation composed with a reflection of the listed transverse
   /// axes: $x_i |-> x_i + L_i$ together with $x_j |-> -x_j$ for each listed
   /// $j$.
   ///
   /// Walking once around the axis returns to the starting point with those
-  /// coordinates reversed. The **parity of the list is the orientability**: an
+  /// coordinates reversed. The parity of the list is the orientability: an
   /// odd number of reflections has determinant $-1$, so the quotient is
-  /// non-orientable (Möbius band, Klein bottle); an even number is a rotation
+  /// non-orientable (Möbius band, Klein bottle). An even number is a rotation
   /// and the quotient stays orientable (a twisted torus).
   Twisted(Vec<usize>),
 }
@@ -78,12 +78,12 @@ impl Identification {
 /// per axis, each axis identified as its [`Identification`] says.
 ///
 /// The Kuhn triangulation tiles every box identically (a fixed corner, one
-/// simplex per axis permutation), and the tiling it induces on a box *face*
+/// simplex per axis permutation), and the tiling it induces on a box face
 /// is what a seam has to match, so every quotient in the family is conforming.
 ///
 /// The tiling of the box interior is a weaker matter, and a reflection does not
 /// preserve it: mirroring an axis exchanges the diagonal. That costs the Kuhn
-/// chain ordering on a twisted seam, not the conformity -- see
+/// chain ordering on a twisted seam, not the conformity, see
 /// [`FlatQuotient::triangulate_ordered`].
 pub struct FlatQuotient {
   /// The period $L_i$ of each axis: the side length of one fundamental domain.
@@ -112,7 +112,7 @@ impl FlatQuotient {
 
   /// A quotient with an independent cell count per axis.
   ///
-  /// Every *closed* axis needs at least `3` cells; an open one needs `1`.
+  /// Every closed axis needs at least `3` cells. An open one needs `1`.
   pub fn new_anisotropic(
     side_lengths: Vector,
     identifications: Vec<Identification>,
@@ -194,11 +194,11 @@ impl FlatQuotient {
     Self::torus(Vector::from_element(dim.index(), 1.0), ncells_axis)
   }
 
-  /// The Möbius band: axis 0 twisted, reflecting the *open* fiber axis 1.
+  /// The Möbius band: axis 0 twisted, reflecting the open fiber axis 1.
   ///
-  /// The smallest non-orientable surface. It has a boundary -- the single
+  /// The smallest non-orientable surface. It has a boundary, the single
   /// circle traversing the open axis twice.
-  /// `ncells_longest` is the resolution of the *longer* period: the two are
+  /// `ncells_longest` is the resolution of the longer period: the two are
   /// discretized quasi-uniformly, so a long narrow band gets cells that are
   /// near equilateral rather than slivers of its aspect ratio.
   pub fn moebius(circumference: f64, width: f64, ncells_longest: usize) -> Self {
@@ -209,7 +209,7 @@ impl FlatQuotient {
     )
   }
 
-  /// The Klein bottle: axis 0 twisted, reflecting the *periodic* axis 1.
+  /// The Klein bottle: axis 0 twisted, reflecting the periodic axis 1.
   ///
   /// Closed and non-orientable. Over $RR$ its Betti numbers are
   /// $b_0 = b_1 = 1$, $b_2 = 0$: the $ZZ_2$ torsion of $H_1$ is invisible to
@@ -241,7 +241,7 @@ impl FlatQuotient {
   /// Whether every reflection is applied an even number of times around every
   /// seam, i.e. whether the deck group lies in $"SO"(d)$.
   ///
-  /// A *sufficient* condition for orientability, not a necessary one, and it is
+  /// A sufficient condition for orientability, not a necessary one, and it is
   /// the cheap combinatorial reading of the identification rather than a
   /// statement about the assembled complex. The authority on the mesh itself is
   /// [`Complex::orientation`], which returns `None` exactly when no coherent
@@ -292,7 +292,7 @@ impl FlatQuotient {
   /// discard.
   ///
   /// `None` if that order is not face-consistent, which is the honest answer
-  /// for every *reflecting* identification: the Kuhn triangulation of a box is
+  /// for every reflecting identification: the Kuhn triangulation of a box is
   /// not reflection-invariant, so the two sides of a twisted seam emit
   /// incompatible chain orders on the face they share. Translational
   /// identifications keep it. Refinement of a twisted quotient therefore goes
@@ -361,11 +361,11 @@ impl FlatQuotient {
   }
 
   /// The signed squared length of every edge, read off the flat geometry of the
-  /// *unidentified* grid.
+  /// unidentified grid.
   ///
   /// Measuring upstairs is what makes this total over every identification: the
   /// displacement of an edge is unambiguous before the quotient, whereas the
-  /// coordinate difference of two identified representatives is not -- a
+  /// coordinate difference of two identified representatives is not, a
   /// reflecting seam sends a step to its mirror image, and no minimal-
   /// representative rule downstairs recovers it. That every cell containing an
   /// edge agrees on its length is precisely the statement that the gluing was
@@ -459,7 +459,7 @@ mod test {
     classes.len()
   }
 
-  /// A *translational* identification preserves the generator's Kuhn chain
+  /// A translational identification preserves the generator's Kuhn chain
   /// order as a face-consistent ordering, and refining in it keeps the quotient
   /// self-similar: one shape class. Translation carries the Kuhn tiling of one
   /// box onto the tiling of the next, chain order included, so the seam is
@@ -477,16 +477,16 @@ mod test {
     }
   }
 
-  /// A *reflecting* identification does not, and the generator says so rather
+  /// A reflecting identification does not, and the generator says so rather
   /// than handing back an ordering that lies.
   ///
   /// The Kuhn triangulation of a box is not reflection-invariant: mirroring an
   /// axis exchanges the diagonal, so the two sides of a twisted seam emit
   /// incompatible chain orders on the face they share. The quotient is still
-  /// *conforming* -- the exchanged diagonal is interior to a box, never on a
-  /// shared face, which is why the topology above is correct -- but invariant 7
+  /// conforming, the exchanged diagonal is interior to a box, never on a
+  /// shared face, which is why the topology above is correct, but invariant 7
   /// asks for more than conformity, and the Kuhn order cannot supply it here.
-  /// Refinement still works through the colex ordering; what is lost is the
+  /// Refinement still works through the colex ordering. What is lost is the
   /// guarantee that a refinement tower stays self-similar.
   ///
   /// Recovering it needs a reflection-invariant triangulation of the box, not a
@@ -505,13 +505,13 @@ mod test {
     }
   }
 
-  /// Quasi-uniform resolution bounds the cell aspect ratio *independently of
-  /// the fundamental domain's own aspect ratio*, which one shared cell count
+  /// Quasi-uniform resolution bounds the cell aspect ratio independently of
+  /// the fundamental domain's own aspect ratio, which one shared cell count
   /// cannot: a Möbius band 16 times longer than it is wide, meshed with one
   /// count, has edges 16 times longer one way than the other, and the shape
   /// regularity every FEM error constant depends on degrades with it.
   ///
-  /// The bound is on the *spacing*, so it is a statement about the geometry and
+  /// The bound is on the spacing, so it is a statement about the geometry and
   /// not about the counts.
   #[test]
   fn quasi_uniform_resolution_bounds_the_aspect_ratio() {
@@ -630,13 +630,13 @@ mod test {
     }
   }
 
-  /// The parity of the reflections is the orientability: reflecting *two*
+  /// The parity of the reflections is the orientability: reflecting two
   /// transverse axes is a rotation, so the twisted 3-torus it glues stays
   /// orientable and closed, with the Euler characteristic of any closed
   /// odd-dimensional manifold.
   ///
   /// This is the control for [`moebius_topology`] and [`klein_topology`]: it
-  /// isolates *non-orientability* from *being twisted at all*.
+  /// isolates non-orientability from being twisted at all.
   #[test]
   fn even_reflection_count_stays_orientable() {
     let twisted = FlatQuotient::new(
@@ -658,7 +658,7 @@ mod test {
   }
 
   /// Every identification leaves the geometry flat and uniform: the quotient is
-  /// a relabelling, so its edge lengths are exactly the grid's, seam included.
+  /// a relabeling, so its edge lengths are exactly the grid's, seam included.
   #[test]
   fn identification_does_not_move_the_geometry() {
     let reference = {

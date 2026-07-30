@@ -4,66 +4,66 @@
 //! $ (sans(D) + m) u = J, quad sans(D) = dif + delta, $
 //!
 //! solved on a simplicial mesh of the spacetime box $[0, T] times [0, 1]^d$
-//! carrying the Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$ -- time is
+//! carrying the Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$, time is
 //! one of the mesh directions, and the hyperbolicity of the equation lives
 //! entirely in the signature of the metric, not in a time-stepping loop. The
-//! flagship case is $1 + 3$ dimensional spacetime; the same code runs the
+//! flagship case is $1 + 3$ dimensional spacetime. The same code runs the
 //! $1 + 1$ and $1 + 2$ cases, swept here for the convergence study.
 //!
 //! Three structures are on display, each printed by the run:
 //!
-//! - **The Lorentzian Hodge star.** On 2-forms in 4D, $star star = -1$ (versus
+//! - The Lorentzian Hodge star. On 2-forms in 4D, $star star = -1$ (versus
 //!   $+1$ Riemannian): the star is a complex structure on $Lambda^2$, the
 //!   electric-magnetic duality rotation. The table of $star (dif x^i wedge
-//!   dif x^j)$ is checked against the closed form -- each timelike factor
+//!   dif x^j)$ is checked against the closed form, each timelike factor
 //!   flips one sign.
 //!
-//! - **The Clifford structure.** The Hodge--Dirac operator acts on a plane
+//! - The Clifford structure. The Hodge--Dirac operator acts on a plane
 //!   wave $u = sin(a dot x) thin omega$ through the Clifford action of the
 //!   wave covector, $(dif + delta) u = cos(a dot x) thin c_a omega$ with
 //!   $c_a omega = a wedge omega - iota_(a^sharp) omega$, and
 //!   $c_a c_a = -inner(a, a)_(eta^(-1))$: the dispersion relation
 //!   $sans(D)^2 = Delta = square$ is literally the Clifford relation, with
 //!   null covectors giving massless waves. The manufactured source $J$ below
-//!   is *built* with this action, wedge and interior product supplying the
+//!   is built with this action, wedge and interior product supplying the
 //!   two halves.
 //!
-//! - **The signature is the whole difference.** The discrete operator is the
+//! - The signature is the whole difference. The discrete operator is the
 //!   same `HodgeDirac` block assembly as the Riemannian 3+1 Maxwell evolution
 //!   (`examples/dirac.rs`), in its self-adjoint sign $A = A^T$; the Minkowski
 //!   metric enters only through the signed edge lengths the mesh carries. One
 //!   pseudo-Riemannian code path, no Lorentzian special case.
 //!
-//! - **Regge calculus, as Regge intended.** The geometry the assembly actually
+//! - Regge calculus, as Regge intended. The geometry the assembly actually
 //!   consumes is not the coordinates but the Regge data derived from them: one
 //!   signed squared length per edge (positive spacelike, zero null, negative
 //!   timelike), from which each cell's Lorentzian metric is reconstructed by
-//!   polarization -- "general relativity without coordinates". The run prints
-//!   the causal census of the edges; the coordinates are used only on the I/O
+//!   polarization, "general relativity without coordinates". The run prints
+//!   the causal census of the edges. The coordinates are used only on the I/O
 //!   side, to interpolate the exact solution and to measure errors.
 //!
 //! The manufactured solution is the plane wave $u_k = sin(a dot x + phi)
 //! thin omega_k$ on every grade at once (the field is genuinely mixed-grade:
-//! $sans(D)$ couples neighbouring grades), with $J = (sans(D) + m) u$
+//! $sans(D)$ couples neighboring grades), with $J = (sans(D) + m) u$
 //! analytic. Essential boundary values are the trace of the interpolant of
 //! $u$, imposed by affine lifting, and the reported error is the $L^2$
 //! distance of the solution to the exact plane wave, measured in the
-//! *Euclidean comparison metric* on the same mesh -- the Lorentzian $L^2$
+//! Euclidean comparison metric on the same mesh, the Lorentzian $L^2$
 //! pairing is indefinite and cannot norm an error.
 //!
 //! Two facts about the discretization are worth seeing in the output:
 //!
-//! - **The mesh must be causally generic.** The time axis is scaled so that no
+//! - The mesh must be causally generic. The time axis is scaled so that no
 //!   edge or diagonal of the mesh is lightlike: a null edge degenerates the
-//!   indefinite $L^2$ pairing on Whitney 1-forms *exactly* (the unit-box mesh
+//!   indefinite $L^2$ pairing on Whitney 1-forms exactly (the unit-box mesh
 //!   in 2D has its diagonals on the light cone, and its 1-form mass matrix is
 //!   singular, rank-deficient by the number of null-diagonal directions).
 //!   This is a well-posedness condition of spacetime FEEC with no Riemannian
 //!   analogue.
 //!
-//! - **Dirichlet data on the whole spacetime boundary.** The manufactured
-//!   problem prescribes the trace on all of $diff([0,T] times [0,1]^d)$ --
-//!   final data included -- which for a hyperbolic operator is a Fredholm
+//! - Dirichlet data on the whole spacetime boundary. The manufactured
+//!   problem prescribes the trace on all of $diff([0,T] times [0,1]^d)$,
+//!   final data included, which for a hyperbolic operator is a Fredholm
 //!   boundary condition, not a causal initial-value one: the continuous
 //!   problem can resonate (the massless wave $sin(pi t\/T') sin(pi x)$ with
 //!   matched box periods is in the kernel). The mass term $m$ and the generic
@@ -129,7 +129,7 @@ fn blade_name(blade: &multiindex::Combination) -> String {
 }
 
 /// The Hodge star of the six 2-form blades of 4D Minkowski space: the
-/// electric-magnetic duality, with $star star = -1$ -- a complex structure,
+/// electric-magnetic duality, with $star star = -1$, a complex structure,
 /// where the Riemannian star of middle grade in 4D squares to $+1$.
 fn lorentzian_star_table() {
   let dim = 4;
@@ -260,7 +260,7 @@ fn convergence(dim: usize, nsubs: &[usize]) {
     let euclidean = MeshCoords::new(coords.matrix().clone());
     let spacetime = &coords;
     // The assembly geometry: signed squared edge lengths, nothing else. From
-    // here on the spacetime is a Regge manifold; the embedding is forgotten.
+    // here on the spacetime is a Regge manifold. The embedding is forgotten.
     let regge = spacetime.to_edge_lengths_sq(&topology);
     // The Euclidean comparison geometry as intrinsic edge lengths: a positive
     // metric to norm errors in, the indefinite pairing cannot.

@@ -12,7 +12,7 @@ use {
 ///
 /// Reference data: the shape functions and the sample points depend on the cell
 /// dimension, the grade and the rule alone, so the table is built once and read
-/// on every cell. Not an evaluation *at* the degrees of freedom -- a node is
+/// on every cell. Not an evaluation at the degrees of freedom: a node is
 /// where a quadrature asks, a DOF is which shape function answers.
 ///
 /// A family constant over the nodes, such as [`WhitneyLsf::dif`], is the

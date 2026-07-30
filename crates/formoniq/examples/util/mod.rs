@@ -1,7 +1,7 @@
 //! Shared support for the Hodge-Laplace examples: the manufactured box
 //! eigenform and the [`report`] helpers that give the three tables one look.
 //!
-//! Included with `#[path = "util/mod.rs"] mod util;`; it is not itself an
+//! Included with `#[path = "util/mod.rs"] mod util;`. It is not itself an
 //! example binary (only files directly under `examples/` are). Each including
 //! binary compiles the whole module but uses only a subset, so unused items are
 //! expected here rather than a sign of dead code.
@@ -42,7 +42,7 @@ pub fn algebraic_convergence_rate(next: f64, prev: f64) -> f64 {
 /// $dif u$ at top grade. A dash says "no meaningful value here", which is more
 /// honest than a printed `inf`, `NaN` or `0.00e0` standing in for one.
 ///
-/// Each formatter returns the bare value; the call site pads it to its column
+/// Each formatter returns the bare value. The call site pads it to its column
 /// width, so the header and the data rows share one set of width specifiers.
 pub mod report {
   /// The absent-value marker: a value that does not exist at this row, as
@@ -100,7 +100,7 @@ impl BoundaryCondition {
 }
 
 /// A closed manifold has no boundary, so the two boundary conditions coincide
-/// there: the boundary subcomplex is empty and the relative problem *is* the
+/// there: the boundary subcomplex is empty and the relative problem is the
 /// absolute one. That is why a torus case carries `Absolute` rather than a
 /// third variant — running both would repeat a solve, not test one more thing.
 ///
@@ -133,8 +133,8 @@ impl Manifold {
   ///
   /// The torus starts at three cells per axis, the fewest a periodic axis
   /// admits: two would glue a cell onto itself. Its geometry is intrinsic with
-  /// no coordinates at all -- the flat torus does not embed isometrically in
-  /// $RR^d$ -- which is exactly why the solver consumes edge lengths.
+  /// no coordinates at all, the flat torus does not embed isometrically in
+  /// $RR^d$, which is exactly why the solver consumes edge lengths.
   pub fn coarse_mesh(self, dim: usize, scale: f64) -> (Complex, MeshLengthsSq, CellOrdering) {
     match self {
       Self::Box => {
@@ -157,7 +157,7 @@ impl Manifold {
   ///
   /// $b_k (K) = delta_(k 0)$ on the contractible box, its Lefschetz dual
   /// $b_k (K, diff K) = delta_(k n)$ under the relative condition, and
-  /// $b_k (T^d) = binom(d, k)$ on the torus -- the one case where the number is
+  /// $b_k (T^d) = binom(d, k)$ on the torus, the one case where the number is
   /// not $0$ or $1$, so the only one that really tests the harmonic sector.
   pub fn harmonic_dim(self, dim: usize, grade: usize, bc: BoundaryCondition) -> usize {
     match self {
@@ -178,11 +178,11 @@ impl Manifold {
 /// for the absolute problem,
 /// $ f = product_(i in I) sin x_i product_(i in.not I) cos x_i, $
 /// so each coordinate carries a $sin$ factor where it is tangential to $dif x^I$
-/// and a $cos$ factor where it is normal --- exactly what $iota_n u = 0$,
+/// and a $cos$ factor where it is normal, exactly what $iota_n u = 0$,
 /// $iota_n dif u = 0$ demand face by face. The relative problem is the Hodge
 /// dual: it swaps $sin arrow.l.r cos$, so $f = product_(i in I) cos x_i
 /// product_(i in.not I) sin x_i$ and $"tr" u = 0$ holds face by face. At grade
-/// $0$ this recovers the textbook scalar cases --- absolute is the Neumann
+/// $0$ this recovers the textbook scalar cases, absolute is the Neumann
 /// eigenfunction $product cos x_i$, relative the Dirichlet $product sin x_i$.
 ///
 /// On flat space the Hodge Laplacian acts diagonally on Cartesian components and

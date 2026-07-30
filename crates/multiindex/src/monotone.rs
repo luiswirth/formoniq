@@ -6,10 +6,10 @@
 //! them, and [`Repetition`] is the bit carrying it: forbidden gives the
 //! subsets, allowed the multisets.
 //!
-//! Counting, ranking and enumeration are then *one* implementation with a
+//! Counting, ranking and enumeration are then one implementation with a
 //! position-dependent offset, not two behind a shared signature. The offset is
 //! the classical shift $w_i |-> w_i + i$ taking a weakly increasing word to a
-//! strictly increasing one, and it appears here only inside the arithmetic --
+//! strictly increasing one, and it appears here only inside the arithmetic,
 //! never as a stored representation, which is the distinction the workspace
 //! keeps between a theorem and a data structure.
 
@@ -90,7 +90,7 @@ impl Repetition {
   ///
   /// The combinatorial number system $sum_i binom(w_i + "shift"(i), i + 1)$,
   /// applied to the shifted word. Independent of the alphabet size, so
-  /// widening the alphabet renumbers nothing already there -- the property
+  /// widening the alphabet renumbers nothing already there, the property
   /// that makes colex the workspace's convention.
   ///
   /// # Panics
@@ -149,8 +149,8 @@ impl Repetition {
   /// colexicographic order, so the position in this iterator is
   /// [`Self::rank`].
   ///
-  /// The successor runs on the *shifted* word, where both families are
-  /// strictly increasing and the step is the same; the shift is undone on the
+  /// The successor runs on the shifted word, where both families are
+  /// strictly increasing and the step is the same. The shift is undone on the
   /// way out. Empty when the alphabet cannot supply a word of that length,
   /// which for a forbidden repetition is any degree above `nsymbols` and for
   /// an allowed one only an empty alphabet.
@@ -435,7 +435,7 @@ impl MonoIndex {
     }
   }
 
-  /// Every single-symbol deletion, by *position*: the interior product on an
+  /// Every single-symbol deletion, by position: the interior product on an
   /// alternating factor, the directional derivative on a symmetric one.
   ///
   /// Iterating positions rather than distinct symbols makes the two uniform. On
@@ -492,7 +492,7 @@ impl From<crate::Combination> for MonoIndex {
 impl MonoIndex {
   /// The same index read as a [`Combination`](crate::Combination), which it
   /// already is when repetition is forbidden: the shift is zero there, so the
-  /// shifted word stored here *is* the set.
+  /// shifted word stored here is the set.
   ///
   /// # Panics
   /// If repetition is allowed, a multiset being no set of symbols.
@@ -589,7 +589,7 @@ impl ExactSizeIterator for MonoIndices {}
 #[derive(Debug, Clone)]
 pub struct MonoDeletions {
   index: MonoIndex,
-  /// The shifted bits not yet visited; the lowest is the next position.
+  /// The shifted bits not yet visited. The lowest is the next position.
   remaining: u128,
   position: usize,
 }
@@ -680,10 +680,10 @@ mod test {
   /// A rank is independent of the alphabet size: widening the alphabet leaves
   /// every existing word where it was.
   ///
-  /// This is what colex is *for*, and the formula shows it -- the sum runs
+  /// This is what colex is for, and the formula shows it, the sum runs
   /// over the word and never mentions `nsymbols`. It holds for both families
   /// here, which is the substantive claim: the symmetric side is not a second
-  /// convention that happens to agree, it is the same one.
+  /// convention that happens to agree: it is the same one.
   #[test]
   fn rank_does_not_depend_on_the_alphabet() {
     for repetition in [Repetition::Forbidden, Repetition::Allowed] {
@@ -703,11 +703,11 @@ mod test {
     }
   }
 
-  /// The allowed family *is* [`Composition`]: same words, same order, same
+  /// The allowed family is [`Composition`]: same words, same order, same
   /// ranks.
   ///
   /// The counterpart of [`forbidden_repetition_is_the_combination`], and
-  /// together they are the claim the module exists to make -- both families
+  /// together they are the claim the module exists to make, both families
   /// enumerated and ranked by one implementation, differing only in the shift.
   ///
   /// [`forbidden_repetition_is_the_combination`]: self::forbidden_repetition_is_the_combination
@@ -872,7 +872,7 @@ mod test {
   }
 
   /// Deleting twice cancels in pairs on an alternating factor,
-  /// $iota_v^2 = 0 = diff compose diff$, and emphatically does *not* on a
+  /// $iota_v^2 = 0 = diff compose diff$, and emphatically does not on a
   /// symmetric one, where the second derivative is symmetric rather than
   /// vanishing.
   ///

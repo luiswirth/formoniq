@@ -3,11 +3,11 @@
 //! `segments.wgsl`.
 //!
 //! One pipeline serves the wireframe overlay and a 1-manifold's own cells. They
-//! were two descriptions of one technique; what differed -- ink, width, whether
-//! the mark rides the standing-wave displacement -- is data now: the material,
+//! were two descriptions of one technique. What differed, ink, width, whether
+//! the mark rides the standing-wave displacement, is data now: the material,
 //! and the endpoint's own normal (zero where a mark does not sit on a displaced
 //! surface, which makes the displacement the identity on it). The arrow glyph,
-//! which has a plane (its surface cell), is a flat mark of its own -- see the
+//! which has a plane (its surface cell), is a flat mark of its own, see the
 //! `glyph` pass.
 //!
 //! The pass is alpha-blended and does not write depth. The ribbons must not:

@@ -20,18 +20,18 @@ use simplicial::{
 ///
 /// The seam between the formoniq engine and the viewer. A scene is produced
 /// either by a live solve (the native path here) or, later, by deserializing a
-/// cached bundle; the viewer neither knows nor cares which. It carries the
+/// cached bundle. The viewer neither knows nor cares which. It carries the
 /// engine's own types — topology, coordinates, cochains — rather than a lossy
 /// export format, so the coloring, displacement and mode selection stay
 /// decisions of the viewer.
 ///
 /// A field's grade decides the mark it is drawn with, not a per-scene choice,
-/// and the rule is one line: reduce the $k$-form to its *reduced grade*
+/// and the rule is one line: reduce the $k$-form to its reduced grade
 /// $min(k, n-k)$ via the Hodge star, then dispatch on that. A reduced grade of
 /// 0 is a scalar density coloring the surface ([`ScalarField`]); a reduced
 /// grade of 1 is a line field drawn with line-integral convolution
 /// ([`LineField`]). Both marks exhaust $n <= 3$: only $n >= 4$ produces a
-/// reduced grade $>= 2$, an $(n-k)$-dimensional sheet with no mark yet -- a
+/// reduced grade $>= 2$, an $(n-k)$-dimensional sheet with no mark yet, a
 /// future mark, not a special case to route around.
 #[derive(Clone)]
 pub struct Scene {
@@ -46,7 +46,7 @@ pub struct Scene {
   pub line_fields: Vec<LineField>,
 }
 
-/// How a field varies in time -- the temporal model the render clock reads, one
+/// How a field varies in time, the temporal model the render clock reads, one
 /// axis orthogonal to the render mark (which the reduced grade picks) and the
 /// spatial cochain.
 ///
@@ -59,7 +59,7 @@ pub struct Scene {
 ///   vertex shader re-times it (`wave_omega`, `wave_amplitude`).
 /// - [`Self::Trajectory`] is the general sampled case: a time-indexed family of
 ///   cochains from a solve (heat, wave), with no closed form. It is interpolated
-///   on the CPU and its field stream is re-baked per frame -- exactly the
+///   on the CPU and its field stream is re-baked per frame, exactly the
 ///   "scrubbing a trajectory rewrites only the field stream" the bake anticipates.
 ///
 /// The eigenmode is the degenerate one-mode-with-known-modulation point of the
@@ -76,7 +76,7 @@ pub enum FieldTime {
 
 impl FieldTime {
   /// The Hodge-Laplace eigenvalue driving the analytic standing wave, when the
-  /// field is one. `None` for a static field and for a sampled trajectory --
+  /// field is one. `None` for a static field and for a sampled trajectory,
   /// neither is animated by a dispersion relation. What the UI reads for the
   /// degeneracy pyramid and the transport frequency readout.
   pub fn eigenvalue(&self) -> Option<f64> {
@@ -87,7 +87,7 @@ impl FieldTime {
   }
 
   /// The GPU standing wave's angular frequency $omega = sqrt(lambda)$. Zero for
-  /// anything the GPU does not modulate in closed form -- a static field, and a
+  /// anything the GPU does not modulate in closed form, a static field, and a
   /// trajectory, whose height stream is rewritten per frame on the CPU instead
   /// (so $cos(0 dot.c t) = 1$ applies the current frame's height at full
   /// amplitude, statically).
@@ -95,7 +95,7 @@ impl FieldTime {
     self.eigenvalue().map_or(0.0, f64::sqrt) as f32
   }
 
-  /// Whether the field animates the surface's displacement height at all -- an
+  /// Whether the field animates the surface's displacement height at all, an
   /// eigenmode riding $cos(sqrt(lambda) t)$, or a trajectory whose per-frame
   /// height moves. A static field does not, so it offers no displacement toggle
   /// and takes an asymmetric (non-diverging) colormap.
@@ -120,11 +120,11 @@ impl FieldTime {
   }
 
   /// The field's cochain at solve-time `t`, linearly interpolated between the
-  /// bracketing sampled frames -- lerping coefficients *is* lerping the Whitney
+  /// bracketing sampled frames, lerping coefficients is lerping the Whitney
   /// field, since the interpolation is linear in them. For a static field or a
   /// standing wave the spatial cochain does not itself vary (the GPU modulates
   /// the standing wave), so `base` is returned unchanged. `t` is clamped to the
-  /// sampled interval; the caller's own loop decides the wrap.
+  /// sampled interval. The caller's own loop decides the wrap.
   pub fn frame_at<'a>(&'a self, base: &'a Cochain, t: f64) -> Cow<'a, Cochain> {
     match self {
       FieldTime::Trajectory { dt, frames } if frames.len() > 1 && *dt > 0.0 => {
@@ -150,13 +150,13 @@ impl FieldTime {
 /// A grade-0 form is a density directly; a top-grade ($k = n$) form becomes one
 /// by the pointwise Hodge star $star: Lambda^n -> Lambda^0$. Either way the
 /// density is read per cell at draw time (`surface_corner_values`), not stored
-/// -- so the top form's discontinuity across cells survives to the colormap
+///, so the top form's discontinuity across cells survives to the colormap
 /// instead of being averaged away.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScalarField {
   pub name: String,
   /// The grade $k$ of the form this field was reconstructed from, before the
-  /// reduction to a density. A genuine 0-form keeps $k = 0$; a top form keeps
+  /// reduction to a density. A genuine 0-form keeps $k = 0$. A top form keeps
   /// $k = n$ even though it is drawn through its Hodge star. Carried so the
   /// gallery can organize by original grade, not by the render mark the reduced
   /// grade happens to share with grade 0.
@@ -183,13 +183,13 @@ pub struct ScalarField {
 /// glyphs and advected particles.
 ///
 /// A grade-1 (or, via the Hodge star, grade-$(n-1)$) form reduces to a genuine
-/// tangent *line* field. Its (unsigned) magnitude $|V|_g$ is read per cell
+/// tangent line field. Its (unsigned) magnitude $|V|_g$ is read per cell
 /// (`surface_corner_values`) and tints the surface the marks are drawn on.
 ///
 /// The glyphs are static: $ker$ and $sharp$ are scale-invariant, so the
 /// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves them fixed and swings
 /// only the magnitude tint through zero. A single real eigenmode does not
-/// travel, so the glyphs are never advected -- only the particles are, on the
+/// travel, so the glyphs are never advected, only the particles are, on the
 /// object's own clock.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct LineField {
@@ -200,8 +200,8 @@ pub struct LineField {
   /// [`ScalarField::grade`].
   pub grade: ExteriorGrade,
   /// The original $k$-cochain, kept whole so the surface tint, the glyphs and
-  /// the particles all read the *true* Whitney field $W c$ (via
-  /// [`WhitneyInterpolant`](derham::interpolate::interpolant::WhitneyInterpolant)) cell by cell -- there is no per-vertex reduction,
+  /// the particles all read the true Whitney field $W c$ (via
+  /// [`WhitneyInterpolant`](derham::interpolate::interpolant::WhitneyInterpolant)) cell by cell: there is no per-vertex reduction,
   /// because a reduced-grade field has no single value at a shared vertex.
   pub cochain: Cochain,
   /// See [`ScalarField::time`].
@@ -230,7 +230,7 @@ pub(crate) fn dof_label(dof: &Simplex) -> String {
 }
 
 /// The display metadata a reconstructed field carries regardless of which
-/// render mark it lands in -- everything [`Scene::field`] needs beyond the
+/// render mark it lands in, everything [`Scene::field`] needs beyond the
 /// cochain itself, bundled so the two independent `Option`s
 /// ([`ScalarField::eigenvalue`]/[`ScalarField::dof`]) don't turn the
 /// constructor into an unreadable run of positional arguments.
@@ -240,7 +240,7 @@ struct FieldMeta {
   dof: Option<Simplex>,
 }
 
-/// What the selected field offers to be read with -- which of
+/// What the selected field offers to be read with, which of
 /// [`crate::ui::FieldView`]'s settings are live.
 ///
 /// The mesh side has no counterpart: every scene has geometry, so its settings
@@ -259,14 +259,14 @@ pub(crate) struct FieldOffers {
   pub(crate) marks: bool,
   /// Whether the field has an interior to march. A solid's field lives in a
   /// volume the boundary primitive cannot show, so the medium is offered
-  /// exactly when the manifold is codimension-zero enough to have one -- an
+  /// exactly when the manifold is codimension-zero enough to have one, an
   /// intrinsic-dimension question, not a grade one, which is why it is the only
   /// offer read off the complex rather than the selection.
   pub(crate) volume: bool,
 }
 
 impl FieldOffers {
-  /// Whether the field offers anything at all -- false for a density that is no
+  /// Whether the field offers anything at all, false for a density that is no
   /// eigenmode (a raw Whitney basis function), whose whole rendering is the
   /// tint on the mesh's surface.
   pub(crate) fn any(self) -> bool {
@@ -276,7 +276,7 @@ impl FieldOffers {
 
 impl Scene {
   /// The reduced grade's answer to what its field can be read with, and the one
-  /// place it is asked outside the display: a selection already *is* the
+  /// place it is asked outside the display: a selection already is the
   /// reduction (which list it indexes is which mark it landed in), so this
   /// reads it off rather than dispatching on grade a second time.
   pub(crate) fn offers(&self, selection: Selection) -> FieldOffers {
@@ -295,8 +295,8 @@ impl Scene {
     }
   }
 
-  /// Hodge-Laplace eigenmodes of a single grade -- standing-wave normal
-  /// modes, $Delta u = lambda u$ -- of an arbitrary simplicial surface with
+  /// Hodge-Laplace eigenmodes of a single grade, standing-wave normal
+  /// modes, $Delta u = lambda u$, of an arbitrary simplicial surface with
   /// the given geometry, filed into `fields` or `line_fields` through the
   /// same [`Self::field`] dispatch a raw Whitney basis function goes
   /// through: an eigenmode and a one-hot cochain differ only in where the
@@ -376,13 +376,13 @@ impl Scene {
   }
 
   /// Hodge-Laplace eigenmodes on the unit sphere — the discrete spherical
-  /// harmonics — at *every* grade $0..=n$ of the de Rham complex, together in
+  /// harmonics — at every grade $0..=n$ of the de Rham complex, together in
   /// one scene, on an icosphere of the given subdivision depth.
   ///
   /// Every grade goes through the same `field` reduction: on the sphere
   /// ($n = 2$) grade 0 and the top grade 2 are scalar densities (grade 2 by its
   /// pointwise Hodge star, $star(f dvol) = f$), while grade 1 is a tangent line
-  /// field. No grade is special-cased -- the extremal grade 2 runs on exactly
+  /// field. No grade is special-cased, the extremal grade 2 runs on exactly
   /// the same code as grade 0, which is the point of the $min(k, n-k)$ dispatch
   /// (discussion #101).
   pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
@@ -408,10 +408,10 @@ impl Scene {
     }
   }
 
-  /// The Hodge-Laplace eigenmodes of a *single* grade on a shared surface
+  /// The Hodge-Laplace eigenmodes of a single grade on a shared surface
   /// mesh: the fields one grade's eigensolve contributes, split by their
   /// render mark. The unit the gallery computes lazily and
-  /// memoizes -- the mesh is built once and passed in, so switching grade pays
+  /// memoizes: the mesh is built once and passed in, so switching grade pays
   /// only for that grade's solve, and only the first time it is viewed. The
   /// discrete spherical harmonics are one instantiation, the mesh being a
   /// sphere; nothing here assumes it.
@@ -452,7 +452,7 @@ impl Scene {
   }
 
   /// The same solve-free placeholder as [`Self::sphere_placeholder`], but on a
-  /// mesh already in hand -- so the gallery can share one sphere mesh between
+  /// mesh already in hand, so the gallery can share one sphere mesh between
   /// the instant placeholder and the per-grade solves that follow, rather than
   /// meshing twice.
   pub fn placeholder_on(topology: Complex, coords: MeshCoords) -> Self {
@@ -493,7 +493,7 @@ impl Scene {
   }
 
   /// Every Whitney basis function ("local shape function") of the standard
-  /// reference cell of dimension `cell_dim` -- the single-cell case of the
+  /// reference cell of dimension `cell_dim`, the single-cell case of the
   /// shared construction below, where every DOF simplex's support is the one
   /// cell itself.
   pub fn whitney_basis(cell_dim: impl Into<Dim>) -> Self {
@@ -501,7 +501,7 @@ impl Scene {
 
     let cell_dim = cell_dim.into();
     let (topology, coords) = unit_coord_complex(cell_dim);
-    // The renderer is 3D-only; a reference cell of `dim < 3` embeds as
+    // The renderer is 3D-only. A reference cell of `dim < 3` embeds as
     // itself in the `z = 0` plane, same as `bake.rs` does
     // for any other flat surface. A no-op once `cell_dim >= 3`.
     let coords = coords.embed_euclidean(cell_dim.max(Dim::new(3)));
@@ -509,7 +509,7 @@ impl Scene {
   }
 
   /// Every Whitney basis function ("global shape function") of an arbitrary
-  /// simplicial mesh -- the multi-cell case of the shared construction below,
+  /// simplicial mesh, the multi-cell case of the shared construction below,
   /// where a DOF simplex's support spans every cell incident to it, which is
   /// exactly where the LSF/GSF distinction shows up on screen: the same
   /// one-hot-cochain construction, just no longer confined to a single cell.
@@ -519,7 +519,7 @@ impl Scene {
 
   /// A named list of explicit cochains on a mesh, each resolved from its
   /// [`crate::gallery::CochainSpec`] and reduced to its render mark through the
-  /// same `field` dispatch every other field goes through -- a field
+  /// same `field` dispatch every other field goes through, a field
   /// here is a general linear combination, not confined to a single one-hot
   /// cochain. The worked triforce examples (a constant field, a pure-curl
   /// field and a pure-divergence field) are one such list; a loaded cochain
@@ -560,7 +560,7 @@ impl Scene {
 
   /// The Hodge decomposition of a probe field, as four switchable fields: the
   /// input $omega$ and its three $L^2$-orthogonal shells
-  /// $omega = dif alpha + delta beta + h$ -- exact, coexact, and harmonic. The
+  /// $omega = dif alpha + delta beta + h$, exact, coexact, and harmonic. The
   /// harmonic shell is what makes this more than the classical Helmholtz split:
   /// on a contractible mesh it vanishes, and on a genus-$g$ surface it is the
   /// $2g$-dimensional space the two independent cycles pair with, seen directly.
@@ -619,7 +619,7 @@ impl Scene {
   /// Shared construction for [`Self::whitney_basis`] and
   /// [`Self::whitney_basis_mesh`]: one field per DOF simplex of every grade
   /// $0..=$ `topology.dim()`, each the reconstructed field of a one-hot
-  /// cochain -- the basis function dual to a DOF simplex $sigma$ *is* the
+  /// cochain, the basis function dual to a DOF simplex $sigma$ is the
   /// cochain $c_tau = delta_(sigma tau)$, so there is no separate "evaluate a
   /// Whitney form" code path here. The interpolant and the sharp musical
   /// isomorphism are exactly the general machinery a solved field (an
@@ -670,7 +670,7 @@ impl Scene {
   /// The heat flow $diff_t u = -kappa Delta u$ of a localized initial bump, as a
   /// single [`FieldTime::Trajectory`] field of grade `grade`: the sampled solution the
   /// transport scrubs and the surface re-bakes per frame. The bump diffuses and
-  /// decays -- the parabolic smoothing of the Hodge-Laplacian, shown directly
+  /// decays, the parabolic smoothing of the Hodge-Laplacian, shown directly
   /// rather than through its spectrum.
   ///
   /// Mesh-agnostic: the boundary condition is carried entirely by which complex
@@ -705,7 +705,7 @@ impl Scene {
 
   /// The wave equation $diff_(t t) u = -Delta u$ of a localized initial bump at
   /// rest, as a single [`FieldTime::Trajectory`] field of grade `grade`. The bump splits
-  /// and its fronts propagate, reflecting off any boundary -- the hyperbolic
+  /// and its fronts propagate, reflecting off any boundary, the hyperbolic
   /// counterpart of [`Self::heat`], on the same initial data and the same
   /// mesh-agnostic footing (a closed mesh uses the identity inclusion).
   ///
@@ -832,7 +832,7 @@ impl Scene {
     }
   }
 
-  /// The displayed field's spatial representative cochain -- the `base` a
+  /// The displayed field's spatial representative cochain, the `base` a
   /// [`FieldTime::frame_at`] reads at each instant.
   pub(crate) fn field_cochain(&self, selection: Selection) -> &Cochain {
     match selection {
@@ -841,9 +841,9 @@ impl Scene {
     }
   }
 
-  /// Reconstructs a cochain as the render mark its *reduced grade*
+  /// Reconstructs a cochain as the render mark its reduced grade
   /// $min(k, n-k)$ calls for, and files it into `fields` or `line_fields`
-  /// accordingly -- the one general entry point both a raw Whitney basis
+  /// accordingly, the one general entry point both a raw Whitney basis
   /// function ([`Self::whitney_basis`]) and a solved field arrive at.
   ///
   /// The Hodge star is what makes the dispatch total. A reduced grade of 0
@@ -853,11 +853,11 @@ impl Scene {
   /// original cochain is stored whole, and the render mark reads it per cell at
   /// draw time (see [`surface_corner_values`]).
   ///
-  /// **The grade reduces against the surface's dimension, not the mesh's**, and
+  /// The grade reduces against the surface's dimension, not the mesh's, and
   /// that is what makes the mark the mark of the thing on screen. A field on a
   /// solid is seen through its boundary, so the $n$ in $min(k, n-k)$ is
   /// $dim diff M$: a $2$-form on a $3$-manifold is a line field in the volume
-  /// but the boundary's *top* form, hence a density, where it is actually
+  /// but the boundary's top form, hence a density, where it is actually
   /// drawn. Reducing against the parent would file it as arrows for a flux that
   /// has no direction on the surface carrying it.
   ///
@@ -874,7 +874,7 @@ impl Scene {
     line_fields: &mut Vec<LineField>,
   ) {
     let FieldMeta { name, time, dof } = meta;
-    // A mode's sign is arbitrary, so it is pinned; a trajectory's is physical
+    // A mode's sign is arbitrary, so it is pinned. A trajectory's is physical
     // (it solved from an initial condition), and its frames are what the
     // display reads, so flipping the representative alone would desync it.
     let cochain = if time.is_trajectory() {
@@ -883,7 +883,7 @@ impl Scene {
       canonical_sign(cochain)
     };
     let k = cochain.grade();
-    // The manifold the mark is *drawn on*. A grade that does not trace is a
+    // The manifold the mark is drawn on. A grade that does not trace is a
     // volume quantity and keeps the parent's reduction (see the doc above).
     let n = if surface.traces(topology, k) {
       surface.dim(topology)
@@ -893,13 +893,13 @@ impl Scene {
 
     // The reduction stars whenever $k > n-k$, and the star needs a global
     // volume form, which a non-orientable mesh does not have. The field is
-    // then not drawable at all -- there is no orientation-independent density
-    // or direction to show -- so it is refused here rather than rendered with
+    // then not drawable at all: there is no orientation-independent density
+    // or direction to show, so it is refused here rather than rendered with
     // a per-cell sign that means nothing. Everything below the star is
-    // unaffected and still files normally; the solver is unaffected either
+    // unaffected and still files normally. The solver is unaffected either
     // way, since the gauge cancels inside the assembly.
     // Orientability is asked of the manifold whose volume form the star needs
-    // -- the one `n` was just read from, so the check and the reduction cannot
+    //, the one `n` was just read from, so the check and the reduction cannot
     // disagree about which object they are talking about.
     if k > n - k && !surface.complex(topology).is_orientable() {
       eprintln!(
@@ -911,7 +911,7 @@ impl Scene {
 
     match (k.min(n - k)).index() {
       0 => {
-        // The original $k$-cochain is kept whole; the reduction to a density (a
+        // The original $k$-cochain is kept whole. The reduction to a density (a
         // pointwise Hodge star for $k = n$, the identity for $k = 0$) is read
         // per cell at draw time by [`surface_corner_values`], never averaged
         // into the stored field.
@@ -934,7 +934,7 @@ impl Scene {
       }
       _reduced => {
         // A reduced grade >= 2 (only reachable at n >= 4) has no render mark
-        // yet -- files into no list rather than panicking the viewer.
+        // yet, files into no list rather than panicking the viewer.
       }
     }
   }
@@ -947,7 +947,7 @@ impl Scene {
 /// this is $F$. Each variant is total over grade and dimension, degenerating
 /// rather than being excluded: $dif omega = 0$ at $k = n$, and [`scalarize`]
 /// takes the resulting top or bottom grade uniformly. The axis is deliberately
-/// separate from the reduction -- the operator is metric-free, the reduction is
+/// separate from the reduction: the operator is metric-free, the reduction is
 /// where the metric enters.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub(crate) enum Scalarization {
@@ -955,8 +955,8 @@ pub(crate) enum Scalarization {
   /// derivative.
   #[default]
   Value,
-  /// $dif omega$: where the field *varies*. At $k = n - 1$ this is the source
-  /// density, a top form the reduction stars into a signed scalar -- so the
+  /// $dif omega$: where the field varies. At $k = n - 1$ this is the source
+  /// density, a top form the reduction stars into a signed scalar, so the
   /// classical divergence is not a case here but the same composite at one
   /// grade.
   Differential,
@@ -993,7 +993,7 @@ impl Scalarization {
 /// positive, ties broken by colex rank.
 ///
 /// An eigenvector is defined only up to a scalar, and a solver may return
-/// either sign on a whim -- so the same mode can come out red where it was blue
+/// either sign on a whim, so the same mode can come out red where it was blue
 /// between two runs of the same scene, for reasons that are not the
 /// mathematics. Pinning it is what makes a rendered field reproducible, and it
 /// dominates the orientation gauge (which is already deterministic): the
@@ -1003,8 +1003,8 @@ impl Scalarization {
 /// colormap range still spans what the field actually is. The zero cochain is
 /// its own canonical form, having no largest coefficient to orient by.
 ///
-/// Applies to modes only. A trajectory's sign is *physical* -- it solved from
-/// an initial condition -- and flipping it would be a lie about the solve, so
+/// Applies to modes only. A trajectory's sign is physical, it solved from
+/// an initial condition, and flipping it would be a lie about the solve, so
 /// the caller excludes it.
 fn canonical_sign(cochain: Cochain) -> Cochain {
   let pivot = cochain
@@ -1047,7 +1047,7 @@ pub(crate) struct HodgeParts {
 /// $u$-block reads $M(dif sigma + delta dif u + H p) = M omega$, so at the
 /// coefficient level
 /// $omega = underbrace(dif sigma, "exact") + underbrace(delta dif u, "coexact") + underbrace(H p, "harmonic")$
-/// *exactly* -- the three shells sum back to $omega$ with no residual, and the
+/// exactly, the three shells sum back to $omega$ with no residual, and the
 /// coexact shell is recovered as the remainder rather than by forming $delta$
 /// explicitly. Their pairwise $L^2$-orthogonality is the content of the mixed
 /// formulation.
@@ -1113,13 +1113,13 @@ pub(crate) fn hodge_decompose(
 /// of a harmonic 1-form scaled to the swirl's magnitude.
 ///
 /// The swirl alone supplies rich exact and coexact shells, but its periods
-/// around the handles can vanish -- they do on the Császár torus, where a purely
+/// around the handles can vanish: they do on the Császár torus, where a purely
 /// ambient probe leaves the harmonic shell at numerical zero. Whether an ambient
 /// field excites a cycle depends on how the handle happens to sit in space,
 /// which is no basis for a teaching example. Injecting a harmonic generator
-/// makes the field genuinely carry a topological cycle on *any* genus-$g$
+/// makes the field genuinely carry a topological cycle on any genus-$g$
 /// surface, so the decomposition demonstrates all three shells regardless of
-/// embedding -- and injecting the harmonic part is itself the point: the
+/// embedding, and injecting the harmonic part is itself the point: the
 /// decomposition returns it untouched, orthogonal to the two it did not put
 /// there. On a contractible mesh the harmonic space is empty and nothing is
 /// added.
@@ -1156,7 +1156,7 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
 ///
 /// The swirl $-y dif x + x dif y$ is not closed, so it carries both an exact and
 /// a coexact part; the $z dif z = dif(z^2\/2)$ makes the exact part manifestly
-/// nonzero. It does *not* reliably carry a harmonic part -- whether an ambient
+/// nonzero. It does not reliably carry a harmonic part, whether an ambient
 /// field has nonzero periods around a surface's handles depends on how those
 /// handles sit in space, and on the Császár torus, for one, they vanish. The
 /// harmonic shell is supplied separately by [`hodge_probe_input`].
@@ -1183,7 +1183,7 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 
 /// A localized grade-$k$ initial condition for a time-dependent solve, defined
 /// off the mesh's own coordinates: a Gaussian in ambient distance centered on
-/// the vertex *nearest* the centroid, of width a fixed fraction of the
+/// the vertex nearest the centroid, of width a fixed fraction of the
 /// coordinate extent, times the first basis blade of grade `grade`. Pulled onto
 /// the mesh through the `derham` bridge and de Rham mapped to a `grade`-cochain,
 /// so it lands on any embedded mesh without assuming a shape.
@@ -1194,7 +1194,7 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
 ///
 /// The nearest-to-centroid vertex, not the farthest: on a mesh with boundary
 /// (the flat grid) the farthest vertex is a boundary corner, where a held
-/// boundary would pin the bump instead of letting it diffuse; the nearest one is
+/// boundary would pin the bump instead of letting it diffuse. The nearest one is
 /// interior, so its boundary trace is near zero and the flow is free. On a closed
 /// mesh every vertex is on the surface, so the nearest merely also works where a
 /// boundary exists.
@@ -1210,37 +1210,34 @@ const HARMONIC_EIGENVALUE: f64 = 1e-8;
 ///
 /// Closed is what conservation needs. $dif sigma = 0$ is the discrete
 /// divergence, and reading the velocity off an $(n-1)$-form is the other half,
-/// since the tangential part of one on a facet *is* its flux, which the Whitney
+/// since the tangential part of one on a facet is its flux, which the Whitney
 /// space's conformity makes single-valued between neighbors. Those are the two
 /// conditions transport needs to conserve at the ends of the grade range.
 ///
-/// *Smoothest* is what makes it look like transport. A field that is not
-/// Killing shears, drawing a bump into filaments finer than the mesh holds, and
-/// a central scheme turns those into oscillation. A Killing field generally
-/// does not exist -- on a piecewise-flat manifold it would have to fix every
-/// hinge of nonzero angle defect -- so the reachable ask is the least-shearing
-/// closed field, and that is the minimizer of the Hodge-Laplace Rayleigh
-/// quotient over closed forms.
+/// Smoothest is what makes it look like transport. A field that is not Killing
+/// shears, drawing a bump into filaments finer than the mesh holds, which a
+/// central scheme turns into oscillation. A Killing field generally does not
+/// exist: on a piecewise-flat manifold it would have to fix every hinge of
+/// nonzero angle defect. The reachable ask is therefore the least-shearing
+/// closed field, the minimizer of the Hodge-Laplace Rayleigh quotient over
+/// closed forms.
 ///
-/// One construction, and the classical answers fall out of it rather than
-/// being special-cased. The harmonic forms are its zero shell, so a mesh whose
-/// topology supplies them uses one: on a torus that is the circulation around a
-/// handle. Where there are none, the lowest exact mode takes over: on a sphere
-/// $dif$ of the $ell = 1$ eigenfunction, which *is* the rigid rotation, at the
-/// eigenvalue $ell (ell + 1) = 2$ the round sphere has.
+/// The classical answers fall out of that one construction rather than being
+/// special-cased. The harmonic forms are its zero shell, so a mesh whose
+/// topology supplies them uses one, on a torus the circulation around a handle.
+/// Where there are none the lowest exact mode takes over, on a sphere $dif$ of
+/// the $ell = 1$ eigenfunction (the rigid rotation) at the eigenvalue
+/// $ell (ell + 1) = 2$.
 ///
-/// The lowest eigenspace is degenerate -- threefold on a sphere, twofold on a
-/// torus -- so a member is chosen by projecting a fixed reference onto it
-/// rather than by taking whichever vector the eigensolver returned first, which
-/// would swing the flow's direction between refinements.
-///
-/// That reference selects only within an *exact* space. It is a coboundary, and
-/// the Hodge decomposition puts it orthogonal to the harmonic shell, so on a
-/// mesh whose topology supplies harmonics the projection is empty and the
-/// eigensolver's own first vector is all there is to go on. The choice is a
-/// gauge either way: every member of the shell is equally the smoothest closed
-/// field, and what the reference buys where it applies is reproducibility, not
-/// correctness.
+/// The lowest eigenspace is degenerate, threefold on a sphere and twofold on a
+/// torus, so a member is chosen by projecting a fixed reference onto it rather
+/// than by taking whichever vector the eigensolver returned first, which would
+/// swing the flow's direction between refinements. The reference is a
+/// coboundary, so the Hodge decomposition puts it orthogonal to the harmonic
+/// shell and the projection is empty exactly where the topology supplies
+/// harmonics, leaving the eigensolver's own first vector. Either way the choice
+/// is a gauge, every member of the shell being equally the smoothest closed
+/// field, and the reference buys reproducibility rather than correctness.
 fn solenoidal_flux(topology: &Complex, coords: &MeshCoords, metric: &MeshLengthsSq) -> Cochain {
   let reference = ambient_blade_flux(topology, coords);
   let Some(space) = smoothest_closed_space(topology, metric) else {
@@ -1338,8 +1335,8 @@ fn ambient_blade_flux(topology: &Complex, coords: &MeshCoords) -> Cochain {
   derham_map(&form.pullback_on(topology, coords), topology, 1)
 }
 
-/// [`solenoidal_flux`] scaled to unit *mean* speed, so a unit of solve time is
-/// a unit of distance travelled and the final time reads as a path length.
+/// [`solenoidal_flux`] scaled to unit mean speed, so a unit of solve time is
+/// a unit of distance traveled and the final time reads as a path length.
 ///
 /// The mean and not the peak: a peak is one cell's outlier, and normalizing
 /// against it leaves the field as a whole moving slower than the final time
@@ -1410,7 +1407,7 @@ fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -
     (-r2 / (2.0 * sigma * sigma)).exp()
   };
 
-  // At top grade the bump is a *density* $f vol$, and the volume form is the
+  // At top grade the bump is a density $f vol$, and the volume form is the
   // manifold's own, not an ambient blade's pullback. The two agree where the
   // mesh fills its ambient space, and on a submanifold only this one is right:
   // the pullback of a fixed ambient $n$-blade is the projection of the tangent
@@ -1457,7 +1454,7 @@ mod tests {
   use simplicial::topology::handle::SimplexIdx;
 
   /// The medium is offered exactly where there is an interior to march, and
-  /// that is an *intrinsic-dimension* question rather than a grade one: at
+  /// that is an intrinsic-dimension question rather than a grade one: at
   /// $n <= 2$ the boundary primitive already draws the whole manifold, and at
   /// $n >= 3$ it cannot. Swept over both, and over every grade at each, since
   /// the answer must not depend on which field is selected.
@@ -1481,14 +1478,14 @@ mod tests {
     }
   }
 
-  /// Grade-0 transport conserves $L^2$ *exactly* on a closed mesh, which is
+  /// Grade-0 transport conserves $L^2$ exactly on a closed mesh, which is
   /// what the solenoidal velocity is for.
   ///
   /// The antisymmetry defect needs the facet terms of neighboring cells to
   /// cancel, and at grade 0 that asks two things: $inner(omega, eta)$
   /// single-valued, which the continuous shape functions give, and the flux
   /// $iota_v vol$ single-valued, which reading the velocity off an
-  /// $(n-1)$-cochain gives. Exact, not approximate -- and a per-cell star
+  /// $(n-1)$-cochain gives. Exact, not approximate, and a per-cell star
   /// without the coherent orientation breaks it, since the field then reverses
   /// across every facet where colex disagrees with the manifold.
   #[test]
@@ -1528,7 +1525,7 @@ mod tests {
   /// of the grade range rests on.
   ///
   /// The magnitude is checked against the reference field and not against zero,
-  /// because the failure this guards is a *near*-vanishing one: a projection
+  /// because the failure this guards is a near-vanishing one: a projection
   /// onto a space the reference is orthogonal to returns roundoff, which is
   /// nonzero, and closed to the same roundoff, so both laws pass on nothing.
   #[test]
@@ -1568,7 +1565,7 @@ mod tests {
   /// Read through a fixed ambient $n$-blade instead, its pullback is the
   /// projection of the tangent multivector onto that blade, which changes sign
   /// over a curved surface and vanishes along a whole curve. The sphere is the
-  /// case that catches it; a full-dimensional mesh cannot.
+  /// case that catches it. A full-dimensional mesh cannot.
   #[test]
   fn the_top_grade_bump_is_a_positive_density() {
     let seed = Scene::spherical_harmonics(2, 1);
@@ -1606,10 +1603,10 @@ mod tests {
     );
   }
 
-  /// A top-grade field displaces its cells *rigidly*: the height is constant
+  /// A top-grade field displaces its cells rigidly: the height is constant
   /// within each cell, which is what makes the fill tear along the field's own
   /// discontinuity instead of smoothing across it. Constant to zero spread,
-  /// not approximately -- the Whitney top form is genuinely $P_0$.
+  /// not approximately, the Whitney top form is genuinely $P_0$.
   #[test]
   fn top_grade_displacement_is_constant_within_each_cell() {
     let scene = Scene::spherical_harmonics(1, 2);
@@ -1691,7 +1688,7 @@ mod tests {
 
   /// The harmonic top-grade form on a closed orientable surface is a multiple
   /// of the volume form, $h = c dvol$, so its reduction $star h = c$ is
-  /// *constant* over the whole manifold. That makes the reduced readout of the
+  /// constant over the whole manifold. That makes the reduced readout of the
   /// $lambda = 0$ grade-2 mode on the sphere a law with an exact answer, and
   /// the sharpest available statement that the Hodge star is being taken
   /// against one global volume form rather than each cell's own.
@@ -1778,13 +1775,13 @@ mod tests {
     assert!(scene.fields[0].time.eigenvalue().is_none());
   }
 
-  /// The heat flow is total on a *closed* mesh, where there is no boundary to
+  /// The heat flow is total on a closed mesh, where there is no boundary to
   /// hold: `solve_heat` runs the free Neumann flow (the relative complex is the
   /// identity inclusion there) instead of panicking on an empty boundary
   /// subcomplex. The regression
   /// for the sphere preset, whose background solve otherwise never completes.
   /// Mass is conserved (the constant is the Neumann kernel), so the bump spreads
-  /// rather than decaying to zero -- the peak drops while the total does not.
+  /// rather than decaying to zero, the peak drops while the total does not.
   #[test]
   fn heat_flow_is_total_on_a_closed_mesh() {
     use regge::mesher::sphere::mesh_sphere_surface;
@@ -1832,7 +1829,7 @@ mod tests {
   /// Both evolutions are posed at every grade of the de Rham complex, not just
   /// at 0: the parabolic flow damps the $L^2$ norm and the symplectic wave flow
   /// keeps it bounded, whatever grade the bump is a form of. Swept over every
-  /// grade of a surface, the extremal ones included -- the top grade is where a
+  /// grade of a surface, the extremal ones included, the top grade is where a
   /// grade-0-only construction (a scalar bump, a `ndofs(0)` source) would have
   /// gone wrong silently.
   #[test]
@@ -1845,7 +1842,7 @@ mod tests {
     .unwrap();
     let l2 = |c: &Cochain| c.coeffs().norm();
 
-    // A trajectory files under the mark its *reduced* grade earns, so on a
+    // A trajectory files under the mark its reduced grade earns, so on a
     // surface grade 1 is a line field and 0 and 2 are densities; the single
     // field is read from whichever list it landed in.
     let only_field = |scene: &Scene| -> FieldTime {
@@ -1886,7 +1883,7 @@ mod tests {
 
   /// What a field offers is its reduced grade's answer, and the answer is total
   /// on the range the ambient reaches: every field of the reference cell in
-  /// every dimension is asked, and each gets the reading its reduction earns --
+  /// every dimension is asked, and each gets the reading its reduction earns,
   /// a density the surface it paints (nothing of its own), a line field its
   /// three marks. Nothing is dropped and nothing is asked twice.
   #[test]
@@ -1912,7 +1909,7 @@ mod tests {
   /// which is what an eigenvalue is: the same distinction `FieldDisplay::build`
   /// makes when it hands a field with none an amplitude of zero. A raw Whitney
   /// basis function is that field, and a grade-0 eigenmode of the same cell
-  /// complex is its counterpart -- so the two together are the rule, not one
+  /// complex is its counterpart, so the two together are the rule, not one
   /// example of it.
   #[test]
   fn displacement_is_offered_exactly_to_a_standing_wave() {
@@ -1979,7 +1976,7 @@ mod tests {
   /// The Hodge decomposition is a theorem, not a golden number. On a genus-1
   /// surface ($b_1 = 2$) the probe 1-form splits into three shells that sum
   /// back to it exactly, are pairwise $L^2$-orthogonal, and carry a genuinely
-  /// nonzero harmonic component -- the part the two handle cycles pair with.
+  /// nonzero harmonic component, the part the two handle cycles pair with.
   /// The flat unit square is the contractible base case: the same solve,
   /// harmonic shell identically zero because there is no grade-1 homology to
   /// project onto. The harmonic dimension is read off the complex and must
@@ -1989,7 +1986,7 @@ mod tests {
   /// thousand vertices, and the harmonic solve at that size dominates the
   /// entire workspace test suite's runtime. The generated donut is the genus-1
   /// case at a few dozen vertices, and being generated it needs no asset at
-  /// all -- what it stands for is $b_1 = 2$, which its construction guarantees
+  /// all, what it stands for is $b_1 = 2$, which its construction guarantees
   /// rather than a file's contents happening to have it.
   #[test]
   fn hodge_decomposition_splits_orthogonally() {
@@ -2083,7 +2080,7 @@ mod tests {
   }
 
   /// The three worked examples are all grade-1 line fields (no scalar
-  /// density), named for the picker -- and the edge-by-vertex-pair lookup in
+  /// density), named for the picker, and the edge-by-vertex-pair lookup in
   /// [`crate::gallery::CochainSpec::resolve`] found every edge of the
   /// triforce's coefficient table without panicking, which is the
   /// actual thing under test.
@@ -2118,7 +2115,7 @@ mod tests {
   /// The regression theorem for the surface tint: a Whitney basis field's
   /// support is exactly the cells its DOF simplex bounds. Read per corner in the
   /// corner's own cell, every cell the form vanishes on reads exactly zero at
-  /// all three corners -- so a basis function no longer bleeds into cells that do
+  /// all three corners, so a basis function no longer bleeds into cells that do
   /// not contain its DOF. A per-vertex tint could not state this: the DOF's
   /// endpoints carry a nonzero nodal value into every incident cell.
   #[test]

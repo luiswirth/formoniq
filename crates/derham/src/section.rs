@@ -2,19 +2,19 @@
 //!
 //! A [`Section`] is the discrete-geometry notion of a field: a section of
 //! $Lambda^k T^* M$ (covariant: a differential form) or $Lambda^k T M$
-//! (contravariant: a multivector field) over the simplicial manifold $M$ --
-//! the piecewise-affine object the mesh *is*, as opposed to whatever smooth
-//! manifold it may be approximating. It is evaluated at a [`MeshPoint`] -- a
-//! cell together with barycentric coordinates -- and its value is expressed in
-//! the **reference frame of that cell's chart**, so it needs no embedding and
+//! (contravariant: a multivector field) over the simplicial manifold $M$,
+//! the piecewise-affine object the mesh is, as opposed to whatever smooth
+//! manifold it may be approximating. It is evaluated at a [`MeshPoint`], a
+//! cell together with barycentric coordinates, and its value is expressed in
+//! the reference frame of that cell's chart, so it needs no embedding and
 //! no global coordinate system. Sections therefore work verbatim on a purely
 //! metric (Regge) manifold, where no global coordinate exists at all.
 //!
-//! The mesh-independent [`CoordField`]s of the `glatt` crate -- analytic
-//! data on the smooth manifold $M$ -- connect to this world through the functor
+//! The mesh-independent [`CoordField`]s of the `glatt` crate, analytic
+//! data on the smooth manifold $M$, connect to this world through the functor
 //! whose direction the variance of the values fixes:
 //!
-//! - covariant: a coordinate form **pulls back** onto the mesh along the
+//! - covariant: a coordinate form pulls back onto the mesh along the
 //!   composite of the cell parametrization and the continuum chart
 //!   ([`Pullback`], canonical and metric-free);
 //! - contravariant: the direction reverses, so a multivector field on the
@@ -23,8 +23,8 @@
 //! Variance is carried by the slots of the value, so [`Pullback`] rejects a
 //! contravariant field where it once failed to compile. The opposite direction,
 //! sampling a section back into ambient coordinates ([`Sampler`]), is not
-//! canonical for forms -- it extends the value by zero on the normal space
-//! through the chart pseudo-inverse -- and is confined to visualization and
+//! canonical for forms, it extends the value by zero on the normal space
+//! through the chart pseudo-inverse, and is confined to visualization and
 //! I/O.
 
 use crate::interpolate::interpolant::WhitneyInterpolant;
@@ -52,12 +52,12 @@ use {
 ///
 /// The value at a [`MeshPoint`] is expressed in the reference frame of the
 /// containing cell's chart, hence lives in $Lambda^k (RR^n)$ for the intrinsic
-/// dimension $n$ of the manifold -- never in an ambient space.
+/// dimension $n$ of the manifold, never in an ambient space.
 ///
 /// Sections need not be continuous across cells: the Whitney forms have only
 /// the tangential continuity their conformity requires. What all sections here
-/// do share is that the quantities extracted from them -- the integral over a
-/// face in the de Rham map, the $L^2$ inner product over a cell -- are
+/// do share is that the quantities extracted from them, the integral over a
+/// face in the de Rham map, the $L^2$ inner product over a cell, are
 /// chart-independent.
 pub trait Section {
   /// The dimension of the simplicial manifold, which is that of the cell
@@ -76,22 +76,22 @@ pub trait Section {
 /// $$ hat(K) ->^(psi_K) RR^N ->^chi Omega, qquad chi = phi^(-1) compose r, $$
 ///
 /// the affine parametrization $psi_K$ of the cell followed by the continuum
-/// chart $chi$ -- the ordinary transition-map pattern, but spanning $M_h$ and
+/// chart $chi$, the ordinary transition-map pattern, but spanning $M_h$ and
 /// $M$ instead of two patches of one manifold. Evaluate $omega$ at
 /// $u = chi(psi_K(lambda))$ and pull the value back through the composite
 /// differential $dif chi dot dif psi_K$. Metric-free, and only for covariant
-/// fields -- pullback is the contravariant action of $Lambda^k$, so the functor
+/// fields, pullback is the contravariant action of $Lambda^k$, so the functor
 /// runs this way and no other, and a contravariant value is rejected rather
 /// than silently transported backwards.
 ///
 /// The construction is a bona fide pullback of a form along a smooth map, and
 /// $(R s)_sigma = integral_(r(sigma)) omega_M$ is the exact integral of the true
-/// form over the curved image of the face. What it is *not* is exact *on* $M$,
-/// and the inexactness is the $M_h != M$ gap made quantitative -- a domain gap
+/// form over the curved image of the face. What it is not is exact on $M$,
+/// and the inexactness is the $M_h != M$ gap made quantitative, a domain gap
 /// ($r(sigma)$ is not the geodesic simplex, $O(h^2)$ under the orthogonal
 /// projection) and a metric gap (the $L^2$ pairings downstream use the chord
 /// metric $g_h$, not $g_M$, also $O(h^2)$). Both are inherent to a linear mesh
-/// and distinct from the exact structure *inside* $M_h$.
+/// and distinct from the exact structure inside $M_h$.
 ///
 /// The flat case is the value $Omega = RR^N$, $phi = id$: then $chi$ is the
 /// identity and the composite collapses to $psi_K$ alone, taken with no chart
@@ -103,7 +103,7 @@ pub struct Pullback<'a, F, S: CoordSpace = Ambient> {
   chart_map: ContinuumChartMap<'a, S>,
 }
 
-/// The chart map $chi$ of the *continuum* $M$: how a mesh point reaches the
+/// The chart map $chi$ of the continuum $M$: how a mesh point reaches the
 /// chart domain $Omega$.
 ///
 /// Not a [`Chart`](simplicial::atlas::Chart), which is a cell of the simplicial
@@ -111,7 +111,7 @@ pub struct Pullback<'a, F, S: CoordSpace = Ambient> {
 /// [`Pullback`] spans, and the name says which.
 enum ContinuumChartMap<'a, S: CoordSpace> {
   /// The flat case: $Omega = RR^N$, $phi = id$, so $chi = id$ and the ambient
-  /// image of the mesh point *is* the domain point. No chart solve.
+  /// image of the mesh point is the domain point. No chart solve.
   Identity,
   /// The curved case: $chi = phi^(-1) compose r$, evaluated by the
   /// [`Parametrization`]. `vertex_omega` caches $chi$ at every mesh vertex, so an
@@ -124,7 +124,7 @@ enum ContinuumChartMap<'a, S: CoordSpace> {
 }
 
 impl<'a, F: CoordField<Ambient>> Pullback<'a, F, Ambient> {
-  /// The flat pullback: the field's domain *is* the ambient space.
+  /// The flat pullback: the field's domain is the ambient space.
   pub fn identity(field: &'a F, topology: &'a Complex, coords: &'a MeshCoords) -> Self {
     assert_eq!(
       field.dim(),
@@ -185,7 +185,7 @@ impl<S: CoordSpace, F: CoordField<S>> Section for Pullback<'_, F, S> {
     let global = parametrization.bary2global(point.bary());
     match &self.chart_map {
       // `Identity` is only ever built at `S = Ambient`, where the ambient image
-      // *is* the domain point; the relabel is the sanctioned unchecked entry.
+      // is the domain point. The relabel is the sanctioned unchecked entry.
       ContinuumChartMap::Identity => {
         let u = Coords::<S>::new(global.into_vector());
         self
@@ -246,14 +246,14 @@ impl<S: CoordSpace, F: CoordField<S>> CoordFieldExt<S> for F {}
 ///
 /// Locates the global point in the mesh, evaluates the field in the cell
 /// chart, and extends the reference-frame value to the ambient frame by
-/// pulling it back along the chart pseudo-inverse $A^+$ -- i.e. by declaring
+/// pulling it back along the chart pseudo-inverse $A^+$, i.e. by declaring
 /// it zero on the normal space of the cell. That choice is metric-dependent
 /// (it is the Moore-Penrose one for the Euclidean ambient metric) and hence
-/// *not* canonical, which is exactly why it may not sit in the core path:
+/// not canonical, which is exactly why it may not sit in the core path:
 /// nothing in assembly or discretization is allowed to need it.
 ///
 /// Without a [`PointLocator`] attached, locating a point is a linear scan over
-/// all cells; with one it is logarithmic, which is what makes grid sampling
+/// all cells. With one it is logarithmic, which is what makes grid sampling
 /// affordable.
 pub struct Sampler<'a, F> {
   field: &'a F,
@@ -395,7 +395,7 @@ impl<F: Section> Section for Flat<'_, F> {
 /// preserving the variance.
 ///
 /// Takes the coherent [`Orientation`], and must. The star is defined against a
-/// volume form, so a cell-by-cell star reads each cell's *colex* orientation,
+/// volume form, so a cell-by-cell star reads each cell's colex orientation,
 /// which is a gauge unrelated to its neighbors': the field it builds flips sign
 /// across every facet where colex disagrees with the manifold. Holding an
 /// `&Orientation` is the proof the mesh is orientable at all, so a caller that
@@ -541,8 +541,8 @@ mod test {
   /// Pulling a coordinate form onto the mesh and sampling it back in ambient
   /// coordinates is the identity, on a mesh of full intrinsic dimension.
   ///
-  /// There the chart is invertible, so the pseudo-inverse *is* the inverse and
-  /// $((A^+)^* compose A^*) omega = omega$ -- the round trip through the
+  /// There the chart is invertible, so the pseudo-inverse is the inverse and
+  /// $((A^+)^* compose A^*) omega = omega$, the round trip through the
   /// manifold loses nothing.
   #[test]
   fn pullback_then_sample_is_identity() {
@@ -601,7 +601,7 @@ mod test {
 
   /// Functoriality of the composite differential: pulling a continuum form onto
   /// a curved mesh through $chi compose psi_K$ equals pulling it along
-  /// $dif chi$ and then along $dif psi_K$ separately -- $Lambda^k (A B) =
+  /// $dif chi$ and then along $dif psi_K$ separately, $Lambda^k (A B) =
   /// (Lambda^k A)(Lambda^k B)$, exercised through the real bridge on $S^2$.
   ///
   /// The bridge assembles the single composite $dif chi dot dif psi_K$; the

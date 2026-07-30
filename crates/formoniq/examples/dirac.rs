@@ -2,13 +2,13 @@
 //! cavity.
 //!
 //! The electromagnetic field $E + B$ (electric 1-form, magnetic 2-form) is
-//! carried as a cochain on the *whole* de Rham complex of the box $[0, pi]^3$,
+//! carried as a cochain on the whole de Rham complex of the box $[0, pi]^3$,
 //! $u = (u_0, u_1, u_2, u_3)$, because the Hodge–Dirac operator is grade-mixing;
 //! all of Maxwell is the one first-order flow
 //!
 //! $ diff_t u = sans(D) u = (dif - delta) u $
 //!
-//! --- the mixed-grade formulation. The four grades carry the
+//!, the mixed-grade formulation. The four grades carry the
 //! four classical equations at once: grade 1 is the electric field $E$, grade 2
 //! the magnetic flux $B$, and the two extremal grades are the Gauss constraints
 //! ($delta E = 0$ in grade 0, $dif B = 0$ in grade 3), which stay negligible for
@@ -28,12 +28,12 @@
 //!
 //! - the total energy is flat to ~1e-15 relative: Gauss–Legendre is symplectic
 //!   and conserves the quadratic invariant $1/2 thin u^T M u$ of the skew system
-//!   exactly, with no drift --- only the physical exchange between grades 1 and 2;
+//!   exactly, with no drift, only the physical exchange between grades 1 and 2;
 //! - the magnetic Gauss law is exact: grade 3 stays at ~1e-30, machine zero,
-//!   because $B$ only ever receives $dif E$ and $dif compose dif = 0$ --- a
-//!   *topological* conservation law, independent of the metric or the step size;
+//!   because $B$ only ever receives $dif E$ and $dif compose dif = 0$, a
+//!   topological conservation law, independent of the metric or the step size;
 //! - the electric Gauss law holds weakly: grade 0 ($delta_h E$) stays small and
-//!   bounded but not at roundoff --- it is *metric*, the residual of the
+//!   bounded but not at roundoff: it is metric, the residual of the
 //!   discretely-projected divergence-free field, and the Dirac flow keeps it
 //!   from growing rather than pinning it to zero.
 

@@ -17,18 +17,18 @@ use multialgebra::ExteriorGrade;
 /// $Delta = dif delta + delta dif$.
 ///
 /// The down-part $dif delta$ is reached through the mixed auxiliary
-/// $sigma = delta u in Lambda^(k-1)$, whose defining relation is *algebraic*
+/// $sigma = delta u in Lambda^(k-1)$, whose defining relation is algebraic
 /// (no $diff_t sigma$): the semidiscrete system
 ///
 /// $ mat(0, 0; 0, M) dot(vec(sigma, u)) = mat(-M_sigma, C_"dn"; -M D^(k-1), -K)
 ///   vec(sigma, u) + vec(0, M f) $
 ///
-/// is an index-1 differential-algebraic system --- $M_sigma sigma = C_"dn" u$
+/// is an index-1 differential-algebraic system, $M_sigma sigma = C_"dn" u$
 /// slaves $sigma$ to $u$, and the singular block mass is exactly what encodes
 /// that. Radau IIA is stiffly accurate and L-stable, the correct integrator
 /// for such a DAE: it enforces the constraint at every stage and damps the
-/// stiff modes monotonically. Following Arnold & Chen (*FEEC for parabolic
-/// problems*), the harmonic component evolves freely --- no gauge is imposed.
+/// stiff modes monotonically. Following Arnold & Chen (FEEC for parabolic
+/// problems), the harmonic component evolves freely and no gauge is imposed.
 ///
 /// Boundary conditions come entirely from the `complex`: the full
 /// [`WhitneyComplex`] gives natural (Neumann) conditions, the relative complex
@@ -66,7 +66,7 @@ pub fn solve_heat<C: HilbertComplex>(
   let inclusion = complex.inclusion(grade);
   let u0 = inclusion.transpose() * initial.coeffs();
   // The algebraic constraint $M_sigma sigma_0 = C_"dn" u_0$ pins a consistent
-  // initial $sigma$; an inconsistent one would pollute the first stage RHS.
+  // initial $sigma$. An inconsistent one would pollute the first stage RHS.
   let sigma0 = if ns > 0 {
     FaerCholesky::new(hb.mass_sigma.clone()).solve(&(hb.codif_dn() * &u0))
   } else {
@@ -109,7 +109,7 @@ mod test {
   /// $L^2$ energy $norm(u)_M^2$ of the Hodge heat flow can only decrease.
   /// $Delta$ is symmetric positive semidefinite, so the semidiscrete flow is a
   /// contraction and Radau IIA, being L-stable, inherits it unconditionally.
-  /// The sweep exercises the degenerate grades too --- $k = 0$ (no $sigma$) and
+  /// The sweep exercises the degenerate grades too, $k = 0$ (no $sigma$) and
   /// $k = n$ (no $omega$, $Delta = 0$, energy exactly flat).
   #[test]
   fn energy_dissipates_at_every_grade() {
@@ -147,7 +147,7 @@ mod test {
   /// independently assembled and factored static mixed Hodge-Laplace solution
   /// [`solve_source`]. Run at grade $1$ on a topologically
   /// trivial box (relative $b_1 = 0$, so the steady state is unique), where the
-  /// down-part $dif delta$ is genuinely nonzero --- the two code paths agreeing
+  /// down-part $dif delta$ is genuinely nonzero, the two code paths agreeing
   /// pins it down.
   #[test]
   fn steady_state_matches_static_hodge_laplace() {

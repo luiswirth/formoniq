@@ -1,7 +1,7 @@
 //! The geometry a boundary inherits from its parent.
 //!
 //! `simplicial`'s `BoundaryComplex` is pure combinatorics: which parent
-//! simplices the boundary consists of. Restricting the parent's *geometry* to
+//! simplices the boundary consists of. Restricting the parent's geometry to
 //! it needs a metric, so it reaches down from here, as an extension trait
 //! because the trace reads as an operation on the boundary.
 

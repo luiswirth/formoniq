@@ -11,9 +11,9 @@
 //!
 //! Two [`Tableau`] families serve the two structural regimes: Gauss-Legendre
 //! collocation is symplectic and conserves every quadratic invariant of a
-//! linear system exactly -- the correct choice for the Hamiltonian systems
+//! linear system exactly, the correct choice for the Hamiltonian systems
 //! (wave, Hodge–Dirac Maxwell), where energy conservation, not just bounded
-//! drift, is available. Radau IIA is L-stable and algebraically stable -- the
+//! drift, is available. Radau IIA is L-stable and algebraically stable, the
 //! correct choice for the dissipative heat equation, where the structure to
 //! preserve is monotone decay under arbitrarily stiff eigenmodes, not
 //! symplecticity.
@@ -49,8 +49,8 @@ impl Tableau {
     Self { a, b, c, s }
   }
 
-  /// Gauss-Legendre collocation, order $2s$ for any $s$: symplectic, and --
-  /// the stronger fact that matters for a *linear* Hamiltonian system --
+  /// Gauss-Legendre collocation, order $2s$ for any $s$: symplectic, and,
+  /// the stronger fact that matters for a linear Hamiltonian system,
   /// exactly conserving every quadratic invariant, not merely a bounded
   /// shadow Hamiltonian.
   ///
@@ -83,7 +83,7 @@ impl Tableau {
 /// i.e. $a_(i j) = integral_0^(c_i) ell_j$ and $b_i = integral_0^1 ell_i$ for
 /// the Lagrange basis $ell_j$ on the nodes. Both are solves against the shared
 /// node Vandermonde $V_(k j) = c_j^(k-1)$, so the whole tableau is fixed by the
-/// nodes alone -- the one construction of which Gauss-Legendre and Radau IIA
+/// nodes alone, the one construction of which Gauss-Legendre and Radau IIA
 /// are the two node choices. The row-sum consistency $c_i = sum_j a_(i j)$ is
 /// the $k = 1$ condition, so it holds by construction.
 fn collocation_tableau(c: Vector) -> Tableau {
@@ -181,13 +181,13 @@ fn map_unit(x: Vector) -> Vector {
 /// system $M dot(y) = A y + f(t)$.
 ///
 /// Because $f$ is linear, the coupled stage system is linear and exact in one
-/// solve -- no Newton iteration. The stage system
+/// solve, no Newton iteration. The stage system
 ///
 /// $ (I_s ⊗ M - dt med (A_"tab" ⊗ A)) k = bb(1)_s ⊗ (A y_0) + f_"stage", $
 ///
 /// is assembled directly as a sparse block matrix (never densified: each
 /// block is a scaled copy of $M$'s or $A$'s own sparsity) and factored once,
-/// since $M$, $A$ and $dt$ are all fixed across the integration -- every
+/// since $M$, $A$ and $dt$ are all fixed across the integration, every
 /// subsequent [`Self::step`] is then a single triangular solve.
 pub struct LinearIrk {
   tableau: Tableau,
@@ -243,7 +243,7 @@ impl LinearIrk {
 
 /// The sparse block Kronecker stage matrix
 /// $I_s ⊗ M - dt med (A_"tab" ⊗ A)$, assembled directly from the triplets of
-/// $M$ and $A$ -- an $s times s$ grid of blocks, each block a scaled copy of
+/// $M$ and $A$, an $s times s$ grid of blocks, each block a scaled copy of
 /// $M$'s or $A$'s own sparsity pattern, never a dense intermediate.
 fn stage_matrix(a_tab: &Matrix, mass: &CsrMatrix, op: &CsrMatrix, dt: f64) -> CsrMatrix {
   let s = a_tab.nrows();
@@ -271,7 +271,7 @@ fn stage_matrix(a_tab: &Matrix, mass: &CsrMatrix, op: &CsrMatrix, dt: f64) -> Cs
 /// dimension- and grade-general form of the Yee (FDTD) leapfrog.
 ///
 /// The DOFs are 2-colored (`color[i]` the color of DOF $i$) so that $A$ couples
-/// only *across* colors and $M$ only *within* them --- a partition into which
+/// only across colors and $M$ only within them, a partition into which
 /// the system splits as
 ///
 /// $ M_0 dot(q) = A_(0 1) p, quad M_1 dot(p) = A_(1 0) q, quad A_(1 0) = -A_(0 1)^T, $
@@ -279,7 +279,7 @@ fn stage_matrix(a_tab: &Matrix, mass: &CsrMatrix, op: &CsrMatrix, dt: f64) -> Cs
 /// a linear Hamiltonian system with the two color blocks as canonical
 /// position and momentum. On the Hodge–Dirac complex the coloring is grade
 /// parity: $dif$ and $delta$ shift grade by one, so even and odd grades never
-/// couple among themselves and $A$ is exactly this block-antidiagonal form ---
+/// couple among themselves and $A$ is exactly this block-antidiagonal form,
 /// leapfrog is then the discrete-time completion of the spatial staggering
 /// (E on edges, B on faces) that FEEC already does.
 ///
@@ -288,7 +288,7 @@ fn stage_matrix(a_tab: &Matrix, mass: &CsrMatrix, op: &CsrMatrix, dt: f64) -> Cs
 /// each Cholesky-factored once. Symplectic, so there is no energy drift; the
 /// staggered invariant [`Self::conserved_energy`] is preserved to roundoff, and
 /// is positive definite (a genuine norm, so the scheme is stable) precisely under
-/// the CFL condition. Unlike [`LinearIrk`] this is only conditionally stable ---
+/// the CFL condition. Unlike [`LinearIrk`] this is only conditionally stable,
 /// the price of being explicit.
 pub struct Leapfrog {
   /// Global DOF indices of color 0 (the drifted "position" block $q$).
@@ -405,7 +405,7 @@ impl Leapfrog {
   ///
   /// the co-located energy $1/2 u^T M u$ minus the leapfrog defect. Preserved to
   /// roundoff by [`Self::step`] (unlike the co-located energy, which oscillates
-  /// at $O(dif t^2)$), and positive definite --- a norm, whence stability ---
+  /// at $O(dif t^2)$), and positive definite, a norm, whence stability,
   /// precisely under the CFL condition.
   pub fn conserved_energy(&self, y: &Vector) -> f64 {
     let q = self.gather(y, &self.idx0);
@@ -442,7 +442,7 @@ mod test {
 
   /// The $s = 1, 2$ Gauss-Legendre and Radau IIA tableaus produced by the
   /// general collocation construction reproduce the classical hardcoded
-  /// coefficients (Hairer & Wanner, *Solving ODEs II*, Tables 5.2, 5.6) to
+  /// coefficients (Hairer & Wanner, Solving ODEs II, Tables 5.2, 5.6) to
   /// roundoff: implicit midpoint and the fourth-order Gauss block; backward
   /// Euler and the third-order Radau block.
   #[test]
@@ -481,7 +481,7 @@ mod test {
 
   /// A collocation tableau satisfies the simplified conditions that define it,
   /// at every stage count: row-sum consistency $c_i = sum_j a_(i j)$, the stage
-  /// conditions $C(s)$, and the quadrature conditions $B(s)$ -- so both families
+  /// conditions $C(s)$, and the quadrature conditions $B(s)$, so both families
   /// have their claimed order $p$ ($2s$ for Gauss, $2s - 1$ for Radau) for all
   /// $s$, not just the two that used to be hardcoded. Radau additionally pins
   /// its last node at $c_s = 1$ (stiff accuracy).
@@ -517,7 +517,7 @@ mod test {
   }
 
   /// Gauss-Legendre on a linear Hamiltonian system exactly conserves the
-  /// quadratic invariant $H = 1/2 (v^2 + omega^2 x^2)$ -- to roundoff, not
+  /// quadratic invariant $H = 1/2 (v^2 + omega^2 x^2)$, to roundoff, not
   /// merely bounded, across many periods and stage counts.
   #[test]
   fn gauss_legendre_conserves_energy_exactly() {
@@ -545,7 +545,7 @@ mod test {
   /// Radau IIA on the scalar decay $dot(y) = -lambda y$ reproduces
   /// $exp(-lambda t)$ to the scheme's classical order, and stays monotone
   /// (no oscillatory overshoot) even at a step size well past the explicit
-  /// stability limit -- the L-stability that Gauss does not have.
+  /// stability limit, the L-stability that Gauss does not have.
   #[test]
   fn radau_iia_is_monotone_and_accurate_for_stiff_decay() {
     let lambda = 500.0;
@@ -577,7 +577,7 @@ mod test {
   /// $A = mat(-1,1;-lambda,0)$, whose $u$-component is the exact decay
   /// $u(t) = u_0 e^(-lambda t)$. Radau IIA is stiffly accurate, so it solves
   /// the algebraic constraint at every stage and reproduces the decay even
-  /// though $M$ is not invertible -- the fact the heat and wave solvers rely
+  /// though $M$ is not invertible, the fact the heat and wave solvers rely
   /// on.
   #[test]
   fn radau_iia_solves_index_one_dae_with_singular_mass() {
@@ -645,7 +645,7 @@ mod test {
   }
 
   /// A constant forcing steers the linear system to its steady state
-  /// $y_infty = -A^(-1) f$; both tableaus must reach it.
+  /// $y_infty = -A^(-1) f$. Both tableaus must reach it.
   #[test]
   fn constant_forcing_reaches_steady_state() {
     let lambda = 3.0;
@@ -670,7 +670,7 @@ mod test {
   /// The explicit leapfrog is symplectic on the skew system $M dot(u) = A u$ it
   /// targets: its staggered invariant is preserved to roundoff (no drift) across
   /// many periods within the CFL limit. A 2-dof skew system with distinct block
-  /// masses, 2-colored into position (dof 0) and momentum (dof 1) --- the minimal
+  /// masses, 2-colored into position (dof 0) and momentum (dof 1), the minimal
   /// model of the grade-parity split.
   #[test]
   fn leapfrog_conserves_staggered_energy_exactly() {

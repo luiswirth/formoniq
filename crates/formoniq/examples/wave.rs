@@ -1,21 +1,21 @@
-//! Wave equation on the flat box $[0, pi]^n$: a hyperbolic flow *conserves*.
+//! Wave equation on the flat box $[0, pi]^n$: a hyperbolic flow conserves.
 //!
 //! Semi-discrete: the Whitney space of $k$-forms in space, Gauss-Legendre
 //! (implicit midpoint) in time, run at every dimension $1 <= n <= 3$ and grade
-//! $0 <= k <= n$ from one loop --- the scalar wave equation at $k = 0$, the
+//! $0 <= k <= n$ from one loop, the scalar wave equation at $k = 0$, the
 //! vector (curl-curl) one at $k = 1$, the top-form flow at $k = n$.
 //!
 //! The operator is the full Hodge Laplacian $Delta = dif delta + delta dif$,
 //! assembled in mixed form through the auxiliary $sigma = delta u$ (see
 //! [`formoniq::problems::wave::solve_wave`]). The semi-discrete energy
 //! $ E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(dot(u))^2) $
-//! --- potential (down- and up-parts) plus kinetic --- is conserved:
+//!, potential (down- and up-parts) plus kinetic, is conserved:
 //! Gauss-Legendre is symplectic and, applied to this linear system, conserves
 //! $E$ to roundoff. The table shows $E$ holding across the run; the drift
 //! column is the largest relative departure over all steps.
 //!
 //! At top grade $dif u = 0$ so the up-part vanishes; at grade $0$ there is no
-//! $sigma$ and the down-part vanishes --- both run by the same code.
+//! $sigma$ and the down-part vanishes, both run by the same code.
 
 #[path = "util/mod.rs"]
 mod util;

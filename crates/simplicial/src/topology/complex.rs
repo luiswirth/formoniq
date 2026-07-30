@@ -23,8 +23,8 @@ use std::{io, path::Path};
 /// vertex-cell lists over the simplex's vertices, and all down-incidence is
 /// pure combinatorics on the vertex set.
 ///
-/// The boundary operators $diff_k$ -- which double as the oriented incidence
-/// backbone -- are computed lazily on first use and cached.
+/// The boundary operators $diff_k$, which double as the oriented incidence
+/// backbone, are computed lazily on first use and cached.
 #[derive(Default, Debug, Clone)]
 pub struct Complex {
   skeletons: Vec<Skeleton>,
@@ -133,7 +133,7 @@ impl Complex {
   /// The dim-simplices that lie on the boundary of the mesh:
   /// the subsimplices of the boundary facets.
   ///
-  /// These span the boundary subcomplex; their complement spans the
+  /// These span the boundary subcomplex. Their complement spans the
   /// relative cochain complex of the pair $(K, diff K)$.
   pub fn boundary_simplices(&self, dim: Dim) -> Vec<SimplexIdx> {
     self
@@ -293,7 +293,7 @@ mod test {
     for dim in (1..=3usize).map(Dim::from) {
       let topology = CartesianTopology::cube(dim, 3).triangulate();
 
-      // Vertices are exactly 0..nvertices, each labelled by its own kidx.
+      // Vertices are exactly 0..nvertices, each labeled by its own kidx.
       let vertices = topology.skeleton(Dim::new(0));
       for (kidx, vertex) in vertices.iter().enumerate() {
         assert_eq!(vertex.vertices, vec![kidx]);

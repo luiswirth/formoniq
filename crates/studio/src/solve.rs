@@ -1,15 +1,15 @@
 //! The one expensive thing the viewer does, expressed as a value.
 //!
-//! A build is a **request** (a mesh and a study) and an **outcome** (the fields
+//! A build is a request (a mesh and a study) and an outcome (the fields
 //! that study produced on it), not a closure. That shape is forced by the web:
 //! the work has to cross a `postMessage` boundary into a worker, and a closure
-//! cannot cross one. Native pays nothing for it -- a thread runs
+//! cannot cross one. Native pays nothing for it, a thread runs
 //! [`SolveRequest::run`] and sends the outcome back, which is what it did
 //! before with a closure.
 //!
-//! The request carries the *mesh itself*, not a descriptor of it. A descriptor
+//! The request carries the mesh itself, not a descriptor of it. A descriptor
 //! would be smaller, and would work for every mesh the gallery can regenerate,
-//! and would silently exclude the one case that matters most -- a mesh the
+//! and would silently exclude the one case that matters most, a mesh the
 //! reader loaded themselves, which exists nowhere but in memory and is exactly
 //! the mesh whose size nobody has bounded. Sending the data is what makes this
 //! general.
@@ -18,9 +18,9 @@
 //! sent it) and reassembles the [`Scene`] around them, so the topology and the
 //! coordinates never make the return trip.
 //!
-//! **Nothing here is browser-specific.** The transport is one small trait's
-//! worth of behaviour, and its two implementations are a thread ([`native`])
-//! and a worker ([`crate::web::worker`]) -- the latter living with the rest of
+//! Nothing here is browser-specific. The transport is one small trait's
+//! worth of behavior, and its two implementations are a thread ([`native`])
+//! and a worker ([`crate::web::worker`]), the latter living with the rest of
 //! the browser layer, not here. This module knows only that an outcome arrives
 //! later.
 
@@ -34,7 +34,7 @@ use regge::coord::mesh::MeshCoords;
 /// A build to run: a mesh, and the study to run on it.
 ///
 /// The mesh travels as its top skeleton and its coordinates, which is exactly
-/// what [`Complex::save`] writes -- every other skeleton and every cached
+/// what [`Complex::save`] writes, every other skeleton and every cached
 /// operator is `from_cells`'s job to rederive, and a `Complex` is deliberately
 /// not serializable for that reason. Rebuilding gives back the same canonical
 /// colex order it left in, so the cochain indices in the outcome line up with
@@ -47,7 +47,7 @@ pub(crate) struct SolveRequest {
 }
 
 /// What a build produces: the fields, split by the render mark their reduced
-/// grade chose. Not a [`Scene`] -- that would send the mesh back to the caller
+/// grade chose. Not a [`Scene`], that would send the mesh back to the caller
 /// that supplied it.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub(crate) struct SolveOutcome {
@@ -135,7 +135,7 @@ use crate::web::worker as backend;
 use native as backend;
 
 /// The native transport: a thread and a channel. The request moves into the
-/// thread whole, so there is nothing to serialize -- the encoding above exists
+/// thread whole, so there is nothing to serialize, the encoding above exists
 /// for the web's sake and native never pays for it.
 #[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod native {
@@ -192,7 +192,7 @@ mod tests {
     }
   }
 
-  /// The outcome round-trips too -- it is what comes back from the worker --
+  /// The outcome round-trips too: it is what comes back from the worker,
   /// and rebuilds the same scene against the mesh the caller kept.
   #[test]
   fn an_outcome_survives_the_return_trip() {

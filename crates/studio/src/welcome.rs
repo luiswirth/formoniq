@@ -4,8 +4,8 @@
 //! The greeting differs by platform because the two viewers genuinely do: what
 //! a native reader can reach (local files, the keyboard fly) a browser one
 //! cannot, and the browser's own terms (WebGPU, the solve in a worker) are not
-//! the desktop's. The persistence is likewise split at the one real seam -- a
-//! marker file natively, `localStorage` on the web -- with the web half living
+//! the desktop's. The persistence is likewise split at the one real seam, a
+//! marker file natively, `localStorage` on the web, with the web half living
 //! in `web.rs`, so nothing browser-specific leaks out of it.
 
 /// The modal's title, shared across platforms.
@@ -31,7 +31,7 @@ pub(crate) fn message() -> &'static str {
   }
 }
 
-/// Whether the welcome should be shown -- true until the reader has dismissed it
+/// Whether the welcome should be shown, true until the reader has dismissed it
 /// once, remembered across launches per platform. A failure to read the marker
 /// errs toward showing it: greeting a returning reader once more is a smaller
 /// harm than hiding it from a new one.

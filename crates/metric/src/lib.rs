@@ -39,7 +39,7 @@ fn is_symmetric(matrix: &Matrix) -> bool {
 ///
 /// On a Riemannian metric every nonzero vector is spacelike; the trichotomy
 /// only becomes non-trivial on an indefinite signature. The signed squared
-/// norm is the primitive -- a norm $sqrt(g(v, v))$ alone cannot carry the
+/// norm is the primitive, a norm $sqrt(g(v, v))$ alone cannot carry the
 /// causal character.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CausalType {
@@ -72,7 +72,7 @@ impl CausalType {
 /// volume factor, the causal trichotomy) read the signature off the metric
 /// itself rather than assuming it.
 ///
-/// **$g$ and $g^(-1)$ are one datum, not two.** The variance says which of the
+/// $g$ and $g^(-1)$ are one datum, not two. The variance says which of the
 /// two this is: covariant is the metric tensor $g$, which measures vectors;
 /// contravariant is $g^(-1)$, which measures covectors. [`Self::dual`] is the
 /// exact passage between them and [`Self::measuring`] asks for the one that
@@ -81,7 +81,7 @@ impl CausalType {
 /// determines the other, either may be handed to an operation and the answer
 /// is the same.
 ///
-/// The dense matrix is the *representation*, not the identity: `det`, `dual`
+/// The dense matrix is the representation, not the identity: `det`, `dual`
 /// and the pullback are matrix operations with optimized implementations, which
 /// is why the matrix is what is stored.
 #[derive(Debug, Clone)]
@@ -137,7 +137,7 @@ impl Metric {
   /// The Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$ in the mostly-plus
   /// convention: the timelike direction is basis vector $0$, the remaining
   /// $n - 1$ are spacelike, signature $(n - 1, 1)$. The flat model of a
-  /// Lorentzian manifold; its spatial block is exactly `euclidean(n - 1)`, which
+  /// Lorentzian manifold. Its spatial block is exactly `euclidean(n - 1)`, which
   /// is how the Riemannian world sits inside the Lorentzian one.
   pub fn minkowski(dim: Dim) -> Self {
     assert!(dim >= 1, "Minkowski space has at least the time axis.");
@@ -256,12 +256,12 @@ impl Metric {
   /// inherits by measuring those images with $g$. For definite $g$, injective
   /// $J$ (full column rank) keeps the result a metric; for indefinite $g$ the
   /// pullback onto a proper subspace can be degenerate (a null subspace), so
-  /// only square invertible $J$ -- e.g. the affine child-cell Jacobians of a
-  /// simplex subdivision -- is guaranteed to stay a metric, with the same
+  /// only square invertible $J$, e.g. the affine child-cell Jacobians of a
+  /// simplex subdivision, is guaranteed to stay a metric, with the same
   /// signature by Sylvester's law of inertia.
   ///
   /// The variance is preserved: a pullback of $g$ is a $g$ on the domain, and
-  /// pulling back $g^(-1)$ along $J$ is *not* the inverse of the pulled-back
+  /// pulling back $g^(-1)$ along $J$ is not the inverse of the pulled-back
   /// $g$ unless $J$ is invertible. Take the dual after pulling back, not
   /// before.
   pub fn pullback(&self, jacobian: &Matrix) -> Self {
@@ -282,7 +282,7 @@ impl Metric {
   }
   /// Cosine of the angle between basis vectors `i` and `j`.
   ///
-  /// An angle presupposes a definite metric; on an indefinite one the
+  /// An angle presupposes a definite metric. On an indefinite one the
   /// Cauchy-Schwarz bound fails and this quotient is not a cosine.
   pub fn basis_angle_cos(&self, i: usize, j: usize) -> f64 {
     self.basis_inner(i, j) / self.basis_norm(i) / self.basis_norm(j)
@@ -350,7 +350,7 @@ impl Metric {
   }
   /// Magnitude $sqrt(abs(g(v, v)))$. On an indefinite metric this is
   /// meaningful only together with the causal character
-  /// ([`Self::causal_type`]); it is never NaN.
+  /// ([`Self::causal_type`]). It is never NaN.
   pub fn norm(&self, v: &Vector) -> f64 {
     self.norm_sq(v).abs().sqrt()
   }
@@ -394,7 +394,7 @@ mod tests {
 
   #[test]
   fn nonstandard_metric_angle_matches_definition() {
-    // A metric that stretches the second axis; the coordinate axes stay
+    // A metric that stretches the second axis. The coordinate axes stay
     // g-orthogonal, but a diagonal vector no longer bisects them.
     let g = Metric::new(
       Variance::Covariant,
@@ -525,7 +525,7 @@ mod tests {
   }
 
   /// The flat models carry their signature by construction: signature
-  /// $(p, q)$, determinant sign $(-1)^q$, unit volume factor -- swept over
+  /// $(p, q)$, determinant sign $(-1)^q$, unit volume factor, swept over
   /// every signature up to dimension 4, the Euclidean $q = 0$ and the empty
   /// $0 times 0$ form included.
   #[test]
@@ -558,7 +558,7 @@ mod tests {
   }
 
   /// The causal trichotomy on Minkowski space: the time axis is timelike, the
-  /// space axes spacelike, the light-cone diagonal null -- and the magnitude
+  /// space axes spacelike, the light-cone diagonal null, and the magnitude
   /// is never NaN, on either side of the cone.
   #[test]
   fn minkowski_causal_types() {

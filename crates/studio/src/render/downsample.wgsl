@@ -38,7 +38,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //
     // An even mean was right while the target was 8-bit and everything in it was
     // bounded by 1. In HDR it is not: one subsample of a bright filament can
-    // be many times its neighbours, so it alone decides the pixel, and as
+    // be many times its neighbors, so it alone decides the pixel, and as
     // the filament drifts sub-pixel between frames the pixel flickers -- the
     // firefly. Weighting each subsample down by its own brightness is what makes
     // the mean stable under that motion. It costs a slight understatement of a
