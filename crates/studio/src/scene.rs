@@ -1361,9 +1361,17 @@ fn mean_speed_flux(
     .sharp(topology, metric);
 
   let cells = topology.cells();
+  // The magnitude of a vector field is its metric norm, not the Euclidean
+  // length of its components in a cell's own frame: those agree only where the
+  // cell's metric is the identity, so a stretched mesh would be scaled wrong.
   let mean: f64 = cells
     .handle_iter()
-    .map(|cell| probe.at(&ChartExt::barycenter(cell)).components().norm())
+    .map(|cell| {
+      metric::tensor::TensorExt::norm(
+        &probe.at(&ChartExt::barycenter(cell)),
+        &metric.cell_metric(cell),
+      )
+    })
     .sum::<f64>()
     / cells.len().max(1) as f64;
 
