@@ -11,6 +11,13 @@ use rayon::prelude::*;
 
 pub type GalMat = CooMatrix;
 /// Assembly algorithm for the Galerkin Matrix.
+///
+/// The local-to-global map is streamed per cell rather than taken from a
+/// materialized [`FaceIncidence`](simplicial::topology::incidence::FaceIncidence).
+/// A scatter needs only the forward reading, which a cell already enumerates,
+/// where that type's reason to exist is holding the converse alongside it: the
+/// gather of [`crate::matfree`] is what needs both. Building it here costs
+/// about twice the assembly time on a 3D grid of 80k cells and buys nothing.
 pub fn assemble_galmat(
   topology: &Complex,
   geometry: &MeshLengthsSq,
