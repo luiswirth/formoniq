@@ -1,4 +1,7 @@
-use crate::{ApproxInverse, InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterion};
+use crate::{
+  ApproxInverse, InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterion,
+  trivial_solve,
+};
 
 /// Solve $A x = b$ by the stationary (preconditioned Richardson) iteration
 /// $x_(k+1) = x_k + B(b - A x_k)$, started from zero.
@@ -16,8 +19,11 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   b: &O::Space,
   stop: StopCriterion,
 ) -> (O::Space, Report) {
+  let b_norm = b.norm();
+  if b_norm == 0.0 {
+    return trivial_solve(b);
+  }
   let mut x = b.zeros_like();
-  let b_norm = b.norm().max(f64::MIN_POSITIVE);
   let mut converged;
   let mut iters = 0;
   let residual = loop {
@@ -42,6 +48,27 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
       converged,
     },
   )
+}
+
+/// Refine `x` toward solving $A x = b$ by `count` stationary steps
+/// $x <- x + B(b - A x)$, continuing from the incoming `x`.
+///
+/// The one place the stationary step is written. A [`Stationary`] preconditioner
+/// is this started from zero, and a multigrid level's smoothing is this
+/// continuing from the iterate the coarse correction left behind.
+pub fn sweeps<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
+  op: &O,
+  precond: &B,
+  b: &O::Space,
+  x: &mut O::Space,
+  count: usize,
+) {
+  for _ in 0..count {
+    let mut residual = op.apply(x);
+    residual.scale(-1.0);
+    residual.add(b);
+    x.add(&precond.apply(&residual));
+  }
 }
 
 /// A fixed number of stationary sweeps, packaged as an approximate inverse,
@@ -76,12 +103,7 @@ impl<O: LinearOperator, B: ApproxInverse<Space = O::Space>> ApproxInverse for St
   }
   fn apply(&self, r: &Self::Space) -> Self::Space {
     let mut x = r.zeros_like();
-    for _ in 0..self.sweeps {
-      let mut resid = self.op.apply(&x);
-      resid.scale(-1.0);
-      resid.add(r);
-      x.add(&self.precond.apply(&resid));
-    }
+    sweeps(self.op, &self.precond, r, &mut x, self.sweeps);
     x
   }
 }
@@ -91,3 +113,49 @@ impl<O: LinearOperator, B: ApproxInverse<Space = O::Space>> ApproxInverse for St
 /// since $(I - B A)^j B = B (I - A B)^j$. Positive-definiteness additionally
 /// needs the sweeps to converge, the constructor's promise as everywhere.
 impl<O: LinearOperator, B: SelfAdjoint<Space = O::Space>> SelfAdjoint for Stationary<'_, O, B> {}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+  use crate::testutil::{csr, tridiag};
+  use crate::{Jacobi, Vector};
+  use na::DMatrix;
+
+  /// Stationary Jacobi iteration converges to the true solution on a
+  /// diagonally dominant SPD system, at a rate set by $rho(I - D^(-1) A)$.
+  #[test]
+  fn stationary_converges_to_the_solution() {
+    let dense = tridiag(8, 4.0, 1.0);
+    let a = csr(&dense);
+    let x_true = Vector::from_fn(8, |i, _| (i as f64 - 3.5).sin());
+    let b = &dense * &x_true;
+
+    let (x, report) = solve(&a, &Jacobi::new(&a), &b, StopCriterion::rtol(1e-10));
+    assert!(report.converged);
+    assert!((x - x_true).norm() < 1e-8);
+
+    // The iteration count is governed by the spectral radius, not free: the
+    // predicted geometric rate bounds it (with slack for the 2-norm transient).
+    let n = dense.nrows();
+    let dinv = DMatrix::from_diagonal(&dense.diagonal().map(|d| 1.0 / d));
+    let rho = (DMatrix::identity(n, n) - dinv * &dense)
+      .complex_eigenvalues()
+      .iter()
+      .map(|c| c.norm())
+      .fold(0.0, f64::max);
+    let predicted = (1e-10_f64.ln() / rho.ln()).ceil() as usize;
+    assert!(rho < 1.0 && report.iters <= 3 * predicted + 10);
+  }
+
+  /// A fixed number of Jacobi sweeps is itself self-adjoint, the promise the
+  /// `SelfAdjoint for Stationary` impl makes, and the basis of nesting it inside
+  /// a Krylov method.
+  #[test]
+  fn stationary_sweeps_are_self_adjoint() {
+    let a = csr(&tridiag(6, 4.0, 1.0));
+    let sweeps = Stationary::new(&a, Jacobi::new(&a), 3);
+    let r = Vector::from_fn(6, |i, _| (i as f64).cos());
+    let s = Vector::from_fn(6, |i, _| (2.0 * i as f64 + 1.0).sin());
+    assert!((sweeps.apply(&r).dot(&s) - r.dot(&sweeps.apply(&s))).abs() < 1e-12);
+  }
+}

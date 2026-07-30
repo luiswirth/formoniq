@@ -40,8 +40,10 @@ Entry-needing preconditioners (a diagonal, a triangular sweep)
 take the assembled sparse matrix at construction,
 and say so by pinning their space to the host vector.
 Everything else is matrix-free.
-Consumers are generic over the operator and the preconditioner, monomorphized,
-with no dynamic dispatch on the assembly-driven apply path.
+Consumers are generic over the operator and the preconditioner, monomorphized.
+The one boxed piece is an auxiliary-space correction,
+where the spaces genuinely differ in type,
+and it costs one dispatch per Krylov step against a matvec-dominated apply.
 
 Two composition objects build a strong preconditioner from these pieces:
 `VCycle`, a geometric multigrid hierarchy that coarsens in space,
