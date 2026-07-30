@@ -138,18 +138,41 @@ impl std::ops::Index<EdgeIdx> for SimplexLengthsSq {
 
 /// Distance Geometry
 impl SimplexLengthsSq {
+  /// The signed squared distance between two vertices: the stored Regge datum,
+  /// and zero along the diagonal.
+  pub fn vertex_dist_sq(&self, vi: usize, vj: usize) -> f64 {
+    if vi == vj {
+      0.0
+    } else {
+      self[edge_index(vi.min(vj), vi.max(vj))]
+    }
+  }
+
+  /// The interior angle at vertex `v` between its edges to `a` and `b`, by the
+  /// law of cosines on that corner's three squared lengths.
+  ///
+  /// Intrinsic, needing neither coordinates nor a Gramian: an angle is a
+  /// function of three edge lengths, which is the Regge datum itself.
+  ///
+  /// An angle presupposes a definite corner, so on a Lorentzian simplex the
+  /// quotient leaves $[-1, 1]$ and the result is NaN, the same failure of the
+  /// Cauchy-Schwarz bound that makes an angle meaningless on an indefinite
+  /// form.
+  pub fn vertex_angle(&self, v: usize, a: usize, b: usize) -> f64 {
+    let (d_va, d_vb, d_ab) = (
+      self.vertex_dist_sq(v, a),
+      self.vertex_dist_sq(v, b),
+      self.vertex_dist_sq(a, b),
+    );
+    ((d_va + d_vb - d_ab) / (2.0 * (d_va * d_vb).sqrt())).acos()
+  }
+
   /// The matrix of signed squared distances between the vertices: exactly the
   /// stored Regge data, symmetrized.
   pub fn distance_matrix(&self) -> Matrix {
-    let mut mat = Matrix::zeros(self.nvertices(), self.nvertices());
-
-    for (iedge, edge) in combinations(self.nvertices(), 2).enumerate() {
-      let (vi, vj) = (edge.index_at(0), edge.index_at(1));
-      let dist_sq = self.lengths_sq[iedge];
-      mat[(vi, vj)] = dist_sq;
-      mat[(vj, vi)] = dist_sq;
-    }
-    mat
+    Matrix::from_fn(self.nvertices(), self.nvertices(), |vi, vj| {
+      self.vertex_dist_sq(vi, vj)
+    })
   }
   pub fn cayley_menger_matrix(&self) -> Matrix {
     let mut mat = self.distance_matrix();
