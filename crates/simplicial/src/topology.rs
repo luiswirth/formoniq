@@ -1,4 +1,5 @@
 pub mod chain;
+pub mod cohomology;
 pub mod complex;
 pub mod data;
 pub mod handle;

@@ -7,6 +7,8 @@
 //! depend on `simplicial` for real reasons, not because a `Vector`/`Matrix`
 //! alias is worth a crate of its own.
 
+pub(crate) mod exact;
+
 use std::mem;
 
 trait CumsumExt {

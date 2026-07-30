@@ -1,19 +1,41 @@
 //! The chain complex of the simplicial complex, and its dual.
 //!
-//! A [`Chain`] is an element of $C_k$, a formal combination of the oriented
-//! $k$-simplices; a [`Cochain`] is an element of $C^k = "Hom"(C_k, RR)$, one
-//! coefficient per $k$-simplex. The [`pairing`] between them is what makes the
-//! second the dual of the first, and under it the boundary $diff$ and the
-//! coboundary $dif$ are adjoint, $angle.l dif omega, c angle.r = angle.l omega,
-//! diff c angle.r$.
+//! A [`Chain`] is an element of $C_k (K; R)$, a formal combination of the
+//! oriented $k$-simplices; a [`Cochain`] is an element of $C^k (K; R) =
+//! "Hom"(C_k, R)$, one coefficient per $k$-simplex. The [`pairing`] between
+//! them is what makes the second the dual of the first, and under it the
+//! boundary $diff$ and the coboundary $dif$ are adjoint, $angle.l dif omega, c
+//! angle.r = angle.l omega, diff c angle.r$.
 //!
-//! Both differentials are the same datum, the signed incidence
-//! [`Complex::incidences`], traversed in its two directions: $diff$ scatters a
-//! coface's coefficient onto its faces, $dif$ gathers a coface's coefficient
-//! from them. The two types differ in their coefficient ring, and only there:
-//! chains carry $ZZ$, so homology is computed exactly, and cochains carry $RR$
-//! and are stored as an algebraic [`Vector`], because that is what an operator
-//! multiplies and a solver returns.
+//! Both are one type, [`FreeModule`], because both *are* the free $R$-module on
+//! the $k$-simplices and nothing in the data distinguishes them. What
+//! distinguishes them is [`Variance`], and it is stated rather than derived: a
+//! chain transforms with the simplices and its differential lowers the grade, a
+//! cochain transforms against them and its differential raises it. The
+//! differential itself is written once. It is the signed incidence
+//! [`Complex::incidences`] read in the direction the variance names, $diff$
+//! scattering a coface's coefficient onto its faces and $dif$ gathering a
+//! coface's coefficient from them, so the two operators are one traversal of
+//! one relation rather than two implementations that must be kept in step.
+//!
+//! Variance being a type parameter here, where
+//! [`multialgebra`](https://docs.rs/multialgebra)'s slot variance deliberately
+//! is not, is the same rule applied to a different shape: there the datum is
+//! per-slot over a runtime number of slots, here it is one datum for the whole
+//! object and known statically, so the witness costs nothing and the omission
+//! it would leave silent cannot arise.
+//!
+//! The coefficient ring is the other axis, and it is a parameter for the same
+//! reason: the complex is defined over any ring, and this library genuinely
+//! runs over two. Over $ZZ$ the (co)homology is computed exactly and a class
+//! has representatives that are honest integer combinations; over $RR$ a
+//! cochain is what an operator multiplies and a solver returns. The defaults
+//! name the ring each side is usually asked for, so neither spelling carries a
+//! parameter it does not care about, and no operation is defined for only one
+//! ring. A ring map $R -> S$ carries the whole complex to another
+//! ([`FreeModule::extend_scalars`]) and commutes with the differentials,
+//! because an incidence coefficient is $plus.minus 1$ and every ring map fixes
+//! those.
 //!
 //! All of this is topology. A cochain becomes a *discrete differential form*
 //! only through the de Rham map, which integrates a form over each simplex and
@@ -26,118 +48,186 @@ use super::{
   handle::{KSimplexIdx, SimplexIdx, SimplexRef},
   skeleton::Skeleton,
 };
-use crate::Dim;
 use crate::linalg::Vector;
+use crate::{Dim, Sign};
+
+use num_traits::Zero;
+use std::{marker::PhantomData, ops::Neg};
 
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
 
-/// An integer $k$-chain: a formal $ZZ$-combination $sum_sigma c_sigma sigma$ of
-/// the k-simplices, coefficients in colex order (indexed by [`KSimplexIdx`]).
+/// The coefficient ring of a [`FreeModule`].
 ///
-/// An element of the chain group $C_k$. Pure combinatorics, carrying no metric
-/// and no geometry.
+/// A blanket alias, so a ring is a coefficient ring by being one. The bounds
+/// are what the operations actually consume, and they are less than a ring:
+/// the differentials need only the additive group, since an incidence
+/// coefficient is $plus.minus 1$ and is applied as an addition or a
+/// subtraction. Multiplication enters in the [`pairing`] and in scaling alone.
+pub trait Coefficient:
+  na::Scalar
+  + Zero
+  + na::ClosedAddAssign
+  + na::ClosedSubAssign
+  + na::ClosedMulAssign
+  + Neg<Output = Self>
+{
+}
+impl<R> Coefficient for R where
+  R: na::Scalar
+    + Zero
+    + na::ClosedAddAssign
+    + na::ClosedSubAssign
+    + na::ClosedMulAssign
+    + Neg<Output = R>
+{
+}
+
+/// Which of the two dual complexes a [`FreeModule`] belongs to: the direction
+/// its differential runs, and which end of an incidence it reads.
+///
+/// The datum has no representational footprint, $C_k$ and $C^k$ being free
+/// modules of the same rank on the same simplices, so it is stated by the type
+/// and never inferred from a value.
+pub trait Variance {
+  /// The grade the differential lands in: one below for a chain, one above for
+  /// a cochain.
+  fn target(grade: Dim) -> Dim;
+  /// The rung of [`Complex::incidences`] connecting the two grades, which is
+  /// the lower of them.
+  fn rung(grade: Dim) -> Dim;
+  /// One incidence resolved into the coordinate read from and the coordinate
+  /// written to.
+  fn traverse(face: KSimplexIdx, coface: KSimplexIdx) -> (KSimplexIdx, KSimplexIdx);
+}
+
+/// The variance of a [`Chain`]: covariant, its differential the boundary
+/// $diff_k: C_k -> C_(k-1)$.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Homological;
+impl Variance for Homological {
+  fn target(grade: Dim) -> Dim {
+    grade - 1
+  }
+  fn rung(grade: Dim) -> Dim {
+    grade - 1
+  }
+  fn traverse(face: KSimplexIdx, coface: KSimplexIdx) -> (KSimplexIdx, KSimplexIdx) {
+    (coface, face)
+  }
+}
+
+/// The variance of a [`Cochain`]: contravariant, its differential the
+/// coboundary $dif^k: C^k -> C^(k+1)$.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct Cohomological;
+impl Variance for Cohomological {
+  fn target(grade: Dim) -> Dim {
+    grade + 1
+  }
+  fn rung(grade: Dim) -> Dim {
+    grade
+  }
+  fn traverse(face: KSimplexIdx, coface: KSimplexIdx) -> (KSimplexIdx, KSimplexIdx) {
+    (face, coface)
+  }
+}
+
+/// The free $R$-module on the $k$-simplices, of the variance `V`: one
+/// coefficient per simplex of one grade, in colex order (indexed by
+/// [`KSimplexIdx`]).
+///
+/// [`Chain`] and [`Cochain`] are its two instantiations. Pure combinatorics,
+/// carrying no metric and no geometry.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Chain {
-  grade: Dim,
-  coeffs: Vec<i64>,
-}
-impl Chain {
-  /// A chain from its coefficients, one per $k$-simplex in colex order.
-  pub fn new(grade: impl Into<Dim>, coeffs: Vec<i64>) -> Self {
-    Self {
-      grade: grade.into(),
-      coeffs,
-    }
-  }
-
-  pub fn grade(&self) -> Dim {
-    self.grade
-  }
-  /// The coefficient of each k-simplex, in colex order.
-  pub fn coeffs(&self) -> &[i64] {
-    &self.coeffs
-  }
-  /// The simplices carrying a nonzero coefficient, with that coefficient: the
-  /// support of the chain.
-  pub fn support(&self) -> impl Iterator<Item = (KSimplexIdx, i64)> {
-    self
-      .coeffs
-      .iter()
-      .enumerate()
-      .filter(|&(_, &c)| c != 0)
-      .map(|(kidx, &c)| (kidx, c))
-  }
-
-  /// The boundary $diff_k: C_k -> C_(k-1)$: the incidence relation scattered
-  /// downward, restricted to the chain's support.
-  ///
-  /// Exact over $ZZ$: the incidence coefficients are $plus.minus 1$, so the
-  /// chain complex stays integral and $diff compose diff = 0$ holds without
-  /// rounding.
-  ///
-  /// Total at the ends. Below grade zero there is nothing to bound, and the
-  /// complex extends by zero either way, so the result is the empty chain
-  /// rather than a panic.
-  pub fn boundary(&self, topology: &Complex) -> Self {
-    if self.grade == 0 {
-      return Self::new(self.grade - 1, Vec::new());
-    }
-    let mut coeffs = vec![0i64; topology.nsimplices(self.grade - 1)];
-    let skeleton = topology.skeleton(self.grade);
-    for (kidx, multiplicity) in self.support() {
-      for (sign, face) in skeleton.handle_by_kidx(kidx).boundary() {
-        coeffs[face.kidx()] += sign.as_i32() as i64 * multiplicity;
-      }
-    }
-    Self::new(self.grade - 1, coeffs)
-  }
-}
-
-/// A $k$-cochain: one real coefficient per $k$-simplex of the skeleton.
-///
-/// An element of $C^k = "Hom"(C_k, RR)$, the dual of the chain group, hence a
-/// vector space of dimension the number of $k$-simplices.
-#[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Cochain {
-  coeffs: Vector,
+#[cfg_attr(
+  feature = "serde",
+  serde(bound(
+    serialize = "R: serde::Serialize",
+    deserialize = "R: serde::Deserialize<'de>"
+  ))
+)]
+pub struct FreeModule<V: Variance, R: Coefficient> {
   grade: Dim,
+  coeffs: Vector<R>,
+  #[cfg_attr(feature = "serde", serde(skip))]
+  variance: PhantomData<V>,
 }
-impl Cochain {
-  pub fn new(grade: impl Into<Dim>, coeffs: Vector) -> Self {
+
+/// An integer $k$-chain: a formal $ZZ$-combination $sum_sigma c_sigma sigma$ of
+/// the $k$-simplices, an element of the chain group $C_k$.
+///
+/// $ZZ$ by default because that is the ring homology is computed over: the
+/// classes are integral and a representative is an honest combination of
+/// simplices, not a rounding of one.
+pub type Chain<R = i64> = FreeModule<Homological, R>;
+
+/// A $k$-cochain: one coefficient per $k$-simplex, an element of
+/// $C^k = "Hom"(C_k, R)$, the dual of the chain group.
+///
+/// $RR$ by default because that is the ring the analysis runs over: an operator
+/// multiplies a cochain and a solver returns one. Cohomology computed exactly
+/// asks for `Cochain<i64>` instead, the same type over the other ring.
+pub type Cochain<R = f64> = FreeModule<Cohomological, R>;
+
+/// Add or subtract a coefficient according to a sign.
+///
+/// The only thing a differential does with the incidence: an incidence
+/// coefficient is $plus.minus 1$ in every ring, so no ring element ever
+/// represents the sign and no multiplication is performed.
+fn accumulate<R: Coefficient>(target: &mut R, sign: Sign, value: &R) {
+  match sign {
+    Sign::Pos => *target += value.clone(),
+    Sign::Neg => *target -= value.clone(),
+  }
+}
+
+impl<V: Variance, R: Coefficient> FreeModule<V, R> {
+  /// From the coefficients, one per $k$-simplex in colex order.
+  pub fn new(grade: impl Into<Dim>, coeffs: Vector<R>) -> Self {
     Self {
-      coeffs,
       grade: grade.into(),
+      coeffs,
+      variance: PhantomData,
     }
   }
-  pub fn constant(value: f64, skeleton: &Skeleton) -> Self {
-    let ncoeffs = skeleton.len();
-    Self::new(skeleton.dim(), Vector::from_element(ncoeffs, value))
+  /// From the coefficients as a plain vector, one per $k$-simplex in colex
+  /// order.
+  pub fn from_vec(grade: impl Into<Dim>, coeffs: Vec<R>) -> Self {
+    Self::new(grade, Vector::from_vec(coeffs))
+  }
+  /// The constant assignment of a coefficient to every simplex of a skeleton.
+  pub fn constant(value: R, skeleton: &Skeleton) -> Self {
+    Self::new(skeleton.dim(), Vector::from_element(skeleton.len(), value))
   }
   pub fn zero(skeleton: &Skeleton) -> Self {
-    Self::constant(0.0, skeleton)
+    Self::constant(R::zero(), skeleton)
   }
+  /// From a function of the simplex, evaluated over the grade's skeleton in
+  /// colex order.
   pub fn from_function<F>(f: F, grade: impl Into<Dim>, topology: &Complex) -> Self
   where
-    F: FnMut(SimplexRef) -> f64,
+    F: FnMut(SimplexRef) -> R,
   {
     let grade = grade.into();
     let skeleton = topology.skeleton(grade);
-    let coeffs = Vector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f));
-    Self::new(grade, coeffs)
+    Self::new(
+      grade,
+      Vector::from_iterator(skeleton.len(), skeleton.handle_iter().map(f)),
+    )
   }
 
   pub fn grade(&self) -> Dim {
     self.grade
   }
-  pub fn coeffs(&self) -> &Vector {
+  pub fn coeffs(&self) -> &Vector<R> {
     &self.coeffs
   }
-  pub fn coeffs_mut(&mut self) -> &mut Vector {
+  pub fn coeffs_mut(&mut self) -> &mut Vector<R> {
     &mut self.coeffs
   }
-  pub fn into_coeffs(self) -> Vector {
+  pub fn into_coeffs(self) -> Vector<R> {
     self.coeffs
   }
   pub fn len(&self) -> usize {
@@ -147,17 +237,68 @@ impl Cochain {
     self.coeffs.is_empty()
   }
 
-  /// The coboundary $dif: C^k -> C^(k+1)$: the incidence relation gathered
-  /// upward, the transpose of [`Chain::boundary`].
+  /// The simplices carrying a nonzero coefficient, with that coefficient: the
+  /// support.
+  pub fn support(&self) -> impl Iterator<Item = (KSimplexIdx, &R)> {
+    self.coeffs.iter().enumerate().filter(|(_, c)| !c.is_zero())
+  }
+
+  /// The differential of the complex: the boundary $diff$ on a chain, the
+  /// coboundary $dif$ on a cochain.
   ///
-  /// Total at the top, where there are no cofaces and the image is the empty
-  /// cochain of the zero space $C^(n+1)$.
-  pub fn dif(&self, topology: &Complex) -> Self {
-    let mut coeffs = Vector::zeros(topology.nsimplices(self.grade + 1));
-    for (sign, face, coface) in topology.incidences(self.grade) {
-      coeffs[coface] += sign.as_f64() * self.coeffs[face];
+  /// One traversal of the signed incidence [`Complex::incidences`], the
+  /// variance deciding which of its two ends is read from and which is written
+  /// to. Exact over any ring: the incidence coefficients are $plus.minus 1$, so
+  /// $diff compose diff = 0$ and $dif compose dif = 0$ hold without rounding.
+  ///
+  /// Total at both ends. Off the range $0 <= k <= n$ the complex extends by the
+  /// zero module, the incidence rung is empty and the target skeleton has no
+  /// simplices, so the result is the empty element of that zero module rather
+  /// than a panic, with no case distinction to make it so.
+  pub fn differential(&self, topology: &Complex) -> Self {
+    let target = V::target(self.grade);
+    let mut coeffs = Vector::zeros(topology.nsimplices(target));
+    for (sign, face, coface) in topology.incidences(V::rung(self.grade)) {
+      let (from, to) = V::traverse(face, coface);
+      accumulate(&mut coeffs[to], sign, &self.coeffs[from]);
     }
-    Self::new(self.grade + 1, coeffs)
+    Self::new(target, coeffs)
+  }
+
+  /// The image under a ring map $R -> S$: the extension of scalars
+  /// $C(K; R) -> C(K; S)$.
+  ///
+  /// It commutes with the differential, since a ring map fixes $plus.minus 1$.
+  /// The caller owes that `ring_map` is one; an arbitrary function of the
+  /// coefficients is not, and its image is not a map of complexes.
+  pub fn extend_scalars<S: Coefficient>(&self, ring_map: impl FnMut(&R) -> S) -> FreeModule<V, S> {
+    FreeModule::new(
+      self.grade,
+      Vector::from_iterator(self.coeffs.len(), self.coeffs.iter().map(ring_map)),
+    )
+  }
+
+  /// Whether this could live on `topology`: same grade, one coefficient per
+  /// simplex of that grade.
+  pub fn is_compatible_with(&self, topology: &Complex) -> bool {
+    self.grade <= topology.dim() && self.len() == topology.skeleton(self.grade).len()
+  }
+}
+
+impl<R: Coefficient> Chain<R> {
+  /// The boundary $diff_k: C_k -> C_(k-1)$: the incidence relation scattered
+  /// downward, the [`differential`](FreeModule::differential) of this variance.
+  pub fn boundary(&self, topology: &Complex) -> Self {
+    self.differential(topology)
+  }
+}
+
+impl<R: Coefficient> Cochain<R> {
+  /// The coboundary $dif^k: C^k -> C^(k+1)$: the incidence relation gathered
+  /// upward, the [`differential`](FreeModule::differential) of this variance
+  /// and the transpose of [`Chain::boundary`].
+  pub fn dif(&self, topology: &Complex) -> Self {
+    self.differential(topology)
   }
 
   /// The restriction to a subsimplex: the pullback along the inclusion
@@ -171,40 +312,51 @@ impl Cochain {
   /// so each face's coefficient is read off with no sign. A grade exceeding
   /// `simplex.dim()` has no faces of that grade and restricts to the empty
   /// cochain, which is how it stays total below the cochain's grade.
+  ///
+  /// A restriction, hence contravariant, which is why it is a cochain
+  /// operation: a chain pushes forward along an inclusion rather than pulling
+  /// back.
   pub fn trace(&self, simplex: SimplexRef) -> Self {
-    let coeffs: Vec<f64> = simplex.faces(self.grade).map(|face| self[face]).collect();
-    Self::new(self.grade, Vector::from_vec(coeffs))
-  }
-
-  /// Whether this could be a cochain on `topology`: same grade, one
-  /// coefficient per simplex of that grade.
-  pub fn is_compatible_with(&self, topology: &Complex) -> bool {
-    self.grade <= topology.dim() && self.len() == topology.skeleton(self.grade).len()
+    let coeffs: Vec<R> = simplex
+      .faces(self.grade())
+      .map(|face| self[face].clone())
+      .collect();
+    Self::new(self.grade(), Vector::from_vec(coeffs))
   }
 
   #[cfg(feature = "serde")]
-  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
+  pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()>
+  where
+    R: serde::Serialize,
+  {
     crate::io::cbor::save_cbor(self, path)
   }
   #[cfg(feature = "serde")]
-  pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
+  pub fn load(path: impl AsRef<Path>) -> io::Result<Self>
+  where
+    R: serde::de::DeserializeOwned,
+  {
     crate::io::cbor::load_cbor(path)
   }
 }
 
 /// The duality pairing $angle.l omega, c angle.r = sum_sigma omega_sigma
-/// c_sigma$ of a cochain with a chain of the same grade.
+/// c_sigma$ of a cochain with a chain of the same grade over the same ring.
 ///
 /// The pairing that makes $C^k$ the dual of $C_k$. Under it $diff$ and $dif$
 /// are adjoint, $angle.l dif omega, c angle.r = angle.l omega, diff c
 /// angle.r$, which is why the coboundary is the transpose of the boundary.
+///
+/// One ring, since a bilinear map is over one: a $ZZ$-chain meets an
+/// $RR$-cochain by [`extending its scalars`](FreeModule::extend_scalars) first,
+/// which names the ring map instead of leaving it implicit.
 ///
 /// A free function, not a method: a pairing is a bilinear map on two spaces and
 /// privileges neither of them.
 ///
 /// # Panics
 /// If the grades or the lengths disagree.
-pub fn pairing(cochain: &Cochain, chain: &Chain) -> f64 {
+pub fn pairing<R: Coefficient>(cochain: &Cochain<R>, chain: &Chain<R>) -> R {
   assert_eq!(
     cochain.grade(),
     chain.grade(),
@@ -218,35 +370,18 @@ pub fn pairing(cochain: &Cochain, chain: &Chain) -> f64 {
   cochain
     .coeffs()
     .iter()
-    .zip(chain.coeffs())
-    .map(|(coefficient, multiplicity)| coefficient * *multiplicity as f64)
-    .sum()
+    .zip(chain.coeffs().iter())
+    .fold(R::zero(), |acc, (coefficient, multiplicity)| {
+      acc + coefficient.clone() * multiplicity.clone()
+    })
 }
 
-/// A chain is columnar data over one grade: the multiplicity of each
-/// $k$-simplex, keyed by its id.
-impl SkeletonData for Chain {
-  type Item<'a>
-    = &'a i64
-  where
-    Self: 'a;
-  fn grade(&self) -> Dim {
-    self.grade
-  }
-  fn len(&self) -> usize {
-    self.coeffs.len()
-  }
-  fn at(&self, kidx: KSimplexIdx) -> &i64 {
-    &self.coeffs[kidx]
-  }
-}
-
-/// A cochain is columnar data over one grade, read like any other: the
-/// coefficient of a $k$-simplex, keyed by its id.
+/// A chain or a cochain is columnar data over one grade, read like any other:
+/// the coefficient of a $k$-simplex, keyed by its id.
 ///
 /// The storage stays an algebraic [`Vector`], not a
-/// [`SkeletonVec`](super::data::SkeletonVec), because a cochain is a vector:
-/// the coboundary multiplies it and a solver returns it. The trait carries the
+/// [`SkeletonVec`](super::data::SkeletonVec), because both are vectors: the
+/// differential multiplies them and a solver returns one. The trait carries the
 /// reading, the type keeps its own representation.
 ///
 /// Shape alone does not make two such columns the same object. A geometry's
@@ -255,9 +390,9 @@ impl SkeletonData for Chain {
 /// cochain's is linear and changes sign with it. They sit on the two sides of
 /// $Lambda^1 times.circle Lambda^1 = Lambda^2 plus.circle "Sym"^2$: the
 /// coboundary acts on this one, and not on that one.
-impl SkeletonData for Cochain {
+impl<V: Variance, R: Coefficient> SkeletonData for FreeModule<V, R> {
   type Item<'a>
-    = &'a f64
+    = &'a R
   where
     Self: 'a;
   fn grade(&self) -> Dim {
@@ -266,90 +401,93 @@ impl SkeletonData for Cochain {
   fn len(&self) -> usize {
     self.coeffs.len()
   }
-  fn at(&self, kidx: KSimplexIdx) -> &f64 {
+  fn at(&self, kidx: KSimplexIdx) -> &R {
     &self.coeffs[kidx]
   }
 }
 
-impl std::ops::Index<SimplexIdx> for Cochain {
-  type Output = f64;
+impl<V: Variance, R: Coefficient> std::ops::Index<SimplexIdx> for FreeModule<V, R> {
+  type Output = R;
   fn index(&self, idx: SimplexIdx) -> &Self::Output {
     assert_eq!(idx.dim(), self.grade());
     &self.coeffs[idx.kidx]
   }
 }
-impl std::ops::IndexMut<SimplexIdx> for Cochain {
+impl<V: Variance, R: Coefficient> std::ops::IndexMut<SimplexIdx> for FreeModule<V, R> {
   fn index_mut(&mut self, idx: SimplexIdx) -> &mut Self::Output {
     assert_eq!(idx.dim(), self.grade());
     &mut self.coeffs[idx.kidx]
   }
 }
 
-impl std::ops::Index<SimplexRef<'_>> for Cochain {
-  type Output = f64;
+impl<V: Variance, R: Coefficient> std::ops::Index<SimplexRef<'_>> for FreeModule<V, R> {
+  type Output = R;
   fn index(&self, handle: SimplexRef<'_>) -> &Self::Output {
     assert_eq!(handle.dim(), self.grade());
     &self.coeffs[handle.kidx()]
   }
 }
-impl std::ops::IndexMut<SimplexRef<'_>> for Cochain {
+impl<V: Variance, R: Coefficient> std::ops::IndexMut<SimplexRef<'_>> for FreeModule<V, R> {
   fn index_mut(&mut self, idx: SimplexRef<'_>) -> &mut Self::Output {
     assert_eq!(idx.dim(), self.grade());
     &mut self.coeffs[idx.kidx()]
   }
 }
 
-impl std::ops::Index<usize> for Cochain {
-  type Output = f64;
+impl<V: Variance, R: Coefficient> std::ops::Index<usize> for FreeModule<V, R> {
+  type Output = R;
   fn index(&self, idx: usize) -> &Self::Output {
     &self.coeffs[idx]
   }
 }
 
-impl std::ops::Mul<f64> for Cochain {
-  type Output = Cochain;
-  fn mul(mut self, rhs: f64) -> Self::Output {
+impl<V: Variance, R: Coefficient> std::ops::Mul<R> for FreeModule<V, R> {
+  type Output = Self;
+  fn mul(mut self, rhs: R) -> Self::Output {
     self *= rhs;
     self
   }
 }
-impl std::ops::Mul<Cochain> for f64 {
-  type Output = Cochain;
-  fn mul(self, rhs: Cochain) -> Self::Output {
-    rhs * self
-  }
-}
-impl std::ops::MulAssign<f64> for Cochain {
-  fn mul_assign(&mut self, rhs: f64) {
+impl<V: Variance, R: Coefficient> std::ops::MulAssign<R> for FreeModule<V, R> {
+  fn mul_assign(&mut self, rhs: R) {
     self.coeffs *= rhs;
   }
 }
-impl std::ops::Neg for Cochain {
+/// Scaling from the left, which coherence cannot state generically: an
+/// `impl Mul<FreeModule<V, R>> for R` would be an implementation on a foreign
+/// type parameter. The one ring the analysis scales by gets it concretely.
+impl<V: Variance> std::ops::Mul<FreeModule<V, f64>> for f64 {
+  type Output = FreeModule<V, f64>;
+  fn mul(self, rhs: FreeModule<V, f64>) -> Self::Output {
+    rhs * self
+  }
+}
+impl<V: Variance, R: Coefficient> Neg for FreeModule<V, R> {
   type Output = Self;
   fn neg(self) -> Self::Output {
     Self::new(self.grade, -self.coeffs)
   }
 }
-impl std::ops::AddAssign for Cochain {
+impl<V: Variance, R: Coefficient> std::ops::AddAssign for FreeModule<V, R> {
   fn add_assign(&mut self, rhs: Self) {
     assert_eq!(self.grade, rhs.grade);
     self.coeffs += rhs.coeffs;
   }
 }
-impl std::ops::Add for Cochain {
+impl<V: Variance, R: Coefficient> std::ops::Add for FreeModule<V, R> {
   type Output = Self;
   fn add(mut self, rhs: Self) -> Self::Output {
     self += rhs;
     self
   }
 }
-impl std::ops::SubAssign for Cochain {
+impl<V: Variance, R: Coefficient> std::ops::SubAssign for FreeModule<V, R> {
   fn sub_assign(&mut self, rhs: Self) {
     assert_eq!(self.grade, rhs.grade);
     self.coeffs -= rhs.coeffs;
   }
 }
-impl std::ops::Sub for Cochain {
+impl<V: Variance, R: Coefficient> std::ops::Sub for FreeModule<V, R> {
   type Output = Self;
   fn sub(mut self, rhs: Self) -> Self::Output {
     self -= rhs;
@@ -369,29 +507,33 @@ mod test {
   /// A probe chain and cochain of a grade, with coefficients that are neither
   /// constant nor symmetric, so a law cannot pass by accident.
   fn probe_chain(topology: &Complex, grade: usize) -> Chain {
-    let coeffs = (0..topology.nsimplices(grade))
+    let coeffs: Vec<i64> = (0..topology.nsimplices(grade))
       .map(|i| (i % 7) as i64 - 3)
       .collect();
-    Chain::new(grade, coeffs)
+    Chain::from_vec(grade, coeffs)
   }
   fn probe_cochain(topology: &Complex, grade: usize) -> Cochain {
     Cochain::from_function(|s| ((s.kidx() % 5) as f64) - 2.0, grade, topology)
+  }
+  /// The probe chain over $RR$, so it pairs with the probe cochain.
+  fn probe_real_chain(topology: &Complex, grade: usize) -> Chain<f64> {
+    probe_chain(topology, grade).extend_scalars(|&c| c as f64)
   }
 
   /// The boundary and the coboundary are adjoint under the chain-cochain
   /// pairing: $angle.l dif omega, c angle.r = angle.l omega, diff c angle.r$.
   ///
   /// The statement that makes $C^k$ the dual complex of $C_k$ rather than
-  /// merely a vector space of the same dimension, and the reason the coboundary
-  /// is the transpose of the boundary. It holds with no metric, no orientation
-  /// and no geometry.
+  /// merely a module of the same rank, and the reason the coboundary is the
+  /// transpose of the boundary. It holds with no metric, no orientation and no
+  /// geometry.
   #[test]
   fn the_boundary_and_the_coboundary_are_adjoint() {
     for dim in 1..=3 {
       let topology = probe_complex(dim);
       for grade in 0..dim {
         let cochain = probe_cochain(&topology, grade);
-        let chain = probe_chain(&topology, grade + 1);
+        let chain = probe_real_chain(&topology, grade + 1);
 
         let differentiated = pairing(&cochain.dif(&topology), &chain);
         let bounded = pairing(&cochain, &chain.boundary(&topology));
@@ -420,7 +562,7 @@ mod test {
       let topology = probe_complex(dim);
       for grade in 0..dim - 1 {
         let cochain = probe_cochain(&topology, grade);
-        let chain = probe_chain(&topology, grade + 2);
+        let chain = probe_real_chain(&topology, grade + 2);
 
         // One step must not already vanish, or both halves below hold for the
         // wrong reason. It is checked against a chain one grade up rather than
@@ -428,7 +570,12 @@ mod test {
         // $angle.l dif omega, diff c angle.r = angle.l dif dif omega, c angle.r$,
         // which is zero for the very reason being tested.
         assert!(
-          pairing(&cochain.dif(&topology), &probe_chain(&topology, grade + 1)).abs() > 1e-9,
+          pairing(
+            &cochain.dif(&topology),
+            &probe_real_chain(&topology, grade + 1)
+          )
+          .abs()
+            > 1e-9,
           "dim {dim} grade {grade}: one step already vanishes"
         );
         let twice_up = pairing(&cochain.dif(&topology).dif(&topology), &chain);
@@ -457,14 +604,26 @@ mod test {
         let chain = probe_chain(&topology, grade);
         let boundary = chain.boundary(&topology);
         let matrix = CsrMatrix::from(topology.boundary_operator(grade.into()));
-        let applied = matrix
-          * Vector::from_iterator(
-            chain.coeffs().len(),
-            chain.coeffs().iter().map(|&c| c as f64),
-          );
+        let applied = matrix * probe_real_chain(&topology, grade).into_coeffs();
         for (kidx, &coefficient) in boundary.coeffs().iter().enumerate() {
           assert_eq!(coefficient as f64, applied[kidx]);
         }
+      }
+    }
+  }
+
+  /// Extension of scalars commutes with the differential, which is what makes
+  /// a ring map a map of complexes: an incidence coefficient is $plus.minus 1$,
+  /// and every ring map fixes those.
+  #[test]
+  fn extending_scalars_commutes_with_the_differential() {
+    for dim in 1..=3 {
+      let topology = probe_complex(dim);
+      for grade in 0..=dim {
+        let chain = probe_chain(&topology, grade);
+        let cast_then_bounded = chain.extend_scalars(|&c| c as f64).boundary(&topology);
+        let bounded_then_cast = chain.boundary(&topology).extend_scalars(|&c| c as f64);
+        assert_eq!(cast_then_bounded.coeffs(), bounded_then_cast.coeffs());
       }
     }
   }
@@ -476,11 +635,11 @@ mod test {
       let topology = probe_complex(dim);
       for grade in 0..=dim {
         let cochain = probe_cochain(&topology, grade);
-        let chain = probe_chain(&topology, grade);
+        let chain = probe_real_chain(&topology, grade);
 
         let expected: f64 = chain
           .support()
-          .map(|(kidx, multiplicity)| cochain.coeffs()[kidx] * multiplicity as f64)
+          .map(|(kidx, multiplicity)| cochain.coeffs()[kidx] * multiplicity)
           .sum();
         assert!((pairing(&cochain, &chain) - expected).abs() < 1e-12);
       }
