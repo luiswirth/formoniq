@@ -453,7 +453,7 @@ pub(crate) struct FieldAttributes {
 /// defined up to a scalar, so a global $A$ changes nothing about which mode is
 /// shown, only how far it swings. The displaced surface stays exactly $x + A f
 /// (x) n(x)$ with the field's own shape intact, and the reach bound
-/// ([`vertex_reach`](regge::coord::vertex_reach)) is what makes
+/// ([`vertex_reach`](realize::reach::vertex_reach)) is what makes
 /// that map an embedding, no fold, no self-intersection.
 ///
 /// The maximum is over the field's whole evolution, not its representative
@@ -1065,7 +1065,8 @@ impl FieldDisplay {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use regge::coord::{vertex_curvature_radius, vertex_reach};
+  use realize::reach::vertex_reach;
+  use regge::coord::vertex_curvature_radius;
 
   /// The law the amplitude bound exists to enforce: at the chosen amplitude no
   /// vertex displaces past its own reach, so the deformation stays an
