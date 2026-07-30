@@ -24,7 +24,7 @@
 mod util;
 
 use {
-  derham::{Cochain, project::derham_map, section::CoordFieldExt},
+  derham::Cochain,
   formoniq::{
     linalg::quadratic_form_sparse,
     problems::heat::solve_heat,
@@ -32,7 +32,7 @@ use {
   },
   regge::mesher::cartesian::CartesianGrid,
   simplicial::linalg::{CsrMatrix, Vector},
-  util::{BoundaryCondition, BoxEigenform},
+  util::relative_eigenform_cochain,
 };
 
 use std::f64::consts::PI;
@@ -62,15 +62,7 @@ fn main() {
     for grade in 0..=dim {
       let mass = CsrMatrix::from(&whitney.mass(grade));
 
-      // A boundary-compatible starting bump: the relative eigenform vanishes on
-      // $diff K$, reaching the mesh by pullback along the affine cell charts and
-      // the de Rham map.
-      let form = BoxEigenform::new(dim, grade, BoundaryCondition::Relative);
-      let initial = derham_map(
-        &form.solution().pullback_on(&topology, &coords),
-        &topology,
-        3,
-      );
+      let initial = relative_eigenform_cochain(dim, grade, &topology, &coords);
       let source = Cochain::new(grade, Vector::zeros(whitney.ndofs(grade)));
 
       // Homogeneous Dirichlet conditions are exactly the relative complex; the
