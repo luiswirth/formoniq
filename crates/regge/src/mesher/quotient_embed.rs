@@ -67,14 +67,17 @@ pub fn equivariant(quotient: &FlatQuotient, radius_slack: f64) -> MeshCoords {
   let reflector = reflectors(quotient);
   let emitters: Vec<Emitter> = (0..dim.index())
     .filter(|&axis| reflector[axis].is_none())
-    .map(|axis| match ids[axis] {
-      Identification::Open => Emitter::Line(axis),
-      _ => Emitter::Circle {
-        axis,
-        fiber: (0..dim.index())
-          .filter(|&j| reflector[j] == Some(axis))
-          .collect(),
-      },
+    .map(|axis| {
+      if ids[axis].is_closed() {
+        Emitter::Circle {
+          axis,
+          fiber: (0..dim.index())
+            .filter(|&j| reflector[j] == Some(axis))
+            .collect(),
+        }
+      } else {
+        Emitter::Line(axis)
+      }
     })
     .collect();
 
@@ -103,22 +106,20 @@ pub fn is_isometric(quotient: &FlatQuotient) -> bool {
   quotient
     .identifications()
     .iter()
-    .all(|id| !matches!(id, Identification::Twisted(_)))
+    .all(|id| id.reflected_axes().is_empty())
 }
 
 /// Which twisted axis reflects each axis, if any.
 fn reflectors(quotient: &FlatQuotient) -> Vec<Option<usize>> {
   let mut reflector = vec![None; quotient.dim().index()];
   for (axis, id) in quotient.identifications().iter().enumerate() {
-    if let Identification::Twisted(reflected) = id {
-      for &j in reflected {
-        assert!(
-          reflector[j].is_none(),
-          "Axis {j} is reflected by two twisted axes; that needs the full \
-           representation of the deck group, not a per-axis frame."
-        );
-        reflector[j] = Some(axis);
-      }
+    for &j in id.reflected_axes() {
+      assert!(
+        reflector[j].is_none(),
+        "Axis {j} is reflected by two twisted axes; that needs the full \
+         representation of the deck group, not a per-axis frame."
+      );
+      reflector[j] = Some(axis);
     }
   }
   reflector
@@ -239,8 +240,9 @@ pub fn donut_r3(quotient: &FlatQuotient, tube_ratio: f64) -> MeshCoords {
     "The donut realizes the flat torus: both axes must be periodic."
   );
   assert!(
-    (0.0..1.0).contains(&tube_ratio),
-    "The tube must be thinner than the revolution radius, or the surface self-intersects."
+    0.0 < tube_ratio && tube_ratio < 1.0,
+    "The tube must be thinner than the revolution radius and thicker than nothing, \
+     or the surface self-intersects."
   );
 
   let major = radius(quotient, 0);
