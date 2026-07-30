@@ -2,7 +2,6 @@ use {
   derham::{
     interpolate::{form::WhitneyExpansion, samples::LsfSamples},
     section::Section,
-    trace::FaceTrace,
   },
   metric::{
     Metric,
@@ -13,8 +12,8 @@ use {
   regge::cell_volume,
   simplicial::{
     atlas::{
-      Bary, Chart, ChartExt, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary, unit_bary_gramian,
-      unit_difbarys, unit_simplex_volume,
+      Bary, Chart, ChartExt, FaceTrace, MeshPoint, SimplexQuadRule, face_bary_to_cell_bary,
+      unit_bary_gramian, unit_difbarys, unit_simplex_volume,
     },
     linalg::{Matrix, Vector},
     topology::simplex::unit_boundary_operator,
