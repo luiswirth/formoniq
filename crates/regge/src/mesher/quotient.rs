@@ -190,8 +190,8 @@ impl FlatQuotient {
   }
 
   /// The unit torus $[0, 1)^d$ with equal periods.
-  pub fn unit_torus(dim: Dim, ncells_axis: usize) -> Self {
-    Self::torus(Vector::from_element(dim.index(), 1.0), ncells_axis)
+  pub fn unit_torus(dim: impl Into<Dim>, ncells_axis: usize) -> Self {
+    Self::torus(Vector::from_element(dim.into().index(), 1.0), ncells_axis)
   }
 
   /// The Möbius band: axis 0 twisted, reflecting the open fiber axis 1.

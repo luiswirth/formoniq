@@ -94,7 +94,8 @@ impl TriangleSurface3D {
     let vertex_normals = crate::bake::vertex_normals(&triangles, &positions);
     for ((mut v, n), &d) in self
       .coords
-      .coord_iter_mut()
+      .matrix_mut()
+      .column_iter_mut()
       .zip(vertex_normals)
       .zip(displacements)
     {
