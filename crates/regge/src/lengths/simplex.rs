@@ -1,7 +1,7 @@
-use super::EdgeIdx;
+use super::{EdgeIdx, LengthsSq};
 use simplicial::{Dim, topology::simplex::nedges};
 
-use metric::{CausalType, Metric};
+use metric::Metric;
 use multialgebra::tensor::Slots;
 use multialgebra::{Factor, Slot, Tensor, Variance};
 use multiindex::{Combination, combinations, factorial};
@@ -70,36 +70,12 @@ impl SimplexLengthsSq {
   pub fn nvertices(&self) -> usize {
     self.dim().index() + 1
   }
-  pub fn nedges(&self) -> usize {
-    self.lengths_sq.len()
-  }
-  /// The signed squared length of an edge: the Regge primitive, its sign the
-  /// causal character.
-  pub fn length_sq(&self, iedge: EdgeIdx) -> f64 {
-    self[iedge]
-  }
-  /// The magnitude $sqrt(abs(s))$ of an edge. On an indefinite metric this is
-  /// meaningful only together with [`Self::causal_type`]. It is never NaN.
-  pub fn length(&self, iedge: EdgeIdx) -> f64 {
-    self[iedge].abs().sqrt()
-  }
-  /// The causal character of an edge: the sign of its squared length.
-  pub fn causal_type(&self, iedge: EdgeIdx) -> CausalType {
-    CausalType::from_norm_sq(self[iedge])
-  }
-
   /// The diameter of this cell: the largest edge magnitude, which by
   /// convexity bounds the distance of any two points inside. A metric
   /// quantity of the Riemannian case. On an indefinite metric it is a mesh
   /// scale, not a distance.
   pub fn diameter(&self) -> f64 {
-    self
-      .lengths_sq
-      .iter()
-      .map(|s| s.abs())
-      .max_by(|a, b| a.partial_cmp(b).unwrap())
-      .unwrap()
-      .sqrt()
+    self.max_length()
   }
 
   /// The shape regularity measure of this cell.
@@ -116,16 +92,11 @@ impl SimplexLengthsSq {
   pub fn into_vector(self) -> Vector {
     self.lengths_sq
   }
-  pub fn iter(
-    &self,
-  ) -> na::iter::MatrixIter<
-    '_,
-    f64,
-    na::Dyn,
-    na::Const<1>,
-    na::VecStorage<f64, na::Dyn, na::Const<1>>,
-  > {
-    self.lengths_sq.iter()
+}
+
+impl LengthsSq for SimplexLengthsSq {
+  fn lengths_sq(&self) -> &Vector {
+    &self.lengths_sq
   }
 }
 
@@ -308,6 +279,7 @@ impl SimplexLengthsSq {
 #[cfg(test)]
 mod test {
   use super::*;
+  use metric::CausalType;
   use multialgebra::tensor::pairing;
   use multiindex::Dim;
 

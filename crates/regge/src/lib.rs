@@ -40,9 +40,10 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 /// is a function of three of them and needs no coordinates, so a Regge
 /// manifold given only as [`MeshLengthsSq`] has a Gaussian curvature exactly
 /// as well as an embedded one, which is why the primitive is what this
-/// consumes. This
-/// Regge's curvature, concentrated at the codimension-2 hinges; in 2D the
-/// hinges are vertices, which is the one case implemented here. Generalizing
+/// consumes.
+///
+/// This is Regge's curvature, concentrated at the codimension-2 hinges; in 2D
+/// the hinges are vertices, which is the one case implemented here. Generalizing
 /// to an $(n-2)$-dimensional hinge of an $n$-manifold needs dihedral angles
 /// between codimension-1 facets, not corner angles between edges, and this
 /// crate does not yet carry that computation, fixed at 2D for the same

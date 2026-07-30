@@ -1,4 +1,4 @@
-use super::{EdgeIdx, simplex::SimplexLengthsSq};
+use super::{EdgeIdx, LengthsSq, simplex::SimplexLengthsSq};
 use simplicial::{
   Dim,
   topology::{
@@ -48,6 +48,11 @@ impl SkeletonData for MeshLengthsSq {
     &self.vector[kidx]
   }
 }
+impl LengthsSq for MeshLengthsSq {
+  fn lengths_sq(&self) -> &Vector {
+    &self.vector
+  }
+}
 impl MeshLengthsSq {
   /// The invariant is per-cell non-degeneracy of the induced metric, checked
   /// over the cell skeleton. The signature is whatever the data describes.
@@ -72,23 +77,6 @@ impl MeshLengthsSq {
     Self::new_unchecked(vector)
   }
 
-  pub fn nedges(&self) -> usize {
-    self.vector.len()
-  }
-  /// The signed squared length of an edge: the Regge primitive, its sign the
-  /// causal character.
-  pub fn length_sq(&self, iedge: EdgeIdx) -> f64 {
-    self[iedge]
-  }
-  /// The magnitude $sqrt(abs(s))$ of an edge. On an indefinite metric this is
-  /// meaningful only together with [`Self::causal_type`]. It is never NaN.
-  pub fn length(&self, iedge: EdgeIdx) -> f64 {
-    self[iedge].abs().sqrt()
-  }
-  /// The causal character of an edge: the sign of its squared length.
-  pub fn causal_type(&self, iedge: EdgeIdx) -> CausalType {
-    CausalType::from_norm_sq(self[iedge])
-  }
   pub fn vector(&self) -> &Vector {
     &self.vector
   }
@@ -98,40 +86,19 @@ impl MeshLengthsSq {
   pub fn into_vector(self) -> Vector {
     self.vector
   }
-  pub fn iter(
-    &self,
-  ) -> na::iter::MatrixIter<
-    '_,
-    f64,
-    na::Dyn,
-    na::Const<1>,
-    na::VecStorage<f64, na::Dyn, na::Const<1>>,
-  > {
-    self.vector.iter()
-  }
 
   /// The mesh width $h_max$: the largest edge magnitude over the mesh, which
   /// on a Riemannian geometry is the largest cell diameter. On an indefinite
   /// one it is a mesh scale, not a distance.
   pub fn mesh_width_max(&self) -> f64 {
-    self
-      .iter()
-      .map(|s| s.abs())
-      .max_by(|a, b| a.partial_cmp(b).unwrap())
-      .unwrap()
-      .sqrt()
+    self.max_length()
   }
 
   /// The mesh width $h_min$: the smallest edge magnitude. On a Riemannian
   /// geometry, by convexity, the smallest distance inside any cell is along
   /// one of its edges.
   pub fn mesh_width_min(&self) -> f64 {
-    self
-      .iter()
-      .map(|s| s.abs())
-      .min_by(|a, b| a.partial_cmp(b).unwrap())
-      .unwrap()
-      .sqrt()
+    self.min_length()
   }
 
   /// The mean edge magnitude $h_"mean"$: the mesh's characteristic local
@@ -305,13 +272,6 @@ impl EdgeRefExt for Edge<'_> {
   fn causal_type(self, lengths_sq: &MeshLengthsSq) -> CausalType {
     lengths_sq.causal_type(self.kidx())
   }
-}
-
-pub type MetricComplex = (Complex, MeshLengthsSq);
-pub fn unit_metric_complex(dim: Dim) -> MetricComplex {
-  let topology = Complex::unit(dim);
-  let lengths_sq = MeshLengthsSq::unit(dim);
-  (topology, lengths_sq)
 }
 
 #[cfg(test)]

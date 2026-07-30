@@ -439,6 +439,7 @@ impl FlatQuotient {
 #[cfg(test)]
 mod test {
   use super::{FlatQuotient, Identification};
+  use crate::lengths::LengthsSq;
   use crate::lengths::mesh::MeshLengthsSq;
   use multiindex::Dim;
   use multiindex::binomial;
@@ -524,7 +525,7 @@ mod test {
     fn edge_length_spread(quotient: &FlatQuotient) -> f64 {
       let (_, lengths) = quotient.triangulate();
       let (mut min, mut max) = (f64::MAX, 0.0_f64);
-      for &l in lengths.iter() {
+      for &l in lengths.vector().iter() {
         let l = l.sqrt();
         min = min.min(l);
         max = max.max(l);
@@ -581,7 +582,7 @@ mod test {
 
       // The geometry is flat and uniform: every edge is spacelike, and the
       // shortest edges are the axis steps of length 1/n.
-      assert!(lengths.iter().all(|&s| s > 0.0));
+      assert!(lengths.iter().all(|s| s > 0.0));
       assert!((lengths.mesh_width_min() - 1.0 / 3.0).abs() < 1e-12);
     }
   }
@@ -614,7 +615,7 @@ mod test {
         complex.orientation().is_none(),
         "the Möbius band is non-orientable"
       );
-      assert!(lengths.iter().all(|&s| s > 0.0));
+      assert!(lengths.iter().all(|s| s > 0.0));
     }
   }
 
@@ -660,7 +661,7 @@ mod test {
     assert!(!complex.has_boundary());
     assert!(complex.orientation().is_some());
     assert_eq!(complex.euler_characteristic(), 0);
-    assert!(lengths.iter().all(|&s| s > 0.0));
+    assert!(lengths.iter().all(|s| s > 0.0));
   }
 
   /// Every identification leaves the geometry flat and uniform: the quotient is
