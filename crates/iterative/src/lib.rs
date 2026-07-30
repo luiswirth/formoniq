@@ -522,14 +522,13 @@ mod tests {
     let level_structs: Vec<Level<Jacobi>> = (0..levels - 1)
       .map(|i| {
         let p = prolongs[i].clone();
-        let r = p.transpose();
-        Level::new(ops[i].clone(), Jacobi::weighted(&ops[i], 2.0 / 3.0), p, r)
+        Level::new(ops[i].clone(), Jacobi::weighted(&ops[i], 2.0 / 3.0), p)
       })
       .collect();
 
     let coarsest = &ops[levels - 1];
     let coarse = DenseInverse::new(&DMatrix::from(coarsest));
-    let cycle = VCycle::symmetric(level_structs, coarse, sweeps);
+    let cycle = VCycle::new(level_structs, coarse, sweeps);
     (cycle, a_fine, a_fine_dense)
   }
 
