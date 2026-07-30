@@ -750,3 +750,53 @@ fn applying_factorwise_is_applying_the_kronecker_product() {
     );
   }
 }
+
+/// Evaluating a symmetric slot is evaluating the polynomial it is:
+/// $x^alpha |-> product_i v_i^(alpha_i)$, summed against the components.
+///
+/// The law that pins the $r!$ the repeated contraction divides out.
+/// Nilpotency cannot see it, and neither can any law stated up to a constant.
+/// Stated against the monomials read off the basis rather than a hardcoded
+/// layout, so it says nothing about which component is which.
+#[test]
+fn evaluating_a_symmetric_slot_evaluates_the_polynomial() {
+  for dim in 1..=3 {
+    for degree in 0..=3 {
+      let poly = probe_tensor(&[Factor::symmetric(degree)], Variance::Covariant, dim, 4);
+      let point = Vector::from_fn(dim, |i, _| 0.5 + i as f64 / 4.0);
+      let vector = Tensor::line(point.clone(), Variance::Contravariant);
+
+      let expected: f64 = Factor::symmetric(degree)
+        .basis(dim)
+        .zip(poly.components().iter())
+        .map(|(monomial, coeff)| coeff * monomial.word().iter().map(|&i| point[i]).product::<f64>())
+        .sum();
+
+      assert_relative_eq!(
+        poly.evaluate(0, &vector).as_scalar(),
+        expected,
+        epsilon = 1e-12
+      );
+    }
+  }
+}
+
+/// An alternating slot of degree above one evaluates to zero, its antisymmetry
+/// being $iota_v compose iota_v = 0$, and at degree one it is the pairing.
+#[test]
+fn evaluating_an_alternating_slot_is_the_pairing_and_then_zero() {
+  for dim in 1..=3 {
+    let point = Vector::from_fn(dim, |i, _| 0.5 + i as f64 / 4.0);
+    let vector = Tensor::line(point.clone(), Variance::Contravariant);
+    for grade in 1..=dim {
+      let form = probe_element(dim, grade, 6, Variance::Covariant);
+      let value = form.evaluate(0, &vector).as_scalar();
+      let expected = if grade == 1 {
+        form.components().dot(&point)
+      } else {
+        0.0
+      };
+      assert_relative_eq!(value, expected, epsilon = 1e-12);
+    }
+  }
+}

@@ -31,9 +31,6 @@ pub type Basis = tinyvec::TinyVec<[MultiIndex; 2]>;
 #[derive(Debug, Clone)]
 pub struct Tensor {
   slots: Slots,
-  /// Derived from the slots, stored so that the single-slot case indexes as
-  /// `components[rank]` with no arithmetic at all.
-  strides: Strides,
   components: Vector,
 }
 
@@ -61,6 +58,55 @@ fn alternating_degree(slot: &Slot) -> usize {
   }
 }
 
+/// What [`Tensor::product`] needs at one slot: the two slots it multiplies,
+/// where each of the three tensors puts that slot in its flat index, and the
+/// Koszul sign the right slot picks up.
+///
+/// Every one of these is a function of the slot position alone, so the table is
+/// built once and the recursion carries nothing but its three running indices
+/// and the sign accumulated so far.
+struct ProductLevel {
+  left: Slot,
+  right: Slot,
+  left_stride: usize,
+  right_stride: usize,
+  target_stride: usize,
+  /// The right slot commutes past every alternating slot of the left after it,
+  /// which is $(-1)^(deg b_i sum_(j > i) deg a_j)$.
+  koszul: Sign,
+}
+
+impl ProductLevel {
+  fn table(left: &[Slot], right: &[Slot], target: &[Slot]) -> Vec<Self> {
+    let (left_strides, right_strides, target_strides) = (
+      tensor_strides(left),
+      tensor_strides(right),
+      tensor_strides(target),
+    );
+
+    // Built from the last slot back, so the alternating degree the right slot
+    // commutes past accumulates as the walk proceeds.
+    let mut trailing = 0;
+    let mut levels: Vec<Self> = (0..left.len())
+      .rev()
+      .map(|slot| {
+        let koszul = Sign::from_parity(alternating_degree(&right[slot]) * trailing);
+        trailing += alternating_degree(&left[slot]);
+        Self {
+          left: left[slot],
+          right: right[slot],
+          left_stride: left_strides[slot],
+          right_stride: right_strides[slot],
+          target_stride: target_strides[slot],
+          koszul,
+        }
+      })
+      .collect();
+    levels.reverse();
+    levels
+  }
+}
+
 /// The stride of each factor in the flat component index, the first factor
 /// running fastest: $s_i = product_(j < i) dim F_j$.
 ///
@@ -84,12 +130,7 @@ impl Tensor {
       tensor_dim(&slots),
       "component count must be the dimension of the tensor product"
     );
-    let strides = tensor_strides(&slots);
-    Self {
-      slots,
-      strides,
-      components,
-    }
+    Self { slots, components }
   }
 
   pub fn zero(slots: impl Into<Slots>) -> Self {
@@ -314,8 +355,10 @@ impl Tensor {
       .all(|slot| slot.dim == first)
       .then_some(first)
   }
-  pub fn strides(&self) -> &[usize] {
-    &self.strides
+  /// The stride of each slot in the flat component index: [`tensor_strides`]
+  /// of this tensor's shape.
+  pub fn strides(&self) -> Strides {
+    tensor_strides(&self.slots)
   }
   pub fn components(&self) -> &Vector {
     &self.components
@@ -374,13 +417,19 @@ impl Tensor {
 
   /// The flat component index of a basis element: mixed radix over the
   /// per-factor colex ranks, $sum_i "rank"(alpha_i) s_i$.
+  ///
+  /// The stride is the running product of the slot extents, accumulated as the
+  /// slots are walked rather than taken from [`Self::strides`], so no layout is
+  /// materialized to index one component.
   pub fn flat_index(&self, basis: &[MultiIndex]) -> usize {
     assert_eq!(basis.len(), self.slots.len());
-    basis
-      .iter()
-      .zip(&self.strides)
-      .map(|(index, stride)| index.rank() * stride)
-      .sum()
+    let mut stride = 1;
+    let mut flat = 0;
+    for (index, slot) in basis.iter().zip(&self.slots) {
+      flat += index.rank() * stride;
+      stride *= slot.multidim();
+    }
+    flat
   }
 
   /// Every basis element with its component, in the order the components are
@@ -483,60 +532,46 @@ impl Tensor {
       *slot = slot.with_degree(slot.degree() + right.degree());
     }
     let mut product = Self::zero(slots);
-
-    // The alternating degrees after each slot on the left: what the right slot
-    // commutes past, hence the Koszul exponent.
-    let mut trailing = vec![0usize; self.slots.len() + 1];
-    for i in (0..self.slots.len()).rev() {
-      trailing[i] = trailing[i + 1] + alternating_degree(&self.slots[i]);
-    }
-
-    self.product_into(other, &mut product, 0, 0, 0, 0, 1.0, &trailing);
+    let levels = ProductLevel::table(&self.slots, &other.slots, &product.slots);
+    self.product_into(other, &mut product, &levels, 0, 0, 0, 1.0);
     product
   }
 
-  /// One factor of [`Self::product`], recursing into the next.
+  /// One slot of [`Self::product`], recursing into the next.
   ///
-  /// Walks the pairs of per-factor basis elements, carrying the partial flat
+  /// Walks the pairs of per-slot basis elements, carrying the partial flat
   /// indices into both operands and the result. Nothing is allocated.
   #[allow(clippy::too_many_arguments)]
   fn product_into(
     &self,
     other: &Self,
     product: &mut Self,
-    factor: usize,
+    levels: &[ProductLevel],
     left_flat: usize,
     right_flat: usize,
     target_flat: usize,
     sign: f64,
-    trailing: &[usize],
   ) {
-    if factor == self.slots.len() {
+    let [level, rest @ ..] = levels else {
       product.components[target_flat] +=
         sign * self.components[left_flat] * other.components[right_flat];
       return;
-    }
+    };
 
-    let (left, right) = (self.slots[factor], other.slots[factor]);
-    let (left_stride, right_stride) = (self.strides[factor], other.strides[factor]);
-    let target_stride = product.strides[factor];
-
-    for (left_rank, left_index) in left.basis().enumerate() {
-      let left_flat = left_flat + left_rank * left_stride;
-      for (right_rank, right_index) in right.basis().enumerate() {
+    for (left_rank, left_index) in level.left.basis().enumerate() {
+      let left_flat = left_flat + left_rank * level.left_stride;
+      for (right_rank, right_index) in level.right.basis().enumerate() {
         let Some((merge_sign, merged)) = left_index.merge(&right_index) else {
           continue;
         };
-        let koszul = alternating_degree(&right) * trailing[factor + 1];
         self.product_into(
           other,
           product,
-          factor + 1,
+          rest,
           left_flat,
-          right_flat + right_rank * right_stride,
-          target_flat + merged.rank() * target_stride,
-          sign * merge_sign.as_f64() * Sign::from_parity(koszul).as_f64(),
-          trailing,
+          right_flat + right_rank * level.right_stride,
+          target_flat + merged.rank() * level.target_stride,
+          sign * (merge_sign * level.koszul).as_f64(),
         );
       }
     }
@@ -570,8 +605,8 @@ impl Tensor {
     let target_span = tensor_dim(&slots[span.start..]);
     slots.extend_from_slice(&self.slots[span.end..]);
 
+    let inner = tensor_dim(&self.slots[..span.start]);
     let source_span = tensor_dim(&self.slots[span.clone()]);
-    let inner = self.strides[span.start];
     let outer = tensor_dim(&self.slots[span.end..]);
 
     let mut rewritten = Self::zero(slots);
@@ -902,10 +937,13 @@ impl Tensor {
   ///
   /// A symmetric factor of degree $r$ is a polynomial of degree $r$, so this is
   /// evaluation at a point, the same operation as feeding a tangent vector into
-  /// an alternating factor.
+  /// an alternating factor. On the monomial basis,
+  /// $x^alpha |-> x^alpha (v) = product_i v_i^(alpha_i)$.
   ///
-  /// Repeated contraction fills the $r$ slots in every order and so overcounts
-  /// by $r!$, which is divided out. On the monomial basis, $x^alpha |-> x^alpha (v)$.
+  /// Contraction of a symmetric factor is the directional derivative
+  /// $diff_v$, so $r$ of them give $diff_v^r p = r! p(v)$ on a homogeneous $p$,
+  /// and the $r!$ is divided out. An alternating factor of degree above one
+  /// evaluates to zero, $iota_v^2 = 0$ being the antisymmetry.
   pub fn evaluate(&self, which: usize, vector: &Tensor) -> Self {
     let degree = self.slots[which].degree();
     let mut value = self.clone();

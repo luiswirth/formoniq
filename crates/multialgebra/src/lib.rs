@@ -149,15 +149,17 @@ impl Factor {
   /// Empty exactly where [`Self::multidim`] is zero, so the trivial ends need
   /// no case of their own.
   pub fn basis(&self, dim: impl Into<Dim>) -> MultiIndices {
-    let dim = dim.into();
-    // A trivial space enumerates nothing, expressed as an empty sweep rather
-    // than a case of its own.
-    let Some(degree) = (self.multidim(dim) > 0).then(|| self.degree.index()) else {
-      return MultiIndices::Word(Word::all(0, 1));
+    let dim = dim.into().index();
+    // A trivial space enumerates nothing, expressed as a word of length one
+    // over the empty alphabet, which no family can supply, rather than as a
+    // case of its own. The family stays the one this factor names.
+    let (dim, degree) = match self.multidim(dim) > 0 {
+      true => (dim, self.degree.index()),
+      false => (0, 1),
     };
     match self.symmetry.repetition() {
-      Some(repetition) => MultiIndices::Mono(MonoIndex::all(repetition, dim.index(), degree)),
-      None => MultiIndices::Word(Word::all(dim.index(), degree)),
+      Some(repetition) => MultiIndices::Mono(MonoIndex::all(repetition, dim, degree)),
+      None => MultiIndices::Word(Word::all(dim, degree)),
     }
   }
 
@@ -317,8 +319,7 @@ pub fn exterior_bases(
   dim: impl Into<Dim>,
   grade: impl Into<ExteriorGrade>,
 ) -> impl Iterator<Item = Blade> {
-  let basis: Vec<MultiIndex> = Factor::alternating(grade).basis(dim).collect();
-  basis.into_iter().map(|index| {
+  Factor::alternating(grade).basis(dim).map(|index| {
     index
       .as_mono()
       .expect("an alternating basis is monotone")
