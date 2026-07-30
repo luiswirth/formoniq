@@ -1116,15 +1116,18 @@ pub(crate) fn hodge_decompose(
 /// around the handles can vanish: they do on the Császár torus, where a purely
 /// ambient probe leaves the harmonic shell at numerical zero. Whether an ambient
 /// field excites a cycle depends on how the handle happens to sit in space,
-/// which is no basis for a teaching example. Injecting a harmonic generator
-/// makes the field genuinely carry a topological cycle on any genus-$g$
-/// surface, so the decomposition demonstrates all three shells regardless of
+/// which is no basis for a teaching example. Injecting a harmonic generator,
+/// the one dual to the first homology cycle, makes the field genuinely carry a
+/// topological cycle on any genus-$g$ surface, so the decomposition
+/// demonstrates all three shells regardless of
 /// embedding, and injecting the harmonic part is itself the point: the
 /// decomposition returns it untouched, orthogonal to the two it did not put
 /// there. On a contractible mesh the harmonic space is empty and nothing is
 /// added.
 pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Cochain {
-  use formoniq::{problems::elliptic::solve_harmonics, whitney_complex::WhitneyComplex};
+  use formoniq::{
+    harmonic::harmonics, problems::elliptic::solve_harmonics, whitney_complex::WhitneyComplex,
+  };
   use simplicial::linalg::CsrMatrix;
 
   let swirl = hodge_probe_form(topology, coords);
@@ -1133,7 +1136,14 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
   let mass = CsrMatrix::from(&complex.mass(1));
   let m_norm = |v: &Vector| (&mass * v).dot(v).max(0.0).sqrt();
 
-  match solve_harmonics(&complex, 1) {
+  // The period-normalized reading: the injected cycle then threads one handle,
+  // which is what makes the harmonic shell the decomposition returns legible as
+  // that handle's circulation rather than as a mixture of the genus-many.
+  let basis = match harmonics(&complex, 1) {
+    Some(harmonics) => Ok(harmonics.integral),
+    None => solve_harmonics(&complex, 1),
+  };
+  match basis {
     Ok(harmonics) if harmonics.ncols() > 0 => {
       let h0 = harmonics.column(0).clone_owned();
       let (swirl_norm, h0_norm) = (m_norm(swirl.coeffs()), m_norm(&h0));
@@ -1235,9 +1245,10 @@ const HARMONIC_EIGENVALUE: f64 = 1e-8;
 /// swing the flow's direction between refinements. The reference is a
 /// coboundary, so the Hodge decomposition puts it orthogonal to the harmonic
 /// shell and the projection is empty exactly where the topology supplies
-/// harmonics, leaving the eigensolver's own first vector. Either way the choice
-/// is a gauge, every member of the shell being equally the smoothest closed
-/// field, and the reference buys reproducibility rather than correctness.
+/// harmonics, leaving the first harmonic generator, which the period
+/// normalization ties to one specific handle. Either way the choice is a gauge,
+/// every member of the shell being equally the smoothest closed field, and both
+/// the reference and the periods buy reproducibility rather than correctness.
 fn solenoidal_flux(topology: &Complex, coords: &MeshCoords, metric: &MeshLengthsSq) -> Cochain {
   let reference = ambient_blade_flux(topology, coords);
   let Some(space) = smoothest_closed_space(topology, metric) else {
@@ -1252,13 +1263,22 @@ fn solenoidal_flux(topology: &Complex, coords: &MeshCoords, metric: &MeshLengths
 /// eigenvalue it inherits because $dif$ commutes with the Laplacian.
 fn smoothest_closed_space(topology: &Complex, metric: &MeshLengthsSq) -> Option<Matrix> {
   use formoniq::{
+    harmonic::harmonics,
     problems::elliptic::{solve_evp, solve_harmonics},
     whitney_complex::WhitneyComplex,
   };
   let flux_grade = topology.dim() - 1;
   let whitney = WhitneyComplex::new(topology, metric);
 
-  let harmonic = solve_harmonics(&whitney, flux_grade).ok()?;
+  // The period-normalized reading, so that where the reference projects to
+  // nothing and a column is displayed directly, that column is the circulation
+  // around one handle rather than an arbitrary rotation of the shell. The
+  // orthonormal reading spans the same space and serves where the projection
+  // behind the periods is not well posed.
+  let harmonic = match harmonics(&whitney, flux_grade) {
+    Some(harmonics) => harmonics.integral,
+    None => solve_harmonics(&whitney, flux_grade).ok()?,
+  };
   if harmonic.ncols() > 0 {
     return Some(harmonic);
   }
