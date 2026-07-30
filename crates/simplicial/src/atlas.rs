@@ -281,31 +281,35 @@ pub fn unit_lattice_interior(
     .map(|k| k.parts().iter().map(|k| k + 1).collect())
 }
 
+/// A lattice point's barycentric weights, $lambda = k \/ R$: the one passage
+/// from the integer primitive to the affine one.
+///
+/// The numerators must sum to the refinement, which is what makes the weights
+/// affine, and is checked under `debug_assertions`.
+pub fn lattice_bary(numerators: &[usize], refinement: usize) -> Bary {
+  debug_assert_eq!(
+    numerators.iter().sum::<usize>(),
+    refinement,
+    "a lattice point's parts sum to the refinement"
+  );
+  let scale = (refinement as f64).recip();
+  Bary::new(Vector::from_iterator(
+    numerators.len(),
+    numerators.iter().map(|&k| k as f64 * scale),
+  ))
+}
+
 /// [`unit_lattice_interior`] as barycentric weights.
 pub fn unit_lattice_interior_bary(
   dim: impl Into<Dim>,
   refinement: usize,
 ) -> impl Iterator<Item = Bary> {
-  let dim = dim.into();
-  let scale = (refinement as f64).recip();
-  unit_lattice_interior(dim, refinement).map(move |k| {
-    Bary::new(Vector::from_iterator(
-      k.len(),
-      k.into_iter().map(|k| k as f64 * scale),
-    ))
-  })
+  unit_lattice_interior(dim, refinement).map(move |k| lattice_bary(&k, refinement))
 }
 
 /// [`unit_lattice`] as barycentric weights, $lambda = k \/ R$.
 pub fn unit_lattice_bary(dim: impl Into<Dim>, refinement: usize) -> impl Iterator<Item = Bary> {
-  let dim = dim.into();
-  let scale = (refinement as f64).recip();
-  unit_lattice(dim, refinement).map(move |k| {
-    Bary::new(Vector::from_iterator(
-      k.len(),
-      k.into_iter().map(|k| k as f64 * scale),
-    ))
-  })
+  unit_lattice(dim, refinement).map(move |k| lattice_bary(&k, refinement))
 }
 
 /// The spanning vectors $v_i = e_(p_i) - e_(p_0)$ of a face of the reference
