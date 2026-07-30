@@ -689,7 +689,10 @@ impl Scene {
     final_time: f64,
   ) -> Self {
     let grade = grade.into();
-    use formoniq::{problems::heat::solve_heat, whitney_complex::WhitneyComplex};
+    use formoniq::{
+      problems::heat::solve_heat,
+      whitney_complex::{HilbertComplex, WhitneyComplex},
+    };
 
     let metric = coords.to_edge_lengths_sq(&topology);
     let whitney = WhitneyComplex::new(&topology, &metric);
@@ -720,7 +723,7 @@ impl Scene {
     let grade = grade.into();
     use formoniq::{
       problems::wave::{WaveState, solve_wave},
-      whitney_complex::WhitneyComplex,
+      whitney_complex::{HilbertComplex, WhitneyComplex},
     };
 
     let metric = coords.to_edge_lengths_sq(&topology);
@@ -1057,7 +1060,7 @@ pub(crate) fn hodge_decompose(
 ) -> Result<HodgeParts, formoniq::linalg::eigen::EigenError> {
   use formoniq::{
     problems::elliptic::{solve_harmonics, solve_source},
-    whitney_complex::WhitneyComplex,
+    whitney_complex::{HilbertComplex, WhitneyComplex},
   };
   use simplicial::linalg::CsrMatrix;
 
@@ -1123,7 +1126,9 @@ pub(crate) fn hodge_decompose(
 /// added.
 pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Cochain {
   use formoniq::{
-    harmonic::harmonics, problems::elliptic::solve_harmonics, whitney_complex::WhitneyComplex,
+    harmonic::harmonics,
+    problems::elliptic::solve_harmonics,
+    whitney_complex::{HilbertComplex, WhitneyComplex},
   };
   use simplicial::linalg::CsrMatrix;
 

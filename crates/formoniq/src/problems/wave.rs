@@ -6,7 +6,7 @@ use crate::{
   whitney_complex::HilbertComplex,
 };
 
-use crate::linalg::{faer::FaerCholesky, quadratic_form_sparse};
+use crate::linalg::quadratic_form_sparse;
 use derham::Cochain;
 use multialgebra::ExteriorGrade;
 use regge::lengths::mesh::MeshLengthsSq;
@@ -34,14 +34,9 @@ impl WaveState {
     let inclusion = complex.inclusion(grade);
     let u = inclusion.transpose() * &self.pos;
     let w = inclusion.transpose() * &self.vel;
-    let sigma_energy = if hb.n_sigma > 0 {
-      let sigma = FaerCholesky::new(hb.mass_sigma.clone()).solve(&(hb.codif_dn() * &u));
-      quadratic_form_sparse(&hb.mass_sigma, &sigma)
-    } else {
-      0.0
-    };
+    let sigma = hb.codif(&u);
     0.5
-      * (sigma_energy
+      * (quadratic_form_sparse(&hb.mass_sigma, &sigma)
         + quadratic_form_sparse(&hb.stiff(), &u)
         + quadratic_form_sparse(&hb.mass_u, &w))
   }
@@ -103,11 +98,7 @@ pub fn solve_wave<C: HilbertComplex>(
   let inclusion = complex.inclusion(grade);
   let u0 = inclusion.transpose() * initial.pos;
   let w0 = inclusion.transpose() * initial.vel;
-  let sigma0 = if ns > 0 {
-    FaerCholesky::new(hb.mass_sigma.clone()).solve(&(hb.codif_dn() * &u0))
-  } else {
-    Vector::zeros(0)
-  };
+  let sigma0 = hb.codif(&u0);
 
   let force = &hb.mass_u * (inclusion.transpose() * force_data.coeffs());
   let mut forcing = Vector::zeros(ns + 2 * nu);
