@@ -596,13 +596,12 @@ mod test {
       let topology = probe_complex(dim);
       for grade in 0..=dim {
         let cochain = probe_cochain(&topology, grade);
-        let assembled =
-          CsrMatrix::from(&topology.coboundary_operator(grade.into())) * cochain.coeffs();
+        let assembled = CsrMatrix::from(&topology.coboundary_operator(grade)) * cochain.coeffs();
         assert_eq!(cochain.dif(&topology).coeffs(), &assembled);
 
         let chain = probe_chain(&topology, grade);
         let boundary = chain.boundary(&topology);
-        let matrix = CsrMatrix::from(topology.boundary_operator(grade.into()));
+        let matrix = CsrMatrix::from(topology.boundary_operator(grade));
         let applied = matrix * probe_real_chain(&topology, grade).into_coeffs();
         for (kidx, &coefficient) in boundary.coeffs().iter().enumerate() {
           assert_eq!(coefficient as f64, applied[kidx]);

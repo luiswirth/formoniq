@@ -202,7 +202,10 @@ impl<S: CoordSpace> SimplexCoords<S> {
 
   /// Coordinate subsimplices: each face of the simplex, realized in the same
   /// space by selecting its vertices' columns.
-  pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords<S>> + use<'_, S> {
+  pub fn subsimps<D: Into<Dim>>(
+    &self,
+    sub_dim: D,
+  ) -> impl Iterator<Item = SimplexCoords<S>> + use<'_, S, D> {
     unit_subsimps(self.dim_intrinsic(), sub_dim).map(|positions| {
       let cols: Vec<Vector> = positions
         .iter()
@@ -236,7 +239,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
 impl SimplexCoords<LocalCartesian> {
   /// The unit simplex: the coordinate realization of the reference cell,
   /// whose local coordinates are the cartesian coordinates of its own chart.
-  pub fn unit(ndim: Dim) -> Self {
+  pub fn unit(ndim: impl Into<Dim>) -> Self {
     Self::new(unit_vertices(ndim))
   }
 }

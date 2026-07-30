@@ -128,11 +128,11 @@ impl Subcomplex {
   /// Its [`complement`](Selection::complement) is the relative chain group
   /// $C_k (K, L)$, so this one datum carries the whole short exact sequence of
   /// the pair.
-  pub fn inclusion(&self, grade: Dim) -> &Selection {
-    &self.inclusion[grade.index()]
+  pub fn inclusion(&self, grade: impl Into<Dim>) -> &Selection {
+    &self.inclusion[grade.into().index()]
   }
   /// The parent indices of the subcomplex's k-simplices.
-  pub fn parent_kidxs(&self, grade: Dim) -> &[KSimplexIdx] {
+  pub fn parent_kidxs(&self, grade: impl Into<Dim>) -> &[KSimplexIdx] {
     self.inclusion(grade).indices()
   }
   pub fn parent_idx(&self, sub_idx: SimplexIdx) -> SimplexIdx {
@@ -142,7 +142,7 @@ impl Subcomplex {
   /// The trace $"tr": C^k (K) -> C^k (diff K)$: restriction of cochains to
   /// the boundary simplices. A cochain map, $"tr" compose dif = dif compose "tr"$,
   /// and the cokernel projection of the relative inclusion.
-  pub fn trace_operator(&self, grade: Dim) -> CooMatrix {
+  pub fn trace_operator(&self, grade: impl Into<Dim>) -> CooMatrix {
     self.inclusion(grade).restriction()
   }
 }

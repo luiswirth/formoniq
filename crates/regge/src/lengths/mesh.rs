@@ -390,7 +390,7 @@ mod test {
         let cell_metric = lengths.cell_metric(cell);
 
         for grade in 1..=dim.index() {
-          for face in cell.get().faces(Dim::from(grade)) {
+          for face in cell.get().faces(grade) {
             let positions = face.simplex().relative_to(&cell_simplex);
 
             // Column $a$ is the face's tangent vector $u_(a+1) - u_0$ read in

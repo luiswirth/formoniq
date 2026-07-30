@@ -86,7 +86,8 @@ impl Simplex {
   /// Total in the dimension: empty off the range $0 <= k <= dim sigma$, where
   /// there is no face to name. The empty simplex is not among them, so a
   /// vertex has no facets rather than one.
-  pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = Self> + use<'_> {
+  pub fn subsimps<D: Into<Dim>>(&self, sub_dim: D) -> impl Iterator<Item = Self> + use<'_, D> {
+    let sub_dim = sub_dim.into();
     sub_dim
       .index_in(self.dim())
       .into_iter()
@@ -180,19 +181,24 @@ impl std::ops::Index<usize> for Simplex {
 ///
 /// Total in the dimension, like [`Simplex::subsimps`] it mirrors: empty off
 /// $0 <= k <= n$, where the unit cell has no face to name.
-pub fn unit_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
+pub fn unit_subsimps(
+  dim_cell: impl Into<Dim>,
+  dim_sub: impl Into<Dim>,
+) -> impl Iterator<Item = Combination> {
+  let (dim_cell, dim_sub) = (dim_cell.into(), dim_sub.into());
   dim_sub
     .index_in(dim_cell)
     .into_iter()
     .flat_map(move |_| combinations((dim_cell + 1).index(), (dim_sub + 1).index()))
 }
 /// How many there are, $binom(n+1, k+1)$, and zero off the range.
-pub fn nsubsimplices(dim_cell: Dim, dim_sub: Dim) -> usize {
+pub fn nsubsimplices(dim_cell: impl Into<Dim>, dim_sub: impl Into<Dim>) -> usize {
+  let (dim_cell, dim_sub) = (dim_cell.into(), dim_sub.into());
   dim_sub.index_in(dim_cell).map_or(0, |_| {
     binomial((dim_cell + 1).index(), (dim_sub + 1).index())
   })
 }
-pub fn nedges(dim_cell: Dim) -> usize {
+pub fn nedges(dim_cell: impl Into<Dim>) -> usize {
   nsubsimplices(dim_cell, Dim::ONE)
 }
 
@@ -206,7 +212,8 @@ pub fn nedges(dim_cell: Dim) -> usize {
 /// module rather than the augmentation onto the empty simplex.
 ///
 /// [`Complex::boundary_operator`]: super::complex::Complex::boundary_operator
-pub fn unit_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
+pub fn unit_boundary_operator(dim_cell: impl Into<Dim>, dim_simp: impl Into<Dim>) -> Matrix {
+  let (dim_cell, dim_simp) = (dim_cell.into(), dim_simp.into());
   let below = dim_simp - Dim::ONE;
   let mut matrix = Matrix::zeros(
     nsubsimplices(dim_cell, below),
