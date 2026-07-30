@@ -34,14 +34,14 @@ fn dense(csr: &CsrMatrix) -> Matrix {
 /// Dimension of the discrete harmonic space
 /// $frak(H)^k = ker dif_k sect ker (dif_(k-1)^T M_k)$:
 /// closed and weakly coclosed k-cochains.
-fn harmonic_space_dim(
-  ndofs: usize,
-  dif: Option<Matrix>,
-  dif_prev: Option<Matrix>,
-  mass: Matrix,
-) -> usize {
-  let coclosed = dif_prev.map(|d| d.transpose() * mass);
-  let constraints: Vec<Matrix> = dif.into_iter().chain(coclosed).collect();
+///
+/// The two constraint blocks are stacked with no case for the extremal grades:
+/// the complex is total in grade, so at the top $dif_k$ has no rows and at
+/// grade $0$ neither does $dif_(k-1)^T M_k$, and a block of no rows constrains
+/// nothing. Handing those the honest empty operator is what makes this one
+/// statement over every grade.
+fn harmonic_space_dim(ndofs: usize, dif: Matrix, dif_prev: Matrix, mass: Matrix) -> usize {
+  let constraints = [dif, dif_prev.transpose() * mass];
   let nrows = constraints.iter().map(na::Matrix::nrows).sum();
   if nrows == 0 {
     return ndofs;
@@ -73,8 +73,8 @@ fn harmonics_are_cohomology_cube() {
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     for k in dim.range_inclusive() {
-      let dif = (k < dim).then(|| dense(&whitney.dif(k)));
-      let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
+      let dif = dense(&whitney.dif(k));
+      let dif_prev = dense(&whitney.dif(k - 1));
       let mass = Matrix::from(&whitney.mass(k));
       let harmonic_dim = harmonic_space_dim(whitney.ndofs(k), dif, dif_prev, mass);
 
@@ -101,8 +101,8 @@ fn harmonics_are_cohomology_sphere() {
   }
 
   for (k, expected) in [(0, 1), (1, 0), (2, 1)].map(|(k, e)| (Dim::new(k), e)) {
-    let dif = (k < dim).then(|| dense(&whitney.dif(k)));
-    let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
+    let dif = dense(&whitney.dif(k));
+    let dif_prev = dense(&whitney.dif(k - 1));
     let mass = Matrix::from(&whitney.mass(k));
     let harmonic_dim = harmonic_space_dim(whitney.ndofs(k), dif, dif_prev, mass);
 
@@ -125,18 +125,12 @@ fn relative_harmonics_are_relative_cohomology_cube() {
     let ndofs: Vec<_> = dim.range_inclusive().map(|k| relative.ndofs(k)).collect();
     let difs: Vec<Matrix> = dim
       .range_inclusive()
-      .map(|k| {
-        if k < dim {
-          dense(&relative.dif(k))
-        } else {
-          Matrix::zeros(0, ndofs[k.index()])
-        }
-      })
+      .map(|k| dense(&relative.dif(k)))
       .collect();
 
     for k in dim.range_inclusive() {
-      let dif = (k < dim).then(|| difs[k.index()].clone());
-      let dif_prev = (k > 0).then(|| difs[k.index() - 1].clone());
+      let dif = difs[k.index()].clone();
+      let dif_prev = dense(&relative.dif(k - 1));
       let mass = Matrix::from(&relative.mass(k));
       let harmonic_dim = harmonic_space_dim(ndofs[k.index()], dif, dif_prev, mass);
 
@@ -241,8 +235,8 @@ fn long_exact_sequence_of_the_pair_annulus() {
   let mut betti_abs = Vec::new();
   for k in dim.range_inclusive() {
     let betti = topology.betti_number(k);
-    let dif = (k < dim).then(|| dense(&whitney.dif(k)));
-    let dif_prev = (k > 0).then(|| dense(&whitney.dif(k - 1)));
+    let dif = dense(&whitney.dif(k));
+    let dif_prev = dense(&whitney.dif(k - 1));
     let mass = Matrix::from(&whitney.mass(k));
     assert_eq!(
       harmonic_space_dim(whitney.ndofs(k), dif, dif_prev, mass),
@@ -258,19 +252,13 @@ fn long_exact_sequence_of_the_pair_annulus() {
   let ndofs_rel: Vec<_> = dim.range_inclusive().map(|k| relative.ndofs(k)).collect();
   let difs_rel: Vec<Matrix> = dim
     .range_inclusive()
-    .map(|k| {
-      if k < dim {
-        dense(&relative.dif(k))
-      } else {
-        Matrix::zeros(0, ndofs_rel[k.index()])
-      }
-    })
+    .map(|k| dense(&relative.dif(k)))
     .collect();
   let mut betti_rel = Vec::new();
   for k in dim.range_inclusive() {
     let betti = cohomology_dim(&difs_rel, &ndofs_rel, k.index());
-    let dif = (k < dim).then(|| difs_rel[k.index()].clone());
-    let dif_prev = (k > 0).then(|| difs_rel[k.index() - 1].clone());
+    let dif = difs_rel[k.index()].clone();
+    let dif_prev = dense(&relative.dif(k - 1));
     let mass = Matrix::from(&relative.mass(k));
     assert_eq!(
       harmonic_space_dim(ndofs_rel[k.index()], dif, dif_prev, mass),
