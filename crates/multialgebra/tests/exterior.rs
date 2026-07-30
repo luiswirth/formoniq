@@ -521,9 +521,9 @@ fn probe_tensor(factors: &[Factor], variance: Variance, dim: usize, seed: usize)
 /// Slots may be over different spaces, which is what a rectangular map is.
 ///
 /// A linear map $A: V -> W$ is $V^* times.circle W$: one covariant slot over
-/// the domain and one contravariant slot over the codomain. With a dimension
-/// per tensor that shape was unrepresentable, so a map had to live outside the
-/// algebra as a bare matrix.
+/// the domain and one contravariant slot over the codomain. The dimension
+/// therefore lives on the slot and not on the tensor, which is what keeps a
+/// map inside the algebra rather than beside it as a bare matrix.
 #[test]
 fn slots_may_be_over_different_spaces() {
   use multialgebra::{Factor, Slot, tensor::Slots};
