@@ -108,7 +108,9 @@ impl Complex {
   }
 
   pub fn has_boundary(&self) -> bool {
-    !self.boundary_facets().is_empty()
+    self
+      .role_skeleton::<roles::Facet>()
+      .is_some_and(|facets| facets.handle_iter().any(Facet::is_boundary))
   }
 
   /// The boundary $diff K$ of a d-mesh: the facets bounding a single cell,
@@ -139,7 +141,7 @@ impl Complex {
     self
       .boundary_facets()
       .into_iter()
-      .flat_map(|facet| facet.faces(dim).map(|sub| sub.idx()).collect::<Vec<_>>())
+      .flat_map(|facet| facet.get().faces(dim).map(|sub| sub.idx()))
       .unique()
       .sorted_by_key(|idx| idx.kidx)
       .collect()
@@ -156,19 +158,17 @@ impl Complex {
 
   /// $diff_k: Delta_k -> Delta_(k-1)$, cached after first use.
   ///
-  /// The chain complex extends by zero: outside $0 <= k <= n$ the operator
-  /// maps to/from the zero space.
+  /// Defined for $0 <= k <= n + 1$, the range beyond which both sides of the
+  /// operator are the zero module and there is nothing left to cache. At the
+  /// two ends it is the zero map out of or into that module, of the right
+  /// shape, which the total accessors give with no case distinction:
+  /// [`nsimplices`](Self::nsimplices) and [`incidences`](Self::incidences)
+  /// are both empty off the range.
   pub fn boundary_operator(&self, dim: Dim) -> &CooMatrix {
     self.boundary_operators[dim.index()].get_or_init(|| self.compute_boundary_operator(dim))
   }
 
   fn compute_boundary_operator(&self, dim: Dim) -> CooMatrix {
-    if dim == self.dim() + 1 {
-      return CooMatrix::zeros(self.nsimplices(self.dim()), 0);
-    }
-    if dim == 0 {
-      return CooMatrix::zeros(0, self.nsimplices(dim));
-    }
     let mut mat = CooMatrix::zeros(self.nsimplices(dim - 1), self.nsimplices(dim));
     for (sign, face, coface) in self.incidences(dim - 1) {
       mat.push(face, coface, sign.as_f64());
@@ -296,8 +296,7 @@ impl Complex {
     let dim = cells.dim();
 
     // Vertices must be contiguous and fully used: labels 0..nvertices, each
-    // appearing in some cell. External imports should close gaps first (see
-    // `geometry::coord::mesh::close_vertex_gaps`).
+    // appearing in some cell. An external import closes the gaps first.
     let mut vertex_used = vec![false; cells.nvertices()];
     for cell in cells.iter() {
       for v in cell.iter() {

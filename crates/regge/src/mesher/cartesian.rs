@@ -149,7 +149,7 @@ impl CartesianGrid {
   }
   /// The cell count of each axis.
   pub fn ncells_per_axis(&self) -> &[usize] {
-    self.topology.ncells_per_axis()
+    self.topology.cell_shape().radices()
   }
   pub fn ncells(&self) -> usize {
     self.topology.ncells()

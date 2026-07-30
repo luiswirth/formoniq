@@ -10,7 +10,7 @@
 //! construction is used in two genuinely different spaces:
 //!
 //! - `SimplexCoords<Ambient>` is a cell embedded in $RR^N$, the extrinsic
-//!   realization, whose induced metric and edge lengths (`geometry::coord`) are
+//!   realization, whose induced metric and edge lengths (`regge::coord`) are
 //!   the bridges down into the intrinsic layer.
 //! - `SimplexCoords<LocalCartesian>` is a simplex realized in a chart's own
 //!   cartesian frame $RR^n$. [`unit`](SimplexCoords::unit) is the
@@ -20,7 +20,7 @@
 //!
 //! Everything here is affine and metric-free: it needs coordinates in some
 //! space, never an inner product on that space. The metric a realization
-//! induces is a `geometry::coord` concern layered on the `Ambient`
+//! induces is a `regge::coord` concern layered on the `Ambient`
 //! instantiation, and it is the only part that presupposes an embedding.
 
 use super::{
@@ -29,10 +29,9 @@ use super::{
 };
 use crate::Dim;
 use crate::linalg::{Matrix, RowVector, RowVectorView, Vector, VectorView};
-use crate::topology::simplex::Simplex;
+use crate::topology::simplex::unit_subsimps;
 
 use coorder::{Ambient, CoordSpace, Coords, CoordsRef, affine::AffineTransform};
-use tracing::warn;
 
 use std::marker::PhantomData;
 
@@ -131,11 +130,13 @@ impl<S: CoordSpace> SimplexCoords<S> {
     self.chart_transform().linear
   }
 
-  /// Local2Global Tangentvector
+  /// $dif psi_K v$: a tangent vector of the reference chart, pushed forward
+  /// into `S`.
   pub fn pushforward_vector<'a>(&self, local: impl Into<VectorView<'a>>) -> Vector {
     self.linear_transform() * local.into()
   }
-  /// Global2Local Cotangentvector
+  /// $psi_K^* omega$: a covector on `S`, pulled back onto the reference chart.
+  /// The other variance of the same differential.
   pub fn pullback_covector<'a>(&self, global: impl Into<RowVectorView<'a>>) -> RowVector {
     global.into() * self.linear_transform()
   }
@@ -202,17 +203,13 @@ impl<S: CoordSpace> SimplexCoords<S> {
   /// Coordinate subsimplices: each face of the simplex, realized in the same
   /// space by selecting its vertices' columns.
   pub fn subsimps(&self, sub_dim: Dim) -> impl Iterator<Item = SimplexCoords<S>> + use<'_, S> {
-    Simplex::unit(self.dim_intrinsic())
-      .subsimps(sub_dim)
-      .collect::<Vec<_>>()
-      .into_iter()
-      .map(|sub| {
-        let cols: Vec<Vector> = sub
-          .iter()
-          .map(|v| self.coord(v).view().into_owned())
-          .collect();
-        SimplexCoords::new(Matrix::from_columns(&cols))
-      })
+    unit_subsimps(self.dim_intrinsic(), sub_dim).map(|positions| {
+      let cols: Vec<Vector> = positions
+        .iter()
+        .map(|v| self.coord(v).view().into_owned())
+        .collect();
+      SimplexCoords::new(Matrix::from_columns(&cols))
+    })
   }
   pub fn edges(&self) -> impl Iterator<Item = SimplexCoords<S>> + use<'_, S> {
     self.subsimps(Dim::ONE)
@@ -221,11 +218,13 @@ impl<S: CoordSpace> SimplexCoords<S> {
   pub fn swap_vertices(&mut self, icol: usize, jcol: usize) {
     self.vertices.swap_columns(icol, jcol);
   }
+  /// Reverse the orientation, by transposing the first two vertices.
+  ///
+  /// The identity on a point, whose orientation group is trivial: there is no
+  /// transposition to make and nothing to report.
   pub fn flip_orientation(&mut self) {
     if self.nvertices() >= 2 {
       self.swap_vertices(0, 1);
-    } else {
-      warn!("Cannot flip SimplexCoords with less than 2 vertices.");
     }
   }
   pub fn flipped_orientation(mut self) -> Self {

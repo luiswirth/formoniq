@@ -27,7 +27,6 @@ num-integer = "0.1.46"
 num-traits = "0.2.19"
 
 indexmap = "2.14.0"
-tracing = "0.1.44"
 
 approx = "0.5.1"
 rayon = "1.12.0"

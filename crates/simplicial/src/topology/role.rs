@@ -228,9 +228,8 @@ impl<'m> Facet<'m> {
   }
 }
 
-/// What the edge proof unlocks: the pair structure of grade 1. The metric
-/// side adds the length the proof keys
-/// (`EdgeRefExt`).
+/// What the edge proof unlocks: the pair structure of grade 1. A geometry adds
+/// the length the proof keys, from above.
 impl<'m> Edge<'m> {
   /// The two endpoints, in vertex order: the type states that an edge has
   /// exactly two.
