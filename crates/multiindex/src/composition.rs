@@ -5,12 +5,18 @@
 //! $"Sym"^d (RR^p)$, the degree-$d$ part of the polynomial algebra.
 //!
 //! This is the symmetric counterpart of [`Combination`](crate::Combination),
-//! which indexes $Lambda^k$. The two are dual in structure, not variants of one
-//! thing: a combination forbids repetition and carries a
-//! [`Sign`](crate::Sign) under permutation, a composition mandates neither and
-//! carries no sign. Compositions form a graded monoid under addition,
+//! which indexes $Lambda^k$. The two are the two values of
+//! [`Repetition`]: a combination forbids repetition and so carries a
+//! [`Sign`](crate::Sign) under permutation, a composition allows it and carries
+//! none. Compositions form a graded monoid under addition,
 //! $x^k x^(k') = x^(k + k')$, where combinations instead carry the wedge,
 //! which is partial and signed.
+//!
+//! What differs is the representation, and only for a reason: an exponent vector
+//! here, a bitset in [`MonoIndex`](crate::MonoIndex). The bitset bounds the
+//! shifted alphabet, and the degree of a composition is unbounded (a refinement
+//! level, a polynomial order), so the two coexist and agree, which is a theorem
+//! of this module rather than an accident.
 //!
 //! Stars and bars bijects with the subsets of $d + p - 1$ slots in two
 //! complementary readings, the bars giving the $(p-1)$-subsets and the stars
@@ -299,9 +305,9 @@ mod test {
     }
   }
 
-  /// The degree is genuinely unbounded: past the 64-index ceiling a
-  /// [`Combination`](crate::Combination) imposes, which is exactly the bound
-  /// stars and bars would have inherited.
+  /// The degree is genuinely unbounded: past the bitset ceiling a
+  /// [`MonoIndex`](crate::MonoIndex) imposes on the shifted alphabet, which is
+  /// exactly the bound stars and bars would have inherited.
   #[test]
   fn degree_is_unbounded() {
     for degree in [63, 64, 65, 256] {

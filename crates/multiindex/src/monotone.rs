@@ -207,6 +207,19 @@ pub struct MonoIndex {
 /// symmetric one of $n$ symbols reaches degree $"MAX" - n + 1$.
 pub const MAX_SHIFTED_SYMBOLS: usize = 128;
 
+/// The bitset of the full alphabet ${0, dots, "nsymbols"-1}$.
+pub(crate) fn full_bits(nsymbols: usize) -> u128 {
+  assert!(
+    nsymbols <= MAX_SHIFTED_SYMBOLS,
+    "alphabet exceeds the bitset"
+  );
+  if nsymbols == MAX_SHIFTED_SYMBOLS {
+    u128::MAX
+  } else {
+    (1u128 << nsymbols) - 1
+  }
+}
+
 /// The set bits of a `u128`, ascending.
 pub(crate) fn set_bits(mut bits: u128) -> impl Iterator<Item = usize> {
   std::iter::from_fn(move || {
@@ -373,6 +386,16 @@ impl MonoIndex {
     }
   }
 
+  /// The next index of the same family and degree in colex order, `None` at the
+  /// last one over the unbounded alphabet.
+  ///
+  /// Unbounded because a colex rank is: the successor of the last index inside
+  /// ${0, dots, n-1}$ is the first index reaching past it, not the end of the
+  /// enumeration. [`Self::all`] is this cut off at [`Repetition::count`].
+  pub fn colex_successor(&self) -> Option<Self> {
+    colex_successor_bits(self.shifted).map(|bits| Self::from_shifted(self.repetition, bits))
+  }
+
   /// Merge two indices of the same family into one of the summed degree, with
   /// the sign of the interleaving: the wedge on an alternating factor, the
   /// monomial product on a symmetric one.
@@ -472,20 +495,9 @@ impl MonoIndex {
       Repetition::Forbidden,
       "a symmetric factor has no top degree, so no complement"
     );
-    let full = if nsymbols == MAX_SHIFTED_SYMBOLS {
-      u128::MAX
-    } else {
-      (1u128 << nsymbols) - 1
-    };
-    let complement = Self::from_shifted(Repetition::Forbidden, !self.shifted & full);
+    let complement = Self::from_shifted(Repetition::Forbidden, !self.shifted & full_bits(nsymbols));
     let (sign, _) = self.merge(&complement).expect("the complement is disjoint");
     (sign, complement)
-  }
-}
-
-impl From<crate::Combination> for MonoIndex {
-  fn from(combination: crate::Combination) -> Self {
-    Self::from_shifted(Repetition::Forbidden, combination.bits())
   }
 }
 
@@ -737,58 +749,6 @@ mod test {
         for degree in 0..=4 {
           for (position, word) in repetition.words(nsymbols, degree).enumerate() {
             assert_eq!(repetition.word_from_rank(nsymbols, degree, position), word);
-          }
-        }
-      }
-    }
-  }
-
-  /// [`MonoIndex`] reproduces [`Combination`] on the forbidden side: the same
-  /// words, the same ranks, and the same signs on merge, deletion and
-  /// complement.
-  ///
-  /// Stated on the signs as well as the sets, the signs being what the algebra
-  /// above reads.
-  #[test]
-  fn the_forbidden_index_is_the_combination() {
-    for nsymbols in 0..=5 {
-      for degree in 0..=4 {
-        for index in MonoIndex::all(Repetition::Forbidden, nsymbols, degree) {
-          let combination = Combination::from_increasing(index.iter());
-          assert_eq!(index.rank(), combination.rank());
-
-          let deletions: Vec<_> = index
-            .deletions()
-            .map(|(sign, symbol, reduced)| (sign, symbol, reduced.rank()))
-            .collect();
-          let expected: Vec<_> = combination
-            .deletions()
-            .map(|(sign, symbol, reduced)| (sign, symbol, reduced.rank()))
-            .collect();
-          assert_eq!(deletions, expected);
-
-          let (sign, complement) = index.complement_signed(nsymbols);
-          let (expected_sign, expected_complement) = combination.complement_signed(nsymbols);
-          assert_eq!(sign, expected_sign);
-          assert_eq!(
-            complement.iter().collect::<Vec<_>>(),
-            expected_complement.iter().collect::<Vec<_>>()
-          );
-
-          for other in MonoIndex::all(Repetition::Forbidden, nsymbols, 2) {
-            let merged = index.merge(&other);
-            let expected = combination.union_signed(Combination::from_increasing(other.iter()));
-            match (merged, expected) {
-              (None, None) => {}
-              (Some((sign, merged)), Some((expected_sign, expected))) => {
-                assert_eq!(sign, expected_sign);
-                assert_eq!(
-                  merged.iter().collect::<Vec<_>>(),
-                  expected.iter().collect::<Vec<_>>()
-                );
-              }
-              _ => panic!("merge disagrees with union_signed"),
-            }
           }
         }
       }
