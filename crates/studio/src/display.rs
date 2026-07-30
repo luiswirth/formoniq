@@ -1069,7 +1069,6 @@ impl FieldDisplay {
 #[cfg(test)]
 mod tests {
   use super::*;
-  use realize::reach::vertex_reach;
   use regge::coord::vertex_curvature_radius;
 
   /// The law the amplitude bound exists to enforce: at the chosen amplitude no
@@ -1092,9 +1091,13 @@ mod tests {
     let heights = realize::reduce::nodal_heights(&topology, &coords, &cochain);
     let peaks: Vec<f32> = heights.iter().map(|h| h.abs() as f32).collect();
 
-    let extent = 1.0;
-    let reach = vertex_reach(&topology, &coords, extent);
-    let ceilings: Vec<f32> = reach.iter().map(|r| (0.9 * r) as f32).collect();
+    // The ceilings the bake itself derives, so the safety fraction is not
+    // written down a second time here.
+    let ceilings: Vec<f32> = realize::bake::BakedMesh::new(&topology, &coords)
+      .positions
+      .iter()
+      .map(|v| v.max_displacement)
+      .collect();
 
     let amplitude = amplitude_bound(ceilings.iter().copied(), &peaks);
     assert!(amplitude.is_finite(), "the bound must bind on a thin slab");

@@ -68,23 +68,23 @@ const REACH_SEARCH_EDGES: i32 = 8;
 /// shape with two sheets far apart in edge lengths but close relative to the
 /// object, such as a wide, finely meshed horseshoe.
 ///
-/// Defined for an embedded surface whose normal field exists, returning
-/// `INFINITY` at every vertex of a complex that is not 2-dimensional or not
-/// orientable: a non-orientable surface has no continuous normal field, so
-/// "displace along the normal" has no meaning to bound.
-pub fn vertex_reach(topology: &Complex, coords: &MeshCoords, max_reach: f64) -> Vec<f64> {
+/// `normals` is the surface's vertex normal field, as the bake already built
+/// it. Only the *line* it spans is used, never its sign: the estimate minimizes
+/// over both sides of the surface, since a displacement swings both ways. So
+/// this is defined on a non-orientable surface too, where no coherent normal
+/// field exists but a normal line field still does, and a vertex whose normal
+/// vanishes (a surface the bake found nothing to displace along) is unbounded.
+pub fn vertex_reach(
+  topology: &Complex,
+  coords: &MeshCoords,
+  normals: &[Vector3],
+  max_reach: f64,
+) -> Vec<f64> {
   use rayon::prelude::*;
 
   let nvertices = topology.nsimplices(Dim::ZERO);
   let unbounded = vec![f64::INFINITY; nvertices];
-  if topology.dim() != 2 || !topology.is_orientable() {
-    return unbounded;
-  }
-
   let points: Vec<Vector3> = (0..nvertices).map(|v| embed3(coords, v)).collect();
-  let Some(normals) = oriented_vertex_normals(topology, &points) else {
-    return unbounded;
-  };
 
   // A grid sized by the mean edge length: fine enough that a shell is a thin
   // layer, coarse enough that a cell holds a few vertices.
@@ -143,33 +143,6 @@ fn embed3(coords: &MeshCoords, vertex: usize) -> Vector3 {
     c.get(1).copied().unwrap_or(0.0),
     c.get(2).copied().unwrap_or(0.0),
   )
-}
-
-/// Area-weighted vertex normals of an orientable embedded surface, each cell
-/// wound by the complex's coherent orientation so the 1-ring's face normals
-/// agree instead of canceling. `None` if the surface is not orientable, where
-/// no such field exists. The global sign is the orientation's own and does not
-/// matter to [`vertex_reach`], which minimizes over both sides.
-fn oriented_vertex_normals(topology: &Complex, points: &[Vector3]) -> Option<Vec<Vector3>> {
-  let orientation = topology.orientation()?;
-  let mut normals = vec![Vector3::zeros(); points.len()];
-  for cell in topology.cells().handle_iter() {
-    let v = &cell.simplex().vertices;
-    let (a, b, c) = (points[v[0]], points[v[1]], points[v[2]]);
-    // Twice the area times the unit normal, so the sum is area-weighted with
-    // no separate normalization per face.
-    let face = (b - a).cross(&(c - a)) * orientation.sign(cell).as_f64();
-    for &i in v {
-      normals[i] += face;
-    }
-  }
-  for normal in &mut normals {
-    let length = normal.norm();
-    if length > 1e-15 {
-      *normal /= length;
-    }
-  }
-  Some(normals)
 }
 
 /// A uniform bucket grid over the points, for the shell walk in
@@ -254,6 +227,16 @@ mod tests {
   use simplicial::linalg::Vector;
   use simplicial::topology::complex::Complex;
 
+  /// The vertex normal field the bake builds, which is what production hands
+  /// [`vertex_reach`].
+  fn normals_of(topology: &Complex, coords: &MeshCoords) -> Vec<Vector3> {
+    crate::bake::BakedMesh::new(topology, coords)
+      .positions
+      .iter()
+      .map(|v| Vector3::new(v.normal[0] as f64, v.normal[1] as f64, v.normal[2] as f64))
+      .collect()
+  }
+
   /// On the unit sphere the reach is the radius, and it is the curvature
   /// half that says so: the medial axis is the center point. The tangent-ball
   /// formula returns exactly $R$ for every pair on a sphere, so this also
@@ -261,7 +244,7 @@ mod tests {
   #[test]
   fn sphere_reach_is_its_radius() {
     let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(3);
-    let reach = vertex_reach(&topology, &coords, 10.0);
+    let reach = vertex_reach(&topology, &coords, &normals_of(&topology, &coords), 10.0);
     for &r in &reach {
       assert!(r > 0.5 && r < 1.05, "expected reach ~ 1, got {r}");
     }
@@ -278,7 +261,7 @@ mod tests {
     for &thickness in &[0.2, 0.05] {
       let (topology, coords) = slab(thickness);
       let curvature = vertex_curvature_radius(&topology, &coords);
-      let reach = vertex_reach(&topology, &coords, 10.0);
+      let reach = vertex_reach(&topology, &coords, &normals_of(&topology, &coords), 10.0);
 
       // The interior of a face is flat, so curvature alone would not bound it.
       let flat = curvature
