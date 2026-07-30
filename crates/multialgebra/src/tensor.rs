@@ -138,6 +138,30 @@ impl Tensor {
     )
   }
 
+  /// The decomposable blade of a frame: the wedge
+  /// $v_1 wedge dots.c wedge v_k$ of the columns of `frame`, in one alternating
+  /// slot of the given variance.
+  ///
+  /// $Lambda^k$ of the frame read as a map $RR^k -> RR^n$, whose single column
+  /// is the $binom(n,k)$ minors in colex, so this is functoriality rather than a
+  /// fold of [`wedge`](Self::wedge) over the columns: the blade of a frame is
+  /// the image of the generator of $Lambda^k (RR^k) tilde.eq RR$.
+  ///
+  /// Zero exactly when the columns are dependent, which is the statement that a
+  /// blade decomposes a subspace, and total at $k = 0$, where the empty wedge is
+  /// the unit.
+  ///
+  /// The variance is the frame's own: a frame of tangent vectors gives a
+  /// multivector, one of covectors a multiform. Nothing here derives it
+  /// (invariant 4), so it is stated.
+  pub fn blade_of(frame: &Matrix, variance: Variance) -> Self {
+    let (dim, grade) = (frame.nrows(), frame.ncols());
+    Self::new(
+      Self::one_alternating(grade, variance, dim),
+      crate::exterior_power(frame, grade).column(0).into(),
+    )
+  }
+
   /// A single basis blade of one alternating slot, with the given sign.
   pub fn from_blade_signed(
     dim: impl Into<Dim>,
