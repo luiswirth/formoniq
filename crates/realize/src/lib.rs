@@ -36,7 +36,6 @@ extern crate nalgebra as na;
 
 pub mod advect;
 pub mod bake;
-pub mod demos;
 pub mod deposit;
 pub mod glyph;
 pub mod io;

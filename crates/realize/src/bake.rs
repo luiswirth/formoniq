@@ -649,7 +649,7 @@ mod tests {
     let (tet, tet_coords) = unit_coord_complex(3);
     let cases = [
       (tet.clone(), tet_coords.embed_euclidean(3)),
-      crate::demos::triforce(),
+      regge::mesher::teaching::triforce(),
     ];
     for (topology, coords) in cases {
       let baked = BakedMesh::new(&topology, &coords);

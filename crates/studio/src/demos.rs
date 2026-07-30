@@ -2,11 +2,12 @@
 //! triforce teaching mesh, plus the default opening field of a freshly shown
 //! scene.
 //!
-//! The mesh itself is [`realize::demos::triforce`], re-exported here: it is a
-//! mesh and nothing more, so it needs no scene, and the reductions below the
-//! viewer test against the same one the studies are shown on.
+//! The mesh itself is [`regge::mesher::teaching::triforce`], re-exported
+//! here: it is a mesh and nothing more, so it needs no scene, and the
+//! reductions below the viewer test against the same one the studies are
+//! shown on.
 
-pub use realize::demos::triforce;
+pub use regge::mesher::teaching::triforce;
 
 use crate::gallery::{CochainSpec, NamedCochain};
 use crate::scene::Scene;
