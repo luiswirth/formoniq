@@ -144,19 +144,25 @@ impl<S: CoordSpace> SimplexCoords<S> {
     global.into() * self.linear_transform()
   }
 
-  pub fn affine_transform(&self) -> AffineTransform {
-    let translation = self.base_vertex().view().into_owned();
+  /// $psi_K$ as an affine map, typed by the two spaces it runs between: out of
+  /// the chart's cartesian frame and into `S`.
+  ///
+  /// A *parametrization*, and the type says so: its
+  /// [`pseudo_inverse`](AffineTransform::pseudo_inverse) is an
+  /// `AffineTransform<S, LocalCartesian>`, which is the chart.
+  pub fn affine_transform(&self) -> AffineTransform<LocalCartesian, S> {
+    let translation = self.base_vertex().to_coords();
     let linear = self.linear_transform();
     AffineTransform::new(translation, linear)
   }
 
   /// $psi_K$: the parametrization, from the reference chart out into the space.
   pub fn local2global<'a>(&self, local: impl Into<LocalRef<'a>>) -> Coords<S> {
-    Coords::new(self.affine_transform().apply_forward(local.into().view()))
+    self.affine_transform().apply_forward(local.into())
   }
   /// $psi_K^(-1)$: back from the space into the reference chart.
   pub fn global2local<'a>(&self, global: impl Into<CoordsRef<'a, S>>) -> Local {
-    Local::new(self.affine_transform().apply_backward(global.into().view()))
+    self.affine_transform().apply_backward(global.into())
   }
   pub fn global2bary<'a>(&self, global: impl Into<CoordsRef<'a, S>>) -> Bary {
     local2bary(&self.global2local(global))

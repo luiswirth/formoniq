@@ -91,7 +91,7 @@ joining the ladder only where `formoniq` consumes it.
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
 | `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map |
 | `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
-| `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform` |
+| `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
 | `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
 | `regge`      | the simplicial manifold $M_h$       | the geometry a complex carries: `MeshLengthsSq` (the intrinsic Regge primitive the engine consumes), `MeshCoords` and `CellGramians` the sources that convert into it, `cell_volume`, `vertex_gaussian_curvature`, the extensions reaching down onto `simplicial`'s types (`SimplexCoordsExt`, `SubdivisionExt`, `BoundaryComplexExt`), `mesher::` (grids with coordinates, quotient tori, sphere surfaces) and `io::gmsh` |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
@@ -310,6 +310,14 @@ Breaking one is a bug even if it compiles and passes tests.
    The maps between them therefore have to be written down,
    and the wrong composition does not compile.
    A bare `Vector` is a displacement or raw linear algebra, never a point.
+
+   **The morphisms are tagged too, not just the points.**
+   `AffineTransform<From, To>` carries its direction,
+   so composition demands a shared middle space
+   and `pseudo_inverse` returns the map the other way round:
+   the parametrization/chart distinction is a type, not a naming convention.
+   Its linear part stays a bare `Matrix`, deliberately,
+   because it maps *displacements*, which are untagged for the reason above.
 
 4. **Variance is per-slot, and stated rather than derived.**
    Covariant slots (forms) and contravariant ones (vectors) stand on fully equal footing,
