@@ -99,92 +99,82 @@ impl ElMatProvider for HodgeMassElmat {
   }
 }
 
-/// Element Matrix Provider for the weak mixed exterior derivative $(dif sigma, v)$.
+/// Element matrix of a bilinear form pairing two Whitney families in the
+/// grade-$k$ inner product,
 ///
-/// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_, J in Delta_(k-1) (K))$
-pub struct DifElmat {
+/// $A = R^top M_k C$,
+///
+/// where each side is either the shape functions of grade $k$ themselves or,
+/// one grade below, their exterior derivative, $C = D$ the coboundary of the
+/// reference cell and $R^top = D^top = diff$ its boundary. The three mixed
+/// forms of the Hodge-Laplace complex are the three remaining choices,
+/// [`WhitneyPairElmat::dif`], [`codif`](Self::codif) and
+/// [`codif_dif`](Self::codif_dif); the fourth, both sides undifferentiated, is
+/// [`HodgeMassElmat`] itself.
+///
+/// A side is metric-free (the exterior derivative on Whitney forms is the
+/// coboundary, a $plus.minus 1$ incidence), so the geometry enters through the
+/// mass alone.
+pub struct WhitneyPairElmat {
   mass: HodgeMassElmat,
-  dif: Matrix,
+  /// $diff$, applied on the left, where the rows are one grade below the mass.
+  row: Option<Matrix>,
+  /// $D$, applied on the right, where the columns are.
+  col: Option<Matrix>,
 }
-impl DifElmat {
-  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+
+impl WhitneyPairElmat {
+  fn new(dim: Dim, mass_grade: ExteriorGrade, row_dif: bool, col_dif: bool) -> Self {
+    let boundary = || unit_boundary_operator(dim, mass_grade);
+    Self {
+      mass: HodgeMassElmat::new(dim, mass_grade),
+      row: row_dif.then(boundary),
+      col: col_dif.then(|| boundary().transpose()),
+    }
+  }
+
+  /// The weak mixed exterior derivative $(dif sigma, v)$,
+  /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_k, J in Delta_(k-1) (K))$.
+  pub fn dif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    Self::new(dim.into(), grade.into(), false, true)
+  }
+
+  /// The weak mixed codifferential $(u, dif tau)$,
+  /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$.
+  pub fn codif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    Self::new(dim.into(), grade.into(), true, false)
+  }
+
+  /// The $(dif u, dif v)$ form on grade $k$,
+  /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$,
+  /// whose inner product is therefore taken one grade up.
+  pub fn codif_dif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    let mass = HodgeMassElmat::new(dim, grade);
-    let dif = unit_boundary_operator(dim, grade).transpose();
-    Self { mass, dif }
+    Self::new(dim, grade + 1, true, true)
+  }
+
+  fn grade_of(&self, side: &Option<Matrix>) -> ExteriorGrade {
+    self.mass.grade - ExteriorGrade::from(usize::from(side.is_some()))
   }
 }
 
-impl ElMatProvider for DifElmat {
+impl ElMatProvider for WhitneyPairElmat {
   fn row_grade(&self) -> ExteriorGrade {
-    self.mass.grade
+    self.grade_of(&self.row)
   }
   fn col_grade(&self) -> ExteriorGrade {
-    self.mass.grade - 1
+    self.grade_of(&self.col)
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
     let mass = self.mass.eval(metric, chart);
-    mass * &self.dif
-  }
-}
-
-/// Element Matrix Provider for the weak mixed codifferential $(u, dif tau)$.
-///
-/// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$
-pub struct CodifElmat {
-  mass: HodgeMassElmat,
-  codif: Matrix,
-}
-impl CodifElmat {
-  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
-    let (dim, grade) = (dim.into(), grade.into());
-    let mass = HodgeMassElmat::new(dim, grade);
-    let codif = unit_boundary_operator(dim, grade);
-    Self { mass, codif }
-  }
-}
-impl ElMatProvider for CodifElmat {
-  fn row_grade(&self) -> ExteriorGrade {
-    self.mass.grade - 1
-  }
-  fn col_grade(&self) -> ExteriorGrade {
-    self.mass.grade
-  }
-  fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
-    let mass = self.mass.eval(metric, chart);
-    &self.codif * mass
-  }
-}
-
-/// Element Matrix Provider for the $(dif u, dif v)$ bilinear form.
-///
-/// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$
-pub struct CodifDifElmat {
-  mass: HodgeMassElmat,
-  dif: Matrix,
-  codif: Matrix,
-}
-impl CodifDifElmat {
-  pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
-    let (dim, grade) = (dim.into(), grade.into());
-    let mass = HodgeMassElmat::new(dim, grade + 1);
-    let dif = unit_boundary_operator(dim, grade + 1).transpose();
-    let codif = dif.transpose();
-
-    Self { mass, dif, codif }
-  }
-}
-
-impl ElMatProvider for CodifDifElmat {
-  fn row_grade(&self) -> ExteriorGrade {
-    self.mass.grade - 1
-  }
-  fn col_grade(&self) -> ExteriorGrade {
-    self.mass.grade - 1
-  }
-  fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
-    let mass = self.mass.eval(metric, chart);
-    &self.codif * mass * &self.dif
+    let mass = match &self.col {
+      Some(dif) => mass * dif,
+      None => mass,
+    };
+    match &self.row {
+      Some(codif) => codif * mass,
+      None => mass,
+    }
   }
 }
 
@@ -928,7 +918,7 @@ mod test {
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
-    let computed = DifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed = WhitneyPairElmat::dif(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
@@ -943,7 +933,7 @@ mod test {
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
-    let computed = CodifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed = WhitneyPairElmat::codif(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
@@ -958,7 +948,8 @@ mod test {
       let geo = SimplexLengthsSq::unit(dim);
       let refcomplex = Complex::unit(dim);
       for grade in dim.range() {
-        let difdif = CodifDifElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+        let difdif =
+          WhitneyPairElmat::codif_dif(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
 
         let difwhitneys: Vec<_> = WhitneyLsf::basis(dim, grade).map(|lsf| lsf.dif()).collect();
         let mut gramian = Matrix::zeros(difwhitneys.len(), difwhitneys.len());

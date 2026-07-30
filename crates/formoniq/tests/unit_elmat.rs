@@ -31,7 +31,7 @@ where
 #[test]
 fn laplacian_refcell() {
   check_ref_elmat(
-    |dim| operators::CodifDifElmat::new(dim, Dim::ZERO),
+    |dim| operators::WhitneyPairElmat::codif_dif(dim, Dim::ZERO),
     unit_laplacian,
   );
 }

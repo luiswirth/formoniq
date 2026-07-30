@@ -217,7 +217,7 @@ mod test {
   use super::*;
   use crate::{
     assemble::assemble_galmat,
-    operators::{CodifDifElmat, CodifElmat, DifElmat, HodgeMassElmat},
+    operators::{HodgeMassElmat, WhitneyPairElmat},
   };
 
   use iterative::{Identity, StopCriterion, krylov::cg};
@@ -264,11 +264,13 @@ mod test {
         if grade >= 1 {
           // Rectangular: a confusion of the row and column incidences would
           // pass unnoticed on the square forms alone.
-          agrees(&topology, &geometry, || DifElmat::new(dim, grade));
-          agrees(&topology, &geometry, || CodifElmat::new(dim, grade));
+          agrees(&topology, &geometry, || WhitneyPairElmat::dif(dim, grade));
+          agrees(&topology, &geometry, || WhitneyPairElmat::codif(dim, grade));
         }
         if grade < dim {
-          agrees(&topology, &geometry, || CodifDifElmat::new(dim, grade));
+          agrees(&topology, &geometry, || {
+            WhitneyPairElmat::codif_dif(dim, grade)
+          });
         }
       }
     }
@@ -281,8 +283,8 @@ mod test {
     // Refinement 2, not 1: an unrefined triangle has as many edges as vertices,
     // and the shapes would coincide for a reason that says nothing.
     let (topology, geometry) = mesh(2, 2);
-    let dif = ElementOperator::new(&topology, &geometry, DifElmat::new(2, 1));
-    let codif = ElementOperator::new(&topology, &geometry, CodifElmat::new(2, 1));
+    let dif = ElementOperator::new(&topology, &geometry, WhitneyPairElmat::dif(2, 1));
+    let codif = ElementOperator::new(&topology, &geometry, WhitneyPairElmat::codif(2, 1));
     assert_ne!(dif.nrows(), dif.ncols());
     assert_ne!(codif.nrows(), codif.ncols());
   }
@@ -335,7 +337,7 @@ mod test {
   #[test]
   fn the_matrix_free_jacobi_preconditions() {
     let (topology, geometry) = mesh(3, 2);
-    let op = ElementOperator::new(&topology, &geometry, CodifDifElmat::new(3, 0));
+    let op = ElementOperator::new(&topology, &geometry, WhitneyPairElmat::codif_dif(3, 0));
     let b = probe(op.nrows());
     let stop = StopCriterion::rtol(1e-10);
 
