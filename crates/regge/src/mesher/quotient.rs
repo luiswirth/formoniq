@@ -74,7 +74,10 @@ impl Identification {
   pub fn min_cells(&self) -> usize {
     if self.is_closed() { 3 } else { 1 }
   }
-  fn reflected_axes(&self) -> &[usize] {
+  /// The transverse axes the gluing reflects, empty unless the axis is
+  /// twisted. This, and not which variant the identification is, is what
+  /// decides orientability and whether an embedding of it can be isometric.
+  pub fn reflected_axes(&self) -> &[usize] {
     match self {
       Self::Twisted(axes) => axes,
       _ => &[],
