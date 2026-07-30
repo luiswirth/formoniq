@@ -247,6 +247,19 @@ Breaking one is a bug even if it compiles and passes tests.
    it answers geometry at every grade,
    which is what the boundary trace, DEC-style constructions
    and higher-dimensional Regge curvature need.
+
+   And that totality is a fact about a *basis*, not a property of the code.
+   An $n$-simplex has $binom(n+1,2) = dim "Sym"^2(RR^n)$ edges,
+   and the symmetric squares of its edge vectors are a basis of $"Sym"^2$
+   indexed by the edges (`unit_edge_squares`),
+   so a squared length is a component of the metric in the dual of that basis,
+   $s_e = angle.l g, u_e dot.circle u_e angle.r$,
+   and `SimplexLengthsSq::metric` is that change of basis
+   with the polarization identity as its written-out form.
+   A face's edges being a subset of the simplex's,
+   restriction to a face is *selecting the components at that face's edge indices*,
+   where the cartesian frame needs a projection.
+   The edge basis is the one adapted to the face lattice, which is the whole claim.
    A *chart*, by contrast, exists only on a top-dimensional simplex (invariant 3):
    pinning a metric accessor to the `Cell` witness would conflate
    *has a metric* (all simplices) with *carries a frame* (cells only).
