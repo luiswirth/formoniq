@@ -66,6 +66,14 @@ impl Identification {
   pub fn is_closed(&self) -> bool {
     !matches!(self, Self::Open)
   }
+  /// The fewest cells an axis with this identification may carry.
+  ///
+  /// A closed axis needs three: with two, a cell is glued onto itself, the
+  /// skeleton dedups the pair and the mesh degenerates. It is the simplicial
+  /// circle needing three edges, one dimension up.
+  pub fn min_cells(&self) -> usize {
+    if self.is_closed() { 3 } else { 1 }
+  }
   fn reflected_axes(&self) -> &[usize] {
     match self {
       Self::Twisted(axes) => axes,
@@ -136,7 +144,7 @@ impl FlatQuotient {
       );
     }
     for (axis, id) in identifications.iter().enumerate() {
-      let floor = if id.is_closed() { 3 } else { 1 };
+      let floor = id.min_cells();
       assert!(
         ncells[axis] >= floor,
         "Axis {axis} needs at least {floor} cells; a closed axis with two would \
@@ -168,8 +176,7 @@ impl FlatQuotient {
       .iter()
       .zip(&identifications)
       .map(|(&side, id)| {
-        let floor = if id.is_closed() { 3 } else { 1 };
-        ((side / longest * ncells_longest as f64).round() as usize).max(floor)
+        ((side / longest * ncells_longest as f64).round() as usize).max(id.min_cells())
       })
       .collect();
     Self::new_anisotropic(side_lengths, identifications, ncells)
@@ -314,11 +321,9 @@ impl FlatQuotient {
         .collect(),
     ));
     let lengths = self.edge_lengths_sq(&complex);
-    let ordering = (words.len() == complex.cells().len()).then(|| {
-      let ordering = CellOrdering::new(&complex, words);
-      ordering.is_face_consistent(&complex).then_some(ordering)
-    });
-    (complex, lengths, ordering.flatten())
+    let ordering = CellOrdering::try_new(&complex, words)
+      .filter(|ordering| ordering.is_face_consistent(&complex));
+    (complex, lengths, ordering)
   }
 
   /// The quotient vertex of a grid vertex: fold each axis coordinate back into
@@ -406,7 +411,7 @@ impl FlatQuotient {
         let iedge = edges.kidx_by_simplex(&edge);
         let known = lengths_sq[iedge];
         assert!(
-          known.is_nan() || (known - length_sq).abs() <= 1e-12 * length_sq.max(1.0),
+          known.is_nan() || (known - length_sq).abs() <= 1e-12 * length_sq,
           "The identification is not by an isometry: an edge inherits two lengths."
         );
         lengths_sq[iedge] = length_sq;
