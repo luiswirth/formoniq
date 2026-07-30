@@ -21,14 +21,15 @@ geometry is a genuinely second input, and it lives in a crate of its own —
 manifold this crate is. Nothing here has a notion of length.
 
 **Topology** is the combinatorial complex: incidence, orientation, navigation
-(star, link, cofaces), and the chain complex with its dual. Chains carry integer
-coefficients and cochains real ones; the boundary ∂ and the coboundary d are one
-signed incidence relation read in its two directions, adjoint under the
-chain-cochain pairing. Simplicial homology is exact: Betti numbers, relative
-Betti numbers of the pair (K, ∂K), the Euler characteristic and representative
-homology generators are computed by exact rational arithmetic. The boundary of a
-complex is itself a first-class complex, with the trace operator as a cochain
-map onto it.
+(star, link, cofaces), and the chain complex with its dual. A chain and a
+cochain are one type over a coefficient ring, differing in their variance;
+the boundary ∂ and the coboundary d are one signed incidence relation read in
+its two directions, adjoint under the chain-cochain pairing. Simplicial homology
+and cohomology are exact: Betti numbers, relative Betti numbers of the pair
+(K, ∂K), the Euler characteristic and representative (co)cycles are computed by
+exact rational arithmetic. The boundary of a complex is itself a first-class
+complex, with the trace operator as a cochain map onto it, and the relative
+complex is the complement of that inclusion.
 
 **The manifold condition** is checkable as far as it can be. A complex is
 pure by construction, is verified to be a pseudomanifold (every facet in one
@@ -68,9 +69,11 @@ belongs with the topology; placing the vertices in space is `regge`'s.
 
 The test suite states laws and sweeps them over dimensions: ∂∘∂ = 0,
 Euler-Poincaré, Poincaré duality on the sphere, Poincaré-Lefschetz for (K, ∂K),
-the transition cocycle law on points and again on fibers, functoriality of the
-trace along a chain of faces, the agreement of two charts on the tangential part
-of a fiber value, and exactness of quadrature on polynomials.
+nonsingularity of the Kronecker pairing between the homology and cohomology
+generators, exactness of 0 → C(K, ∂K) → C(K) → C(∂K) → 0, the transition cocycle
+law on points and again on fibers, functoriality of the trace along a chain of
+faces, the agreement of two charts on the tangential part of a fiber value, and
+exactness of quadrature on polynomials.
 
 The laws that are meant to be sharp are checked to be sharp: where two charts
 agree only tangentially, the test also asserts that they genuinely disagree
