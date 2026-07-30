@@ -151,50 +151,56 @@ impl AdvectBake {
   }
 }
 
-/// The field's peak magnitude $max |V|_g$ over the cell barycenters.
+/// The speed $|V|_g$ of the reduced field at each cell's barycenter, with the
+/// cell's metric weight $sqrt(det g)$ beside it.
 ///
-/// What a display divides by to turn "so many object-radii per second" into the
-/// field time the bake wants: the field's own units are the cochain's, and the
-/// only scale a viewer can read is the object's. A field that vanishes
-/// everywhere gives zero, and the caller decides what a still field looks like.
-///
-/// Sampled at barycenters rather than integrated: the peak of an affine field on
-/// a simplex is at a vertex, so this underestimates slightly, which sets the
-/// speed a hair low and never a hair high, the safe direction for a mark whose
-/// whole legibility is that it is slow enough.
-pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> f64 {
+/// Sampled at barycenters rather than integrated: the sharped reduced field is
+/// affine on a cell, so its extremes are at the vertices and a barycenter
+/// sample underestimates slightly. That sets a speed a hair low and never a
+/// hair high, the safe direction for a mark whose whole legibility is that it
+/// is slow enough.
+fn cell_speeds(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<(f64, f64)> {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
+  let grade = cochain.grade();
   topology
     .cells()
     .handle_iter()
     .map(|cell| {
       let metric = coords.cell_metric(cell);
       let point = MeshPoint::barycenter(cell.idx());
-      let sign = crate::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
-      reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric)
+      let sign = crate::reduce::admitted_reduction_sign(topology, cell, grade);
+      let speed = reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric);
+      (metric.det_sqrt(), speed)
     })
+    .collect()
+}
+
+/// The field's peak speed $max |V|_g$.
+///
+/// What a display divides by to turn "so many object-radii per second" into the
+/// field time the bake wants: the field's own units are the cochain's, and the
+/// only scale a viewer can read is the object's. A field that vanishes
+/// everywhere gives zero, and the caller decides what a still field looks like.
+pub fn peak_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> f64 {
+  cell_speeds(topology, coords, cochain)
+    .into_iter()
+    .map(|(_, speed)| speed)
     .fold(0.0, f64::max)
 }
 
-/// The field's mean magnitude over the manifold, area-weighted: the
-/// barycenter samples of [`peak_speed`], averaged by the cells' metric volume
-/// instead of maximized.
+/// The field's mean speed over the manifold, weighted by the cells' metric
+/// volume: the same samples as [`peak_speed`], averaged instead of maximized.
 ///
 /// What the deposit's ink calibration divides by: with splats inked by arc
 /// length, the equilibrium trail brightness is set by the average speed of
 /// the population, not the peak, and the average is the field's own
 /// area-weighted mean, an exact quantity of the field, not a tuned ratio.
 pub fn mean_speed(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> f64 {
-  let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-  let (mut weighted, mut total) = (0.0, 0.0);
-  for cell in topology.cells().handle_iter() {
-    let metric = coords.cell_metric(cell);
-    let weight = metric.det_sqrt();
-    let point = MeshPoint::barycenter(cell.idx());
-    let sign = crate::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
-    weighted += weight * reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric);
-    total += weight;
-  }
+  let (weighted, total) = cell_speeds(topology, coords, cochain)
+    .into_iter()
+    .fold((0.0, 0.0), |(weighted, total), (weight, speed)| {
+      (weighted + weight * speed, total + weight)
+    });
   if total > 0.0 { weighted / total } else { 0.0 }
 }
 
