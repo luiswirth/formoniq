@@ -22,7 +22,8 @@
 //! shared vertex. A quantity on a skeleton simplex is therefore read through
 //! the trace $i^*$ ([`trace_value`]), exact by $H(dif)$ conformity and so
 //! single-valued with no averaging. A quantity read in a cell's own frame
-//! ([`reduced_value`]) is per cell and genuinely disagrees with its neighbor.
+//! (the nodal recovery of [`nodal_heights`]) is per cell and genuinely
+//! disagrees with its neighbor.
 //! Averaging the second into the first is a recovery, and presenting a recovery
 //! as the field is the thing to avoid.
 
@@ -241,10 +242,18 @@ pub fn nodal_heights(topology: &Complex, coords: &MeshCoords, cochain: &Cochain)
   let nvertices = topology.skeleton(0).len();
   let mut sum = vec![0.0; nvertices];
   let mut count = vec![0u32; nvertices];
+  let k = cochain.grade();
   for cell in topology.cells().handle_iter() {
     let metric = coords.cell_metric(cell);
+    // The readout in the cell's own chart: the signed density for a reduced
+    // grade of 0, the magnitude for a reduced grade of 1, the direction there
+    // being the glyph and particle marks' to carry.
+    let signed = (k == topology.dim()).then(|| admitted_reduction_sign(topology, cell, k));
     for (ilocal, &v) in cell.simplex().vertices.iter().enumerate() {
-      sum[v] += reduced_value(&interpolant, cell, &metric, ilocal);
+      let mut weights = Vector::zeros(cell.nvertices());
+      weights[ilocal] = 1.0;
+      let point = MeshPoint::new(cell.idx(), weights.into());
+      sum[v] += scalarize(interpolant.eval(&point), &metric, signed);
       count[v] += 1;
     }
   }
@@ -253,26 +262,6 @@ pub fn nodal_heights(topology: &Complex, coords: &MeshCoords, cochain: &Cochain)
     .zip(count)
     .map(|(s, c)| if c > 0 { s / f64::from(c) } else { 0.0 })
     .collect()
-}
-
-/// The reduced field's scalar readout at one cell vertex, in that cell's chart:
-/// the signed density for a reduced grade of 0, the magnitude $|V|_g$ for a
-/// reduced grade of 1 (the direction is the glyph and particle marks' to carry).
-/// The one place the reduction is evaluated, shared by the per-corner colormap
-/// and the per-vertex height so the two cannot drift.
-pub fn reduced_value(
-  interpolant: &WhitneyInterpolant,
-  cell: Cell,
-  metric: &Metric,
-  ilocal: usize,
-) -> f64 {
-  let mut weights = na::DVector::zeros(cell.nvertices());
-  weights[ilocal] = 1.0;
-  let point = MeshPoint::new(cell.idx(), weights.into());
-  let k = interpolant.cochain().grade();
-  let signed =
-    (k == cell.complex().dim()).then(|| admitted_reduction_sign(cell.complex(), cell, k));
-  scalarize(interpolant.eval(&point), metric, signed)
 }
 
 /// The trace-reduced scalar of a field on a skeleton simplex: the one rule that
