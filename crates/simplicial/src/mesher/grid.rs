@@ -34,8 +34,8 @@ impl CartesianTopology {
     Self::new(vec![ncells_axis; dim.into().index()])
   }
 
-  pub fn dim(&self) -> usize {
-    self.cells.naxes()
+  pub fn dim(&self) -> Dim {
+    self.cells.naxes().into()
   }
 
   /// The shape of the cell grid: the cell count of each axis.
@@ -45,10 +45,6 @@ impl CartesianTopology {
   /// The shape of the vertex grid: one more vertex than cells along each axis.
   pub fn vertex_shape(&self) -> Radix {
     self.cells.radices().iter().map(|&n| n + 1).collect()
-  }
-  /// The cell count of each axis.
-  pub fn ncells_per_axis(&self) -> &[usize] {
-    self.cells.radices()
   }
   pub fn ncells(&self) -> usize {
     self.cells.count()
@@ -79,7 +75,7 @@ impl CartesianTopology {
   /// $emptyset subset {a_1} subset {a_1, a_2} subset dots.c$
   /// in this subset lattice, one per permutation of the axes.
   pub fn cell_skeleton(&self) -> Skeleton {
-    let dim = self.dim();
+    let dim = self.dim().index();
     let vertices_shape = self.vertex_shape();
 
     let mut simplices: Vec<Simplex> = Vec::with_capacity(factorial(dim) * self.ncells());

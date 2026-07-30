@@ -6,7 +6,7 @@
 //! inside a coarse one (a [`Child`]). Transporting a geometry across that record
 //!, pulling each coarse cell's metric back onto its children, or placing the
 //! new vertices of an embedding, is the geometry layer's job (see
-//! `geometry::refine`), keyed off the same [`Subdivision`].
+//! `regge::refine`), keyed off the same [`Subdivision`].
 //!
 //! Every cell is subdivided by the one reference pattern
 //! ([`UnitRefinement`](crate::atlas::refine::UnitRefinement)),

@@ -100,9 +100,6 @@ impl Skeleton {
     self.simplices.iter()
   }
 
-  pub fn insert(&mut self, simp: Simplex) -> (KSimplexIdx, bool) {
-    self.simplices.insert_full(simp)
-  }
   pub fn into_index_set(self) -> IndexSet<Simplex> {
     self.simplices
   }

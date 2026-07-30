@@ -3758,7 +3758,6 @@ dependencies = [
  "num-traits",
  "rayon",
  "serde",
- "tracing",
 ]
 
 [[package]]

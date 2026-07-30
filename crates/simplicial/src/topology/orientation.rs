@@ -220,7 +220,7 @@ impl Complex {
 mod test {
   use super::*;
   use crate::Dim;
-  use crate::topology::{simplex::Simplex, skeleton::Skeleton};
+  use crate::topology::{homology::test::two_sphere, simplex::Simplex, skeleton::Skeleton};
 
   fn complex_of(cells: &[&[usize]]) -> Complex {
     Complex::from_cells(Skeleton::new(
@@ -311,7 +311,7 @@ mod test {
   /// Reversal is an involution and stays coherent: the other generator.
   #[test]
   fn reversal_is_an_involution() {
-    let complex = two_sphere(0);
+    let complex = two_sphere();
     let orientation = complex.orientation().unwrap();
     assert_eq!(&orientation.reversed().reversed(), orientation);
     assert!(
@@ -324,32 +324,17 @@ mod test {
     );
   }
 
-  /// A combinatorial 2-sphere: the boundary of a tetrahedron.
-  ///
-  /// `_subdivisions` is ignored. The point of this fixture is that a sphere is a
-  /// combinatorial object here, needing no coordinates to subdivide.
-  fn two_sphere(_subdivisions: usize) -> Complex {
-    Complex::from_cells(Skeleton::new(vec![
-      Simplex::new(vec![0, 1, 2]),
-      Simplex::new(vec![0, 1, 3]),
-      Simplex::new(vec![0, 2, 3]),
-      Simplex::new(vec![1, 2, 3]),
-    ]))
-  }
-
   /// The sphere is orientable, and its colex frames genuinely disagree, the
   /// orientation is doing work, not returning all-`Pos`.
   #[test]
   fn sphere_is_orientable_and_not_trivially_signed() {
-    for nsubdivisions in 0..=0 {
-      let complex = two_sphere(nsubdivisions);
-      assert!(complex.is_orientable());
-      assert_coherent(&complex);
-      let signs = complex.orientation().unwrap().signs();
-      assert!(
-        signs.contains(&Sign::Neg),
-        "colex order is not already coherent on the icosphere"
-      );
-    }
+    let complex = two_sphere();
+    assert!(complex.is_orientable());
+    assert_coherent(&complex);
+    let signs = complex.orientation().unwrap().signs();
+    assert!(
+      signs.contains(&Sign::Neg),
+      "colex order is not already coherent on the sphere"
+    );
   }
 }
