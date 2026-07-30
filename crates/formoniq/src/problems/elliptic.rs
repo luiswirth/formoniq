@@ -319,7 +319,9 @@ impl HodgeBlocks {
   ///
   /// Total in grade: at grade $0$ the $sigma$ space is trivial and the empty
   /// vector is its only element, so the mass solve is skipped rather than run
-  /// on an empty system.
+  /// on an empty system. Not total over signature: the solve is the SPD direct
+  /// one, so it wants a Riemannian geometry, where an indefinite $M_(k-1)$
+  /// needs the LU its caller must then choose.
   pub fn codif(&self, u: &Vector) -> Vector {
     if self.n_sigma == 0 {
       return Vector::zeros(0);
