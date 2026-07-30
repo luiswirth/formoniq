@@ -365,6 +365,38 @@ mod tests {
     }
   }
 
+  /// A corner's value belongs to its corner, not to its slot: permuting a
+  /// primitive's vertices permutes its values the same way. That is what makes
+  /// the stream readable against a wound primitive at all, since a `Simplex` is
+  /// colex-sorted and a rasterizer's corner order is not. Swept over the three
+  /// skeletons a render primitive can be, at every grade.
+  #[test]
+  fn a_corner_value_follows_its_vertex_through_a_rewinding() {
+    use regge::coord::mesh::unit_coord_complex;
+    let (topology, coords) = unit_coord_complex(2);
+    for k in 0..=2 {
+      let ndofs = topology.nsimplices(k);
+      let cochain = Cochain::new(
+        k,
+        Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i + 1) as f64)),
+      );
+
+      let triangle = [0u32, 1, 2];
+      let straight = corner_values(&topology, &coords, &cochain, [triangle]);
+      let swapped = corner_values(&topology, &coords, &cochain, [[2u32, 0, 1]]);
+      assert_eq!(swapped, [straight[2], straight[0], straight[1]], "k={k}");
+
+      let edge = corner_values(&topology, &coords, &cochain, [[0u32, 1]]);
+      let flipped = corner_values(&topology, &coords, &cochain, [[1u32, 0]]);
+      assert_eq!(flipped, [edge[1], edge[0]], "k={k}");
+
+      // A vertex has one corner, so the statement is the trivial one, which is
+      // exactly what the degenerate member of the family should say.
+      let point = corner_values(&topology, &coords, &cochain, [[1u32]]);
+      assert_eq!(point.len(), 1, "k={k}");
+    }
+  }
+
   /// On the diagonal $d = k$ the trace-colored value is the cochain density
   /// $c_tau \/ vol_g(tau)$, and constant across the simplex however the point is
   /// chosen, the flat-shaded DOF the lowest-order element forces. Single-valued

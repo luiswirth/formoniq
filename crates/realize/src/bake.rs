@@ -201,11 +201,12 @@ impl BakedMesh {
       ),
       2 => {
         let (triangles, normals) = oriented_surface(topology, &ambient);
+        let reach = vertex_reach(topology, coords, &normals, extent);
         (
           PrimBatch::Triangles(triangles),
           skeleton_indices(topology, Dim::ONE),
           normals,
-          vertex_reach(topology, coords, extent),
+          reach,
         )
       }
       // A solid ($n >= 3$) has no visible interior and no slicing tool yet, so
@@ -236,7 +237,12 @@ impl BakedMesh {
 
         let (local_tris, local_normals) =
           oriented_surface(surface.complex(topology), &local_points);
-        let local_reach = vertex_reach(surface.complex(topology), surface.coords(coords), extent);
+        let local_reach = vertex_reach(
+          surface.complex(topology),
+          surface.coords(coords),
+          &local_normals,
+          extent,
+        );
 
         let triangles: Vec<[u32; 3]> = local_tris
           .iter()
@@ -572,30 +578,31 @@ pub fn orient_triangles(triangles: &[[u32; 3]]) -> Vec<[u32; 3]> {
   oriented
 }
 
-/// Per-vertex normals of a triangle surface embedded in $RR^3$: the average of
-/// the unit normals of a vertex's incident triangles.
+/// The unit vertex normals of a triangle surface embedded in $RR^3$: at each
+/// vertex, the area-weighted sum of its incident triangles' normals.
 ///
-/// Meaningful only on a consistently wound list; see [`orient_triangles`]. Not
-/// itself renormalized, at a crease or on a coarse mesh the average of unit
-/// vectors falls short of one, so a caller needing a unit axis normalizes
-/// itself.
-pub fn vertex_normals(
-  triangles: &[[u32; 3]],
-  positions: &[na::Vector3<f64>],
-) -> Vec<na::Vector3<f64>> {
+/// The weight is the cross product's own length, twice the triangle's area, so
+/// the sum is the area weighting with nothing to divide by: a sliver
+/// contributes in proportion to the surface it actually carries, where a mean
+/// of unit normals would let a fan of slivers outvote the face they sit on.
+///
+/// Meaningful only on a consistently wound list; see [`orient_triangles`]. Zero
+/// at a vertex whose incident normals cancel and at one with no triangle at
+/// all, which is the honest answer, there is no axis there, and callers read it
+/// as such rather than dividing by a length of zero.
+fn vertex_normals(triangles: &[[u32; 3]], positions: &[na::Vector3<f64>]) -> Vec<na::Vector3<f64>> {
   let mut normals = vec![na::Vector3::zeros(); positions.len()];
-  let mut counts = vec![0u32; positions.len()];
   for ivs in triangles {
     let vs = ivs.map(|i| positions[i as usize]);
-    let triangle_normal = (vs[1] - vs[0]).cross(&(vs[2] - vs[0])).normalize();
+    let weighted = (vs[1] - vs[0]).cross(&(vs[2] - vs[0]));
     for &iv in ivs {
-      normals[iv as usize] += triangle_normal;
-      counts[iv as usize] += 1;
+      normals[iv as usize] += weighted;
     }
   }
-  for (normal, count) in normals.iter_mut().zip(counts) {
-    if count > 0 {
-      *normal /= f64::from(count);
+  for normal in &mut normals {
+    let length = normal.norm();
+    if length > 1e-15 {
+      *normal /= length;
     }
   }
   normals
