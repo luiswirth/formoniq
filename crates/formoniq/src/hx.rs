@@ -152,9 +152,6 @@ pub struct GradeKHodgeHx {
   preconditioner: AuxiliarySpace<Jacobi>,
 }
 
-/// The classic damped-Jacobi weight, damping the upper half of the spectrum.
-const SMOOTHER_WEIGHT: f64 = 2.0 / 3.0;
-
 impl GradeKHodgeHx {
   /// Assemble the operator and the auxiliary-space preconditioner for grade
   /// `grade` on the given Whitney complex, reading the ambient frame off
@@ -251,7 +248,7 @@ fn hx_preconditioner(
   blocks: &dyn AuxiliaryBlocks,
 ) -> AuxiliarySpace<Jacobi> {
   let operator = complex.hdif_gram(grade);
-  let mut preconditioner = AuxiliarySpace::new(Jacobi::weighted(&operator, SMOOTHER_WEIGHT));
+  let mut preconditioner = AuxiliarySpace::new(Jacobi::smoother(&operator));
 
   // Gradient correction: Pi_grad = D_{k-1}, auxiliary operator A_{k-1}.
   let lower = grade - 1;
