@@ -651,7 +651,7 @@ mod test {
 
       for grade in dim.range_inclusive() {
         let ndofs = topology.nsimplices(grade);
-        let cochain = crate::cochain::Cochain::new(
+        let cochain = crate::Cochain::new(
           grade,
           Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i % 5) as f64 - 2.0)),
         );

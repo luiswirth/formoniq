@@ -18,7 +18,7 @@
 //! than in a reader's surprise.
 
 use coorder::Coord;
-use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use multialgebra::ExteriorGrade;
 use regge::coord::locate::PointLocator;
 use regge::coord::mesh::MeshCoords;

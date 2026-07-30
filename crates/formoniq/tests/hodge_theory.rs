@@ -10,7 +10,7 @@
 
 extern crate nalgebra as na;
 
-use derham::cochain::Cochain;
+use derham::Cochain;
 use formoniq::whitney_complex::{RelativeWhitneyComplex, WhitneyComplex};
 use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;

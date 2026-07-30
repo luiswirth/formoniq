@@ -28,7 +28,7 @@
 use regge::boundary::BoundaryComplexExt;
 use std::borrow::Cow;
 
-use derham::cochain::Cochain;
+use derham::Cochain;
 use multialgebra::ExteriorGrade;
 use regge::coord::mesh::MeshCoords;
 use simplicial::{

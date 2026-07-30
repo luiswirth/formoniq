@@ -7,7 +7,7 @@ use simplicial::linalg::{Matrix, Vector};
 use simplicial::topology::orientation::Orientation;
 
 use crate::ui::Selection;
-use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
+use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use multialgebra::{Blade, ExteriorGrade, Tensor, Variance};
 use realize::surface::Surface;
 use regge::coord::mesh::MeshCoords;

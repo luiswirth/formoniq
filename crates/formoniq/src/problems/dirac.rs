@@ -98,7 +98,7 @@ use crate::{
   whitney_complex::{HilbertComplex, RelativeWhitneyComplex},
 };
 
-use derham::cochain::Cochain;
+use derham::Cochain;
 use multialgebra::ExteriorGrade;
 use simplicial::{
   Dim,

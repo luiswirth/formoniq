@@ -36,7 +36,7 @@ use crate::{
 
 use {
   crate::linalg::faer::FaerCholesky,
-  derham::{cochain::Cochain, section::Section},
+  derham::{Cochain, section::Section},
   multialgebra::ExteriorGrade,
   simplicial::{
     atlas::SimplexQuadRule,

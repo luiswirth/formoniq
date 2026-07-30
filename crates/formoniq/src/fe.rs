@@ -24,7 +24,7 @@
 
 use {
   crate::linalg::faer::FaerLu,
-  derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
+  derham::{Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
   iterative::{Jacobi, StopCriterion, krylov::cg},
   metric::tensor::inner,
   regge::{cell_volume, lengths::mesh::MeshLengthsSq},

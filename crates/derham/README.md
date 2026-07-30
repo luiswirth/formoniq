@@ -5,10 +5,10 @@ differential forms on a simplicial manifold, without coordinates.
 
 ## What it provides
 
-- `Cochain`:
-  a discrete k-form, one coefficient per k-simplex,
-  with the discrete exterior derivative as the coboundary.
-  Arbitrary dimension and grade.
+- The reading of a simplicial cochain as a discrete k-form.
+  The cochain complex itself is topology and belongs to `simplicial`;
+  what makes its coefficients the integrals of a form,
+  and its coboundary the exterior derivative, is the de Rham map below.
 - Whitney interpolation `W`:
   the lowest-order Whitney forms, the basis of P⁻₁Λᵏ dual to the degrees of freedom,
   reconstructing from a cochain a form defined at every point of the manifold.

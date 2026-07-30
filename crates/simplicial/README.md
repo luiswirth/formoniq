@@ -14,11 +14,14 @@ geometry is a genuinely second input, and it lives in a crate of its own —
 [regge](https://crates.io/crates/regge). Nothing here has a notion of length.
 
 **Topology** is the combinatorial complex: incidence, orientation, navigation
-(star, link, cofaces), boundary and coboundary operators, and exact integer
-simplicial homology. Betti numbers, relative Betti numbers of the pair (K, ∂K),
-the Euler characteristic and representative homology generators are computed by
-exact rational arithmetic. The boundary of a complex is itself a first-class
-complex, with the trace operator as a cochain map onto it.
+(star, link, cofaces), and the chain complex with its dual. Chains carry integer
+coefficients and cochains real ones; the boundary ∂ and the coboundary d are one
+signed incidence relation read in its two directions, adjoint under the
+chain-cochain pairing. Simplicial homology is exact: Betti numbers, relative
+Betti numbers of the pair (K, ∂K), the Euler characteristic and representative
+homology generators are computed by exact rational arithmetic. The boundary of a
+complex is itself a first-class complex, with the trace operator as a cochain
+map onto it.
 
 **The atlas** is the piecewise-affine chart structure: barycentric charts on the
 cells, affine transition maps between charts sharing a face (obeying the cocycle
@@ -53,5 +56,5 @@ Mesh formats are `regge`'s, since reading a mesh means reading coordinates too.
 `simplicial` is the topological layer of
 [formoniq](https://github.com/luiswirth/formoniq), a finite element exterior
 calculus (FEEC) engine. It knows nothing of differential forms or of geometry:
-metrics and edge lengths live in `regge`, and cochains, Whitney forms and PDEs
-in the crates above.
+metrics and edge lengths live in `regge`, and the reading of a cochain as a
+discrete differential form, Whitney forms and PDEs in the crates above.

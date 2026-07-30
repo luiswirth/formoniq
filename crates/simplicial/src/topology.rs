@@ -1,4 +1,5 @@
 pub mod boundary;
+pub mod chain;
 pub mod complex;
 pub mod data;
 pub mod handle;

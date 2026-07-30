@@ -340,7 +340,7 @@ impl<B: SelfAdjoint<Space = Vector>> SelfAdjoint for ReplicatedBlock<B> {}
 mod tests {
   use super::*;
   use derham::{
-    cochain::Cochain,
+    Cochain,
     interpolate::interpolant::WhitneyInterpolant,
     project::derham_map,
     section::{CoordFieldExt, Wedge},

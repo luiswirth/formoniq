@@ -27,7 +27,7 @@
 //! $"im" diff_(k+1)$, hence exact linear algebra over $QQ$ (`BigRational`, so no
 //! coefficient growth ever overflows), not just a rank.
 
-use super::{complex::Complex, handle::KSimplexIdx};
+use super::{chain::Chain, complex::Complex};
 use crate::Dim;
 
 use num_bigint::BigInt;
@@ -141,73 +141,6 @@ impl Complex {
       .filter(|(r, c, _)| !boundary_rows.contains(r) && !boundary_cols.contains(c))
       .collect();
     exact_rank(self.nsimplices(grade - 1), &triplets)
-  }
-}
-
-/// An integer $k$-chain: a formal $ZZ$-combination $sum_sigma c_sigma sigma$ of
-/// the k-simplices, coefficients in colex order (indexed by [`KSimplexIdx`]).
-///
-/// An element of the chain group $C_k$: a formal $ZZ$-combination of oriented
-/// k-simplices. Pure combinatorics, carrying no metric and no geometry, so it
-/// lives here with the rest of the topological structure.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Chain {
-  grade: Dim,
-  coeffs: Vec<i64>,
-}
-impl Chain {
-  /// A chain from its coefficients, one per $k$-simplex in colex order.
-  pub fn new(grade: impl Into<Dim>, coeffs: Vec<i64>) -> Self {
-    Self {
-      grade: grade.into(),
-      coeffs,
-    }
-  }
-
-  pub fn grade(&self) -> Dim {
-    self.grade
-  }
-  /// The coefficient of each k-simplex, in colex order.
-  pub fn coeffs(&self) -> &[i64] {
-    &self.coeffs
-  }
-  /// The simplices carrying a nonzero coefficient, with that coefficient: the
-  /// support of the chain.
-  pub fn support(&self) -> impl Iterator<Item = (KSimplexIdx, i64)> {
-    self
-      .coeffs
-      .iter()
-      .enumerate()
-      .filter(|&(_, &c)| c != 0)
-      .map(|(kidx, &c)| (kidx, c))
-  }
-
-  /// The boundary $diff_k: C_k -> C_(k-1)$.
-  ///
-  /// Exact over $ZZ$: the incidence coefficients are $plus.minus 1$, so the
-  /// chain complex stays integral and $diff compose diff = 0$ holds without
-  /// rounding.
-  ///
-  /// Total at the ends. Below grade zero there is nothing to bound, and the
-  /// complex extends by zero either way, so the result is the empty chain
-  /// rather than a panic.
-  pub fn boundary(&self, topology: &Complex) -> Self {
-    if self.grade == 0 {
-      return Self::new(self.grade - 1, Vec::new());
-    }
-    let mut coeffs = vec![0i64; topology.nsimplices(self.grade - 1)];
-    for (kidx, coefficient) in self.support() {
-      for (sign, face) in topology
-        .skeleton(self.grade)
-        .handle_iter()
-        .nth(kidx)
-        .expect("a chain's coefficients are indexed by its own skeleton")
-        .boundary()
-      {
-        coeffs[face.kidx()] += sign.as_i32() as i64 * coefficient;
-      }
-    }
-    Self::new(self.grade - 1, coeffs)
   }
 }
 
@@ -419,7 +352,7 @@ fn primitive_chain(grade: Dim, cycle: &[BigRational]) -> Chain {
     .iter()
     .map(|x| x.to_i64().expect("generator coefficient fits in i64"))
     .collect();
-  Chain { grade, coeffs }
+  Chain::new(grade, coeffs)
 }
 
 /// Two primes near $2^30$. Their pairwise product fits in an `i64`, so all

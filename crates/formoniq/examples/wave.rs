@@ -21,7 +21,7 @@
 mod util;
 
 use {
-  derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt},
+  derham::{Cochain, project::derham_map, section::CoordFieldExt},
   formoniq::{
     problems::wave::{WaveState, cfl_dt, solve_wave},
     whitney_complex::WhitneyComplex,

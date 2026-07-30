@@ -26,7 +26,7 @@
 //! Averaging the second into the first is a recovery, and presenting a recovery
 //! as the field is the thing to avoid.
 
-use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use metric::Metric;
 use metric::tensor::TensorExt;
 use multialgebra::{ExteriorGrade, Tensor};

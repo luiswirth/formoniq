@@ -37,9 +37,7 @@
 //! application. Both cost $O("nnz")$. The earlier column-by-column build was
 //! $O(N^2)$.
 
-use crate::{
-  cochain::Cochain, interpolate::form::WhitneyLsf, project::integrate_face, section::Section,
-};
+use crate::{Cochain, interpolate::form::WhitneyLsf, project::integrate_face, section::Section};
 
 use {
   multialgebra::{Dim, ExteriorGrade, Tensor, Variance, tensor::Transport},

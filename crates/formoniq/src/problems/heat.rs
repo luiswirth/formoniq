@@ -9,7 +9,7 @@ use crate::{
   whitney_complex::HilbertComplex,
 };
 
-use derham::cochain::Cochain;
+use derham::Cochain;
 use multialgebra::ExteriorGrade;
 
 /// Radau IIA for the Hodge heat equation $diff_t u = -Delta u + f$ on Whitney

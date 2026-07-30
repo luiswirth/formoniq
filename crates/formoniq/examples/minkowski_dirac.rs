@@ -74,7 +74,7 @@
 extern crate nalgebra as na;
 
 use coorder::Coord;
-use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
+use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::{
   assemble::assemble_galvec,
   fe::fe_l2_error,

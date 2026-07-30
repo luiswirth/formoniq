@@ -30,7 +30,7 @@
 //! mark instead of fusing into a continuous line.
 
 use coorder::Coord;
-use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use metric::tensor::TensorExt;
 use rayon::prelude::*;
 use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};

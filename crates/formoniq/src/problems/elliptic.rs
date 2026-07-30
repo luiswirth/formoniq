@@ -9,7 +9,7 @@ use {
     eigen::{EigenError, sparse_shift_invert_eigen},
     faer::FaerLu,
   },
-  derham::cochain::Cochain,
+  derham::Cochain,
   multialgebra::ExteriorGrade,
 };
 

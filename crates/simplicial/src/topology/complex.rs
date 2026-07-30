@@ -4,7 +4,7 @@ use super::{
   role::{Facet, RoledSkeleton, SimplexRole, roles},
   skeleton::Skeleton,
 };
-use crate::Dim;
+use crate::{Dim, Sign};
 
 use crate::linalg::{CooMatrix, CooMatrixExt};
 
@@ -166,20 +166,37 @@ impl Complex {
     if dim == self.dim() + 1 {
       return CooMatrix::zeros(self.nsimplices(self.dim()), 0);
     }
-    let sups = &self.skeleton(dim);
-
     if dim == 0 {
-      return CooMatrix::zeros(0, sups.len());
+      return CooMatrix::zeros(0, self.nsimplices(dim));
     }
-
-    let subs = &self.skeleton(dim - 1);
-    let mut mat = CooMatrix::zeros(subs.len(), sups.len());
-    for (isup, sup) in sups.handle_iter().enumerate() {
-      for (sign, sub) in sup.boundary() {
-        mat.push(sub.kidx(), isup, sign.as_f64());
-      }
+    let mut mat = CooMatrix::zeros(self.nsimplices(dim - 1), self.nsimplices(dim));
+    for (sign, face, coface) in self.incidences(dim - 1) {
+      mat.push(face, coface, sign.as_f64());
     }
     mat
+  }
+
+  /// The signed incidence relation between grade $k$ and grade $k+1$, as the
+  /// triples $(\[tau : sigma\], sigma, tau)$ of a face $sigma$, a coface $tau$
+  /// and the sign with which one occurs in the other's boundary.
+  ///
+  /// One relation, and everything built on it is a reading of it: the boundary
+  /// $diff$ scatters it downward, the coboundary $dif$ gathers it upward, and
+  /// [`boundary_operator`](Self::boundary_operator) is it assembled as a matrix.
+  /// Empty outside $0 <= k < n$, where one of the two skeletons is the zero
+  /// space.
+  pub fn incidences(
+    &self,
+    grade: impl Into<Dim>,
+  ) -> impl Iterator<Item = (Sign, KSimplexIdx, KSimplexIdx)> {
+    let grade = grade.into();
+    let cofaces = self.skeleton(grade + 1);
+    (0..cofaces.len()).flat_map(move |kidx| {
+      let coface = cofaces.handle_by_kidx(kidx);
+      coface
+        .boundary()
+        .map(move |(sign, face)| (sign, face.kidx(), kidx))
+    })
   }
 
   /// The orientation cache, for [`Complex::orientation`] to fill.

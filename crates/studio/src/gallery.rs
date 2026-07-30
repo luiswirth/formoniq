@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use derham::cochain::Cochain;
+use derham::Cochain;
 use multialgebra::ExteriorGrade;
 use regge::coord::mesh::MeshCoords;
 use regge::coord::mesh::unit_coord_complex;

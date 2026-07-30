@@ -101,9 +101,8 @@ fn main() {
       let solution = solve_transport(&topology, &geometry, &transport, nsteps, dt, &initial);
 
       let (mass, _) = assemble_transport(&topology, &geometry, &transport);
-      let l2 = |c: &derham::cochain::Cochain| {
-        formoniq::linalg::quadratic_form_sparse(&mass, c.coeffs()).sqrt()
-      };
+      let l2 =
+        |c: &derham::Cochain| formoniq::linalg::quadratic_form_sparse(&mass, c.coeffs()).sqrt();
 
       let initial_norm = l2(&solution[0]);
       let final_norm = l2(solution.last().unwrap());

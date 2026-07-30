@@ -1,5 +1,5 @@
 use super::form::WhitneyLsf;
-use crate::cochain::Cochain;
+use crate::Cochain;
 
 use {
   multialgebra::Tensor,
@@ -74,7 +74,7 @@ mod test {
   use super::*;
   use multiindex::Dim;
 
-  use crate::{cochain::Cochain, section::Section};
+  use crate::{Cochain, section::Section};
 
   use {
     multialgebra::Tensor,
