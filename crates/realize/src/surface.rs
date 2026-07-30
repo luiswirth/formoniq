@@ -163,7 +163,7 @@ mod tests {
     assert_eq!(surface.dim(&topology), topology.dim());
     assert!(surface.vertex_to_parent().is_none());
 
-    let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+    let cochain = Cochain::constant(1.0, topology.skeleton(1));
     let traced = surface.trace(&topology, &cochain).expect("a 1-form traces");
     assert!(
       matches!(traced, Cow::Borrowed(_)),
@@ -185,7 +185,7 @@ mod tests {
     let to_parent = surface.vertex_to_parent().expect("a cube has a boundary");
     assert_eq!(surface.coords(&coords).nvertices(), to_parent.len());
     assert!(
-      to_parent.len() < topology.skeleton_raw(0).len(),
+      to_parent.len() < topology.skeleton(0).len(),
       "a cube has interior vertices the boundary does not"
     );
   }
@@ -227,7 +227,7 @@ mod tests {
     }
     assert!(!surface.traces(&topology, topology.dim()));
 
-    let volume = Cochain::constant(1.0, topology.skeleton_raw(3));
+    let volume = Cochain::constant(1.0, topology.skeleton(3));
     assert!(surface.trace(&topology, &volume).is_none());
   }
 }

@@ -348,7 +348,7 @@ mod tests {
     for dim in 1..=3 {
       let topology = Complex::unit(dim);
       let coords = MeshCoords::unit(dim);
-      let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+      let cochain = Cochain::constant(1.0, topology.skeleton(1));
       let interpolant = WhitneyInterpolant::new(cochain, &topology);
       for cell in topology.cells().handle_iter() {
         let metric = coords.cell_metric(cell);

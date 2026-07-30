@@ -514,7 +514,7 @@ mod tests {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let ncells = topology.cells().len();
       for grade in 1..=dim {
-        let skeleton = topology.skeleton_raw(grade);
+        let skeleton = topology.skeleton(grade);
         let cochain = Cochain::constant(1.0, skeleton);
         let xml = to_string(&topology, &coords, &[NamedCochain::new("field", &cochain)]).unwrap();
         let written = data_array(&xml, "field");
@@ -553,7 +553,7 @@ mod tests {
   fn a_foreign_cochain_is_refused() {
     let (topology, coords) = CartesianGrid::new_unit(2, 2).triangulate();
     let (other, _) = CartesianGrid::new_unit(2, 3).triangulate();
-    let foreign = Cochain::constant(1.0, other.skeleton_raw(0));
+    let foreign = Cochain::constant(1.0, other.skeleton(0));
     assert!(matches!(
       to_string(
         &topology,
@@ -569,8 +569,8 @@ mod tests {
   #[test]
   fn the_document_is_balanced_xml() {
     let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
-    let scalar = Cochain::constant(1.0, topology.skeleton_raw(0));
-    let vector = Cochain::constant(1.0, topology.skeleton_raw(1));
+    let scalar = Cochain::constant(1.0, topology.skeleton(0));
+    let vector = Cochain::constant(1.0, topology.skeleton(1));
     let xml = to_string(
       &topology,
       &coords,
@@ -605,7 +605,7 @@ mod tests {
   #[test]
   fn a_field_name_is_escaped() {
     let (topology, coords) = CartesianGrid::new_unit(2, 1).triangulate();
-    let cochain = Cochain::constant(1.0, topology.skeleton_raw(0));
+    let cochain = Cochain::constant(1.0, topology.skeleton(0));
     let xml = to_string(
       &topology,
       &coords,
@@ -625,7 +625,7 @@ mod tests {
     for dim in 1..=MAX_DIM {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
-      let cochain = Cochain::constant(1.0, topology.skeleton_raw(dim));
+      let cochain = Cochain::constant(1.0, topology.skeleton(dim));
       let xml = to_string(
         &topology,
         &coords,
@@ -653,7 +653,7 @@ mod tests {
   #[test]
   fn the_vector_reduction_agrees_with_the_viewer() {
     let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
-    let nedges = topology.skeleton_raw(1).len();
+    let nedges = topology.skeleton(1).len();
     let coeffs = Vector::from_iterator(nedges, (0..nedges).map(|i| (i as f64).sin()));
     let cochain = Cochain::new(1, coeffs);
     let written = cell_vectors(&topology, &coords, &cochain);

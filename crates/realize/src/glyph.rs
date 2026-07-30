@@ -286,7 +286,7 @@ mod tests {
     let mut ratios = Vec::new();
     for subdivisions in 1..=4 {
       let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(subdivisions);
-      let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+      let cochain = Cochain::constant(1.0, topology.skeleton(1));
       let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
       assert!(!instances.is_empty(), "the sweep must produce glyphs");
 
@@ -332,7 +332,7 @@ mod tests {
       "the render surface is a 2-manifold"
     );
 
-    let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+    let cochain = Cochain::constant(1.0, topology.skeleton(1));
     let traced = surface
       .trace(&topology, &cochain)
       .expect("a 1-form traces onto the boundary");
@@ -363,7 +363,7 @@ mod tests {
   #[test]
   fn the_bake_emits_one_instance_per_lattice_point() {
     let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
-    let cochain = Cochain::constant(1.0, topology.skeleton_raw(1));
+    let cochain = Cochain::constant(1.0, topology.skeleton(1));
     let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
 
     let expected: usize = topology

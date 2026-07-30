@@ -307,7 +307,7 @@ pub fn surface_corner_heights(
 /// reads as the reference the fill's torn cells sit around.
 pub fn nodal_heights(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<f64> {
   let interpolant = WhitneyInterpolant::new(cochain.clone(), topology);
-  let nvertices = topology.skeleton_raw(0).len();
+  let nvertices = topology.skeleton(0).len();
   let mut sum = vec![0.0; nvertices];
   let mut count = vec![0u32; nvertices];
   for cell in topology.cells().handle_iter() {

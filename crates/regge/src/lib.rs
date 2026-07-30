@@ -59,7 +59,7 @@ pub fn vertex_gaussian_curvature(topology: &Complex, geometry: &MeshLengthsSq) -
     2,
     "Gaussian curvature is a 2D-surface quantity."
   );
-  let nvertices = topology.skeleton_raw(Dim::ZERO).len();
+  let nvertices = topology.skeleton(Dim::ZERO).len();
   let boundary: std::collections::HashSet<usize> =
     topology.boundary_vertices().into_iter().collect();
 
@@ -104,7 +104,7 @@ mod tests {
     let lengths = coords.to_edge_lengths_sq(&topology);
     let gauss = vertex_gaussian_curvature(&topology, &lengths);
 
-    let nvertices = topology.skeleton_raw(Dim::ZERO).len();
+    let nvertices = topology.skeleton(Dim::ZERO).len();
     let mut areas = vec![0.0; nvertices];
     for cell in topology.cells().handle_iter() {
       let vol = cell_volume(&lengths.cell_metric(cell));

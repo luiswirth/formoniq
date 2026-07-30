@@ -8,7 +8,7 @@ use crate::Dim;
 ///
 /// Always the canonical (sorted) representative of its vertex set;
 /// orientation is not encoded in the ordering but carried explicitly as a
-/// [`Sign`] (see [`SignedSimplex`]).
+/// [`Sign`] alongside it, as in [`Self::boundary`].
 ///
 /// Combinatorially, a mesh simplex is a monotone injection of the local
 /// positions ${0, dots, k}$ into the vertex alphabet: all sign combinatorics
@@ -42,10 +42,6 @@ impl Simplex {
   }
   pub fn single(v: usize) -> Self {
     Self::new(vec![v])
-  }
-
-  pub fn with_sign(self, sign: Sign) -> SignedSimplex {
-    SignedSimplex::new(self, sign)
   }
 
   pub fn nvertices(&self) -> usize {
@@ -99,11 +95,11 @@ impl Simplex {
   }
 
   /// The boundary $diff sigma = sum_i (-1)^i (sigma without v_i)$:
-  /// alternating positional deletions.
-  pub fn boundary(&self) -> impl Iterator<Item = SignedSimplex> + use<'_> {
+  /// alternating positional deletions, each facet with the sign it carries.
+  pub fn boundary(&self) -> impl Iterator<Item = (Sign, Self)> + use<'_> {
     Combination::full(self.nvertices())
       .deletions()
-      .map(|(sign, _, positions)| self.select(positions).with_sign(sign))
+      .map(|(sign, _, positions)| (sign, self.select(positions)))
   }
 
   pub fn supersimps<'a>(
@@ -179,57 +175,48 @@ impl std::ops::Index<usize> for Simplex {
   }
 }
 
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
-pub struct SignedSimplex {
-  pub simplex: Simplex,
-  pub sign: Sign,
-}
-impl SignedSimplex {
-  pub fn new(simplex: Simplex, sign: Sign) -> Self {
-    Self { simplex, sign }
-  }
-}
-
 /// The subsimplices of the unit simplex: local vertex sets,
 /// in colexicographic order.
+///
+/// Total in the dimension, like [`Simplex::subsimps`] it mirrors: empty off
+/// $0 <= k <= n$, where the unit cell has no face to name.
 pub fn unit_subsimps(dim_cell: Dim, dim_sub: Dim) -> impl Iterator<Item = Combination> {
-  combinations((dim_cell + 1).index(), (dim_sub + 1).index())
+  dim_sub
+    .index_in(dim_cell)
+    .into_iter()
+    .flat_map(move |_| combinations((dim_cell + 1).index(), (dim_sub + 1).index()))
 }
+/// How many there are, $binom(n+1, k+1)$, and zero off the range.
 pub fn nsubsimplices(dim_cell: Dim, dim_sub: Dim) -> usize {
-  binomial((dim_cell + 1).index(), (dim_sub + 1).index())
+  dim_sub.index_in(dim_cell).map_or(0, |_| {
+    binomial((dim_cell + 1).index(), (dim_sub + 1).index())
+  })
 }
 pub fn nedges(dim_cell: Dim) -> usize {
   nsubsimplices(dim_cell, Dim::ONE)
 }
 
-/// $diff^k: Delta_k (Delta^n) -> Delta_(k-1) (Delta^n)$
+/// $diff_k: Delta_k (hat(K)) -> Delta_(k-1) (hat(K))$, the boundary operator
+/// between the colex-ordered subsimplices of the unit `dim_cell`-simplex, built
+/// from the alternating positional deletions. Satisfies
+/// $diff compose diff = 0$.
 ///
-/// Matrix of the boundary operator between the colexicographically ordered
-/// subsimplices of the unit `dim_cell`-simplex.
+/// The reference-cell form of [`Complex::boundary_operator`], and the same
+/// convention: unaugmented, so at grade $0$ it is the zero map into the zero
+/// module rather than the augmentation onto the empty simplex.
 ///
-/// Unaugmented: the boundary of vertices is zero, not the augmentation map
-/// to the (-1)-simplex that `boundary_matrix` (below) computes.
+/// [`Complex::boundary_operator`]: super::complex::Complex::boundary_operator
 pub fn unit_boundary_operator(dim_cell: Dim, dim_simp: Dim) -> Matrix {
-  if dim_simp == 0 {
-    return Matrix::zeros(0, (dim_cell + 1).index());
-  }
-  boundary_matrix((dim_cell + 1).index(), (dim_simp + 1).index())
-}
-
-/// Matrix of the boundary operator
-/// $diff: "colex-ordered card-subsets of" {0,..,n-1} -> "(card-1)-subsets"$,
-/// built from the alternating deletions. Satisfies $diff compose diff = 0$.
-///
-/// Augmented: for card 1 this is the augmentation map onto the empty set
-/// (the single (-1)-simplex of the reduced chain complex).
-fn boundary_matrix(n: usize, card: usize) -> Matrix {
-  if card == 0 {
-    return Matrix::zeros(0, binomial(n, 0));
-  }
-  let mut matrix = Matrix::zeros(binomial(n, card - 1), binomial(n, card));
-  for (isup, sup) in combinations(n, card).enumerate() {
-    for (sign, _, sub) in sup.deletions() {
-      matrix[(sub.rank(), isup)] = sign.as_f64();
+  let below = dim_simp - Dim::ONE;
+  let mut matrix = Matrix::zeros(
+    nsubsimplices(dim_cell, below),
+    nsubsimplices(dim_cell, dim_simp),
+  );
+  for (icoface, coface) in unit_subsimps(dim_cell, dim_simp).enumerate() {
+    // Off the range there is no face to scatter into: the deletions of a
+    // vertex land on the empty simplex, which the complex does not carry.
+    for (sign, _, face) in coface.deletions().filter(|_| below.in_range(dim_cell)) {
+      matrix[(face.rank(), icoface)] = sign.as_f64();
     }
   }
   matrix
@@ -242,13 +229,15 @@ mod test {
 
   use itertools::Itertools;
 
-  /// $diff compose diff = 0$ for the combinatorial boundary matrices.
+  /// $diff compose diff = 0$ for the reference-cell boundary matrices, swept
+  /// over every dimension and grade including the ends, where the operator is
+  /// the zero map into or out of the zero module.
   #[test]
-  fn boundary_matrix_squares_to_zero() {
-    for n in 1..=6 {
-      for card in 2..=n {
-        let product = boundary_matrix(n, card - 1) * boundary_matrix(n, card);
-        assert!(product.iter().all(|&v| v == 0.0));
+  fn unit_boundary_squares_to_zero() {
+    for dim in (0..=5usize).map(Dim::from) {
+      for grade in (dim + 1).range_inclusive() {
+        let product = unit_boundary_operator(dim, grade - 1) * unit_boundary_operator(dim, grade);
+        assert!(product.iter().all(|&v| v == 0.0), "dim {dim} grade {grade}");
       }
     }
   }
@@ -285,9 +274,9 @@ mod test {
     use std::collections::HashMap;
     let simp = Simplex::unit(Dim::new(3));
     let mut chain: HashMap<Simplex, i32> = HashMap::new();
-    for face in simp.boundary() {
-      for subface in face.simplex.boundary() {
-        *chain.entry(subface.simplex).or_default() += (face.sign * subface.sign).as_i32();
+    for (sign, face) in simp.boundary() {
+      for (subsign, subface) in face.boundary() {
+        *chain.entry(subface).or_default() += (sign * subsign).as_i32();
       }
     }
     assert!(chain.values().all(|&c| c == 0));

@@ -60,7 +60,7 @@ pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64
     2,
     "Mean curvature is a 2D-surface quantity."
   );
-  let nvertices = topology.skeleton_raw(Dim::ZERO).len();
+  let nvertices = topology.skeleton(Dim::ZERO).len();
 
   let mut areas = vec![0.0; nvertices];
   let mut laplacian = vec![Vector::zeros(coords.dim().index()); nvertices];

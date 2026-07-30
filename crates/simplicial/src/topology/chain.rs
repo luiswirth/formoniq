@@ -45,8 +45,7 @@
 use super::{
   complex::Complex,
   data::SkeletonData,
-  handle::{KSimplexIdx, SimplexIdx, SimplexRef},
-  skeleton::Skeleton,
+  handle::{KSimplexIdx, SimplexIdx, SimplexRef, SkeletonRef},
 };
 use crate::linalg::Vector;
 use crate::{Dim, Sign};
@@ -198,10 +197,10 @@ impl<V: Variance, R: Coefficient> FreeModule<V, R> {
     Self::new(grade, Vector::from_vec(coeffs))
   }
   /// The constant assignment of a coefficient to every simplex of a skeleton.
-  pub fn constant(value: R, skeleton: &Skeleton) -> Self {
+  pub fn constant(value: R, skeleton: SkeletonRef) -> Self {
     Self::new(skeleton.dim(), Vector::from_element(skeleton.len(), value))
   }
-  pub fn zero(skeleton: &Skeleton) -> Self {
+  pub fn zero(skeleton: SkeletonRef) -> Self {
     Self::constant(R::zero(), skeleton)
   }
   /// From a function of the simplex, evaluated over the grade's skeleton in

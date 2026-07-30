@@ -145,20 +145,17 @@ impl<'m> SimplexRef<'m> {
     self.faces(self.idx.dim - 1)
   }
   /// The signed boundary $diff sigma$: each facet with its incidence sign.
+  ///
+  /// Empty on a vertex, whose deletions land on the empty simplex the complex
+  /// does not carry.
   pub fn boundary(self) -> impl Iterator<Item = (Sign, SimplexRef<'m>)> {
     let complex = self.complex;
     let below = self.idx.dim - 1;
-    let has_boundary = self.idx.dim >= 1;
     self
       .simplex()
       .boundary()
-      .filter(move |_| has_boundary)
-      .map(move |signed| {
-        (
-          signed.sign,
-          complex.skeleton(below).handle_by_simplex(&signed.simplex),
-        )
-      })
+      .filter(move |_| below.in_range(complex.dim()))
+      .map(move |(sign, face)| (sign, complex.skeleton(below).handle_by_simplex(&face)))
   }
 
   //, up-incidence,
@@ -274,15 +271,25 @@ impl<'m> SkeletonRef<'m> {
   pub fn dim(&self) -> Dim {
     self.dim
   }
+  /// The stored skeleton of this dimension, `None` where the complex has none.
+  fn stored(&self) -> Option<&'m Skeleton> {
+    self
+      .is_inhabited()
+      .then(|| self.complex.skeleton_raw(self.dim))
+  }
   pub fn len(&self) -> usize {
-    if self.is_inhabited() {
-      self.complex.skeleton_raw(self.dim).len()
-    } else {
-      0
-    }
+    self.stored().map_or(0, Skeleton::len)
   }
   pub fn is_empty(&self) -> bool {
     self.len() == 0
+  }
+  /// The simplices, in colex order.
+  ///
+  /// Total like [`len`](Self::len): off $0 <= k <= n$ the skeleton is the zero
+  /// space and there is nothing to yield. The [`Deref`](std::ops::Deref) to the
+  /// stored [`Skeleton`] would have no such dimension to be asked about.
+  pub fn iter(&self) -> impl Iterator<Item = &'m Simplex> {
+    self.stored().into_iter().flat_map(Skeleton::iter)
   }
   pub fn handle_by_kidx(&self, idx: KSimplexIdx) -> SimplexRef<'m> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)
