@@ -6,7 +6,7 @@
 
 use approx::assert_relative_eq;
 use metric::Metric;
-use metric::tensor::{TensorExt, inner};
+use metric::tensor::{TensorExt, inner, multiform_metric, multivector_metric, tensor_gramian};
 use multialgebra::tensor::Slots;
 use multialgebra::tensor::{pairing, wedge_pairing};
 use multialgebra::{Factor, Matrix, Slot, Tensor, Variance, Vector, exterior_bases, exterior_dim};
@@ -151,7 +151,7 @@ fn musical_isomorphisms() {
 /// $product_i k_i !$.
 ///
 /// One law over both families, and it is what says the dense embedding and
-/// [`Factor::gramian`] agree on the normalization. The alternating basis is
+/// `Factor::induced_form` agree on the normalization. The alternating basis is
 /// orthonormal while the symmetric one has $norm(x^alpha)^2 = alpha!$, and both
 /// come out right only because the embedding is unnormalized in the same sense
 /// the Gramian is: a mismatch shows up here as a factorial.
@@ -332,5 +332,55 @@ fn the_metric_is_the_pairing_against_a_symmetric_product() {
       metric.inner(&v, &w),
       epsilon = 1e-12
     );
+  }
+}
+
+/// The Gram matrix of a tensor's own basis measures each slot by *its own*
+/// variance, so a **mixed** tensor draws on g and g⁻¹ at once and no single
+/// variance describes the result. That is why it is a bare matrix and not a
+/// `Metric`: a constructor supplying one would be guessing.
+///
+/// On a uniform tensor it agrees with the named per-family metric, and the two
+/// sides of that comparison are matrices, so nothing claims a variance.
+#[test]
+fn the_tensor_gramian_measures_each_slot_by_its_own_variance() {
+  for dim in 1..=3 {
+    let g = probe_metric(dim);
+    for grade in 0..=dim {
+      let form = Tensor::one_alternating(grade, Variance::Covariant, dim);
+      let vect = Tensor::one_alternating(grade, Variance::Contravariant, dim);
+
+      assert_relative_eq!(
+        &tensor_gramian(&form, &g),
+        multiform_metric(&g, grade).matrix(),
+        epsilon = 1e-12
+      );
+      assert_relative_eq!(
+        &tensor_gramian(&vect, &g),
+        multivector_metric(&g, grade).matrix(),
+        epsilon = 1e-12
+      );
+
+      // The mixed shape: one covariant slot and one contravariant, the shape an
+      // endomorphism has. Its Gramian is the Kronecker product of the two, so
+      // both g and g^-1 appear and neither variance is the answer.
+      let mixed = Slots::from_iter([
+        Slot::new(Factor::alternating(grade), Variance::Covariant, dim),
+        Slot::new(Factor::alternating(grade), Variance::Contravariant, dim),
+      ]);
+      let expected = multiform_metric(&g, grade)
+        .matrix()
+        .kronecker(multivector_metric(&g, grade).matrix());
+      assert_relative_eq!(&tensor_gramian(&mixed, &g), &expected, epsilon = 1e-12);
+
+      // And the two factors genuinely differ, or the law says nothing.
+      if grade > 0 && dim > 1 {
+        assert!(
+          (multiform_metric(&g, grade).matrix() - multivector_metric(&g, grade).matrix()).amax()
+            > 1e-9,
+          "g and g^-1 must differ, or a single variance would do"
+        );
+      }
+    }
   }
 }
