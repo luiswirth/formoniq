@@ -600,9 +600,7 @@ fn solve_bordered(system: &CsrMatrix, rhs: &Vector, h: &Vector) -> Vector {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{
-    linalg::faer::FaerCholesky, problems::elliptic::HodgeBlocks, whitney_complex::WhitneyComplex,
-  };
+  use crate::{hodge::HodgeBlocks, linalg::faer::FaerCholesky, whitney_complex::WhitneyComplex};
   use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
 
