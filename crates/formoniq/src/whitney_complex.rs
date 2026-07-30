@@ -15,7 +15,7 @@ use crate::{
   linalg::faer::FaerLu,
   operators::HodgeMassElmat,
 };
-use regge::boundary::BoundaryComplexExt;
+use regge::subcomplex::SubcomplexExt;
 
 use {
   crate::linalg::quadratic_form_sparse,
@@ -25,7 +25,7 @@ use {
   simplicial::{
     Dim,
     linalg::{CooMatrix, CsrMatrix, Vector},
-    topology::{boundary::BoundaryComplex, complex::Complex, handle::KSimplexIdx, role::Facet},
+    topology::{complex::Complex, handle::KSimplexIdx, role::Facet, subcomplex::Subcomplex},
   },
 };
 
@@ -378,7 +378,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
 /// The Whitney complex of the boundary $diff K$ (the image of the trace map),
 /// carrying the geometry induced from the parent mesh.
 pub struct BoundaryWhitneyComplex {
-  boundary: BoundaryComplex,
+  boundary: Subcomplex,
   geometry: MeshLengthsSq,
 }
 
@@ -393,7 +393,7 @@ impl BoundaryWhitneyComplex {
   pub fn geometry(&self) -> &MeshLengthsSq {
     &self.geometry
   }
-  pub fn boundary_complex(&self) -> &BoundaryComplex {
+  pub fn boundary_complex(&self) -> &Subcomplex {
     &self.boundary
   }
   /// Total in grade: $0$ outside $[0, dim diff K]$, where $diff K$ carries no

@@ -12,9 +12,9 @@ use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;
-use regge::boundary::BoundaryComplexExt;
 use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;
+use regge::subcomplex::SubcomplexExt;
 use simplicial::{Dim, linalg::CsrMatrix};
 
 use approx::assert_relative_eq;

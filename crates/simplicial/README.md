@@ -23,6 +23,14 @@ homology generators are computed by exact rational arithmetic. The boundary of a
 complex is itself a first-class complex, with the trace operator as a cochain
 map onto it.
 
+**The manifold condition** is checkable as far as it can be. A complex is
+pure by construction, is verified to be a pseudomanifold (every facet in one
+or two cells) when it is built, and can be asked whether it is a homology
+manifold: every vertex link having the homology of a sphere, or being acyclic
+on the boundary. That last rung is the strongest one there is, since
+recognizing a PL sphere is undecidable above dimension four, and the code says
+only what it checked.
+
 **The atlas** is the piecewise-affine chart structure: barycentric charts on the
 cells, affine transition maps between charts sharing a face (obeying the cocycle
 law), an intrinsic notion of a point (a cell plus barycentric weights),

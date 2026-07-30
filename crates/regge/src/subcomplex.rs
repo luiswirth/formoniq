@@ -1,17 +1,17 @@
-//! The geometry a boundary inherits from its parent.
+//! The geometry a subcomplex inherits from its parent.
 //!
-//! `simplicial`'s `BoundaryComplex` is pure combinatorics: which parent
-//! simplices the boundary consists of. Restricting the parent's geometry to
+//! `simplicial`'s `Subcomplex` is pure combinatorics: which parent
+//! simplices it consists of. Restricting the parent's geometry to
 //! it needs a metric, so it reaches down from here, as an extension trait
-//! because the trace reads as an operation on the boundary.
+//! because the trace reads as an operation on the subcomplex.
 
 use multiindex::Dim;
-use simplicial::{linalg::Matrix, topology::boundary::BoundaryComplex};
+use simplicial::{linalg::Matrix, topology::subcomplex::Subcomplex};
 
 use crate::{coord::mesh::MeshCoords, lengths::mesh::MeshLengthsSq};
 
-/// Restricting a parent's geometry to a boundary.
-pub trait BoundaryComplexExt {
+/// Restricting a parent's geometry to a subcomplex.
+pub trait SubcomplexExt {
   /// The induced geometry: parent squared edge lengths restricted to the
   /// boundary. A pure data restriction, total on any signature; on an
   /// indefinite parent a null facet carries degenerate data, which surfaces
@@ -22,7 +22,7 @@ pub trait BoundaryComplexExt {
   fn trace_coords(&self, parent: &MeshCoords) -> MeshCoords;
 }
 
-impl BoundaryComplexExt for BoundaryComplex {
+impl SubcomplexExt for Subcomplex {
   /// The induced geometry: parent squared edge lengths restricted to the
   /// boundary. A pure data restriction, total on any signature; on an
   /// indefinite parent a null facet carries degenerate data, which surfaces

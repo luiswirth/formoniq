@@ -222,7 +222,10 @@ impl Complex {
       }
     }
 
-    let complex = Complex::from_cells(Skeleton::new(cells));
+    // Unchecked: subdividing every cell by one pattern keeps the mesh
+    // conforming, so the refinement of a pseudomanifold is one, and the parent
+    // was checked when it was built.
+    let complex = Complex::from_cells_unchecked(Skeleton::new(cells));
 
     // Reindex the provenance to the refined complex's colex cell order.
     let cell_skeleton = complex.skeleton_raw(dim);

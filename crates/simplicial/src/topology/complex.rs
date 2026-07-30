@@ -216,7 +216,38 @@ impl Complex {
 }
 
 impl Complex {
+  /// The complex spanned by the given cells, checked to be a pseudomanifold:
+  /// every facet lies in one or two cells.
+  ///
+  /// That rung, and not the manifold condition itself, is what is verified
+  /// here, and it is verified eagerly because the rest of the crate reads
+  /// up-incidence through [`Facet::adjacent_cells`], which is a pair only
+  /// because of it. The stronger conditions, and the one that is not decidable
+  /// at all, are in [`manifold`](super::manifold).
+  ///
+  /// # Panics
+  /// If a facet lies in three or more cells, or a vertex label is unused.
   pub fn from_cells(cells: Skeleton) -> Self {
+    let complex = Self::from_cells_unchecked(cells);
+    assert!(
+      complex.is_pseudomanifold(),
+      "a facet must lie in one or two cells"
+    );
+    complex
+  }
+
+  /// The complex spanned by the given cells, taking the pseudomanifold
+  /// condition on trust.
+  ///
+  /// For a caller that produces conforming cells by construction, a refinement
+  /// or a boundary extraction, and would otherwise pay a sweep over every facet
+  /// of every cell for a fact it already has. [`Complex::is_pseudomanifold`] is
+  /// the same check, on demand.
+  ///
+  /// # Panics
+  /// If a vertex label is unused: the labelling is a representation invariant,
+  /// not a manifold condition, and is checked either way.
+  pub fn from_cells_unchecked(cells: Skeleton) -> Self {
     let dim = cells.dim();
 
     // Vertices must be contiguous and fully used: labels 0..nvertices, each
@@ -247,21 +278,6 @@ impl Complex {
       for v in cell.iter() {
         vertex_cells[v].push(icell);
       }
-    }
-
-    // Manifold check: every facet is shared by one or two cells.
-    if dim >= 1 {
-      let facets = &skeletons[(dim - 1).index()];
-      let mut nparents = vec![0usize; facets.len()];
-      for cell in skeletons[dim.index()].iter() {
-        for facet in cell.subsimps(dim - 1) {
-          nparents[facets.kidx_by_simplex(&facet)] += 1;
-        }
-      }
-      assert!(
-        nparents.iter().all(|&n| n == 1 || n == 2),
-        "Topology must be manifold."
-      );
     }
 
     Self {

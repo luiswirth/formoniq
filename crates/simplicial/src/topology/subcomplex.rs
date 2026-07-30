@@ -1,12 +1,19 @@
-//! The boundary $diff K$ of a complex as a complex in its own right,
-//! together with the inclusion $diff K arrow.hook K$.
+//! A codimension-1 subcomplex $L subset.eq K$ as a complex in its own right,
+//! together with the inclusion $L arrow.hook K$.
 //!
-//! This is the third object of the short exact sequence of the pair,
+//! Three of them are the same construction, which is why there is one type: the
+//! boundary $diff K$, a part $Gamma subset.eq diff K$ carrying its own boundary
+//! condition, and the link of a vertex. Each is spanned by a set of facets, each
+//! renumbers its vertices monotonically, and each keeps the map back.
 //!
-//! $0 -> C^k (K, diff K) -> C^k (K) -->^"tr" C^k (diff K) -> 0$
+//! For the boundary this is the third object of the short exact sequence of the
+//! pair,
+//!
+//! $0 -> C^k (K, diff K) -> C^k (K) -->^"tr" C^k (diff K) -> 0$,
 //!
 //! whose kernel is the relative complex. The trace (restriction of cochains
-//! to boundary simplices) is a cochain map: $"tr" compose dif = dif compose "tr"$.
+//! to the subcomplex's simplices) is a cochain map: $"tr" compose dif = dif
+//! compose "tr"$.
 
 use super::{
   complex::Complex,
@@ -23,11 +30,12 @@ use crate::linalg::CooMatrix;
 /// its own (monotone) vertex numbering and the simplex-wise inclusion into
 /// the parent complex.
 ///
-/// For the full boundary $diff K$ this is a closed $(n-1)$-manifold; a
-/// subset $Gamma$ of the boundary facets gives the boundary part of mixed
-/// boundary conditions.
+/// For the full boundary $diff K$ this is a closed $(n-1)$-manifold; a subset
+/// $Gamma$ of the boundary facets gives the boundary part of mixed boundary
+/// conditions; and the facets opposite a vertex give its link
+/// ([`Complex::vertex_link`]).
 #[derive(Debug, Clone)]
-pub struct BoundaryComplex {
+pub struct Subcomplex {
   complex: Complex,
   /// Per grade: boundary k-simplex index -> parent k-simplex index.
   /// The inclusion is monotone, so no signs appear.
@@ -39,7 +47,7 @@ pub struct BoundaryComplex {
 impl Complex {
   /// The boundary $diff K$ as a first-class complex.
   /// `None` if the manifold is closed.
-  pub fn boundary_complex(&self) -> Option<BoundaryComplex> {
+  pub fn boundary_complex(&self) -> Option<Subcomplex> {
     let facets = self.boundary_facets();
     if facets.is_empty() {
       return None;
@@ -54,7 +62,7 @@ impl Complex {
   /// The [`Facet`] witness carries the codimension-1 precondition; what it
   /// cannot carry is which complex it proves it for, hence the ownership
   /// check.
-  pub fn facet_subcomplex(&self, facets: Vec<Facet>) -> BoundaryComplex {
+  pub fn facet_subcomplex(&self, facets: Vec<Facet>) -> Subcomplex {
     assert!(!facets.is_empty(), "Facet subcomplex must not be empty.");
     assert!(
       facets.iter().all(|f| f.belongs_to(self)),
@@ -109,7 +117,7 @@ impl Complex {
       .map(|k| self.nsimplices(k))
       .collect();
 
-    BoundaryComplex {
+    Subcomplex {
       complex,
       parent_kidxs,
       parent_nsimplices,
@@ -117,7 +125,7 @@ impl Complex {
   }
 }
 
-impl BoundaryComplex {
+impl Subcomplex {
   pub fn complex(&self) -> &Complex {
     &self.complex
   }
