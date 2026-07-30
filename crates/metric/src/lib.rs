@@ -146,6 +146,11 @@ impl Metric {
   pub fn matrix(&self) -> &Matrix {
     &self.matrix
   }
+  /// The matrix, consuming the metric: for a caller that built one only to
+  /// measure with it and has no use for the non-degeneracy afterwards.
+  pub fn into_matrix(self) -> Matrix {
+    self.matrix
+  }
   /// Whether this is $g$ (covariant) or $g^(-1)$ (contravariant).
   pub fn variance(&self) -> Variance {
     self.variance

@@ -29,11 +29,11 @@ use crate::Metric;
 /// its matrix entries, exactly, with no weight anywhere: $g_(i j)$ is the
 /// component at $x^(e_i + e_j)$. That is not a convenience: it is what a
 /// bilinear form is, an object that eats vectors, hence a dual one, and it is
-/// why both directions here go through [`Tensor::reciprocal`] and
-/// [`Tensor::from_reciprocal`] rather than touching the stored components. Read
-/// in the multiplicative basis the same metric carries $1 \/ alpha!$ on its
-/// diagonal, which is the factor the earlier form of this code spelled out by
-/// hand.
+/// why both directions go through [`Tensor::reciprocal`] and
+/// [`Tensor::from_reciprocal`] rather than touching the stored components. In
+/// the multiplicative basis the same metric carries $1 \/ alpha!$ on its
+/// diagonal, so a component read or written directly is off by that factor on
+/// every repeated index.
 impl Metric {
   /// The $"Sym"^2$ slot a metric of this space and variance occupies.
   fn sym2(&self) -> Slot {
@@ -112,7 +112,7 @@ pub fn tensor_gramian(slots: &[Slot], metric: &Metric) -> Matrix {
 pub fn per_slot_gramians(slots: &[Slot], metric: &Metric) -> Vec<Matrix> {
   slots
     .iter()
-    .map(|slot| metric.on_slot(slot).matrix().clone())
+    .map(|slot| metric.on_slot(slot).into_matrix())
     .collect()
 }
 
