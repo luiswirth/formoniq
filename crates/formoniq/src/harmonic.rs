@@ -20,6 +20,23 @@
 //! hence to a specific hole, reproducibly and stably under refinement, where an
 //! eigensolver returns an arbitrary rotation within the null space.
 //!
+//! The projection alone leaves the basis of $cal(H)^k$ only defined up to
+//! $"GL"(b_k)$, since the cocycles it starts from are whichever ones the
+//! elimination order produced, so a representative may still wrap a combination
+//! of holes. The basis is pinned by its **periods**: pairing against the
+//! Kronecker-dual cycles gives $P_(i j) = integral_(z_j) h^i$, nonsingular over
+//! $QQ$, and $H |-> H P^(-T)$ is the basis with
+//!
+//! $ integral_(z_j) h^i = delta^i_j, $
+//!
+//! so basis vector $i$ has unit period around hole $i$ and none around any
+//! other. The periods are computed on the *cocycles*, over $ZZ$ and hence
+//! exactly, because a period does not see the projection: $h = z - D p$ and
+//! $angle.l D p, z_j angle.r = angle.l p, diff z_j angle.r = 0$ on a cycle, so
+//! $h$ and $z$ have the same periods. Pinning the basis this way inherits the
+//! labelling of the cycles: it makes the correspondence to the holes explicit,
+//! it does not choose which hole is which.
+//!
 //! $A = D^T M_k D$ is singular, its kernel being $ker dif^(k-1)$, but the
 //! system is consistent by construction and the residual $h = z - D p$ does not
 //! depend on which solution $p$ is taken, so nothing has to be gauge-fixed and
@@ -33,6 +50,7 @@
 
 use crate::{linalg::bilinear_form_sparse, whitney_complex::HilbertComplex};
 
+use derham::{Chain, Cochain, pairing};
 use iterative::{Identity, StopCriterion, krylov::cg};
 use multialgebra::ExteriorGrade;
 use simplicial::linalg::{CsrMatrix, Matrix};
@@ -47,8 +65,10 @@ use simplicial::linalg::{CsrMatrix, Matrix};
 /// mixed saddle point assumes of its harmonic block, its preconditioner using
 /// the identity there. Neither substitutes for the other.
 pub struct Harmonics {
-  /// The harmonic representatives of an integral cohomology basis, in the
-  /// order [`HilbertComplex::integral_cocycles`] gives.
+  /// The harmonic representatives of the integral cohomology basis dual to
+  /// [`HilbertComplex::integral_cycles`], in the order that gives:
+  /// $integral_(z_j) h^i = delta^i_j$, so column $i$ carries unit period
+  /// around cycle $i$ and none around the others.
   pub integral: Matrix,
   /// The $M_k$-orthonormalization of [`Self::integral`],
   /// $H L^(-T)$ for the Cholesky factor $G = L L^T$ of the Gram matrix
@@ -56,11 +76,45 @@ pub struct Harmonics {
   pub orthonormal: Matrix,
 }
 
+/// The change of basis $H |-> H P^(-T)$ making the harmonic representatives
+/// dual to the cycles, $integral_(z_j) h^i = delta^i_j$.
+///
+/// The period matrix $P_(i j) = angle.l z^i, z_j angle.r$ is read off the
+/// integral cocycles rather than the projected forms, exactly over $ZZ$: a
+/// period is blind to the projection, since the coboundary subtracted pairs to
+/// zero against a cycle.
+///
+/// `None` where $P$ is singular, which Kronecker duality excludes over $QQ$: a
+/// harmonic space whose periods do not separate its own dual cycles has lost
+/// the correspondence to the holes that is the point of this basis, and there
+/// is nothing to return in place of it.
+fn period_normalize(
+  integral: Matrix,
+  cocycles: &[Cochain<i64>],
+  cycles: &[Chain<i64>],
+) -> Option<Matrix> {
+  if integral.ncols() == 0 {
+    return Some(integral);
+  }
+  let periods = Matrix::from_fn(cocycles.len(), cycles.len(), |i, j| {
+    pairing(&cocycles[i], &cycles[j]) as f64
+  });
+  Some(integral * periods.transpose().try_inverse()?)
+}
+
 /// A basis of the discrete harmonic space $cal(H)^k$, in both readings.
+///
+/// The [`Harmonics::integral`] reading is period-normalized against
+/// [`HilbertComplex::integral_cycles`], so its columns correspond to the holes
+/// one for one; [`Harmonics::orthonormal`] is derived from it and is
+/// $M_k$-orthonormal whichever basis of the space it is handed, so the saddle
+/// point's assumption is independent of that normalization.
 ///
 /// `None` where the Gram matrix of the harmonic representatives is not positive
 /// definite, i.e. on an indefinite ($L^2$-pseudo-)metric, where the projection
 /// this rests on is not well posed. The caller falls back to an eigensolve.
+/// Also `None` on a singular period matrix, which `period_normalize` says
+/// cannot arise from a dual pair of bases.
 pub fn harmonics<C: HilbertComplex>(
   complex: &C,
   grade: impl Into<ExteriorGrade>,
@@ -93,6 +147,7 @@ pub fn harmonics<C: HilbertComplex>(
   } else {
     Matrix::from_columns(&columns)
   };
+  let integral = period_normalize(integral, &cocycles, &complex.integral_cycles(grade))?;
 
   let gram = Matrix::from_fn(integral.ncols(), integral.ncols(), |i, j| {
     bilinear_form_sparse(
@@ -172,6 +227,20 @@ mod test {
       // of the least-squares residual.
       let coclosed = dif_prev.transpose() * (&mass * &h);
       assert!(coclosed.norm() <= 1e-8 * scale, "grade={grade}");
+    }
+
+    // The integral reading is dual to the cycles: $integral_(z_j) h^i =
+    // delta^i_j$, so a basis form wraps its own hole and no other. This is a
+    // law with content, since the unnormalized basis fails it.
+    let cycles = complex.integral_cycles(grade);
+    assert_eq!(cycles.len(), complex.harmonic_dim(grade));
+    for (i, h) in harmonics.integral.column_iter().enumerate() {
+      let form = Cochain::new(grade, h.into_owned());
+      for (j, cycle) in cycles.iter().enumerate() {
+        let period = pairing(&form, &cycle.extend_scalars(|&c| c as f64));
+        let expected = f64::from(u8::from(i == j));
+        assert!((period - expected).abs() <= 1e-8, "grade={grade}");
+      }
     }
 
     // The orthonormal reading is what the mixed saddle point assumes:
