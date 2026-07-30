@@ -12,22 +12,18 @@ Two standing rules from the user.
 1. An unused public item is not dead code. Every crate below `derham` is a standalone published library and is judged as one. The question is always whether the API is elegant for someone who has never heard of FEEC, never whether `formoniq` happens to call it. The exception is an item that is not merely unused but *wrong* for the crate's own stated generality — that is a finding, not dead code, and it goes.
 2. The repo captures the current state, never the story of how it got there. No leftovers in code, docs or comments narrating what something used to be, what a previous design could not do, what a migration licenses, or what changed. Commit messages are where history lives. Write every doc comment as though the current design were the only one there had ever been.
 
-State. `multiindex`, `multialgebra`, `metric`, `coorder` and `simplicial` are done, on `main`. `regge` has had one pass (six commits, ending `regge: one reading of a signed squared length`) but was **not finished** — start by completing it, then go up: `glatt`, `derham`, `iterative`, `formoniq`, `realize`, `studio`.
+State. The pass has walked the ladder bottom-up and is through `iterative`. Done, on `main`: `multiindex`, `multialgebra`, `metric`, `coorder`, `simplicial`, `regge`, `glatt`, `derham`, `iterative`. Remaining, in order: `formoniq`, `realize`, `studio`. The scope prefix of a commit says which crate it belongs to, so `git log --oneline` is the record; this file carries only what the log cannot.
 
-What the `regge` pass already did, so you don't redo it.
-- `LengthsSq` in `lengths.rs`: `MeshLengthsSq` and `SimplexLengthsSq` are one column at two scopes, so `nedges`/`length_sq`/`length`/`causal_type`/`iter`/`max_length`/`min_length` are written once. Each type keeps only the names that carry something at its scope (`diameter`, `mesh_width_*`).
-- Removed: `simplex_lengths_sq_of` (a second name for `SimplexLengthsSq::from_metric`), `MetricComplex`/`unit_metric_complex` (a tuple alias nothing built), and `SimplexCoordsExt` (`metric_tensor`/`to_lengths_sq` could only assume a Euclidean ambient; `SimplexCoords` carries no inner product, `MeshCoords` does, and `MeshCoords::simplex_metric`/`to_edge_lengths_sq` are the real bridges).
-- Three `if topology.dim() == 0` guards removed; two compensated for `Complex::edges` being the partial accessor where `skeleton(1)` is total.
-- README: named a `metric` module that is `lengths`, omitted `subcomplex`.
+What the `iterative` pass did, so you don't redo it.
+- The stationary step $x <- x + B(b - A x)$ was written three times (the standalone solve, the `Stationary` preconditioner, the V-cycle's own `smooth`). It is now `stationary::sweeps`, continuing from the incoming iterate, which is what post-smoothing needs and what made the multigrid copy look like a different operation.
+- A zero right-hand side was answered three ways, one of them by clamping the norm to `MIN_POSITIVE`. `trivial_solve` answers it once; the clamp is gone.
+- `VCycle` carries one sweep count and `Level` forms its own restriction as the transpose of its prolongation, so the `SelfAdjoint` marker rests on the markers of its parts and on nothing a caller must remember.
+- Tests moved out of the flat `mod tests` in `lib.rs` into the modules whose objects they state laws about; shared fixtures are `testutil`, which the `aux_space` tests had been duplicating.
+- Deliberately left: `Level` stores `restrict` beside `prolong`. It is derived, but re-transposing a CSR per level per Krylov step is real work, and forming it in the constructor is what makes the adjointness structural.
 
-Where to pick `regge` back up. These were seen and not acted on:
-- `coord/mesh.rs` and `lengths/simplex.rs` still carry `is_degenerate` with a hardcoded `1e-12` in two places, and `SimplexCoords::is_degenerate` in `simplicial` is a third. No test pins the threshold.
-- `MeshCoords::coord_iter_mut` returns a fully spelled-out `na::iter::ColumnIterMut<...>`; the two `iter()` methods that did the same were folded into `LengthsSq`, this one was not.
-- `lengths/simplex.rs` has both a free `edge_index(vi, vj)` and `nedges(dim)` from `simplicial`, alongside `SimplexLengthsSq::nedges()`. Worth asking whether the local edge indexing has one home.
-- `mesher/quotient.rs` is 694 lines and `mesher/quotient_embed.rs` 423, the two largest files in the crate; neither was read closely.
-- `coord/locate.rs` (333 lines) and `io/gmsh.rs` were not read at all.
-- `regge` still takes a `Dim` (not `impl Into<Dim>`) in several public signatures; `simplicial` was swept for this and `regge` was not. CLAUDE.md states the convention.
+Where to start on `formoniq`. It is the largest crate and the only one whose subject is FEEC itself: `assemble` and its matrix-free peer `matfree`, `operators`, `fe`, `harmonic`, `whitney_complex`, `multigrid`, `hx`, `time`, `linalg`, `bc`, `problems`. Nothing has been surveyed for the pass yet. The examples under `crates/formoniq/examples/` are run by hand, not by `cargo test`, so a change reaching them has to be run.
 
-Three things noted by earlier agents and deliberately not acted on, for whoever reaches them. `Metric::new_unchecked` falls back to the checked constructor under `debug_assertions` and `on_slot` builds a `Metric` per slot, so a debug build does a symmetric eigendecomposition per `inner()` call — deliberate, but it makes the debug test suite much slower than it looks. And three doc comments upstream still narrate history: `formoniq/src/time.rs:486`, `studio/src/scene.rs:515`, `studio/src/render/camera.rs:433`.
-
-Start by finishing the `regge` inventory above, then move up the ladder.
+Carried notes, upstream of where the pass now is.
+- `Metric::new_unchecked` falls back to the checked constructor under `debug_assertions` and `on_slot` builds a `Metric` per slot, so a debug build does a symmetric eigendecomposition per `inner()` call. Deliberate, but it makes the debug test suite much slower than it looks.
+- Doc comments still narrating history: `formoniq/src/time.rs:486`, `studio/src/scene.rs:515`, `studio/src/render/camera.rs:433`. The first is in the crate that is next.
+- `regge/src/io/gmsh.rs` was never read closely during the `regge` pass.
