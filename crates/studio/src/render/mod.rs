@@ -157,8 +157,8 @@ fn depth_stencil_biased(write: bool, units: i32) -> wgpu::DepthStencilState {
 }
 
 /// The bias a mark lying in the surface takes. Small: it has to beat
-/// coplanar z-fighting and nothing more, since it no longer has to compensate
-/// for a world-space displacement.
+/// coplanar z-fighting and nothing more: the mark is coplanar with the surface
+/// by construction, never displaced toward the camera.
 const SURFACE_MARK_DEPTH_BIAS: i32 = 64;
 
 /// The triangle-list primitive state shared by every pipeline here: nothing is
