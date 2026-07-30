@@ -34,8 +34,7 @@
 //! Whitney basis forms supported on $sigma$'s parent cell. The action of $P$ on a
 //! single cochain ([`prolongate`]) is then just the matrix-vector product against
 //! [`prolongation_matrix`], one code path, the matrix, with the cochain map its
-//! application. Both cost $O("nnz")$. The earlier column-by-column build was
-//! $O(N^2)$.
+//! application. Both cost $O("nnz")$.
 
 use crate::{Cochain, interpolate::form::WhitneyLsf, project::integrate_face, section::Section};
 
