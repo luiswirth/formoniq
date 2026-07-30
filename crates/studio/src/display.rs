@@ -491,7 +491,7 @@ fn peak_heights(scene: &Scene, selection: Selection) -> Vec<f32> {
   let nvertices = scene.coords.nvertices();
   let cochain = scene.field_cochain(selection);
   let mut peaks = vec![0.0f32; nvertices];
-  let mut absorb = |cochain: &derham::cochain::Cochain| {
+  let mut absorb = |cochain: &derham::Cochain| {
     let heights = realize::reduce::nodal_heights(&scene.topology, &scene.coords, cochain);
     for (peak, h) in peaks.iter_mut().zip(heights) {
       *peak = peak.max(h.abs() as f32);
@@ -518,7 +518,7 @@ pub(crate) const TRAJECTORY_LOOP_SECONDS: f64 = 6.0;
 pub(crate) fn field_attributes(
   topology: &simplicial::topology::complex::Complex,
   coords: &regge::coord::mesh::MeshCoords,
-  cochain: &derham::cochain::Cochain,
+  cochain: &derham::Cochain,
   cell_corners: &[realize::bake::CellCorner],
   segments: &[[u32; 2]],
 ) -> (FieldAttributes, FieldRanges) {
@@ -1073,7 +1073,7 @@ mod tests {
   fn no_vertex_displaces_past_its_reach() {
     let thickness = 0.04;
     let (topology, coords) = slab(thickness);
-    let cochain = derham::cochain::Cochain::new(
+    let cochain = derham::Cochain::new(
       0,
       na::DVector::from_fn(coords.nvertices(), |i, _| {
         // An arbitrary sign-changing field: what matters is that it is not

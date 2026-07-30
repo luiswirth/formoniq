@@ -24,7 +24,7 @@
 mod util;
 
 use {
-  derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt},
+  derham::{Cochain, project::derham_map, section::CoordFieldExt},
   formoniq::{
     linalg::quadratic_form_sparse, problems::heat::solve_heat, whitney_complex::WhitneyComplex,
   },

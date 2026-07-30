@@ -621,7 +621,7 @@ mod test {
   use simplicial::topology::complex::Complex;
 
   use derham::{
-    cochain::Cochain,
+    Cochain,
     interpolate::{form::WhitneyLsf, interpolant::WhitneyInterpolant},
   };
   use multialgebra::Tensor;

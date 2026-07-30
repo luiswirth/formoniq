@@ -247,6 +247,7 @@ impl std::hash::Hash for SimplexRef<'_> {
 }
 
 /// A handle to a skeleton in the mesh.
+#[derive(Clone, Copy)]
 pub struct SkeletonRef<'m> {
   complex: &'m Complex,
   dim: Dim,
@@ -259,9 +260,32 @@ impl std::ops::Deref for SkeletonRef<'_> {
 }
 
 impl<'m> SkeletonRef<'m> {
+  /// A handle to the skeleton of the given dimension.
+  ///
+  /// Total over every dimension: outside $0 <= k <= n$ it denotes the empty
+  /// skeleton, the zero space the chain complex extends by, so a sweep may run
+  /// off either end and get nothing rather than a panic. The stored
+  /// [`Skeleton`] cannot express that (it has no simplex to read its dimension
+  /// from), which is why the dimension lives on the handle.
   pub fn new(complex: &'m Complex, dim: Dim) -> Self {
-    assert!(dim <= complex.dim());
     Self { complex, dim }
+  }
+  /// Whether this dimension is one the complex stores simplices for.
+  fn is_inhabited(&self) -> bool {
+    self.dim >= 0 && self.dim <= self.complex.dim()
+  }
+  pub fn dim(&self) -> Dim {
+    self.dim
+  }
+  pub fn len(&self) -> usize {
+    if self.is_inhabited() {
+      self.complex.skeleton_raw(self.dim).len()
+    } else {
+      0
+    }
+  }
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
   }
   pub fn handle_by_kidx(&self, idx: KSimplexIdx) -> SimplexRef<'m> {
     SimplexIdx::new(self.dim, idx).handle(self.complex)

@@ -19,7 +19,7 @@ use regge::boundary::BoundaryComplexExt;
 
 use {
   crate::linalg::quadratic_form_sparse,
-  derham::cochain::Cochain,
+  derham::Cochain,
   multialgebra::ExteriorGrade,
   regge::lengths::mesh::MeshLengthsSq,
   simplicial::{
@@ -105,7 +105,7 @@ pub trait HilbertComplex {
 /// The $L^2 Lambda^k$ pairing of two cochains of a discrete complex,
 /// $angle.l u, v angle.r_(L^2) = u^top M_k v$.
 ///
-/// The metric duality, where [`pairing`](derham::cochain::pairing) is the
+/// The metric duality, where [`pairing`](derham::pairing) is the
 /// metric-free one. A chain-cochain pairing needs nothing but the incidence;
 /// this needs the mass matrix, hence a geometry, and the two must not be
 /// conflated: the first is a statement about the complex, the second about the
@@ -602,7 +602,7 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
 #[cfg(test)]
 mod test {
   use super::*;
-  use derham::cochain::Cochain;
+  use derham::Cochain;
   use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
   use simplicial::linalg::Vector;
@@ -784,8 +784,8 @@ mod test {
   #[test]
   fn the_l2_pairing_is_the_metric_duality_and_the_other_is_not() {
     use approx::assert_relative_eq;
-    use derham::cochain::pairing;
-    use simplicial::topology::homology::Chain;
+    use derham::pairing;
+    use simplicial::topology::chain::Chain;
 
     for dim in 1..=3 {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();

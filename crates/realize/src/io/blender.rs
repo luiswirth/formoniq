@@ -8,7 +8,10 @@ use std::fmt::Write;
 use std::path::Path;
 
 pub fn coord_complex2obj(complex: &Complex, coords: &MeshCoords) -> String {
-  let surface = TriangleSurface3D::from_coord_skeleton(complex.cells().clone(), coords.clone());
+  let surface = TriangleSurface3D::from_coord_skeleton(
+    complex.skeleton_raw(complex.dim()).clone(),
+    coords.clone(),
+  );
   to_obj_string(&surface)
 }
 

@@ -16,7 +16,7 @@ pub struct Transport<'a, V> {
   pub quad_degree: usize,
 }
 
-use derham::{cochain::Cochain, section::Section};
+use derham::{Cochain, section::Section};
 use multialgebra::ExteriorGrade;
 use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{

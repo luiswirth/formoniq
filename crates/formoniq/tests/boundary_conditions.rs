@@ -8,7 +8,7 @@
 
 extern crate nalgebra as na;
 
-use derham::{cochain::Cochain, project::derham_map, section::CoordFieldExt};
+use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{assemble, bc, operators::SourceElVec, whitney_complex::WhitneyComplex};
 use glatt::field::DiffFormClosure;

@@ -28,7 +28,7 @@
 //! $sigma$, on which the two charts agree by exactly that map. The law is
 //! `derham_map_is_independent_of_supporting_cell` below.
 
-use crate::{cochain::Cochain, section::Section, trace::FaceTrace};
+use crate::{Cochain, section::Section, trace::FaceTrace};
 
 use {
   multialgebra::{Tensor, Variance},

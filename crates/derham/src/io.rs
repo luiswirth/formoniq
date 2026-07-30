@@ -1,4 +1,4 @@
-use crate::cochain::Cochain;
+use crate::Cochain;
 
 use multialgebra::ExteriorGrade;
 

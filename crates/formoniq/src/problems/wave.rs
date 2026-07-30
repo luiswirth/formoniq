@@ -7,7 +7,7 @@ use crate::{
 };
 
 use crate::linalg::{faer::FaerCholesky, quadratic_form_sparse};
-use derham::cochain::Cochain;
+use derham::Cochain;
 use multialgebra::ExteriorGrade;
 use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector};

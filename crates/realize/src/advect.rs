@@ -40,7 +40,7 @@
 //! exponentiate a zero block into a one, and an unused weight would spring to
 //! life.
 
-use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use metric::Metric;
 use metric::tensor::TensorExt;
 use regge::coord::mesh::MeshCoords;

@@ -33,7 +33,7 @@ use metric::tensor::TensorExt;
 use std::io;
 use std::path::Path;
 
-use derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant};
+use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use metric::Metric;
 use multialgebra::{ExteriorGrade, Tensor};
 use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};

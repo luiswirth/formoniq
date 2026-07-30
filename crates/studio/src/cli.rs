@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
-use derham::cochain::Cochain;
+use derham::Cochain;
 use formoniq_studio::export::{ExportSpec, export};
 use formoniq_studio::gallery::{
   ADVECTION_FINAL_TIME, BuiltinMesh, CochainSpec, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
