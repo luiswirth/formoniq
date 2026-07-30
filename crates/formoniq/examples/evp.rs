@@ -33,6 +33,7 @@ use {
     problems::elliptic,
     whitney_complex::{HilbertComplex, WhitneyComplex},
   },
+  multialgebra::ExteriorGrade,
   util::{BoundaryCondition, Manifold, algebraic_convergence_rate, report},
 };
 
@@ -111,12 +112,7 @@ fn sweep() {
           }
           let whitney = WhitneyComplex::new(&topology, &metric);
 
-          let ndofs = whitney.ndofs(grade)
-            + if grade > 0 {
-              whitney.ndofs(grade - 1)
-            } else {
-              0
-            };
+          let ndofs = whitney.ndofs(grade) + whitney.ndofs(ExteriorGrade::from(grade) - 1);
           // Stop once the solve would exceed the budget, or once refinement no
           // longer grows the mesh — a 0-manifold is a single point and does not
           // subdivide, so it has exactly one level.
