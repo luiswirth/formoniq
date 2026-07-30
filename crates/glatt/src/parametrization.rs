@@ -52,7 +52,9 @@ type SeedFn<S> = dyn Fn(&Coord) -> Coords<S> + Sync;
 
 /// The finite-difference step for the derived Jacobian.
 const FD_STEP: f64 = 1e-7;
-/// The convergence tolerance and iteration cap for the Gauss-Newton chart.
+/// The convergence tolerance and iteration cap for the Gauss-Newton chart. The
+/// tolerance is on the step, relative to the domain point it moves, so it means
+/// the same thing on a domain of any scale.
 const GN_TOL: f64 = 1e-12;
 const GN_MAX_ITER: usize = 100;
 /// The rank tolerance of the pseudo-inverse.
@@ -168,13 +170,26 @@ impl<S: CoordSpace> Parametrization<S> {
 
   fn gauss_newton(&self, p: &Coord, seed: &Coords<S>) -> Coords<S> {
     let mut u = seed.clone();
+    let mut previous = f64::INFINITY;
     for _ in 0..GN_MAX_ITER {
+      // What vanishes at the nearest point is the step, not the residual: the
+      // residual there is the distance from `p` to the image, and it is zero
+      // only for a `p` already on the manifold. The step is that residual
+      // projected onto the tangent space, hence the first-order optimality
+      // condition of the least-squares problem this solves.
       let residual: Vector = &self.forward(&u) - p;
-      if residual.norm() < GN_TOL {
+      let step = self.chart_differential(&u) * residual;
+      let size = step.norm();
+      u -= &step;
+
+      // Converged, or making no further progress. A derived Jacobian is only
+      // accurate to the noise of its finite differences, and the step cannot
+      // shrink past what that noise contributes, so stagnation is the floor an
+      // approximate model imposes on any solve built from it.
+      if size <= GN_TOL * (1.0 + u.vector().norm()) || size >= previous {
         break;
       }
-      let step = self.chart_differential(&u) * residual;
-      u -= &step;
+      previous = size;
     }
     u
   }
@@ -414,6 +429,47 @@ mod test {
     let inflated = Coord::new(footpoint.vector() * 1.3);
     let recovered = sphere.chart(&inflated, &u);
     assert_relative_eq!(recovered.vector(), u.vector(), epsilon = 1e-9);
+  }
+
+  /// Gauss-Newton stops once it has converged, on a target off the manifold as
+  /// much as on one on it. The residual there is the distance from the point to
+  /// the image and never vanishes, so what converges is its tangential part,
+  /// the step, and a solver watching the residual would run to the iteration
+  /// cap on every such query while returning the same answer.
+  #[test]
+  fn the_projection_of_an_off_manifold_point_terminates_early() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let evaluations = Arc::new(AtomicUsize::new(0));
+    let counter = evaluations.clone();
+    let sphere = Parametrization::new(
+      move |u: &Coord| {
+        counter.fetch_add(1, Ordering::Relaxed);
+        let (theta, phi) = (u[0], u[1]);
+        Coord::from_iterator(
+          3,
+          [
+            theta.sin() * phi.cos(),
+            theta.sin() * phi.sin(),
+            theta.cos(),
+          ],
+        )
+      },
+      Dim::new(2),
+    );
+
+    let u = Coord::from_iterator(2, [1.0, 2.0]);
+    let inflated = Coord::new(sphere.forward(&u).vector() * 1.3);
+    evaluations.store(0, Ordering::Relaxed);
+    let recovered = sphere.chart(&inflated, &u);
+
+    assert_relative_eq!(recovered.vector(), u.vector(), epsilon = 1e-9);
+    // Every iteration evaluates the forward map at least once, so staying
+    // under the cap in evaluations is staying under it in iterations.
+    // Every iteration evaluates the forward map at least once, so staying
+    // under the cap in evaluations is staying under it in iterations.
+    assert!(evaluations.load(Ordering::Relaxed) < GN_MAX_ITER);
   }
 
   /// The built-in $n$-sphere, across dimensions and radii: every image lies on
