@@ -1,10 +1,13 @@
 use super::{EdgeIdx, LengthsSq};
-use simplicial::{Dim, topology::simplex::nedges};
+use simplicial::{
+  Dim,
+  topology::simplex::{edge_index, nedges},
+};
 
 use metric::Metric;
 use multialgebra::tensor::Slots;
 use multialgebra::{Factor, Slot, Tensor, Variance};
-use multiindex::{Combination, combinations, factorial};
+use multiindex::{combinations, factorial};
 use simplicial::linalg::{Matrix, Vector};
 
 /// The signed squared edge lengths of a simplex: Regge calculus, on any
@@ -29,16 +32,13 @@ pub struct SimplexLengthsSq {
   dim: Dim,
 }
 
-/// The edge index of a vertex pair: the colexicographic rank.
-pub fn edge_index(vi: usize, vj: usize) -> EdgeIdx {
-  Combination::from_increasing([vi, vj]).rank()
-}
 impl SimplexLengthsSq {
   /// The invariant is non-degeneracy of the induced metric tensor, the
   /// squared lengths must describe a simplex of some signature, Euclidean
   /// realizability ([`Self::is_coordinate_realizable`]) being the Riemannian
   /// special case, not the requirement.
-  pub fn new(lengths_sq: Vector, dim: Dim) -> Self {
+  pub fn new(lengths_sq: Vector, dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
     assert_eq!(lengths_sq.len(), nedges(dim), "Wrong number of edges.");
     let this = Self { lengths_sq, dim };
     assert!(
@@ -47,7 +47,8 @@ impl SimplexLengthsSq {
     );
     this
   }
-  pub fn new_unchecked(lengths_sq: Vector, dim: Dim) -> Self {
+  pub fn new_unchecked(lengths_sq: Vector, dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
     if cfg!(debug_assertions) {
       Self::new(lengths_sq, dim)
     } else {
@@ -120,7 +121,7 @@ impl SimplexLengthsSq {
     if vi == vj {
       0.0
     } else {
-      self[edge_index(vi.min(vj), vi.max(vj))]
+      self[edge_index(vi, vj)]
     }
   }
 
@@ -191,7 +192,8 @@ impl SimplexLengthsSq {
 /// reciprocal of the shape regularity a simplex may reach before its metric is
 /// numerically singular.
 const DEGENERACY_FLOOR: f64 = 1e-12;
-pub fn cayley_menger_factor(dim: Dim) -> f64 {
+pub fn cayley_menger_factor(dim: impl Into<Dim>) -> f64 {
+  let dim = dim.into();
   (-1.0f64).powi(dim.index() as i32 + 1)
     / factorial(dim.index()).pow(2) as f64
     / 2f64.powi(dim.index() as i32)
@@ -266,7 +268,7 @@ impl SimplexLengthsSq {
       };
     }
 
-    Self::new(lengths_sq, dim.into())
+    Self::new(lengths_sq, dim)
   }
 
   /// Regge calculus: the metric tensor is the polarization identity in the
@@ -454,7 +456,7 @@ mod test {
             )]
           })
           .collect();
-        let face_lengths = SimplexLengthsSq::new(selected.into(), (dim.index() - 1).into());
+        let face_lengths = SimplexLengthsSq::new(selected.into(), dim.index() - 1);
 
         // The same restriction done the cartesian way: pull the metric back
         // along the inclusion of the face's spanning vectors.

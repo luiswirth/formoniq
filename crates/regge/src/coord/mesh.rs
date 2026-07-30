@@ -176,12 +176,6 @@ impl MeshCoords {
     self.matrix.column_iter().map(CoordRef::new)
   }
 
-  pub fn coord_iter_mut(
-    &mut self,
-  ) -> na::iter::ColumnIterMut<'_, f64, na::Dyn, na::Dyn, na::VecStorage<f64, na::Dyn, na::Dyn>> {
-    self.matrix.column_iter_mut()
-  }
-
   /// The Regge geometry this embedding realizes: the signed squared length
   /// of each edge under the ambient inner product, of whatever signature the
   /// ambient carries, an embedding into Minkowski space yields Lorentzian

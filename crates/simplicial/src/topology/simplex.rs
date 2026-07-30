@@ -201,6 +201,14 @@ pub fn nsubsimplices(dim_cell: impl Into<Dim>, dim_sub: impl Into<Dim>) -> usize
 pub fn nedges(dim_cell: impl Into<Dim>) -> usize {
   nsubsimplices(dim_cell, Dim::ONE)
 }
+/// Which edge of a simplex a pair of its vertex positions is: the colex rank of
+/// the pair, so the position of that edge in [`unit_subsimps`] at dimension one.
+///
+/// The two positions are the endpoints of an edge, hence unordered and
+/// distinct; an edge from a vertex to itself does not exist.
+pub fn edge_index(vi: usize, vj: usize) -> usize {
+  Combination::from_increasing([vi.min(vj), vi.max(vj)]).rank()
+}
 
 /// $diff_k: Delta_k (hat(K)) -> Delta_(k-1) (hat(K))$, the boundary operator
 /// between the colex-ordered subsimplices of the unit `dim_cell`-simplex, built
@@ -262,6 +270,19 @@ mod test {
             .iter()
             .all(|sub| sub.relative_to(&simp) == Combination::from_increasing(sub.iter()))
         );
+      }
+    }
+  }
+
+  /// The edge index is the position of the pair in the enumeration, in either
+  /// order of the endpoints, and every edge is hit exactly once.
+  #[test]
+  fn edge_indices_enumerate_the_edges() {
+    for dim in (1..=4usize).map(Dim::from) {
+      for (iedge, edge) in unit_subsimps(dim, Dim::ONE).enumerate() {
+        let (vi, vj) = (edge.index_at(0), edge.index_at(1));
+        assert_eq!(edge_index(vi, vj), iedge);
+        assert_eq!(edge_index(vj, vi), iedge);
       }
     }
   }

@@ -30,12 +30,14 @@ impl Rect {
     assert_eq!(min.len(), max.len());
     Self { min, max }
   }
-  pub fn new_unit_cube(dim: Dim) -> Self {
+  pub fn new_unit_cube(dim: impl Into<Dim>) -> Self {
+    let dim = dim.into();
     let min = Vector::zeros(dim.index());
     let max = Vector::from_element(dim.index(), 1.0);
     Self { min, max }
   }
-  pub fn new_scaled_cube(dim: Dim, scale: f64) -> Self {
+  pub fn new_scaled_cube(dim: impl Into<Dim>, scale: f64) -> Self {
+    let dim = dim.into();
     let min = Vector::zeros(dim.index());
     let max = Vector::from_element(dim.index(), scale);
     Self { min, max }

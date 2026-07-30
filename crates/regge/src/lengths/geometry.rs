@@ -63,7 +63,7 @@ pub struct CellGramians {
   metrics: SkeletonVec<Metric>,
 }
 impl CellGramians {
-  pub fn new(dim: Dim, metrics: Vec<Metric>) -> Self {
+  pub fn new(dim: impl Into<Dim>, metrics: Vec<Metric>) -> Self {
     Self {
       metrics: SkeletonVec::new(dim, metrics),
     }
