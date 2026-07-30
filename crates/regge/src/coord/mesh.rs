@@ -5,7 +5,6 @@ use simplicial::{
   topology::{
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef},
-    relabel::VertexRelabelling,
     role::{Cell, Vertex, roles},
     {VertexIdx, complex::Complex},
   },
@@ -115,13 +114,15 @@ impl MeshCoords {
     self.matrix.swap_columns(icol, jcol);
   }
 
-  /// The coordinates of the relabelled vertices: the columns the relabelling
-  /// keeps, in its order. The geometric half of closing the gaps an imported
-  /// mesh leaves in its vertex numbering, the combinatorial half being the
-  /// cells the same [`VertexRelabelling`] renumbers.
-  pub fn relabelled(&self, relabelling: &VertexRelabelling) -> MeshCoords {
-    let columns: Vec<_> = relabelling
-      .used()
+  /// The coordinates of the named vertices, in the order named: the columns of
+  /// this embedding at those indices, under the same ambient inner product.
+  ///
+  /// The geometric half of any renumbering of the vertices, the combinatorial
+  /// half being whatever produced the indices, a
+  /// [`VertexRelabelling`](simplicial::topology::relabel::VertexRelabelling)
+  /// closing the gaps of an import or a subcomplex naming its parent's.
+  pub fn select(&self, vertices: &[VertexIdx]) -> MeshCoords {
+    let columns: Vec<_> = vertices
       .iter()
       .map(|&v| self.coord(v).into_view())
       .collect();
