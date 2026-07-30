@@ -39,7 +39,15 @@ What the `realize` pass did, so you don't redo it.
 - Deliberately left: `reduce::corner_bounds` is a normalization range rather than a reduction, but it sits where the per-corner streams are produced and every caller of one calls the other.
 - The crate's `CLAUDE.md` needed no change, which is the interesting part: on all three of these the design doc was already right and the code had drifted from it.
 
-Where to start on `studio`. It is the last crate, it has its own `CLAUDE.md` (which governs `realize` too), and it has not been surveyed. Its test suite is slow, around three minutes, so run it in the background rather than waiting on it.
+Where `studio` stands. It is the last crate and it has its own `CLAUDE.md`, which governs `realize` too. Its test suite is slow, around three minutes, so run it in the background rather than waiting on it. Surveyed and done so far: `scene.rs`, and the parts of `display.rs` and `bake.rs` those changes reached. Not yet surveyed: `gallery.rs`, `app.rs`, `ui.rs`, `export.rs`, `cli.rs`, `solve.rs`, `render/`, the shaders.
+
+What the `studio` pass has done so far.
+- Nine `Scene` constructors each opened a `Surface`, two empty vectors and a struct literal, four of them under a verbatim copy of the same comment about why the surface comes first. `Scene::on` is that opening and `Scene::file` a method on it.
+- `Scene::file` read the reduction's `n` off the surface-or-parent choice while asking the surface for orientability either way, so a volume density on a solid reduced against one manifold and was checked against another, under a comment claiming they could not disagree. The manifold the mark is drawn on is chosen once.
+- `spherical_harmonics`, `sphere_placeholder` and grade-0 `eigenmodes` are gone: unreachable outside the tests, and the first was a curated view as its own code path, which the crate's `CLAUDE.md` explicitly refuses.
+- `ambient_bump`'s doc comment sat on `LOWEST_MODES`, two hundred lines away.
+- A dozen doc comments explained the current design by naming an older one. Nine others broke a line before a comma instead of after it.
+- Deliberately left: `ScalarField` and `LineField` are field-for-field identical, and unifying them is tempting. They are two types because the two lists *are* the reduction, made once at construction, so a consumer reads which mark a field landed in instead of dispatching on grade again. Merging them would put a grade dispatch back at every consumer, which the crate's anti-goals name.
 
 Carried notes, upstream of where the pass now is.
 - `Metric::new_unchecked` falls back to the checked constructor under `debug_assertions` and `on_slot` builds a `Metric` per slot, so a debug build does a symmetric eigendecomposition per `inner()` call. Deliberate, but it makes the debug test suite much slower than it looks.
