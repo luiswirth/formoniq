@@ -19,7 +19,7 @@ use regge::subcomplex::SubcomplexExt;
 
 use {
   crate::linalg::quadratic_form_sparse,
-  derham::Cochain,
+  derham::{Chain, Cochain},
   multialgebra::ExteriorGrade,
   regge::lengths::mesh::MeshLengthsSq,
   simplicial::{
@@ -69,6 +69,21 @@ pub trait HilbertComplex {
   /// implementor whose DOFs are not the simplices owes the de Rham map into
   /// its own space here.
   fn integral_cocycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Cochain<i64>>;
+
+  /// Representative integral cycles of a basis of the homology Kronecker-dual
+  /// to [`Self::integral_cocycles`], in the same DOF indexing: $H_k (K; ZZ)$
+  /// for the full complex, $H_k (K, diff K; ZZ)$ for the relative one. One per
+  /// [`Self::harmonic_dim`], the two ranks agreeing by universal coefficients.
+  ///
+  /// These are the holes a period measures. Pairing a cochain against them
+  /// (`simplicial::topology::chain::pairing`) is what pins the harmonic basis
+  /// to the individual holes in [`crate::harmonic`], and the pairing matrix of
+  /// the two bases is nonsingular over $QQ$, which is what makes that pinning
+  /// well posed.
+  ///
+  /// A period is an integral over a $k$-chain, so an implementor whose DOFs are
+  /// not the simplices owes the de Rham map here as it does for the cocycles.
+  fn integral_cycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Chain<i64>>;
 
   /// The inclusion $E: C^k arrow.hook cal(W) Lambda^k$ of this complex's DOFs
   /// into the ambient Whitney space, extending by zero on the constrained
@@ -385,6 +400,16 @@ impl HilbertComplex for WhitneyComplex<'_> {
       Vec::new()
     }
   }
+  /// The absolute cycles, on the DOFs of the full complex, which are the
+  /// $k$-simplices themselves.
+  fn integral_cycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Chain<i64>> {
+    let grade = grade.into();
+    if grade.in_range(self.dim()) {
+      self.topology.homology_generators(grade)
+    } else {
+      Vec::new()
+    }
+  }
   /// No boundary is constrained, so the inclusion is the identity.
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
@@ -638,6 +663,31 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
           na::DVector::from_iterator(
             interior.len(),
             interior.iter().map(|&kidx| cocycle.coeffs()[kidx]),
+          ),
+        )
+      })
+      .collect()
+  }
+  /// The relative cycles, restricted to the interior DOFs by $E^T$, exactly as
+  /// the relative cocycles are: they are supported in the interior already, so
+  /// the restriction loses nothing.
+  fn integral_cycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Chain<i64>> {
+    let grade = grade.into();
+    if !grade.in_range(self.dim()) {
+      return Vec::new();
+    }
+    let interior = &self.interior_simps[grade.index()];
+    self
+      .full
+      .topology()
+      .relative_homology_generators(grade)
+      .into_iter()
+      .map(|cycle| {
+        Chain::new(
+          grade,
+          na::DVector::from_iterator(
+            interior.len(),
+            interior.iter().map(|&kidx| cycle.coeffs()[kidx]),
           ),
         )
       })
