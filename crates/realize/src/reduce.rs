@@ -35,15 +35,8 @@ use simplicial::linalg::Vector;
 use simplicial::{
   Sign,
   atlas::{Bary, MeshPoint},
-  topology::{
-    complex::Complex,
-    handle::{SimplexIdx, SimplexRef},
-    role::Cell,
-    simplex::Simplex,
-  },
+  topology::{complex::Complex, handle::SimplexRef, role::Cell, simplex::Simplex},
 };
-
-use crate::bake::CellCorner;
 
 /// The colormap range of a per-corner value stream, for normalization. Falls
 /// back to a unit range on an empty or constant field so the viewer never
@@ -143,106 +136,47 @@ pub fn admitted_reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGr
     .expect("a starred field is only filed on an orientable mesh")
 }
 
-/// The surface colormap scalar at every rendered triangle corner, three per
-/// triangle, in [`CellCorner`] order, as the [`trace_value`] of the field on
-/// the triangle's own 2-simplex (the fill is the 2-skeleton).
+/// The colormap scalar at every corner of a stream of render primitives, `N`
+/// values per primitive in the primitive's own corner order: the one rule that
+/// colors the fill, the wireframe and the points alike.
 ///
-/// The trace is single-valued across the cells incident at the face by tangential
-/// conformity, so no per-corner cell disambiguation and no averaging is needed:
-/// a face the form vanishes on colors to zero because its trace is zero, and a
-/// grade above 2 traces to zero on every face, leaving the fill black (its home
-/// is volumetric, deferred). At $n = 2$ the face is the cell and this reproduces
-/// the reduced-grade density exactly; at $n = 3$ it reads the face's own trace,
-/// not a value borrowed from an incident tet.
-pub fn surface_corner_values(
+/// A primitive is the global vertex tuple of an $(N-1)$-simplex of the mesh,
+/// wound in whatever order the rasterizer draws it, and its corner's value is
+/// the [`trace_value`] of the field on that simplex at the corner's barycentric
+/// indicator. So the triangles of the fill read the 2-skeleton, the segments of
+/// the wireframe the 1-skeleton and the vertices the 0-skeleton, one body at
+/// three grades rather than three techniques.
+///
+/// The trace is single-valued across the cells incident at a shared simplex by
+/// tangential conformity, so no per-corner cell disambiguation and no averaging
+/// enters: a simplex the form vanishes on colors to zero because its trace is
+/// zero, and a grade above $N-1$ traces to zero on every one of them, leaving
+/// that skeleton honestly uncolored. At $n = N-1$ the simplex is a cell and this
+/// reproduces the reduced-grade density exactly; above it the simplex's own
+/// trace is read, never a value borrowed from an incident cell.
+pub fn corner_values<const N: usize>(
   topology: &Complex,
   coords: &MeshCoords,
   cochain: &Cochain,
-  cell_corners: &[CellCorner],
+  primitives: impl IntoIterator<Item = [u32; N]>,
 ) -> Vec<f64> {
-  let n = topology.dim();
-  let mut values = Vec::with_capacity(3 * cell_corners.len());
-  for cc in cell_corners {
-    let cell = SimplexIdx::new(n, cc.cell).handle(topology);
-    let mut positions = cc.local;
-    positions.sort_unstable();
-    let vertices = &cell.simplex().vertices;
-    let face_simplex = Simplex::new(positions.iter().map(|&p| vertices[p]).collect());
-    let face = topology.skeleton(2).handle_by_simplex(&face_simplex);
-    for &ilocal in &cc.local {
-      let corner = positions.iter().position(|&p| p == ilocal).unwrap();
-      let mut weights = Vector::zeros(3);
+  let mut values = Vec::new();
+  for corners in primitives {
+    // A `Simplex` is the colex-sorted vertex set while a primitive carries its
+    // winding, so a corner is named by its vertex rather than by its position.
+    let mut sorted = corners;
+    sorted.sort_unstable();
+    let simplex = topology
+      .skeleton(N - 1)
+      .handle_by_simplex(&Simplex::new(sorted.iter().map(|&v| v as usize).collect()));
+    values.extend(corners.iter().map(|v| {
+      let corner = sorted.iter().position(|u| u == v).unwrap();
+      let mut weights = Vector::zeros(N);
       weights[corner] = 1.0;
-      values.push(trace_value(
-        topology,
-        coords,
-        cochain,
-        face,
-        &Bary::new(weights),
-      ));
-    }
+      trace_value(topology, coords, cochain, simplex, &Bary::new(weights))
+    }));
   }
   values
-}
-
-/// The 1-skeleton colormap value at each segment's two endpoints, as two
-/// parallel arrays (`[i]` is segment `i`'s two ends), the [`trace_value`] of
-/// the field on each edge.
-///
-/// The $k = 1$ counterpart of [`surface_corner_values`]'s $k = 2$: the same
-/// trace, on a different skeleton, at a different render primitive. Per edge
-/// rather than per vertex because a grade-1 density differs between edges
-/// sharing a vertex, and single-valued by conformity so no averaging enters. A
-/// grade above 1 traces to zero on every edge (the reduction returns 0), so the
-/// 1-skeleton of a flux field is uncolored, honestly.
-pub fn segment_colors(
-  topology: &Complex,
-  coords: &MeshCoords,
-  cochain: &Cochain,
-  segments: &[[u32; 2]],
-) -> [Vec<f64>; 2] {
-  let mut ends = [
-    Vec::with_capacity(segments.len()),
-    Vec::with_capacity(segments.len()),
-  ];
-  for &vpair in segments {
-    let mut vs = [vpair[0] as usize, vpair[1] as usize];
-    vs.sort_unstable();
-    let edge = topology
-      .skeleton(1)
-      .handle_by_simplex(&Simplex::new(vs.to_vec()));
-    for (end, &v) in vpair.iter().enumerate() {
-      let corner = vs.iter().position(|&p| p == v as usize).unwrap();
-      let mut weights = Vector::zeros(2);
-      weights[corner] = 1.0;
-      ends[end].push(trace_value(
-        topology,
-        coords,
-        cochain,
-        edge,
-        &Bary::new(weights),
-      ));
-    }
-  }
-  ends
-}
-
-/// The 0-skeleton colormap value at every mesh vertex, the [`trace_value`] of
-/// the field on each 0-simplex.
-///
-/// The $k = 0$ member of the same family as [`segment_colors`] and
-/// [`surface_corner_values`]. A vertex is the one skeleton simplex a field is
-/// always single-valued on with no reduction: a 0-form reads its own value
-/// there, and any higher grade traces to zero (a $k$-form has no restriction to
-/// a point). Per vertex, not per incident cell, the 0-form is continuous, so
-/// there is nothing to average.
-pub fn point_colors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<f64> {
-  let bary = Bary::new(Vector::from_element(1, 1.0));
-  topology
-    .skeleton(0)
-    .handle_iter()
-    .map(|vertex| trace_value(topology, coords, cochain, vertex, &bary))
-    .collect()
 }
 
 /// The surface's displacement height per rendered corner, by the strategy the
@@ -276,26 +210,19 @@ pub fn surface_corner_heights(
   topology: &Complex,
   coords: &MeshCoords,
   cochain: &Cochain,
-  cell_corners: &[CellCorner],
+  triangles: &[[u32; 3]],
 ) -> Vec<f64> {
   let n = topology.dim();
   let k = cochain.grade();
   if k > n - k {
     // Discontinuous: the per-corner read is already constant on each cell, so
     // the honest colormap value and the rigid height are the same number.
-    return surface_corner_values(topology, coords, cochain, cell_corners);
+    return corner_values(topology, coords, cochain, triangles.iter().copied());
   }
   let nodal = nodal_heights(topology, coords, cochain);
-  cell_corners
+  triangles
     .iter()
-    .flat_map(|cc| {
-      let vertices = SimplexIdx::new(n, cc.cell)
-        .handle(topology)
-        .simplex()
-        .vertices
-        .clone();
-      cc.local.map(|ilocal| nodal[vertices[ilocal]])
-    })
+    .flat_map(|t| t.map(|v| nodal[v as usize]))
     .collect()
 }
 

@@ -24,9 +24,10 @@
 //! boundary, whose faces are not charts. Both give the empty layout, which
 //! every consumer treats as "no deposit" by arithmetic rather than by branch.
 
+use regge::coord::mesh::MeshCoords;
 use simplicial::topology::complex::Complex;
 
-use regge::coord::mesh::MeshCoords;
+use crate::bake::CellCorner;
 
 /// The atlas texture's side, in texels. One fixed square texture: the budget
 /// the per-cell resolutions are allocated out of. The trail is sampled from
@@ -122,37 +123,27 @@ impl DepositLayout {
   /// The atlas texel coordinate of each triangle corner, three per triangle in
   /// the triangles' own order, normalized to $[0, 1]$ texture coordinates.
   ///
-  /// `triangles` must be the bake's cell triangles in cell order (each a
-  /// permutation of its cell's vertices, the winding pass may have swapped
-  /// two). A corner's coordinate is the block formula at the corner's own
-  /// barycentric indicator: vertex $0 -> O + (R, 0)$, $1 -> O + (0, R)$,
-  /// $2 -> O$, where the local index is the vertex's position in the cell's
-  /// colex-sorted tuple. Affine interpolation of these three values is the
-  /// map $O + R (lambda_0, lambda_1)$ at every interior point, which is why no
-  /// per-fragment lookup exists.
+  /// A corner's coordinate is the block formula at the corner's own barycentric
+  /// indicator: local vertex $0 -> O + (R, 0)$, $1 -> O + (0, R)$, $2 -> O$,
+  /// the local index being the [`CellCorner`]'s, the corner's position in its
+  /// cell's colex-sorted tuple. Affine interpolation of these three values is
+  /// the map $O + R (lambda_0, lambda_1)$ at every interior point, which is why
+  /// no per-fragment lookup exists.
   ///
   /// Zeros (matching length) for the empty layout, so the vertex stream always
   /// exists and "no deposit" stays a material value rather than a pipeline.
-  pub fn corner_uvs(&self, topology: &Complex, triangles: &[[u32; 3]]) -> Vec<[f32; 2]> {
+  pub fn corner_uvs(&self, cell_corners: &[CellCorner]) -> Vec<[f32; 2]> {
     if self.blocks.is_empty() {
-      return vec![[0.0; 2]; 3 * triangles.len()];
+      return vec![[0.0; 2]; 3 * cell_corners.len()];
     }
-    assert_eq!(self.blocks.len(), triangles.len());
-    let cells = topology.skeleton_raw(topology.dim());
     let atlas = ATLAS_SIZE as f32;
-    triangles
+    cell_corners
       .iter()
-      .zip(cells.iter())
-      .zip(&self.blocks)
-      .flat_map(|((triangle, cell), block)| {
-        triangle.map(|vertex| {
-          let local = cell
-            .vertices
-            .iter()
-            .position(|&v| v == vertex as usize)
-            .expect("a bake triangle is a permutation of its cell");
-          let origin = [block.origin[0] as f32, block.origin[1] as f32];
-          let r = block.resolution as f32;
+      .flat_map(|cc| {
+        let block = self.blocks[cc.cell];
+        let origin = [block.origin[0] as f32, block.origin[1] as f32];
+        let r = block.resolution as f32;
+        cc.local.map(|local| {
           let corner = match local {
             0 => [origin[0] + r, origin[1]],
             1 => [origin[0], origin[1] + r],
@@ -255,10 +246,8 @@ mod tests {
     let (topology, coords) = regge::mesher::teaching::triforce();
     let layout = DepositLayout::new(&topology, &coords);
     let baked = crate::bake::BakedMesh::new(&topology, &coords);
-    let crate::bake::PrimBatch::Triangles(triangles) = &baked.cells else {
-      panic!("a 2-manifold bakes to triangles");
-    };
-    let uvs = layout.corner_uvs(&topology, triangles);
+    let triangles = baked.fill_triangles();
+    let uvs = layout.corner_uvs(&baked.cell_corners);
     assert_eq!(uvs.len(), 3 * triangles.len());
 
     let cells = topology.skeleton_raw(2);

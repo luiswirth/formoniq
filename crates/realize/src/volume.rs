@@ -128,9 +128,9 @@ fn sample_at(
   )
 }
 
-/// The ambient minimum corner and extent of the mesh, padded by half a voxel on
-/// each side so a boundary vertex is inside the grid rather than exactly on its
-/// face.
+/// The ambient minimum corner and extent of the mesh, padded on each side by a
+/// small fraction of its own extent so a boundary vertex is inside the grid
+/// rather than exactly on its face.
 fn bounding_box(coords: &MeshCoords) -> ([f64; 3], [f64; 3]) {
   let mut lo = [f64::INFINITY; 3];
   let mut hi = [f64::NEG_INFINITY; 3];
