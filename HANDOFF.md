@@ -12,7 +12,16 @@ Two standing rules from the user.
 1. An unused public item is not dead code. Every crate below `derham` is a standalone published library and is judged as one. The question is always whether the API is elegant for someone who has never heard of FEEC, never whether `formoniq` happens to call it. The exception is an item that is not merely unused but *wrong* for the crate's own stated generality — that is a finding, not dead code, and it goes.
 2. The repo captures the current state, never the story of how it got there. No leftovers in code, docs or comments narrating what something used to be, what a previous design could not do, what a migration licenses, or what changed. Commit messages are where history lives. Write every doc comment as though the current design were the only one there had ever been.
 
-State. The pass has walked the ladder bottom-up and is through `iterative`. Done, on `main`: `multiindex`, `multialgebra`, `metric`, `coorder`, `simplicial`, `regge`, `glatt`, `derham`, `iterative`. Remaining, in order: `formoniq`, `realize`, `studio`. The scope prefix of a commit says which crate it belongs to, so `git log --oneline` is the record; this file carries only what the log cannot.
+State. The pass has walked the ladder bottom-up and is through `formoniq`. Done, on `main`: `multiindex`, `multialgebra`, `metric`, `coorder`, `simplicial`, `regge`, `glatt`, `derham`, `iterative`, `formoniq`. Remaining, in order: `realize`, `studio`. The scope prefix of a commit says which crate it belongs to, so `git log --oneline` is the record; this file carries only what the log cannot.
+
+What the `formoniq` pass did, so you don't redo it.
+- Both `HilbertComplex` implementations spelled out their operators inherently and forwarded each through the trait. The bodies live in the trait impls now, and the norm family, which uses nothing but trait operations, moved there as default methods, so the relative complex has it too.
+- `MixedGalMats` and `HodgeBlocks` were one datum in two types; `HodgeBlocks` survives, in its own `hodge` module rather than inside `problems::elliptic`, which every other problem had been reaching into. Its degenerate-grade branches are gone: the complex is total in grade, so the general expressions already produce the empty blocks.
+- The three mixed element matrices are $R^top M_k C$ with each side the identity or the coboundary, hence `WhitneyPairElmat`'s three constructors.
+- The HX preconditioner's structure was written once per way of inverting its blocks; the structure is stated once and the inverses are the two `AuxiliaryBlocks` impls.
+- Every SPD direct solve goes through `DirectInverse`, which verifies faer's Cholesky against a probe. Three production solves had been calling `FaerCholesky` raw, unguarded against the silent-inaccuracy failure that wrapper exists for.
+- Deliberately left: `multigrid::Grade0Multigrid` names a grade in its type. The restriction is real, a plain V-cycle is only effective at grade 0, and generalizing it would put a knowingly-poor solver in the public surface. The tower under it is already grade-general.
+- Measured and reverted: routing `assemble` through a materialized `FaceIncidence`, the way `matfree` does, costs about 2x. `assemble.rs` carries the reason.
 
 What the `iterative` pass did, so you don't redo it.
 - The stationary step $x <- x + B(b - A x)$ was written three times (the standalone solve, the `Stationary` preconditioner, the V-cycle's own `smooth`). It is now `stationary::sweeps`, continuing from the incoming iterate, which is what post-smoothing needs and what made the multigrid copy look like a different operation.
@@ -21,9 +30,10 @@ What the `iterative` pass did, so you don't redo it.
 - Tests moved out of the flat `mod tests` in `lib.rs` into the modules whose objects they state laws about; shared fixtures are `testutil`, which the `aux_space` tests had been duplicating.
 - Deliberately left: `Level` stores `restrict` beside `prolong`. It is derived, but re-transposing a CSR per level per Krylov step is real work, and forming it in the constructor is what makes the adjointness structural.
 
-Where to start on `formoniq`. It is the largest crate and the only one whose subject is FEEC itself: `assemble` and its matrix-free peer `matfree`, `operators`, `fe`, `harmonic`, `whitney_complex`, `multigrid`, `hx`, `time`, `linalg`, `bc`, `problems`. Nothing has been surveyed for the pass yet. The examples under `crates/formoniq/examples/` are run by hand, not by `cargo test`, so a change reaching them has to be run.
+Where to start on `realize`. It is the first of the two crates outside the core: intrinsic data made extrinsic, the grade and dimension reductions, the render primitives and the file formats. `studio` follows and has its own `CLAUDE.md`. Neither has been surveyed for the pass yet.
 
 Carried notes, upstream of where the pass now is.
 - `Metric::new_unchecked` falls back to the checked constructor under `debug_assertions` and `on_slot` builds a `Metric` per slot, so a debug build does a symmetric eigendecomposition per `inner()` call. Deliberate, but it makes the debug test suite much slower than it looks.
-- Doc comments still narrating history: `formoniq/src/time.rs:486`, `studio/src/scene.rs:515`, `studio/src/render/camera.rs:433`. The first is in the crate that is next.
+- Doc comments still narrating history: `studio/src/scene.rs:515`, `studio/src/render/camera.rs:433`.
 - `regge/src/io/gmsh.rs` was never read closely during the `regge` pass.
+- The examples under `crates/formoniq/examples/` are run by hand, not by `cargo test`, so a change reaching them has to be run. `source` is the slow one, tens of minutes.
