@@ -195,7 +195,7 @@ mod test {
   use super::*;
   use approx::assert_relative_eq;
   use metric::Metric;
-  use metric::tensor::multiform_metric;
+  use metric::tensor::inner;
   use multialgebra::{exterior_bases, exterior_dim};
   use multiindex::combinations;
   use simplicial::atlas::{SimplexQuadRule, unit_simplex_volume};
@@ -313,7 +313,6 @@ mod test {
       for q in 0..=dim.index() {
         let metric = skewed_metric(dim.index(), q);
         for grade in 1..=dim.index() {
-          let inner = multiform_metric(&metric, grade);
           for dof_simp in combinations(nvertices, grade + 1) {
             let whitney = WhitneyLsf::unit(dim, dof_simp);
             for blade in exterior_bases(dim, grade - 1) {
@@ -321,7 +320,7 @@ mod test {
               let integral = qr.integrate_unit(
                 &|bary: BaryRef| {
                   let dif_phi = bubble_dif(bary).wedge(&c);
-                  inner.inner(dif_phi.components(), whitney.at_bary(bary).components())
+                  inner(&dif_phi, &whitney.at_bary(bary), &metric)
                 },
                 unit_simplex_volume(dim),
               );

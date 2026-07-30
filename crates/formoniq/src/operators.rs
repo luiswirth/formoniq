@@ -6,7 +6,7 @@ use {
   },
   metric::{
     Metric,
-    tensor::{TensorExt, multiform_metric},
+    tensor::{TensorExt, inner, multiform_metric},
   },
   multialgebra::{Dim, ExteriorGrade, Tensor, exterior_power},
   multiindex::{Combination, Sign},
@@ -447,15 +447,12 @@ impl<F: Sync + Section> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
     self.grade
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
-    let inner = multiform_metric(metric, self.grade);
     self.quad.integrate_pair(
       &self.shapes,
       &self.shapes,
       chart,
       cell_volume(metric),
-      |point, row, col| {
-        self.coefficient.at(point).components()[0] * inner.inner(row.components(), col.components())
-      },
+      |point, row, col| self.coefficient.at(point).as_scalar() * inner(row, col, metric),
     )
   }
 }
@@ -545,8 +542,6 @@ impl<V: Sync + Section> ElMatProvider for LieDerivativeElmat<'_, V> {
   }
 
   fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
-    let inner = multiform_metric(metric, self.grade);
-
     let interior = self.volume.integrate_pair(
       &self.test,
       &self.trial_dif,
@@ -554,7 +549,7 @@ impl<V: Sync + Section> ElMatProvider for LieDerivativeElmat<'_, V> {
       cell_volume(metric),
       |point, test, trial_dif| {
         let advected = trial_dif.interior_product(&self.velocity.at(point));
-        inner.inner(advected.components(), test.components())
+        inner(&advected, test, metric)
       },
     );
 
@@ -608,12 +603,11 @@ impl<F: Sync + Section> ElVecProvider for SourceElVec<'_, F> {
     self.source.grade()
   }
   fn eval(&self, metric: &Metric, chart: Chart) -> ElVec {
-    let inner = multiform_metric(metric, self.grade());
     self.quad.integrate(
       &self.shapes,
       chart,
       cell_volume(metric),
-      |point, whitney| inner.inner(self.source.at(point).components(), whitney.components()),
+      |point, whitney| inner(&self.source.at(point), whitney, metric),
     )
   }
 }
@@ -666,8 +660,7 @@ mod test {
         coeffs[idof] = 1.0;
         let field = WhitneyInterpolant::new(Cochain::new(grade, coeffs), &refcomplex);
 
-        let interior =
-          WhitneyLsf::unit(dim, dof_simp).dif().components()[0] * unit_simplex_volume(dim);
+        let interior = WhitneyLsf::unit(dim, dof_simp).dif().as_scalar() * unit_simplex_volume(dim);
         let boundary = quadrature.integrate_form(chart, &field);
 
         assert_relative_eq!(boundary, interior, epsilon = 1e-12);
@@ -748,7 +741,6 @@ mod test {
 
       for grade in dim.range_inclusive() {
         let test = LsfSamples::whitney(dim, grade, volume.nodes());
-        let inner = multiform_metric(&metric, grade);
 
         let boundary_test = LsfSamples::whitney(dim, grade, boundary.nodes());
         let boundary_trial = LsfSamples::whitney(dim, grade, boundary.nodes());
@@ -766,7 +758,7 @@ mod test {
         for (jdof, dof_simp) in unit_subsimps(dim, grade).enumerate() {
           let dif_interior = dif_interior_of(dim, dof_simp, &velocity.value);
           let direct = volume.integrate(&test, chart, cell_volume(&metric), |_point, test| {
-            inner.inner(dif_interior.components(), test.components())
+            inner(&dif_interior, test, &metric)
           });
 
           for idof in 0..direct.len() {
@@ -858,10 +850,9 @@ mod test {
         let elmat = LieDerivativeElmat::new(&velocity, grade, 2).eval(&metric, chart);
         let symmetric_part = &elmat + elmat.transpose();
 
-        let inner = multiform_metric(&metric, grade);
         let shapes = LsfSamples::whitney(dim, grade, boundary.nodes());
         let defect = boundary.integrate_pair(&shapes, &shapes, chart, |_point, row, col| {
-          inner.inner(row.components(), col.components()) * flux.clone()
+          inner(row, col, &metric) * flux.clone()
         });
 
         largest_defect = largest_defect.max(defect.norm());
@@ -973,14 +964,14 @@ mod test {
         let difwhitneys: Vec<_> = unit_subsimps(dim, grade)
           .map(|simp| WhitneyLsf::unit(dim, simp).dif())
           .collect();
-        let mut inner = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
+        let mut gramian = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
         for (i, awhitney) in difwhitneys.iter().enumerate() {
           for (j, bwhitney) in difwhitneys.iter().enumerate() {
-            inner[(i, j)] = metric::tensor::inner(awhitney, bwhitney, &geo.metric());
+            gramian[(i, j)] = inner(awhitney, bwhitney, &geo.metric());
           }
         }
-        inner *= geo.vol();
-        assert_relative_eq!(&difdif, &inner);
+        gramian *= geo.vol();
+        assert_relative_eq!(&difdif, &gramian);
       }
     }
   }
