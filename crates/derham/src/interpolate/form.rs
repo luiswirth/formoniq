@@ -1,5 +1,8 @@
 use {
-  multialgebra::{ExteriorGrade, Tensor, Variance, exterior_dim, tensor::Transport},
+  multialgebra::{
+    ExteriorGrade, Factor, Slot, Tensor, Variance,
+    tensor::{Slots, Transport, covariant_slots, tensor_dim, tensor_strides},
+  },
   multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
   simplicial::{
@@ -126,15 +129,27 @@ pub struct WhitneyExpansion {
   cell_dim: Dim,
   grade: ExteriorGrade,
   dofs: Vec<Combination>,
+  /// The codomain $Lambda^k (RR^(n+1))^* times.circle (RR^(n+1))^*$ as a shape,
+  /// so the component layout is [`tensor_strides`] rather than arithmetic
+  /// written out here.
+  slots: Slots,
 }
 impl WhitneyExpansion {
   pub fn new(cell_dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (cell_dim, grade) = (cell_dim.into(), grade.into());
     let dofs = unit_subsimps(cell_dim, grade).collect();
+    let nvertices = (cell_dim + 1).index();
     Self {
       cell_dim,
       grade,
       dofs,
+      // Uniformly covariant: $lambda_v$ is a coordinate functional on the formal
+      // barycentric space and $dif lambda_I$ a $k$-form on it, so both slots are
+      // dual. The two symmetries coincide at degree one.
+      slots: covariant_slots(
+        [Factor::alternating(grade), Factor::alternating(1)],
+        nvertices,
+      ),
     }
   }
 
@@ -147,6 +162,27 @@ impl WhitneyExpansion {
   /// The degrees of freedom, in colex order: the columns of the map.
   pub fn dofs(&self) -> &[Combination] {
     &self.dofs
+  }
+  /// The product space this map lands in, whose per-slot Gram matrices are what
+  /// [`pullback`](Self::pullback) consumes.
+  pub fn slots(&self) -> &[Slot] {
+    &self.slots
+  }
+
+  /// The nonzeros of the column at `dof`: the deletion formula
+  /// $W_sigma = k! sum_i (-1)^i lambda_(sigma_i) dif lambda_(sigma without sigma_i)$,
+  /// as $(dif lambda$ blade, $lambda$ vertex, coefficient$)$.
+  ///
+  /// **The single definition of this map.** Both readings of it, the explicit
+  /// [`matrix`](Self::matrix) and the factored [`pullback`](Self::pullback),
+  /// consume this rather than restating it, so the two cannot drift apart. The
+  /// $k!$ lives here, which is why the pullback of a bilinear form carries
+  /// $(k!)^2$ without anyone squaring anything.
+  fn column(&self, dof: Combination) -> impl Iterator<Item = (Combination, usize, f64)> {
+    let scale = factorial_f64(self.grade.index());
+    dof
+      .deletions()
+      .map(move |(sign, vertex, blade)| (blade, vertex, sign.as_f64() * scale))
   }
 
   /// The pullback $C^top (H times.circle Q) C$ along the basis of a bilinear
@@ -170,34 +206,31 @@ impl WhitneyExpansion {
   /// algebra: a generic factored application would hand back dense columns and
   /// be slower than this.
   pub fn pullback(&self, blade: &Matrix, bary: &Matrix) -> Matrix {
-    let mut pullback = Matrix::zeros(self.dofs.len(), self.dofs.len());
-    for (i, asimp) in self.dofs.iter().enumerate() {
-      for (j, bsimp) in self.dofs.iter().enumerate() {
-        pullback[(i, j)] = asimp
-          .deletions()
-          .flat_map(|a| bsimp.deletions().map(move |b| (a, b)))
-          .map(|((asign, avertex, ablade), (bsign, bvertex, bblade))| {
-            (asign * bsign).as_f64()
-              * blade[(ablade.rank(), bblade.rank())]
-              * bary[(avertex, bvertex)]
-          })
-          .sum();
-      }
-    }
-    factorial_f64(self.grade.index()).powi(2) * pullback
+    Matrix::from_fn(self.dofs.len(), self.dofs.len(), |i, j| {
+      self
+        .column(self.dofs[i])
+        .flat_map(|a| self.column(self.dofs[j]).map(move |b| (a, b)))
+        .map(|((ablade, avertex, avalue), (bblade, bvertex, bvalue))| {
+          avalue * bvalue * blade[(ablade.rank(), bblade.rank())] * bary[(avertex, bvertex)]
+        })
+        .sum()
+    })
   }
 
-  /// The map written out, with the blade index in colex order and the vertex
-  /// index running fastest: the row order of the tensor product
-  /// [`pullback`](Self::pullback) takes apart.
+  /// The map written out, its rows laid out on the basis of
+  /// [`slots`](Self::slots): blade index in colex order, vertex index running
+  /// fastest.
+  ///
+  /// That layout is [`tensor_strides`] and not arithmetic of its own, which is
+  /// what makes this agree with the Kronecker product
+  /// [`pullback`](Self::pullback) takes apart. Written by hand the two would
+  /// have the same shape and different meanings, which no shape check catches.
   pub fn matrix(&self) -> Matrix {
-    let nvertices = (self.cell_dim + 1).index();
-    let nblades = exterior_dim(nvertices, self.grade);
-    let scale = factorial_f64(self.grade.index());
-    let mut coeffs = Matrix::zeros(nblades * nvertices, self.dofs.len());
-    for (j, dof) in self.dofs.iter().enumerate() {
-      for (sign, vertex, blade) in dof.deletions() {
-        coeffs[(blade.rank() * nvertices + vertex, j)] = sign.as_f64() * scale;
+    let strides = tensor_strides(&self.slots);
+    let mut coeffs = Matrix::zeros(tensor_dim(&self.slots), self.dofs.len());
+    for (j, &dof) in self.dofs.iter().enumerate() {
+      for (blade, vertex, value) in self.column(dof) {
+        coeffs[(blade.rank() * strides[0] + vertex * strides[1], j)] = value;
       }
     }
     coeffs
