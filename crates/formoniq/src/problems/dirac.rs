@@ -625,10 +625,6 @@ mod test {
     MixedField::new(grades)
   }
 
-  /// The discrete codifferential is the adjoint of the exterior derivative:
-  /// the assembled Hodge–Dirac operator is skew-symmetric, $A + A^T = 0$, to
-  /// roundoff and at every dimension. This is integration by parts made
-  /// structural, the super-diagonal blocks are the negated transposes of the
   /// Poincaré--Lefschetz, discretely: the closed-form top-grade harmonic
   /// $h_n = M_n^(-1) z$ is annihilated by the massless self-adjoint
   /// Hodge--Dirac operator, in every dimension and on either signature. This is
@@ -659,6 +655,10 @@ mod test {
     }
   }
 
+  /// The discrete codifferential is the adjoint of the exterior derivative:
+  /// the assembled Hodge–Dirac operator is skew-symmetric, $A + A^T = 0$, to
+  /// roundoff and at every dimension. This is integration by parts made
+  /// structural, the super-diagonal blocks are the negated transposes of the
   /// sub-diagonal ones by construction, and it is what conserves energy.
   #[test]
   fn operator_is_skew_symmetric() {
@@ -720,12 +720,7 @@ mod test {
         let hb = HodgeBlocks::compute(&whitney, grade);
         let uk = u.grade(grade).coeffs();
         let up = hb.stiff() * uk;
-        let dn = if hb.n_sigma > 0 {
-          let s = FaerCholesky::new(hb.mass_sigma.clone()).solve(&(&hb.codif_dn() * uk));
-          &hb.dif_sigma() * s
-        } else {
-          Vector::zeros(hb.n_u)
-        };
+        let dn = &hb.dif_sigma() * hb.codif(uk);
         let lap = chol[grade.index()].solve(&(up + dn));
 
         let lhs = d2u.grade(grade).coeffs();
