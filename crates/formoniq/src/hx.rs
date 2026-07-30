@@ -49,7 +49,7 @@
 //! vector-nodal space is future work.
 
 use iterative::{ApproxInverse, AuxiliarySpace, Jacobi, SelfAdjoint};
-use multialgebra::{Tensor, exterior_dim, exterior_power};
+use multialgebra::{Tensor, Variance, exterior_dim};
 use regge::coord::mesh::MeshCoords;
 use simplicial::{
   linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
@@ -119,15 +119,17 @@ pub fn vector_nodal_prolongation(
 /// wedge of its edge vectors from vertex $0$, in colex order.
 ///
 /// A multivector, contravariant: it is spanned by tangent vectors, so it pushes
-/// forward and is measured by $Lambda^k g$ rather than its inverse. The
-/// components are the $binom(N,k)$ minors in colex, which is what
-/// [`exterior_power`] of the edge matrix produces in its one column.
+/// forward and is measured by $Lambda^k g$ rather than its inverse.
+///
+/// The ambient counterpart of
+/// [`face_tangent_blade`](derham::project::face_tangent_blade), which is the
+/// same [`Tensor::blade_of`] taken in a cell's reference frame instead.
 fn tangent_blade(coords: &MeshCoords, vertices: &[usize], ambient: usize, k: usize) -> Tensor {
   let base = coords.coord(vertices[0]).view();
   let edges = Matrix::from_fn(ambient, k, |i, j| {
     coords.coord(vertices[j + 1]).view()[i] - base[i]
   });
-  Tensor::multivector(exterior_power(&edges, k).column(0).into_owned(), ambient, k)
+  Tensor::blade_of(&edges, Variance::Contravariant)
 }
 
 /// A grade-$k$ Hodge-Laplace solver preconditioned by the Hiptmair-Xu
