@@ -5,8 +5,9 @@ use simplicial::{
   topology::{
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef},
+    relabel::VertexRelabelling,
     role::{Cell, Vertex, roles},
-    {VertexIdx, complex::Complex, simplex::Simplex},
+    {VertexIdx, complex::Complex},
   },
 };
 
@@ -112,6 +113,19 @@ impl MeshCoords {
 
   pub fn swap_coords(&mut self, icol: usize, jcol: usize) {
     self.matrix.swap_columns(icol, jcol);
+  }
+
+  /// The coordinates of the relabelled vertices: the columns the relabelling
+  /// keeps, in its order. The geometric half of closing the gaps an imported
+  /// mesh leaves in its vertex numbering, the combinatorial half being the
+  /// cells the same [`VertexRelabelling`] renumbers.
+  pub fn relabelled(&self, relabelling: &VertexRelabelling) -> MeshCoords {
+    let columns: Vec<_> = relabelling
+      .used()
+      .iter()
+      .map(|&v| self.coord(v).into_view())
+      .collect();
+    Self::with_ambient(Matrix::from_columns(&columns), self.ambient.clone())
   }
 
   /// Whether this embedding could be the geometry of `topology`: one column
@@ -241,27 +255,6 @@ impl VertexRefExt for Vertex<'_> {
   fn coord<'c>(self, coords: &'c MeshCoords) -> CoordRef<'c> {
     coords.coord(self.kidx())
   }
-}
-
-/// Relabel vertices so they are contiguous and fully used: drop any vertex
-/// absent from the cells and renumber the rest to $0..m$, closing gaps. The
-/// renumbering is monotone (preserves increasing vertex order within cells) and
-/// applied in lockstep to the coordinates. Idempotent on an already-gapless
-/// mesh. Meant for external imports (e.g. Gmsh) before building a [`Complex`].
-pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simplex>, MeshCoords) {
-  let mut used: Vec<VertexIdx> = cells.iter().flat_map(|cell| cell.iter()).collect();
-  used.sort_unstable();
-  used.dedup();
-
-  let relabel = |v: VertexIdx| used.binary_search(&v).expect("vertex is used");
-  let cells = cells
-    .into_iter()
-    .map(|cell| Simplex::new(cell.iter().map(relabel).collect()))
-    .collect();
-
-  let columns: Vec<_> = used.iter().map(|&v| coords.coord(v).into_view()).collect();
-  let coords = MeshCoords::with_ambient(Matrix::from_columns(&columns), coords.ambient().clone());
-  (cells, coords)
 }
 
 pub fn unit_coord_complex(dim: impl Into<Dim>) -> (Complex, MeshCoords) {

@@ -25,7 +25,9 @@ use std::fmt;
 
 use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::Matrix;
-use simplicial::topology::{complex::Complex, ordering::CellOrdering, orientation::Orientation};
+use simplicial::topology::{
+  complex::Complex, ordering::CellOrdering, orientation::Orientation, relabel::VertexRelabelling,
+};
 
 use crate::io::surface::TriangleSurface3D;
 
@@ -119,7 +121,17 @@ pub fn parse_wound(obj: &str) -> Result<(Complex, MeshCoords, Option<Orientation
     return Err(ObjError::Empty);
   }
   check_manifold(&triangles)?;
-  let positions = close_vertex_gaps(&mut triangles, positions);
+
+  // An OBJ from the wild routinely carries loose points, or a `v` block shared
+  // by an object whose faces were not exported, while a complex is built on the
+  // vertices $0..m$ with every one of them used. Closing the gap here rather
+  // than after the fact keeps the triangle list, and hence the winding words
+  // read off it, in one numbering throughout.
+  let relabelling = VertexRelabelling::of_used(triangles.iter().flatten().copied());
+  for corner in triangles.iter_mut().flatten() {
+    *corner = relabelling.relabel(*corner);
+  }
+  let positions: Vec<_> = relabelling.used().iter().map(|&v| positions[v]).collect();
 
   let columns: Vec<_> = positions
     .iter()
@@ -198,27 +210,6 @@ fn parse_face<'a>(
     });
   }
   Ok(corners)
-}
-
-/// Discards vertices no triangle references and relabels the triangles onto the
-/// contiguous range that remains, returning the surviving positions.
-///
-/// A `Complex` requires its vertex labels to be exactly $0..n$, each used by
-/// some cell. An OBJ from the wild routinely carries loose points, or a `v`
-/// block shared by an object whose faces were not exported. Closing the gap
-/// here rather than after the fact keeps the triangle list, and hence the
-/// winding words read off it, in one numbering throughout.
-fn close_vertex_gaps(triangles: &mut [[usize; 3]], positions: Vec<[f64; 3]>) -> Vec<[f64; 3]> {
-  let mut used: Vec<usize> = triangles.iter().flatten().copied().collect();
-  used.sort_unstable();
-  used.dedup();
-  if used.len() == positions.len() {
-    return positions;
-  }
-  for corner in triangles.iter_mut().flatten() {
-    *corner = used.binary_search(corner).expect("corner is used");
-  }
-  used.into_iter().map(|v| positions[v]).collect()
 }
 
 /// Rejects a triangle soup that is not a 2-manifold: every undirected edge of a

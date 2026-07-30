@@ -9,6 +9,7 @@ pub mod manifold;
 pub mod ordering;
 pub mod orientation;
 pub mod refine;
+pub mod relabel;
 pub mod role;
 pub mod simplex;
 pub mod skeleton;
