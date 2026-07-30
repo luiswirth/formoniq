@@ -7,6 +7,14 @@ use crate::{
   time::{LinearIrk, Tableau},
 };
 
+use derham::{Cochain, section::Section};
+use multialgebra::ExteriorGrade;
+use regge::lengths::mesh::MeshLengthsSq;
+use simplicial::{
+  linalg::{CsrMatrix, Vector},
+  topology::complex::Complex,
+};
+
 /// How the transport is posed: the space it acts on and the field it follows.
 pub struct Transport<'a, V> {
   pub grade: ExteriorGrade,
@@ -15,14 +23,6 @@ pub struct Transport<'a, V> {
   /// integrand of two affine shape functions is the binding side.
   pub quad_degree: usize,
 }
-
-use derham::{Cochain, section::Section};
-use multialgebra::ExteriorGrade;
-use regge::lengths::mesh::MeshLengthsSq;
-use simplicial::{
-  linalg::{CsrMatrix, Vector},
-  topology::complex::Complex,
-};
 
 /// The mass matrix and the discrete Lie derivative of the semidiscrete
 /// transport system $M dot(u) = -A u$.
