@@ -1,6 +1,6 @@
 # metric
 
-Pseudo-Riemannian metrics of arbitrary signature,
+Pseudo-Riemannian metrics of arbitrary signature on a tangent space,
 and the operations on multilinear algebra that need one.
 
 ## What it provides
@@ -32,7 +32,9 @@ and the operations on multilinear algebra that need one.
   The signed squared norm is the primitive,
   and a magnitude alone never carries the causal character (and never yields NaN).
 - The metric operations on a tensor:
-  the induced metric on any exterior or symmetric power,
+  the induced metric on any exterior or symmetric power
+  (one method over both families, taking determinants of the minors on Λᵏ
+  and permanents on Symᵈ),
   the inner product, the norm, the Hodge star and the musical isomorphisms.
   Each slot is measured by its own variance,
   so a mixed tensor raises and lowers the right indices.
@@ -46,7 +48,8 @@ It sits directly above `multialgebra`, and the boundary between them is the poin
 the wedge, the contraction, the exterior derivative and both pairings need no metric,
 while the inner product, the Hodge star and the musicals need nothing else.
 An operation's crate therefore says what it depends on.
-The crate has no notion of meshes.
+The crate has no notion of meshes:
+this is a metric on a tangent space, and a metric on a mesh is `regge`'s.
 
 ## License
 

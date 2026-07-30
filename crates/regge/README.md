@@ -1,13 +1,15 @@
 # regge
 
-Discrete metric geometry on a simplicial complex.
+Regge geometry: the geometry carried by a simplicial manifold.
 
-A simplicial complex is pure combinatorics: incidence, orientation, boundary,
-homology, none of which is metric. A geometry is a genuinely second input, and
-this is where it enters. The two are separate because the separation is
-mathematical, not a matter of taste: the boundary operator, the exterior
-derivative and the Betti numbers are metric-free facts, and no amount of
-combinatorics derives a metric.
+The manifold itself is pure combinatorics and piecewise-affine structure —
+incidence, orientation, boundary, homology, charts — none of which is metric,
+and it lives in [simplicial](https://crates.io/crates/simplicial). A geometry is
+a genuinely second input, and this is where it enters: a metric on each
+piecewise-flat cell, and with it lengths, volumes and curvature. The two are
+separate because the separation is mathematical, not a matter of taste: the
+boundary operator, the exterior derivative and the Betti numbers are metric-free
+facts, and no amount of combinatorics derives a metric.
 
 The primitive is `MeshLengthsSq`, one signed squared length per edge. Signed
 because Regge calculus was invented for Lorentzian spacetimes and an unsquared

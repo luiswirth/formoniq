@@ -73,27 +73,35 @@ is enforced by the crate boundaries rather than by convention.
   affine coordinates tagged by the space they live in,
   so the maps between coordinate spaces are explicit and their confusion does not compile.
 - **[`multialgebra`](crates/multialgebra/README.md)**:
-  the exterior and symmetric algebras as one construction, and tensor products of them,
+  the free tensor power and its exterior and symmetric quotients as one construction,
+  and tensor products of all three,
   metric-free throughout,
   with the variance of each slot deciding pullback against pushforward
   and which metric measures it.
 - **[`metric`](crates/metric/README.md)**:
-  pseudo-Riemannian metrics of arbitrary signature and the operations needing one:
+  pseudo-Riemannian metrics of arbitrary signature on a tangent space,
+  and the operations needing one:
   the inner product, the Hodge star and the musical isomorphisms,
   with g and g⁻¹ one datum rather than a stored pair.
+  Nothing to do with meshes.
 - **[`simplicial`](crates/simplicial/README.md)**:
-  the simplicial complex and its piecewise-affine atlas, metric-free throughout,
+  the simplicial manifold: its topology and its piecewise-affine structure,
+  the atlas and the bundle the atlas determines, metric-free throughout,
   with a geometry a genuinely separate input rather than a field on the mesh.
 - **[`regge`](crates/regge/README.md)**:
-  that geometry: signed squared edge lengths as the primitive,
-  with coordinates and per-cell metrics as sources converting into them,
+  Regge geometry, which is geometry on that manifold:
+  the metric of a piecewise-flat cell,
+  with signed squared edge lengths as the primitive
+  and coordinates or per-cell metrics as sources converting into them,
   so nothing in the core path requires an embedding.
 - **[`glatt`](crates/glatt/README.md)**:
   the continuum manifold that the simplicial one approximates,
   with parametrizations and analytic differential-form data on them.
+  It has never heard of a mesh.
 - **[`derham`](crates/derham/README.md)**:
-  discrete differential forms, where the exterior algebra, the mesh and the continuum meet.
-  The home of cochains, Whitney interpolation and the de Rham map.
+  discrete differential forms, everything about them:
+  cochains read as forms, Whitney interpolation, the de Rham map,
+  the degrees of freedom, and the road in from the continuum.
 - **[`formoniq`](crates/formoniq/README.md)**:
   the FEM engine, holding assembly, boundary conditions, time integration,
   the solvers and the problem formulations.
@@ -102,14 +110,32 @@ Because each concept lives in the lowest crate that can express it,
 the lower crates are self-contained mathematical objects rather than FEEC-internal plumbing,
 and are usable on their own.
 `multialgebra` is a multilinear-algebra library that knows nothing of meshes or PDEs.
-`simplicial` carries combinatorial topology
-(boundary operators, homology, Betti numbers) alongside intrinsic Regge geometry,
-none of which needs a differential form.
+`simplicial` is simplicial topology and the piecewise-affine structure on it
+(boundary operators, homology, Betti numbers, charts),
+and `regge` the discrete metric geometry that structure carries,
+neither of which needs a differential form.
 `multiindex` is colex-ranked combinatorics, `metric` is pseudo-Riemannian linear algebra,
 and `glatt` is continuum differential geometry.
 FEEC is what `derham` and `formoniq` build on top,
 not something the layers below are entangled with.
 Each core crate carries its own README and is published on its own.
+
+## Off to the side
+
+Three crates are deliberately not part of that ladder,
+because none of them models any part of FEEC.
+
+- **[`iterative`](crates/iterative/README.md)**
+  sits below the mathematics: Krylov methods, preconditioners and smoothers
+  around one object, an approximate inverse.
+  It depends on nothing but sparse matrices
+  and would serve any PDE code equally well.
+- **`realize`** and **`studio`** sit above it,
+  consuming everything and consumed by nothing:
+  `realize` is where intrinsic data becomes extrinsic
+  (the grade reduction, the dimension reduction, the file formats, no graphics),
+  and `studio` is the viewer.
+  Both are unpublished, and the core path may not reach either.
 
 ## Visualization
 
