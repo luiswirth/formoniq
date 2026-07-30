@@ -14,9 +14,84 @@ use multialgebra::{
   Factor, Matrix, Slot, Symmetry, Tensor, Variance,
   tensor::{Basis, Slots, factorwise_kronecker},
 };
-use multiindex::{MultiIndex, Sign};
+use multiindex::{MultiIndex, Sign, Word};
 
 use crate::Metric;
+
+/// A metric read as the $"Sym"^2$ element it is, and back.
+///
+/// A symmetric bilinear form on $V$ *is* an element of $"Sym"^2(V^*)$, and one
+/// on $V^*$ an element of $"Sym"^2(V)$, so the variance is the slot's variance
+/// and nothing is chosen here. The matrix stays the representation; this is the
+/// identity, computed on demand.
+///
+/// The two directions carry the **symmetric multiplicity**, and it is never
+/// written as a number. The $"Sym"$ basis is unnormalized, $x^alpha$ summing
+/// over all $k!$ orderings, so the orderings that coincide on a repeated symbol
+/// are summed rather than assigned and $norm(x^alpha)^2 = alpha!$. A packed
+/// component and its matrix entry therefore differ by $alpha!$, which for
+/// $"Sym"^2$ is $2$ on the diagonal and $1$ off it. Rather than spell that out,
+/// the weights are read off [`Factor::induced_form`] of the identity, whose
+/// diagonal is exactly $alpha!$: one convention, stated in one place, and the
+/// same code at any degree.
+impl Metric {
+  /// The $"Sym"^2$ basis of this metric's space, and the multiplicity $alpha!$
+  /// of each of its elements.
+  fn sym2(&self) -> (Slot, Vec<f64>) {
+    let slot = Slot::new(Factor::symmetric(2), self.variance(), self.dim());
+    let multiplicity = Factor::symmetric(2)
+      .induced_form(&Matrix::identity(self.dim(), self.dim()))
+      .diagonal()
+      .iter()
+      .copied()
+      .collect();
+    (slot, multiplicity)
+  }
+
+  /// This metric as an element of $"Sym"^2$ of its own space.
+  ///
+  /// The inverse of [`Self::from_tensor`], up to floating point.
+  pub fn tensor(&self) -> Tensor {
+    let (slot, multiplicity) = self.sym2();
+    let components = slot
+      .basis()
+      .zip(&multiplicity)
+      .map(|(index, alpha_factorial)| {
+        let symbols = index.word();
+        self.matrix()[(symbols[0], symbols[1])] / alpha_factorial
+      })
+      .collect::<Vec<_>>();
+    Tensor::new(Slots::from_iter([slot]), components.into())
+  }
+
+  /// The metric a symmetric 2-tensor is.
+  ///
+  /// Reads the entries off [`Tensor::to_free`] rather than reapplying the
+  /// multiplicity by hand, so the two directions cannot disagree about the
+  /// convention: the free power *is* the matrix, laid out over $[n; 2]$.
+  ///
+  /// # Panics
+  /// If the tensor is not a single symmetric slot of degree $2$, or if the form
+  /// it carries is degenerate.
+  pub fn from_tensor(tensor: &Tensor) -> Self {
+    let [slot] = tensor.slots() else {
+      panic!("a metric is one slot");
+    };
+    assert_eq!(
+      slot.symmetry(),
+      Symmetry::Symmetric,
+      "a metric is symmetric"
+    );
+    assert_eq!(slot.degree().index(), 2, "a metric is of degree two");
+
+    let dim = slot.dim.index();
+    let free = tensor.to_free();
+    let matrix = Matrix::from_fn(dim, dim, |i, j| {
+      free.components()[free.flat_index(&[MultiIndex::Word(Word::new(dim, [i, j]))])]
+    });
+    Self::new(slot.variance, matrix)
+  }
+}
 
 /// The metric induced on $times.circle_i F_i$: the Kronecker product of the
 /// per-slot metrics, in the same slot order as the components.
