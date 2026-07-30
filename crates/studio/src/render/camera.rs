@@ -12,8 +12,8 @@ use std::f32::consts::FRAC_PI_2;
 /// the opposite direction, being densest at $0$. Unreversed the two compound,
 /// concentrating precision where the hyperbola already had it and starving the
 /// far field, where a wireframe's depth bias then loses to roundoff. Reversed
-/// they very nearly cancel, and the relative precision is roughly uniform in $z$
-///, which is why $z_"near"$ may stay aggressively small, as the framing
+/// they very nearly cancel, and the relative precision is roughly uniform in $z$,
+/// which is why $z_"near"$ may stay aggressively small, as the framing
 /// deliberately sets it, at almost no cost.
 ///
 /// The flip must live in the matrix and not in the shader. As a row operation it

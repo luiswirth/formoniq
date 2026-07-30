@@ -166,8 +166,7 @@ pub struct ScalarField {
   /// the moving field is read through [`FieldTime::frame_at`] on [`Self::time`].
   pub cochain: Cochain,
   /// How this field varies in time: a static field, an eigenmode's standing
-  /// wave, or a solve's sampled trajectory. Was an `Option<f64>` eigenvalue; see
-  /// [`FieldTime`].
+  /// wave, or a solve's sampled trajectory. See [`FieldTime`].
   pub time: FieldTime,
   /// The DOF simplex this field is dual to, when the field is a raw Whitney
   /// basis function. `None` for a solved field (an eigenmode, a trajectory),
@@ -232,7 +231,7 @@ pub(crate) fn dof_label(dof: &Simplex) -> String {
 /// The display metadata a reconstructed field carries regardless of which
 /// render mark it lands in, everything [`Scene::field`] needs beyond the
 /// cochain itself, bundled so the two independent `Option`s
-/// ([`ScalarField::eigenvalue`]/[`ScalarField::dof`]) don't turn the
+/// ([`ScalarField::time`]/[`ScalarField::dof`]) don't turn the
 /// constructor into an unreadable run of positional arguments.
 struct FieldMeta {
   name: String,
@@ -898,8 +897,8 @@ impl Scene {
     // a per-cell sign that means nothing. Everything below the star is
     // unaffected and still files normally. The solver is unaffected either
     // way, since the gauge cancels inside the assembly.
-    // Orientability is asked of the manifold whose volume form the star needs
-    //, the one `n` was just read from, so the check and the reduction cannot
+    // Orientability is asked of the manifold whose volume form the star needs,
+    // the one `n` was just read from, so the check and the reduction cannot
     // disagree about which object they are talking about.
     if k > n - k && !surface.complex(topology).is_orientable() {
       eprintln!(

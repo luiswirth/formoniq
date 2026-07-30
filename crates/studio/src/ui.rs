@@ -842,8 +842,8 @@ pub(crate) struct PanelResponse {
   /// the trajectory slider moved, a static field and an eigenmode have no
   /// timeline to scrub.
   pub(crate) scrub_time: Option<f64>,
-  /// Whether "Restart" was clicked: the caller returns the clock to its start
-  ///, a trajectory's first frame, a standing wave's crest, keeping the
+  /// Whether "Restart" was clicked: the caller returns the clock to its start,
+  /// a trajectory's first frame, a standing wave's crest, keeping the
   /// play/pause state.
   pub(crate) restart: bool,
   /// Whether the standing wave should be running after this frame, the
@@ -1214,8 +1214,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         // taxonomy over it.
         //
         // The skeletons, as peers: one row per k-skeleton the mesh has
-        // (k <= min(n, 2)), faces at the top, each with the same two questions
-        //, drawn, and colored by the field or left as structural geometry.
+        // (k <= min(n, 2)), faces at the top, each with the same two questions,
+        // drawn, and colored by the field or left as structural geometry.
         section(ui, "Mesh", |ui| {
           ui.weak(mesh_stats_line(&model.simplex_counts))
             .on_hover_text("Simplex count per skeleton dimension, read off the topology");
