@@ -3,10 +3,7 @@ use crate::Cochain;
 
 use {
   multialgebra::Tensor,
-  simplicial::{
-    atlas::MeshPoint,
-    topology::{complex::Complex, simplex::unit_subsimps},
-  },
+  simplicial::{atlas::MeshPoint, topology::complex::Complex},
 };
 
 /// The Whitney interpolation $W c = sum_sigma c_sigma W_sigma$ of a cochain: a
@@ -35,9 +32,7 @@ impl<'a> WhitneyInterpolant<'a> {
       cochain.is_compatible_with(complex),
       "Cochain is not a cochain on this complex."
     );
-    let forms = unit_subsimps(complex.dim(), cochain.grade())
-      .map(|dof_simp| WhitneyLsf::unit(complex.dim(), dof_simp))
-      .collect();
+    let forms = WhitneyLsf::basis(complex.dim(), cochain.grade()).collect();
     Self {
       cochain,
       complex,
