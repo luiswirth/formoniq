@@ -429,8 +429,8 @@ mod tests {
     }
   }
 
-  /// Orbiting holds the pivot fixed however far it is turned, the property
-  /// the old target-primary camera lost the moment anything moved the eye.
+  /// Orbiting holds the pivot fixed however far it is turned: the pivot is the
+  /// camera's own datum, so nothing that moves the eye can drift it.
   #[test]
   fn orbit_fixes_its_center() {
     let mut c = at(0.3, 0.2);

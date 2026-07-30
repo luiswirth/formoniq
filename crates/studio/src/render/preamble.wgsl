@@ -314,8 +314,7 @@ fn aces(x: vec3<f32>) -> vec3<f32> {
 // really does carry a hundred times one speck's light. Something has to decide
 // what that means in $[0, 1]$, and these are the only two honest answers:
 //
-// - **Clamp** is what an 8-bit target did implicitly, and is therefore not an
-//   approximation of the old renderer but exactly it -- everything at or below
+// - **Clamp** is what an 8-bit target does implicitly: everything at or below
 //   1 is untouched, everything above is white. The whole range above 1 is lost.
 // - **The curve** keeps that range, at a price that is unavoidable rather than
 //   a flaw in this particular fit: $[0, 1]$ is already fully spent by the marks

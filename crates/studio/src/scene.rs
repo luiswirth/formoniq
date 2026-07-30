@@ -64,9 +64,7 @@ pub struct Scene {
 ///
 /// The eigenmode is the degenerate one-mode-with-known-modulation point of the
 /// trajectory, which is why the two share every display path below and differ
-/// only in where the animation is evaluated. The previous `Option<f64>`
-/// eigenvalue was already this axis in two states (`None`/`Some`); this names the
-/// third.
+/// only in where the animation is evaluated.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum FieldTime {
   Static,
@@ -149,9 +147,10 @@ impl FieldTime {
 ///
 /// A grade-0 form is a density directly; a top-grade ($k = n$) form becomes one
 /// by the pointwise Hodge star $star: Lambda^n -> Lambda^0$. Either way the
-/// density is read per cell at draw time (`surface_corner_values`), not stored
-///, so the top form's discontinuity across cells survives to the colormap
-/// instead of being averaged away.
+/// density is read per rendered corner at draw time
+/// (`realize::reduce::corner_values`), not stored, so the top form's
+/// discontinuity across cells survives to the colormap instead of being
+/// averaged away.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct ScalarField {
   pub name: String,
@@ -184,7 +183,8 @@ pub struct ScalarField {
 ///
 /// A grade-1 (or, via the Hodge star, grade-$(n-1)$) form reduces to a genuine
 /// tangent line field. Its (unsigned) magnitude $|V|_g$ is read per cell
-/// (`surface_corner_values`) and tints the surface the marks are drawn on.
+/// (`realize::reduce::corner_values`) and tints the surface the marks are drawn
+/// on.
 ///
 /// The glyphs are static: $ker$ and $sharp$ are scale-invariant, so the
 /// standing wave $u(t) = cos(sqrt(lambda) t) phi$ leaves them fixed and swings
@@ -512,7 +512,7 @@ impl Scene {
   /// simplicial mesh, the multi-cell case of the shared construction below,
   /// where a DOF simplex's support spans every cell incident to it, which is
   /// exactly where the LSF/GSF distinction shows up on screen: the same
-  /// one-hot-cochain construction, just no longer confined to a single cell.
+  /// one-hot-cochain construction, not confined to a single cell.
   pub fn whitney_basis_mesh(topology: Complex, coords: MeshCoords) -> Self {
     Self::whitney_basis_on(topology, coords)
   }
@@ -851,7 +851,7 @@ impl Scene {
   /// $k = n-1$) a tangent line field, and a reduced grade $>= 2$ (only reachable
   /// at $n >= 4$) has no mark yet. The reduction is not applied here: the
   /// original cochain is stored whole, and the render mark reads it per cell at
-  /// draw time (see [`surface_corner_values`]).
+  /// draw time (see [`realize::reduce::corner_values`]).
   ///
   /// The grade reduces against the surface's dimension, not the mesh's, and
   /// that is what makes the mark the mark of the thing on screen. A field on a
@@ -913,7 +913,7 @@ impl Scene {
       0 => {
         // The original $k$-cochain is kept whole. The reduction to a density (a
         // pointwise Hodge star for $k = n$, the identity for $k = 0$) is read
-        // per cell at draw time by [`surface_corner_values`], never averaged
+        // per corner at draw time by `realize::reduce::corner_values`, never averaged
         // into the stored field.
         fields.push(ScalarField {
           name,
@@ -2125,11 +2125,11 @@ mod tests {
     assert!(colors.iter().all(|&v| (v - colors[0]).abs() < 1e-9));
   }
 
-  /// The regression theorem for the surface tint: a Whitney basis field's
-  /// support is exactly the cells its DOF simplex bounds. Read per corner in the
-  /// corner's own cell, every cell the form vanishes on reads exactly zero at
-  /// all three corners, so a basis function no longer bleeds into cells that do
-  /// not contain its DOF. A per-vertex tint could not state this: the DOF's
+  /// The surface tint respects a basis function's support: it is exactly the
+  /// cells its DOF simplex bounds. Read per corner on the corner's own
+  /// simplex, every cell the form vanishes on reads exactly zero at all three
+  /// corners, so a basis function does not bleed into cells that do not contain
+  /// its DOF. A per-vertex tint could not state this: the DOF's
   /// endpoints carry a nonzero nodal value into every incident cell.
   #[test]
   fn whitney_basis_support_is_exactly_its_dof_cells() {

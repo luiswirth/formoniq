@@ -14,7 +14,7 @@
 // to one invocation to compute the perpendicular.
 //
 // A segment mark has two inks, chosen by `material.colored`. Off, it is the
-// fixed geometry color: the structural skeleton (the old wireframe), and the
+// fixed geometry color: the structural skeleton (the wireframe), and the
 // halo/core outline `display.rs` draws for a ribbon that must separate from a
 // field it crosses (a wider light segment, a narrower dark one on top -- the
 // standard cartographic outline). On, it is the shared colormap of the field

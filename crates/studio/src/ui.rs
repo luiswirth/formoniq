@@ -439,9 +439,9 @@ fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection,
 /// tabs, but a view over one already-solved scene rather than a re-solve),
 /// then a dropdown over that grade's DOFs alone. A mesh's DOF count is
 /// unbounded (a reference cell has a handful, a built-in surface thousands),
-/// and every grade shown flat at once, the previous layout, grew the
-/// inspector to the mesh's simplex count; collapsed behind a dropdown, the
-/// panel's size no longer depends on the mesh. The active grade is read off
+/// and showing every grade flat at once would grow the inspector to the mesh's
+/// simplex count; collapsed behind a dropdown, the panel's size does not depend
+/// on the mesh. The active grade is read off
 /// the current selection, so switching tabs jumps to that grade's first DOF
 /// and the next frame's tab highlight follows it.
 fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {

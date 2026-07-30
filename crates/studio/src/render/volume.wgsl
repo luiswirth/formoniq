@@ -200,7 +200,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // Empty space is the common case inside the box (the mesh does not fill
         // its own bounding box, and the field vanishes over much of what it
         // does). The coarse grid steps over a whole empty block at once, so the
-        // vacuum no longer costs a fine sample per step -- most of the frame's
+        // vacuum costs no fine sample at all -- most of the frame's
         // speed on a solid that only half-fills its bounds.
         if (block_occupancy(x) <= MIN_OCCUPANCY) {
             t = skip_block(m, x, dir, t);

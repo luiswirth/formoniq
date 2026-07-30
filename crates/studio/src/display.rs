@@ -265,8 +265,7 @@ pub(crate) fn default_camera(scene: &Scene, aspect: f32) -> Camera {
     .fold(0.0, f64::max);
   let is_planar = z_extent < 1e-9 * extent;
   // Straight down ($theta = -pi/2$) is an ordinary pose, reachable and framed
-  // like any other: it is the pole the old `look_at` camera could not go to,
-  // and having to stop short of it is what made top-down a mode of its own.
+  // like any other, so top-down is a camera position and not a mode.
   // `yaw = pi/2` puts screen-right on world $+x$ (`Camera::right`), so a plane
   // seen from above keeps its own axes; the 3D default's $-pi/2$ is the
   // mirrored convention it has always had.
@@ -426,10 +425,10 @@ pub(crate) struct FieldAttributes {
   /// cannot tear, so it rides the continuous nodal recovery at every grade.
   pub(crate) wire_height: Vec<f32>,
   /// Per segment endpoint (two parallel arrays), for the 1-skeleton's colormap:
-  /// the trace of the field on each edge ([`realize::reduce::segment_colors`]).
+  /// the trace of the field on each edge ([`realize::reduce::corner_values`]).
   pub(crate) segment_colors: [Vec<f32>; 2],
   /// Per mesh vertex, for the 0-skeleton's colormap: the field's value there
-  /// ([`realize::reduce::point_colors`]).
+  /// ([`realize::reduce::corner_values`]).
   pub(crate) point_colors: Vec<f32>,
 }
 
