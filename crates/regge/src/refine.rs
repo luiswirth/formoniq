@@ -101,6 +101,7 @@ impl MeshCoords {
 #[cfg(test)]
 mod test {
   use super::SubdivisionExt;
+  use crate::lengths::LengthsSq;
   use crate::mesher::cartesian::CartesianGrid;
   use multiindex::Dim;
   use simplicial::topology::complex::Complex;

@@ -31,10 +31,11 @@ manifold with edge lengths a Regge manifold rather than an approximation of one.
 
 ## What it provides
 
-- `metric`:
+- `lengths`:
   `MeshLengthsSq` and the per-simplex metrics it derives — `cell_metric`,
   `simplex_metric`, `simplex_volume` — plus `CellGramians` as a source and as
-  the materialized cell column a refinement pulls back.
+  the materialized cell column a refinement pulls back. `LengthsSq` is what a
+  column of signed squared lengths reads as, at either scope.
 - `coord`:
   `MeshCoords`, the extrinsic realization, and the bridges that induce a metric
   and edge lengths from it. Point location lives here too, an embedding being
@@ -42,6 +43,8 @@ manifold with edge lengths a Regge manifold rather than an approximation of one.
 - `refine`:
   the geometric half of uniform refinement, keyed off `simplicial`'s
   `Subdivision`.
+- `subcomplex`:
+  the geometry a boundary or a boundary part inherits from its parent.
 - `mesher`:
   generators — Cartesian/Kuhn grids, quotient tori, sphere surfaces — each
   producing a complex and the coordinates that go with it, plus the

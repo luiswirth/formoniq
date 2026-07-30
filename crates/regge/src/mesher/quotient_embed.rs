@@ -297,6 +297,7 @@ fn revolve(quotient: &FlatQuotient, point: impl Fn(&[usize]) -> [f64; 3]) -> Mes
 #[cfg(test)]
 mod test {
   use super::{donut_r3, equivariant, is_isometric, moebius_r3};
+  use crate::lengths::LengthsSq;
   use crate::mesher::quotient::{FlatQuotient, Identification};
   use multiindex::Dim;
   use simplicial::linalg::Vector;
@@ -369,7 +370,7 @@ mod test {
         "a twisted embedding is curved, so it cannot reproduce the flat lengths"
       );
       // Curved, but still a faithful realization: no edge collapses.
-      assert!(induced.iter().all(|&l| l > 0.0));
+      assert!(induced.iter().all(|l| l > 0.0));
     }
   }
 
@@ -410,7 +411,7 @@ mod test {
       assert_eq!(coords.dim(), 3);
       let (complex, intrinsic) = quotient.triangulate();
       let induced = coords.to_edge_lengths_sq(&complex);
-      assert!(induced.iter().all(|&l| l > 0.0));
+      assert!(induced.iter().all(|l| l > 0.0));
       assert!(
         intrinsic
           .iter()

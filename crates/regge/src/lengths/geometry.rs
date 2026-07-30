@@ -32,7 +32,7 @@
 //! edge lengths (the primitive) or per-cell metrics at the boundary of the API,
 //! not through runtime dispatch on the hot path.
 
-use super::{mesh::MeshLengthsSq, simplex::SimplexLengthsSq};
+use super::{LengthsSq, mesh::MeshLengthsSq, simplex::SimplexLengthsSq};
 use simplicial::{
   Dim,
   topology::{
@@ -110,16 +110,11 @@ impl CellGramians {
   /// than a precondition: `None` on data that disagrees on a shared edge,
   /// never a length that silently favors one cell over another.
   pub fn try_to_edge_lengths_sq(&self, topology: &Complex) -> Option<MeshLengthsSq> {
-    if topology.dim() == 0 {
-      return Some(MeshLengthsSq::new_unchecked(
-        simplicial::linalg::Vector::zeros(0),
-      ));
-    }
-    let nedges = topology.edges().len();
+    let nedges = topology.skeleton(Dim::ONE).len();
     let mut edge_lengths_sq = simplicial::linalg::Vector::zeros(nedges);
     let mut written = vec![false; nedges];
     for cell in topology.cells().handle_iter() {
-      let lengths_sq = simplex_lengths_sq_of(&self.metrics[cell.get()]);
+      let lengths_sq = SimplexLengthsSq::from_metric(&self.metrics[cell.get()]);
       let scale = (0..lengths_sq.nedges())
         .map(|local| lengths_sq.length_sq(local).abs())
         .fold(0.0, f64::max);
@@ -173,12 +168,6 @@ impl CellGramians {
   pub fn load(path: impl AsRef<Path>) -> io::Result<Self> {
     simplicial::io::cbor::load_cbor(path)
   }
-}
-
-/// Regge signed squared edge lengths from a cell's metric tensor, on any
-/// signature.
-pub fn simplex_lengths_sq_of(metric: &Metric) -> SimplexLengthsSq {
-  SimplexLengthsSq::from_metric(metric)
 }
 
 #[cfg(test)]

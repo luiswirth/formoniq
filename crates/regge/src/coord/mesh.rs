@@ -5,7 +5,7 @@ use simplicial::{
   topology::{
     data::SkeletonData,
     handle::{KSimplexIdx, SimplexRef},
-    role::{Cell, Vertex},
+    role::{Cell, Vertex, roles},
     {VertexIdx, complex::Complex, simplex::Simplex},
   },
 };
@@ -186,17 +186,15 @@ impl MeshCoords {
   /// of each edge under the ambient inner product, of whatever signature the
   /// ambient carries, an embedding into Minkowski space yields Lorentzian
   /// Regge data, causal signs included.
+  ///
+  /// A 0-manifold is a discrete set of points: its 1-skeleton is empty, so its
+  /// geometry is the empty vector, which the total accessor gives rather than
+  /// a guard.
   pub fn to_edge_lengths_sq(&self, topology: &Complex) -> MeshLengthsSq {
-    // A 0-manifold is a discrete set of points: its 1-skeleton is empty, so the
-    // edge-length representation of its (trivial, 0-dimensional) geometry is the
-    // empty vector.
-    if topology.dim() == 0 {
-      return MeshLengthsSq::new_unchecked(Vector::zeros(0));
-    }
-    let edges = topology.edges();
+    let edges = topology.skeleton(Dim::ONE);
     let mut edge_lengths_sq = Vector::zeros(edges.len());
     for (iedge, edge) in edges.handle_iter().enumerate() {
-      let (vi, vj) = edge.endpoints();
+      let (vi, vj) = edge.role::<roles::Edge>().endpoints();
       edge_lengths_sq[iedge] = self.ambient.norm_sq(&(vj.coord(self) - vi.coord(self)));
     }
     // SAFETY: Squared lengths come from a coordinate realization.
