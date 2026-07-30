@@ -98,6 +98,24 @@ impl Tensor {
     Self::new(Slots::new(), Vector::from_element(1, value))
   }
 
+  /// The value of a scalar, the inverse of [`Self::scalar`].
+  ///
+  /// A tensor of no slots is a number, and this is that identification. Note
+  /// that a tensor of *degree* zero in some slot is also one-dimensional, and
+  /// this accepts it too: $Lambda^0 = "Sym"^0 = RR$, so the slots are there but
+  /// the space they span is the ground field either way.
+  ///
+  /// # Panics
+  /// If the tensor is not one-dimensional.
+  pub fn as_scalar(&self) -> f64 {
+    assert_eq!(
+      self.components.len(),
+      1,
+      "a scalar is a one-dimensional tensor"
+    );
+    self.components[0]
+  }
+
   /// A grade-one element of the space itself, where the two symmetries coincide.
   pub fn line(components: Vector, variance: Variance) -> Self {
     let dim = components.len();
@@ -1047,7 +1065,7 @@ pub fn wedge_pairing(left: &Tensor, right: &Tensor) -> f64 {
   let top = left.wedge(right);
   // The top grade is one-dimensional, so the product is a multiple of the basis
   // volume element and that multiple is the pairing.
-  top.components()[0]
+  top.as_scalar()
 }
 /// Every factor at one variance: the shape of a uniform-variance tensor.
 ///

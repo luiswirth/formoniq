@@ -26,7 +26,7 @@ use {
   crate::linalg::faer::FaerLu,
   derham::{cochain::Cochain, interpolate::interpolant::WhitneyInterpolant, section::Section},
   iterative::{Jacobi, StopCriterion, krylov::cg},
-  metric::tensor::multiform_metric,
+  metric::tensor::inner,
   regge::{cell_volume, lengths::mesh::MeshLengthsSq},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
@@ -51,7 +51,6 @@ pub fn fe_l2_error<F: Section>(
   geometry: &MeshLengthsSq,
 ) -> f64 {
   let dim = topology.dim();
-  let grade = fe_cochain.grade();
   let qr = SimplexQuadRule::degree(dim, 3);
   let fe_whitney = WhitneyInterpolant::new(fe_cochain.clone(), topology);
 
@@ -60,9 +59,10 @@ pub fn fe_l2_error<F: Section>(
     .handle_iter()
     .map(|cell| {
       let metric = geometry.cell_metric(cell);
-      let inner = multiform_metric(&metric, grade);
-      let error_pointwise =
-        |point: &MeshPoint| inner.norm_sq((exact.at(point) - fe_whitney.at(point)).components());
+      let error_pointwise = |point: &MeshPoint| {
+        let error = exact.at(point) - fe_whitney.at(point);
+        inner(&error, &error, &metric)
+      };
       qr.integrate_cell(cell, &error_pointwise, cell_volume(&metric))
     })
     .sum();
