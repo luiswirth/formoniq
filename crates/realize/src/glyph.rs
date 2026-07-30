@@ -278,9 +278,9 @@ mod tests {
   /// to the mean edge length, which is what must stay bounded.
   ///
   /// Every other dimension of the arrow is a fraction of this length, applied
-  /// in the vertex shader, so self-similarity is structural now and there is no
+  /// in the vertex shader, so self-similarity is structural and there is no
   /// stored width that could disagree with it: this is the one number the
-  /// bake still decides.
+  /// bake decides.
   #[test]
   fn an_arrow_is_sized_by_its_cell_at_every_refinement() {
     let mut ratios = Vec::new();
@@ -313,9 +313,9 @@ mod tests {
   /// On a solid the arrows live on the boundary surface, never in the volume.
   ///
   /// The failure this pins is not cosmetic. A tetrahedron has no plane for a
-  /// flat quad to lie in, so glyphing the cells of a $3$-manifold produced
-  /// arrows with an arbitrary `across` axis at points inside an opaque solid,
-  /// the mark evaluated on an object it cannot be a mark of. Stated as a
+  /// flat quad to lie in, so glyphing the cells of a $3$-manifold would give
+  /// arrows an arbitrary `across` axis, at points inside an opaque solid: the
+  /// mark evaluated on an object it cannot be a mark of. Stated as a
   /// geometric fact rather than a count: every arrow's center lies on $diff M$,
   /// so none is interior. Checked against the unit cube's faces, where being on
   /// the boundary is exactly having a coordinate at 0 or 1.

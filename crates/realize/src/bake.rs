@@ -221,8 +221,7 @@ impl BakedMesh {
       // and never displace.
       //
       // The 1-skeleton stays the whole mesh's, not the boundary's: shown on
-      // its own it is how the interior is inspected, which the fill no longer
-      // can.
+      // its own it is how the interior is inspected, which the fill cannot.
       _ => {
         // The render surface is the same object the field marks are drawn on
         // and traced onto, so the fill and the glyphs cannot disagree about

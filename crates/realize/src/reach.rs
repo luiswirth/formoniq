@@ -253,9 +253,9 @@ mod tests {
   /// The half curvature cannot see. A thin flat slab has infinite curvature
   /// radius on its faces: they are planes, and reach $t \/ 2$, because the
   /// opposite face is what the offset runs into. This is the case that
-  /// collapses a mesh when a displacement is bounded by curvature alone, and
-  /// the assertion is that the bound now comes from the thickness rather than
-  /// from the (absent) curvature.
+  /// collapses a mesh when a displacement is bounded by curvature alone: the
+  /// bound has to come from the thickness rather than from the (absent)
+  /// curvature.
   #[test]
   fn thin_slab_reach_is_half_its_thickness() {
     for &thickness in &[0.2, 0.05] {
