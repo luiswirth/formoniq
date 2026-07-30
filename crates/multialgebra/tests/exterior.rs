@@ -656,3 +656,36 @@ fn a_materialized_transport_is_adjoint_on_both_families() {
     }
   }
 }
+
+/// Applying a factored operator slot by slot is applying its Kronecker
+/// product: $(times.circle_i M_i) c$ computed the cheap way and the formed way
+/// agree.
+///
+/// This is what lets every measuring and transporting operation refuse to build
+/// the product. Swept over rectangular factors, so the slot dimensions change
+/// under the map and a routine that assumed square would fail, and over both
+/// families and three slots, where a stride mistake shows up as a permuted
+/// answer rather than a wrong shape.
+#[test]
+fn applying_factorwise_is_applying_the_kronecker_product() {
+  use multialgebra::tensor::{apply_factorwise, factorwise_kronecker};
+
+  for dims in [vec![], vec![3], vec![2, 4], vec![4, 1, 3], vec![2, 3, 2]] {
+    // Rectangular: each slot's matrix takes d to d+1, so a transposed or
+    // square-assuming implementation cannot pass.
+    let per_slot: Vec<Matrix> = dims
+      .iter()
+      .enumerate()
+      .map(|(f, &d)| Matrix::from_fn(d + 1, d, |i, j| ((1 + f + 3 * i + 7 * j) % 5) as f64 - 2.0))
+      .collect();
+
+    let len: usize = dims.iter().product();
+    let components = Vector::from_fn(len, |i, _| ((3 + 5 * i) % 7) as f64 - 3.0);
+
+    assert_relative_eq!(
+      apply_factorwise(&per_slot, &dims, &components),
+      factorwise_kronecker(&per_slot) * &components,
+      epsilon = 1e-12
+    );
+  }
+}

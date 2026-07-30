@@ -12,7 +12,7 @@
 use multialgebra::ExteriorGrade;
 use multialgebra::{
   Factor, Matrix, Slot, Symmetry, Tensor, Variance,
-  tensor::{Basis, Slots, factorwise_kronecker},
+  tensor::{Basis, Slots, apply_factorwise, factorwise_kronecker},
 };
 use multiindex::{MonoIndex, MultiIndex, Repetition, Sign};
 
@@ -92,12 +92,28 @@ impl Metric {
 /// describes it, and a constructor that supplied one would be guessing. Nothing
 /// about this object is a metric on the underlying space; it is the Gram matrix
 /// of a basis, which is all an inner product needs.
+///
+/// **Formed, and usually not what you want.** The Gram matrix of a product is
+/// the product of the Gram matrices, so measuring anything applies
+/// [`per_slot_gramians`] slot by slot and never builds this: see
+/// [`apply_factorwise`]. Reach for the formed matrix only where a matrix is the
+/// deliverable.
 pub fn tensor_gramian(slots: &[Slot], metric: &Metric) -> Matrix {
-  let per_slot: Vec<Matrix> = slots
+  factorwise_kronecker(&per_slot_gramians(slots, metric))
+}
+
+/// The Gram matrix of each slot separately, in slot order: the factors of
+/// [`tensor_gramian`], and the form the measuring operations actually use.
+///
+/// Each slot is measured by [`Metric::measuring`] against *its own* variance,
+/// which is the whole reason these stay apart rather than collapsing into one
+/// induced metric: on a mixed tensor some factors come from $g$ and some from
+/// $g^(-1)$.
+pub fn per_slot_gramians(slots: &[Slot], metric: &Metric) -> Vec<Matrix> {
+  slots
     .iter()
     .map(|slot| metric.on_slot(slot).matrix().clone())
-    .collect();
-  factorwise_kronecker(&per_slot)
+    .collect()
 }
 
 /// The metric induced on multivectors $Lambda^k V$: $Lambda^k g$.
@@ -127,8 +143,15 @@ pub fn inner(left: &Tensor, right: &Tensor, metric: &Metric) -> f64 {
     right.slots(),
     "an inner product is of one shape"
   );
-  let gramian = tensor_gramian(left.slots(), metric);
-  (left.components().transpose() * gramian * right.components()).x
+  // The Gramian of a product is the product of the Gramians, so it is applied
+  // slot by slot and never formed: see `tensor_gramian` for what that costs.
+  let dims: Vec<usize> = left.slots().iter().map(Slot::multidim).collect();
+  let measured = apply_factorwise(
+    &per_slot_gramians(left.slots(), metric),
+    &dims,
+    right.components(),
+  );
+  left.components().dot(&measured)
 }
 
 /// The metric operations on a [`Tensor`], as methods where the notation asks
