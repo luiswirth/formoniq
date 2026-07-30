@@ -81,18 +81,23 @@ impl Metric {
   }
 }
 
-/// The metric induced on $times.circle_i F_i$: the Kronecker product of the
+/// The Gram matrix induced on $times.circle_i F_i$: the Kronecker product of the
 /// per-slot metrics, in the same slot order as the components.
 ///
-/// Each slot is measured by [`Metric::measuring`] against its own variance, so
-/// a mixed tensor is measured correctly where a single global choice would not
-/// be.
-pub fn tensor_metric(slots: &[Slot], metric: &Metric) -> Metric {
+/// Each slot is measured by [`Metric::measuring`] against its own variance, so a
+/// mixed tensor is measured correctly where a single global choice would not be.
+///
+/// A bare matrix, and not a [`Metric`], for exactly that reason. A mixed tensor's
+/// Gramian has factors from $g$ *and* from $g^(-1)$, so no single variance
+/// describes it, and a constructor that supplied one would be guessing. Nothing
+/// about this object is a metric on the underlying space; it is the Gram matrix
+/// of a basis, which is all an inner product needs.
+pub fn tensor_gramian(slots: &[Slot], metric: &Metric) -> Matrix {
   let per_slot: Vec<Matrix> = slots
     .iter()
     .map(|slot| metric.on_slot(slot).matrix().clone())
     .collect();
-  Metric::new_unchecked(Variance::Covariant, factorwise_kronecker(&per_slot))
+  factorwise_kronecker(&per_slot)
 }
 
 /// The metric induced on multivectors $Lambda^k V$: $Lambda^k g$.
@@ -122,7 +127,8 @@ pub fn inner(left: &Tensor, right: &Tensor, metric: &Metric) -> f64 {
     right.slots(),
     "an inner product is of one shape"
   );
-  tensor_metric(left.slots(), metric).inner(left.components(), right.components())
+  let gramian = tensor_gramian(left.slots(), metric);
+  (left.components().transpose() * gramian * right.components()).x
 }
 
 /// The metric operations on a [`Tensor`], as methods where the notation asks
@@ -133,8 +139,9 @@ pub fn inner(left: &Tensor, right: &Tensor, metric: &Metric) -> f64 {
 /// carries that where `star(&omega, ..)` would not. [`inner`] stays free,
 /// being symmetric in its two arguments.
 pub trait TensorExt {
-  /// The induced metric on this tensor's own basis.
-  fn induced_metric(&self, metric: &Metric) -> Metric;
+  /// The Gram matrix on this tensor's own basis, each slot measured by its own
+  /// variance. Not a [`Metric`]: see [`tensor_gramian`].
+  fn gramian(&self, metric: &Metric) -> Matrix;
   /// Magnitude $sqrt(abs(inner(v, v)))$, never NaN: on an indefinite metric the
   /// sign of [`inner`] carries the causal character separately.
   fn norm(&self, metric: &Metric) -> f64;
@@ -164,8 +171,8 @@ pub trait TensorExt {
 }
 
 impl TensorExt for Tensor {
-  fn induced_metric(&self, metric: &Metric) -> Metric {
-    tensor_metric(self.slots(), metric)
+  fn gramian(&self, metric: &Metric) -> Matrix {
+    tensor_gramian(self.slots(), metric)
   }
 
   fn norm(&self, metric: &Metric) -> f64 {
