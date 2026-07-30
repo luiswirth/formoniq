@@ -274,6 +274,22 @@ impl FieldOffers {
 }
 
 impl Scene {
+  /// A scene on a mesh, carrying no fields yet: what every constructor below
+  /// starts from and [`Self::file`] fills.
+  ///
+  /// The surface reduction is fixed here, before any field exists, because the
+  /// mark a field gets is chosen against the surface's dimension and not the
+  /// mesh's.
+  fn on(topology: Complex, coords: MeshCoords) -> Self {
+    Self {
+      surface: Surface::of(&topology, &coords),
+      topology,
+      coords,
+      fields: Vec::new(),
+      line_fields: Vec::new(),
+    }
+  }
+
   /// The reduced grade's answer to what its field can be read with, and the one
   /// place it is asked outside the display: a selection already is the
   /// reduction (which list it indexes is which mark it landed in), so this
@@ -294,30 +310,21 @@ impl Scene {
     }
   }
 
-  /// Hodge-Laplace eigenmodes of a single grade, standing-wave normal
-  /// modes, $Delta u = lambda u$, of an arbitrary simplicial surface with
-  /// the given geometry, filed into `fields` or `line_fields` through the
-  /// same [`Self::field`] dispatch a raw Whitney basis function goes
-  /// through: an eigenmode and a one-hot cochain differ only in where the
-  /// cochain comes from (an eigensolve vs. a Kronecker delta), not in
-  /// how it is reconstructed or displayed.
+  /// Files the Hodge-Laplace eigenmodes of one grade: the standing-wave normal
+  /// modes $Delta u = lambda u$ of the scene's own mesh, through the same
+  /// [`Self::file`] dispatch a raw Whitney basis function goes through. An
+  /// eigenmode and a one-hot cochain differ only in where the cochain comes
+  /// from, an eigensolve against a Kronecker delta, not in how it is
+  /// reconstructed or displayed.
   ///
   /// A failed eigensolve contributes no fields and is reported on stderr: an
   /// iteration budget too small for one mesh is not a reason to take the
   /// viewer down.
-  fn eigenmode_fields(
-    topology: &Complex,
-    surface: &Surface,
-    coords: &MeshCoords,
-    grade: ExteriorGrade,
-    nmodes: usize,
-    fields: &mut Vec<ScalarField>,
-    line_fields: &mut Vec<LineField>,
-  ) {
+  fn file_eigenmodes(&mut self, grade: ExteriorGrade, nmodes: usize) {
     use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
 
-    let metric = coords.to_edge_lengths_sq(topology);
-    let solved = solve_evp(&WhitneyComplex::new(topology, &metric), grade, nmodes);
+    let metric = self.coords.to_edge_lengths_sq(&self.topology);
+    let solved = solve_evp(&WhitneyComplex::new(&self.topology, &metric), grade, nmodes);
     let (eigenvals, _, eigenfuncs) = match solved {
       Ok(solved) => solved,
       Err(err) => {
@@ -327,168 +334,51 @@ impl Scene {
     };
 
     for (i, (&lambda, col)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate() {
-      let name = format!("mode {i} (grade {grade}, lambda = {lambda:.2})");
-      let cochain = Cochain::new(grade, col.into_owned());
-      Self::field(
-        topology,
-        surface,
+      self.file(
         FieldMeta {
-          name,
+          name: format!("mode {i} (grade {grade}, lambda = {lambda:.2})"),
           time: FieldTime::StandingWave { eigenvalue: lambda },
           dof: None,
         },
-        cochain,
-        fields,
-        line_fields,
+        Cochain::new(grade, col.into_owned()),
       );
     }
   }
 
-  /// Grade-0 Hodge-Laplace eigenmodes of an arbitrary simplicial surface.
-  /// Neither the mesh nor its embedding are assumed to be a sphere: any 2D
-  /// `Complex` with a `MeshCoords` realization goes in, so a scene is exactly
-  /// as general as the underlying eigensolve. The spherical harmonics are one
-  /// instantiation of this ([`Self::spherical_harmonics`]), not a special
-  /// case baked into the solve.
-  pub fn eigenmodes(topology: Complex, coords: MeshCoords, nmodes: usize) -> Self {
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(&topology, &coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
-    Self::eigenmode_fields(
-      &topology,
-      &surface,
-      &coords,
-      Dim::ZERO,
-      nmodes,
-      &mut fields,
-      &mut line_fields,
-    );
-    Self {
-      surface,
-      topology,
-      coords,
-      fields,
-      line_fields,
-    }
-  }
-
-  /// Hodge-Laplace eigenmodes on the unit sphere — the discrete spherical
-  /// harmonics — at every grade $0..=n$ of the de Rham complex, together in
-  /// one scene, on an icosphere of the given subdivision depth.
-  ///
-  /// Every grade goes through the same `field` reduction: on the sphere
-  /// ($n = 2$) grade 0 and the top grade 2 are scalar densities (grade 2 by its
-  /// pointwise Hodge star, $star(f dvol) = f$), while grade 1 is a tangent line
-  /// field. No grade is special-cased, the extremal grade 2 runs on exactly
-  /// the same code as grade 0, which is the point of the $min(k, n-k)$ dispatch
-  /// (discussion #101).
-  pub fn spherical_harmonics(nsubdivisions: usize, nmodes: usize) -> Self {
-    use regge::mesher::sphere::mesh_sphere_surface;
-
-    let (topology, coords) = mesh_sphere_surface(nsubdivisions);
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(&topology, &coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
-    for grade in topology.dim().range_inclusive() {
-      let (mut f, mut l) = Self::eigenmodes_grade(&topology, &coords, grade, nmodes);
-      fields.append(&mut f);
-      line_fields.append(&mut l);
-    }
-    Self {
-      surface,
-      topology,
-      coords,
-      fields,
-      line_fields,
-    }
-  }
-
-  /// The Hodge-Laplace eigenmodes of a single grade on a shared surface
-  /// mesh: the fields one grade's eigensolve contributes, split by their
-  /// render mark. The unit the gallery computes lazily and
-  /// memoizes: the mesh is built once and passed in, so switching grade pays
-  /// only for that grade's solve, and only the first time it is viewed. The
-  /// discrete spherical harmonics are one instantiation, the mesh being a
-  /// sphere; nothing here assumes it.
-  pub fn eigenmodes_grade(
-    topology: &Complex,
-    coords: &MeshCoords,
-    grade: ExteriorGrade,
-    nmodes: usize,
-  ) -> (Vec<ScalarField>, Vec<LineField>) {
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(topology, coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
-    Self::eigenmode_fields(
-      topology,
-      &surface,
-      coords,
-      grade,
-      nmodes,
-      &mut fields,
-      &mut line_fields,
-    );
-    (fields, line_fields)
-  }
-
-  /// The bare icosphere carrying a single constant field: the mesh of
-  /// [`Self::spherical_harmonics`] without its eigensolve.
-  /// Stands in for the real scene so the viewer can show the sphere the instant
-  /// the window opens, while the solve runs in the background and swaps the
-  /// actual modes in when it lands. The lone field has no eigenvalue, so it is
-  /// drawn as a plain, undeformed surface.
-  pub fn sphere_placeholder(nsubdivisions: usize) -> Self {
-    use regge::mesher::sphere::mesh_sphere_surface;
-
-    let (topology, coords) = mesh_sphere_surface(nsubdivisions);
-    Self::placeholder_on(topology, coords)
-  }
-
-  /// The same solve-free placeholder as [`Self::sphere_placeholder`], but on a
-  /// mesh already in hand, so the gallery can share one sphere mesh between
-  /// the instant placeholder and the per-grade solves that follow, rather than
-  /// meshing twice.
+  /// The solve-free placeholder on a mesh: a single flat field, so the viewer
+  /// can show the geometry the instant it has one while the study solves in
+  /// the background and swaps the real fields in when it lands. The lone field
+  /// has no time, so it is drawn as a plain, undeformed surface.
   pub fn placeholder_on(topology: Complex, coords: MeshCoords) -> Self {
     let nvertices = topology.skeleton(0).len();
-    let fields = vec![ScalarField {
+    let mut scene = Self::on(topology, coords);
+    scene.fields.push(ScalarField {
       name: "loading...".to_string(),
       grade: Dim::ZERO,
       cochain: Cochain::new(Dim::ZERO, na::DVector::zeros(nvertices)),
       time: FieldTime::Static,
       dof: None,
-    }];
-    Self {
-      surface: Surface::of(&topology, &coords),
-      topology,
-      coords,
-      fields,
-      line_fields: Vec::new(),
-    }
+    });
+    scene
   }
 
-  /// A full [`Scene`] carrying one grade's Hodge-Laplace eigenmodes on the
-  /// shared surface mesh: the mesh (cloned in) plus the fields that grade's
-  /// eigensolve contributes. The display unit the gallery memoizes per grade.
-  pub fn mesh_grade(
+  /// One grade's Hodge-Laplace eigenmodes, the standing-wave normal modes of
+  /// an arbitrary simplicial manifold with the given geometry. The unit the
+  /// gallery memoizes per grade, so switching grade pays for that grade's
+  /// solve alone, and only the first time it is viewed.
+  ///
+  /// Nothing here assumes a sphere: the discrete spherical harmonics are this
+  /// study on that mesh, and every grade runs the same code, the extremal ones
+  /// included, which is the point of the $min(k, n-k)$ dispatch.
+  pub fn eigenmodes(
     topology: &Complex,
     coords: &MeshCoords,
     grade: ExteriorGrade,
     nmodes: usize,
   ) -> Self {
-    let (fields, line_fields) = Self::eigenmodes_grade(topology, coords, grade, nmodes);
-    Self {
-      surface: Surface::of(topology, coords),
-      topology: topology.clone(),
-      coords: coords.clone(),
-      fields,
-      line_fields,
-    }
+    let mut scene = Self::on(topology.clone(), coords.clone());
+    scene.file_eigenmodes(grade, nmodes);
+    scene
   }
 
   /// Every Whitney basis function ("local shape function") of the standard
@@ -518,7 +408,7 @@ impl Scene {
 
   /// A named list of explicit cochains on a mesh, each resolved from its
   /// [`crate::gallery::CochainSpec`] and reduced to its render mark through the
-  /// same `field` dispatch every other field goes through, a field
+  /// same `file` dispatch every other field goes through, a field
   /// here is a general linear combination, not confined to a single one-hot
   /// cochain. The worked triforce examples (a constant field, a pure-curl
   /// field and a pure-divergence field) are one such list; a loaded cochain
@@ -528,33 +418,19 @@ impl Scene {
     coords: MeshCoords,
     specs: &[crate::gallery::NamedCochain],
   ) -> Self {
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(&topology, &coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
+    let mut scene = Self::on(topology, coords);
     for named in specs {
-      Self::field(
-        &topology,
-        &surface,
+      let cochain = named.spec.resolve(&scene.topology);
+      scene.file(
         FieldMeta {
           name: named.name.clone(),
           time: FieldTime::Static,
           dof: None,
         },
-        named.spec.resolve(&topology),
-        &mut fields,
-        &mut line_fields,
+        cochain,
       );
     }
-
-    Self {
-      surface,
-      topology,
-      coords,
-      fields,
-      line_fields,
-    }
+    scene
   }
 
   /// The Hodge decomposition of a probe field, as four switchable fields: the
@@ -571,13 +447,6 @@ impl Scene {
   /// input alone rather than taking the viewer down.
   pub fn hodge_decomposition(topology: Complex, coords: MeshCoords) -> Self {
     let input = hodge_probe_input(&topology, &coords);
-
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(&topology, &coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
-
     let named = match hodge_decompose(&topology, &coords, &input) {
       Ok(parts) => vec![
         ("ω input", input),
@@ -591,28 +460,18 @@ impl Scene {
       }
     };
 
+    let mut scene = Self::on(topology, coords);
     for (name, cochain) in named {
-      Self::field(
-        &topology,
-        &surface,
+      scene.file(
         FieldMeta {
           name: name.to_string(),
           time: FieldTime::Static,
           dof: None,
         },
         cochain,
-        &mut fields,
-        &mut line_fields,
       );
     }
-
-    Self {
-      surface,
-      topology,
-      coords,
-      fields,
-      line_fields,
-    }
+    scene
   }
 
   /// Shared construction for [`Self::whitney_basis`] and
@@ -627,43 +486,24 @@ impl Scene {
   /// colexicographic skeleton order, which coincides with
   /// `unit_subsimps` on the single-cell reference complex.
   fn whitney_basis_on(topology: Complex, coords: MeshCoords) -> Self {
-    let dim = topology.dim();
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(&topology, &coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
-    for grade in dim.range_inclusive() {
-      let ndofs = topology.nsimplices(grade);
-      for (idof, dof_simp) in topology.skeleton_raw(grade).iter().enumerate() {
-        let name = format!("W^{grade}_{}", dof_label(dof_simp));
-
+    let mut scene = Self::on(topology, coords);
+    for grade in scene.topology.dim().range_inclusive() {
+      let ndofs = scene.topology.nsimplices(grade);
+      let dofs: Vec<Simplex> = scene.topology.skeleton_raw(grade).iter().cloned().collect();
+      for (idof, dof) in dofs.into_iter().enumerate() {
         let mut coeffs = na::DVector::zeros(ndofs);
         coeffs[idof] = 1.0;
-        let cochain = Cochain::new(grade, coeffs);
-
-        Self::field(
-          &topology,
-          &surface,
+        scene.file(
           FieldMeta {
-            name,
+            name: format!("W^{grade}_{}", dof_label(&dof)),
             time: FieldTime::Static,
-            dof: Some(dof_simp.clone()),
+            dof: Some(dof),
           },
-          cochain,
-          &mut fields,
-          &mut line_fields,
+          Cochain::new(grade, coeffs),
         );
       }
     }
-
-    Self {
-      surface,
-      topology,
-      coords,
-      fields,
-      line_fields,
-    }
+    scene
   }
 
   /// The heat flow $diff_t u = -kappa Delta u$ of a localized initial bump, as a
@@ -786,9 +626,10 @@ impl Scene {
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
 
-  /// Files a solved trajectory of any grade into a scene through the same `field`
-  /// dispatch every other field goes through: the trajectory's first frame is
-  /// its spatial representative, the sampled family its [`FieldTime`].
+  /// Files a solved trajectory of any grade into a scene through the same
+  /// [`Self::file`] dispatch every other field goes through: the trajectory's
+  /// first frame is its spatial representative, the sampled family its
+  /// [`FieldTime`].
   fn trajectory_scene(
     topology: Complex,
     coords: MeshCoords,
@@ -796,30 +637,16 @@ impl Scene {
     dt: f64,
     frames: Vec<Cochain>,
   ) -> Self {
-    // Built before the fields are filed: the mark each one gets is chosen
-    // against the surface's dimension, not the mesh's.
-    let surface = Surface::of(&topology, &coords);
-    let mut fields = Vec::new();
-    let mut line_fields = Vec::new();
-    Self::field(
-      &topology,
-      &surface,
+    let mut scene = Self::on(topology, coords);
+    scene.file(
       FieldMeta {
         name: "trajectory".to_string(),
         time: FieldTime::Trajectory { dt, frames },
         dof: None,
       },
       initial,
-      &mut fields,
-      &mut line_fields,
     );
-    Self {
-      surface,
-      topology,
-      coords,
-      fields,
-      line_fields,
-    }
+    scene
   }
 
   /// The displayed field's temporal model, for the transport clock and the
@@ -841,9 +668,9 @@ impl Scene {
   }
 
   /// Reconstructs a cochain as the render mark its reduced grade
-  /// $min(k, n-k)$ calls for, and files it into `fields` or `line_fields`
-  /// accordingly, the one general entry point both a raw Whitney basis
-  /// function ([`Self::whitney_basis`]) and a solved field arrive at.
+  /// $min(k, n-k)$ calls for, and files it into the scene under the mark that
+  /// grade names: the one general entry point both a raw Whitney basis function
+  /// ([`Self::whitney_basis`]) and a solved field arrive at.
   ///
   /// The Hodge star is what makes the dispatch total. A reduced grade of 0
   /// ($k = 0$ or $k = n$) is a scalar density, a reduced grade of 1 ($k = 1$ or
@@ -864,14 +691,7 @@ impl Scene {
   /// $C^k (diff M) = 0$): a volume density is not a surface quantity, so it
   /// reduces against the parent and is drawn by sampling the cells behind the
   /// boundary, until a volume mark exists to own it.
-  fn field(
-    topology: &Complex,
-    surface: &Surface,
-    meta: FieldMeta,
-    cochain: Cochain,
-    fields: &mut Vec<ScalarField>,
-    line_fields: &mut Vec<LineField>,
-  ) {
+  fn file(&mut self, meta: FieldMeta, cochain: Cochain) {
     let FieldMeta { name, time, dof } = meta;
     // A mode's sign is arbitrary, so it is pinned. A trajectory's is physical
     // (it solved from an initial condition), and its frames are what the
@@ -882,13 +702,17 @@ impl Scene {
       canonical_sign(cochain)
     };
     let k = cochain.grade();
-    // The manifold the mark is drawn on. A grade that does not trace is a
-    // volume quantity and keeps the parent's reduction (see the doc above).
-    let n = if surface.traces(topology, k) {
-      surface.dim(topology)
+    // The manifold the mark is drawn on, named once: a grade that does not
+    // trace is a volume quantity and keeps the parent (see the doc above).
+    // Both the reduction's $n$ and the orientability the star needs are read
+    // off it, so the two cannot disagree about which object they are about.
+    let topology = &self.topology;
+    let drawn_on = if self.surface.traces(topology, k) {
+      self.surface.complex(topology)
     } else {
-      topology.dim()
+      topology
     };
+    let n = drawn_on.dim();
 
     // The reduction stars whenever $k > n-k$, and the star needs a global
     // volume form, which a non-orientable mesh does not have. The field is
@@ -897,10 +721,7 @@ impl Scene {
     // a per-cell sign that means nothing. Everything below the star is
     // unaffected and still files normally. The solver is unaffected either
     // way, since the gauge cancels inside the assembly.
-    // Orientability is asked of the manifold whose volume form the star needs,
-    // the one `n` was just read from, so the check and the reduction cannot
-    // disagree about which object they are talking about.
-    if k > n - k && !surface.complex(topology).is_orientable() {
+    if k > n - k && !drawn_on.is_orientable() {
       eprintln!(
         "field '{name}' (grade {k} of {n}) needs the Hodge star to be drawn, \
          and the mesh is non-orientable: no global volume form, so it is skipped"
@@ -912,9 +733,9 @@ impl Scene {
       0 => {
         // The original $k$-cochain is kept whole. The reduction to a density (a
         // pointwise Hodge star for $k = n$, the identity for $k = 0$) is read
-        // per corner at draw time by `realize::reduce::corner_values`, never averaged
-        // into the stored field.
-        fields.push(ScalarField {
+        // per corner at draw time by `realize::reduce::corner_values`, never
+        // averaged into the stored field.
+        self.fields.push(ScalarField {
           name,
           grade: k,
           cochain,
@@ -923,7 +744,7 @@ impl Scene {
         });
       }
       1 => {
-        line_fields.push(LineField {
+        self.line_fields.push(LineField {
           name,
           grade: k,
           cochain,
@@ -1510,8 +1331,7 @@ mod tests {
   fn grade_zero_transport_conserves_on_a_closed_mesh() {
     use formoniq::problems::advection::{Transport, assemble_transport, solve_transport};
 
-    let seed = Scene::spherical_harmonics(2, 1);
-    let (topology, coords) = (seed.topology, seed.coords);
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(2);
     let metric = coords.to_edge_lengths_sq(&topology);
     let velocity = WhitneyInterpolant::new(solenoidal_flux(&topology, &coords, &metric), &topology)
       .hodge_star(&topology, &metric, topology.orientation().unwrap())
@@ -1549,11 +1369,11 @@ mod tests {
   #[test]
   fn the_velocity_is_the_smoothest_closed_field() {
     let donut = crate::gallery::QuotientSurface::Donut.build(20);
-    let sphere = Scene::spherical_harmonics(2, 1);
+    let sphere = regge::mesher::sphere::mesh_sphere_surface(2);
 
     for (name, topology, coords, harmonics) in [
       ("donut", donut.0, donut.1, 2),
-      ("sphere", sphere.topology, sphere.coords, 0),
+      ("sphere", sphere.0, sphere.1, 0),
     ] {
       let metric = coords.to_edge_lengths_sq(&topology);
       let space = smoothest_closed_space(&topology, &metric).expect("a closed field exists");
@@ -1586,8 +1406,8 @@ mod tests {
   /// case that catches it. A full-dimensional mesh cannot.
   #[test]
   fn the_top_grade_bump_is_a_positive_density() {
-    let seed = Scene::spherical_harmonics(2, 1);
-    let top = ambient_bump(&seed.topology, &seed.coords, seed.topology.dim());
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(2);
+    let top = ambient_bump(&topology, &coords, topology.dim());
 
     assert!(
       top.coeffs().iter().all(|c| *c > 0.0),
@@ -1601,8 +1421,8 @@ mod tests {
   /// central scheme neither damps nor blows up.
   #[test]
   fn advection_carries_the_bump_without_losing_it() {
-    let seed = Scene::spherical_harmonics(2, 1);
-    let scene = Scene::advection(seed.topology, seed.coords, Dim::ZERO, 16, 3.0);
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(2);
+    let scene = Scene::advection(topology, coords, Dim::ZERO, 16, 3.0);
 
     let FieldTime::Trajectory { frames, .. } = &scene.fields[0].time else {
       panic!("advection must produce a sampled trajectory");
@@ -1627,13 +1447,10 @@ mod tests {
   /// not approximately, the Whitney top form is genuinely $P_0$.
   #[test]
   fn top_grade_displacement_is_constant_within_each_cell() {
-    let scene = Scene::spherical_harmonics(1, 2);
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
+    let scene = Scene::eigenmodes(&topology, &coords, topology.dim(), 2);
     let baked = realize::bake::BakedMesh::new(&scene.topology, &scene.coords);
-    let top = scene
-      .fields
-      .iter()
-      .find(|f| f.grade == scene.topology.dim())
-      .expect("a top-grade scalar field");
+    let top = scene.fields.first().expect("a top-grade scalar field");
     let heights = surface_corner_heights(
       &scene.topology,
       &scene.coords,
@@ -1655,13 +1472,10 @@ mod tests {
   /// rather than a switch to rigid displacement everywhere.
   #[test]
   fn grade_zero_displacement_agrees_at_a_shared_vertex() {
-    let scene = Scene::spherical_harmonics(1, 2);
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
+    let scene = Scene::eigenmodes(&topology, &coords, Dim::ZERO, 2);
     let baked = realize::bake::BakedMesh::new(&scene.topology, &scene.coords);
-    let scalar = scene
-      .fields
-      .iter()
-      .find(|f| f.grade == 0)
-      .expect("a grade-0 field");
+    let scalar = scene.fields.first().expect("a grade-0 field");
     let heights = surface_corner_heights(
       &scene.topology,
       &scene.coords,
@@ -1940,14 +1754,7 @@ mod tests {
     }
     .build()
     .unwrap();
-    let (fields, _) = Scene::eigenmodes_grade(&topology, &coords, simplicial::Dim::ZERO, 4);
-    let scene = Scene {
-      surface: Surface::of(&topology, &coords),
-      topology,
-      coords,
-      fields,
-      line_fields: Vec::new(),
-    };
+    let scene = Scene::eigenmodes(&topology, &coords, simplicial::Dim::ZERO, 4);
     assert!(
       !scene.fields.is_empty(),
       "the grade-0 eigensolve produced modes"
