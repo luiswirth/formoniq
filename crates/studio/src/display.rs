@@ -340,10 +340,7 @@ impl MeshDisplay {
     let deposit_uvs = deposit_layout.corner_uvs(&baked.cell_corners);
     let vertices = baked.segment_vertices();
     let heights = vec![0.0; vertices.len()];
-    let segments = match &baked.cells {
-      realize::bake::PrimBatch::Segments(cells) => cells.as_slice(),
-      _ => &baked.edges,
-    };
+    let segments = baked.segments();
     let seg_zeros = vec![0.0f32; segments.len()];
     let vertex_zeros = vec![0.0f32; vertices.len()];
     Self {
@@ -362,14 +359,10 @@ impl MeshDisplay {
     }
   }
 
-  /// The 1-skeleton's edges (as pairs of mesh-vertex indices): the cells of a
-  /// 1-manifold, the overlay otherwise. What the segment marks are drawn over,
-  /// and what their per-edge trace colors are read on.
+  /// The bake's segments: what the segment marks are drawn over, and what
+  /// their per-edge trace colors are read on.
   pub(crate) fn segments(&self) -> &[[u32; 2]] {
-    match &self.baked.cells {
-      realize::bake::PrimBatch::Segments(cells) => cells,
-      _ => &self.baked.edges,
-    }
+    self.baked.segments()
   }
 
   /// Where a world-space ray meets the mesh, as a distance along it. `None` on
