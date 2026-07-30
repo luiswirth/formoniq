@@ -26,14 +26,16 @@
 
 use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
 
-/// One level of the hierarchy: its operator, its smoother, and the transfers to
+/// One level of the hierarchy: its operator, its smoother, and the transfer to
 /// the next-coarser level.
 ///
-/// `prolong` is $P: RR^(n_"coarse") -> RR^(n_"fine")$, the inclusion of the
-/// coarser space into this one; `restrict` is $R: RR^(n_"fine") ->
-/// RR^(n_"coarse")$, typically $P^T$. The operator is this level's $A$, and
-/// `smoother` any approximate inverse of it. The coarsest level carries no
-/// transfers: it is the [`VCycle`]'s coarse solver, not a `Level`.
+/// The transfer is the prolongation $P: RR^(n_"coarse") -> RR^(n_"fine")$, the
+/// inclusion of the coarser space into this one, and the restriction is its
+/// transpose, formed here rather than supplied. That the two are adjoint is
+/// half of what makes a symmetric cycle self-adjoint, so it is a property of
+/// the level and not a promise a caller keeps. The operator is this level's
+/// $A$, and `smoother` any approximate inverse of it. The coarsest level
+/// carries no transfer: it is the [`VCycle`]'s coarse solver, not a `Level`.
 pub struct Level<S> {
   operator: CsrMatrix,
   smoother: S,
@@ -42,9 +44,9 @@ pub struct Level<S> {
 }
 
 impl<S> Level<S> {
-  /// A level from its operator, smoother and the two transfers to the coarser
+  /// A level from its operator, smoother and the prolongation from the coarser
   /// level below it.
-  pub fn new(operator: CsrMatrix, smoother: S, prolong: CsrMatrix, restrict: CsrMatrix) -> Self {
+  pub fn new(operator: CsrMatrix, smoother: S, prolong: CsrMatrix) -> Self {
     debug_assert_eq!(
       operator.nrows(),
       operator.ncols(),
@@ -55,11 +57,7 @@ impl<S> Level<S> {
       operator.nrows(),
       "prolongation maps into this level"
     );
-    debug_assert_eq!(
-      restrict.ncols(),
-      operator.nrows(),
-      "restriction maps out of this level"
-    );
+    let restrict = prolong.transpose();
     Self {
       operator,
       smoother,
@@ -74,8 +72,14 @@ impl<S> Level<S> {
 /// The levels run finest first; below the last one sits the coarse solver `C`,
 /// an [`ApproxInverse`] of the coarsest operator (a direct factorization in the
 /// minimal case, the exact inverse). One [`apply`](ApproxInverse::apply) runs a
-/// single V-cycle: `pre` smoothing sweeps down each level, the recursion, then
-/// `post` sweeps back up.
+/// single V-cycle: `sweeps` smoothing steps down each level, the recursion,
+/// then the same number back up.
+///
+/// The cycle is symmetric, one count and not two, because the down-sweep and
+/// the up-sweep are then mutual adjoints and the whole cycle inherits the
+/// self-adjointness of its smoother. That is what lets it precondition
+/// [`cg`](crate::krylov::cg), and unequal counts would produce a cycle whose
+/// [`SelfAdjoint`] marker is false.
 ///
 /// With no levels at all it degrades to the coarse solver alone, the totality
 /// base case, a hierarchy of one grid being a plain direct solve with no
@@ -83,29 +87,18 @@ impl<S> Level<S> {
 pub struct VCycle<S, C> {
   levels: Vec<Level<S>>,
   coarse: C,
-  pre: usize,
-  post: usize,
+  sweeps: usize,
 }
 
 impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<S, C> {
-  /// A V-cycle with independent pre- and post-smoothing counts.
-  pub fn new(levels: Vec<Level<S>>, coarse: C, pre: usize, post: usize) -> Self {
+  /// A V-cycle over the levels, with `sweeps` smoothing steps on the way down
+  /// and the same number on the way up.
+  pub fn new(levels: Vec<Level<S>>, coarse: C, sweeps: usize) -> Self {
     Self {
       levels,
       coarse,
-      pre,
-      post,
+      sweeps,
     }
-  }
-
-  /// A symmetric V-cycle: `sweeps` pre-smoothing and the same number of
-  /// post-smoothing steps.
-  ///
-  /// Equal counts with a self-adjoint smoother and $R = P^T$ make the whole
-  /// cycle self-adjoint, the condition under which it may precondition
-  /// [`cg`](crate::krylov::cg), see the [`SelfAdjoint`] impl.
-  pub fn symmetric(levels: Vec<Level<S>>, coarse: C, sweeps: usize) -> Self {
-    Self::new(levels, coarse, sweeps, sweeps)
   }
 
   /// One V-cycle starting at level `i`, returning the approximate solution of
@@ -115,12 +108,12 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<
       return self.coarse.apply(r);
     };
     let mut x = Vector::zeros(level.operator.nrows());
-    smooth(&level.operator, &level.smoother, r, &mut x, self.pre);
+    smooth(&level.operator, &level.smoother, r, &mut x, self.sweeps);
     let residual = r - &level.operator * &x;
     let coarse_residual = &level.restrict * &residual;
     let correction = self.cycle(i + 1, &coarse_residual);
     x += &level.prolong * &correction;
-    smooth(&level.operator, &level.smoother, r, &mut x, self.post);
+    smooth(&level.operator, &level.smoother, r, &mut x, self.sweeps);
     x
   }
 }
@@ -156,14 +149,13 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> ApproxI
   }
 }
 
-/// Self-adjoint when the smoother and coarse solver are and the cycle is
-/// symmetric ($"pre" = "post"$, with $R = P^T$ on every level). A symmetric
-/// V-cycle of a symmetric operator is a symmetric operator: the down-sweep and
-/// up-sweep are mutual adjoints and the coarse correction $P C R = P C P^T$ is
-/// self-adjoint whenever $C$ is.
+/// Self-adjoint exactly when the smoother and the coarse solver are: the
+/// down-sweep and the up-sweep are mutual adjoints, since the cycle carries one
+/// sweep count, and the coarse correction $P C R = P C P^T$ is self-adjoint
+/// whenever $C$ is, since a [`Level`] forms its restriction as the transpose of
+/// its prolongation.
 ///
-/// As everywhere in the crate, self-adjointness is the marker and positive
-/// definiteness the constructor's promise, here also that `pre == post`,
-/// which [`VCycle::symmetric`] guarantees. It is what lets a V-cycle precondition
-/// [`cg`](crate::krylov::cg).
+/// Both of those are structural, so this marker rests on the markers of its
+/// parts and on nothing a caller has to remember. As everywhere in the crate,
+/// positive definiteness stays the constructor's promise.
 impl<S: SelfAdjoint<Space = Vector>, C: SelfAdjoint<Space = Vector>> SelfAdjoint for VCycle<S, C> {}

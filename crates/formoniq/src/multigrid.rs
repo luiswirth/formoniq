@@ -145,15 +145,14 @@ impl RefinementTower {
       .rev()
       .map(|f| {
         let prolong = prolongation_matrix(grade, &self.complexes[f - 1], &self.subdivisions[f - 1]);
-        let restrict = prolong.transpose();
         let smoother = Jacobi::weighted(&operators[f], SMOOTHER_WEIGHT);
-        Level::new(operators[f].clone(), smoother, prolong, restrict)
+        Level::new(operators[f].clone(), smoother, prolong)
       })
       .collect();
 
     let coarse =
       DirectInverse::try_new(operators[0].clone()).expect("coarsest operator must be SPD");
-    VCycle::symmetric(levels, coarse, sweeps)
+    VCycle::new(levels, coarse, sweeps)
   }
 }
 
