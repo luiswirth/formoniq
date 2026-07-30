@@ -107,7 +107,7 @@ pub fn gmsh2coord_cells_ordered(bytes: &[u8]) -> (Skeleton, MeshCoords, Vec<Vec<
 
   (
     Skeleton::new(simplices),
-    mesh_vertices.relabelled(&relabelling),
+    mesh_vertices.select(relabelling.used()),
     words,
   )
 }
