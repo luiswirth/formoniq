@@ -1,6 +1,12 @@
-//! A tolerant Wavefront OBJ reader for surface meshes.
+//! Reading and writing surface meshes as Wavefront OBJ.
 //!
-//! Enough of the format to load a triangulated surface out of the wild, the
+//! The writer is a leaf of the bake: an OBJ is a wound triangle surface in
+//! $RR^3$, which is what the dimension reduction already produced, so it writes
+//! [`BakedMesh`]'s vertex table and fill rather than reducing a complex a
+//! second time. The reader is the other direction and is the tolerant half,
+//! since a file from the wild is not a mesh until it has been checked.
+//!
+//! It accepts enough of the format to load a triangulated surface, the
 //! built-in gallery's own assets and a mesh the user picks off disk alike. It
 //! reads vertex positions and faces and ignores everything else: texture
 //! coordinates, normals, materials, groups, smoothing and comments are skipped;
@@ -21,15 +27,16 @@
 //! taking the viewer down with it.
 
 use std::collections::HashMap;
-use std::fmt;
+use std::fmt::{self, Write as _};
 
 use regge::coord::mesh::MeshCoords;
 use simplicial::linalg::Matrix;
 use simplicial::topology::{
   complex::Complex, ordering::CellOrdering, orientation::Orientation, relabel::VertexRelabelling,
+  simplex::Simplex, skeleton::Skeleton,
 };
 
-use crate::io::surface::TriangleSurface3D;
+use crate::bake::BakedMesh;
 
 /// Why an OBJ string could not be read as a surface mesh.
 #[derive(Debug)]
@@ -67,6 +74,39 @@ impl fmt::Display for ObjError {
 }
 
 impl std::error::Error for ObjError {}
+
+/// The baked surface as an OBJ document: its vertex table as `v` lines and its
+/// fill's wound triangles as `f` lines.
+///
+/// The winding is the bake's, hence the manifold's own coherent orientation
+/// where it has one, so a reader downstream sees the same outward faces the
+/// viewer draws. A bake with no fill (a curve, a point cloud, a closed solid)
+/// writes its vertices and no faces, which is what the format has to say about
+/// an object with no surface.
+pub fn to_string(baked: &BakedMesh) -> String {
+  let mut obj = String::new();
+  for vertex in &baked.positions {
+    let [x, y, z] = vertex.position;
+    writeln!(obj, "v {x:.6} {y:.6} {z:.6}").unwrap();
+  }
+  for triangle in baked.fill_triangles() {
+    // OBJ indexes vertices from one.
+    writeln!(
+      obj,
+      "f {} {} {}",
+      triangle[0] + 1,
+      triangle[1] + 1,
+      triangle[2] + 1
+    )
+    .unwrap();
+  }
+  obj
+}
+
+/// Writes the baked surface to `path` as OBJ.
+pub fn write(path: impl AsRef<std::path::Path>, baked: &BakedMesh) -> std::io::Result<()> {
+  std::fs::write(path, to_string(baked))
+}
 
 /// Reads an OBJ string as a triangulated surface `Complex` with its ambient
 /// (3D) coordinates. See the module docs for the accepted subset of the format.
@@ -139,7 +179,12 @@ pub fn parse_wound(obj: &str) -> Result<(Complex, MeshCoords, Option<Orientation
     .collect();
   let coords = MeshCoords::from(Matrix::from_columns(&columns));
   let words: Vec<Vec<usize>> = triangles.iter().map(|t| t.to_vec()).collect();
-  let (complex, coords) = TriangleSurface3D::new(triangles, coords).into_coord_complex();
+  let complex = Complex::from_cells(Skeleton::new(
+    words
+      .iter()
+      .map(|t| Simplex::from_word(t.clone()).1)
+      .collect(),
+  ));
 
   let orientation = CellOrdering::try_new(&complex, words)
     .and_then(|ordering| ordering.induced_orientation(&complex));
@@ -231,6 +276,25 @@ fn check_manifold(triangles: &[[usize; 3]]) -> Result<(), ObjError> {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  /// Writing and reading are inverse on a surface the format can hold: the
+  /// document a bake writes parses back to the same mesh, same vertices, same
+  /// cells, at the same positions. The winding is not recovered as such, a
+  /// `Complex` stores its cells colex-sorted, but it survives as the
+  /// orientation the file's faces induce.
+  #[test]
+  fn a_baked_surface_round_trips_through_the_document() {
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
+    let baked = crate::bake::BakedMesh::new(&topology, &coords);
+
+    let (read, read_coords, orientation) = parse_wound(&to_string(&baked)).unwrap();
+    assert_eq!(read.nsimplices(0), topology.nsimplices(0));
+    assert_eq!(read.nsimplices(2), topology.nsimplices(2));
+    assert!(orientation.is_some(), "the bake writes a wound surface");
+    for (before, after) in coords.coord_iter().zip(read_coords.coord_iter()) {
+      assert!((before.view() - after.view()).norm() < 1e-5);
+    }
+  }
 
   /// A single triangle with texture/normal references and a trailing comment
   /// reads as one face on three vertices, the `v/vt/vn` groups and the `#`
