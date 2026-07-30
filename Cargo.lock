@@ -3748,6 +3748,7 @@ dependencies = [
  "coorder",
  "indexmap",
  "itertools 0.15.0",
+ "multialgebra",
  "multiindex",
  "nalgebra",
  "nalgebra-sparse",

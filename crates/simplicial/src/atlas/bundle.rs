@@ -1,26 +1,63 @@
-//! The trace of a form onto a face of a cell.
+//! The tangent bundle of the piecewise-affine manifold, and the exterior
+//! bundles over it.
+//!
+//! A chart identifies its cell with the reference simplex, so the tangent space
+//! at a point of a cell *is* $RR^n$ read in that chart's frame, and the fiber
+//! over the point is $Lambda^k (RR^n)$ or its dual $Lambda^k (RR^n)^*$. Nothing
+//! but the atlas enters: no metric, no embedding. The bundle is therefore chart
+//! data of a piece with the charts themselves, and a value of it is expressible
+//! wherever a [`MeshPoint`](super::MeshPoint) is.
+//!
+//! What a chart does not give is a frame over a *face*, since only a cell is a
+//! chart. A face has a tangent space all the same, spanned by its edges in the
+//! frame of any cell containing it, and the inclusion $iota_tau: tau
+//! arrow.hook K$ read in that frame is the whole content of this module, in its
+//! two variances: [`face_tangent_blade`] is $Lambda^d$ of it on the vector side,
+//! [`FaceTrace`] its pullback on the form side.
+//!
+//! A value in the fiber is expressed in *some* chart, and there the atlas
+//! reasserts itself: two charts containing the same point are related by a
+//! [`Transition`](super::Transition), and only the part of a value tangential
+//! to their overlap is carried between them. See
+//! [`Transition::pullback`](super::Transition::pullback).
 
-use {
-  multialgebra::{Dim, ExteriorGrade, Tensor, Variance, tensor::Transport},
-  multiindex::Combination,
-  simplicial::atlas::unit_face_spanning_vectors,
-};
+use super::unit_face_spanning_vectors;
+use crate::Dim;
+
+use multialgebra::{ExteriorGrade, Tensor, Variance, tensor::Transport};
+use multiindex::Combination;
+
+/// The tangent blade $v_1 wedge dots.c wedge v_d$ of a face of a cell, written
+/// in the cell's frame: the [`Tensor::blade_of`] its spanning vectors, hence a
+/// generator of the one-dimensional $Lambda^d (T tau)$.
+///
+/// The face is named by its local vertex positions within the cell, and the
+/// blade carries the orientation that vertex order gives it. Metric-free and
+/// coordinate-free: the spanning vectors are differences of the reference
+/// vertices, so a face has them whatever geometry the complex carries, and none
+/// at all if it carries none.
+pub fn face_tangent_blade(cell_dim: impl Into<Dim>, positions: &Combination) -> Tensor {
+  Tensor::blade_of(
+    &unit_face_spanning_vectors(cell_dim, positions),
+    Variance::Contravariant,
+  )
+}
 
 /// The trace $tr_tau = iota_tau^*: Lambda^k (T^* K) -> Lambda^k (T^* tau)$ onto
-/// a face of a cell, identified by the face's local vertex positions: the
-/// pullback along the inclusion, hence $Lambda^k$ of the face's spanning
-/// vectors.
+/// a face of a cell, named by the face's local vertex positions: the pullback
+/// along the inclusion, hence $Lambda^k$ of the face's spanning vectors.
 ///
-/// Metric-free, being a pullback, and covariant-only for the reason a
-/// [`Pullback`](crate::section::Pullback) is. The vector-side counterpart is
-/// [`face_tangent_blade`](crate::project::face_tangent_blade).
+/// Metric-free, being a pullback, and covariant-only: a pullback is the
+/// contravariant action of the functor, so it runs this way and no other, and
+/// the vector-side counterpart at the face's own grade is
+/// [`face_tangent_blade`].
 ///
 /// The result lives on the face's own tangent space, so the normal components
-/// are not discarded but absent: there is no space left for them. Trivial
-/// below the grade, where $Lambda^k (T^* tau) = 0$.
+/// are not discarded but absent: there is no space left for them. Trivial above
+/// the face's dimension, where $Lambda^k (T^* tau) = 0$.
 ///
 /// Materialized once and applied at every point, $Lambda^k$ of the inclusion
-/// being reference data.
+/// being reference data of the chart rather than of the cell.
 #[derive(Debug, Clone)]
 pub struct FaceTrace {
   /// The functor of $iota_tau$ on one covariant alternating slot, materialized.
@@ -66,13 +103,13 @@ impl FaceTrace {
     self.transport.pullback(form)
   }
 
-  /// The single coefficient of a trace at the face's top grade, $k = d$,
+  /// The single coefficient of a trace at the face's own dimension, $k = d$,
   /// where $Lambda^d (T^* tau)$ is one-dimensional.
   ///
-  /// This is the integrand of the de Rham map: $tr_tau omega$ at top grade is
-  /// the duality pairing of $omega$ with the face's tangent blade, so
-  /// integrating a $k$-form over a $k$-simplex is the top-grade case of the
-  /// trace and not a construction of its own.
+  /// At that grade the trace is the duality pairing of the form with the face's
+  /// [`face_tangent_blade`], which is what integrating a $k$-form over a
+  /// $k$-simplex reduces to: the top-grade case of the trace, not a
+  /// construction of its own.
   pub fn top_coefficient(&self, form: &Tensor) -> f64 {
     assert_eq!(
       self.grade, self.face_dim,
@@ -85,15 +122,14 @@ impl FaceTrace {
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::project::face_tangent_blade;
-  use multialgebra::tensor::pairing;
+  use crate::topology::simplex::Simplex;
 
-  use multialgebra::Vector;
+  use multialgebra::{Vector, tensor::pairing};
   use multiindex::combinations;
-  use simplicial::topology::simplex::Simplex;
 
   use approx::assert_relative_eq;
 
+  /// An arbitrary, nowhere-vanishing form of the given shape.
   fn test_form(dim: Dim, grade: ExteriorGrade) -> Tensor {
     let n = multialgebra::exterior_dim(dim, grade);
     Tensor::multiform(
@@ -104,8 +140,7 @@ mod test {
   }
 
   /// At the face's own grade the trace is the duality pairing with the face's
-  /// tangent blade, which is the de Rham map's integrand: integrating a
-  /// $k$-form over a $k$-simplex is the top-grade case of the trace.
+  /// tangent blade: the two variances of one inclusion are adjoint.
   #[test]
   fn top_grade_trace_is_the_tangent_blade_pairing() {
     for dim in (1..=4).map(Dim::from) {
@@ -128,8 +163,8 @@ mod test {
   /// $tr_(rho subset tau) compose tr_(tau subset K) = tr_(rho subset K)$,
   /// which is the pullback of a composite inclusion being the composite of the
   /// pullbacks. It is what lets a trace be taken in any order down a chain of
-  /// faces, and it is the reason the de Rham map on a face does not depend on
-  /// the route taken to reach it.
+  /// faces, and hence what makes the value on a face independent of the route
+  /// taken down to it.
   #[test]
   fn traces_compose_along_a_chain_of_faces() {
     for dim in (0..=4).map(Dim::from) {

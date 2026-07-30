@@ -21,21 +21,20 @@
 //! subsimplex of the reference cell and its tangent blade is pure
 //! combinatorics.
 //!
-//! Which supporting cell is chosen does not matter. Two charts containing
-//! $sigma$ differ by a [`Transition`](simplicial::atlas::Transition), whose
-//! differential carries the tangent blade of $sigma$ in one chart to the tangent
-//! blade in the other. The pairing sees only the part of $omega$ tangential to
-//! $sigma$, on which the two charts agree by exactly that map. The law is
-//! `derham_map_is_independent_of_supporting_cell` below.
+//! Which supporting cell is chosen does not matter, and the reason is a fact
+//! about the atlas rather than about this map: two charts containing $sigma$
+//! differ by a [`Transition`](simplicial::atlas::Transition), which carries the
+//! tangential part of a fiber value faithfully and nothing else. The pairing of
+//! $omega$ with the tangent blade of $sigma$ is tangential, so the two charts
+//! agree on it. The law is `derham_map_is_independent_of_supporting_cell` below,
+//! and its cause is stated and tested one crate down.
 
-use crate::{Cochain, section::Section, trace::FaceTrace};
+use crate::{Cochain, section::Section};
 
 use {
-  multialgebra::{Tensor, Variance},
   multiindex::Combination,
   simplicial::{
-    Dim,
-    atlas::{Chart, MeshPoint, SimplexQuadRule, unit_face_spanning_vectors, unit_simplex_volume},
+    atlas::{Chart, FaceTrace, MeshPoint, SimplexQuadRule, unit_simplex_volume},
     topology::complex::Complex,
   },
 };
@@ -67,21 +66,6 @@ pub fn derham_map(field: &impl Section, topology: &Complex, quad_degree: usize) 
     .into();
 
   Cochain::new(grade, coeffs)
-}
-
-/// The tangent blade $v_1 wedge dots.c wedge v_k$ of a face of the reference
-/// cell, in the cell's reference frame: the [`Tensor::blade_of`] its spanning
-/// vectors.
-///
-/// An `exterior` construction on `simplicial` combinatorics, and so it lives here
-/// in the crate that joins them. Metric-free and coordinate-free: a face of a
-/// cell has spanning vectors in the cell's chart whatever geometry the mesh
-/// carries, and none at all if it carries none.
-pub fn face_tangent_blade(cell_dim: Dim, positions: &Combination) -> Tensor {
-  Tensor::blade_of(
-    &unit_face_spanning_vectors(cell_dim, positions),
-    Variance::Contravariant,
-  )
 }
 
 /// $integral_sigma omega$ over a face of a cell, expressed in that cell's
@@ -118,8 +102,8 @@ mod test {
   use crate::section::CoordFieldExt;
 
   use {
-    coorder::Coord, glatt::field::DiffFormClosure, regge::mesher::cartesian::CartesianGrid,
-    simplicial::linalg::Vector,
+    coorder::Coord, glatt::field::DiffFormClosure, multialgebra::Tensor,
+    regge::mesher::cartesian::CartesianGrid, simplicial::linalg::Vector,
   };
 
   use approx::assert_relative_eq;
@@ -222,39 +206,6 @@ mod test {
 
         for value in &integrals[1..] {
           assert_relative_eq!(*value, integrals[0], epsilon = 1e-12);
-        }
-      }
-    }
-  }
-
-  /// The tangent blade of a shared face transforms by $Lambda^k (dif psi)$
-  /// under the transition between the two charts that see it.
-  ///
-  /// This is why the de Rham map is well defined: the duality pairing
-  /// $angle.l omega, tau angle.r$ is invariant because the form pulls back along
-  /// $dif psi$ exactly as the blade pushes forward along it, and the two cancel.
-  /// The well-definedness above is the consequence. This is the cause.
-  #[test]
-  fn tangent_blade_transforms_by_the_transition_differential() {
-    use simplicial::atlas::ChartExt;
-
-    for dim in (2..=3).into_iter().map(Dim::from) {
-      let (topology, _) = CartesianGrid::new_unit(dim, 2).triangulate();
-
-      for face_dim in Dim::ONE.range_to_inclusive(dim - 1) {
-        for face in topology.skeleton(face_dim).handle_iter() {
-          let cells: Vec<_> = face.cells().collect();
-          for (i, &source) in cells.iter().enumerate() {
-            for &target in &cells[i + 1..] {
-              let differential = source.transition_to(target).differential();
-
-              let here = face_tangent_blade(dim, &face.simplex().relative_to(source.simplex()));
-              let there = face_tangent_blade(dim, &face.simplex().relative_to(target.simplex()));
-
-              let pushed = here.pushforward(&differential);
-              assert_relative_eq!(pushed.components(), there.components(), epsilon = 1e-12);
-            }
-          }
         }
       }
     }

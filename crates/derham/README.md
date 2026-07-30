@@ -1,7 +1,8 @@
 # derham
 
-The discrete de Rham complex:
-differential forms on a simplicial manifold, without coordinates.
+Discrete differential forms on a simplicial manifold, without coordinates:
+their representation, their degrees of freedom, and the maps in and out of the
+continuous ones.
 
 ## What it provides
 
@@ -19,7 +20,7 @@ differential forms on a simplicial manifold, without coordinates.
   a field over the simplicial manifold,
   evaluated at an intrinsic point (a cell plus barycentric weights)
   and valued in that chart's frame,
-  with variance (form vs. multivector field) as a type parameter.
+  with the variance of the values deciding whether it is a form or a multivector field.
   Sections carry a lazy pointwise algebra: wedge, the musical isomorphisms, and the Hodge star.
 - The bridge to the continuum:
   analytic data on a smooth manifold (from the `glatt` crate)
@@ -42,9 +43,10 @@ and functoriality of the composite pullback on a curved manifold.
 
 `derham` is the discrete-forms layer of
 [formoniq](https://github.com/luiswirth/formoniq),
-a finite element exterior calculus (FEEC) engine:
-the crate where the exterior algebra (`multialgebra`), the simplicial manifold (`simplicial`)
-and the continuum (`glatt`) meet.
+a finite element exterior calculus (FEEC) engine.
+It builds on the simplicial manifold (`simplicial`) and its geometry (`regge`),
+and it is also the crate where those meet the continuum (`glatt`),
+since pulling an analytic form onto the mesh is how one enters the discrete world.
 It assembles no global operators and solves nothing.
 Those live one crate up.
 

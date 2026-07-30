@@ -28,6 +28,13 @@
 //! affine combinatorics of the unit simplex, which is why it sits below
 //! both the coordinate (extrinsic) and the metric layer, not inside either.
 //!
+//! The atlas determines the bundles too, and not only the points. A chart
+//! identifies its cell with the reference simplex, so the tangent space at a
+//! point is $RR^n$ in that chart's frame and the exterior powers over it are
+//! fibers of a bundle fixed by the atlas alone ([`bundle`]). That is why the
+//! trace onto a face and a face's tangent blade live here rather than wherever
+//! a geometry does: neither asks for one.
+//!
 //! # The two coordinate systems of a chart
 //!
 //! A chart carries two coordinate systems, related by dropping the redundant
@@ -43,6 +50,7 @@
 //! an embedding, and the [`coorder::CoordSpace`] tags keep the
 //! three from being confused for one another.
 
+pub mod bundle;
 pub mod chart;
 pub mod point;
 pub mod quadrature;
@@ -50,6 +58,7 @@ pub mod refine;
 pub mod simplex_coords;
 pub mod transition;
 
+pub use bundle::{FaceTrace, face_tangent_blade};
 pub use chart::{Chart, ChartExt};
 pub use point::{BARY_EPS, MeshPoint};
 pub use quadrature::SimplexQuadRule;

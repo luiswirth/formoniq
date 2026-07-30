@@ -122,7 +122,7 @@ pub fn vector_nodal_prolongation(
 /// forward and is measured by $Lambda^k g$ rather than its inverse.
 ///
 /// The ambient counterpart of
-/// [`face_tangent_blade`](derham::project::face_tangent_blade), which is the
+/// [`face_tangent_blade`](simplicial::atlas::face_tangent_blade), which is the
 /// same [`Tensor::blade_of`] taken in a cell's reference frame instead.
 fn tangent_blade(coords: &MeshCoords, simp: &Simplex) -> Tensor {
   let edges = simplex_coords(simp, coords).spanning_vectors();

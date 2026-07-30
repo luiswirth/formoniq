@@ -128,8 +128,7 @@ mod test {
   /// space and there is nothing to interpolate).
   #[test]
   fn whitney_trace_commutes() {
-    use crate::trace::FaceTrace;
-    use simplicial::atlas::Bary;
+    use simplicial::atlas::{Bary, FaceTrace};
 
     for n in (1..=3).into_iter().map(Dim::from) {
       let complex = Complex::unit(n);

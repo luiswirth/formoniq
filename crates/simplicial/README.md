@@ -1,9 +1,15 @@
 # simplicial
 
-Simplicial complexes of arbitrary dimension, and the piecewise-affine atlas on
-them. Metric-free throughout. Nothing is specialized to 2D or 3D, dimension is a
-runtime value, and the degenerate cases (a point, a single cell, an empty
-skeleton) run on the same code paths and return the trivial answer.
+The simplicial manifold of arbitrary dimension: its topology, and the
+piecewise-affine structure it carries. Metric-free throughout. Nothing is
+specialized to 2D or 3D, dimension is a runtime value, and the degenerate cases
+(a point, a single cell, an empty skeleton) run on the same code paths and
+return the trivial answer.
+
+The object is the manifold, and the complex is what it is built out of. Not
+every complex is a manifold, so the crate does not pretend otherwise: the
+manifold condition is a property to be *checked*, as far as it can be, and how
+far that is is said below.
 
 ## The design
 
@@ -11,7 +17,8 @@ A mesh is a topology and a geometry, and the separation is mathematical rather
 than a matter of taste: the boundary operator, incidence and homology are
 metric-free facts, and no amount of combinatorics derives a metric. So a
 geometry is a genuinely second input, and it lives in a crate of its own —
-[regge](https://crates.io/crates/regge). Nothing here has a notion of length.
+[regge](https://crates.io/crates/regge), which is Regge geometry *on* the
+manifold this crate is. Nothing here has a notion of length.
 
 **Topology** is the combinatorial complex: incidence, orientation, navigation
 (star, link, cofaces), and the chain complex with its dual. Chains carry integer
@@ -39,6 +46,19 @@ uniform (Freudenthal) refinement recording the affine map of each child. Affine,
 not flat: flatness is about curvature and presupposes a metric, while the charts
 are affine maps and need none.
 
+**The bundles** come with the atlas, and not with a geometry. A chart identifies
+its cell with the reference simplex, so the tangent space at a point is ℝⁿ read
+in that chart's frame, and the exterior powers over it are fibers of a bundle
+the atlas alone determines. What lives on those fibers is here: the tangent
+blade of a face, the trace onto a face (the pullback along its inclusion), and
+the action of a transition on a fiber value. The last one is where the atlas
+bites. A transition is exact on points, but on fibers it is the true change of
+frame only on the tangent space of the overlap, so only the tangential part of a
+value is chart-independent, and a quantity claiming to be well defined on the
+manifold owes a transition argument. The multilinear algebra itself is not
+reimplemented here, it is
+[multialgebra](https://crates.io/crates/multialgebra).
+
 **The Kuhn triangulation** of a box is here too, and that is not an oversight. It
 is combinatorics: which simplices, in which vertex order, from the per-axis cell
 counts alone. The vertex order is what makes uniform refinement compose, so it
@@ -48,7 +68,13 @@ belongs with the topology; placing the vertices in space is `regge`'s.
 
 The test suite states laws and sweeps them over dimensions: ∂∘∂ = 0,
 Euler-Poincaré, Poincaré duality on the sphere, Poincaré-Lefschetz for (K, ∂K),
-the transition cocycle law, and exactness of quadrature on polynomials.
+the transition cocycle law on points and again on fibers, functoriality of the
+trace along a chain of faces, the agreement of two charts on the tangential part
+of a fiber value, and exactness of quadrature on polynomials.
+
+The laws that are meant to be sharp are checked to be sharp: where two charts
+agree only tangentially, the test also asserts that they genuinely disagree
+before the trace is taken, so a trivial implementation could not pass.
 
 Every fixture is built combinatorially, which is the crate's own claim tested on
 itself: a 2-sphere is the boundary of a tetrahedron, and the annulus is a grid
@@ -63,6 +89,7 @@ Mesh formats are `regge`'s, since reading a mesh means reading coordinates too.
 
 `simplicial` is the topological layer of
 [formoniq](https://github.com/luiswirth/formoniq), a finite element exterior
-calculus (FEEC) engine. It knows nothing of differential forms or of geometry:
-metrics and edge lengths live in `regge`, and the reading of a cochain as a
-discrete differential form, Whitney forms and PDEs in the crates above.
+calculus (FEEC) engine. It knows nothing of geometry: metrics and edge lengths
+live in `regge`, and the reading of a cochain as a discrete differential form,
+Whitney forms and PDEs in the crates above. A form on a fiber is a different
+matter, and it is here, because the bundle it lives in is atlas data.

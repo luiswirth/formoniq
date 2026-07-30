@@ -4,7 +4,7 @@ version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT OR Apache-2.0"
-description = "The simplicial complex of arbitrary dimension and its atlas: incidence, orientation, homology, barycentric charts, refinement. Metric-free."
+description = "The simplicial manifold of arbitrary dimension: its topology (incidence, orientation, homology) and its piecewise structure (barycentric charts, transitions, the exterior bundle, refinement). Metric-free."
 repository = "https://github.com/luiswirth/formoniq"
 readme = "README.md"
 keywords = ["simplicial", "mesh", "topology", "homology"]
@@ -12,6 +12,7 @@ categories = ["mathematics", "science"]
 
 [dependencies]
 coorder = { path = "../coorder", version = "0.2.0" }
+multialgebra = { path = "../multialgebra", version = "0.2.0" }
 multiindex = { path = "../multiindex", version = "0.2.0" }
 
 itertools = "0.15.0"

@@ -60,11 +60,43 @@ Code should read the way a mathematician would write.
 
 ## Architecture
 
+**What each crate is.**
+One sentence each, and it is the first question to ask of any placement decision:
+a thing belongs where it is part of the crate's answer to this.
+
+| crate | is |
+| ------------ | -- |
+| `multiindex` | the combinatorial index sets and their colex ranking |
+| `multialgebra` | the free tensor power over one vector space, and its exterior and symmetric quotients |
+| `metric` | a metric on a tangent space, and the multilinear operations needing one. Not about meshes |
+| `coorder` | the affine space as a type: points tagged by the space they live in, and the affine maps between them |
+| `simplicial` | the simplicial manifold: its topology and its piecewise structure, the atlas and the bundle the atlas determines |
+| `regge` | Regge geometry, which is geometry *on* the simplicial manifold: the metric of a piecewise-flat cell, in the edge-lengths-squared representation |
+| `glatt` | the continuum manifold and analytic data on it. No mesh |
+| `derham` | discrete differential forms: cochains as forms, Whitney forms, the de Rham map, interpolation and reconstruction, the degrees of freedom |
+| `iterative` | iterative solvers, and nothing else |
+| `formoniq` | the FEM engine, which bundles all of the above |
+| `realize` | intrinsic data made extrinsic: the grade reduction, the dimension reduction, the file formats |
+| `studio` | the visualizer |
+
+**Three tiers, and the difference is real.**
+The first eight are *the mathematics*, each a standalone mathematical object,
+published as such and usable by a reader who has never heard of FEEC.
+`formoniq` is *the engine*, the one crate whose subject is FEEC itself.
+The last three are not core, for two opposite reasons:
+`iterative` sits below the mathematics and could serve any PDE code,
+knowing nothing of meshes, forms or geometry,
+while `realize` and `studio` sit above it, consuming everything and consumed by nothing.
+Neither group models any part of FEEC,
+which is why `studio` is out of `default-members`,
+why `realize` and `studio` are unpublished
+and why neither may be reached from the core path.
+
 Crate ladder, each layer adding exactly one thing:
 `multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq → realize → studio`,
 with `coorder` and `simplicial` joining from the side:
-`coorder` is foundational, and `simplicial` (pure topology plus the atlas)
-sits beside `metric` as what `regge` adds a metric to.
+`coorder` is foundational, and `simplicial` sits beside `metric`
+as the manifold `regge` adds a geometry to.
 `regge`/`glatt` are siblings, the discrete manifold and the continuum one.
 
 Two of those boundaries are invariants made structural rather than documented.
@@ -78,8 +110,15 @@ and the split runs through the meshers too --
 the Kuhn triangulation of a box is combinatorial (`CartesianTopology`),
 placing its vertices is not (`CartesianGrid`).
 Both boundaries are checkable in a manifest, which is the point of making them structural:
-`multialgebra` depends on neither the metric nor a mesh,
-and `simplicial` on neither the metric nor the algebra.
+`multialgebra` depends on neither the metric nor a mesh, and `simplicial` on no metric.
+`simplicial` does depend on `multialgebra`, and must:
+the tangent bundle of a piecewise-affine manifold and the exterior powers over it
+are determined by the atlas alone,
+every chart being the same chart up to the labelling of its vertices,
+so the fiber over a point of a cell *is* $Lambda^bullet (RR^n)$ in that chart's frame.
+The bundle is therefore chart data of a piece with the charts,
+and the face trace, the tangent blade of a face
+and the action of a transition on a fiber value live with them.
 A reference datum typed as a metric would reintroduce the edge,
 so `unit_bary_gramian` hands back a bare matrix.
 `iterative` is off to the side:
@@ -89,10 +128,10 @@ joining the ladder only where `formoniq` consumes it.
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
-| `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns) |
+| `multialgebra` | $V^(times.circle k)$ and its two quotients $Lambda$ and $"Sym"$, as one construction | `Symmetry` (free, alternating, symmetric), `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns) |
 | `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | the affine space, typed              | `Coords<S>` (a point tagged by its space, generic over owned or borrowed storage) with the affine structure: the action of a displacement, `affine_combination` and its uniform case `barycenter`; `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
-| `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., `chain::` (`FreeModule<V, R>` over a coefficient ring `R` and a `Variance` `V`, of which `Chain`/`Cochain` are the two aliases: one signed incidence read both ways, with `Complex::incidences` the relation and the boundary operators its assembled form), `homology::`/`cohomology::` (the free ranks and representative (co)cycles over $ZZ$, one subquotient computed on the incidence and its transpose), `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings, `manifold::` the checkable rungs of the manifold condition, `subcomplex::Subcomplex` the boundary, a boundary part and a vertex link as one construction), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
+| `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., `chain::` (`FreeModule<V, R>` over a coefficient ring `R` and a `Variance` `V`, of which `Chain`/`Cochain` are the two aliases: one signed incidence read both ways, with `Complex::incidences` the relation and the boundary operators its assembled form), `homology::`/`cohomology::` (the free ranks and representative (co)cycles over $ZZ$, one subquotient computed on the incidence and its transpose), `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings, `manifold::` the checkable rungs of the manifold condition, `subcomplex::Subcomplex` the boundary, a boundary part and a vertex link as one construction), `atlas::` (`Chart`, `MeshPoint`, `Transition` with its action on fiber values, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`, and `bundle::` the exterior bundle the atlas determines: `FaceTrace`, `face_tangent_blade`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
 | `regge`      | the simplicial manifold $M_h$       | the geometry a complex carries: `MeshLengthsSq` (the intrinsic Regge primitive the engine consumes), `MeshCoords` and `CellGramians` the sources that convert into it, `cell_volume`, `vertex_gaussian_curvature`, the extensions reaching down onto `simplicial`'s types (`SimplexCoordsExt`, `SubdivisionExt`, `SubcomplexExt`), `mesher::` (grids with coordinates, quotient tori, sphere surfaces) and `io::gmsh` |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
 | `derham`     | the de Rham complex on it           | `section::Section` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyForm`, `WhitneyInterpolant`), `polynomial::` ($P_r Lambda^k$ and the trimmed $P^-_r Lambda^k$ as $"Sym"^r times.circle Lambda^k$ in barycentric coordinates), `decomposition::GeometricDecomposition` (the direct sum over subsimplices, hence the local-to-global map), `project::derham_map` |
@@ -102,6 +141,10 @@ joining the ladder only where `formoniq` consumes it.
 | `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), the gallery's `MeshSource × Study` product, a wgpu/winit/egui renderer over `realize`'s primitives, native and wasm |
 
 No crate exists solely to hold a shared type alias.
+`coorder` is the contrasting case, and it is what makes the rule a rule rather than a size limit:
+it is small, but `Coords<Ambient>` must be *the same type* in `simplicial`, `regge` and `glatt`,
+none of which may depend on another,
+and that shared nominal identity is exactly what a crate is for.
 `Vector`/`Matrix` (dense nalgebra) are trivial aliases with no nominal identity to share,
 so `metric`, `coorder`, `multialgebra` and `glatt`
 each declare their own directly from `nalgebra` rather than depending on anything for them.
@@ -155,6 +198,16 @@ If expressing it there would need a new downward dependency,
 it belongs one level up instead, in the crate that joins the two,
 which is why `derham` exists, where the algebra, `regge` and `glatt` all meet.
 Never widen a lower crate's dependencies to make a method fit.
+
+The test is what determines the concept, not what happens to be convenient:
+a new downward dependency is right exactly when the concept is *of* the lower object,
+and then the old placement was the accident.
+That is why `simplicial` takes `multialgebra`:
+the bundle is determined by the atlas and by nothing else,
+so it was sitting in `derham` because `simplicial` had no algebra,
+which is a fact about a manifest and not about mathematics.
+The two readings are told apart by the same question invariant 5 asks,
+what the concept's inputs actually are.
 
 **The building-block crates are standalone, and published as such.**
 Concepts floating up leaves each lower crate a self-contained mathematical object,
@@ -291,7 +344,15 @@ Breaking one is a bug even if it compiles and passes tests.
    which is why only the *tangential* part of a section is chart-independent,
    and hence why the de Rham map is well defined on a face
    while a pointwise Whitney value is not.
-   Anything claiming chart-independence owes a `Transition` argument.
+   Anything claiming chart-independence owes a `Transition` argument,
+   and that argument is an operation rather than a remark:
+   a transition acts on the values of the bundle
+   (`Transition::pullback` and `Transition::pushforward`),
+   faithfully on the tangential part (`Transition::overlap_trace`) and nowhere else.
+   The remaining components of a transported value are an artifact of the affine extension,
+   which is testable rather than merely stated:
+   another route between the same two charts contradicts them,
+   and agrees exactly after the trace.
 
    The chart's own structure (reference vertices, barycentric differentials, volume, quadrature)
    is a function of `Dim` alone (the `unit_*` functions), and deliberately so:
@@ -538,10 +599,15 @@ The examples in `crates/formoniq/examples/` are the end-to-end check,
 convergence rates, spectra,
 but they are run and read by hand, not asserted by `cargo test`.
 
-**$Lambda$ and $"Sym"$ are siblings, and one construction.**
-They are the two quotients of the tensor algebra by the two ways adjacent
-factors commute, so a single `Parity` carries the whole distinction and every
-operation is written once over both.
+**$Lambda$ and $"Sym"$ are siblings, and one construction, under $V^(times.circle k)$.**
+They are the two quotients of the free tensor power by a character of $S_k$,
+which lands in an abelian group and so factors through the abelianization,
+$ZZ\/2$ for $k >= 2$:
+the sign character gives $Lambda^k$ and the trivial one $"Sym"^k$,
+and those are the whole list rather than a pair chosen out of many.
+The free power sits above them both, unquotiented.
+So a single `Symmetry` carries the distinction, in three variants and not two,
+and every operation is written once over all of them.
 The Hodge star is the sole exception, and genuinely so: $"Sym"$ has no top
 degree to complement against, so the star exists on an alternating factor and
 refuses on a symmetric one.
