@@ -61,6 +61,15 @@ impl MultiIndex {
     }
   }
 
+  /// The size of the stabilizer of this index under the $S_k$ action on its
+  /// positions, $alpha! = product_s m_s !$ over the multiplicities.
+  pub fn stabilizer(&self) -> usize {
+    match self {
+      Self::Mono(index) => index.stabilizer(),
+      Self::Word(index) => index.stabilizer(),
+    }
+  }
+
   /// The monotone index, if this is one.
   pub fn as_mono(&self) -> Option<&MonoIndex> {
     match self {

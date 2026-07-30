@@ -219,6 +219,14 @@ impl Word {
     self.iter().filter(|&s| s == symbol).count()
   }
 
+  /// The size of the stabilizer of this word under the $S_k$ action on its
+  /// positions, $product_s m_s !$ over the multiplicities.
+  pub fn stabilizer(&self) -> usize {
+    (0..self.radix)
+      .map(|symbol| crate::factorial(self.multiplicity(symbol)))
+      .product()
+  }
+
   /// The number of words of a degree over an alphabet: $n^k$.
   ///
   /// The dimension of $V^(times.circle k)$, and the count no symmetry reduces.

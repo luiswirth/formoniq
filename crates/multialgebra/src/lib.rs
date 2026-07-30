@@ -167,8 +167,8 @@ impl Factor {
   ///
   /// Takes a bare matrix and knows nothing of non-degeneracy or signature: this
   /// crate is the metric-free half of the algebra, and an induced form needs
-  /// only a form. The `gramian` crate wraps this where those properties are
-  /// wanted.
+  /// only a form. Wrapping it where those properties are wanted is the job of
+  /// whoever has them.
   ///
   /// The same minors [`Self::induced`] takes, of the metric rather than of a
   /// map. Both are $sum_sigma "sign"(sigma) product_i A_(i sigma(i))$ under the
@@ -419,29 +419,30 @@ pub fn symmetric_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
 
   let mut power = Matrix::zeros(nrows, ncols);
   for (j, source) in Composition::all(map.ncols(), degree).enumerate() {
-    // The image of the basis monomial, built factor by factor: start at the
-    // constant 1 and multiply in one column of `map` per unit of degree.
-    let mut poly = Vector::zeros(Factor::symmetric(0).multidim(map.nrows()));
-    poly[0] = 1.0;
-    for (col, &multiplicity) in source.parts().iter().enumerate() {
-      for _ in 0..multiplicity {
-        poly = multiply_by_linear(&poly, &map.column(col).into_owned(), map.nrows());
-      }
-    }
+    // The image of the basis monomial, built variable by variable: start at the
+    // constant 1 and multiply in one column of `map` per unit of degree, so the
+    // polynomial in hand has the degree of the units spent so far.
+    let variables = (source.parts().iter().enumerate())
+      .flat_map(|(col, &multiplicity)| std::iter::repeat_n(col, multiplicity));
+    let poly = variables
+      .enumerate()
+      .fold(Vector::from_element(1, 1.0), |poly, (spent, col)| {
+        multiply_by_linear(&poly, spent, &map.column(col).into_owned())
+      });
     power.column_mut(j).copy_from(&poly);
   }
   power
 }
 
-/// Multiply a homogeneous polynomial by the linear form whose coefficients are
-/// `linear`, raising the degree by one.
+/// Multiply a homogeneous polynomial of the given degree by the linear form
+/// whose coefficients are `linear`, raising the degree by one.
 ///
 /// The one place the symmetric side needs its own combinatorics: a monomial
 /// times a variable is another monomial, so the product is a scatter over
 /// [`Composition::rank`] with no sign, where the alternating side would carry
 /// one and cancel repetitions.
-fn multiply_by_linear(poly: &Vector, linear: &Vector, nparts: usize) -> Vector {
-  let degree = degree_of(poly.len(), nparts);
+fn multiply_by_linear(poly: &Vector, degree: usize, linear: &Vector) -> Vector {
+  let nparts = linear.len();
   let mut product = Vector::zeros(Composition::count(nparts, degree + 1));
   for (coeff, monomial) in poly.iter().zip(Composition::all(nparts, degree)) {
     if *coeff == 0.0 {
@@ -456,53 +457,38 @@ fn multiply_by_linear(poly: &Vector, linear: &Vector, nparts: usize) -> Vector {
   product
 }
 
-/// The degree of a homogeneous polynomial in `nparts` variables from its
-/// coefficient count. Inverse to [`Composition::count`] in the degree.
-fn degree_of(ncoeffs: usize, nparts: usize) -> usize {
-  (0..)
-    .find(|&d| Composition::count(nparts, d) == ncoeffs)
-    .expect("A coefficient count is a dimension of some degree.")
-}
-
-/// The map induced on $times.circle_i F_i$ by a linear map on the underlying
-/// space: the Kronecker product of the per-slot induced maps.
-///
-/// The whole of functoriality on a tensor product, uniform over the slots: the
-/// symmetry is consulted only inside [`Factor::induced`], never here. An empty
-/// product of slots is the scalars, on which every map induces the identity.
-pub fn induced(slots: &[Slot], map: &Matrix) -> Matrix {
-  slots
-    .iter()
-    .map(|slot| slot.factor.induced(map))
-    .reduce(|acc, factor| acc.kronecker(&factor))
-    .unwrap_or_else(|| Matrix::identity(1, 1))
-}
-
 /// The multiplicity $alpha!$ of each basis element of a shape, in component
-/// order: $1$ throughout on an alternating or free factor, $alpha!$ on a
-/// symmetric one.
+/// order: $alpha!$ on a symmetric slot and $1$ on an alternating or free one.
 ///
-/// It is $norm(x^alpha)^2$ under the Euclidean form, hence
-/// [`Factor::induced_form`] of the identity, read off there rather than
-/// recomputed so one convention serves both.
+/// It is $norm(e_alpha)^2$ under the Euclidean form, so it is the diagonal of
+/// [`Factor::induced_form`] of the identity, which is the law that ties the two
+/// together. It is not computed that way: a permanent per entry of a square
+/// matrix is exponential where the multiplicities are a product of factorials.
 ///
-/// Deliberately not public. It is the change of basis between the monomial
-/// basis and its reciprocal, and the only ways to spend it are
-/// [`Tensor::reciprocal`] and [`Tensor::from_reciprocal`], which say which basis
-/// they mean. Applying the weights by hand is how the two operations that
-/// dualize came to disagree with each other in the first place.
-pub(crate) fn basis_multiplicity(slots: &[Slot], dim: impl Into<Dim>) -> Vector {
-  let dim = dim.into().index();
-  slots
+/// A quotient's basis element is an unnormalized (anti)symmetrization divided
+/// by $k!$, in which each distinct word occurs $alpha!$ times, so its square
+/// norm is $alpha!$. A free slot symmetrizes nothing, its basis element being a
+/// single tensor, so it carries no multiplicity at all and the stabilizer of
+/// its word does not enter.
+///
+/// Deliberately not public. It is the change of basis between the stored
+/// multiplicative basis and its reciprocal, and the only ways to spend it are
+/// [`Tensor::reciprocal`] and [`Tensor::from_reciprocal`], which say which
+/// basis they mean.
+pub(crate) fn basis_multiplicity(slots: &[Slot]) -> Vector {
+  let per_slot: Vec<Matrix> = slots
     .iter()
     .map(|slot| {
-      slot
-        .factor
-        .induced_form(&Matrix::identity(dim, dim))
-        .diagonal()
+      let weights = slot
+        .basis()
+        .map(|index| match slot.symmetry().repetition() {
+          Some(_) => index.stabilizer() as f64,
+          None => 1.0,
+        });
+      Matrix::from_iterator(slot.multidim(), 1, weights)
     })
-    .reduce(|acc, factor| acc.kronecker(&factor))
-    .unwrap_or_else(|| Vector::from_element(1, 1.0))
+    .collect();
+  tensor::factorwise_kronecker(&per_slot).column(0).into()
 }
 
 #[cfg(test)]
@@ -591,11 +577,12 @@ mod test {
     ];
     for factors in &factor_lists {
       for &(p, q, r) in &[(3, 3, 3), (4, 3, 3), (3, 4, 2)] {
-        // The slots name the domain; `induced` reads both ends off the map.
+        // The slots name the domain; a transport reads both ends off the map.
         let slots = tensor::covariant_slots(factors.iter().copied(), q);
+        let functor = |map: &Matrix| tensor::Transport::new(&slots, map).to_matrix();
         let (a, b) = (probe(p, q, 3), probe(q, r, 4));
-        let composed = induced(&slots, &(&a * &b));
-        let separate = induced(&slots, &a) * induced(&slots, &b);
+        let composed = functor(&(&a * &b));
+        let separate = functor(&a) * functor(&b);
 
         let expected_rows: usize = factors.iter().map(|f| f.multidim(p)).product();
         let expected_cols: usize = factors.iter().map(|f| f.multidim(r)).product();
@@ -604,36 +591,6 @@ mod test {
           (expected_rows, expected_cols)
         );
         assert_relative_eq!(composed, separate, epsilon = 1e-6);
-      }
-    }
-  }
-
-  /// The factors sit in the index in the order given, the last running
-  /// fastest: entry $(r_1 d_2 + r_2, c_1 e_2 + c_2)$ of the product is
-  /// $F_1 (r_1, c_1) dot F_2 (r_2, c_2)$.
-  ///
-  /// Functoriality cannot see this. $(A times.circle B)(C times.circle D) =
-  /// A C times.circle B D$ holds under any consistent ordering, so the law
-  /// above passes just as well with the factors reversed, and the convention
-  /// needs its own statement. It is load-bearing: it fixes which component of
-  /// a tensor is which.
-  #[test]
-  fn the_last_factor_runs_fastest() {
-    let (first, second) = (Factor::symmetric(2), Factor::alternating(1));
-    let map = probe(3, 4, 6);
-    let (a, b) = (first.induced(&map), second.induced(&map));
-    let product = induced(&tensor::covariant_slots([first, second], map.ncols()), &map);
-
-    for r1 in 0..a.nrows() {
-      for c1 in 0..a.ncols() {
-        for r2 in 0..b.nrows() {
-          for c2 in 0..b.ncols() {
-            assert_relative_eq!(
-              product[(r1 * b.nrows() + r2, c1 * b.ncols() + c2)],
-              a[(r1, c1)] * b[(r2, c2)]
-            );
-          }
-        }
       }
     }
   }

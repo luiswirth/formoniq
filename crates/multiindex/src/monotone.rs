@@ -13,7 +13,7 @@
 //! never as a stored representation, which is the distinction the workspace
 //! keeps between a theorem and a data structure.
 
-use crate::{Sign, binomial};
+use crate::{Sign, binomial, factorial};
 
 /// The symbols of a monotone multi-index, inline up to a degree covering every
 /// grade of a low-dimensional exterior algebra and a modest polynomial order.
@@ -341,6 +341,20 @@ impl MonoIndex {
   /// forbidden.
   pub fn multiplicity(&self, symbol: usize) -> usize {
     self.iter().filter(|&s| s == symbol).count()
+  }
+
+  /// The size of the stabilizer of this index under the $S_k$ action on its
+  /// positions, $alpha! = product_s m_s !$ over the multiplicities.
+  ///
+  /// The number of orderings of the word that give the word back, hence the
+  /// multiplicity an unnormalized symmetrization carries. Always $1$ where
+  /// repetition is forbidden, every multiplicity being at most one there.
+  pub fn stabilizer(&self) -> usize {
+    self
+      .word()
+      .chunk_by(|left, right| left == right)
+      .map(|run| factorial(run.len()))
+      .product()
   }
 
   /// The colexicographic rank, the canonical index into the basis.

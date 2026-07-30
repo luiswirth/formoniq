@@ -133,7 +133,7 @@ fn the_trivial_ends_are_total() {
 
     // The empty tensor product is also the scalars, and is a different shape:
     // isomorphic, distinct in arity, with no slot to contract.
-    assert_eq!(Tensor::scalar(2.5, dim).slots().len(), 0);
+    assert_eq!(Tensor::scalar(2.5).slots().len(), 0);
     assert_eq!(scalar.slots().len(), 1);
   }
 }
@@ -424,38 +424,98 @@ fn the_free_power_is_the_unquotiented_one() {
   }
 }
 
-/// Forgetting the symmetry is functorial: `to_free` commutes with pullback.
+/// The duality pairing of a quotient is the pairing of the free power it
+/// embeds into, up to the $k!$ the unnormalized embedding carries:
+/// $angle.l omega, v angle.r product_i k_i ! = angle.l "free" omega, "free" v angle.r$.
 ///
-/// The embedding is a map of representations, not a serialization, so a map
-/// acting on the quotient and then forgetting is the same as forgetting and
-/// then acting. That is what makes it belong inside the algebra.
+/// The law that pins the $alpha!$ absolutely, where the adjointness of the
+/// pullback pins it only up to a consistent choice: both sides of an adjoint
+/// statement read the packed components through the same weights, so a wrong
+/// weight cancels there and shows up only against the free power, which
+/// carries no weights of its own.
 ///
-/// Swept over both families and over rectangular maps, which is what the law
-/// actually claims. Restricted to $Lambda^k$ it is much weaker than it looks:
-/// every $alpha!$ is $1$ there, so the pullback matrix is the bare transpose of
-/// the functor and the multiplicity the symmetric basis carries never enters.
+/// Swept over mixed-family shapes of two slots, where the weights must also
+/// land at the right components, and the two slots are given different degrees
+/// so a transposed layout cannot pass.
 #[test]
-fn forgetting_the_symmetry_commutes_with_pullback() {
-  for symmetry in [Symmetry::Alternating, Symmetry::Symmetric] {
-    for dim in 1..=3 {
-      for degree in 0..=dim {
-        for cols in 1..=dim {
-          let slot = Slot::new(Factor::new(symmetry, degree), Variance::Covariant, dim);
-          let form = Tensor::new(
-            Slots::from_iter([slot]),
-            Vector::from_fn(slot.multidim(), |i, _| ((3 * i + 2) % 7) as f64 - 3.0),
-          );
-          let map = probe_matrix(dim, cols, 4);
+fn the_packed_pairing_is_the_free_pairing() {
+  use multiindex::factorial;
+
+  for dim in 1..=3 {
+    for grade in 0..=dim {
+      for degree in 0..=2 {
+        for factors in [
+          vec![Factor::alternating(grade), Factor::symmetric(degree)],
+          vec![Factor::symmetric(degree), Factor::alternating(grade)],
+          vec![Factor::symmetric(degree), Factor::symmetric(grade)],
+        ] {
+          let form = probe_tensor(&factors, Variance::Covariant, dim, 1);
+          let vector = probe_tensor(&factors, Variance::Contravariant, dim, 3);
+          let orderings: usize = factors
+            .iter()
+            .map(|f| factorial(f.degree().index()))
+            .product();
 
           assert_relative_eq!(
-            form.pullback(&map).to_free().components(),
-            form.to_free().pullback(&map).components(),
+            pairing(&form, &vector) * orderings as f64,
+            form
+              .to_free()
+              .components()
+              .dot(vector.to_free().components()),
             epsilon = 1e-9
           );
         }
       }
     }
   }
+}
+
+/// Forgetting the symmetry is functorial: `to_free` commutes with pullback.
+///
+/// The embedding is a map of representations, not a serialization, so a map
+/// acting on the quotient and then forgetting is the same as forgetting and
+/// then acting. That is what makes it belong inside the algebra.
+///
+/// Swept over both families, over rectangular maps and over shapes of one and
+/// two slots. Restricted to a single $Lambda^k$ it is much weaker than it
+/// looks: every $alpha!$ is $1$ there, so the pullback matrix is the bare
+/// transpose of the functor and the multiplicity the symmetric basis carries
+/// never enters. On two slots the multiplicities also have to sit at the right
+/// components, which the one-slot case cannot see.
+#[test]
+fn forgetting_the_symmetry_commutes_with_pullback() {
+  for symmetry in [Symmetry::Alternating, Symmetry::Symmetric] {
+    for dim in 1..=3 {
+      for degree in 0..=dim {
+        for cols in 1..=dim {
+          let shapes: [Vec<Factor>; 2] = [
+            vec![Factor::new(symmetry, degree)],
+            vec![Factor::new(symmetry, degree), Factor::symmetric(2)],
+          ];
+          for factors in shapes {
+            let form = probe_tensor(&factors, Variance::Covariant, dim, 2);
+            let map = probe_matrix(dim, cols, 4);
+
+            assert_relative_eq!(
+              form.pullback(&map).to_free().components(),
+              form.to_free().pullback(&map).components(),
+              epsilon = 1e-9
+            );
+          }
+        }
+      }
+    }
+  }
+}
+
+/// A tensor of the given shape with deterministic components.
+fn probe_tensor(factors: &[Factor], variance: Variance, dim: usize, seed: usize) -> Tensor {
+  let slots = multialgebra::tensor::uniform_slots(factors.iter().copied(), variance, dim);
+  let len = multialgebra::tensor::tensor_dim(&slots);
+  Tensor::new(
+    slots,
+    Vector::from_fn(len, |i, _| ((seed + 5 * i) % 7) as f64 - 3.0),
+  )
 }
 
 /// Slots may be over different spaces, which is what a rectangular map is.

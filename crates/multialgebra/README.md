@@ -37,10 +37,10 @@ to complement against, which only an alternating slot has.
   axis of a dense array has a length, and a symmetry and a variance besides.
 - `Tensor`:
   a list of slots, their strides, and the components. Components live on the
-  product of the per-slot bases, last slot running fastest, so the layout is
-  row-major and an all-free tensor is a dense array. Symmetry, variance and
-  dimension are all per slot, so a rectangular map V* ⊗ W and the metric-free
-  trace are both expressible.
+  product of the per-slot bases, first slot running fastest, which is colex on
+  the per-slot ranks and makes an all-free tensor a dense array. Symmetry,
+  variance and dimension are all per slot, so a rectangular map V* ⊗ W and the
+  metric-free trace are both expressible.
 - the algebra:
   `tensor` concatenates slots, `merge` collapses two of one symmetry into one
   of the summed degree, and `product` multiplies slot by slot with the Koszul
