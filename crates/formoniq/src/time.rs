@@ -482,9 +482,9 @@ mod test {
   /// A collocation tableau satisfies the simplified conditions that define it,
   /// at every stage count: row-sum consistency $c_i = sum_j a_(i j)$, the stage
   /// conditions $C(s)$, and the quadrature conditions $B(s)$, so both families
-  /// have their claimed order $p$ ($2s$ for Gauss, $2s - 1$ for Radau) for all
-  /// $s$, not just the two that used to be hardcoded. Radau additionally pins
-  /// its last node at $c_s = 1$ (stiff accuracy).
+  /// have their claimed order $p$ ($2s$ for Gauss, $2s - 1$ for Radau) at every
+  /// stage count. Radau additionally pins its last node at $c_s = 1$ (stiff
+  /// accuracy).
   #[test]
   fn collocation_tableaus_satisfy_order_conditions() {
     for s in 1..=6 {

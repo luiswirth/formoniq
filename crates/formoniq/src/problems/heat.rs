@@ -1,6 +1,5 @@
 //! Module for the Heat Equation, the prototypical parabolic PDE.
 
-use crate::linalg::faer::FaerCholesky;
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector};
 
 use crate::{
@@ -67,11 +66,7 @@ pub fn solve_heat<C: HilbertComplex>(
   let u0 = inclusion.transpose() * initial.coeffs();
   // The algebraic constraint $M_sigma sigma_0 = C_"dn" u_0$ pins a consistent
   // initial $sigma$. An inconsistent one would pollute the first stage RHS.
-  let sigma0 = if ns > 0 {
-    FaerCholesky::new(hb.mass_sigma.clone()).solve(&(hb.codif_dn() * &u0))
-  } else {
-    Vector::zeros(0)
-  };
+  let sigma0 = hb.codif(&u0);
 
   let source_u = &hb.mass_u * (inclusion.transpose() * source.coeffs());
   let mut forcing = Vector::zeros(ns + nu);

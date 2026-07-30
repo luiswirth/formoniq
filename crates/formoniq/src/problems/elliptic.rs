@@ -1,13 +1,10 @@
-use crate::{
-  assemble::{GalMat, GalVec},
-  whitney_complex::HilbertComplex,
-};
+use crate::{assemble::GalVec, whitney_complex::HilbertComplex};
 
 use {
   crate::linalg::{
     DirectInverse,
     eigen::{EigenError, sparse_shift_invert_eigen},
-    faer::FaerLu,
+    faer::{FaerCholesky, FaerLu},
   },
   derham::Cochain,
   multialgebra::ExteriorGrade,
@@ -60,15 +57,14 @@ fn assemble_mixed_kkt<C: HilbertComplex>(
   grade: ExteriorGrade,
   harmonics: &Matrix,
 ) -> (CsrMatrix, Vector, usize, usize) {
-  let galmats = MixedGalMats::compute(complex, grade);
+  let blocks = HodgeBlocks::compute(complex, grade);
 
-  let mass_u = CsrMatrix::from(&galmats.mass_u);
-  let mass_harmonics = &mass_u * harmonics;
+  let mass_harmonics = &blocks.mass_u * harmonics;
 
-  let sigma_len = galmats.sigma_len();
-  let u_len = galmats.u_len();
+  let sigma_len = blocks.n_sigma;
+  let u_len = blocks.n_u;
 
-  let mut galmat = galmats.mixed_hodge_laplacian();
+  let mut galmat = blocks.mixed_hodge_laplacian();
 
   galmat.grow(mass_harmonics.ncols(), mass_harmonics.ncols());
 
@@ -230,17 +226,14 @@ pub fn solve_evp<C: HilbertComplex>(
   neigenvalues: usize,
 ) -> Result<(Vector, Matrix, Matrix), EigenError> {
   let grade = grade.into();
-  let galmats = MixedGalMats::compute(complex, grade);
+  let blocks = HodgeBlocks::compute(complex, grade);
 
-  let lhs = galmats.mixed_hodge_laplacian();
+  let lhs = blocks.mixed_hodge_laplacian();
 
-  let sigma_len = galmats.sigma_len();
-  let u_len = galmats.u_len();
+  let (sigma_len, u_len) = (blocks.n_sigma, blocks.n_u);
   let mut rhs = CooMatrix::zeros(sigma_len + u_len, sigma_len + u_len);
-  for (mut r, mut c, &v) in galmats.mass_u.triplet_iter() {
-    r += sigma_len;
-    c += sigma_len;
-    rhs.push(r, c, v);
+  for (r, c, &v) in blocks.mass_u.triplet_iter() {
+    rhs.push(sigma_len + r, sigma_len + c, v);
   }
 
   let (eigenvals, eigenvectors) =
@@ -257,13 +250,12 @@ pub fn solve_evp<C: HilbertComplex>(
 /// [`HilbertComplex`], so the trait alone decides natural (full complex) versus
 /// essential (relative complex) boundary conditions.
 ///
-/// These are the pieces the mixed evolution problems ([`crate::problems::heat`],
-/// [`crate::problems::wave`]) build their block systems from: the down-coupling
-/// $sigma = delta u in Lambda^(k-1)$ and the up-coupling $omega = dif u in
-/// Lambda^(k+1)$. The two degenerate grades ($k = 0$ has no $sigma$ space,
-/// $k = n$ has no $omega$ space) are carried as correctly shaped empty
-/// blocks rather than special-cased, so the block systems assemble uniformly at
-/// every grade.
+/// These are the pieces the mixed problems build their block systems from: the
+/// down-coupling $sigma = delta u in Lambda^(k-1)$ and the up-coupling
+/// $omega = dif u in Lambda^(k+1)$. The two degenerate grades ($k = 0$ has no
+/// $sigma$ space, $k = n$ has no $omega$ space) need no case of their own: the
+/// complex is total in grade, so the neighbouring space is empty there and its
+/// blocks come out correctly shaped from the same expressions.
 pub struct HodgeBlocks {
   pub n_sigma: usize,
   pub n_u: usize,
@@ -279,42 +271,15 @@ pub struct HodgeBlocks {
 impl HodgeBlocks {
   pub fn compute<C: HilbertComplex>(complex: &C, grade: ExteriorGrade) -> Self {
     assert!(grade <= complex.dim());
-    let empty = |r: usize, c: usize| CsrMatrix::from(&CooMatrix::zeros(r, c));
-
-    let n_u = complex.ndofs(grade);
-    let mass_u = CsrMatrix::from(&complex.mass(grade));
-
-    let (n_sigma, mass_sigma, dif_dn) = if grade > 0 {
-      let n_sigma = complex.ndofs(grade - 1);
-      (
-        n_sigma,
-        CsrMatrix::from(&complex.mass(grade - 1)),
-        complex.dif(grade - 1),
-      )
-    } else {
-      (0, empty(0, 0), empty(n_u, 0))
-    };
-
-    let (n_omega, mass_omega, dif_up) = if grade < complex.dim() {
-      let n_omega = complex.ndofs(grade + 1);
-      (
-        n_omega,
-        CsrMatrix::from(&complex.mass(grade + 1)),
-        complex.dif(grade),
-      )
-    } else {
-      (0, empty(0, 0), empty(0, n_u))
-    };
-
     Self {
-      n_sigma,
-      n_u,
-      n_omega,
-      mass_sigma,
-      mass_u,
-      mass_omega,
-      dif_dn,
-      dif_up,
+      n_sigma: complex.ndofs(grade - 1),
+      n_u: complex.ndofs(grade),
+      n_omega: complex.ndofs(grade + 1),
+      mass_sigma: CsrMatrix::from(&complex.mass(grade - 1)),
+      mass_u: CsrMatrix::from(&complex.mass(grade)),
+      mass_omega: CsrMatrix::from(&complex.mass(grade + 1)),
+      dif_dn: complex.dif(grade - 1),
+      dif_up: complex.dif(grade),
     }
   }
 
@@ -347,82 +312,30 @@ impl HodgeBlocks {
   pub fn stiff(&self) -> CsrMatrix {
     self.dif_up.transpose() * &self.mass_omega * &self.dif_up
   }
-}
 
-pub struct MixedGalMats {
-  mass_sigma: GalMat,
-  dif_sigma: GalMat,
-  codif_u: GalMat,
-  codifdif_u: GalMat,
-  mass_u: GalMat,
-}
-impl MixedGalMats {
-  pub fn compute<C: HilbertComplex>(complex: &C, grade: ExteriorGrade) -> Self {
-    assert!(grade <= complex.dim());
-
-    let mass_u = complex.mass(grade);
-    let mass_u_csr = CsrMatrix::from(&mass_u);
-
-    let (mass_sigma, dif_sigma, codif_u) = if grade > 0 {
-      let mass_sigma = complex.mass(grade - 1);
-
-      let exdif_sigma = complex.dif(grade - 1);
-
-      let dif_sigma = &mass_u_csr * &exdif_sigma;
-      let dif_sigma = CooMatrix::from(&dif_sigma);
-
-      let codif_u = &exdif_sigma.transpose() * &mass_u_csr;
-      let codif_u = CooMatrix::from(&codif_u);
-
-      (mass_sigma, dif_sigma, codif_u)
-    } else {
-      // At grade 0 the $sigma$ space is empty, but the off-diagonal blocks still
-      // have to align with the $u$ block: $dif_sigma$ maps the empty $sigma$ into
-      // $u$-space ($u_"len" times 0$) and $codif_u$ maps $u$ into it
-      // ($0 times u_"len"$). Shaping them $0 times 0$ instead breaks block assembly.
-      let u_len = mass_u.nrows();
-      (
-        GalMat::new(0, 0),
-        GalMat::new(u_len, 0),
-        GalMat::new(0, u_len),
-      )
-    };
-
-    let codifdif_u = if grade < complex.dim() {
-      complex.codif_dif(grade)
-    } else {
-      // At top grade $dif u = 0$, so the $codif dif$ block vanishes — but it still
-      // occupies the $u times u$ diagonal slot and must be shaped $u_"len"^2$, not
-      // $0 times 0$, or block assembly misaligns.
-      GalMat::new(mass_u.nrows(), mass_u.nrows())
-    };
-
-    Self {
-      mass_sigma,
-      dif_sigma,
-      codif_u,
-      codifdif_u,
-      mass_u,
+  /// The codifferential $sigma = delta u$ of a coefficient vector, the solution
+  /// of the algebraic relation $M_(k-1) sigma = (D^(k-1))^T M_k u$ that slaves
+  /// $sigma$ to $u$ in every mixed system here.
+  ///
+  /// Total in grade: at grade $0$ the $sigma$ space is trivial and the empty
+  /// vector is its only element, so the mass solve is skipped rather than run
+  /// on an empty system.
+  pub fn codif(&self, u: &Vector) -> Vector {
+    if self.n_sigma == 0 {
+      return Vector::zeros(0);
     }
+    FaerCholesky::new(self.mass_sigma.clone()).solve(&(self.codif_dn() * u))
   }
 
-  pub fn sigma_len(&self) -> usize {
-    self.mass_sigma.nrows()
-  }
-  pub fn u_len(&self) -> usize {
-    self.mass_u.nrows()
-  }
-
+  /// The mixed Hodge-Laplacian $mat(M_(k-1), -(D^(k-1))^T M_k; M_k D^(k-1), K)$
+  /// on $(sigma, u)$: the saddle point of the first-order system
+  /// $sigma = delta u$, $dif sigma + delta dif u = f$.
   pub fn mixed_hodge_laplacian(&self) -> CooMatrix {
-    let Self {
-      mass_sigma,
-      dif_sigma,
-      codif_u,
-      codifdif_u,
-      ..
-    } = self;
-    let codif_u = codif_u.clone();
-    CooMatrix::block(&[&[mass_sigma, &(codif_u.neg())], &[dif_sigma, codifdif_u]])
+    let coo = |m: &CsrMatrix| CooMatrix::from(m);
+    CooMatrix::block(&[
+      &[&coo(&self.mass_sigma), &coo(&self.codif_dn()).neg()],
+      &[&coo(&self.dif_sigma()), &coo(&self.stiff())],
+    ])
   }
 }
 
