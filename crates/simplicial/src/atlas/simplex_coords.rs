@@ -35,6 +35,11 @@ use coorder::{Ambient, CoordSpace, Coords, CoordsRef, affine::AffineTransform};
 
 use std::marker::PhantomData;
 
+/// The relative floor the volume of a realization must clear to count as
+/// non-degenerate, as a fraction of the largest volume its spanning vectors
+/// could enclose.
+const DEGENERACY_FLOOR: f64 = 1e-12;
+
 /// The vertex coordinates of a simplex realized in the coordinate space `S`, as
 /// the columns of a matrix. The default space is [`Ambient`], the embedded case.
 pub struct SimplexCoords<S: CoordSpace = Ambient> {
@@ -112,8 +117,23 @@ impl<S: CoordSpace> SimplexCoords<S> {
   pub fn vol(&self) -> f64 {
     self.det().abs()
   }
+  /// Whether the realization is degenerate: the spanning vectors are
+  /// numerically dependent, so the parametrization fails to be injective and
+  /// the simplex collapses onto a lower-dimensional affine subspace.
+  ///
+  /// The volume is compared against the largest one a simplex with spanning
+  /// vectors of these lengths could have, which by Hadamard's inequality is
+  /// reached exactly when they are orthogonal. The quotient is therefore a
+  /// dimensionless number in $[0, 1]$, one on an orthogonal frame and zero
+  /// exactly on a dependent one, so the predicate is invariant under scaling
+  /// the simplex: degeneracy is a rank condition, never a size.
   pub fn is_degenerate(&self) -> bool {
-    self.vol() <= 1e-12
+    let spanning_volume: f64 = self
+      .spanning_vectors()
+      .column_iter()
+      .map(|v| v.norm())
+      .product();
+    self.vol() <= DEGENERACY_FLOOR * unit_simplex_volume(self.dim_intrinsic()) * spanning_volume
   }
 
   /// The linear part $A$ of the parametrization: the differential
@@ -310,6 +330,24 @@ mod test {
         point.barycenter().vector(),
         &Vector::from_element(ambient, 0.7)
       );
+    }
+  }
+
+  /// Degeneracy is a rank condition and not a size: a simplex scaled uniformly
+  /// stays non-degenerate however small it gets, and one whose vertices fall
+  /// onto a lower-dimensional subspace is caught however large.
+  #[test]
+  fn degeneracy_is_scale_invariant() {
+    for dim in (1..=4usize).map(Dim::from) {
+      for scale in [1e-5, 1.0, 1e5] {
+        let scaled = SimplexCoords::unit(dim).vertices() * scale;
+        assert!(!SimplexCoords::<LocalCartesian>::new(scaled.clone()).is_degenerate());
+
+        let mut collapsed = scaled;
+        let base = collapsed.column(0).into_owned();
+        collapsed.set_column(dim.index(), &base);
+        assert!(SimplexCoords::<LocalCartesian>::new(collapsed).is_degenerate());
+      }
     }
   }
 
