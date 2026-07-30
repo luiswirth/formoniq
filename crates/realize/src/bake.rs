@@ -303,6 +303,17 @@ impl BakedMesh {
     }
   }
 
+  /// The segments the mark is drawn over: a 1-manifold's own cells, the
+  /// 1-skeleton overlay otherwise. One list either way, so a curve's edges are
+  /// drawn once and the choice stays a fact about the reduction rather than one
+  /// a consumer restates.
+  pub fn segments(&self) -> &[[u32; 2]] {
+    match &self.cells {
+      PrimBatch::Segments(cells) => cells,
+      _ => &self.edges,
+    }
+  }
+
   /// The mesh's own vertices as segment vertices: the table the 1-skeleton
   /// overlay (and a 1-manifold's cells) are drawn from, at full opacity.
   pub fn segment_vertices(&self) -> Vec<SegmentVertex> {
