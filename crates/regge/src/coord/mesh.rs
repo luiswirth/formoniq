@@ -11,7 +11,6 @@ use simplicial::{
 };
 
 use metric::Metric;
-use multialgebra::Variance;
 use simplicial::linalg::{Matrix, Vector};
 
 use itertools::Itertools;
@@ -222,7 +221,7 @@ impl MeshCoords {
     for i in old_dim..dim.index() {
       ambient[(i, i)] = 1.0;
     }
-    self.ambient = Metric::new_unchecked(Variance::Covariant, ambient);
+    self.ambient = Metric::new_unchecked(self.ambient.variance(), ambient);
     self
   }
 }
