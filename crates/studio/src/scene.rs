@@ -918,17 +918,7 @@ pub(crate) fn hodge_decompose(
   })
 }
 
-/// A deterministic, mesh-independent probe form for the Hodge decomposition:
-/// the ambient 1-form $omega = -y dif x + x dif y + z dif z$ pulled onto the
-/// mesh through the `derham` bridge, then de Rham mapped to a `grade`-cochain.
-///
-/// The swirl $-y dif x + x dif y$ is not closed (a coexact part) and threads
-/// any handle enclosing the $z$-axis (a harmonic part); the $z dif z = dif(z^2\/2)$
-/// contributes a manifestly exact part. Its pullback therefore lights up all
-/// three shells on a genus-1 surface, and degrades gracefully (harmonic part
-/// zero) on a contractible one.
-///
-/// The probe field the decomposition study actually splits: the ambient swirl
+/// The probe field the decomposition study splits: the ambient swirl
 /// [`hodge_probe_form`] plus, on a mesh with grade-1 homology, an explicit copy
 /// of a harmonic 1-form scaled to the swirl's magnitude.
 ///
@@ -1013,23 +1003,6 @@ fn hodge_probe_form(topology: &Complex, coords: &MeshCoords) -> Cochain {
   derham_map(&pulled, topology, 2)
 }
 
-/// A localized grade-$k$ initial condition for a time-dependent solve, defined
-/// off the mesh's own coordinates: a Gaussian in ambient distance centered on
-/// the vertex nearest the centroid, of width a fixed fraction of the
-/// coordinate extent, times the first basis blade of grade `grade`. Pulled onto
-/// the mesh through the `derham` bridge and de Rham mapped to a `grade`-cochain,
-/// so it lands on any embedded mesh without assuming a shape.
-///
-/// Which blade carries the bump is a gauge of the ambient frame, not of the
-/// mathematics: any nonzero constant $k$-covector gives the same construction,
-/// and grade 0 (the empty blade) recovers the scalar bump exactly.
-///
-/// The nearest-to-centroid vertex, not the farthest: on a mesh with boundary
-/// (the flat grid) the farthest vertex is a boundary corner, where a held
-/// boundary would pin the bump instead of letting it diffuse. The nearest one is
-/// interior, so its boundary trace is near zero and the flow is free. On a closed
-/// mesh every vertex is on the surface, so the nearest merely also works where a
-/// boundary exists.
 /// How many of the lowest eigenmodes to ask for: enough to cover the
 /// degeneracy of the bottom eigenspace, which is the ambient dimension's worth
 /// of rotations on a sphere and rarely more elsewhere. The zero shell is
@@ -1221,6 +1194,23 @@ fn mean_speed_flux(
   }
 }
 
+/// A localized grade-$k$ initial condition for a time-dependent solve, defined
+/// off the mesh's own coordinates: a Gaussian in ambient distance centered on
+/// the vertex nearest the centroid, of width a fixed fraction of the
+/// coordinate extent, times the first basis blade of grade `grade`. Pulled onto
+/// the mesh through the `derham` bridge and de Rham mapped to a `grade`-cochain,
+/// so it lands on any embedded mesh without assuming a shape.
+///
+/// Which blade carries the bump is a gauge of the ambient frame, not of the
+/// mathematics: any nonzero constant $k$-covector gives the same construction,
+/// and grade 0 (the empty blade) recovers the scalar bump exactly.
+///
+/// The nearest-to-centroid vertex, not the farthest: on a mesh with boundary
+/// (the flat grid) the farthest vertex is a boundary corner, where a held
+/// boundary would pin the bump instead of letting it diffuse. The nearest one is
+/// interior, so its boundary trace is near zero and the flow is free. On a closed
+/// mesh every vertex is on the surface, so the nearest merely also works where a
+/// boundary exists.
 fn ambient_bump(topology: &Complex, coords: &MeshCoords, grade: ExteriorGrade) -> Cochain {
   let geometry = coords.to_edge_lengths_sq(topology);
   let n = coords.dim().index();
