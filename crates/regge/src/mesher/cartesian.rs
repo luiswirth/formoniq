@@ -1,17 +1,11 @@
-use multiindex::{
-  Combination, Permutation,
-  cartesian::{cartesian2linear_mixed, corner_offset, linear2cartesian_mixed, mixed_strides},
-  factorial,
-};
 use simplicial::linalg::{Matrix, Vector};
-
-pub use multiindex::cartesian::{cartesian2linear, linear2cartesian};
 
 use crate::coord::mesh::MeshCoords;
 use metric::Metric;
 use simplicial::{
   Dim,
-  topology::{complex::Complex, simplex::Simplex, skeleton::Skeleton},
+  mesher::grid::CartesianTopology,
+  topology::{complex::Complex, skeleton::Skeleton},
 };
 
 /// Time-axis scale of a causally generic Minkowski box (axis $0$ is time).
@@ -73,7 +67,7 @@ impl Rect {
 /// case, and [`Self::new_unit`] and friends are that case named.
 pub struct CartesianGrid {
   rect: Rect,
-  ncells: Vec<usize>,
+  topology: CartesianTopology,
 }
 // constructors
 impl CartesianGrid {
@@ -85,8 +79,10 @@ impl CartesianGrid {
       rect.dim(),
       "One cell count per axis is required."
     );
-    assert!(ncells.iter().all(|&n| n >= 1), "An axis needs a cell.");
-    Self { rect, ncells }
+    Self {
+      topology: CartesianTopology::new(ncells),
+      rect,
+    }
   }
   /// A grid whose cells are as near cubical as the counts allow: the count on
   /// each axis is scaled by that axis's length, so the spacing is
@@ -102,25 +98,31 @@ impl CartesianGrid {
       .iter()
       .map(|&side| ((side / longest * ncells_longest as f64).round() as usize).max(1))
       .collect();
-    Self { rect, ncells }
+    Self {
+      topology: CartesianTopology::new(ncells),
+      rect,
+    }
   }
   pub fn new_min_max(min: Vector, max: Vector, ncells_axis: usize) -> Self {
     let rect = Rect::new_min_max(min, max);
     let ncells = vec![ncells_axis; rect.dim()];
-    Self { rect, ncells }
+    Self {
+      topology: CartesianTopology::new(ncells),
+      rect,
+    }
   }
   pub fn new_unit(dim: impl Into<Dim>, ncells_axis: usize) -> Self {
     let dim = dim.into();
     Self {
       rect: Rect::new_unit_cube(dim),
-      ncells: vec![ncells_axis; dim.index()],
+      topology: CartesianTopology::cube(dim, ncells_axis),
     }
   }
   pub fn new_unit_scaled(dim: impl Into<Dim>, ncells_axis: usize, scale: f64) -> Self {
     let dim = dim.into();
     Self {
       rect: Rect::new_scaled_cube(dim, scale),
-      ncells: vec![ncells_axis; dim.index()],
+      topology: CartesianTopology::cube(dim, ncells_axis),
     }
   }
 }
@@ -141,22 +143,22 @@ impl CartesianGrid {
   pub fn side_lengths(&self) -> Vector {
     self.rect.side_lengths()
   }
+  /// The combinatorics of the grid, which the coordinates are placed on.
+  pub fn topology(&self) -> &CartesianTopology {
+    &self.topology
+  }
   /// The cell count of each axis.
   pub fn ncells_per_axis(&self) -> &[usize] {
-    &self.ncells
-  }
-  /// The vertex count of each axis: one more than its cells.
-  pub fn nvertices_per_axis(&self) -> Vec<usize> {
-    self.ncells.iter().map(|&n| n + 1).collect()
+    self.topology.ncells_per_axis()
   }
   pub fn ncells(&self) -> usize {
-    self.ncells.iter().product()
+    self.topology.ncells()
   }
   pub fn nvertices(&self) -> usize {
-    self.nvertices_per_axis().iter().product()
+    self.topology.nvertices()
   }
   pub fn vertex_cart_idx(&self, ivertex: usize) -> Vec<usize> {
-    linear2cartesian_mixed(ivertex, &self.nvertices_per_axis())
+    self.topology.vertex_cart_idx(ivertex)
   }
   pub fn vertex_pos(&self, ivertex: usize) -> Vector {
     let cart_idx = self.vertex_cart_idx(ivertex);
@@ -164,26 +166,18 @@ impl CartesianGrid {
       cart_idx.len(),
       cart_idx
         .iter()
-        .zip(&self.ncells)
+        .zip(self.ncells_per_axis())
         .map(|(&c, &n)| c as f64 / n as f64),
     );
     fractions.component_mul(&self.side_lengths()) + self.min()
   }
 
   pub fn is_vertex_on_boundary(&self, vertex: usize) -> bool {
-    self
-      .vertex_cart_idx(vertex)
-      .iter()
-      .zip(&self.ncells)
-      .any(|(&c, &n)| c == 0 || c == n)
+    self.topology.is_vertex_on_boundary(vertex)
   }
 
   pub fn boundary_vertices(&self) -> Vec<usize> {
-    let nvertices = self.nvertices_per_axis();
-    (0..self.nvertices())
-      .filter(|&v| self.is_vertex_on_boundary(v))
-      .map(|v| cartesian2linear_mixed(&self.vertex_cart_idx(v), &nvertices))
-      .collect()
+    self.topology.boundary_vertices()
   }
 }
 
@@ -236,36 +230,10 @@ impl CartesianGrid {
     MeshCoords::new(coords)
   }
 
-  /// Kuhn (Freudenthal) triangulation.
-  ///
-  /// The corners of a cube are the subsets of the axes (radix-2 cartesian
-  /// indices are `Combination` bitsets), and each of the $d!$ simplices of a
-  /// cube is a maximal chain
-  /// $emptyset subset {a_1} subset {a_1, a_2} subset dots.c$
-  /// in this subset lattice, one per permutation of the axes.
+  /// Kuhn (Freudenthal) triangulation: the grid's combinatorics, which the
+  /// coordinates play no part in.
   pub fn cell_skeleton(&self) -> Skeleton {
-    let dim = self.dim();
-    let nvertices = self.nvertices_per_axis();
-    let strides = mixed_strides(&nvertices);
-
-    let mut simplices: Vec<Simplex> = Vec::with_capacity(factorial(dim) * self.ncells());
-    for ibox in 0..self.ncells() {
-      let box_cart = linear2cartesian_mixed(ibox, &self.ncells);
-      let origin = cartesian2linear_mixed(&box_cart, &nvertices);
-
-      for axes in Permutation::all(dim) {
-        let chain = axes.iter().scan(Combination::empty(), |corner, axis| {
-          *corner = corner.inserted(axis);
-          Some(*corner)
-        });
-        let vertices = std::iter::once(origin)
-          .chain(chain.map(|corner| origin + corner_offset(corner, &strides)))
-          .collect();
-        simplices.push(Simplex::new(vertices));
-      }
-    }
-
-    Skeleton::new(simplices)
+    self.topology.cell_skeleton()
   }
 }
 

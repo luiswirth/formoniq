@@ -40,7 +40,7 @@ use super::{Bary, LocalCartesian, SimplexCoords, bary2local};
 use crate::Dim;
 use crate::linalg::{Matrix, Vector};
 
-use multiindex::{Composition, Permutation, cartesian};
+use multiindex::{Composition, Permutation, Radix};
 
 use std::collections::HashMap;
 
@@ -108,14 +108,14 @@ fn kuhn_children(dim: Dim, refinement: usize) -> impl Iterator<Item = Vec<Vec<us
   let in_region = move |s: &[usize]| s[0] <= r && s.windows(2).all(|w| w[0] >= w[1]);
 
   let n = dim.index();
-  cartesian::grid(r + 1, n).flat_map(move |base| {
+  Radix::uniform(r + 1, n).all().flat_map(move |base| {
     Permutation::all(n).filter_map(move |perm| {
       let mut w = base.clone();
       let mut child = Vec::with_capacity((dim + 1).index());
-      child.push(w.clone());
+      child.push(w.to_vec());
       for axis in perm.iter() {
         w[axis] += 1;
-        child.push(w.clone());
+        child.push(w.to_vec());
       }
       child.iter().all(|s| in_region(s)).then_some(child)
     })

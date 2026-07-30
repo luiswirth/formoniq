@@ -1,6 +1,6 @@
 //! A tensor product of alternating and symmetric factors over one space.
 
-use multiindex::{Degree, Dim, MonoIndex, MultiIndex, Sign, Word};
+use multiindex::{Degree, Dim, MonoIndex, MultiIndex, Radix, Sign, Word};
 
 use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, basis_multiplicity};
 
@@ -61,14 +61,19 @@ fn alternating_degree(slot: &Slot) -> usize {
   }
 }
 
-/// The stride of each factor in the flat component index, last factor running
-/// fastest: $s_i = product_(j > i) dim F_j$.
+/// The stride of each factor in the flat component index, the first factor
+/// running fastest: $s_i = product_(j < i) dim F_j$.
+///
+/// The colex convention of the whole workspace, read on the factors: a flat
+/// index is the mixed-radix number of the per-factor ranks, so it is
+/// [`Radix::linearize`](multiindex::Radix::linearize) on the factor dimensions.
 pub fn tensor_strides(slots: &[Slot]) -> Strides {
-  let mut strides = Strides::from_iter(std::iter::repeat_n(1, slots.len()));
-  for i in (0..slots.len().saturating_sub(1)).rev() {
-    strides[i] = strides[i + 1] * slots[i + 1].multidim();
-  }
-  strides
+  Strides::from_iter(
+    Radix::new(slots.iter().map(Slot::multidim))
+      .strides()
+      .iter()
+      .copied(),
+  )
 }
 
 impl Tensor {
@@ -376,7 +381,7 @@ impl Tensor {
   }
 
   /// Every basis element with its component, in the order the components are
-  /// stored: colex per factor, last factor fastest.
+  /// stored: colex per factor, first factor fastest.
   pub fn basis_iter(&self) -> impl Iterator<Item = (f64, Basis)> + '_ {
     let bases = self.slot_bases();
     let mut odometer = vec![0usize; self.slots.len()];
@@ -386,8 +391,8 @@ impl Tensor {
         .zip(&bases)
         .map(|(&position, factor_basis)| factor_basis[position])
         .collect();
-      // Advance the last factor fastest, matching the stride convention.
-      for (position, factor_basis) in odometer.iter_mut().zip(&bases).rev() {
+      // Advance the first factor fastest, matching the stride convention.
+      for (position, factor_basis) in odometer.iter_mut().zip(&bases) {
         *position += 1;
         if *position < factor_basis.len() {
           break;
@@ -430,7 +435,9 @@ impl Tensor {
   pub fn tensor(&self, other: &Self) -> Self {
     let mut factors = self.slots.clone();
     factors.extend_from_slice(&other.slots);
-    let components = self.components.kronecker(&other.components);
+    // The first slot runs fastest, so the left operand is the least
+    // significant factor of the layout.
+    let components = other.components.kronecker(&self.components);
     Self::new(factors, components)
   }
 
@@ -564,8 +571,8 @@ impl Tensor {
     // by dividing the component count, so a factor naming the trivial space
     // leaves an empty sweep instead of a division by zero.
     let (left_dim, right_dim) = (left.multidim(), right.multidim());
-    let inner = self.strides[first + 1];
-    let outer = tensor_dim(&self.slots[..first]);
+    let inner = self.strides[first];
+    let outer = tensor_dim(&self.slots[first + 2..]);
     let merged_dim = merged.slots[first].multidim();
 
     for (left_rank, left_index) in left.basis().enumerate() {
@@ -576,7 +583,7 @@ impl Tensor {
         let sign = sign.as_f64();
         let product_rank = product.rank();
         for block in 0..outer {
-          let from = ((block * left_dim + left_rank) * right_dim + right_rank) * inner;
+          let from = ((block * right_dim + right_rank) * left_dim + left_rank) * inner;
           let to = (block * merged_dim + product_rank) * inner;
           for offset in 0..inner {
             merged.components[to + offset] += sign * self.components[from + offset];
@@ -623,7 +630,7 @@ impl Tensor {
     let slot = self.slots[which];
     let basis_dim = slot.multidim();
     let inner = self.strides[which];
-    let outer = tensor_dim(&self.slots[..which]);
+    let outer = tensor_dim(&self.slots[which + 1..]);
     let reduced_dim = contracted.slots[which].multidim();
 
     for (rank, index) in slot.basis().enumerate() {
@@ -778,7 +785,7 @@ impl Tensor {
       if sign != 0.0 {
         expanded.components[flat] += sign * self.components[self.flat_index(&source)];
       }
-      for (position, slot_basis) in odometer.iter_mut().zip(&bases).rev() {
+      for (position, slot_basis) in odometer.iter_mut().zip(&bases) {
         *position += 1;
         if *position < slot_basis.len() {
           break;
@@ -1267,6 +1274,7 @@ pub fn covariant_slots(factors: impl IntoIterator<Item = Factor>, dim: impl Into
 pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
   per_slot
     .iter()
+    .rev()
     .cloned()
     .reduce(|acc, slot| acc.kronecker(&slot))
     .unwrap_or_else(|| Matrix::identity(1, 1))
@@ -1288,7 +1296,7 @@ pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
 /// point of a tensor product having factors at all.
 ///
 /// `dims` is the component layout being consumed, in slot order, and must be
-/// the one [`tensor_strides`] implies: last factor fastest.
+/// the one [`tensor_strides`] implies: first factor fastest.
 ///
 /// # Panics
 /// If the matrices, the dimensions and the component count disagree.
@@ -1310,10 +1318,10 @@ pub fn apply_factorwise(per_slot: &[Matrix], dims: &[usize], components: &Vector
       "a slot's matrix must consume that slot's dimension"
     );
     let (from, to) = (matrix.ncols(), matrix.nrows());
-    // The layout is last-factor-fastest, so a slot's index sits between an
-    // `outer` block of the slots before it and an `inner` stride of those after.
-    let outer: usize = current[..slot].iter().product();
-    let inner: usize = current[slot + 1..].iter().product();
+    // The layout is first-factor-fastest, so a slot index sits between an
+    // `inner` stride of the slots before it and an `outer` block of those after.
+    let inner: usize = current[..slot].iter().product();
+    let outer: usize = current[slot + 1..].iter().product();
 
     let mut next = Vector::zeros(outer * to * inner);
     for a in 0..outer {

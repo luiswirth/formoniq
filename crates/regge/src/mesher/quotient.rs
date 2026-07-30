@@ -26,7 +26,7 @@
 //! checkable rather than merely asserted.
 
 use itertools::Itertools;
-use multiindex::cartesian::{cartesian2linear_mixed, linear2cartesian_mixed};
+use multiindex::Radix;
 
 use crate::lengths::mesh::MeshLengthsSq;
 use crate::mesher::cartesian::CartesianGrid;
@@ -256,7 +256,7 @@ impl FlatQuotient {
   /// The number of distinct values each axis coordinate takes after
   /// identification: `ncells_axis` on a closed axis, one more on an open one,
   /// whose far face survives.
-  fn radices(&self) -> Vec<usize> {
+  fn shape(&self) -> Radix {
     self
       .identifications
       .iter()
@@ -271,9 +271,15 @@ impl FlatQuotient {
       .collect()
   }
 
+  /// The shape of the covering vertex grid, before identification: one more
+  /// vertex than cells along every axis, closed or not.
+  fn grid_shape(&self) -> Radix {
+    self.ncells.iter().map(|&n| n + 1).collect()
+  }
+
   /// The number of vertices after identification.
   pub fn nvertices(&self) -> usize {
-    self.radices().iter().product()
+    self.shape().count()
   }
 
   /// The topology and the Regge geometry of the quotient: the identified
@@ -322,8 +328,8 @@ impl FlatQuotient {
   /// The grid spans one period per axis, so each seam is crossed at most once
   /// and the wraps of distinct axes are independent.
   fn reduce_vertex(&self, grid_vertex: usize) -> usize {
-    let grid_radices = self.ncells.iter().map(|&n| n + 1).collect_vec();
-    let mut cart = linear2cartesian_mixed(grid_vertex, &grid_radices);
+    let grid_shape = self.grid_shape();
+    let mut cart = grid_shape.delinearize(grid_vertex);
 
     let wrapped = (0..self.dim().index())
       .filter(|&axis| self.identifications[axis].is_closed() && cart[axis] == self.ncells[axis])
@@ -338,7 +344,7 @@ impl FlatQuotient {
         *coord %= self.ncells[axis];
       }
     }
-    cartesian2linear_mixed(&cart, &self.radices())
+    self.shape().linearize(&cart)
   }
 
   /// Each cell as the identified image of its Kuhn chain, in chain order.
@@ -380,15 +386,15 @@ impl FlatQuotient {
         .zip(&self.ncells)
         .map(|(&side, &n)| side / n as f64),
     );
-    let grid_radices = self.ncells.iter().map(|&n| n + 1).collect_vec();
+    let grid_shape = self.grid_shape();
 
     let edges = complex.skeleton_raw(Dim::ONE);
     let mut lengths_sq = Vector::from_element(edges.len(), f64::NAN);
 
     for cell in self.grid().cell_skeleton() {
       for [&vi, &vj] in cell.vertices.iter().array_combinations() {
-        let ci = linear2cartesian_mixed(vi, &grid_radices);
-        let cj = linear2cartesian_mixed(vj, &grid_radices);
+        let ci = grid_shape.delinearize(vi);
+        let cj = grid_shape.delinearize(vj);
         let length_sq = (0..dim.index())
           .map(|a| {
             let step = (cj[a] as isize - ci[a] as isize) as f64 * spacing[a];
@@ -426,7 +432,7 @@ impl FlatQuotient {
   /// The cartesian multi-index of a quotient vertex, its position in the
   /// fundamental domain, in units of the grid spacing.
   pub fn vertex_cart_idx(&self, vertex: VertexIdx) -> Vec<usize> {
-    linear2cartesian_mixed(vertex, &self.radices())
+    self.shape().delinearize(vertex).to_vec()
   }
 }
 

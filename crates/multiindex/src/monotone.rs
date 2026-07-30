@@ -665,12 +665,12 @@ mod test {
     }
   }
 
-  /// The forbidden family reproduces [`Combination`] exactly: same words, same
-  /// order, same ranks.
+  /// The word-level forbidden family and [`Combination`] agree exactly: same
+  /// words, same order, same ranks.
   ///
-  /// This is what licenses the unified implementation to replace the existing
-  /// one. Order as well as content, since a rank is only meaningful against an
-  /// enumeration.
+  /// The two are different representations, an unbounded word and a bitset, so
+  /// this is a theorem rather than a tautology. Order as well as content, since
+  /// a rank is only meaningful against an enumeration.
   #[test]
   fn forbidden_repetition_is_the_combination() {
     for nsymbols in 0..=5 {
