@@ -609,6 +609,19 @@ Peers as operators, not as objects:
 a direct factorization and an eigensolve need entries,
 so the assembled form is strictly the more capable one.
 
+**A `Tensor` is for the geometric space, never for the space of unknowns.**
+`multialgebra` models the tangent and cotangent space of a point and their powers:
+dimension $n$, grade at most $n$, everything about it sized by the manifold's dimension
+and fixed once the dimension is.
+A degree-of-freedom space is a different kind of object.
+It is sized by the mesh and the polynomial degree, it has no grade,
+no variance and no wedge, and it grows without bound under refinement.
+So a cochain, a load vector, an element matrix and an assembled operator
+are linear algebra (`Vector`, `Matrix`, `CsrMatrix`), and never tensors,
+however much a bilinear form on them looks like one.
+The map between the two kinds is where the geometry enters a discretization,
+and it is an ordinary matrix (`WhitneyExpansion`), not a functor.
+
 **A tensorial computation runs on the tensor, never on its components.**
 The inner product, the transport, the star, the musicals and the pairings
 are operations of `multialgebra` and `metric`,
