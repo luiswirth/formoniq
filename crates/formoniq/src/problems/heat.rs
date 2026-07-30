@@ -3,7 +3,7 @@
 use simplicial::linalg::{CooMatrix, CooMatrixExt, CsrMatrix, Vector};
 
 use crate::{
-  problems::elliptic::HodgeBlocks,
+  hodge::HodgeBlocks,
   time::{LinearIrk, Tableau},
   whitney_complex::HilbertComplex,
 };

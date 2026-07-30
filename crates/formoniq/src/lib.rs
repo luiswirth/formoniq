@@ -7,6 +7,7 @@ pub mod assemble;
 pub mod bc;
 pub mod fe;
 pub mod harmonic;
+pub mod hodge;
 pub mod hx;
 pub mod linalg;
 pub mod matfree;
