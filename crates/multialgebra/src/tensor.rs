@@ -20,7 +20,7 @@ pub type Basis = tinyvec::TinyVec<[MultiIndex; 2]>;
 /// [`Combination`](multiindex::Combination)-shaped index on an alternating
 /// factor, a [`Composition`](multiindex::Composition)-shaped one on a symmetric
 /// factor, both spelled [`MonoIndex`], in colexicographic order, with the
-/// last factor running fastest.
+/// first factor running fastest.
 ///
 /// The convention does not follow from functoriality, which holds under any
 /// consistent reordering, so it is stated and tested as its own law.
@@ -99,7 +99,11 @@ impl Tensor {
   }
 
   /// The scalar $lambda in RR$: the empty tensor product, of no slots.
-  pub fn scalar(value: f64, _dim: impl Into<Dim>) -> Self {
+  ///
+  /// Over no space in particular. An empty product names none, which is what
+  /// distinguishes it from [`Self::one`], the unit of the exterior algebra of a
+  /// given space.
+  pub fn scalar(value: f64) -> Self {
     Self::new(Slots::new(), Vector::from_element(1, value))
   }
 
@@ -343,15 +347,14 @@ impl Tensor {
   pub fn reciprocal(&self) -> Vector {
     self
       .components
-      .component_mul(&basis_multiplicity(&self.slots, self.dim()))
+      .component_mul(&basis_multiplicity(&self.slots))
   }
 
   /// A tensor from its components in the reciprocal basis: the inverse of
   /// [`Self::reciprocal`], and what a dualizing operation ends with.
   pub fn from_reciprocal(slots: impl Into<Slots>, reciprocal: Vector) -> Self {
     let slots = slots.into();
-    let dim = slots.first().map_or(0, |slot| slot.dim.index());
-    let components = reciprocal.component_div(&basis_multiplicity(&slots, dim));
+    let components = reciprocal.component_div(&basis_multiplicity(&slots));
     Self::new(slots, components)
   }
 
@@ -718,8 +721,8 @@ impl Tensor {
   /// $"Sym"$ are compressed representations of subspaces of
   /// $V^(times.circle k)$, and this is the map that says so. It is also the way
   /// out to code that knows only dense arrays: the strides of an all-free
-  /// tensor are the radix, so the components are row-major over
-  /// `[dim; total degree]` with no permutation.
+  /// tensor are the radix, so the components are the dense array over
+  /// `[dim; total degree]` with its first axis fastest and no permutation.
   ///
   /// The entry at a word is that word's canonicalization, which
   /// [`MonoIndex::from_word`] already computes: the sign of the sorting
@@ -758,19 +761,10 @@ impl Tensor {
           None => source.push(*index),
           Some(repetition) => match MonoIndex::from_word(repetition, index.word()) {
             Some((canonical_sign, canonical)) => {
-              // The orderings of the canonical word that give back this exact
-              // one: its stabilizer, of size alpha!. On an alternating slot
-              // every multiplicity is one and this is a no-op; on a symmetric
-              // one it is the multiplicity the unnormalized symmetrization
-              // carries, and dropping it costs exactly that factor.
-              let stabilizer: usize = canonical
-                .word()
-                .iter()
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .map(|&symbol| multiindex::factorial(canonical.multiplicity(symbol)))
-                .product();
-              sign *= canonical_sign.as_f64() * stabilizer as f64;
+              // The stabilizer is the multiplicity the unnormalized
+              // symmetrization carries, and dropping it costs exactly that
+              // factor. One on an alternating slot, where no symbol repeats.
+              sign *= canonical_sign.as_f64() * canonical.stabilizer() as f64;
               source.push(MultiIndex::Mono(canonical));
             }
             // A repeated symbol in an alternating slot: the zero of the
@@ -900,7 +894,7 @@ impl Tensor {
     Self::new(slots, value.components)
   }
 
-  /// Apply a linear map to one slot, leaving the others alone:
+  /// Apply an endomorphism of one slot's own space, leaving the others alone:
   /// $id times.circle dots times.circle M times.circle dots times.circle id$.
   ///
   /// By stride arithmetic rather than by materializing the Kronecker product,
@@ -908,36 +902,38 @@ impl Tensor {
   ///
   /// The map acts on the slot's own basis, not on the underlying space: it is
   /// already an induced map. [`Self::pullback`] and [`Self::pushforward`] are
-  /// what take a map of the space.
+  /// what take a map of the space, and a map that changes a slot's extent
+  /// changes the shape, so it is [`apply_factorwise`] rather than this.
+  ///
+  /// # Panics
+  /// If the matrix is not square of the slot's extent.
   pub fn apply_to_slot(&self, which: usize, matrix: &Matrix) -> Self {
     let stride = self.strides[which];
-    let source_dim = self.slots[which].multidim();
-    assert_eq!(matrix.ncols(), source_dim);
+    let dim = self.slots[which].multidim();
+    assert_eq!(
+      (matrix.nrows(), matrix.ncols()),
+      (dim, dim),
+      "a slot keeps its extent under an endomorphism of it"
+    );
+    let outer = tensor_dim(&self.slots[which + 1..]);
 
-    let mut slots = self.slots.clone();
-    // The map may change that factor's dimension only by changing its degree,
-    // which the caller states; here the shape is read off `matrix`.
-    let target_dim = matrix.nrows();
-    let outer = self.components.len() / (stride * source_dim);
-
-    let mut components = Vector::zeros(outer * target_dim * stride);
+    let mut components = Vector::zeros(self.components.len());
     for before in 0..outer {
-      for source in 0..source_dim {
+      for source in 0..dim {
         for after in 0..stride {
-          let from = (before * source_dim + source) * stride + after;
+          let from = (before * dim + source) * stride + after;
           let value = self.components[from];
           if value == 0.0 {
             continue;
           }
-          for target in 0..target_dim {
-            let to = (before * target_dim + target) * stride + after;
-            components[to] += matrix[(target, source)] * value;
+          for target in 0..dim {
+            components[(before * dim + target) * stride + after] +=
+              matrix[(target, source)] * value;
           }
         }
       }
     }
-    slots[which] = self.slots[which];
-    Self::new(slots, components)
+    Self::new(self.slots.clone(), components)
   }
 
   /// The variance every slot shares, or a panic naming why a mixed tensor has
@@ -1781,7 +1777,7 @@ mod test {
     assert!(!mixed.is_exterior());
 
     // The scalar is vacuously both, and is not a slot.
-    let scalar = Tensor::scalar(1.0, dim);
+    let scalar = Tensor::scalar(1.0);
     assert!(scalar.is_alternating() && scalar.is_symmetric());
     assert!(scalar.single().is_none());
   }
