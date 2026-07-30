@@ -50,10 +50,10 @@
 
 use iterative::{ApproxInverse, AuxiliarySpace, Jacobi, SelfAdjoint};
 use multialgebra::{Tensor, Variance, exterior_dim};
-use regge::coord::mesh::MeshCoords;
+use regge::coord::{mesh::MeshCoords, simplex::simplex_coords};
 use simplicial::{
-  linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
-  topology::complex::Complex,
+  linalg::{CooMatrix, CsrMatrix, Vector},
+  topology::{complex::Complex, simplex::Simplex},
 };
 
 use crate::{
@@ -105,7 +105,7 @@ pub fn vector_nodal_prolongation(
   let mut coo = CooMatrix::new(nrows, ncols);
   for (row, simp) in ksimplices.handle_iter().enumerate() {
     let vertices: Vec<usize> = simp.simplex().iter().collect();
-    let blade = tangent_blade(coords, &vertices, ambient, k);
+    let blade = tangent_blade(coords, simp.simplex());
     for &a in &vertices {
       for (comp, &value) in blade.components().iter().enumerate() {
         coo.push(row, comp * nvertices + a, factor * value);
@@ -124,11 +124,8 @@ pub fn vector_nodal_prolongation(
 /// The ambient counterpart of
 /// [`face_tangent_blade`](derham::project::face_tangent_blade), which is the
 /// same [`Tensor::blade_of`] taken in a cell's reference frame instead.
-fn tangent_blade(coords: &MeshCoords, vertices: &[usize], ambient: usize, k: usize) -> Tensor {
-  let base = coords.coord(vertices[0]).view();
-  let edges = Matrix::from_fn(ambient, k, |i, j| {
-    coords.coord(vertices[j + 1]).view()[i] - base[i]
-  });
+fn tangent_blade(coords: &MeshCoords, simp: &Simplex) -> Tensor {
+  let edges = simplex_coords(simp, coords).spanning_vectors();
   Tensor::blade_of(&edges, Variance::Contravariant)
 }
 

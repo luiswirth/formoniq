@@ -267,7 +267,7 @@ pub fn close_vertex_gaps(cells: Vec<Simplex>, coords: &MeshCoords) -> (Vec<Simpl
     .map(|cell| Simplex::new(cell.iter().map(relabel).collect()))
     .collect();
 
-  let columns: Vec<_> = used.iter().map(|&v| coords.coord(v).view()).collect();
+  let columns: Vec<_> = used.iter().map(|&v| coords.coord(v).into_view()).collect();
   let coords = MeshCoords::with_ambient(Matrix::from_columns(&columns), coords.ambient().clone());
   (cells, coords)
 }

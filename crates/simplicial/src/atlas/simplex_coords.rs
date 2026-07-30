@@ -122,17 +122,13 @@ impl<S: CoordSpace> SimplexCoords<S> {
   pub fn linear_transform(&self) -> Matrix {
     self.spanning_vectors()
   }
-  /// The pseudo-inverse $A^+$ of the linear part.
+  /// The pseudo-inverse $A^+$ of the linear part: the differential of the chart.
   ///
   /// A genuine inverse only when the realization is full-dimensional. On an
   /// embedded submanifold it is the Moore-Penrose one, which annihilates the
   /// normal space, a metric-dependent choice, and hence not canonical.
   pub fn inv_linear_transform(&self) -> Matrix {
-    if self.dim_intrinsic() == 0 {
-      Matrix::zeros(0, 0)
-    } else {
-      self.linear_transform().pseudo_inverse(1e-12).unwrap()
-    }
+    self.chart_transform().linear
   }
 
   /// Local2Global Tangentvector
@@ -147,13 +143,20 @@ impl<S: CoordSpace> SimplexCoords<S> {
   /// $psi_K$ as an affine map, typed by the two spaces it runs between: out of
   /// the chart's cartesian frame and into `S`.
   ///
-  /// A parametrization, and the type says so: its
-  /// [`pseudo_inverse`](AffineTransform::pseudo_inverse) is an
-  /// `AffineTransform<S, LocalCartesian>`, which is the chart.
+  /// A parametrization, and the type says so: its inverse is the chart,
+  /// [`Self::chart_transform`].
   pub fn affine_transform(&self) -> AffineTransform<LocalCartesian, S> {
     let translation = self.base_vertex().to_coords();
     let linear = self.linear_transform();
     AffineTransform::new(translation, linear)
+  }
+  /// $psi_K^(-1)$ as an affine map: the chart, out of `S` and into the chart's
+  /// cartesian frame.
+  ///
+  /// Inverse to [`Self::affine_transform`] on the affine hull of the simplex,
+  /// which for a full-dimensional realization is all of `S`.
+  pub fn chart_transform(&self) -> AffineTransform<S, LocalCartesian> {
+    self.affine_transform().pseudo_inverse()
   }
 
   /// $psi_K$: the parametrization, from the reference chart out into the space.
@@ -162,19 +165,22 @@ impl<S: CoordSpace> SimplexCoords<S> {
   }
   /// $psi_K^(-1)$: back from the space into the reference chart.
   pub fn global2local<'a>(&self, global: impl Into<CoordsRef<'a, S>>) -> Local {
-    self.affine_transform().apply_backward(global.into())
+    self.chart_transform().apply_forward(global.into())
   }
   pub fn global2bary<'a>(&self, global: impl Into<CoordsRef<'a, S>>) -> Bary {
     local2bary(&self.global2local(global))
   }
+  /// The point with the given barycentric coordinates: the affine combination of
+  /// the vertices weighted by them, which is what barycentric coordinates are.
   pub fn bary2global<'a>(&self, bary: impl Into<BaryRef<'a>>) -> Coords<S> {
-    let bary = bary.into();
-    let global: Vector = self
-      .coord_iter()
-      .zip(bary.view().iter())
-      .map(|(vi, &baryi)| baryi * vi.view())
-      .sum();
-    Coords::new(global)
+    Coords::affine_combination(
+      bary
+        .into()
+        .into_view()
+        .iter()
+        .copied()
+        .zip(self.coord_iter()),
+    )
   }
 
   /// Total differential of barycentric coordinate functions in the rows(!) of
@@ -187,10 +193,7 @@ impl<S: CoordSpace> SimplexCoords<S> {
   }
 
   pub fn barycenter(&self) -> Coords<S> {
-    let mut barycenter = Vector::zeros(self.dim_space().index());
-    self.coord_iter().for_each(|v| barycenter += v.view());
-    barycenter /= self.nvertices() as f64;
-    Coords::new(barycenter)
+    Coords::barycenter(self.coord_iter())
   }
   pub fn is_global_inside<'a>(&self, global: impl Into<CoordsRef<'a, S>>) -> bool {
     is_bary_inside(&self.global2bary(global))
@@ -287,6 +290,24 @@ mod test {
     for dim in (0..=4usize).map(Dim::from) {
       let computed = SimplexCoords::unit(dim).difbarys();
       assert_relative_eq!(computed, unit_difbarys(dim), epsilon = 1e-12);
+    }
+  }
+
+  /// A single vertex realized in $RR^N$: its one barycentric coordinate is
+  /// constantly $1$, so its differential is the zero covector of that space, and
+  /// the chart out of the empty local frame is the zero map. The degenerate end
+  /// of the range, on the same code as every other simplex.
+  #[test]
+  fn point_realized_in_ambient_space() {
+    for ambient in 0..=3 {
+      let point: SimplexCoords = SimplexCoords::new(Matrix::from_element(ambient, 1, 0.7));
+      assert_eq!(point.dim_intrinsic(), Dim::ZERO);
+      assert_eq!(point.inv_linear_transform().shape(), (0, ambient));
+      assert_relative_eq!(point.difbarys(), Matrix::zeros(1, ambient));
+      assert_relative_eq!(
+        point.barycenter().vector(),
+        &Vector::from_element(ambient, 0.7)
+      );
     }
   }
 
