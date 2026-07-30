@@ -38,7 +38,7 @@ use crate::operators::ElMatProvider;
 #[cfg(test)]
 use approx::assert_relative_eq;
 
-use iterative::{ApproxInverse, LinearOperator};
+use iterative::{Jacobi, LinearOperator};
 use metric::Metric;
 use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
@@ -178,39 +178,13 @@ pub fn diagonal<E: ElMatProvider>(op: &ElementOperator<'_, E>) -> Vector {
   )
 }
 
-/// The Jacobi approximate inverse of a matrix-free operator: $B = D^(-1)$,
-/// with $D$ read by [`diagonal`] rather than from an assembled matrix.
-#[derive(Clone, Debug)]
-pub struct MatrixFreeJacobi {
-  inv_diag: Vector,
+/// The Jacobi approximate inverse of a matrix-free operator, $B = omega
+/// D^(-1)$: the ordinary [`Jacobi`], handed the diagonal [`diagonal`] gathered
+/// instead of one read off an assembled matrix. A preconditioner does not care
+/// where its diagonal came from.
+pub fn jacobi<E: ElMatProvider>(op: &ElementOperator<'_, E>, omega: f64) -> Jacobi {
+  Jacobi::from_diagonal(&diagonal(op), omega)
 }
-
-impl MatrixFreeJacobi {
-  /// Panics on a zero diagonal entry, exactly as the assembled Jacobi does: a
-  /// positive-definite operator has none.
-  pub fn new<E: ElMatProvider>(op: &ElementOperator<'_, E>) -> Self {
-    let diag = diagonal(op);
-    assert!(
-      diag.iter().all(|&d| d != 0.0),
-      "a zero diagonal entry has no inverse"
-    );
-    Self {
-      inv_diag: diag.map(f64::recip),
-    }
-  }
-}
-
-impl ApproxInverse for MatrixFreeJacobi {
-  type Space = Vector;
-  fn dim(&self) -> usize {
-    self.inv_diag.len()
-  }
-  fn apply(&self, r: &Vector) -> Vector {
-    self.inv_diag.component_mul(r)
-  }
-}
-
-impl iterative::SelfAdjoint for MatrixFreeJacobi {}
 
 #[cfg(test)]
 mod test {
@@ -342,7 +316,7 @@ mod test {
     let stop = StopCriterion::rtol(1e-10);
 
     let (_, plain) = cg(&op, &Identity::new(b.len()), &b, stop);
-    let (_, jacobi) = cg(&op, &MatrixFreeJacobi::new(&op), &b, stop);
+    let (_, jacobi) = cg(&op, &jacobi(&op, 1.0), &b, stop);
     assert!(
       jacobi.iters < plain.iters,
       "{} vs {}",
