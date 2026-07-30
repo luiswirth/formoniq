@@ -518,7 +518,7 @@ impl Study {
   pub fn build(&self, mesh: &Mesh) -> Scene {
     let (topology, coords) = mesh;
     match self {
-      Study::Eigenmodes { grade, nmodes } => Scene::mesh_grade(topology, coords, *grade, *nmodes),
+      Study::Eigenmodes { grade, nmodes } => Scene::eigenmodes(topology, coords, *grade, *nmodes),
       Study::WhitneyBasis => Scene::whitney_basis_mesh(topology.clone(), coords.clone()),
       Study::Cochains(specs) => Scene::cochains(topology.clone(), coords.clone(), specs),
       Study::HodgeDecomposition => Scene::hodge_decomposition(topology.clone(), coords.clone()),
