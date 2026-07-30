@@ -160,10 +160,15 @@ impl WhitneyExpansion {
   /// [`unit_bary_gramian`](simplicial::atlas::unit_bary_gramian), the result is
   /// the Hodge mass matrix at unit volume.
   ///
-  /// The factors are taken apart because their tensor product is the one thing
-  /// worth not forming: $C$ has $k+1$ nonzeros per column, so the sum here runs
-  /// over $(k+1)^2$ terms per entry, where the product has
-  /// $(n+1)^2 binom(n+1,k)^2$.
+  /// Not forming $H times.circle Q$ is the general rule
+  /// ([`apply_factorwise`](multialgebra::tensor::apply_factorwise)), and not
+  /// what is special here. What is special is that $C$ is **sparse**: the
+  /// deletion formula gives it $k+1$ nonzeros per column, so an entry is a sum
+  /// over $(k+1)^2$ pairs rather than over the $(n+1) binom(n+1,k)$ dimensions
+  /// of the product space. That sparsity is a property of the Whitney basis, not
+  /// of the tensor product, so it is spent here and cannot be spent by the
+  /// algebra: a generic factored application would hand back dense columns and
+  /// be slower than this.
   pub fn pullback(&self, blade: &Matrix, bary: &Matrix) -> Matrix {
     let mut pullback = Matrix::zeros(self.dofs.len(), self.dofs.len());
     for (i, asimp) in self.dofs.iter().enumerate() {
