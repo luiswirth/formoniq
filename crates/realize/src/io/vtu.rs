@@ -35,7 +35,7 @@ use std::path::Path;
 
 use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use metric::Metric;
-use multialgebra::{ExteriorGrade, Tensor};
+use multialgebra::Tensor;
 use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};
 use simplicial::{
   Dim, Sign,
@@ -43,7 +43,7 @@ use simplicial::{
   topology::{complex::Complex, role::Cell},
 };
 
-use crate::reduce::{reduced_form, scalarize};
+use crate::reduce::{reduced_form, reduction_sign, scalarize};
 
 /// The largest dimension VTU can encode, intrinsic and ambient alike: its cell
 /// zoo stops at the tetrahedron and its points are 3-tuples.
@@ -72,6 +72,9 @@ pub enum VtuError {
   AmbientDimTooHigh(usize),
   /// The coordinates or a cochain do not belong to this complex.
   Incompatible(String),
+  /// A field whose reduction is a direction, on a mesh carrying no coherent
+  /// orientation for the star to fire against.
+  NoOrientation(String),
   Io(io::Error),
 }
 
@@ -87,6 +90,10 @@ impl std::fmt::Display for VtuError {
         "an embedding in {dim} dimensions does not fit VTU, whose points are 3-tuples"
       ),
       Self::Incompatible(what) => write!(f, "{what} does not belong to this complex"),
+      Self::NoOrientation(what) => write!(
+        f,
+        "{what} reduces to a direction, which a mesh with no coherent orientation does not have"
+      ),
       Self::Io(err) => write!(f, "{err}"),
     }
   }
@@ -137,6 +144,21 @@ pub fn to_string(
     .find(|f| !f.cochain.is_compatible_with(topology))
   {
     return Err(VtuError::Incompatible(format!(
+      "the cochain `{}`",
+      bad.name
+    )));
+  }
+  // A signed density falls back to its magnitude where no orientation fixes the
+  // volume form (invariant 6), but a direction has no such reading, so a field
+  // reducing to one is refused rather than starred against each cell's own
+  // colex frame, which would paint the indexing convention onto the file.
+  if topology.orientation().is_none()
+    && let Some(bad) = fields.iter().find(|f| {
+      let k = f.cochain.grade().index();
+      k > n.index() - k && k.min(n.index() - k) == 1
+    })
+  {
+    return Err(VtuError::NoOrientation(format!(
       "the cochain `{}`",
       bad.name
     )));
@@ -306,29 +328,11 @@ fn push_cell_data(
   xml.push_str("      </CellData>\n");
 }
 
-/// The sign the top-grade reduction is read with: the cell's coherent
-/// orientation where the manifold has one, and `None` otherwise.
-///
-/// `None` is not a fallback that hides a failure. A signed density is a reading
-/// against a global volume form, a non-orientable manifold has none, and the
-/// magnitude is what is left that is true (invariant 6): the star is refused
-/// rather than taken per cell against each cell's own colex frame, which would
-/// paint the indexing convention onto the file.
-fn orientation_sign(topology: &Complex, cell: Cell, grade: ExteriorGrade) -> Option<Sign> {
-  let n = topology.dim().index();
-  let k = grade.index();
-  if k <= n - k {
-    return None;
-  }
-  topology
-    .orientation()
-    .map(|orientation| orientation.sign(cell))
-}
-
 /// One sample of the field per cell, at the cell's barycenter, handed to the
 /// caller's reduction together with the cell's metric and the sign the star is
-/// read against. The one place a cochain is evaluated, so the scalar and the
-/// vector mark cannot sample at different points.
+/// read against ([`reduction_sign`], `None` where the star has no coherent
+/// orientation to fire against). The one place a cochain is evaluated, so the
+/// scalar and the vector mark cannot sample at different points.
 fn sample_cells<T>(
   topology: &Complex,
   coords: &MeshCoords,
@@ -341,7 +345,7 @@ fn sample_cells<T>(
     .handle_iter()
     .map(|cell| {
       let metric = coords.cell_metric(cell);
-      let sign = orientation_sign(topology, cell, cochain.grade());
+      let sign = reduction_sign(topology, cell, cochain.grade());
       let form = interpolant.eval(&MeshPoint::barycenter(cell.idx()));
       reduce(cell, form, &metric, sign)
     })
@@ -351,9 +355,15 @@ fn sample_cells<T>(
 /// The reduced grade-1 field per cell, sharped to a vector and pushed forward
 /// into ambient coordinates, padded to the format's 3-tuple. The same
 /// composition the glyph mark draws.
+///
+/// The sign is required rather than defaulted: a direction has no
+/// orientation-free reading the way a magnitude does, so a starred vector field
+/// on a non-orientable mesh is refused in [`to_string`] rather than written
+/// against each cell's own colex frame.
 fn cell_vectors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<[f64; 3]> {
   sample_cells(topology, coords, cochain, |cell, form, metric, sign| {
-    let field = reduced_form(form, metric, sign.unwrap_or(Sign::Pos)).musical(metric);
+    let sign = sign.expect("a starred vector field is refused on a non-orientable mesh");
+    let field = reduced_form(form, metric, sign).musical(metric);
     let ambient = field
       .pushforward(&cell.coord_simplex(coords).linear_transform())
       .components()
@@ -661,7 +671,7 @@ mod tests {
     let interpolant = WhitneyInterpolant::new(cochain.clone(), &topology);
     for (cell, ambient) in topology.cells().handle_iter().zip(written) {
       let metric = coords.cell_metric(cell);
-      let sign = crate::reduce::reduction_sign(&topology, cell, cochain.grade());
+      let sign = crate::reduce::admitted_reduction_sign(&topology, cell, cochain.grade());
       let form = interpolant.eval(&MeshPoint::barycenter(cell.idx()));
       let expected = cell.coord_simplex(&coords).pushforward_vector(
         reduced_form(form, &metric, sign)

@@ -170,7 +170,7 @@ pub fn bake_glyphs(
     .into_par_iter()
     .flat_map_iter(|cell| {
       let metric = coords.cell_metric(cell);
-      let sign = crate::reduce::reduction_sign(topology, cell, cochain.grade());
+      let sign = crate::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
       // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential
       // pushes the sharped field out of the cell's tangent frame into the
       // ambient one, and `global2bary` reads a point back to the weights the

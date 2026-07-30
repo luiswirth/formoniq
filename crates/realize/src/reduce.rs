@@ -114,29 +114,33 @@ pub fn scalarize(form: Tensor, metric: &Metric, signed: Option<Sign>) -> f64 {
 /// reduction is the identity (no star, so no volume form and no orientation),
 /// otherwise the cell's coherent orientation.
 ///
-/// Panics on a non-orientable complex, and the contract that makes it sound is
-/// the caller's: a field whose reduction needs the star must not be admitted
-/// on a mesh with no coherent orientation, so holding a field that reaches here
-/// is already the proof that the orientation exists. The refusal belongs where
-/// the field is admitted, once, rather than at every draw, which is why this
-/// is a panic and not a `Result`.
-///
-/// A consumer that cannot make that promise up front asks
-/// [`Complex::orientation`](simplicial::topology::complex::Complex::orientation)
-/// itself and passes `None` to [`scalarize`], which is the honest magnitude.
-/// What no consumer may do is star per cell against each cell's own colex
-/// frame: that returns $plus.minus$ the true density with the sign flipping
-/// wherever colex disagrees with the manifold, which is plausible on screen and
-/// wrong.
-pub fn reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGrade) -> Sign {
+/// `None` is the one case where the reduction has no sign to be read with: the
+/// star fires and the complex is not orientable, so there is no global volume
+/// form to read it against. What no consumer may do then is star per cell
+/// against each cell's own colex frame: that returns $plus.minus$ the true
+/// value with the sign flipping wherever colex disagrees with the manifold,
+/// which is plausible on screen and wrong. A scalar mark still has the honest
+/// magnitude ([`scalarize`] with `None`); a direction has no such reading and
+/// the mark is refused instead.
+pub fn reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGrade) -> Option<Sign> {
   let n = topology.dim();
   if grade <= n - grade {
-    return Sign::Pos;
+    return Some(Sign::Pos);
   }
-  topology
-    .orientation()
+  Some(topology.orientation()?.sign(cell))
+}
+
+/// [`reduction_sign`] under the caller's standing promise that the field was
+/// admitted on an orientable mesh.
+///
+/// A field whose reduction needs the star must not be admitted on a mesh with
+/// no coherent orientation, so holding one that reaches a mark is already the
+/// proof that the orientation exists. The refusal belongs where the field is
+/// admitted, once, rather than at every draw, which is why this panics rather
+/// than widening every mark's signature.
+pub fn admitted_reduction_sign(topology: &Complex, cell: Cell, grade: ExteriorGrade) -> Sign {
+  reduction_sign(topology, cell, grade)
     .expect("a starred field is only filed on an orientable mesh")
-    .sign(cell)
 }
 
 /// The surface colormap scalar at every rendered triangle corner, three per
@@ -339,7 +343,8 @@ pub fn reduced_value(
   weights[ilocal] = 1.0;
   let point = MeshPoint::new(cell.idx(), weights.into());
   let k = interpolant.cochain().grade();
-  let signed = (k == cell.complex().dim()).then(|| reduction_sign(cell.complex(), cell, k));
+  let signed =
+    (k == cell.complex().dim()).then(|| admitted_reduction_sign(cell.complex(), cell, k));
   scalarize(interpolant.eval(&point), metric, signed)
 }
 
@@ -390,7 +395,7 @@ pub fn trace_value(
   // A top form is the manifold's own only on a cell ($d = n$). On a face it is
   // top for the face while no coherent orientation reaches it, so it reduces by
   // magnitude like every other grade.
-  let signed = (k == n && d == n).then(|| reduction_sign(topology, simplex.role(), k));
+  let signed = (k == n && d == n).then(|| admitted_reduction_sign(topology, simplex.role(), k));
   scalarize(form, &coords.simplex_metric(simplex), signed)
 }
 

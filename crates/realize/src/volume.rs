@@ -25,7 +25,7 @@ use regge::coord::mesh::MeshCoords;
 use simplicial::topology::complex::Complex;
 use simplicial::{Dim, atlas::MeshPoint};
 
-use crate::reduce::{reduction_sign, scalarize};
+use crate::reduce::{admitted_reduction_sign, scalarize};
 
 /// Voxels per axis, chosen so one voxel is about the mesh's own mean edge
 /// length and clamped to what a texture upload should carry. Derived from the
@@ -120,7 +120,7 @@ fn sample_at(
   n: Dim,
 ) -> f64 {
   let cell = point.chart(topology);
-  let signed = (k == n).then(|| reduction_sign(topology, cell, k));
+  let signed = (k == n).then(|| admitted_reduction_sign(topology, cell, k));
   scalarize(
     interpolant.eval(point),
     &coords.simplex_metric(cell.get()),
