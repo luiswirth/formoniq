@@ -80,7 +80,12 @@ impl SimplexLengthsSq {
 
   /// The shape regularity measure of this cell.
   pub fn shape_regularity(&self) -> f64 {
-    self.diameter().powi(self.dim().index() as i32) / self.vol()
+    self.volume_scale() / self.vol()
+  }
+  /// The order of magnitude a non-degenerate volume has at this diameter,
+  /// $"diam"^n$: the scale against which a volume is small or large.
+  pub fn volume_scale(&self) -> f64 {
+    self.diameter().powi(self.dim().index() as i32)
   }
 
   pub fn vector(&self) -> &Vector {
@@ -169,10 +174,23 @@ impl SimplexLengthsSq {
   pub fn vol(&self) -> f64 {
     self.cayley_menger_det().abs().sqrt()
   }
+  /// Whether the induced metric is degenerate: the volume vanishes against
+  /// [`Self::volume_scale`], the volume a simplex of this diameter would
+  /// otherwise have.
+  ///
+  /// The comparison is relative, so the predicate is invariant under a uniform
+  /// scaling of the geometry, as degeneracy itself is. An absolute bound on the
+  /// volume would instead call every simplex of a fine mesh degenerate, the
+  /// more so the higher the dimension.
   pub fn is_degenerate(&self) -> bool {
-    self.vol() <= 1e-12
+    self.vol() <= DEGENERACY_FLOOR * self.volume_scale()
   }
 }
+
+/// The relative floor a volume must clear to count as non-degenerate: the
+/// reciprocal of the shape regularity a simplex may reach before its metric is
+/// numerically singular.
+const DEGENERACY_FLOOR: f64 = 1e-12;
 pub fn cayley_menger_factor(dim: Dim) -> f64 {
   (-1.0f64).powi(dim.index() as i32 + 1)
     / factorial(dim.index()).pow(2) as f64
@@ -319,6 +337,23 @@ mod test {
         let regge = SimplexLengthsSq::from_metric(&g);
         assert_relative_eq!(regge.metric().matrix(), g.matrix(), epsilon = 1e-12);
         assert_eq!(regge.metric().signature(), (dim.index() - q, q));
+      }
+    }
+  }
+
+  /// Degeneracy is measured against the simplex's own scale, so a uniform
+  /// scaling leaves it alone. Collapsing two vertices onto each other, which
+  /// makes two rows of the distance matrix agree, trips it at every scale.
+  #[test]
+  fn degeneracy_is_scale_invariant() {
+    for dim in (2..=4usize).map(Dim::from) {
+      for scale in [1e-4, 1.0, 1e4] {
+        let mut lengths = SimplexLengthsSq::unit(dim);
+        *lengths.vector_mut() *= scale * scale;
+        assert!(!lengths.is_degenerate());
+
+        lengths.vector_mut()[edge_index(1, 2)] = 0.0;
+        assert!(lengths.is_degenerate());
       }
     }
   }
