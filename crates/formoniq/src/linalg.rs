@@ -30,6 +30,11 @@ enum Factorization {
 /// A direct SPD factorization presented as an [`iterative::ApproxInverse`]: the
 /// exact inverse $B = A^(-1)$, the perfect approximate inverse.
 ///
+/// This is the crate's SPD direct solve, and every one of them goes through
+/// it: the verification below is a property of the factorization, not of one
+/// caller that remembered to ask for it. [`faer::FaerCholesky`] is the raw
+/// backend binding underneath.
+///
 /// The bridge that lets a direct factorization serve as a block of a
 /// preconditioner, an exact inner solve on one space of a saddle point,
 /// so a block-diagonal preconditioner over these makes MINRES converge in an
@@ -56,6 +61,12 @@ pub struct DirectInverse {
 const PROBE_RTOL: f64 = 1e-8;
 
 impl DirectInverse {
+  /// The verified SPD direct solve. Panics where the matrix is not positive
+  /// definite; [`Self::try_new`] is the fallible variant.
+  pub fn new(a: CsrMatrix) -> Self {
+    Self::try_new(a).expect("a direct SPD solve needs a positive definite matrix")
+  }
+
   /// Factor an SPD block, `None` if it is not positive definite (so a caller
   /// building a block preconditioner can fall back to a whole-system indefinite
   /// solve on a Lorentzian geometry).

@@ -235,12 +235,6 @@ impl GradeKHodgeHx {
   }
 }
 
-/// The direct SPD inverse of an auxiliary operator, expecting positive
-/// definiteness (the Riemannian case the auxiliary solves require).
-fn direct(operator: CsrMatrix) -> DirectInverse {
-  DirectInverse::try_new(operator).expect("auxiliary operator must be SPD")
-}
-
 /// The grade-`grade` HX auxiliary-space preconditioner on `complex`: the
 /// smoother and the two corrections, with `blocks` supplying the inverse of each
 /// auxiliary operator.
@@ -293,10 +287,10 @@ struct DirectBlocks<'a>(&'a WhitneyComplex<'a>);
 
 impl AuxiliaryBlocks for DirectBlocks<'_> {
   fn gradient(&self, grade: ExteriorGrade) -> Box<dyn SelfAdjoint<Space = Vector>> {
-    Box::new(direct(self.0.hdif_gram(grade)))
+    Box::new(DirectInverse::new(self.0.hdif_gram(grade)))
   }
   fn nodal(&self) -> Box<dyn SelfAdjoint<Space = Vector>> {
-    Box::new(direct(self.0.hdif_gram(0)))
+    Box::new(DirectInverse::new(self.0.hdif_gram(0)))
   }
 }
 
