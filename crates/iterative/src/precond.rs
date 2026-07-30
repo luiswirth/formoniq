@@ -68,6 +68,15 @@ impl Jacobi {
         diag[i] = v;
       }
     }
+    Self::from_diagonal(&diag, omega)
+  }
+
+  /// The weighted Jacobi inverse of an operator given by its diagonal alone.
+  ///
+  /// The diagonal is the whole datum, so an operator that never forms its
+  /// entries still has one to offer: the diagonal of a sum is the sum of the
+  /// diagonals, which a matrix-free operator can gather from its parts.
+  pub fn from_diagonal(diag: &Vector, omega: f64) -> Self {
     assert!(
       diag.iter().all(|&d| d != 0.0),
       "Jacobi needs a nonzero diagonal"
