@@ -542,6 +542,54 @@ impl Tensor {
     }
   }
 
+  /// Replace the slots at `span` by `replacement`, scattering the components
+  /// through a weighted map of that span's own component index.
+  ///
+  /// The shape every local operation of the algebra has. A merge, a
+  /// contraction and an endomorphism of one slot each touch a run of adjacent
+  /// slots and leave the rest alone, so the combinatorics runs once per index
+  /// of the span while every component sharing that index rides along as a
+  /// stride. What differs between them is only the weighted map, which is what
+  /// they pass in.
+  ///
+  /// `scatter` yields `(from, to, weight)`, `from` an index of the span's own
+  /// component space and `to` one of the replacement's, both in the same
+  /// first-slot-fastest order the strides carry.
+  ///
+  /// The slots outside the span are counted as products rather than by
+  /// dividing the component count, so a slot naming the trivial space leaves
+  /// an empty sweep instead of a division by zero.
+  fn rewrite_span(
+    &self,
+    span: std::ops::Range<usize>,
+    replacement: impl IntoIterator<Item = Slot>,
+    scatter: impl IntoIterator<Item = (usize, usize, f64)>,
+  ) -> Self {
+    let mut slots: Slots = self.slots[..span.start].iter().copied().collect();
+    slots.extend(replacement);
+    let target_span = tensor_dim(&slots[span.start..]);
+    slots.extend_from_slice(&self.slots[span.end..]);
+
+    let source_span = tensor_dim(&self.slots[span.clone()]);
+    let inner = self.strides[span.start];
+    let outer = tensor_dim(&self.slots[span.end..]);
+
+    let mut rewritten = Self::zero(slots);
+    for (from, to, weight) in scatter {
+      if weight == 0.0 {
+        continue;
+      }
+      for block in 0..outer {
+        let source = (block * source_span + from) * inner;
+        let target = (block * target_span + to) * inner;
+        for offset in 0..inner {
+          rewritten.components[target + offset] += weight * self.components[source + offset];
+        }
+      }
+    }
+    rewritten
+  }
+
   /// Merge factor `first` with the one after it into a single factor of the
   /// summed degree: the wedge on two alternating factors, the polynomial
   /// product on two symmetric ones.
@@ -564,37 +612,31 @@ impl Tensor {
       "a merge combines two slots of one variance"
     );
 
-    let mut merged_slots = self.slots.clone();
-    merged_slots.remove(first + 1);
-    merged_slots[first] = left.with_degree(left.degree() + right.degree());
-    let mut merged = Self::zero(merged_slots);
+    // The pair of ranks is one index of the two-slot span, the left slot the
+    // faster of the two.
+    let left_dim = left.multidim();
+    let pairs = right
+      .basis()
+      .enumerate()
+      .flat_map(move |(right_rank, right_index)| {
+        left
+          .basis()
+          .enumerate()
+          .filter_map(move |(left_rank, left_index)| {
+            let (sign, product) = left_index.merge(&right_index)?;
+            Some((
+              right_rank * left_dim + left_rank,
+              product.rank(),
+              sign.as_f64(),
+            ))
+          })
+      });
 
-    // The combinatorics runs once per pair of indices of the two touched
-    // factors. The rest ride along as strides, counted as products rather than
-    // by dividing the component count, so a factor naming the trivial space
-    // leaves an empty sweep instead of a division by zero.
-    let (left_dim, right_dim) = (left.multidim(), right.multidim());
-    let inner = self.strides[first];
-    let outer = tensor_dim(&self.slots[first + 2..]);
-    let merged_dim = merged.slots[first].multidim();
-
-    for (left_rank, left_index) in left.basis().enumerate() {
-      for (right_rank, right_index) in right.basis().enumerate() {
-        let Some((sign, product)) = left_index.merge(&right_index) else {
-          continue;
-        };
-        let sign = sign.as_f64();
-        let product_rank = product.rank();
-        for block in 0..outer {
-          let from = ((block * right_dim + right_rank) * left_dim + left_rank) * inner;
-          let to = (block * merged_dim + product_rank) * inner;
-          for offset in 0..inner {
-            merged.components[to + offset] += sign * self.components[from + offset];
-          }
-        }
-      }
-    }
-    merged
+    self.rewrite_span(
+      first..first + 2,
+      [left.with_degree(left.degree() + right.degree())],
+      pairs,
+    )
   }
 
   /// Contract factor `which` with a grade-one element of the dual variance:
@@ -608,11 +650,12 @@ impl Tensor {
   /// Total at the trivial end: contracting a degree-zero factor lands in the
   /// trivial space, the empty index having no deletions.
   pub fn contract(&self, which: usize, dual: &Tensor) -> Self {
+    let slot = self.slots[which];
+    assert_eq!(dual.slots.len(), 1, "contraction is with a single slot");
     assert_eq!(
-      dual.slots[0].dim, self.slots[which].dim,
+      dual.slots[0].dim, slot.dim,
       "contraction is against an element of the slot's own space"
     );
-    assert_eq!(dual.slots.len(), 1, "contraction is with a single slot");
     assert_eq!(
       dual.slots[0].degree(),
       1,
@@ -620,39 +663,21 @@ impl Tensor {
     );
     assert_eq!(
       dual.slots[0].variance,
-      self.slots[which].variance.dual(),
+      slot.variance.dual(),
       "contraction is against the dual variance"
     );
 
-    let mut contracted_slots = self.slots.clone();
-    contracted_slots[which] = contracted_slots[which].with_degree(self.slots[which].degree() - 1);
-    let mut contracted = Self::zero(contracted_slots);
+    let deletions = slot.basis().enumerate().flat_map(move |(rank, index)| {
+      index
+        .deletions()
+        .map(move |(sign, symbol, reduced)| (rank, reduced.rank(), sign.as_f64() * dual[symbol]))
+    });
 
-    // As in `merge`: the deletions of one index are enumerated once, and every
-    // component sharing it is swept by stride arithmetic.
-    let slot = self.slots[which];
-    let basis_dim = slot.multidim();
-    let inner = self.strides[which];
-    let outer = tensor_dim(&self.slots[which + 1..]);
-    let reduced_dim = contracted.slots[which].multidim();
-
-    for (rank, index) in slot.basis().enumerate() {
-      for (sign, symbol, reduced) in index.deletions() {
-        let weight = sign.as_f64() * dual.components[symbol];
-        if weight == 0.0 {
-          continue;
-        }
-        let reduced_rank = reduced.rank();
-        for block in 0..outer {
-          let from = (block * basis_dim + rank) * inner;
-          let to = (block * reduced_dim + reduced_rank) * inner;
-          for offset in 0..inner {
-            contracted.components[to + offset] += weight * self.components[from + offset];
-          }
-        }
-      }
-    }
-    contracted
+    self.rewrite_span(
+      which..which + 1,
+      [slot.with_degree(slot.degree() - 1)],
+      deletions,
+    )
   }
 
   /// Move one degree from one factor to another, summed over the basis of the
@@ -908,32 +933,17 @@ impl Tensor {
   /// # Panics
   /// If the matrix is not square of the slot's extent.
   pub fn apply_to_slot(&self, which: usize, matrix: &Matrix) -> Self {
-    let stride = self.strides[which];
-    let dim = self.slots[which].multidim();
+    let slot = self.slots[which];
+    let dim = slot.multidim();
     assert_eq!(
       (matrix.nrows(), matrix.ncols()),
       (dim, dim),
       "a slot keeps its extent under an endomorphism of it"
     );
-    let outer = tensor_dim(&self.slots[which + 1..]);
 
-    let mut components = Vector::zeros(self.components.len());
-    for before in 0..outer {
-      for source in 0..dim {
-        for after in 0..stride {
-          let from = (before * dim + source) * stride + after;
-          let value = self.components[from];
-          if value == 0.0 {
-            continue;
-          }
-          for target in 0..dim {
-            components[(before * dim + target) * stride + after] +=
-              matrix[(target, source)] * value;
-          }
-        }
-      }
-    }
-    Self::new(self.slots.clone(), components)
+    let entries = (0..dim)
+      .flat_map(|source| (0..dim).map(move |target| (source, target, matrix[(target, source)])));
+    self.rewrite_span(which..which + 1, [slot], entries)
   }
 
   /// The variance every slot shares, or a panic naming why a mixed tensor has
