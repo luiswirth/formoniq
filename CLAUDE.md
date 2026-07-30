@@ -533,17 +533,17 @@ The exterior derivative and the Koszul operator are likewise one operation,
 `Tensor::transfer`, in its two directions.
 Never re-introduce a second implementation of either family.
 
-**The symmetric basis is unnormalized, and therefore not self-dual.**
-$x^alpha$ sums over all $k!$ orderings, so $norm(x^alpha)^2 = alpha!$
-and the dual of $x^alpha$ is $x^alpha \/ alpha!$.
-Every operation that *dualizes* a symmetric slot therefore carries that multiplicity:
-the duality pairing weights by it,
-and a pullback is the transpose of the functor conjugated by it, not the bare transpose.
-Never write the factorial: `basis_multiplicity` reads it off
-`Factor::induced_form` of the identity, one convention in one place at any degree.
-Every $alpha!$ is $1$ on $Lambda^k$,
-so a law swept over the alternating family alone says nothing about any of this,
-and a law that dualizes is swept over both.
+**The stored basis is multiplicative, hence not self-dual.**
+$x^alpha x^beta = x^(alpha+beta)$ and $e_I wedge e_J = plus.minus e_(I union J)$
+with unit coefficients, which is what lets the two families be one construction.
+The price is $norm(x^alpha)^2 = alpha!$ on a symmetric slot,
+so anything that *dualizes* one reads `Tensor::reciprocal`
+and lands through `Tensor::from_reciprocal`,
+never `components` and never a factorial written by hand.
+Both bases are rational; an orthonormal one would need $sqrt(alpha!)$, and none is used.
+Every $alpha!$ is $1$ on $Lambda^k$, where the two bases coincide,
+so a law swept over the alternating family alone says nothing about any of this:
+**a law that dualizes is swept over both families.**
 
 **Combinations and compositions are different objects.**
 A `Combination` is a subset, the basis of $Lambda^k$:

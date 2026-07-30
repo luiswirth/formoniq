@@ -486,12 +486,12 @@ pub fn induced(slots: &[Slot], map: &Matrix) -> Matrix {
 /// [`Factor::induced_form`] of the identity, read off there rather than
 /// recomputed so one convention serves both.
 ///
-/// This is what makes the unnormalized symmetric basis **not self-dual**, and
-/// therefore what stands between the functor and its transpose: the matrix of a
-/// pullback on this basis is $D^(-1) (F A)^top D$, not $(F A)^top$. Every
-/// $alpha!$ is $1$ without repetition, which is why the distinction is
-/// invisible on $Lambda^k$ and why it has to be written down here.
-pub fn basis_multiplicity(slots: &[Slot], dim: impl Into<Dim>) -> Vector {
+/// **Deliberately not public.** It is the change of basis between the monomial
+/// basis and its reciprocal, and the only ways to spend it are
+/// [`Tensor::reciprocal`] and [`Tensor::from_reciprocal`], which say which basis
+/// they mean. Applying the weights by hand is how the two operations that
+/// dualize came to disagree with each other in the first place.
+pub(crate) fn basis_multiplicity(slots: &[Slot], dim: impl Into<Dim>) -> Vector {
   let dim = dim.into().index();
   slots
     .iter()

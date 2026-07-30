@@ -275,6 +275,39 @@ impl Tensor {
   pub fn into_components(self) -> Vector {
     self.components
   }
+
+  /// The components in the **reciprocal basis**: the basis dual to the one a
+  /// tensor stores its components in.
+  ///
+  /// The stored basis is *multiplicative*, $x^alpha x^beta = x^(alpha + beta)$
+  /// and $e_I wedge e_J = plus.minus e_(I union J)$ with unit coefficients,
+  /// which is what lets $Lambda$ and $"Sym"$ be one construction. The price is
+  /// that it is not self-dual on a symmetric slot: $x^alpha$ sums over all $k!$
+  /// orderings, so $norm(x^alpha)^2 = alpha!$ and the reciprocal basis element
+  /// is $x^alpha \/ alpha!$. Both bases are rational; only an *orthonormal* one
+  /// would need $sqrt(alpha!)$, and none is used here.
+  ///
+  /// **Everything that dualizes a slot reads through this**: the duality
+  /// pairing, and the pullback, which is the adjoint of the pushforward and so a
+  /// pairing in disguise. The multiplicative operations use
+  /// [`Self::components`] directly. On $Lambda^k$ the two coincide, every
+  /// $alpha!$ being $1$, which is why a law swept over the alternating family
+  /// alone says nothing about any of this.
+  pub fn reciprocal(&self) -> Vector {
+    self
+      .components
+      .component_mul(&basis_multiplicity(&self.slots, self.dim()))
+  }
+
+  /// A tensor from its components in the reciprocal basis: the inverse of
+  /// [`Self::reciprocal`], and what a dualizing operation ends with.
+  pub fn from_reciprocal(slots: impl Into<Slots>, reciprocal: Vector) -> Self {
+    let slots = slots.into();
+    let dim = slots.first().map_or(0, |slot| slot.dim.index());
+    let components = reciprocal.component_div(&basis_multiplicity(&slots, dim));
+    Self::new(slots, components)
+  }
+
   /// The dimension of the space this tensor lives in.
   pub fn multidim(&self) -> usize {
     self.components.len()
@@ -927,16 +960,12 @@ impl Tensor {
     }
     let slots: Slots = self.slots.iter().map(|s| s.with_dim(map.ncols())).collect();
 
-    // The pullback is the transpose of the functor, *conjugated by the basis
-    // multiplicity*: the unnormalized symmetric basis is not self-dual, so
-    // dualizing picks up alpha! on the codomain and drops it on the domain. On
-    // an alternating slot every factor is 1 and this is the bare transpose.
-    let codomain = basis_multiplicity(&self.slots, self.dim());
-    let domain = basis_multiplicity(&slots, map.ncols());
-    let weighted = self.components.component_mul(&codomain);
-    let components = (self.induced_matrix(map).transpose() * weighted).component_div(&domain);
-
-    Self::new(slots, components)
+    // A pullback dualizes: it is the adjoint of the pushforward, so it acts on
+    // the reciprocal components and lands in the reciprocal basis of the domain.
+    // On a symmetric slot that is what makes it the transpose of the functor
+    // conjugated by alpha! rather than the bare transpose.
+    let transported = self.induced_matrix(map).transpose() * self.reciprocal();
+    Self::from_reciprocal(slots, transported)
   }
 }
 
@@ -951,12 +980,12 @@ impl Tensor {
 /// privileges neither argument. It is symmetric in them, `pairing(a, b)` being
 /// `pairing(b, a)`, which method syntax would quietly deny.
 ///
-/// Weighted by [`basis_multiplicity`], because the unnormalized symmetric basis
-/// is **not self-dual**: the dual of $x^alpha$ is $x^alpha \/ alpha!$, so
-/// pairing the packed components against each other bare would be off by
-/// $alpha!$ on every repeated symbol. The weight is $1$ throughout on
-/// $Lambda^k$, where the basis *is* self-dual, which is why the plain dot
-/// product is right there and only there.
+/// One side is read in the **reciprocal basis** ([`Tensor::reciprocal`]), which
+/// is what the pairing of a basis element with its dual means. Either side will
+/// do and the answer is the same, which is the pairing's symmetry stated in the
+/// implementation. A plain dot product of the stored components would be off by
+/// $alpha!$ on every repeated symbol, and right on $Lambda^k$, where the two
+/// bases coincide.
 pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
   assert_eq!(
     left.slots().len(),
@@ -970,11 +999,7 @@ pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
       "a pairing is against the dual variance, slot for slot"
     );
   }
-  let multiplicity = basis_multiplicity(left.slots(), left.dim());
-  left
-    .components()
-    .component_mul(&multiplicity)
-    .dot(right.components())
+  left.reciprocal().dot(right.components())
 }
 
 /// The wedge pairing $Lambda^k times Lambda^(n-k) -> RR$,
