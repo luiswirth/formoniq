@@ -30,10 +30,20 @@ via the combinatorial number system.
 - Permutation parity:
   `Sign` as the sign group, and sorting that reports the parity of the sorting permutation.
 - Weak compositions (stars and bars), enumerated through the same colex bijection.
-- `cartesian`: positional (radix) multi-indices for tensor-product index sets.
+- `cartesian`: positional (radix) multi-indices for tensor-product index sets,
+  and `Word`, the free family, where there is no symmetry to quotient by
+  and so nothing to compress.
   A radix-2 index is a cube corner, that is, a `Combination` of axes.
+- `Permutation`: the symmetric group in one-line notation,
+  ranked in the factorial number system, carrying the sign homomorphism.
 
-The bitset representation caps indices at 64 (`MAX_NINDICES`), asserted at construction.
+The bitset caps the *shifted* alphabet at 128 (`MAX_SHIFTED_SYMBOLS`),
+asserted at construction.
+That reads differently for the two families:
+a combination may span 128 indices,
+while a composition over n symbols reaches degree 128 − n + 1.
+`Composition` stores its exponent vector directly rather than as a bitset,
+so its degree stays unbounded.
 
 ## Correctness
 

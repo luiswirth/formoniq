@@ -89,6 +89,10 @@ impl Word {
   pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
     (0..self.degree).map(move |position| self.symbol(position))
   }
+  /// How many positions carry a symbol.
+  pub fn multiplicity(&self, symbol: usize) -> usize {
+    self.iter().filter(|&s| s == symbol).count()
+  }
 
   /// The number of words of a degree over an alphabet: $n^k$.
   ///
