@@ -6,6 +6,7 @@ extern crate nalgebra_sparse as nas;
 pub mod assemble;
 pub mod bc;
 pub mod fe;
+pub mod harmonic;
 pub mod hx;
 pub mod linalg;
 pub mod matfree;

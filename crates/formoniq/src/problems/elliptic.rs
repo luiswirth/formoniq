@@ -183,6 +183,19 @@ pub fn solve_source<C: HilbertComplex>(
   Ok((sigma, u, p))
 }
 
+/// An $M_k$-orthonormal basis of the discrete harmonic space $cal(H)^k$, the
+/// form the mixed saddle point of [`solve_source`] needs.
+///
+/// Computed by [`crate::harmonic::harmonics`], the $L^2$ projection of integral
+/// cohomology generators, which is exact in $dif h = 0$ and takes its dimension
+/// from topology rather than from an eigenvalue tolerance. On a geometry where
+/// that projection is not well posed, an indefinite $L^2$ pairing, it falls
+/// back to the shift-invert eigensolve of the Hodge-Laplace pencil near $0$,
+/// keeping the method total over signature.
+///
+/// A caller wanting the harmonic forms of *specific* holes wants
+/// [`crate::harmonic::Harmonics::integral`] instead; the orthonormalization
+/// here mixes the classes.
 pub fn solve_harmonics<C: HilbertComplex>(
   complex: &C,
   grade: impl Into<ExteriorGrade>,
@@ -197,6 +210,10 @@ pub fn solve_harmonics<C: HilbertComplex>(
   if homology_dim == 0 {
     let nwhitneys = complex.ndofs(grade);
     return Ok(Matrix::zeros(nwhitneys, 0));
+  }
+
+  if let Some(harmonics) = crate::harmonic::harmonics(complex, grade) {
+    return Ok(harmonics.orthonormal);
   }
 
   let (eigenvals, _, harmonics) = solve_evp(complex, grade, homology_dim)?;

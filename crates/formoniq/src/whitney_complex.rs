@@ -58,6 +58,18 @@ pub trait HilbertComplex {
   /// invariant.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize;
 
+  /// Representative integral cocycles of a basis of the cohomology this
+  /// complex's harmonic space realizes, expressed in *this* complex's DOFs:
+  /// $H^k (K; ZZ)$ for the full complex, $H^k (K, diff K; ZZ)$ for the
+  /// relative one. One per [`Self::harmonic_dim`].
+  ///
+  /// Metric-free, and closed exactly: the coefficients are integers and the
+  /// incidence entries are $plus.minus 1$. This is the input the harmonic
+  /// projection of [`crate::harmonic`] turns into a harmonic basis, so an
+  /// implementor whose DOFs are not the simplices owes the de Rham map into
+  /// its own space here.
+  fn integral_cocycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Cochain<i64>>;
+
   /// The inclusion $E: C^k arrow.hook cal(W) Lambda^k$ of this complex's DOFs
   /// into the ambient Whitney space, extending by zero on the constrained
   /// boundary. The identity on the full complex.
@@ -363,6 +375,16 @@ impl HilbertComplex for WhitneyComplex<'_> {
       0
     }
   }
+  /// The absolute cocycles, on the DOFs of the full complex, which are the
+  /// $k$-simplices themselves.
+  fn integral_cocycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Cochain<i64>> {
+    let grade = grade.into();
+    if grade.in_range(self.dim()) {
+      self.topology.cohomology_generators(grade)
+    } else {
+      Vec::new()
+    }
+  }
   /// No boundary is constrained, so the inclusion is the identity.
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
@@ -592,6 +614,34 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
     } else {
       0
     }
+  }
+  /// The relative cocycles, restricted to the interior DOFs by $E^T$. They are
+  /// supported in the interior already, so the restriction loses nothing.
+  ///
+  /// Like [`Self::harmonic_dim`], this reads the pair $(K, diff K)$ even where
+  /// only a part $Gamma$ is constrained: the invariants of the genuinely mixed
+  /// pair $(K, Gamma)$ are not what either function returns.
+  fn integral_cocycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Cochain<i64>> {
+    let grade = grade.into();
+    if !grade.in_range(self.dim()) {
+      return Vec::new();
+    }
+    let interior = &self.interior_simps[grade.index()];
+    self
+      .full
+      .topology()
+      .relative_cohomology_generators(grade)
+      .into_iter()
+      .map(|cocycle| {
+        Cochain::new(
+          grade,
+          na::DVector::from_iterator(
+            interior.len(),
+            interior.iter().map(|&kidx| cocycle.coeffs()[kidx]),
+          ),
+        )
+      })
+      .collect()
   }
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
