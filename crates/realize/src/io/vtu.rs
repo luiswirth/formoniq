@@ -354,9 +354,10 @@ fn sample_cells<T>(
 fn cell_vectors(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Vec<[f64; 3]> {
   sample_cells(topology, coords, cochain, |cell, form, metric, sign| {
     let field = reduced_form(form, metric, sign.unwrap_or(Sign::Pos)).musical(metric);
-    let ambient = cell
-      .coord_simplex(coords)
-      .pushforward_vector(field.components());
+    let ambient = field
+      .pushforward(&cell.coord_simplex(coords).linear_transform())
+      .components()
+      .clone();
     let mut padded = [0.0; 3];
     for (slot, value) in padded.iter_mut().zip(ambient.iter()) {
       *slot = *value;

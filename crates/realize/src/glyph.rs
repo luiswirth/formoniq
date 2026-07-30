@@ -205,7 +205,12 @@ pub fn bake_glyphs(
         .map(|bary| {
           let point = MeshPoint::new(cell.idx(), bary);
           let field = reduced_form(interpolant.eval(&point), &metric, sign).musical(&metric);
-          let ambient: Vector = coord_simplex.pushforward_vector(field.components());
+          // Sharped, hence contravariant, so it genuinely pushes forward: the
+          // functor checks that where a bare matrix product would not.
+          let ambient: Vector = field
+            .pushforward(&coord_simplex.linear_transform())
+            .components()
+            .clone();
           let magnitude = ambient.norm();
           let opacity = if peak > 0.0 {
             (magnitude / peak).clamp(0.0, 1.0)
