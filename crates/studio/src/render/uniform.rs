@@ -92,8 +92,8 @@ impl<T: Pod> UniformBinding<T> {
 ///
 /// A material belongs to an item and a bind group belongs to a buffer, so a
 /// frame drawing $m$ items of one kind needs $m$ bindings. The pool is what lets
-/// that count be a property of the scene, several manifolds, several overlays
-///, rather than a fixed set the renderer declares up front.
+/// that count be a property of the scene, several manifolds, several overlays,
+/// rather than a fixed set the renderer declares up front.
 pub struct UniformPool<T: Pod + Default> {
   label: &'static str,
   visibility: wgpu::ShaderStages,

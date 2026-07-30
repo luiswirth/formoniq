@@ -104,8 +104,8 @@ fn shader_module(device: &wgpu::Device, label: &str, body: &str) -> wgpu::Shader
 /// alpha-blended segment marks only test against it.
 ///
 /// `Greater`, and the pass clears to [`DEPTH_CLEAR`], because depth is reversed:
-/// nearer is larger. See [`OPENGL_TO_REVERSED_WGPU_MATRIX`] for why. The three
-///, the projection's sign, the comparison, the clear, are one decision, and
+/// nearer is larger. See [`OPENGL_TO_REVERSED_WGPU_MATRIX`] for why. The three,
+/// the projection's sign, the comparison, the clear, are one decision, and
 /// any two of them agreeing without the third is a scene drawn inside out.
 ///
 /// [`OPENGL_TO_REVERSED_WGPU_MATRIX`]: camera::OPENGL_TO_REVERSED_WGPU_MATRIX

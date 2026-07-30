@@ -884,8 +884,8 @@ impl Gallery {
   }
 
   /// Switches to a regenerable mesh source, building its mesh first so a
-  /// failure leaves the current one untouched. `Ok(Some(scene))` installs now
-  ///, a cache hit, or a solve-free placeholder on the new mesh to show while
+  /// failure leaves the current one untouched. `Ok(Some(scene))` installs now,
+  /// a cache hit, or a solve-free placeholder on the new mesh to show while
   /// its study re-solves; `Ok(None)` is a no-op source change; `Err` is a build
   /// failure to surface.
   pub(crate) fn select_mesh(&mut self, source: MeshSource) -> Result<Option<Scene>, String> {

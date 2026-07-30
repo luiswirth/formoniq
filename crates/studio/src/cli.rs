@@ -63,8 +63,8 @@ enum Command {
     #[arg(long, value_parser = parse_size, default_value = "1920x1080")]
     size: (u32, u32),
     /// How densely to sample the standing wave's period (mp4). The clip is
-    /// exactly one period at any count: that is what makes it loop seamlessly
-    ///, so this only chooses how many frames that period is cut into.
+    /// exactly one period at any count: that is what makes it loop seamlessly,
+    /// so this only chooses how many frames that period is cut into.
     /// Defaults to the count that makes playback at `--fps` run at wall-clock
     /// speed. A field that is not an eigenmode has no period and renders one
     /// still.

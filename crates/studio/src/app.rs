@@ -845,8 +845,8 @@ impl State {
   /// Keyboard navigation, dispatched by projection.
   ///
   /// The two views have different natural motions, a perspective camera flies
-  /// through the scene, an orthographic one slides across a flat view and zooms
-  ///, so this is where the interaction reads the projection, the keyboard
+  /// through the scene, an orthographic one slides across a flat view and zooms,
+  /// so this is where the interaction reads the projection, the keyboard
   /// counterpart to the mouse split at the button press. The primitives beneath
   /// (the eye translation, the multiplicative zoom) are shared; only which key
   /// drives which is chosen here.
