@@ -6,9 +6,6 @@ extern crate nalgebra as na;
 
 use std::marker::PhantomData;
 
-/// The dimension of a space or object.
-pub type Dim = usize;
-
 pub type Vector<T = f64> = na::DVector<T>;
 pub type Matrix<T = f64> = na::DMatrix<T>;
 pub type VectorView<'a, T = f64> = na::DVectorView<'a, T>;
@@ -35,39 +32,128 @@ impl CoordSpace for Ambient {
 pub type Coord = Coords<Ambient>;
 pub type CoordRef<'a> = CoordsRef<'a, Ambient>;
 
-/// A point of the coordinate space `S`, as its coordinate tuple.
+/// The coordinate tuple backing a point: owned, or a view into the column of a
+/// matrix. What a point needs of its storage is that its coordinates can be
+/// read.
+pub trait CoordVector {
+  fn view(&self) -> VectorView<'_>;
+}
+impl CoordVector for Vector {
+  fn view(&self) -> VectorView<'_> {
+    self.as_view()
+  }
+}
+impl CoordVector for VectorView<'_> {
+  fn view(&self) -> VectorView<'_> {
+    self.as_view()
+  }
+}
+
+/// A point of the affine space `S`, as its coordinate tuple.
 ///
-/// Derefs to the underlying [`Vector`], so all read-only linear algebra is
-/// available directly. The difference of two points of the same space is a
-/// displacement, and is therefore a bare [`Vector`], not a `Coords`.
-pub struct Coords<S: CoordSpace> {
-  entries: Vector,
+/// Points and displacements are different things, and the type says which: the
+/// difference of two points is a bare [`Vector`], a point plus a displacement is
+/// a point again, and there is no sum of two points. That free transitive action
+/// of $RR^n$ on the points is the affine structure, and
+/// [`affine_combination`](Self::affine_combination) is the one way to combine
+/// points without choosing an origin.
+///
+/// Derefs to the storage, so all read-only linear algebra is available directly.
+pub struct Coords<S: CoordSpace, V: CoordVector = Vector> {
+  entries: V,
   space: PhantomData<S>,
 }
 
-impl<S: CoordSpace> Coords<S> {
-  pub fn new(entries: Vector) -> Self {
+/// A borrowed point of the affine space `S`: a view, for coordinates stored as
+/// the column of a matrix.
+pub type CoordsRef<'a, S> = Coords<S, VectorView<'a>>;
+
+impl<S: CoordSpace, V: CoordVector> Coords<S, V> {
+  /// The tuple claims the space: this is where a raw coordinate vector enters,
+  /// and the tag is asserted rather than derived. Every operation afterwards
+  /// preserves it.
+  pub fn new(entries: V) -> Self {
     Self {
       entries,
       space: PhantomData,
     }
   }
-  pub fn zeros(dim: Dim) -> Self {
-    Self::new(Vector::zeros(dim))
-  }
-  pub fn from_element(dim: Dim, value: f64) -> Self {
-    Self::new(Vector::from_element(dim, value))
-  }
-  pub fn from_iterator(dim: Dim, iter: impl IntoIterator<Item = f64>) -> Self {
-    Self::new(Vector::from_iterator(dim, iter))
-  }
 
   /// The number of coordinates, which is the dimension of the space.
-  pub fn dim(&self) -> Dim {
-    self.entries.len()
+  pub fn dim(&self) -> usize {
+    self.view().len()
   }
 
   /// The coordinate tuple, untagged: the escape hatch into raw linear algebra.
+  pub fn view(&self) -> VectorView<'_> {
+    self.entries.view()
+  }
+  /// The same point, borrowed.
+  pub fn as_view(&self) -> CoordsRef<'_, S> {
+    CoordsRef::new(self.view())
+  }
+  /// The same point, owned.
+  pub fn to_coords(&self) -> Coords<S> {
+    Coords::new(self.view().into_owned())
+  }
+}
+
+impl<S: CoordSpace> Coords<S> {
+  pub fn zeros(dim: usize) -> Self {
+    Self::new(Vector::zeros(dim))
+  }
+  pub fn from_element(dim: usize, value: f64) -> Self {
+    Self::new(Vector::from_element(dim, value))
+  }
+  pub fn from_iterator(dim: usize, iter: impl IntoIterator<Item = f64>) -> Self {
+    Self::new(Vector::from_iterator(dim, iter))
+  }
+
+  /// The affine combination $sum_i lambda_i p_i$ of points weighted by
+  /// $lambda$, which is well defined precisely because $sum_i lambda_i = 1$:
+  /// it equals $p_0 + sum_i lambda_i (p_i - p_0)$ for any of the points as base,
+  /// a point displaced by a vector. This is the structure that makes the space
+  /// affine rather than linear, and the only combination of points there is.
+  ///
+  /// The weights must sum to one and the points must be at least one and of a
+  /// common dimension.
+  pub fn affine_combination<'a, C: Into<CoordsRef<'a, S>>>(
+    weighted: impl IntoIterator<Item = (f64, C)>,
+  ) -> Self {
+    let mut weighted = weighted.into_iter();
+    let (weight, point) = weighted
+      .next()
+      .expect("an affine combination is of at least one point");
+    let mut total = weight;
+    let mut entries = weight * point.into().view();
+    for (weight, point) in weighted {
+      total += weight;
+      entries += weight * point.into().view();
+    }
+    debug_assert!(
+      (total - 1.0).abs() < 1e-9,
+      "the weights of an affine combination sum to one, got {total}"
+    );
+    Self::new(entries)
+  }
+
+  /// The barycenter of a finite set of points: their affine combination with
+  /// equal weights, hence independent of any origin.
+  pub fn barycenter<'a, C: Into<CoordsRef<'a, S>>>(points: impl IntoIterator<Item = C>) -> Self {
+    let mut points = points.into_iter();
+    let first = points
+      .next()
+      .expect("a barycenter is of at least one point")
+      .into();
+    let mut count = 1.0;
+    let mut entries = first.view().into_owned();
+    for point in points {
+      count += 1.0;
+      entries += point.into().view();
+    }
+    Self::new(entries / count)
+  }
+
   pub fn vector(&self) -> &Vector {
     &self.entries
   }
@@ -77,125 +163,91 @@ impl<S: CoordSpace> Coords<S> {
   pub fn into_vector(self) -> Vector {
     self.entries
   }
-  /// The coordinate tuple as an untagged view: `Copy`, and the form nalgebra's
-  /// consuming combinators want.
-  pub fn view(&self) -> VectorView<'_> {
-    self.entries.as_view()
-  }
-  pub fn as_view(&self) -> CoordsRef<'_, S> {
-    CoordsRef::new(self.entries.as_view())
-  }
-}
-
-/// A borrowed point of the coordinate space `S`: a view, for coordinates stored
-/// as the column of a matrix.
-pub struct CoordsRef<'a, S: CoordSpace> {
-  view: VectorView<'a>,
-  space: PhantomData<S>,
 }
 
 impl<'a, S: CoordSpace> CoordsRef<'a, S> {
-  pub fn new(view: VectorView<'a>) -> Self {
-    Self {
-      view,
-      space: PhantomData,
-    }
-  }
-  pub fn dim(&self) -> Dim {
-    self.view.len()
-  }
-  pub fn view(&self) -> VectorView<'a> {
-    self.view
-  }
-  pub fn to_coords(&self) -> Coords<S> {
-    Coords::new(self.view.into_owned())
+  /// The borrowed tuple, for as long as the point's own borrow lasts, which
+  /// outlives the handle.
+  pub fn into_view(self) -> VectorView<'a> {
+    self.entries
   }
 }
 
-impl<'a, S: CoordSpace> From<&'a Coords<S>> for CoordsRef<'a, S> {
-  fn from(coords: &'a Coords<S>) -> Self {
+impl<'a, S: CoordSpace, V: CoordVector> From<&'a Coords<S, V>> for CoordsRef<'a, S> {
+  fn from(coords: &'a Coords<S, V>) -> Self {
     coords.as_view()
   }
 }
-/// The unchecked entry from raw linear algebra: the space is whatever the
-/// context infers, claimed and not verified. The convenience is worth it, but
-/// it is the one place the tagging is on trust (see the module docs).
-impl<S: CoordSpace> From<Vector> for Coords<S> {
-  fn from(entries: Vector) -> Self {
+impl<S: CoordSpace, V: CoordVector> From<V> for Coords<S, V> {
+  fn from(entries: V) -> Self {
     Self::new(entries)
   }
 }
 
-impl<S: CoordSpace> std::ops::Deref for Coords<S> {
-  type Target = Vector;
+impl<S: CoordSpace, V: CoordVector> std::ops::Deref for Coords<S, V> {
+  type Target = V;
   fn deref(&self) -> &Self::Target {
     &self.entries
-  }
-}
-impl<'a, S: CoordSpace> std::ops::Deref for CoordsRef<'a, S> {
-  type Target = VectorView<'a>;
-  fn deref(&self) -> &Self::Target {
-    &self.view
   }
 }
 
 /// The displacement between two points of the same space: a tangent vector,
 /// hence untagged.
-impl<S: CoordSpace> std::ops::Sub for &Coords<S> {
+impl<S: CoordSpace, V: CoordVector, W: CoordVector> std::ops::Sub<&Coords<S, W>> for &Coords<S, V> {
   type Output = Vector;
-  fn sub(self, rhs: Self) -> Vector {
-    self.vector() - rhs.vector()
+  fn sub(self, rhs: &Coords<S, W>) -> Vector {
+    self.view() - rhs.view()
   }
 }
-impl<S: CoordSpace> std::ops::Sub<CoordsRef<'_, S>> for &Coords<S> {
+impl<S: CoordSpace, V: CoordVector + Copy, W: CoordVector + Copy> std::ops::Sub<Coords<S, W>>
+  for Coords<S, V>
+{
   type Output = Vector;
-  fn sub(self, rhs: CoordsRef<'_, S>) -> Vector {
-    self.vector() - rhs.view()
-  }
-}
-impl<S: CoordSpace> std::ops::Sub<&Coords<S>> for CoordsRef<'_, S> {
-  type Output = Vector;
-  fn sub(self, rhs: &Coords<S>) -> Vector {
-    self.view() - rhs.vector()
-  }
-}
-impl<S: CoordSpace> std::ops::Sub for CoordsRef<'_, S> {
-  type Output = Vector;
-  fn sub(self, rhs: Self) -> Vector {
+  fn sub(self, rhs: Coords<S, W>) -> Vector {
     self.view() - rhs.view()
   }
 }
 
+/// A point displaced by a vector is a point: the action of $RR^n$ that makes the
+/// space affine. Free and transitive, its orbit map being subtraction of points.
+impl<S: CoordSpace, V: CoordVector> std::ops::Add<&Vector> for &Coords<S, V> {
+  type Output = Coords<S>;
+  fn add(self, rhs: &Vector) -> Coords<S> {
+    Coords::new(self.view() + rhs)
+  }
+}
+impl<S: CoordSpace, V: CoordVector> std::ops::Sub<&Vector> for &Coords<S, V> {
+  type Output = Coords<S>;
+  fn sub(self, rhs: &Vector) -> Coords<S> {
+    Coords::new(self.view() - rhs)
+  }
+}
+impl<S: CoordSpace> std::ops::AddAssign<&Vector> for Coords<S> {
+  fn add_assign(&mut self, rhs: &Vector) {
+    self.entries += rhs;
+  }
+}
+impl<S: CoordSpace> std::ops::SubAssign<&Vector> for Coords<S> {
+  fn sub_assign(&mut self, rhs: &Vector) {
+    self.entries -= rhs;
+  }
+}
+
 // The derives would demand `S: Clone`, which a marker never is.
-impl<S: CoordSpace> Clone for Coords<S> {
+impl<S: CoordSpace, V: CoordVector + Clone> Clone for Coords<S, V> {
   fn clone(&self) -> Self {
     Self::new(self.entries.clone())
   }
 }
-impl<S: CoordSpace> Clone for CoordsRef<'_, S> {
-  fn clone(&self) -> Self {
-    *self
-  }
-}
-impl<S: CoordSpace> Copy for CoordsRef<'_, S> {}
+impl<S: CoordSpace, V: CoordVector + Copy> Copy for Coords<S, V> {}
 
-impl<S: CoordSpace> PartialEq for Coords<S> {
-  fn eq(&self, other: &Self) -> bool {
-    self.entries == other.entries
+impl<S: CoordSpace, V: CoordVector, W: CoordVector> PartialEq<Coords<S, W>> for Coords<S, V> {
+  fn eq(&self, other: &Coords<S, W>) -> bool {
+    self.view() == other.view()
   }
 }
-impl<S: CoordSpace> PartialEq for CoordsRef<'_, S> {
-  fn eq(&self, other: &Self) -> bool {
-    self.view == other.view
-  }
-}
-impl<S: CoordSpace> std::fmt::Debug for Coords<S> {
+impl<S: CoordSpace, V: CoordVector> std::fmt::Debug for Coords<S, V> {
   fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}{:?}", S::NAME, self.entries.as_slice())
-  }
-}
-impl<S: CoordSpace> std::fmt::Debug for CoordsRef<'_, S> {
-  fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-    write!(f, "{}{:?}", S::NAME, self.view.iter().collect::<Vec<_>>())
+    write!(f, "{}{:?}", S::NAME, self.view().iter().collect::<Vec<_>>())
   }
 }

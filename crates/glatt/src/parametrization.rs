@@ -169,12 +169,12 @@ impl<S: CoordSpace> Parametrization<S> {
   fn gauss_newton(&self, p: &Coord, seed: &Coords<S>) -> Coords<S> {
     let mut u = seed.clone();
     for _ in 0..GN_MAX_ITER {
-      let residual: Vector = self.forward(&u).vector() - p.vector();
+      let residual: Vector = &self.forward(&u) - p;
       if residual.norm() < GN_TOL {
         break;
       }
       let step = self.chart_differential(&u) * residual;
-      *u.vector_mut() -= step;
+      u -= &step;
     }
     u
   }

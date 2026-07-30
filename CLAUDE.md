@@ -91,7 +91,7 @@ joining the ladder only where `formoniq` consumes it.
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
 | `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns) |
 | `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
-| `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
+| `coorder`    | the affine space, typed              | `Coords<S>` (a point tagged by its space, generic over owned or borrowed storage) with the affine structure: the action of a displacement, `affine_combination` and its uniform case `barycenter`; `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
 | `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
 | `regge`      | the simplicial manifold $M_h$       | the geometry a complex carries: `MeshLengthsSq` (the intrinsic Regge primitive the engine consumes), `MeshCoords` and `CellGramians` the sources that convert into it, `cell_volume`, `vertex_gaussian_curvature`, the extensions reaching down onto `simplicial`'s types (`SimplexCoordsExt`, `SubdivisionExt`, `BoundaryComplexExt`), `mesher::` (grids with coordinates, quotient tori, sphere surfaces) and `io::gmsh` |
 | `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
@@ -310,6 +310,14 @@ Breaking one is a bug even if it compiles and passes tests.
    The maps between them therefore have to be written down,
    and the wrong composition does not compile.
    A bare `Vector` is a displacement or raw linear algebra, never a point.
+
+   **A point is not a vector, and the operations available say so.**
+   The difference of two points is a displacement, a point displaced by one is a point,
+   and the only combination of points is the affine one, `Coords::affine_combination`,
+   whose weights sum to one so that it is independent of any origin.
+   Barycentric coordinates *are* that combination on a simplex's vertices,
+   which is why the chart is affine and not linear,
+   and anything summing points by hand has dropped the distinction.
 
    **The morphisms are tagged too, not just the points.**
    `AffineTransform<From, To>` carries its direction,
