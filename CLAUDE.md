@@ -89,7 +89,7 @@ joining the ladder only where `formoniq` consumes it.
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
-| `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape), `blade_of` (the wedge of a frame's columns) |
+| `multialgebra` | $Lambda$ and $"Sym"$ as one construction | `Parity`, `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns) |
 | `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | typed affine coordinates            | `Coords<S>` (coordinates tagged by their space), `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
 | `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., boundary operators, `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `incidence::FaceIncidence` the cell-to-face relation in both of its readings), `atlas::` (`Chart`, `MeshPoint`, `Transition`, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
@@ -627,6 +627,18 @@ and the failure is a plausible wrong number rather than a mismatch anything catc
 The operations know the difference in one place, and that is the whole point of them.
 Reading components to *lay out* a value, scattering a blade into a sparse matrix,
 writing a column to a file, is the exception, and it is storage, not mathematics.
+
+**A Kronecker product is never formed to be applied.**
+The Gram matrix of a tensor product is the product of the Gram matrices
+and the functor of a map is the product of the per-slot functors,
+so both are held as their factors and applied slot by slot (`apply_factorwise`),
+never built and multiplied.
+Forming costs the square of the product of the slot dimensions
+where applying costs their product times their sum.
+`tensor_gramian` and `Transport::to_matrix` are for a caller that needs a matrix
+*as* a matrix, a congruence or a factorization, and for nothing else.
+Exploiting sparsity in a map *into* the product is a different matter
+and belongs to whoever owns the map.
 
 **One datum, derived not stored.**
 Where one value determines another, the second is computed at the point of use
