@@ -52,6 +52,18 @@ pub trait HilbertComplex {
   fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix;
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat;
 
+  /// Galerkin matrix of the weak codifferential
+  /// $angle.l delta u, tau angle.r = angle.l u, dif tau angle.r$, that is
+  /// $(D^(k-1))^T M_k$, shape $"ndofs"(k-1) times "ndofs"(k)$.
+  ///
+  /// The mixed block of every problem posed around grade $k$, and the fourth of
+  /// the four pairings of a Whitney family against another: both sides
+  /// undifferentiated is [`Self::mass`], both differentiated is
+  /// [`Self::codif_dif`], and this is one of each. Weak in the same sense
+  /// `codif_dif` is: the mass inverse that would make it the codifferential
+  /// itself is left to whoever solves with it, so this stays sparse.
+  fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat;
+
   /// The dimension of the discrete harmonic space $cal(H)^k$: the Betti number
   /// of the complex by the discrete Hodge theorem ($b_k (K)$ for the full
   /// complex, $b_k (K, diff K)$ for the relative one), an exact topological
@@ -116,14 +128,14 @@ pub trait HilbertComplex {
   /// metric-free (invariant 5): it carries the mass inverse, realized here as a
   /// solve, well conditioned, since the mass is. Total over signature (the
   /// solve is an LU).
-  fn codif(&self, u: &Cochain) -> Cochain {
+  fn codif_cochain(&self, u: &Cochain) -> Cochain {
     let grade = u.grade();
     let lower = grade - 1;
     if self.ndofs(lower) == 0 {
       return Cochain::new(lower, Vector::zeros(0));
     }
     let mass_lower = CsrMatrix::from(&self.mass(lower));
-    let coupling = self.dif(lower).transpose() * &CsrMatrix::from(&self.mass(grade));
+    let coupling = CsrMatrix::from(&self.codif(grade));
     let sigma = FaerLu::new(mass_lower).solve(&(coupling * u.coeffs()));
     Cochain::new(lower, sigma)
   }
@@ -170,7 +182,7 @@ pub trait HilbertComplex {
   /// [`Self::seminorm_hdif`] it costs a mass solve, since $delta$ carries the
   /// mass inverse.
   fn seminorm_hcodif(&self, u: &Cochain) -> f64 {
-    self.norm_l2(&self.codif(u))
+    self.norm_l2(&self.codif_cochain(u))
   }
 
   /// The full $H^* Lambda^k (delta)$ norm
@@ -381,6 +393,25 @@ impl HilbertComplex for WhitneyComplex<'_> {
       self.topology,
       self.geometry,
       WhitneyPairElmat::codif_dif(self.dim(), grade),
+    )
+  }
+
+  /// Assembled from its element form, like [`Self::codif_dif`] and for the same
+  /// reason: $(D^(k-1))^T M_k$ is a pairing of two Whitney families over one
+  /// cell, so nothing global has to be built and multiplied to reach it.
+  ///
+  /// Total in grade: at grade $0$ and past either end of the complex one of the
+  /// two spaces is trivial, and the correctly shaped empty matrix is the answer.
+  fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
+    let grade = grade.into();
+    let (rows, cols) = (self.ndofs(grade - 1), self.ndofs(grade));
+    if rows == 0 || cols == 0 {
+      return GalMat::new(rows, cols);
+    }
+    assemble_galmat(
+      self.topology,
+      self.geometry,
+      WhitneyPairElmat::codif(self.dim(), grade),
     )
   }
   /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.
@@ -605,6 +636,19 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
     let stiff = CsrMatrix::from(&self.full.codif_dif(grade));
     GalMat::from(&(incl.transpose() * stiff * incl))
   }
+
+  /// Galerkin matrix of the weak codifferential on the relative complex:
+  /// $E_(k-1)^T ((D^(k-1))^T M_k) E_k$, the restriction of the full complex's.
+  ///
+  /// Exact for the same subcomplex reason as [`Self::codif_dif`]: with
+  /// $P = E_k E_k^T$, $dif$ of a boundary-vanishing $(k-1)$-cochain vanishes on
+  /// the boundary, so $P D E_(k-1) = D E_(k-1)$ and the projection between the
+  /// two factors collapses.
+  fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
+    let grade = grade.into();
+    let codif = CsrMatrix::from(&self.full.codif(grade));
+    GalMat::from(&(self.inclusion(grade - 1).transpose() * codif * self.inclusion(grade)))
+  }
   /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize {
@@ -744,6 +788,49 @@ mod test {
     }
   }
 
+  /// The weak codifferential has the same two routes as the stiffness, and
+  /// they agree: the element-local pairing that [`HilbertComplex::codif`]
+  /// assembles, and the global product $(D^(k-1))^T M_k$ of two assembled
+  /// matrices. Swept over every dimension and grade, the degenerate grade $0$
+  /// included, where the $sigma$ space is empty and both are the $0 times
+  /// "ndofs"(0)$ matrix.
+  #[test]
+  fn codif_local_and_global_routes_agree() {
+    for dim in (1..=3).map(Dim::from) {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in dim.range_inclusive() {
+        let local = CsrMatrix::from(&whitney.codif(grade));
+        let global = whitney.dif(grade - 1).transpose() * &CsrMatrix::from(&whitney.mass(grade));
+
+        assert_eq!(local.nrows(), global.nrows());
+        assert_eq!(local.ncols(), global.ncols());
+        let residual = (&local - &global)
+          .values()
+          .iter()
+          .fold(0.0f64, |acc, v| acc.max(v.abs()));
+        let scale = local
+          .values()
+          .iter()
+          .fold(0.0f64, |acc, v| acc.max(v.abs()));
+        assert!(
+          residual <= 1e-12 * scale.max(1.0),
+          "dim {dim:?} grade {grade:?}: routes differ by {residual:e}"
+        );
+        // Above grade 0 the sigma space is nonempty and the coupling is a
+        // nonzero matrix, so the law is not two empties agreeing.
+        if grade > 0 {
+          assert!(
+            scale > 1e-6,
+            "dim {dim:?} grade {grade:?}: coupling vanished"
+          );
+        }
+      }
+    }
+  }
+
   /// The relative stiffness is the restriction of the full one, which is the
   /// subcomplex property in matrix form and is why the relative complex never
   /// has to assemble a mass one grade up.
@@ -846,7 +933,7 @@ mod test {
       for grade in Dim::ONE.range_to_inclusive(dim) {
         let u = sample(grade, &topology);
         let tau = sample(grade - 1, &topology);
-        let sigma = whitney.codif(&u);
+        let sigma = whitney.codif_cochain(&u);
 
         let mass_lower = CsrMatrix::from(&whitney.mass(grade - 1));
         let mass_k = CsrMatrix::from(&whitney.mass(grade));
@@ -873,7 +960,7 @@ mod test {
 
       for grade in Dim::new(2).range_to_inclusive(dim) {
         let u = sample(grade, &topology);
-        let ddu = whitney.codif(&whitney.codif(&u));
+        let ddu = whitney.codif_cochain(&whitney.codif_cochain(&u));
         assert!(whitney.norm_l2(&ddu) < 1e-9, "dim={dim} grade={grade}");
       }
     }
@@ -902,7 +989,7 @@ mod test {
           assert_eq!(whitney.seminorm_hcodif(&u), 0.0, "delta = 0 at grade 0");
           // delta u is the empty cochain of the trivial space Lambda^(-1) = 0,
           // not a missing value.
-          let du = whitney.codif(&u);
+          let du = whitney.codif_cochain(&u);
           assert_eq!(du.grade(), Dim::new(-1));
           assert_eq!(du.coeffs().len(), 0);
         }
