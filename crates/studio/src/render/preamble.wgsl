@@ -391,6 +391,9 @@ struct VolumeMaterial {
     // Seconds into that wave. A frame fact rather than a material choice, like
     // `inv_view_proj`, and filled by the renderer from the same `FrameView`.
     time: f32,
+    // The field-unit scale the coarse acceleration grid's texels are stored in
+    // (the grid's peak magnitude), so a block's bound can be converted into the
+    // one occupancy the fine samples are measured against.
+    coarse_scale: f32,
     _pad0: f32,
-    _pad1: f32,
 };
