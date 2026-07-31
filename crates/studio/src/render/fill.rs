@@ -2,11 +2,11 @@
 //! value and normal-displaced as a standing wave. See `fill.wgsl`.
 
 use super::{
-  MASK_FORMAT, color_target,
+  MarkPipeline,
   deposit::deposit_read_layout,
   depth_stencil,
   item::SurfaceBatch,
-  primitive, shader_module,
+  shader_module,
   uniform::{FrameUniform, SurfaceMaterial, UniformBinding, UniformPool},
 };
 
@@ -32,30 +32,16 @@ impl FillPass {
       ],
       immediate_size: 0,
     });
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Fill Pipeline"),
-      layout: Some(&layout),
-      vertex: wgpu::VertexState {
-        module: &shader,
-        entry_point: Some("vs_main"),
-        compilation_options: wgpu::PipelineCompilationOptions::default(),
-        buffers: &SurfaceBatch::layouts(),
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &shader,
-        entry_point: Some("fs_main"),
-        compilation_options: wgpu::PipelineCompilationOptions::default(),
-        targets: &[
-          color_target(format, wgpu::BlendState::REPLACE),
-          color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),
-        ],
-      }),
-      primitive: primitive(),
-      depth_stencil: Some(depth_stencil(true)),
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
+    let pipeline = MarkPipeline {
+      label: "Fill Pipeline",
+      shader: &shader,
+      layout: &layout,
+      buffers: &SurfaceBatch::layouts(),
+      format,
+      blend: wgpu::BlendState::REPLACE,
+      depth: depth_stencil(true),
+    }
+    .build(device);
     Self { pipeline }
   }
 
