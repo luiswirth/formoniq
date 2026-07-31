@@ -8,13 +8,9 @@ use multialgebra::ExteriorGrade;
 use simplicial::{Dim, topology::simplex::Simplex};
 
 use crate::gallery::{
-  ADVECTION_FINAL_TIME_MAX, ADVECTION_FINAL_TIME_MIN, BuiltinMesh, DEFAULT_NMODES,
-  DEFAULT_TRAJECTORY_STEPS, EIGENMODES_NMODES_MAX, EIGENMODES_NMODES_MIN, GRID_CELLS_DEFAULT,
-  GRID_CELLS_MAX, GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, HEAT_FINAL_TIME_MAX,
-  HEAT_FINAL_TIME_MIN, MeshSource, Preset, QUOTIENT_CELLS_DEFAULT, QUOTIENT_CELLS_MAX,
-  QUOTIENT_CELLS_MIN, QuotientSurface, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX,
-  SPHERE_SUBDIVISIONS, SPHERE_SUBDIVISIONS_MAX, Study, TRAJECTORY_STEPS_MAX, TRAJECTORY_STEPS_MIN,
-  WAVE_FINAL_TIME, WAVE_FINAL_TIME_MAX, WAVE_FINAL_TIME_MIN,
+  ADVECTION_FINAL_TIME, BuiltinMesh, EIGENMODES_NMODES, GRID_CELLS, GRID_DIM, HEAT_FINAL_TIME,
+  MeshSource, Preset, QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, SPHERE_SUBDIVISIONS,
+  Study, TRAJECTORY_STEPS, WAVE_FINAL_TIME,
 };
 use crate::scene::{FieldOffers, dof_label};
 
@@ -678,13 +674,7 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
   match study {
     Study::Eigenmodes { grade, nmodes } => {
       let commit = grade_tabs(ui, grade, max_grade);
-      commit
-        | commit_slider(
-          ui,
-          nmodes,
-          EIGENMODES_NMODES_MIN..=EIGENMODES_NMODES_MAX,
-          "modes",
-        )
+      commit | commit_slider(ui, nmodes, EIGENMODES_NMODES.range(), "modes")
     }
     Study::Heat {
       grade,
@@ -692,18 +682,8 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
       final_time,
     } => {
       let grade_changed = grade_tabs(ui, grade, max_grade);
-      let steps = commit_slider(
-        ui,
-        nsteps,
-        TRAJECTORY_STEPS_MIN..=TRAJECTORY_STEPS_MAX,
-        "steps",
-      );
-      let time = commit_slider(
-        ui,
-        final_time,
-        HEAT_FINAL_TIME_MIN..=HEAT_FINAL_TIME_MAX,
-        "final t",
-      );
+      let steps = commit_slider(ui, nsteps, TRAJECTORY_STEPS.range(), "steps");
+      let time = commit_slider(ui, final_time, HEAT_FINAL_TIME.range(), "final t");
       grade_changed | steps | time
     }
     Study::Wave {
@@ -712,18 +692,8 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
       final_time,
     } => {
       let grade_changed = grade_tabs(ui, grade, max_grade);
-      let steps = commit_slider(
-        ui,
-        nsteps,
-        TRAJECTORY_STEPS_MIN..=TRAJECTORY_STEPS_MAX,
-        "steps",
-      );
-      let time = commit_slider(
-        ui,
-        final_time,
-        WAVE_FINAL_TIME_MIN..=WAVE_FINAL_TIME_MAX,
-        "final t",
-      );
+      let steps = commit_slider(ui, nsteps, TRAJECTORY_STEPS.range(), "steps");
+      let time = commit_slider(ui, final_time, WAVE_FINAL_TIME.range(), "final t");
       grade_changed | steps | time
     }
     Study::Advection {
@@ -732,18 +702,8 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
       final_time,
     } => {
       let grade_changed = grade_tabs(ui, grade, max_grade);
-      let steps = commit_slider(
-        ui,
-        nsteps,
-        TRAJECTORY_STEPS_MIN..=TRAJECTORY_STEPS_MAX,
-        "steps",
-      );
-      let time = commit_slider(
-        ui,
-        final_time,
-        ADVECTION_FINAL_TIME_MIN..=ADVECTION_FINAL_TIME_MAX,
-        "final t",
-      );
+      let steps = commit_slider(ui, nsteps, TRAJECTORY_STEPS.range(), "steps");
+      let time = commit_slider(ui, final_time, ADVECTION_FINAL_TIME.range(), "final t");
       grade_changed | steps | time
     }
     Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => false,
@@ -1041,20 +1001,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
               let is_sphere = matches!(requested_mesh, MeshSource::Sphere { .. });
               if ui.selectable_label(is_sphere, "Sphere").clicked() && !is_sphere {
                 requested_mesh = MeshSource::Sphere {
-                  subdivisions: SPHERE_SUBDIVISIONS,
+                  subdivisions: SPHERE_SUBDIVISIONS.default,
                 };
               }
               let is_grid = matches!(requested_mesh, MeshSource::Grid { .. });
               if ui.selectable_label(is_grid, "Grid").clicked() && !is_grid {
                 requested_mesh = MeshSource::Grid {
-                  dim: GRID_DIM_DEFAULT,
-                  cells_axis: GRID_CELLS_DEFAULT,
+                  dim: GRID_DIM.default,
+                  cells_axis: GRID_CELLS.default,
                 };
               }
               let is_ref = matches!(requested_mesh, MeshSource::ReferenceCell { .. });
               if ui.selectable_label(is_ref, "Reference cell").clicked() && !is_ref {
                 requested_mesh = MeshSource::ReferenceCell {
-                  dim: REFERENCE_CELL_DIM,
+                  dim: REFERENCE_CELL_DIM.default,
                 };
               }
               for surface in [QuotientSurface::Donut, QuotientSurface::Moebius] {
@@ -1063,7 +1023,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
                 if ui.selectable_label(selected, surface.label()).clicked() && !selected {
                   requested_mesh = MeshSource::Quotient {
                     surface,
-                    cells_axis: QUOTIENT_CELLS_DEFAULT,
+                    cells_axis: QUOTIENT_CELLS.default,
                   };
                 }
               }
@@ -1088,23 +1048,20 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
             MeshSource::Sphere { subdivisions } => commit_slider(
               ui,
               subdivisions,
-              0..=SPHERE_SUBDIVISIONS_MAX,
+              SPHERE_SUBDIVISIONS.range(),
               "subdivisions",
             ),
             MeshSource::Grid { dim, cells_axis } => {
-              let d = commit_slider(ui, dim, 1..=GRID_DIM_MAX, "dimension");
-              let c = commit_slider(ui, cells_axis, 1..=GRID_CELLS_MAX, "cells/axis");
+              let d = commit_slider(ui, dim, GRID_DIM.range(), "dimension");
+              let c = commit_slider(ui, cells_axis, GRID_CELLS.range(), "cells/axis");
               d | c
             }
             MeshSource::ReferenceCell { dim } => {
-              commit_slider(ui, dim, 1..=REFERENCE_CELL_DIM_MAX, "dimension")
+              commit_slider(ui, dim, REFERENCE_CELL_DIM.range(), "dimension")
             }
-            MeshSource::Quotient { cells_axis, .. } => commit_slider(
-              ui,
-              cells_axis,
-              QUOTIENT_CELLS_MIN..=QUOTIENT_CELLS_MAX,
-              "cells/axis",
-            ),
+            MeshSource::Quotient { cells_axis, .. } => {
+              commit_slider(ui, cells_axis, QUOTIENT_CELLS.range(), "cells/axis")
+            }
             MeshSource::Triforce
             | MeshSource::Builtin(_)
             | MeshSource::Custom { .. }
@@ -1129,7 +1086,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           if ui.selectable_label(on_eigenmodes, "Eigenmodes").clicked() && !on_eigenmodes {
             requested_study = Study::Eigenmodes {
               grade: model.last_grade,
-              nmodes: DEFAULT_NMODES,
+              nmodes: EIGENMODES_NMODES.default,
             };
           }
           let on_whitney = matches!(model.study, Study::WhitneyBasis);
@@ -1147,16 +1104,16 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           if ui.selectable_label(on_heat, "Heat").clicked() && !on_heat {
             requested_study = Study::Heat {
               grade: model.last_grade,
-              nsteps: DEFAULT_TRAJECTORY_STEPS,
-              final_time: HEAT_FINAL_TIME,
+              nsteps: TRAJECTORY_STEPS.default,
+              final_time: HEAT_FINAL_TIME.default,
             };
           }
           let on_wave = matches!(model.study, Study::Wave { .. });
           if ui.selectable_label(on_wave, "Wave").clicked() && !on_wave {
             requested_study = Study::Wave {
               grade: model.last_grade,
-              nsteps: DEFAULT_TRAJECTORY_STEPS,
-              final_time: WAVE_FINAL_TIME,
+              nsteps: TRAJECTORY_STEPS.default,
+              final_time: WAVE_FINAL_TIME.default,
             };
           }
           if matches!(model.study, Study::Cochains(_)) {

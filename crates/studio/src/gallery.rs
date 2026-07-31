@@ -25,34 +25,108 @@ use regge::mesher::quotient::Identification;
 use crate::scene::Scene;
 use crate::ui::{Marks, Selection};
 
-// Icosphere subdivision depth the gallery opens on. The Laplace-Beltrami
-// eigensolve is dense in the vertex count, so keep this modest for an instant
-// startup. The mesh slider goes up to `SPHERE_SUBDIVISIONS_MAX` for fidelity.
-pub(crate) const SPHERE_SUBDIVISIONS: usize = 3;
-// Upper end of the sphere refinement slider. The per-grade solve is dense
-// ($O(n^3)$), and at grade 1 the edge count is what enters, so a step past this
-// turns the background solve from seconds into minutes, the cap keeps every
-// reachable mesh solvable while the window stays responsive.
-pub(crate) const SPHERE_SUBDIVISIONS_MAX: usize = 4;
-// Cells per axis the unit-cube grid opens on, and the upper end of its
-// refinement slider. A grid this fine keeps the dense per-grade solve well
-// inside the sphere's cost, so the same cap reasoning applies loosely.
-pub(crate) const GRID_CELLS_DEFAULT: usize = 8;
-pub(crate) const GRID_CELLS_MAX: usize = 20;
+/// A numeric parameter of a mesh source or a study: the value it opens on and
+/// the range a control offers.
+///
+/// One datum rather than a default beside a floor beside a ceiling, so a bound
+/// cannot drift from the parameter it bounds, and so a control cannot supply
+/// one of its own: a slider that writes its own floor is a second place the
+/// range is decided, and the CLI and the UI then disagree about what is
+/// allowed.
+#[derive(Clone, Copy, Debug)]
+pub struct Param<T> {
+  /// What the parameter opens on, absent an explicit choice.
+  pub default: T,
+  pub min: T,
+  pub max: T,
+}
 
-// Cells on the longest axis a quotient surface opens on, and the ends of its
-// refinement slider. The shorter axes are scaled down from it, so the cells stay
-// near equilateral rather than inheriting the fundamental domain's aspect ratio.
-// Three is the floor the generator imposes on a closed axis.
-//
-// Calibrated against the sphere, which is the mesh every cost here was reasoned
-// about: its default carries 1280 cells and 1920 edges, so a donut of 40 (800
-// cells, 1200 edges) sits comfortably inside it while a donut of 12 carried 72
-// cells, eighteen times coarser than the mesh beside it in the same picker,
-// too coarse to resolve anything a field does.
-pub const QUOTIENT_CELLS_DEFAULT: usize = 40;
-pub(crate) const QUOTIENT_CELLS_MIN: usize = 3;
-pub(crate) const QUOTIENT_CELLS_MAX: usize = 64;
+impl<T: Copy + PartialOrd> Param<T> {
+  pub const fn new(default: T, min: T, max: T) -> Self {
+    Self { default, min, max }
+  }
+
+  /// The range a control offers, and the one a value is admitted from.
+  pub fn range(self) -> std::ops::RangeInclusive<T> {
+    self.min..=self.max
+  }
+
+  /// `value` brought into range, for an input the parameter does not control
+  /// (a command line, a deserialized preset).
+  pub fn clamp(self, value: T) -> T {
+    if value < self.min {
+      self.min
+    } else if value > self.max {
+      self.max
+    } else {
+      value
+    }
+  }
+}
+
+/// Icosphere subdivision depth. The Laplace-Beltrami eigensolve is dense in the
+/// vertex count, so the default stays modest for an instant startup. The
+/// ceiling keeps every reachable mesh solvable while the window stays
+/// responsive: the per-grade solve is dense ($O(n^3)$), and at grade 1 the edge
+/// count is what enters, so one step past it turns the background solve from
+/// seconds into minutes.
+pub const SPHERE_SUBDIVISIONS: Param<usize> = Param::new(3, 0, 4);
+
+/// Cells per axis of the unit-cube grid. Fine enough to resolve a field, and
+/// its ceiling keeps the dense per-grade solve well inside the sphere's cost.
+pub const GRID_CELLS: Param<usize> = Param::new(8, 1, 20);
+
+/// Cells on the longest axis of a quotient surface. The shorter axes are scaled
+/// down from it, so the cells stay near equilateral rather than inheriting the
+/// fundamental domain's aspect ratio. Three is the floor the generator imposes
+/// on a closed axis.
+///
+/// Calibrated against the sphere, which is the mesh every cost here was
+/// reasoned about: its default carries 1280 cells and 1920 edges, so a donut of
+/// 40 (800 cells, 1200 edges) sits comfortably inside it, where a donut of 12
+/// would be eighteen times coarser than the mesh beside it in the same picker,
+/// too coarse to resolve anything a field does.
+pub const QUOTIENT_CELLS: Param<usize> = Param::new(40, 3, 64);
+
+/// The grid's intrinsic dimension, spanning the $1..=3$ the fixed ambient $RR^3$
+/// embeds. A square is the default.
+pub const GRID_DIM: Param<usize> = Param::new(2, 1, 3);
+
+/// The reference cell of the Whitney-basis study, over the same dimensions.
+/// A triangle is the default.
+pub const REFERENCE_CELL_DIM: Param<usize> = Param::new(2, 1, 3);
+
+/// Hodge-Laplace modes an eigenmode study solves for. The default closes a
+/// complete degeneracy shell on the sphere at both low grades: grade 0 fills
+/// $l = 0..=3$ ($sum (2l+1) = 16$) and grade 1 fills $l = 1, 2$ ($6 + 10 = 16$),
+/// so the orbital pyramid the UI lays these out in has no half-built final row.
+/// The ceiling closes the sphere's $l = 0..=5$ grade-0 pyramid ($36$) and keeps
+/// the projected subspace, which is what grows with the mode count, inside what
+/// stays interactive.
+pub const EIGENMODES_NMODES: Param<usize> = Param::new(16, 1, 36);
+
+/// How many steps a time-dependent study samples its solution at. The default
+/// is enough that the linear interpolation between frames reads as continuous
+/// motion at the trajectory's playback rate; the floor still reads as motion
+/// under that interpolation, and the ceiling is where the sampled frames stop
+/// earning their memory against the interpolant between them.
+pub const TRAJECTORY_STEPS: Param<usize> = Param::new(160, 10, 400);
+
+/// The heat flow's final time: long enough for the initial bump to diffuse and
+/// visibly decay on the unit-scale gallery meshes. The parabolic smoothing
+/// settles quickly, which is why its range sits an order below the wave's.
+pub const HEAT_FINAL_TIME: Param<f64> = Param::new(0.5, 0.05, 2.0);
+
+/// The wave equation's final time, in the same units: several periods of the
+/// lowest modes, so the fronts propagate and reflect rather than barely
+/// stirring.
+pub const WAVE_FINAL_TIME: Param<f64> = Param::new(12.0, 1.0, 30.0);
+
+/// The advection's final time. The field carries unit mean speed, so a unit of
+/// time is a unit of distance traveled: the gallery's surfaces are unit-scale
+/// with a revolution of about `QUOTIENT_CIRCUMFERENCE`, and the default is a
+/// couple of laps.
+pub const ADVECTION_FINAL_TIME: Param<f64> = Param::new(13.0, 0.5, 40.0);
 
 // The donut's tube as a fraction of its revolution radius. The binding
 // constraint is not self-intersection of the mesh, the generator already
@@ -73,61 +147,6 @@ const QUOTIENT_CIRCUMFERENCE: f64 = std::f64::consts::TAU;
 // wide has no interior and nothing to show a field on, and still well inside
 // `MOEBIUS_RADIUS_SLACK`, which keeps the swept strip clear of its own axis.
 const MOEBIUS_WIDTH_RATIO: f64 = 1.5;
-
-// The intrinsic dimension the grid opens on, and the top of its dimension
-// slider: the same $1..=3$ the reference cell spans, since both live in the
-// fixed ambient $RR^3$. A square (dim 2) matches the historical planar grid.
-pub const GRID_DIM_DEFAULT: usize = 2;
-pub const GRID_DIM_MAX: usize = 3;
-
-// The reference cell the Whitney-basis study opens on, and the top of its
-// dimension slider: the intrinsic dimensions the fixed ambient $RR^3$ embeds.
-// A triangle (dim 2) matches the historical local-shape-function gallery.
-pub const REFERENCE_CELL_DIM: usize = 2;
-pub const REFERENCE_CELL_DIM_MAX: usize = 3;
-
-// Hodge-Laplace modes an eigenmode study solves for by default. Chosen so both
-// low grades close on a complete degeneracy shell on the sphere: grade 0 fills
-// $l = 0..=3$ ($sum (2l+1) = 16$) and grade 1 fills $l = 1, 2$
-// ($6 + 10 = 16$), so the orbital pyramid the UI lays these out in has no
-// half-built final row.
-pub const DEFAULT_NMODES: usize = 16;
-// The top of the eigenmode-count slider. The per-grade solve is dense
-// ($O(n^3)$) in the shift-invert factorization but the projected subspace is
-// what grows with the mode count, so a cap here keeps the background solve from
-// widening past what stays interactive. Enough to close the sphere's $l = 0..=5$
-// grade-0 pyramid ($sum_(l=0)^5 (2l+1) = 36$) with a full final row.
-pub const EIGENMODES_NMODES_MIN: usize = 1;
-pub const EIGENMODES_NMODES_MAX: usize = 36;
-
-// A time-dependent study samples its solution at this many steps over the
-// solve's final time. Enough that the linear interpolation between frames reads
-// as continuous motion at the trajectory's playback rate.
-pub const DEFAULT_TRAJECTORY_STEPS: usize = 160;
-// The trajectory-sampling slider's range. The lower end still reads as motion
-// under interpolation. The upper end is where the sampled frames stop earning
-// their memory against the linear interpolant between them.
-pub const TRAJECTORY_STEPS_MIN: usize = 10;
-pub const TRAJECTORY_STEPS_MAX: usize = 400;
-// The heat flow's final time: long enough for the initial bump to diffuse and
-// visibly decay on the unit-scale gallery meshes. The wave equation's, in the
-// same units: several periods of the lowest modes, so the fronts propagate and
-// reflect rather than barely stirring.
-pub const HEAT_FINAL_TIME: f64 = 0.5;
-pub const WAVE_FINAL_TIME: f64 = 12.0;
-// The advection field carries unit mean speed, so a unit of time is a unit of
-// distance traveled: the gallery's surfaces are unit-scale with a revolution
-// of about `QUOTIENT_CIRCUMFERENCE`, and this is a couple of laps.
-pub const ADVECTION_FINAL_TIME: f64 = 13.0;
-// The final-time sliders' ranges, one per equation because the two evolve on
-// different scales: the parabolic smoothing settles quickly, the hyperbolic
-// fronts want several periods to propagate and reflect.
-pub const HEAT_FINAL_TIME_MIN: f64 = 0.05;
-pub const HEAT_FINAL_TIME_MAX: f64 = 2.0;
-pub const WAVE_FINAL_TIME_MIN: f64 = 1.0;
-pub const WAVE_FINAL_TIME_MAX: f64 = 30.0;
-pub const ADVECTION_FINAL_TIME_MIN: f64 = 0.5;
-pub const ADVECTION_FINAL_TIME_MAX: f64 = 40.0;
 
 /// The shared surface mesh a study solves against, built once so every
 /// per-grade eigensolve reuses it rather than remeshing.
@@ -272,7 +291,7 @@ impl QuotientSurface {
 
   pub(crate) fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
     use regge::mesher::{quotient::FlatQuotient, quotient_embed};
-    let cells_axis = cells_axis.max(QUOTIENT_CELLS_MIN);
+    let cells_axis = QUOTIENT_CELLS.clamp(cells_axis);
     match self {
       Self::Donut => {
         // Quasi-uniform: the tube's period is `DONUT_TUBE_RATIO` of the
@@ -358,10 +377,9 @@ pub enum MeshSource {
 }
 
 impl MeshSource {
-  /// The mesh the gallery opens on: the icosphere, matching the historical
-  /// startup.
+  /// The mesh the gallery opens on: the icosphere.
   pub const START: MeshSource = MeshSource::Sphere {
-    subdivisions: SPHERE_SUBDIVISIONS,
+    subdivisions: SPHERE_SUBDIVISIONS.default,
   };
 
   pub(crate) fn label(&self) -> String {
@@ -481,7 +499,7 @@ impl Study {
   pub(crate) fn start() -> Study {
     Study::Eigenmodes {
       grade: Dim::ZERO,
-      nmodes: DEFAULT_NMODES,
+      nmodes: EIGENMODES_NMODES.default,
     }
   }
 
@@ -687,7 +705,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       name: "Whitney basis",
       description: "The local shape functions: the Whitney basis on a single reference cell, one field per DOF simplex",
       mesh: MeshSource::ReferenceCell {
-        dim: REFERENCE_CELL_DIM,
+        dim: REFERENCE_CELL_DIM.default,
       },
       study: Study::WhitneyBasis,
       selection: None,
@@ -708,8 +726,8 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::START,
       study: Study::Heat {
         grade: Dim::ZERO,
-        nsteps: DEFAULT_TRAJECTORY_STEPS,
-        final_time: HEAT_FINAL_TIME,
+        nsteps: TRAJECTORY_STEPS.default,
+        final_time: HEAT_FINAL_TIME.default,
       },
       selection: None,
       marks: None,
@@ -720,8 +738,8 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::START,
       study: Study::Wave {
         grade: Dim::ZERO,
-        nsteps: DEFAULT_TRAJECTORY_STEPS,
-        final_time: WAVE_FINAL_TIME,
+        nsteps: TRAJECTORY_STEPS.default,
+        final_time: WAVE_FINAL_TIME.default,
       },
       selection: None,
       marks: None,
@@ -732,8 +750,8 @@ pub(crate) fn presets() -> Vec<Preset> {
       mesh: MeshSource::START,
       study: Study::Advection {
         grade: Dim::ZERO,
-        nsteps: DEFAULT_TRAJECTORY_STEPS,
-        final_time: ADVECTION_FINAL_TIME,
+        nsteps: TRAJECTORY_STEPS.default,
+        final_time: ADVECTION_FINAL_TIME.default,
       },
       selection: None,
       marks: None,
@@ -749,7 +767,7 @@ pub(crate) fn presets() -> Vec<Preset> {
         mesh: MeshSource::Builtin(bob),
         study: Study::Eigenmodes {
           grade: Dim::ONE,
-          nmodes: DEFAULT_NMODES,
+          nmodes: EIGENMODES_NMODES.default,
         },
         selection: None,
         marks: None,
@@ -1011,7 +1029,7 @@ mod tests {
     for (surface, betti, has_boundary, orientable) in cases {
       let source = MeshSource::Quotient {
         surface,
-        cells_axis: QUOTIENT_CELLS_DEFAULT,
+        cells_axis: QUOTIENT_CELLS.default,
       };
       let (topology, coords) = source.build().expect("a generated mesh always builds");
 
@@ -1119,7 +1137,7 @@ mod tests {
       .expect("a Hodge decomposition preset");
     let mesh = MeshSource::Quotient {
       surface: QuotientSurface::Donut,
-      cells_axis: QUOTIENT_CELLS_DEFAULT,
+      cells_axis: QUOTIENT_CELLS.default,
     }
     .build()
     .expect("a generated mesh always builds");
