@@ -212,7 +212,7 @@ fn interactive_mesh() -> Result<(), Box<dyn std::error::Error>> {
 
   let path = std::path::PathBuf::from(prompt("Enter mesh file path (.msh).")?);
   let (topology, coords) = match path.extension().and_then(|e| e.to_str()) {
-    Some("msh") => regge::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?),
+    Some("msh") => regge::io::gmsh::gmsh2coord_complex(&std::fs::read(path)?)?,
     _ => return Err("Unknown or missing file extension.".into()),
   };
   let metric = coords.to_edge_lengths_sq(&topology);
