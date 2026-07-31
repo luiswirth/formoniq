@@ -18,13 +18,7 @@ use crate::ui::Selection;
 /// nonempty. A scene with neither (never produced here) falls back harmlessly
 /// to the first scalar slot.
 pub(crate) fn default_selection(scene: &Scene) -> Selection {
-  if !scene.fields.is_empty() {
-    Selection::Scalar(0)
-  } else if !scene.line_fields.is_empty() {
-    Selection::Line(0)
-  } else {
-    Selection::Scalar(0)
-  }
+  scene.selections().next().unwrap_or(Selection::Scalar(0))
 }
 
 /// The constant / pure-curl / pure-divergence worked grade-1 fields on the
