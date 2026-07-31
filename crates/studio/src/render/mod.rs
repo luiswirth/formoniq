@@ -183,6 +183,58 @@ fn color_target(
   })
 }
 
+/// The pipeline every mark's pass is built from: one shader's `vs_main` and
+/// `fs_main` over one batch's vertex streams, writing the scene's color target
+/// and the selection mask beside it.
+///
+/// The marks differ in their shader, their vertex streams, how they blend into
+/// the color target and how they meet the depth buffer, and in nothing else, so
+/// those are the arguments and the rest is stated here once. Writing the mask
+/// is the part that most wants stating once: a pass that skipped it would draw
+/// correctly and be invisible to picking.
+struct MarkPipeline<'a> {
+  label: &'a str,
+  shader: &'a wgpu::ShaderModule,
+  layout: &'a wgpu::PipelineLayout,
+  buffers: &'a [wgpu::VertexBufferLayout<'a>],
+  /// The scene color target's format. The mask's is the fixed
+  /// [`MASK_FORMAT`].
+  format: wgpu::TextureFormat,
+  /// How the mark blends into the color target. The mask is always replaced:
+  /// what is drawn last at a pixel is what is picked there.
+  blend: wgpu::BlendState,
+  depth: wgpu::DepthStencilState,
+}
+
+impl MarkPipeline<'_> {
+  fn build(self, device: &wgpu::Device) -> wgpu::RenderPipeline {
+    device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+      label: Some(self.label),
+      layout: Some(self.layout),
+      vertex: wgpu::VertexState {
+        module: self.shader,
+        entry_point: Some("vs_main"),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
+        buffers: self.buffers,
+      },
+      fragment: Some(wgpu::FragmentState {
+        module: self.shader,
+        entry_point: Some("fs_main"),
+        compilation_options: wgpu::PipelineCompilationOptions::default(),
+        targets: &[
+          color_target(self.format, self.blend),
+          color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),
+        ],
+      }),
+      primitive: primitive(),
+      depth_stencil: Some(self.depth),
+      multisample: wgpu::MultisampleState::default(),
+      multiview_mask: None,
+      cache: None,
+    })
+  }
+}
+
 #[cfg(test)]
 mod tests {
   /// Every WGSL source in this module parses and validates against naga's own

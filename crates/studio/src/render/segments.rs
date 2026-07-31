@@ -17,9 +17,9 @@
 //! read.
 
 use super::{
-  MASK_FORMAT, SURFACE_MARK_DEPTH_BIAS, color_target, depth_stencil_biased,
+  MarkPipeline, SURFACE_MARK_DEPTH_BIAS, depth_stencil_biased,
   item::SegmentBatch,
-  primitive, shader_module,
+  shader_module,
   uniform::{FrameUniform, SegmentMaterial, UniformPool},
 };
 
@@ -40,30 +40,16 @@ impl SegmentPass {
       bind_group_layouts: &[Some(frame.layout()), Some(materials.layout())],
       immediate_size: 0,
     });
-    let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
-      label: Some("Segment Pipeline"),
-      layout: Some(&layout),
-      vertex: wgpu::VertexState {
-        module: &shader,
-        entry_point: Some("vs_main"),
-        compilation_options: wgpu::PipelineCompilationOptions::default(),
-        buffers: &SegmentBatch::layouts(),
-      },
-      fragment: Some(wgpu::FragmentState {
-        module: &shader,
-        entry_point: Some("fs_main"),
-        compilation_options: wgpu::PipelineCompilationOptions::default(),
-        targets: &[
-          color_target(format, wgpu::BlendState::ALPHA_BLENDING),
-          color_target(MASK_FORMAT, wgpu::BlendState::REPLACE),
-        ],
-      }),
-      primitive: primitive(),
-      depth_stencil: Some(depth_stencil_biased(true, SURFACE_MARK_DEPTH_BIAS)),
-      multisample: wgpu::MultisampleState::default(),
-      multiview_mask: None,
-      cache: None,
-    });
+    let pipeline = MarkPipeline {
+      label: "Segment Pipeline",
+      shader: &shader,
+      layout: &layout,
+      buffers: &SegmentBatch::layouts(),
+      format,
+      blend: wgpu::BlendState::ALPHA_BLENDING,
+      depth: depth_stencil_biased(true, SURFACE_MARK_DEPTH_BIAS),
+    }
+    .build(device);
     Self { pipeline }
   }
 
