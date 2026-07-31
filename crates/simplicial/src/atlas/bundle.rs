@@ -24,7 +24,10 @@
 use super::unit_face_spanning_vectors;
 use crate::Dim;
 
-use multialgebra::{ExteriorGrade, Tensor, Variance, tensor::Transport};
+use multialgebra::{
+  ExteriorGrade, Tensor, Variance,
+  tensor::{Transport, one_alternating},
+};
 use multiindex::Combination;
 
 /// The tangent blade $v_1 wedge dots.c wedge v_d$ of a face of a cell, written
@@ -77,7 +80,7 @@ impl FaceTrace {
     let inclusion = unit_face_spanning_vectors(cell_dim, positions);
     Self {
       transport: Transport::new(
-        &Tensor::one_alternating(grade, Variance::Covariant, cell_dim),
+        &one_alternating(grade, Variance::Covariant, cell_dim),
         &inclusion,
       ),
       face_dim,

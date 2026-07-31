@@ -67,6 +67,35 @@ to complement against, which only an alternating slot has.
   map that says so; it is also the way out to code that knows only dense
   arrays.
 
+## Coefficients
+
+The coefficients are any commutative ring, not a field.
+Every structure constant of the algebra is ±1 or a factorial,
+and each of those is the image of an integer under the one ring map ℤ → R,
+so nothing here divides:
+the wedge, the contraction, both transfers, the pairings, the pushforward
+and the functors above all run over ℤ,
+where their laws are exact equalities rather than statements to a tolerance.
+
+The exception is the operations that dualize a slot,
+and it is the only one.
+The stored basis is multiplicative, so the reciprocal basis element of a
+symmetric slot is x^α / α!,
+and over ℤ those span the divided power algebra rather than the symmetric one:
+Sym^d(V)* ≅ Γ^d(V*), with equality only once the factorials are inverted.
+So `from_reciprocal`, `evaluate` and the pullback ask for a `RationalAlgebra`,
+a ring in which the positive integers are invertible,
+and that is the mathematics rather than a limitation of the encoding.
+Every α! is 1 on the alternating family,
+where Λ^k(V)* ≅ Λ^k(V*) over any ring, so nothing purely exterior asks for it.
+
+A ring is a `RationalAlgebra` by saying so.
+Deriving it from the operations available would admit ℤ,
+whose division operator truncates,
+and that is exactly the kind of silently wrong answer the split exists to prevent.
+`extend_scalars` is the map between rings, and it is natural:
+every operation commutes with it, ℤ → ℚ → ℝ → ℂ being one operation read four ways.
+
 What stays outside is Schur functors: a symmetry like the Riemann tensor's
 R_ijkl = R_klij is cut out by a higher-dimensional irreducible representation
 of S_k, not by a character, and its basis is no longer a word.

@@ -105,6 +105,10 @@ Two of those boundaries are invariants made structural rather than documented.
 the wedge, the contraction, the transfer and both pairings need no metric,
 the inner product, the Hodge star and the musicals need nothing else,
 so an operation's crate now says what it depends on.
+The coefficient ring reads off the same boundary rather than a second one:
+`multialgebra` is generic over any commutative ring,
+while a metric is real and applying one lands in $RR$,
+so the ring-generic operations are exactly the metric-free ones.
 **Invariant 1** splits `simplicial` from `regge`:
 the complex is combinatorics, a geometry is a genuinely second input,
 and the split runs through the meshers too --
@@ -129,7 +133,7 @@ joining the ladder only where `formoniq` consumes it.
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
 | `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
-| `multialgebra` | $V^(times.circle k)$ and its two quotients $Lambda$ and $"Sym"$, as one construction | `Symmetry` (free, alternating, symmetric), `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns) |
+| `multialgebra` | $V^(times.circle k)$ and its two quotients $Lambda$ and $"Sym"$, as one construction | `Symmetry` (free, alternating, symmetric), `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns), `Ring`/`RationalAlgebra` (the coefficient ring and the $QQ$-algebra the dualizing operations need), `extend_scalars`, `determinant` (Leibniz, since a ring does not divide) |
 | `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | the affine space, typed              | `Coords<S>` (a point tagged by its space, generic over owned or borrowed storage) with the affine structure: the action of a displacement, `affine_combination` and its uniform case `barycenter`; `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
 | `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., `chain::` (`FreeModule<V, R>` over a coefficient ring `R` and a `Variance` `V`, of which `Chain`/`Cochain` are the two aliases: one signed incidence read both ways, with `Complex::incidences` the relation and the boundary operators its assembled form), `homology::`/`cohomology::` (the free ranks and representative (co)cycles over $ZZ$, one subquotient computed on the incidence and its transpose), `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `relabel::VertexRelabelling` the gap-closing renumbering an import needs, `incidence::FaceIncidence` the cell-to-face relation in both of its readings, `manifold::` the checkable rungs of the manifold condition, `subcomplex::Subcomplex` the boundary, a boundary part and a vertex link as one construction), `atlas::` (`Chart`, `MeshPoint`, `Transition` with its action on fiber values, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`, and `bundle::` the exterior bundle the atlas determines: `FaceTrace`, `face_tangent_blade`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), and `linalg::` (the dense/sparse nalgebra aliases and `CooMatrixExt` block-matrix builder every crate above it reuses). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
@@ -633,6 +637,23 @@ Both bases are rational; an orthonormal one would need $sqrt(alpha!)$, and none 
 Every $alpha!$ is $1$ on $Lambda^k$, where the two bases coincide,
 so a law swept over the alternating family alone says nothing about any of this:
 **a law that dualizes is swept over both families.**
+
+That $alpha!$ is also what decides how much of a field the coefficients have to be.
+Every structure constant of the algebra is $plus.minus 1$ or a factorial,
+each the image of an integer under the unique ring map $ZZ -> R$,
+so the algebra is division-free and `Tensor<R>` runs over any commutative `Ring`,
+$ZZ$ included, where the metric-free laws are exact equalities rather than tolerances.
+The dualizing operations are the one exception, and they are the only one:
+over $ZZ$ the reciprocal basis of a symmetric slot spans the divided power algebra,
+$"Sym"^d (V)^* tilde.equals Gamma^d (V^*)$,
+with equality only once the factorials are inverted,
+so `from_reciprocal`, `evaluate` and the pullback ask for a `RationalAlgebra`
+and nothing else does.
+That bound is *stated* rather than derived, in the pattern of invariant 4:
+$ZZ$ has a division operator and it truncates,
+so a blanket bound over the operations available would have admitted it silently.
+`extend_scalars` is the map between rings,
+and its naturality is the law a hardcoded coefficient breaks.
 
 **Combinations and compositions are different objects.**
 A `Combination` is a subset, the basis of $Lambda^k$:
