@@ -7,8 +7,7 @@
 // stream is a function of the mesh alone, the value and height streams of the
 // field on it (the discontinuous colormap and the continuous displacement
 // height respectively), and the deposit coordinate of the mesh's atlas layout.
-// The deposit
-// coordinate is interpolated plainly -- the map (cell, bary) -> atlas texel is
+// The deposit coordinate is interpolated plainly -- the map (cell, bary) -> atlas texel is
 // affine per triangle, so the rasterizer's interpolation of the three corner
 // values *is* that map at every fragment, and no per-fragment lookup exists.
 
