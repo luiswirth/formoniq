@@ -1,7 +1,7 @@
 // Shared WGSL preamble, prepended to every shader body in this module (see
-// `render::shader_source`). It declares only types, pipeline-overridable
-// constants and pure functions -- never a binding, since the group a uniform
-// sits in is a property of the pipeline that uses it, not of the value.
+// `render::shader_source`). It declares only types, plain constants and pure
+// functions -- never a binding, since the group a uniform sits in is a property
+// of the pipeline that uses it, not of the value.
 //
 // Each struct here is the WGSL side of a `#[repr(C)]` Rust mirror of the same
 // name -- a uniform in `uniform.rs`, or a storage element declared beside the
@@ -104,10 +104,17 @@ fn wave_osc(frame: Frame, omega: f32) -> f32 {
     return cos(omega * frame.time);
 }
 
-// The wave-displaced world position of one vertex, clamped to that vertex's own
-// curvature cap so a thin or sharply curved feature never folds through its
-// focal point. A vertex with a zero normal -- a mark that sits on no surface --
-// is left where it is by the same expression.
+// The wave-displaced world position of one vertex.
+//
+// The amplitude is what bounds the deformation, one global scalar chosen so no
+// vertex passes its own reach (see `display::safe_amplitude`), because scaling
+// is the operation an eigenmode is indifferent to and a per-vertex clamp binds
+// at a different value at every vertex, flattening the field in patches. So the
+// clamp here is a guard against a mesh whose reach the estimator could not
+// resolve, and it does not fire in normal operation.
+//
+// A vertex with a zero normal -- a mark that sits on no surface -- is left where
+// it is by the same expression.
 fn wave_displace(amplitude: f32, osc: f32, position: vec3<f32>, normal: vec3<f32>, value: f32, max_displacement: f32) -> vec3<f32> {
     let raw = amplitude * osc * value;
     let capped = clamp(raw, -max_displacement, max_displacement);
@@ -117,9 +124,9 @@ fn wave_displace(amplitude: f32, osc: f32, position: vec3<f32>, normal: vec3<f32
 // Perceptually uniform sequential map (a polynomial fit to viridis), for an
 // unsigned magnitude: dark, low-saturation at 0, rising in lightness and
 // saturation to a bright yellow at 1. Monotone in luminance, which is exactly
-// what lets a single fixed ink separate from it everywhere -- unlike the
-// three-sinusoid rainbow this replaces, whose channels summed to a constant
-// and made it iso-luminant.
+// what lets a single fixed ink separate from it everywhere: an iso-luminant map
+// leaves a wireframe or a glyph indistinguishable from the fill behind it
+// wherever the two happen to agree in lightness.
 fn viridis(t: f32) -> vec3<f32> {
     let x = clamp(t, 0.0, 1.0);
     let c0 = vec3<f32>(0.2777273272, 0.0054073445, 0.3340998053);
@@ -352,8 +359,8 @@ fn aces(x: vec3<f32>) -> vec3<f32> {
 // colormapped fill and a segment ribbon are clamped to `[0, 1]` by
 // construction -- see the same invariant `bloom.wgsl`'s prefilter turns on --
 // so clamp is not a mode for them, it is the identity, and running the curve
-// over them regardless is what skewed the heatmap's palette for no gain: the
-// curve was never asked whether there was anything above 1 to reconcile.
+// over them regardless skews the palette for no gain: it reconciles a range
+// nothing there occupies.
 // `unbounded_mask` is that question, answered per pixel by the marks that
 // drew there rather than guessed from the radiance's own value -- a value near
 // 1 cannot tell a saturated fill from a faint overlap of particles, but the
