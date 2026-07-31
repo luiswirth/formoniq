@@ -42,10 +42,7 @@ fn real_operators(dim: Dim, grade: usize) -> (CsrMatrix, CsrMatrix) {
   let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
   let lengths = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &lengths);
-  (
-    CsrMatrix::from(&whitney.mass(grade)),
-    CsrMatrix::from(&whitney.codif_dif(grade)),
-  )
+  (whitney.mass(grade), whitney.codif_dif(grade))
 }
 
 fn probe(n: usize, seed: usize) -> Vector {

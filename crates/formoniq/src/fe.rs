@@ -30,7 +30,7 @@ use {
   regge::{cell_volume, lengths::mesh::MeshLengthsSq},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
-    linalg::{CsrMatrix, Vector},
+    linalg::Vector,
     topology::complex::Complex,
   },
 };
@@ -91,7 +91,7 @@ pub fn l2_projection<F: Sync + Section>(
   qr: Option<SimplexQuadRule>,
 ) -> Cochain {
   let grade = field.grade();
-  let mass = CsrMatrix::from(&whitney.mass(grade));
+  let mass = whitney.mass(grade);
   let load: Vector = assemble_galvec(
     whitney.topology(),
     whitney.geometry(),
@@ -198,7 +198,7 @@ mod test {
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       for grade in dim.range_inclusive() {
-        let mass = CsrMatrix::from(&whitney.mass(grade));
+        let mass = whitney.mass(grade);
         let n = mass.nrows();
         let b = Vector::from_fn(n, |i, _| ((i % 5) as f64 - 2.0) * 0.5);
 
@@ -231,7 +231,7 @@ mod test {
     let whitney = WhitneyComplex::new(&topology, &lengths);
 
     for grade in dim.range_inclusive() {
-      let mass = CsrMatrix::from(&whitney.mass(grade));
+      let mass = whitney.mass(grade);
       let n = mass.nrows();
       let b = Vector::from_fn(n, |i, _| ((i % 5) as f64 - 2.0) * 0.5);
 

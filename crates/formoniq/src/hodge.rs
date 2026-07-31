@@ -63,10 +63,10 @@ impl HodgeBlocks {
     Self {
       n_sigma: complex.ndofs(grade - 1),
       n_u: complex.ndofs(grade),
-      mass_sigma: CsrMatrix::from(&complex.mass(grade - 1)),
-      mass_u: CsrMatrix::from(&complex.mass(grade)),
-      codif_u: CsrMatrix::from(&complex.codif(grade)),
-      codif_dif: CsrMatrix::from(&complex.codif_dif(grade)),
+      mass_sigma: complex.mass(grade - 1),
+      mass_u: complex.mass(grade),
+      codif_u: complex.codif(grade),
+      codif_dif: complex.codif_dif(grade),
     }
   }
 

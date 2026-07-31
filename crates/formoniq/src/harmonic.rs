@@ -53,7 +53,7 @@ use crate::{linalg::bilinear_form_sparse, whitney_complex::HilbertComplex};
 use derham::{Chain, Cochain, pairing};
 use iterative::{Identity, StopCriterion, krylov::cg};
 use multialgebra::ExteriorGrade;
-use simplicial::linalg::{CsrMatrix, Matrix};
+use simplicial::linalg::Matrix;
 
 /// The two readings of one harmonic space, as the columns of two matrices
 /// spanning it.
@@ -123,7 +123,7 @@ pub fn harmonics<C: HilbertComplex>(
   let ndofs = complex.ndofs(grade);
   let cocycles = complex.integral_cocycles(grade);
 
-  let mass = CsrMatrix::from(&complex.mass(grade));
+  let mass = complex.mass(grade);
   // $D = dif^(k-1)$, the coboundary *into* this grade. At grade $0$ it has no
   // columns, the normal equations are the empty system and $h = z$ with no
   // special case.
@@ -206,7 +206,7 @@ mod test {
   /// The laws every harmonic basis obeys, checked on one complex and grade.
   fn assert_harmonic<C: HilbertComplex>(complex: &C, grade: Dim) {
     let harmonics = harmonics(complex, grade).expect("Riemannian, so the projection is well posed");
-    let mass = CsrMatrix::from(&complex.mass(grade));
+    let mass = complex.mass(grade);
     let dif_prev = complex.dif(grade - 1);
     let dif = complex.dif(grade);
 
@@ -288,7 +288,7 @@ mod test {
     for (topology, lengths) in fixtures() {
       let whitney = WhitneyComplex::new(&topology, &lengths);
       for grade in topology.dim().range_inclusive() {
-        let mass = CsrMatrix::from(&whitney.mass(grade));
+        let mass = whitney.mass(grade);
         let dif_prev = whitney.dif(grade - 1);
         let harmonics = harmonics(&whitney, grade).unwrap();
 

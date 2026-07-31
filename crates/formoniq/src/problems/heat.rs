@@ -114,7 +114,7 @@ mod test {
       let whitney = WhitneyComplex::new(&topology, &metric);
 
       for grade in dim.range_inclusive() {
-        let mass = CsrMatrix::from(&whitney.mass(grade));
+        let mass = whitney.mass(grade);
         let n = whitney.ndofs(grade);
         let u0 = Cochain::new(
           grade,
@@ -158,7 +158,7 @@ mod test {
     let inclusion = relative.inclusion(grade);
     let source = Cochain::new(grade, &inclusion * &f_rel);
 
-    let mass_rel = CsrMatrix::from(&relative.mass(grade));
+    let mass_rel = relative.mass(grade);
     let galvec = &inclusion * (&mass_rel * &f_rel);
     let (_sigma, u_static, _p) = solve_source(&relative, galvec, grade).expect("static solve");
 

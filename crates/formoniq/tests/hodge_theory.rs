@@ -181,7 +181,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   // Affine-lifting path with zero boundary values.
   let zero_values = Cochain::new(Dim::ZERO, Vector::zeros(boundary.ndofs(Dim::ZERO)));
-  let laplace = CsrMatrix::from(&whitney.codif_dif(Dim::ZERO));
+  let laplace = whitney.codif_dif(Dim::ZERO);
   let sol_lifted = bc::solve_with_essential_bc(
     &whitney.relative(),
     &boundary,
@@ -192,7 +192,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   // Direct solve on C^0(K, dK), extended by zero.
   let relative: RelativeWhitneyComplex = whitney.relative();
-  let laplace_relative = CsrMatrix::from(&relative.codif_dif(Dim::ZERO));
+  let laplace_relative = relative.codif_dif(Dim::ZERO);
   let rhs_relative = relative.restrict(&Cochain::new(Dim::ZERO, galvec));
   let sol_relative = FaerCholesky::new(laplace_relative).solve(rhs_relative.coeffs());
   let sol_relative = relative.extend_by_zero(&Cochain::new(Dim::ZERO, sol_relative));

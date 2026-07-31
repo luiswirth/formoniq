@@ -140,6 +140,6 @@ pub fn boundary_mass(
 ) -> CsrMatrix {
   let grade = grade.into();
   let trace = boundary.trace(grade);
-  let mass = CsrMatrix::from(&boundary.whitney_complex().mass(grade));
+  let mass = boundary.whitney_complex().mass(grade);
   trace.transpose() * mass * trace
 }
