@@ -39,6 +39,8 @@ What the `realize` pass did, so you don't redo it.
 - Deliberately left: `reduce::corner_bounds` is a normalization range rather than a reduction, but it sits where the per-corner streams are produced and every caller of one calls the other.
 - The crate's `CLAUDE.md` needed no change, which is the interesting part: on all three of these the design doc was already right and the code had drifted from it.
 
+The `studio` tail is done: everything the outline below named has now been read closely, and the pass has walked the whole ladder. What the tail found is listed after the earlier `studio` notes.
+
 Where `studio` stands. It is the last crate and it has its own `CLAUDE.md`, which governs `realize` too. Its test suite is slow, around three minutes, so run it in the background rather than waiting on it. The crate has been walked. Read closely: `scene.rs`, `gallery.rs`, `solve.rs`, `demos.rs`, `welcome.rs`, `display.rs`, `cli.rs`, `export.rs`, `ui.rs`, `render/mod.rs`, `render/item.rs`, the four mark passes, `render/camera.rs`, `render/renderer.rs`, `render/uniform.rs`. Read only in outline, and the place to start if the pass is resumed: `app.rs`'s input and touch handling, `render/deposit.rs`, `render/volume.rs`, `render/advect.rs`, `render/particles.rs`, `web.rs`, and the shaders.
 
 What the `studio` pass did.
@@ -57,8 +59,17 @@ What the `studio` pass did.
 - A dozen doc comments explained the current design by naming an older one. Nine others broke a line before a comma instead of after it.
 - Deliberately left: `ScalarField` and `LineField` are field-for-field identical, and unifying them is tempting. They are two types because the two lists *are* the reduction, made once at construction, so a consumer reads which mark a field landed in instead of dispatching on grade again. Merging them would put a grade dispatch back at every consumer, which the crate's anti-goals name.
 
+What the `studio` tail did (`app.rs`'s input and touch handling, the four remaining render modules, `web.rs`, the shaders).
+- The panel rebuilt the picker's flat order by hand beside `Scene::selections`, which exists to state that order once. It is `Scene::entries` now. In the same function, the scalarization compare read `self.field_view` after `response.field_view` had already been assigned to it, so it compared a value against itself and never fired: changing which operator the medium is baked from rebuilt nothing.
+- The volume's coarse empty-space grid normalized a block's `max |value|` by the volume's own peak, while the march compared it against fine samples normalized by the *display's* range, which is the boundary trace's wherever the medium shows the field itself. The bound was therefore not conservative and the skip could step over medium. The texel now carries the field-unit scale it is stored in and the shader converts through the one `occupancy_scale` both tests use.
+- `SPLAT_FALLOFF` was written in Rust, to calibrate the display's gain, and again in WGSL, to draw the footprint. It goes through `DepositParams` now, as its sibling radius already did. The advect workgroup size stays a mirror (`@workgroup_size` cannot read a uniform) but a test reads it off the parsed module.
+- `SILHOUETTE_EPS`/`OPAQUE_ENOUGH` and the paragraph justifying the split stood byte-identical in two shaders, with a shared preamble right there.
+- `wave_displace` presented its per-vertex clamp as the mechanism bounding the displacement, which is the instrument the crate's `CLAUDE.md` rejects and which `display::safe_amplitude` already documents as the guard it is.
+- Four more comments explained the current design by naming an older one (the colormap, the tone curve, the bloom's knee, the preamble's own header).
+- Checked and found sound, so nobody need re-check: `particles.rs`'s first generation is literally `respawn(id, 0)`, constants included, so the claim that it is drawn by the rule every later one is holds; `advect.wgsl` and `glyph.wgsl` had nothing.
+- The wasm target is not installed on this machine, so no web-side change can be compiled here. The `web.rs` change was removing two `#[cfg(target_arch = "wasm32")]` gates inside a module already gated on it, which is a provable no-op.
+
 Carried notes, upstream of where the pass now is.
 - `Metric::new_unchecked` falls back to the checked constructor under `debug_assertions` and `on_slot` builds a `Metric` per slot, so a debug build does a symmetric eigendecomposition per `inner()` call. Deliberate, but it makes the debug test suite much slower than it looks.
-- Doc comments still narrating history: `studio/src/scene.rs:515`, `studio/src/render/camera.rs:433`.
 - `regge/src/io/gmsh.rs` was never read closely during the `regge` pass.
 - The examples under `crates/formoniq/examples/` are run by hand, not by `cargo test`, so a change reaching them has to be run. `source` is the slow one, tens of minutes.
