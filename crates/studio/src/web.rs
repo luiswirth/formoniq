@@ -134,7 +134,6 @@ fn mount_canvas(window: &Window) {
 /// mid-flight (the reader picks another pair) therefore stops occupying a core
 /// instead of running to completion for an answer nobody will read, which is
 /// also why the handle owns the worker rather than sharing a long-lived one.
-#[cfg(target_arch = "wasm32")]
 pub(crate) mod worker {
   use std::cell::RefCell;
   use std::rc::Rc;
@@ -225,7 +224,6 @@ pub(crate) mod worker {
 /// instance of this same module, so the solver here is the identical code the
 /// native build runs on a thread: the boundary is the transport, never a
 /// second implementation.
-#[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn solve_in_worker(request: &[u8]) -> Vec<u8> {
   let request: crate::solve::SolveRequest = crate::solve::decode(request);
