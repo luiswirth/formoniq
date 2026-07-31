@@ -3,6 +3,17 @@ use crate::Dim;
 
 use indexmap::IndexSet;
 
+/// The simplices are indexed by their own vertex words, which the library
+/// generates itself and no caller supplies, so the hash table has no adversary
+/// to resist and the default SipHash buys nothing for a key of two or three
+/// integers. Measured on a 3D grid, hashing dominated a face lookup, which is
+/// the innermost step of assembly.
+///
+/// This is the hash table only. An [`IndexSet`] keeps its entries in insertion
+/// order whatever hasher indexes them, so the colex order of a skeleton, and
+/// with it every [`KSimplexIdx`], is untouched by this choice.
+pub type SimplexSet = IndexSet<Simplex, rustc_hash::FxBuildHasher>;
+
 #[cfg(feature = "serde")]
 use std::{io, path::Path};
 
@@ -11,7 +22,7 @@ use std::{io, path::Path};
 /// the index every handle and boundary operator refers to.
 #[derive(Default, Debug, Clone)]
 pub struct Skeleton {
-  simplices: IndexSet<Simplex>,
+  simplices: SimplexSet,
   nvertices: usize,
 }
 
@@ -64,7 +75,7 @@ impl Skeleton {
         + 1
     };
 
-    let simplices = IndexSet::from_iter(simplices);
+    let simplices = SimplexSet::from_iter(simplices);
     Self {
       simplices,
       nvertices,
@@ -92,7 +103,7 @@ impl Skeleton {
     self.nvertices
   }
   #[must_use]
-  pub fn simplices(&self) -> &IndexSet<Simplex> {
+  pub fn simplices(&self) -> &SimplexSet {
     &self.simplices
   }
   #[must_use]
@@ -100,7 +111,7 @@ impl Skeleton {
     self.simplices.iter()
   }
 
-  pub fn into_index_set(self) -> IndexSet<Simplex> {
+  pub fn into_index_set(self) -> SimplexSet {
     self.simplices
   }
 

@@ -3762,6 +3762,7 @@ dependencies = [
  "num-rational 0.4.2",
  "num-traits",
  "rayon",
+ "rustc-hash 2.1.3",
  "serde",
 ]
 
