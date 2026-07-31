@@ -213,10 +213,7 @@ impl HodgeDirac {
   fn assemble_signed<C: HilbertComplex>(complex: &C, delta_sign: f64) -> Self {
     let dim = complex.dim();
 
-    let masses: Vec<CsrMatrix> = dim
-      .range_inclusive()
-      .map(|k| CsrMatrix::from(&complex.mass(k)))
-      .collect();
+    let masses: Vec<CsrMatrix> = dim.range_inclusive().map(|k| complex.mass(k)).collect();
     // The coboundaries $D_k: C^k -> C^(k+1)$, one per interior coupling.
     let difs: Vec<CsrMatrix> = dim.range().map(|k| complex.dif(k)).collect();
 
@@ -561,7 +558,7 @@ pub fn top_harmonic(relative: &RelativeWhitneyComplex) -> Option<Vector> {
     orientation.signs().len(),
     orientation.signs().iter().map(|s| s.as_f64()),
   );
-  let h_n = FaerLu::new(CsrMatrix::from(&relative.mass(dim))).solve(&z);
+  let h_n = FaerLu::new(relative.mass(dim)).solve(&z);
 
   let ndofs: Vec<usize> = dim.range_inclusive().map(|k| relative.ndofs(k)).collect();
   let mut h = Vector::zeros(ndofs.iter().sum());

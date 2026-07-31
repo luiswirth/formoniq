@@ -225,7 +225,7 @@ mod test {
       geometry: &MeshLengthsSq,
       elmat: impl Fn() -> E,
     ) {
-      let assembled: CsrMatrix = (&assemble_galmat(topology, geometry, elmat())).into();
+      let assembled: CsrMatrix = assemble_galmat(topology, geometry, elmat());
       let op = ElementOperator::new(topology, geometry, elmat());
       let x = probe(op.ncols());
       assert_relative_eq!(op.apply(&x), assembled * &x, epsilon = 1e-9);
@@ -271,7 +271,7 @@ mod test {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
         let assembled: CsrMatrix =
-          (&assemble_galmat(&topology, &geometry, HodgeMassElmat::new(dim, grade))).into();
+          assemble_galmat(&topology, &geometry, HodgeMassElmat::new(dim, grade));
         let op = ElementOperator::new(&topology, &geometry, HodgeMassElmat::new(dim, grade));
         let expected = Vector::from_fn(op.nrows(), |i, _| {
           assembled.get_entry(i, i).unwrap().into_value()
@@ -293,7 +293,7 @@ mod test {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
         let assembled: CsrMatrix =
-          (&assemble_galmat(&topology, &geometry, HodgeMassElmat::new(dim, grade))).into();
+          assemble_galmat(&topology, &geometry, HodgeMassElmat::new(dim, grade));
         let op = ElementOperator::new(&topology, &geometry, HodgeMassElmat::new(dim, grade));
         let b = probe(op.nrows());
         let stop = StopCriterion::rtol(1e-10);

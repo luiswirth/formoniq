@@ -44,7 +44,7 @@ pub fn assemble_transport<V: Sync + Section>(
     geometry,
     LieDerivativeElmat::new(transport.velocity, transport.grade, transport.quad_degree),
   );
-  (CsrMatrix::from(&mass), CsrMatrix::from(&lie))
+  (mass, lie)
 }
 
 /// $diff_t omega + cal(L)_v omega = 0$ on Whitney $k$-forms of any grade,

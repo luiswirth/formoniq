@@ -31,7 +31,7 @@ use {
     whitney_complex::{HilbertComplex, WhitneyComplex},
   },
   regge::mesher::cartesian::CartesianGrid,
-  simplicial::linalg::{CsrMatrix, Vector},
+  simplicial::linalg::Vector,
   util::relative_eigenform_cochain,
 };
 
@@ -60,7 +60,7 @@ fn main() {
     let whitney = WhitneyComplex::new(&topology, &metric);
 
     for grade in 0..=dim {
-      let mass = CsrMatrix::from(&whitney.mass(grade));
+      let mass = whitney.mass(grade);
 
       let initial = relative_eigenform_cochain(dim, grade, &topology, &coords);
       let source = Cochain::new(grade, Vector::zeros(whitney.ndofs(grade)));

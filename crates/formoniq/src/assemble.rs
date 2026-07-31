@@ -2,7 +2,7 @@ use crate::operators::{ElMatProvider, ElVecProvider};
 
 use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
-  linalg::{CooMatrix, Vector},
+  linalg::{CooMatrix, CsrMatrix, Vector},
   topology::complex::Complex,
 };
 
@@ -43,7 +43,15 @@ impl Triplets {
   }
 }
 
-pub type GalMat = CooMatrix;
+/// An assembled Galerkin matrix: compressed, because that is what an operator
+/// is asked for.
+///
+/// Coordinate format is how a scatter *builds* a matrix, not what anyone wants
+/// back: every caller here applies, factors, adds or restricts, and each of
+/// those is a compressed-format operation. Handing back the triplet container
+/// would export the assembly's own intermediate and leave the same conversion
+/// at every call site.
+pub type GalMat = CsrMatrix;
 /// Assembly algorithm for the Galerkin Matrix.
 ///
 /// The local-to-global map is streamed per cell rather than taken from a
@@ -98,7 +106,10 @@ pub fn assemble_galmat(
     .reduce(Triplets::default, Triplets::concat)
     .into_arrays();
 
-  GalMat::try_from_triplets(nsimps_row, nsimps_col, rows, cols, values).unwrap()
+  let coo = CooMatrix::try_from_triplets(nsimps_row, nsimps_col, rows, cols, values).unwrap();
+  // The one place the triplets are summed and compressed, rather than once per
+  // caller. Duplicate entries at a shared face add here, which is the scatter.
+  GalMat::from(&coo)
 }
 
 pub type GalVec = Vector;

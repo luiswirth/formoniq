@@ -111,7 +111,7 @@ pub trait HilbertComplex {
   /// since $dif$ is metric-free and no mass inverse enters.
   fn hdif_gram(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
-    &CsrMatrix::from(&self.mass(grade)) + &CsrMatrix::from(&self.codif_dif(grade))
+    &self.mass(grade) + &self.codif_dif(grade)
   }
 
   /// The discrete codifferential $delta: Lambda^k -> Lambda^(k-1)$, the
@@ -134,8 +134,8 @@ pub trait HilbertComplex {
     if self.ndofs(lower) == 0 {
       return Cochain::new(lower, Vector::zeros(0));
     }
-    let mass_lower = CsrMatrix::from(&self.mass(lower));
-    let coupling = CsrMatrix::from(&self.codif(grade));
+    let mass_lower = self.mass(lower);
+    let coupling = self.codif(grade);
     let sigma = FaerLu::new(mass_lower).solve(&(coupling * u.coeffs()));
     Cochain::new(lower, sigma)
   }
@@ -151,7 +151,7 @@ pub trait HilbertComplex {
 
   /// $L^2 Lambda^k$ norm of a discrete differential form.
   fn norm_l2(&self, u: &Cochain) -> f64 {
-    quadratic_form_sparse(&CsrMatrix::from(&self.mass(u.grade())), u.coeffs()).sqrt()
+    quadratic_form_sparse(&self.mass(u.grade()), u.coeffs()).sqrt()
   }
 
   /// $H Lambda^k (dif)$ seminorm: the $L^2$ norm of the exterior derivative.
@@ -230,7 +230,7 @@ pub fn l2_pairing(complex: &impl HilbertComplex, left: &Cochain, right: &Cochain
     right.grade(),
     "an L2 pairing is between cochains of one grade"
   );
-  let mass = CsrMatrix::from(&complex.mass(left.grade()));
+  let mass = complex.mass(left.grade());
   assert_eq!(
     mass.ncols(),
     left.coeffs().len(),
@@ -343,7 +343,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
   fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
     if !grade.in_range(self.dim()) {
-      return GalMat::new(0, 0);
+      return GalMat::zeros(0, 0);
     }
     assemble_galmat(
       self.topology,
@@ -387,7 +387,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
     if !grade.in_range(self.dim()) {
-      return GalMat::new(self.ndofs(grade), self.ndofs(grade));
+      return GalMat::zeros(self.ndofs(grade), self.ndofs(grade));
     }
     assemble_galmat(
       self.topology,
@@ -406,7 +406,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
     let grade = grade.into();
     let (rows, cols) = (self.ndofs(grade - 1), self.ndofs(grade));
     if rows == 0 || cols == 0 {
-      return GalMat::new(rows, cols);
+      return GalMat::zeros(rows, cols);
     }
     assemble_galmat(
       self.topology,
@@ -603,8 +603,8 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
   fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
     let incl = self.inclusion(grade);
-    let mass = CsrMatrix::from(&self.full.mass(grade));
-    GalMat::from(&(incl.transpose() * mass * incl))
+    let mass = self.full.mass(grade);
+    incl.transpose() * mass * incl
   }
 
   /// Exterior derivative on the relative complex: $E_(k+1)^T D E_k$.
@@ -633,8 +633,8 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
     let incl = self.inclusion(grade);
-    let stiff = CsrMatrix::from(&self.full.codif_dif(grade));
-    GalMat::from(&(incl.transpose() * stiff * incl))
+    let stiff = self.full.codif_dif(grade);
+    incl.transpose() * stiff * incl
   }
 
   /// Galerkin matrix of the weak codifferential on the relative complex:
@@ -646,8 +646,8 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
   /// two factors collapses.
   fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    let codif = CsrMatrix::from(&self.full.codif(grade));
-    GalMat::from(&(self.inclusion(grade - 1).transpose() * codif * self.inclusion(grade)))
+    let codif = self.full.codif(grade);
+    self.inclusion(grade - 1).transpose() * codif * self.inclusion(grade)
   }
   /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
@@ -755,10 +755,10 @@ mod test {
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       for grade in dim.range_inclusive() {
-        let local = CsrMatrix::from(&whitney.codif_dif(grade));
+        let local = whitney.codif_dif(grade);
 
         let dif = whitney.dif(grade);
-        let mass = CsrMatrix::from(&whitney.mass(grade + 1));
+        let mass = whitney.mass(grade + 1);
         let global = dif.transpose() * mass * dif;
 
         assert_eq!(local.nrows(), global.nrows());
@@ -802,8 +802,8 @@ mod test {
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       for grade in dim.range_inclusive() {
-        let local = CsrMatrix::from(&whitney.codif(grade));
-        let global = whitney.dif(grade - 1).transpose() * &CsrMatrix::from(&whitney.mass(grade));
+        let local = whitney.codif(grade);
+        let global = whitney.dif(grade - 1).transpose() * &whitney.mass(grade);
 
         assert_eq!(local.nrows(), global.nrows());
         assert_eq!(local.ncols(), global.ncols());
@@ -855,10 +855,10 @@ mod test {
           assert!(relative.ndofs(grade) < topology.nsimplices(grade));
         }
 
-        let restricted = CsrMatrix::from(&relative.codif_dif(grade));
+        let restricted = relative.codif_dif(grade);
 
         let dif = relative.dif(grade);
-        let mass = CsrMatrix::from(&relative.mass(grade + 1));
+        let mass = relative.mass(grade + 1);
         let by_definition = dif.transpose() * mass * dif;
 
         let residual = (&restricted - &by_definition)
@@ -935,8 +935,8 @@ mod test {
         let tau = sample(grade - 1, &topology);
         let sigma = whitney.codif_cochain(&u);
 
-        let mass_lower = CsrMatrix::from(&whitney.mass(grade - 1));
-        let mass_k = CsrMatrix::from(&whitney.mass(grade));
+        let mass_lower = whitney.mass(grade - 1);
+        let mass_k = whitney.mass(grade);
         let lhs = bilinear_form_sparse(&mass_lower, sigma.coeffs(), tau.coeffs());
         let rhs = bilinear_form_sparse(&mass_k, u.coeffs(), tau.dif(&topology).coeffs());
 
@@ -1038,7 +1038,7 @@ mod test {
       // the general formula with no special case.
       let ldd_top = whitney.codif_dif(dim);
       assert_eq!((ldd_top.nrows(), ldd_top.ncols()), (ndofs_top, ndofs_top));
-      let ldd_top = CsrMatrix::from(&ldd_top);
+
       assert!(ldd_top.values().iter().all(|&v| v == 0.0), "dim={dim}");
     }
   }

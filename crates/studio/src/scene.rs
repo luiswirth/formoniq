@@ -960,7 +960,6 @@ pub(crate) fn hodge_decompose(
     problems::elliptic::{solve_harmonics, solve_source},
     whitney_complex::{HilbertComplex, WhitneyComplex},
   };
-  use simplicial::linalg::CsrMatrix;
 
   let grade = input.grade();
   let metric = coords.to_edge_lengths_sq(topology);
@@ -968,7 +967,7 @@ pub(crate) fn hodge_decompose(
 
   // The load vector of the source problem is the Riesz representation of the
   // functional $angle.l omega, dot.c angle.r$, i.e. $M_k omega$.
-  let mass = CsrMatrix::from(&complex.mass(grade));
+  let mass = complex.mass(grade);
   let source_galvec = &mass * input.coeffs();
 
   let (sigma, _u, p) = solve_source(&complex, source_galvec, grade)?;
@@ -977,7 +976,7 @@ pub(crate) fn hodge_decompose(
   // exact $= dif sigma$. At grade 0 the $sigma in Lambda^(-1)$ space is empty,
   // so the exact shell is identically zero.
   let exact = if grade > 0 {
-    let dif = CsrMatrix::from(&topology.coboundary_operator(grade - 1));
+    let dif = simplicial::linalg::CsrMatrix::from(&topology.coboundary_operator(grade - 1));
     &dif * sigma.coeffs()
   } else {
     Vector::zeros(input.coeffs().len())
@@ -1018,12 +1017,11 @@ pub(crate) fn hodge_probe_input(topology: &Complex, coords: &MeshCoords) -> Coch
     problems::elliptic::solve_harmonics,
     whitney_complex::{HilbertComplex, WhitneyComplex},
   };
-  use simplicial::linalg::CsrMatrix;
 
   let swirl = hodge_probe_form(topology, coords);
   let metric = coords.to_edge_lengths_sq(topology);
   let complex = WhitneyComplex::new(topology, &metric);
-  let mass = CsrMatrix::from(&complex.mass(1));
+  let mass = complex.mass(1);
   let m_norm = |v: &Vector| (&mass * v).dot(v).max(0.0).sqrt();
 
   // The period-normalized reading: the injected cycle then threads one handle,
@@ -1189,14 +1187,9 @@ fn project_onto(
   metric: &MeshLengthsSq,
 ) -> Option<Cochain> {
   use formoniq::{assemble::assemble_galmat, operators::HodgeMassElmat};
-  use simplicial::linalg::CsrMatrix;
 
   let grade = reference.grade();
-  let mass = CsrMatrix::from(&assemble_galmat(
-    topology,
-    metric,
-    HodgeMassElmat::new(topology.dim(), grade),
-  ));
+  let mass = assemble_galmat(topology, metric, HodgeMassElmat::new(topology.dim(), grade));
   let weighted = &mass * space;
   let gram = space.transpose() * &weighted;
   let rhs = weighted.transpose() * reference.coeffs();
@@ -1877,7 +1870,6 @@ mod tests {
     use crate::gallery::MeshSource;
     use crate::gallery::{QUOTIENT_CELLS, QuotientSurface};
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
-    use simplicial::linalg::CsrMatrix;
 
     let torus = || {
       MeshSource::Quotient {
@@ -1924,7 +1916,7 @@ mod tests {
         "{label}: harmonic dimension is the first Betti number"
       );
 
-      let mass = CsrMatrix::from(&complex.mass(1));
+      let mass = complex.mass(1);
       let ip = |a: &Cochain, b: &Cochain| (&mass * b.coeffs()).dot(a.coeffs());
 
       // The three shells reconstruct the input exactly (LU residual aside).
