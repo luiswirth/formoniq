@@ -47,6 +47,33 @@ pub type RowVectorView<'a, T = f64> = na::MatrixView<'a, T, na::U1, na::Dyn>;
 pub type CooMatrix<T = f64> = nas::CooMatrix<T>;
 pub type CsrMatrix<T = f64> = nas::CsrMatrix<T>;
 
+pub trait CsrMatrixExt<T> {
+  /// Extension of scalars along a ring map $R -> S$, entrywise on the same
+  /// sparsity pattern.
+  ///
+  /// The seam between an operator and the field its unknowns live in. An
+  /// operator assembled from real geometry and real shape functions is real
+  /// whatever field its solution lives in, so a complex solve *extends* the
+  /// operator it already has rather than assembling a second one, and the
+  /// pattern is untouched because a ring map fixes zero.
+  ///
+  /// The counterpart of
+  /// [`FreeModule::extend_scalars`](crate::topology::chain::FreeModule::extend_scalars)
+  /// on the operator side of the same pairing, and the two commute with
+  /// applying the operator, which is what makes a complex solve of a real
+  /// system split into two real ones.
+  fn extend_scalars<S: na::Scalar>(&self, ring_map: impl FnMut(&T) -> S) -> CsrMatrix<S>;
+}
+
+impl<T: na::Scalar> CsrMatrixExt<T> for CsrMatrix<T> {
+  fn extend_scalars<S: na::Scalar>(&self, ring_map: impl FnMut(&T) -> S) -> CsrMatrix<S> {
+    let (offsets, indices, values) = self.clone().disassemble();
+    let values = values.iter().map(ring_map).collect();
+    CsrMatrix::try_from_csr_data(self.nrows(), self.ncols(), offsets, indices, values)
+      .expect("a ring map preserves the sparsity pattern")
+  }
+}
+
 pub trait CooMatrixExt {
   fn neg(self) -> Self;
   fn block(block_grid: &[&[&Self]]) -> Self;

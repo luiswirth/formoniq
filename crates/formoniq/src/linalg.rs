@@ -13,18 +13,39 @@ use crate::linalg::faer::{FaerCholesky, FaerLu};
 pub mod eigen;
 pub mod faer;
 
-pub fn bilinear_form_sparse(mat: &CsrMatrix, u: &Vector, v: &Vector) -> f64 {
-  ((mat.transpose() * u).transpose() * v).x
+pub use faer::Field;
+
+/// The bilinear form $u^T M v$, with no conjugation in any field.
+///
+/// A duality pairing rather than an inner product: it is what a load vector
+/// against a test function is. Over $CC$ it is *not* an energy, which is the
+/// distinction [`sesquilinear_form_sparse`] draws.
+pub fn bilinear_form_sparse<T: Field>(mat: &CsrMatrix<T>, u: &Vector<T>, v: &Vector<T>) -> T {
+  u.dot(&(mat * v))
 }
-pub fn quadratic_form_sparse(mat: &CsrMatrix, u: &Vector) -> f64 {
-  bilinear_form_sparse(mat, u, u)
+
+/// The sesquilinear form $u^H M v$, conjugate-linear in its first argument.
+///
+/// The inner product a self-adjoint operator defines, and the one an energy is
+/// measured in. It coincides with [`bilinear_form_sparse`] over $RR$, so
+/// nothing real can tell the two apart.
+pub fn sesquilinear_form_sparse<T: Field>(mat: &CsrMatrix<T>, u: &Vector<T>, v: &Vector<T>) -> T {
+  u.dotc(&(mat * v))
+}
+
+/// The quadratic form $u^H M u$ of a self-adjoint operator: an energy.
+///
+/// Real-valued, and that is mathematics rather than a cast: a Hermitian form
+/// is real on the diagonal, which is why a mass matrix defines a norm at all.
+pub fn quadratic_form_sparse<T: Field>(mat: &CsrMatrix<T>, u: &Vector<T>) -> T::RealField {
+  sesquilinear_form_sparse(mat, u, u).real()
 }
 
 /// The chosen factorization behind a [`DirectInverse`]: Cholesky by default, LU
 /// as the verified fallback.
-enum Factorization {
-  Cholesky(Box<FaerCholesky>),
-  Lu(Box<FaerLu>),
+enum Factorization<T> {
+  Cholesky(Box<FaerCholesky<T>>),
+  Lu(Box<FaerLu<T>>),
 }
 
 /// A direct SPD factorization presented as an [`iterative::ApproxInverse`]: the
@@ -50,8 +71,8 @@ enum Factorization {
 /// construction against a probe right-hand side and falls back to LU when the
 /// Cholesky solve does not reproduce it. The guard costs one extra triangular
 /// solve, negligible next to the factorization.
-pub struct DirectInverse {
-  factorization: Factorization,
+pub struct DirectInverse<T = f64> {
+  factorization: Factorization<T>,
   dim: usize,
 }
 
@@ -60,10 +81,10 @@ pub struct DirectInverse {
 /// independent (the factor itself is corrupt), so one probe settles it.
 const PROBE_RTOL: f64 = 1e-8;
 
-impl DirectInverse {
+impl<T: Field> DirectInverse<T> {
   /// The verified SPD direct solve. Panics where the matrix is not positive
   /// definite; [`Self::try_new`] is the fallible variant.
-  pub fn new(a: CsrMatrix) -> Self {
+  pub fn new(a: CsrMatrix<T>) -> Self {
     Self::try_new(a).expect("a direct SPD solve needs a positive definite matrix")
   }
 
@@ -75,7 +96,7 @@ impl DirectInverse {
   /// Cholesky returned an inaccurate factor (see the type docs). `None` only when
   /// the matrix is genuinely not positive definite, Cholesky failing the PD
   /// check, not merely the accuracy probe.
-  pub fn try_new(a: CsrMatrix) -> Option<Self> {
+  pub fn try_new(a: CsrMatrix<T>) -> Option<Self> {
     let dim = a.nrows();
     // `None` here means genuinely indefinite: preserve that contract.
     let chol = FaerCholesky::try_new(a.clone())?;
@@ -93,26 +114,26 @@ impl DirectInverse {
 
 /// Whether `chol` actually solves `a x = b`: does the factorization reproduce a
 /// deterministic probe right-hand side to [`PROBE_RTOL`]?
-fn cholesky_is_accurate(a: &CsrMatrix, chol: &FaerCholesky) -> bool {
+fn cholesky_is_accurate<T: Field>(a: &CsrMatrix<T>, chol: &FaerCholesky<T>) -> bool {
   let n = a.nrows();
   if n == 0 {
     return true;
   }
-  let b = Vector::from_fn(n, |i, _| ((i as f64 + 1.0) * 0.5).sin());
+  let b = Vector::from_fn(n, |i, _| na::convert(((i as f64 + 1.0) * 0.5).sin()));
   let x = chol.solve(&b);
-  (a * x - &b).norm() <= PROBE_RTOL * b.norm()
+  (a * x - &b).norm() <= na::convert::<f64, T::RealField>(PROBE_RTOL) * b.norm()
 }
 
-impl iterative::ApproxInverse for DirectInverse {
-  type Space = Vector;
+impl<T: Field> iterative::ApproxInverse for DirectInverse<T> {
+  type Space = Vector<T>;
   fn dim(&self) -> usize {
     self.dim
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &Vector<T>) -> Vector<T> {
     match &self.factorization {
       Factorization::Cholesky(chol) => chol.solve(r),
       Factorization::Lu(lu) => lu.solve(r),
     }
   }
 }
-impl iterative::SelfAdjoint for DirectInverse {}
+impl<T: Field> iterative::SelfAdjoint for DirectInverse<T> {}
