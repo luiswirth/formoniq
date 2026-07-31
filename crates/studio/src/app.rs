@@ -30,7 +30,7 @@ use crate::display::{FieldDisplay, MeshDisplay, default_camera, scene_extent};
 use crate::gallery::{Gallery, MeshSource, Preset, Study, presets};
 use crate::render::{DEFAULT_SSAA_SCALE, FrameView, GpuContext, Renderer, camera::Camera};
 use crate::scene::Scene;
-use crate::ui::{Entry, PanelModel, Selection};
+use crate::ui::{PanelModel, Selection};
 
 use egui_wgpu::{
   Renderer as EguiRenderer, RendererOptions as EguiRendererOptions, ScreenDescriptor,
@@ -962,36 +962,10 @@ impl State {
     let mesh_source = self.gallery.mesh_source.clone();
     let study = self.gallery.study.clone();
 
-    // The current scene's modes, as the picker needs them. Scalar and line
-    // fields both feed in. For a single mesh grade exactly one list is
-    // populated, so the pyramid is over that grade alone.
-    let entries: Vec<Entry> = self
-      .scene
-      .fields
-      .iter()
-      .enumerate()
-      .map(|(i, f)| Entry {
-        selection: Selection::Scalar(i),
-        grade: f.grade,
-        eigenvalue: f.time.eigenvalue(),
-        dof: f.dof.as_ref(),
-        name: f.name.as_str(),
-      })
-      .chain(
-        self
-          .scene
-          .line_fields
-          .iter()
-          .enumerate()
-          .map(|(i, f)| Entry {
-            selection: Selection::Line(i),
-            grade: f.grade,
-            eigenvalue: f.time.eigenvalue(),
-            dof: f.dof.as_ref(),
-            name: f.name.as_str(),
-          }),
-      )
-      .collect();
+    // The current scene's modes, as the picker needs them. For a single mesh
+    // grade exactly one of the two lists is populated, so the pyramid is over
+    // that grade alone.
+    let entries = self.scene.entries();
 
     // The displayed field's temporal model, for the transport readouts: an
     // eigenvalue gives the standing wave a frequency to report; a trajectory
@@ -1109,6 +1083,12 @@ impl State {
     // is the same case from the other side: a preset names the marks it opens
     // with, and applying the panel's copy afterward would drop them the frame
     // the preset is clicked.
+    // The one field setting that is not free: the medium is baked from the
+    // cochain the operator produces, so changing which operator that is
+    // rebuilds the field display exactly the way switching fields does. Read
+    // across the assignment, which is what loses the outgoing value, and
+    // applied below, after the pair has settled.
+    let rescalarized = self.field_view.scalarization != response.field_view.scalarization;
     self.mesh_view = response.mesh_view;
     self.field_view = response.field_view;
 
@@ -1151,13 +1131,6 @@ impl State {
     // selection or a buffer. So they apply regardless of the branch above, where
     // being inside it would silently drop a toggle that happened to fire on the
     // same frame as a mesh or study change.
-    // The one setting here that is not free: the medium is baked from the
-    // cochain the operator produces, so changing which operator that is
-    // rebuilds the field display exactly the way switching fields does.
-    // Compared before the assignment, since the assignment is what loses the
-    // old value.
-    let rescalarized = self.field_view.scalarization != response.field_view.scalarization;
-    self.field_view = response.field_view;
     if rescalarized {
       self.apply_field(self.selection);
     }
@@ -1414,7 +1387,7 @@ impl State {
       // Particles advect through a line field while the clock runs, whatever its
       // `FieldTime`. A scalar field moves only if its own time model does.
       Selection::Line(_) => true,
-      Selection::Scalar(i) => self.scene.fields[i].time.animates(),
+      Selection::Scalar(_) => self.scene.field_time(self.selection).animates(),
     };
     let live = self.gallery.is_loading()
       || !self.keys_held.is_empty()

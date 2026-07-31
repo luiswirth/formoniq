@@ -715,6 +715,37 @@ impl Scene {
       .chain((0..self.line_fields.len()).map(Selection::Line))
   }
 
+  /// The scene's fields as the mode picker reads them, in [`Self::selections`]'s
+  /// order.
+  ///
+  /// The picker's rows and the flat index `--field N` names are then the same
+  /// walk over the same order, so neither can be laid out against a convention
+  /// the other does not share.
+  pub(crate) fn entries(&self) -> Vec<crate::ui::Entry<'_>> {
+    self
+      .selections()
+      .map(|selection| {
+        let (name, grade, dof) = match selection {
+          Selection::Scalar(i) => {
+            let field = &self.fields[i];
+            (field.name.as_str(), field.grade, field.dof.as_ref())
+          }
+          Selection::Line(i) => {
+            let field = &self.line_fields[i];
+            (field.name.as_str(), field.grade, field.dof.as_ref())
+          }
+        };
+        crate::ui::Entry {
+          selection,
+          grade,
+          eigenvalue: self.field_time(selection).eigenvalue(),
+          dof,
+          name,
+        }
+      })
+      .collect()
+  }
+
   /// Reconstructs a cochain as the render mark its reduced grade
   /// $min(k, n-k)$ calls for, and files it into the scene under the mark that
   /// grade names: the one general entry point both a raw Whitney basis function
