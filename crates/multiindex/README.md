@@ -37,17 +37,23 @@ via the combinatorial number system.
 - `Permutation`: the symmetric group in one-line notation,
   ranked in the factorial number system, carrying the sign homomorphism.
 
-The bitset caps the *shifted* alphabet at 128 (`MAX_SHIFTED_SYMBOLS`),
+The bitset caps the *shifted* alphabet at the width of the integer backing it,
 asserted at construction.
-That reads differently for the two families:
-a combination may span 128 indices,
-while a composition over n symbols reaches degree 128 − n + 1.
+That width is a type parameter, over the primitive unsigned integers:
+`MonoIndexOver<B>` and `CombinationOver<B>` are the types,
+`MonoIndex` and `Combination` are those at the default `u64`,
+and the aliases are what the rest of the code reads,
+in the way `DMatrix` stands for a `Matrix` in nalgebra.
+The ceiling reads differently for the two families:
+a combination may span `B::WIDTH` indices,
+while a composition over n symbols reaches degree `B::WIDTH` − n + 1.
 `Composition` stores its exponent vector directly rather than as a bitset,
 so its degree stays unbounded.
 
 ## Correctness
 
-The laws are tests, swept over cardinalities:
+The laws are tests, swept over cardinalities and over the backing widths,
+a narrow one exercising the boundary a wide one never reaches:
 rank and unranking invert each other,
 colex order coincides with bitset order,
 enumeration is filtration-compatible,

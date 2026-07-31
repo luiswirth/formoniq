@@ -2,7 +2,8 @@
 
 use crate::{
   Sign, binomial,
-  monotone::{self, MonoIndex, Repetition},
+  bits::{self, Bits},
+  monotone::{DefaultBits, MonoIndexOver, Repetition},
 };
 
 /// A strictly increasing multi-index: a finite set of indices, stored as the
@@ -11,7 +12,7 @@ use crate::{
 /// The basis element of $Lambda^k$ (a set of covector indices) and of
 /// simplicial chains (a set of vertices).
 ///
-/// A newtype over [`MonoIndex`] at [`Repetition::Forbidden`]: a subset is a
+/// A newtype over [`MonoIndexOver`] at [`Repetition::Forbidden`]: a subset is a
 /// monotone word that may not repeat, and forbidding repetition makes the shift
 /// zero, so the shifted word a `MonoIndex` stores is the set. The wrapper adds
 /// nothing to the representation and delegates every operation; what it adds is
@@ -21,26 +22,29 @@ use crate::{
 ///
 /// The derived `Ord` compares the bitsets numerically, which for equal
 /// cardinality is exactly the colexicographic order.
+///
+/// The backing width is the type parameter, as on [`MonoIndexOver`], and
+/// [`Combination`] is this at the width the workspace reads.
 #[derive(Clone, Copy, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
-pub struct Combination(MonoIndex);
+pub struct CombinationOver<B: Bits = DefaultBits>(MonoIndexOver<B>);
 
-/// The maximum index (exclusive) a [`Combination`] can contain.
-pub const MAX_NINDICES: usize = monotone::MAX_SHIFTED_SYMBOLS;
+/// A subset at the default width.
+pub type Combination = CombinationOver<DefaultBits>;
 
-impl Combination {
+impl<B: Bits> CombinationOver<B> {
   pub fn empty() -> Self {
-    Self(MonoIndex::empty(Repetition::Forbidden))
+    Self(MonoIndexOver::empty(Repetition::Forbidden))
   }
   pub fn single(index: usize) -> Self {
-    Self(MonoIndex::single(Repetition::Forbidden, index))
+    Self(MonoIndexOver::single(Repetition::Forbidden, index))
   }
   /// The full set ${0, dots, card - 1}$.
   pub fn full(card: usize) -> Self {
-    Self::from_bits(monotone::full_bits(card))
+    Self::from_bits(B::low_mask(card))
   }
   /// From strictly increasing indices.
   pub fn from_increasing(indices: impl IntoIterator<Item = usize>) -> Self {
-    Self(MonoIndex::new(Repetition::Forbidden, indices))
+    Self(MonoIndexOver::new(Repetition::Forbidden, indices))
   }
 
   /// Canonicalize an arbitrarily ordered index word into the sign of its
@@ -49,19 +53,19 @@ impl Combination {
   /// `None` if an index repeats. The only place unsorted multi-indices
   /// exist: as transient inputs.
   pub fn from_word(word: impl IntoIterator<Item = usize>) -> Option<(Sign, Self)> {
-    MonoIndex::from_word(Repetition::Forbidden, word).map(|(sign, index)| (sign, Self(index)))
+    MonoIndexOver::from_word(Repetition::Forbidden, word).map(|(sign, index)| (sign, Self(index)))
   }
 
   /// The raw bitset, each set bit an index.
-  pub fn bits(self) -> u128 {
+  pub fn bits(self) -> B {
     self.0.shifted_bits()
   }
   /// From a raw bitset, each set bit an index.
   ///
   /// Every bitset denotes a combination, so this is total. The name marks that
   /// the caller is working at the bit level, where the set is the bits.
-  pub fn from_bits(bits: u128) -> Self {
-    Self(MonoIndex::from_shifted(Repetition::Forbidden, bits))
+  pub fn from_bits(bits: B) -> Self {
+    Self(MonoIndexOver::from_shifted(Repetition::Forbidden, bits))
   }
   pub fn card(self) -> usize {
     self.0.degree()
@@ -70,7 +74,7 @@ impl Combination {
     self.card() == 0
   }
   pub fn contains(self, index: usize) -> bool {
-    index < MAX_NINDICES && self.bits() & (1 << index) != 0
+    index < B::WIDTH && !(self.bits() & B::singleton(index)).is_empty()
   }
   pub fn is_subset_of(self, other: Self) -> bool {
     self.bits() & other.bits() == self.bits()
@@ -78,7 +82,7 @@ impl Combination {
 
   /// The indices in ascending order.
   pub fn iter(self) -> impl Iterator<Item = usize> {
-    monotone::set_bits(self.bits())
+    bits::set_bits(self.bits())
   }
   /// The position-th smallest index.
   pub fn index_at(self, position: usize) -> usize {
@@ -86,13 +90,13 @@ impl Combination {
   }
   /// With the index added; must not be contained yet.
   pub fn inserted(self, index: usize) -> Self {
-    assert!(index < MAX_NINDICES && !self.contains(index));
-    Self::from_bits(self.bits() | 1 << index)
+    assert!(!self.contains(index));
+    Self::from_bits(self.bits() | B::singleton(index))
   }
   /// The position of an index within the set.
   pub fn position_of(self, index: usize) -> usize {
     assert!(self.contains(index));
-    (self.bits() & ((1 << index) - 1)).count_ones() as usize
+    (self.bits() & B::low_mask(index)).count_ones()
   }
 
   /// Colexicographic rank among all combinations of the same cardinality:
@@ -105,7 +109,7 @@ impl Combination {
   }
   /// Inverse of [`Self::rank`]: greedy from the largest element.
   pub fn from_rank(card: usize, rank: usize) -> Self {
-    Self(MonoIndex::from_rank(Repetition::Forbidden, card, rank))
+    Self(MonoIndexOver::from_rank(Repetition::Forbidden, card, rank))
   }
 
   /// All combinations of the given cardinality in colexicographic order.
@@ -119,6 +123,13 @@ impl Combination {
       next = current.0.colex_successor().map(Self);
       Some(current)
     })
+  }
+
+  /// The combinations of the given cardinality inside ${0, dots, n-1}$, in
+  /// colexicographic order: the prefix of [`Self::all`] the filtration
+  /// property picks out.
+  pub fn inside(n: usize, card: usize) -> impl Iterator<Item = Self> {
+    Self::all(card).take(binomial(n, card))
   }
 
   /// Merge two disjoint combinations with the sign of the interleaving
@@ -164,23 +175,23 @@ impl Combination {
 /// All combinations of cardinality `card` inside ${0, dots, n-1}$,
 /// in colexicographic order.
 pub fn combinations(n: usize, card: usize) -> impl Iterator<Item = Combination> {
-  Combination::all(card).take(binomial(n, card))
+  Combination::inside(n, card)
 }
 
-impl FromIterator<usize> for Combination {
+impl<B: Bits> FromIterator<usize> for CombinationOver<B> {
   /// From strictly increasing indices.
   fn from_iter<T: IntoIterator<Item = usize>>(iter: T) -> Self {
     Self::from_increasing(iter)
   }
 }
 
-impl From<Combination> for MonoIndex {
-  fn from(combination: Combination) -> Self {
+impl<B: Bits> From<CombinationOver<B>> for MonoIndexOver<B> {
+  fn from(combination: CombinationOver<B>) -> Self {
     combination.0
   }
 }
 
-impl std::fmt::Debug for Combination {
+impl<B: Bits> std::fmt::Debug for CombinationOver<B> {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
     f.debug_set().entries(self.iter()).finish()
   }
@@ -219,22 +230,32 @@ mod test {
   }
 
   /// The first binom(n, k) combinations are exactly those inside 0..n.
+  ///
+  /// Checked at several backings: the width bounds what a value can hold and
+  /// enters neither the enumeration nor the rank, so the same statement has to
+  /// come out of every one of them.
   #[test]
   fn colex_enumeration_is_filtration_compatible() {
-    for n in 0..=6 {
-      for card in 0..=n {
-        let inside: Vec<_> = combinations(n, card).collect();
-        assert_eq!(inside.len(), binomial(n, card));
-        assert!(inside.iter().all(|c| c.iter().all(|index| index < n)));
-        assert_eq!(
-          inside,
-          itertools::Itertools::combinations(0..n, card)
-            .map(Combination::from_increasing)
-            .sorted()
-            .collect::<Vec<_>>()
-        );
+    fn check<B: Bits>() {
+      for n in 0..=6 {
+        for card in 0..=n {
+          let inside: Vec<_> = CombinationOver::<B>::inside(n, card).collect();
+          assert_eq!(inside.len(), binomial(n, card));
+          assert!(inside.iter().all(|c| c.iter().all(|index| index < n)));
+          assert_eq!(
+            inside,
+            itertools::Itertools::combinations(0..n, card)
+              .map(CombinationOver::<B>::from_increasing)
+              .sorted()
+              .collect::<Vec<_>>()
+          );
+        }
       }
     }
+    check::<u8>();
+    check::<u16>();
+    check::<u64>();
+    check::<u128>();
   }
 
   #[test]
@@ -273,16 +294,22 @@ mod test {
   /// $e_S wedge e_(S^c) = sign dot e_"full"$ consistency.
   #[test]
   fn complement_signed_wedges_to_top() {
-    for n in 0..=6 {
-      for card in 0..=n {
-        for combination in combinations(n, card) {
-          let (sign, complement) = combination.complement_signed(n);
-          let (union_sign, union) = combination.union_signed(complement).unwrap();
-          assert_eq!(union, Combination::full(n));
-          assert_eq!(sign, union_sign);
+    fn check<B: Bits>() {
+      for n in 0..=6 {
+        for card in 0..=n {
+          for combination in CombinationOver::<B>::inside(n, card) {
+            let (sign, complement) = combination.complement_signed(n);
+            let (union_sign, union) = combination.union_signed(complement).unwrap();
+            assert_eq!(union, CombinationOver::<B>::full(n));
+            assert_eq!(sign, union_sign);
+          }
         }
       }
     }
+    check::<u8>();
+    check::<u16>();
+    check::<u64>();
+    check::<u128>();
   }
 
   /// Double deletions cancel in pairs: $diff compose diff = 0$ at the level
