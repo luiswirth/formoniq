@@ -7,7 +7,10 @@
 /// shifted symbol a [`MonoIndex`](crate::MonoIndex) can hold; beyond that the
 /// exact computation still runs, so nothing here is a bound on what may be
 /// counted.
-const BINOMIAL_TABLE_SIZE: usize = crate::monotone::MAX_SHIFTED_SYMBOLS + 1;
+///
+/// Sized by the widest backing rather than by any one of them, the table being
+/// shared across every width.
+const BINOMIAL_TABLE_SIZE: usize = crate::bits::MAX_WIDTH + 1;
 static BINOMIALS: std::sync::LazyLock<[[usize; BINOMIAL_TABLE_SIZE]; BINOMIAL_TABLE_SIZE]> =
   std::sync::LazyLock::new(|| {
     let mut table = [[0usize; BINOMIAL_TABLE_SIZE]; BINOMIAL_TABLE_SIZE];

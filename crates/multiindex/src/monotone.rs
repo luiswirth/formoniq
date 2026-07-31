@@ -13,7 +13,11 @@
 //! never as a stored representation, which is the distinction the workspace
 //! keeps between a theorem and a data structure.
 
-use crate::{Sign, binomial, factorial};
+use crate::{
+  Sign, binomial,
+  bits::{self, Bits},
+  factorial,
+};
 
 /// The symbols of a monotone multi-index, inline up to a degree covering every
 /// grade of a low-dimensional exterior algebra and a modest polynomial order.
@@ -191,54 +195,42 @@ impl Repetition {
 /// The alphabet is absent, as from [`Combination`](crate::Combination): a colex
 /// rank does not depend on it. Only enumeration and the complement take one.
 ///
+/// The width of the bitset is the type parameter, and it is a fact about the
+/// machine alone: it bounds the *shifted* alphabet a value can hold and enters
+/// no formula here. [`MonoIndex`] is this at the width the workspace reads,
+/// which is what every constructor without a bitset argument needs, a default
+/// type parameter applying in type position but not in inference.
+///
 /// `Default` is the empty alternating index, the unit of the merge monoid and
 /// the sole basis element of the scalars.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
-pub struct MonoIndex {
+pub struct MonoIndexOver<B: Bits = DefaultBits> {
   repetition: Repetition,
   /// The set of shifted symbols, one bit each.
-  shifted: u128,
+  shifted: B,
 }
 
-/// The number of symbols a shifted word can range over.
+/// The backing width the workspace reads a multi-index at.
 ///
-/// The bound is on the shifted alphabet, $n + k - 1$, so it reads differently
-/// for the two families: an alternating index may span this many symbols, a
-/// symmetric one of $n$ symbols reaches degree $"MAX" - n + 1$.
-pub const MAX_SHIFTED_SYMBOLS: usize = 128;
+/// The bound is on the shifted alphabet $n + k - 1$, so the alternating side is
+/// bounded by the dimension of the space and the symmetric side by the degree.
+/// [`Composition`](crate::Composition) carries the unbounded-degree case outside
+/// the bitset, so a wider default buys headroom nothing uses, and a narrower
+/// backing measurably cheapens the index layer, the value being passed by
+/// register rather than copied through the stack.
+pub type DefaultBits = u64;
 
-/// The bitset of the full alphabet ${0, dots, "nsymbols"-1}$.
-pub(crate) fn full_bits(nsymbols: usize) -> u128 {
-  assert!(
-    nsymbols <= MAX_SHIFTED_SYMBOLS,
-    "alphabet exceeds the bitset"
-  );
-  if nsymbols == MAX_SHIFTED_SYMBOLS {
-    u128::MAX
-  } else {
-    (1u128 << nsymbols) - 1
-  }
-}
+/// A monotone multi-index at the default width.
+pub type MonoIndex = MonoIndexOver<DefaultBits>;
 
-/// The set bits of a `u128`, ascending.
-pub(crate) fn set_bits(mut bits: u128) -> impl Iterator<Item = usize> {
-  std::iter::from_fn(move || {
-    (bits != 0).then(|| {
-      let symbol = bits.trailing_zeros() as usize;
-      bits &= bits - 1;
-      symbol
-    })
-  })
-}
-
-impl MonoIndex {
+impl<B: Bits> MonoIndexOver<B> {
   /// From an ascending word.
   ///
   /// # Panics
-  /// If the word is not monotone for this family, or reaches past
-  /// [`MAX_SHIFTED_SYMBOLS`] once shifted.
+  /// If the word is not monotone for this family, or reaches past the bitset
+  /// once shifted.
   pub fn new(repetition: Repetition, word: impl IntoIterator<Item = usize>) -> Self {
-    let mut shifted = 0u128;
+    let mut shifted = B::ZERO;
     let mut previous: Option<usize> = None;
     for (position, symbol) in word.into_iter().enumerate() {
       assert!(
@@ -249,9 +241,7 @@ impl MonoIndex {
         "word is not monotone for {repetition:?}"
       );
       previous = Some(symbol);
-      let bit = symbol + repetition.shift(position);
-      assert!(bit < MAX_SHIFTED_SYMBOLS, "index reaches past the bitset");
-      shifted |= 1 << bit;
+      shifted = shifted | B::singleton(symbol + repetition.shift(position));
     }
     Self {
       repetition,
@@ -260,7 +250,7 @@ impl MonoIndex {
   }
 
   /// From the bitset of an already shifted word.
-  pub(crate) fn from_shifted(repetition: Repetition, shifted: u128) -> Self {
+  pub(crate) fn from_shifted(repetition: Repetition, shifted: B) -> Self {
     Self {
       repetition,
       shifted,
@@ -270,14 +260,13 @@ impl MonoIndex {
   /// The empty index: the basis of the scalars $Lambda^0 = "Sym"^0 = RR$, for
   /// either family.
   pub fn empty(repetition: Repetition) -> Self {
-    Self::from_shifted(repetition, 0)
+    Self::from_shifted(repetition, B::ZERO)
   }
 
   /// A single symbol: a basis element of $Lambda^1 = "Sym"^1 = V$, where the
   /// two families coincide.
   pub fn single(repetition: Repetition, symbol: usize) -> Self {
-    assert!(symbol < MAX_SHIFTED_SYMBOLS);
-    Self::from_shifted(repetition, 1 << symbol)
+    Self::from_shifted(repetition, B::singleton(symbol))
   }
 
   /// Canonicalize an arbitrarily ordered word into the sign of the sorting
@@ -312,15 +301,15 @@ impl MonoIndex {
   /// The degree $k$ of the $Lambda^k$ or $"Sym"^k$ this indexes: the length of
   /// the word, hence the number of set bits.
   pub fn degree(&self) -> usize {
-    self.shifted.count_ones() as usize
+    self.shifted.count_ones()
   }
   /// The raw shifted bitset.
-  pub fn shifted_bits(&self) -> u128 {
+  pub fn shifted_bits(&self) -> B {
     self.shifted
   }
   /// The shifted symbols, ascending: the set the representation is.
   pub fn shifted_iter(&self) -> impl Iterator<Item = usize> {
-    set_bits(self.shifted)
+    bits::set_bits(self.shifted)
   }
   /// The symbols of the word, ascending, with the shift undone.
   pub fn iter(&self) -> impl Iterator<Item = usize> + '_ {
@@ -375,14 +364,14 @@ impl MonoIndex {
   /// greedy from the top position down, so it costs the degree and not the
   /// rank.
   pub fn from_rank(repetition: Repetition, degree: usize, mut rank: usize) -> Self {
-    let mut shifted = 0u128;
+    let mut shifted = B::ZERO;
     for position in (1..=degree).rev() {
       let mut symbol = position - 1;
       while binomial(symbol + 1, position) <= rank {
         symbol += 1;
       }
       rank -= binomial(symbol, position);
-      shifted |= 1 << symbol;
+      shifted = shifted | B::singleton(symbol);
     }
     Self::from_shifted(repetition, shifted)
   }
@@ -392,10 +381,10 @@ impl MonoIndex {
   /// One enumeration for both: the shifted words are strictly increasing either
   /// way, so this walks the same bitset successor over an alphabet the shift
   /// widens.
-  pub fn all(repetition: Repetition, nsymbols: usize, degree: usize) -> MonoIndices {
-    MonoIndices {
+  pub fn all(repetition: Repetition, nsymbols: usize, degree: usize) -> MonoIndicesOver<B> {
+    MonoIndicesOver {
       repetition,
-      next: (degree < MAX_SHIFTED_SYMBOLS).then(|| (1u128 << degree) - 1),
+      next: (degree <= B::WIDTH).then(|| B::low_mask(degree)),
       remaining: repetition.count(nsymbols, degree),
     }
   }
@@ -432,12 +421,12 @@ impl MonoIndex {
     );
     match self.repetition {
       Repetition::Forbidden => {
-        if self.shifted & other.shifted != 0 {
+        if !(self.shifted & other.shifted).is_empty() {
           return None;
         }
         let inversions: usize = other
           .shifted_iter()
-          .map(|symbol| (self.shifted >> symbol >> 1).count_ones() as usize)
+          .map(|symbol| (self.shifted.shr_total(symbol).shr_total(1)).count_ones())
           .sum();
         Some((
           Sign::from_parity(inversions),
@@ -445,7 +434,7 @@ impl MonoIndex {
         ))
       }
       Repetition::Allowed => {
-        let mut merged = 0u128;
+        let mut merged = B::ZERO;
         let (mut left, mut right) = (self.iter().peekable(), other.iter().peekable());
         for position in 0..self.degree() + other.degree() {
           let symbol = match (left.peek(), right.peek()) {
@@ -463,9 +452,7 @@ impl MonoIndex {
             }
             (None, None) => unreachable!("the degrees count the symbols"),
           };
-          let bit = symbol + position;
-          assert!(bit < MAX_SHIFTED_SYMBOLS, "merge reaches past the bitset");
-          merged |= 1 << bit;
+          merged = merged | B::singleton(symbol + position);
         }
         Some((Sign::Pos, Self::from_shifted(Repetition::Allowed, merged)))
       }
@@ -486,8 +473,8 @@ impl MonoIndex {
   /// for a symmetric factor and zero for an alternating one.
   ///
   /// Total at the trivial end: the empty index has no deletions.
-  pub fn deletions(&self) -> MonoDeletions {
-    MonoDeletions {
+  pub fn deletions(&self) -> MonoDeletionsOver<B> {
+    MonoDeletionsOver {
       index: *self,
       remaining: self.shifted,
       position: 0,
@@ -509,30 +496,31 @@ impl MonoIndex {
       Repetition::Forbidden,
       "a symmetric factor has no top degree, so no complement"
     );
-    let complement = Self::from_shifted(Repetition::Forbidden, !self.shifted & full_bits(nsymbols));
+    let complement =
+      Self::from_shifted(Repetition::Forbidden, !self.shifted & B::low_mask(nsymbols));
     let (sign, _) = self.merge(&complement).expect("the complement is disjoint");
     (sign, complement)
   }
 }
 
-impl MonoIndex {
+impl<B: Bits> MonoIndexOver<B> {
   /// The same index read as a [`Combination`](crate::Combination), which it
   /// already is when repetition is forbidden: the shift is zero there, so the
   /// shifted word stored here is the set.
   ///
   /// # Panics
   /// If repetition is allowed, a multiset being no set of symbols.
-  pub fn to_combination(&self) -> crate::Combination {
+  pub fn to_combination(&self) -> crate::combination::CombinationOver<B> {
     assert_eq!(
       self.repetition,
       Repetition::Forbidden,
       "a symmetric index is a multiset, which no bitset of symbols represents"
     );
-    crate::Combination::from_bits(self.shifted)
+    crate::combination::CombinationOver::from_bits(self.shifted)
   }
 }
 
-impl std::fmt::Debug for MonoIndex {
+impl<B: Bits> std::fmt::Debug for MonoIndexOver<B> {
   fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
     match self.repetition {
       Repetition::Forbidden => f.debug_set().entries(self.iter()).finish(),
@@ -543,16 +531,16 @@ impl std::fmt::Debug for MonoIndex {
 
 /// The colexicographic successor of a strictly increasing word held as a
 /// bitset, or `None` at the last (Gosper's hack).
-fn colex_successor_bits(bits: u128) -> Option<u128> {
-  if bits == 0 {
+fn colex_successor_bits<B: Bits>(bits: B) -> Option<B> {
+  if bits.is_empty() {
     return None;
   }
-  let lowest = bits & bits.wrapping_neg();
-  let carried = bits.checked_add(lowest)?;
-  if carried == 0 {
+  let lowest = bits.trailing_zeros();
+  let carried = bits.checked_add(bits.lowest())?;
+  if carried.is_empty() {
     return None;
   }
-  Some(carried | (((bits ^ carried) / lowest) >> 2))
+  Some(carried | (bits ^ carried).shr_total(lowest + 2))
 }
 
 /// The colexicographic successor of a strictly increasing word over `nsymbols`
@@ -586,59 +574,65 @@ fn advance_colex(word: &mut [usize], nsymbols: usize) -> bool {
 /// A named type rather than an opaque one so a caller dispatching between the
 /// index families can hold either without boxing.
 #[derive(Debug, Clone)]
-pub struct MonoIndices {
+pub struct MonoIndicesOver<B: Bits = DefaultBits> {
   repetition: Repetition,
-  next: Option<u128>,
+  next: Option<B>,
   remaining: usize,
 }
 
-impl Iterator for MonoIndices {
-  type Item = MonoIndex;
-  fn next(&mut self) -> Option<MonoIndex> {
+/// Every [`MonoIndex`] of a family, degree and alphabet, in colex.
+pub type MonoIndices = MonoIndicesOver<DefaultBits>;
+
+impl<B: Bits> Iterator for MonoIndicesOver<B> {
+  type Item = MonoIndexOver<B>;
+  fn next(&mut self) -> Option<Self::Item> {
     if self.remaining == 0 {
       return None;
     }
     let current = self.next?;
     self.next = colex_successor_bits(current);
     self.remaining -= 1;
-    Some(MonoIndex::from_shifted(self.repetition, current))
+    Some(MonoIndexOver::from_shifted(self.repetition, current))
   }
   fn size_hint(&self) -> (usize, Option<usize>) {
     (self.remaining, Some(self.remaining))
   }
 }
-impl ExactSizeIterator for MonoIndices {}
+impl<B: Bits> ExactSizeIterator for MonoIndicesOver<B> {}
 
 /// Every single-symbol deletion of a [`MonoIndex`], by position.
 ///
 /// Owns the index, which is [`Copy`], so it carries no lifetime.
 #[derive(Debug, Clone)]
-pub struct MonoDeletions {
-  index: MonoIndex,
+pub struct MonoDeletionsOver<B: Bits = DefaultBits> {
+  index: MonoIndexOver<B>,
   /// The shifted bits not yet visited. The lowest is the next position.
-  remaining: u128,
+  remaining: B,
   position: usize,
 }
 
-impl Iterator for MonoDeletions {
-  type Item = (Sign, usize, MonoIndex);
+/// Every single-symbol deletion of a [`MonoIndex`], by position.
+pub type MonoDeletions = MonoDeletionsOver<DefaultBits>;
+
+impl<B: Bits> Iterator for MonoDeletionsOver<B> {
+  type Item = (Sign, usize, MonoIndexOver<B>);
   fn next(&mut self) -> Option<Self::Item> {
-    if self.remaining == 0 {
+    if self.remaining.is_empty() {
       return None;
     }
-    let bit = self.remaining.trailing_zeros() as usize;
-    self.remaining &= self.remaining - 1;
+    let bit = self.remaining.trailing_zeros();
+    self.remaining = self.remaining.without_lowest();
     let position = self.position;
     self.position += 1;
 
     let repetition = self.index.repetition;
     let slide = repetition.shift(1);
-    let below = self.index.shifted & ((1u128 << bit) - 1);
-    let above = self.index.shifted >> bit >> 1;
+    let below = self.index.shifted & B::low_mask(bit);
+    let above = self.index.shifted.shr_total(bit).shr_total(1);
     Some((
       repetition.sign_of(position),
       bit - repetition.shift(position),
-      MonoIndex::from_shifted(repetition, below | (above << (bit + 1 - slide))),
+      MonoIndexOver::from_shifted(repetition, below | above.shl_total(bit + 1 - slide)),
     ))
   }
 }
@@ -647,6 +641,19 @@ impl Iterator for MonoDeletions {
 mod test {
   use super::*;
   use crate::{Combination, Composition, Sign, combinations};
+
+  /// Every law about a [`MonoIndexOver`] is a fact about the multi-index and
+  /// not about the width of the bitset holding it, so each is checked at
+  /// several backings. The narrow ones are what exercise the boundary a wide
+  /// one never reaches.
+  macro_rules! at_every_width {
+    ($check:ident) => {{
+      $check::<u16>();
+      $check::<u32>();
+      $check::<u64>();
+      $check::<u128>();
+    }};
+  }
 
   /// The word of a composition: its symbol repeated with the multiplicity of
   /// each part, ascending.
@@ -774,20 +781,23 @@ mod test {
   /// unsigned, and of the summed degree.
   #[test]
   fn the_allowed_index_is_the_composition() {
-    for nsymbols in 1..=4 {
-      for degree in 0..=4 {
-        for index in MonoIndex::all(Repetition::Allowed, nsymbols, degree) {
-          let composition = Composition::from_word(nsymbols, &index.word());
-          assert_eq!(index.rank(), composition.rank());
+    at_every_width!(check);
+    fn check<B: Bits>() {
+      for nsymbols in 1..=4 {
+        for degree in 0..=4 {
+          for index in MonoIndexOver::<B>::all(Repetition::Allowed, nsymbols, degree) {
+            let composition = Composition::from_word(nsymbols, &index.word());
+            assert_eq!(index.rank(), composition.rank());
 
-          for other in MonoIndex::all(Repetition::Allowed, nsymbols, 2) {
-            let (sign, merged) = index
-              .merge(&other)
-              .expect("a monomial product never vanishes");
-            assert_eq!(sign, Sign::Pos);
-            assert_eq!(merged.degree(), index.degree() + other.degree());
-            let expected = &composition + &Composition::from_word(nsymbols, &other.word());
-            assert_eq!(Composition::from_word(nsymbols, &merged.word()), expected);
+            for other in MonoIndexOver::<B>::all(Repetition::Allowed, nsymbols, 2) {
+              let (sign, merged) = index
+                .merge(&other)
+                .expect("a monomial product never vanishes");
+              assert_eq!(sign, Sign::Pos);
+              assert_eq!(merged.degree(), index.degree() + other.degree());
+              let expected = &composition + &Composition::from_word(nsymbols, &other.word());
+              assert_eq!(Composition::from_word(nsymbols, &merged.word()), expected);
+            }
           }
         }
       }
@@ -800,19 +810,22 @@ mod test {
   /// allowed. The exponent is the same; only [`Repetition::sign_of`] differs.
   #[test]
   fn the_merge_is_graded_commutative() {
-    for repetition in [Repetition::Forbidden, Repetition::Allowed] {
-      for degree_a in 0..=2 {
-        for degree_b in 0..=2 {
-          for a in MonoIndex::all(repetition, 4, degree_a) {
-            for b in MonoIndex::all(repetition, 4, degree_b) {
-              let sign = repetition.sign_of(degree_a * degree_b);
-              match (a.merge(&b), b.merge(&a)) {
-                (None, None) => {}
-                (Some((sign_ab, ab)), Some((sign_ba, ba))) => {
-                  assert_eq!(ab, ba);
-                  assert_eq!(sign_ab, sign * sign_ba);
+    at_every_width!(check);
+    fn check<B: Bits>() {
+      for repetition in [Repetition::Forbidden, Repetition::Allowed] {
+        for degree_a in 0..=2 {
+          for degree_b in 0..=2 {
+            for a in MonoIndexOver::<B>::all(repetition, 4, degree_a) {
+              for b in MonoIndexOver::<B>::all(repetition, 4, degree_b) {
+                let sign = repetition.sign_of(degree_a * degree_b);
+                match (a.merge(&b), b.merge(&a)) {
+                  (None, None) => {}
+                  (Some((sign_ab, ab)), Some((sign_ba, ba))) => {
+                    assert_eq!(ab, ba);
+                    assert_eq!(sign_ab, sign * sign_ba);
+                  }
+                  _ => panic!("the merge vanishes in only one order"),
                 }
-                _ => panic!("the merge vanishes in only one order"),
               }
             }
           }
@@ -825,20 +838,23 @@ mod test {
   /// the graded monoid both families carry.
   #[test]
   fn the_merge_is_an_associative_monoid() {
-    for repetition in [Repetition::Forbidden, Repetition::Allowed] {
-      let unit = MonoIndex::empty(repetition);
-      for a in MonoIndex::all(repetition, 4, 2) {
-        assert_eq!(a.merge(&unit), Some((Sign::Pos, a)));
-        assert_eq!(unit.merge(&a), Some((Sign::Pos, a)));
-        for b in MonoIndex::all(repetition, 4, 1) {
-          for c in MonoIndex::all(repetition, 4, 1) {
-            let left = a
-              .merge(&b)
-              .and_then(|(sign, ab)| ab.merge(&c).map(|(s, abc)| (sign * s, abc)));
-            let right = b
-              .merge(&c)
-              .and_then(|(sign, bc)| a.merge(&bc).map(|(s, abc)| (sign * s, abc)));
-            assert_eq!(left, right);
+    at_every_width!(check);
+    fn check<B: Bits>() {
+      for repetition in [Repetition::Forbidden, Repetition::Allowed] {
+        let unit = MonoIndexOver::<B>::empty(repetition);
+        for a in MonoIndexOver::<B>::all(repetition, 4, 2) {
+          assert_eq!(a.merge(&unit), Some((Sign::Pos, a)));
+          assert_eq!(unit.merge(&a), Some((Sign::Pos, a)));
+          for b in MonoIndexOver::<B>::all(repetition, 4, 1) {
+            for c in MonoIndexOver::<B>::all(repetition, 4, 1) {
+              let left = a
+                .merge(&b)
+                .and_then(|(sign, ab)| ab.merge(&c).map(|(s, abc)| (sign * s, abc)));
+              let right = b
+                .merge(&c)
+                .and_then(|(sign, bc)| a.merge(&bc).map(|(s, abc)| (sign * s, abc)));
+              assert_eq!(left, right);
+            }
           }
         }
       }
@@ -855,17 +871,20 @@ mod test {
   /// where it must not.
   #[test]
   fn double_deletion_vanishes_only_when_alternating() {
-    use std::collections::HashMap;
-    for repetition in [Repetition::Forbidden, Repetition::Allowed] {
-      for index in MonoIndex::all(repetition, 4, 3) {
-        let mut chain: HashMap<Symbols, i32> = HashMap::new();
-        for (sign_outer, _, once) in index.deletions() {
-          for (sign_inner, _, twice) in once.deletions() {
-            *chain.entry(twice.word()).or_default() += (sign_outer * sign_inner).as_i32();
+    at_every_width!(check);
+    fn check<B: Bits>() {
+      use std::collections::HashMap;
+      for repetition in [Repetition::Forbidden, Repetition::Allowed] {
+        for index in MonoIndexOver::<B>::all(repetition, 4, 3) {
+          let mut chain: HashMap<Symbols, i32> = HashMap::new();
+          for (sign_outer, _, once) in index.deletions() {
+            for (sign_inner, _, twice) in once.deletions() {
+              *chain.entry(twice.word()).or_default() += (sign_outer * sign_inner).as_i32();
+            }
           }
+          let vanishes = chain.values().all(|&coefficient| coefficient == 0);
+          assert_eq!(vanishes, repetition == Repetition::Forbidden);
         }
-        let vanishes = chain.values().all(|&coefficient| coefficient == 0);
-        assert_eq!(vanishes, repetition == Repetition::Forbidden);
       }
     }
   }
@@ -876,50 +895,89 @@ mod test {
   /// rule, before any coefficients enter.
   #[test]
   fn deletion_is_a_graded_derivation_of_the_merge() {
-    for repetition in [Repetition::Forbidden, Repetition::Allowed] {
-      // `degree_a` odd is what exercises the Koszul sign: fixing it even
-      // leaves the parity trivial and the law passes under any sign.
-      for degree_a in 1..=3 {
-        for degree_b in 1..=2 {
-          for a in MonoIndex::all(repetition, 4, degree_a) {
-            for b in MonoIndex::all(repetition, 4, degree_b) {
-              let Some((sign_ab, ab)) = a.merge(&b) else {
-                continue;
-              };
-              // Deletions of the product, as a signed multiset keyed by the
-              // deleted symbol and the resulting word.
-              let mut from_product: std::collections::HashMap<(usize, Symbols), i32> =
-                std::collections::HashMap::new();
-              for (sign, symbol, reduced) in ab.deletions() {
-                *from_product.entry((symbol, reduced.word())).or_default() +=
-                  (sign_ab * sign).as_i32();
-              }
-
-              let mut from_leibniz: std::collections::HashMap<(usize, Symbols), i32> =
-                std::collections::HashMap::new();
-              for (sign, symbol, reduced) in a.deletions() {
-                if let Some((merge_sign, whole)) = reduced.merge(&b) {
-                  *from_leibniz.entry((symbol, whole.word())).or_default() +=
-                    (sign * merge_sign).as_i32();
+    at_every_width!(check);
+    fn check<B: Bits>() {
+      for repetition in [Repetition::Forbidden, Repetition::Allowed] {
+        // `degree_a` odd is what exercises the Koszul sign: fixing it even
+        // leaves the parity trivial and the law passes under any sign.
+        for degree_a in 1..=3 {
+          for degree_b in 1..=2 {
+            for a in MonoIndexOver::<B>::all(repetition, 4, degree_a) {
+              for b in MonoIndexOver::<B>::all(repetition, 4, degree_b) {
+                let Some((sign_ab, ab)) = a.merge(&b) else {
+                  continue;
+                };
+                // Deletions of the product, as a signed multiset keyed by the
+                // deleted symbol and the resulting word.
+                let mut from_product: std::collections::HashMap<(usize, Symbols), i32> =
+                  std::collections::HashMap::new();
+                for (sign, symbol, reduced) in ab.deletions() {
+                  *from_product.entry((symbol, reduced.word())).or_default() +=
+                    (sign_ab * sign).as_i32();
                 }
-              }
-              let parity = repetition.sign_of(a.degree());
-              for (sign, symbol, reduced) in b.deletions() {
-                if let Some((merge_sign, whole)) = a.merge(&reduced) {
-                  *from_leibniz.entry((symbol, whole.word())).or_default() +=
-                    (parity * sign * merge_sign).as_i32();
-                }
-              }
 
-              from_product.retain(|_, coefficient| *coefficient != 0);
-              from_leibniz.retain(|_, coefficient| *coefficient != 0);
-              assert!(!from_product.is_empty(), "the law would hold vacuously");
-              assert_eq!(from_product, from_leibniz);
+                let mut from_leibniz: std::collections::HashMap<(usize, Symbols), i32> =
+                  std::collections::HashMap::new();
+                for (sign, symbol, reduced) in a.deletions() {
+                  if let Some((merge_sign, whole)) = reduced.merge(&b) {
+                    *from_leibniz.entry((symbol, whole.word())).or_default() +=
+                      (sign * merge_sign).as_i32();
+                  }
+                }
+                let parity = repetition.sign_of(a.degree());
+                for (sign, symbol, reduced) in b.deletions() {
+                  if let Some((merge_sign, whole)) = a.merge(&reduced) {
+                    *from_leibniz.entry((symbol, whole.word())).or_default() +=
+                      (parity * sign * merge_sign).as_i32();
+                  }
+                }
+
+                from_product.retain(|_, coefficient| *coefficient != 0);
+                from_leibniz.retain(|_, coefficient| *coefficient != 0);
+                assert!(!from_product.is_empty(), "the law would hold vacuously");
+                assert_eq!(from_product, from_leibniz);
+              }
             }
           }
         }
       }
     }
+  }
+
+  /// An index may fill its backing exactly, and every operation stays total
+  /// at that edge: the complement is empty, the colex successor is the end of
+  /// the enumeration, and the deletions are the whole alphabet.
+  ///
+  /// The width is a ceiling on the representation and enters no formula, so
+  /// the narrow backings are where this says something.
+  #[test]
+  fn an_index_may_span_the_full_width() {
+    fn check<B: Bits>() {
+      let full = MonoIndexOver::<B>::new(Repetition::Forbidden, 0..B::WIDTH);
+      assert_eq!(full.degree(), B::WIDTH);
+      assert_eq!(full.rank(), 0, "the full set is the first of its degree");
+      assert_eq!(full.colex_successor(), None);
+
+      let (sign, complement) = full.complement_signed(B::WIDTH);
+      assert_eq!(sign, Sign::Pos);
+      assert_eq!(complement.degree(), 0);
+
+      let deleted: Vec<_> = full.deletions().map(|(_, symbol, _)| symbol).collect();
+      assert_eq!(deleted, (0..B::WIDTH).collect::<Vec<_>>());
+    }
+    check::<u8>();
+    check::<u16>();
+    check::<u32>();
+    check::<u64>();
+    check::<u128>();
+  }
+
+  /// Past the width there is no representation, so construction refuses rather
+  /// than wrapping into a different index.
+  #[test]
+  #[should_panic(expected = "index reaches past the bitset")]
+  fn a_symbol_past_the_width_is_refused() {
+    MonoIndexOver::<u8>::single(Repetition::Forbidden, u8::WIDTH);
   }
 
   /// Both families agree at the degenerate degrees, where there is no

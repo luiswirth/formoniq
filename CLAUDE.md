@@ -132,7 +132,7 @@ joining the ladder only where `formoniq` consumes it.
 
 | crate        | is                                  | key contents |
 | ------------ | ----------------------------------- | ------------ |
-| `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
+| `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Bits` (the sealed backing width both are generic over), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
 | `multialgebra` | $V^(times.circle k)$ and its two quotients $Lambda$ and $"Sym"$, as one construction | `Symmetry` (free, alternating, symmetric), `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns), `Ring`/`RationalAlgebra` (the coefficient ring and the $QQ$-algebra the dualizing operations need), `extend_scalars`, `determinant` (Leibniz, since a ring does not divide) |
 | `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
 | `coorder`    | the affine space, typed              | `Coords<S>` (a point tagged by its space, generic over owned or borrowed storage) with the affine structure: the action of a displacement, `affine_combination` and its uniform case `barycenter`; `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
@@ -670,10 +670,25 @@ so in shifted form both families are sets and one bitset serves both:
 ranking, enumeration, deletion and the complement become the same bit operations,
 and the family is consulted only for the sign.
 The cost is a ceiling on the *shifted* alphabet $n + k - 1$,
-so a degree is bounded where it was not,
-and the bound is $128$ rather than a `Combination`'s $64$.
+so a degree is bounded where it was not.
 Taken with the numbers in hand: it is what closed a five-fold gap
 against the standalone exterior algebra to well under two.
+
+**The width of that bitset is machine data, so it is a parameter and not a constant.**
+`MonoIndexOver<B>` and `CombinationOver<B>` are generic over a sealed `Bits`,
+the primitive unsigned integers and nothing else,
+and `MonoIndex`/`Combination` are the aliases at the default width the workspace reads,
+in the way `DMatrix` stands for a `Matrix` in nalgebra.
+The alias is forced rather than a convenience:
+a default type parameter applies in type position but not in inference,
+so a constructor taking no `B` would be ambiguous against the bare generic.
+Sealing is load-bearing:
+the derived `Ord` compares bitsets numerically,
+which at equal cardinality *is* colex order,
+and a storage that is not a primitive integer is exactly what would lose it.
+The parameter stops inside the crate,
+nothing above `multiindex` names a width,
+and a law swept over the widths is what keeps the narrow boundary exercised.
 
 **The combinatorics is the library's own.**
 The enumeration order of these objects is load-bearing:
