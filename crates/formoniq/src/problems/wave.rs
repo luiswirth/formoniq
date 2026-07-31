@@ -90,10 +90,10 @@ pub fn solve_wave<C: HilbertComplex>(
     &[&z(nu, ns), &z(nu, nu), &mass_u],
   ]));
   let op_block = CsrMatrix::from(&CooMatrix::block(&[
-    &[&coo(&(-&hb.mass_sigma)), &coo(&hb.codif_u()), &z(ns, nu)],
+    &[&coo(&(-&hb.mass_sigma)), &coo(&hb.codif_u), &z(ns, nu)],
     &[&z(nu, ns), &z(nu, nu), &mass_u],
     &[
-      &coo(&(-&hb.codif_u().transpose())),
+      &coo(&(-&hb.codif_u.transpose())),
       &coo(&(-&hb.codif_dif)),
       &z(nu, nu),
     ],

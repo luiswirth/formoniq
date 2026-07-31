@@ -40,9 +40,15 @@ pub struct HodgeBlocks {
   pub mass_sigma: CsrMatrix,
   /// $M_k$, the mass on the $u$ space.
   pub mass_u: CsrMatrix,
-  /// $dif: Lambda^(k-1) -> Lambda^k$, the differential on the $sigma$ space,
-  /// shape $n_u times n_sigma$.
-  pub dif_sigma: CsrMatrix,
+  /// $(D^(k-1))^T M_k$, the weak codifferential
+  /// $angle.l delta u, tau angle.r = angle.l u, dif tau angle.r$, shape
+  /// $n_sigma times n_u$: the $sigma <- u$ block.
+  ///
+  /// The opposite block $u <- sigma$ is this transposed, and is not a second
+  /// matrix: the mass is symmetric on every signature, so $(D^T M)^T = M D$.
+  /// That adjointness is exactly what makes the saddle point symmetric, so a
+  /// caller transposing states it where a second field would duplicate it.
+  pub codif_u: CsrMatrix,
   /// $(D^k)^T M_(k+1) D^k$, the Galerkin matrix of $(dif u, dif v)$, shape
   /// $n_u^2$. The up-Laplacian $delta dif$, zero at top grade where $dif u = 0$.
   ///
@@ -59,26 +65,9 @@ impl HodgeBlocks {
       n_u: complex.ndofs(grade),
       mass_sigma: CsrMatrix::from(&complex.mass(grade - 1)),
       mass_u: CsrMatrix::from(&complex.mass(grade)),
-      dif_sigma: complex.dif(grade - 1),
+      codif_u: CsrMatrix::from(&complex.codif(grade)),
       codif_dif: CsrMatrix::from(&complex.codif_dif(grade)),
     }
-  }
-
-  /// The weak codifferential $delta$ of the $u$ space, $(D^(k-1))^T M_k$, shape
-  /// $n_sigma times n_u$: the $sigma <- u$ block, characterized by
-  /// $angle.l delta u, tau angle.r = angle.l u, dif tau angle.r$.
-  ///
-  /// The dual of [`Self::dif_sigma`], and the pair is why they are named for
-  /// the space each acts on rather than for a direction: $dif$ takes $sigma$ up
-  /// into $Lambda^k$, $delta$ takes $u$ back down.
-  ///
-  /// The opposite block $u <- sigma$ is this transposed, and is not a second
-  /// product: the mass is symmetric on every signature, so
-  /// $(D^T M)^T = M D$. That adjointness is exactly what makes the saddle point
-  /// symmetric, so a caller transposing states it where a second method would
-  /// reproduce it.
-  pub fn codif_u(&self) -> CsrMatrix {
-    self.dif_sigma.transpose() * &self.mass_u
   }
 
   /// The codifferential $sigma = delta u$ of a coefficient vector, the solution
@@ -94,7 +83,7 @@ impl HodgeBlocks {
     if self.n_sigma == 0 {
       return Vector::zeros(0);
     }
-    DirectInverse::new(self.mass_sigma.clone()).apply(&(self.codif_u() * u))
+    DirectInverse::new(self.mass_sigma.clone()).apply(&(&self.codif_u * u))
   }
 
   /// The mixed Hodge-Laplacian $mat(M_(k-1), -(D^(k-1))^T M_k; M_k D^(k-1), K)$
@@ -103,8 +92,8 @@ impl HodgeBlocks {
   pub fn mixed_hodge_laplacian(&self) -> CooMatrix {
     let coo = |m: &CsrMatrix| CooMatrix::from(m);
     CooMatrix::block(&[
-      &[&coo(&self.mass_sigma), &coo(&self.codif_u()).neg()],
-      &[&coo(&self.codif_u().transpose()), &coo(&self.codif_dif)],
+      &[&coo(&self.mass_sigma), &coo(&self.codif_u).neg()],
+      &[&coo(&self.codif_u.transpose()), &coo(&self.codif_dif)],
     ])
   }
 }
