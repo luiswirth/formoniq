@@ -104,13 +104,6 @@ fn vs_splat(@builtin(vertex_index) vertex_index: u32, @builtin(instance_index) i
     return out;
 }
 
-// The same procedural Gaussian profile the head speck draws with, here in
-// texel units: a hard stamp would alias against the lattice as the particle
-// crosses texel boundaries, and the smooth footprint is what makes the laid
-// trail continuous rather than beaded. Additively blended, so overlapping
-// footprints accumulate into density.
-const SPLAT_FALLOFF: f32 = 3.5;
-
 // Ink by *arc length*, not by time: the splat scales by the texels the
 // particle moves this step. The trail's subject is motion, so a stationary
 // particle -- a zero of the field -- deposits exactly nothing rather than
@@ -121,6 +114,11 @@ const SPLAT_FALLOFF: f32 = 3.5;
 @fragment
 fn fs_splat(in: SplatOut) -> @location(0) vec4<f32> {
     let r2 = dot(in.offset, in.offset);
-    let gaussian = exp(-SPLAT_FALLOFF * r2);
+    // The same procedural Gaussian profile the head speck draws with, here in
+    // texel units: a hard stamp would alias against the lattice as the particle
+    // crosses texel boundaries, and the smooth footprint is what makes the laid
+    // trail continuous rather than beaded. Additively blended, so overlapping
+    // footprints accumulate into density.
+    let gaussian = exp(-deposit.falloff * r2);
     return vec4<f32>(deposit.energy * in.step_texels * gaussian, 0.0, 0.0, 1.0);
 }

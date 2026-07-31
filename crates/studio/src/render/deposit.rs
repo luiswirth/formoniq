@@ -29,9 +29,9 @@ pub struct DepositParams {
   pub energy: f32,
   pub decay: f32,
   pub depth: u32,
+  pub falloff: f32,
   pub _pad0: u32,
   pub _pad1: u32,
-  pub _pad2: u32,
 }
 
 /// The atlas texel format: float because deposits accumulate without bound
@@ -232,9 +232,9 @@ impl DepositBatch {
         energy,
         decay,
         depth,
+        falloff: SPLAT_FALLOFF as f32,
         _pad0: 0,
         _pad1: 0,
-        _pad2: 0,
       },
     );
 
@@ -260,8 +260,10 @@ impl DepositBatch {
 /// not from a wide stamp.
 const SPLAT_RADIUS_TEXELS: f32 = 1.5;
 
-/// The Gaussian falloff of one splat, in units of the radius. Mirrors
-/// `SPLAT_FALLOFF` in `deposit.wgsl`.
+/// The Gaussian falloff of one splat, in units of the radius: the $k$ of
+/// $e^(-k r^2 \/ r_s^2)$. Reaches the shader through [`DepositParams`], like
+/// the radius, so the profile the splat draws and the integral the display's
+/// gain is calibrated against are the same number.
 const SPLAT_FALLOFF: f64 = 3.5;
 
 /// The texels one splat deposits in total at unit energy,

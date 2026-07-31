@@ -51,7 +51,9 @@ pub struct AdvectParams {
   pub _pad2: u32,
 }
 
-/// Must match `@workgroup_size` in `advect.wgsl`.
+/// The `@workgroup_size` `advect.wgsl` declares, which is what
+/// [`AdvectPass::dispatch`] sizes its workgroup count against. The two are
+/// pinned to each other by a test rather than by this comment.
 pub(super) const WORKGROUP_SIZE: u32 = 64;
 
 /// The bindings `advect.wgsl` declares, as a layout.

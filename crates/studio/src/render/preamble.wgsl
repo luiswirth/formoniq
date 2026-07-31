@@ -269,9 +269,9 @@ struct DepositParams {
     energy: f32,
     decay: f32,
     depth: u32,
+    falloff: f32,
     _pad0: u32,
     _pad1: u32,
-    _pad2: u32,
 };
 
 // Relative luminance (Rec. 709), the one place those weights are written down.
