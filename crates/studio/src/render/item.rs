@@ -32,6 +32,18 @@ fn vertex_buffer<T: Pod + Default>(device: &wgpu::Device, label: &str, data: &[T
   })
 }
 
+/// Rewrites a vertex buffer's contents, unless the stream is empty.
+///
+/// An empty one is not nothing to write: [`vertex_buffer`] padded the buffer to
+/// one element so it could be bound at all, and writing zero bytes over that
+/// pad would leave the buffer holding a value nothing asked for. The batch's
+/// own count is what keeps the pad from being drawn either way.
+fn write_stream<T: Pod>(queue: &wgpu::Queue, buffer: &wgpu::Buffer, data: &[T]) {
+  if !data.is_empty() {
+    queue.write_buffer(buffer, 0, bytemuck::cast_slice(data));
+  }
+}
+
 const fn attribute(
   offset: u64,
   shader_location: u32,
@@ -150,12 +162,8 @@ impl SurfaceBatch {
   /// from. Which strategy produced it is
   /// the scene's height reduction's to decide. One buffer write each, no rebake.
   pub fn write_attributes(&self, queue: &wgpu::Queue, colors: &[f32], heights: &[f32]) {
-    if !colors.is_empty() {
-      queue.write_buffer(&self.colors, 0, bytemuck::cast_slice(colors));
-    }
-    if !heights.is_empty() {
-      queue.write_buffer(&self.heights, 0, bytemuck::cast_slice(heights));
-    }
+    write_stream(queue, &self.colors, colors);
+    write_stream(queue, &self.heights, heights);
   }
 
   /// The static stream at locations 0..=2, the per-corner colormap value at 3,
@@ -256,15 +264,10 @@ impl SegmentBatch {
   /// mesh vertex (gathered here); `colors` is per edge endpoint (written as-is).
   pub fn write_attributes(&self, queue: &wgpu::Queue, heights: &[f32], colors: [&[f32]; 2]) {
     for (end, buffer) in self.heights.iter().enumerate() {
-      let gathered = gather(heights, &self.segments, end);
-      if !gathered.is_empty() {
-        queue.write_buffer(buffer, 0, bytemuck::cast_slice(&gathered));
-      }
+      write_stream(queue, buffer, &gather(heights, &self.segments, end));
     }
     for (buffer, color) in self.colors.iter().zip(colors) {
-      if !color.is_empty() {
-        queue.write_buffer(buffer, 0, bytemuck::cast_slice(color));
-      }
+      write_stream(queue, buffer, color);
     }
   }
 
@@ -353,12 +356,8 @@ impl PointBatch {
   /// Rebinds the points to a different field of the same mesh: the static
   /// per-vertex geometry stays, both per-vertex field streams are rewritten.
   pub fn write_attributes(&self, queue: &wgpu::Queue, heights: &[f32], colors: &[f32]) {
-    if !heights.is_empty() {
-      queue.write_buffer(&self.heights, 0, bytemuck::cast_slice(heights));
-    }
-    if !colors.is_empty() {
-      queue.write_buffer(&self.colors, 0, bytemuck::cast_slice(colors));
-    }
+    write_stream(queue, &self.heights, heights);
+    write_stream(queue, &self.colors, colors);
   }
 
   /// The instance's static stream at locations 0..=3, its displacement height at

@@ -228,6 +228,42 @@ pub(crate) fn dof_label(dof: &Simplex) -> String {
     .join(separator)
 }
 
+/// The render mark a grade-$k$ field on an $n$-manifold is drawn with: the
+/// reduced grade $min(k, n-k)$, named.
+///
+/// The rule stated once, for the two questions that ask it. A field being filed
+/// asks it of its own grade, and a grade tab asks it of a grade nothing has
+/// been solved at yet, which is why the mark cannot always be read off a
+/// [`Selection`] and has to be derivable from the grade alone.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum Mark {
+  /// Reduced grade 0: a scalar density, coloring the surface.
+  Density,
+  /// Reduced grade 1: a tangent line field, drawn as glyphs and particles.
+  LineField,
+  /// Reduced grade $>= 2$, only reachable at $n >= 4$: an $(n-k)$-dimensional
+  /// sheet, with no mark yet. A future mark, not a case to route around.
+  Sheet,
+}
+
+impl Mark {
+  pub(crate) fn of(grade: ExteriorGrade, n: Dim) -> Self {
+    match (grade.min(n - grade)).index() {
+      0 => Self::Density,
+      1 => Self::LineField,
+      _ => Self::Sheet,
+    }
+  }
+
+  pub(crate) fn label(self) -> &'static str {
+    match self {
+      Self::Density => "density",
+      Self::LineField => "line field",
+      Self::Sheet => "sheet",
+    }
+  }
+}
+
 /// The display metadata a reconstructed field carries regardless of which
 /// render mark it lands in, everything [`Scene::field`] needs beyond the
 /// cochain itself, bundled so the two independent `Option`s
@@ -729,8 +765,8 @@ impl Scene {
       return;
     }
 
-    match (k.min(n - k)).index() {
-      0 => {
+    match Mark::of(k, n) {
+      Mark::Density => {
         // The original $k$-cochain is kept whole. The reduction to a density (a
         // pointwise Hodge star for $k = n$, the identity for $k = 0$) is read
         // per corner at draw time by `realize::reduce::corner_values`, never
@@ -743,7 +779,7 @@ impl Scene {
           dof,
         });
       }
-      1 => {
+      Mark::LineField => {
         self.line_fields.push(LineField {
           name,
           grade: k,
@@ -752,9 +788,8 @@ impl Scene {
           dof,
         });
       }
-      _reduced => {
-        // A reduced grade >= 2 (only reachable at n >= 4) has no render mark
-        // yet, files into no list rather than panicking the viewer.
+      Mark::Sheet => {
+        // No render mark yet: it files into no list rather than panicking.
       }
     }
   }
