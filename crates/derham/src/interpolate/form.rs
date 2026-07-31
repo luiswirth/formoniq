@@ -1,7 +1,7 @@
 use {
   multialgebra::{
     ExteriorGrade, Factor, Slot, Tensor, Variance,
-    tensor::{Slots, Transport, covariant_slots, tensor_dim, tensor_strides},
+    tensor::{Slots, Transport, covariant_slots, one_alternating, tensor_dim, tensor_strides},
   },
   multiindex::{Combination, Sign, factorial_f64},
   simplicial::linalg::Matrix,
@@ -60,7 +60,7 @@ impl WhitneyLsf {
     // $lambda: RR^n -> RR^(n+1)$: the rows are the $dif lambda_i$.
     let difbarys = unit_difbarys(cell_dim);
     let grade = Dim::from(dof_simp.card() - 1);
-    let covariant = |grade| Tensor::one_alternating(grade, Variance::Covariant, cell_dim);
+    let covariant = |grade| one_alternating(grade, Variance::Covariant, cell_dim);
     Self {
       cell_dim,
       dof_simp,

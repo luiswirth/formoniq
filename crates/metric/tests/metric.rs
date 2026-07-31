@@ -8,7 +8,7 @@ use approx::assert_relative_eq;
 use metric::Metric;
 use metric::tensor::{TensorExt, inner, multiform_metric, multivector_metric, tensor_gramian};
 use multialgebra::tensor::Slots;
-use multialgebra::tensor::{pairing, wedge_pairing};
+use multialgebra::tensor::{one_alternating, pairing, wedge_pairing};
 use multialgebra::{Factor, Matrix, Slot, Tensor, Variance, Vector, exterior_bases, exterior_dim};
 use multiindex::Sign;
 
@@ -20,7 +20,7 @@ fn probe_matrix(nrows: usize, ncols: usize, seed: usize) -> Matrix {
 
 fn probe_element(dim: usize, grade: usize, seed: usize, variance: Variance) -> Tensor {
   Tensor::new(
-    Tensor::one_alternating(grade, variance, dim),
+    one_alternating(grade, variance, dim),
     Vector::from_fn(exterior_dim(dim, grade), |i, _| {
       ((seed + 5 * i) % 7) as f64 - 3.0
     }),
@@ -347,8 +347,8 @@ fn the_tensor_gramian_measures_each_slot_by_its_own_variance() {
   for dim in 1..=3 {
     let g = probe_metric(dim);
     for grade in 0..=dim {
-      let form = Tensor::one_alternating(grade, Variance::Covariant, dim);
-      let vect = Tensor::one_alternating(grade, Variance::Contravariant, dim);
+      let form = one_alternating(grade, Variance::Covariant, dim);
+      let vect = one_alternating(grade, Variance::Contravariant, dim);
 
       assert_relative_eq!(
         &tensor_gramian(&form, &g),

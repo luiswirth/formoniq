@@ -14,6 +14,9 @@ categories = ["mathematics"]
 multiindex = { path = "../multiindex", version = "0.2.0" }
 
 nalgebra = "0.35.0"
+num-complex = "0.4.6"
+num-rational = "0.4.2"
+num-traits = "0.2.19"
 tinyvec = { version = "1.11.0", features = ["alloc"] }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
 
@@ -22,6 +25,8 @@ serde = ["dep:serde"]
 
 [dev-dependencies]
 divan = "0.1.21"
+num-complex = "0.4.6"
+num-rational = "0.4.2"
 approx = "0.5.1"
 
 [[bench]]

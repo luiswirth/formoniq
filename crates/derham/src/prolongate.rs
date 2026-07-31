@@ -39,7 +39,10 @@
 use crate::{Cochain, interpolate::form::WhitneyLsf, project::integrate_face, section::Section};
 
 use {
-  multialgebra::{Dim, ExteriorGrade, Tensor, Variance, tensor::Transport},
+  multialgebra::{
+    Dim, ExteriorGrade, Tensor, Variance,
+    tensor::{Transport, one_alternating},
+  },
   simplicial::{
     atlas::{Bary, MeshPoint, SimplexQuadRule},
     linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
@@ -87,10 +90,7 @@ pub fn prolongation_matrix(
 
     // One child, one Jacobian, so its functor is built once and reused at every
     // quadrature node of every basis form on the cell.
-    let transport = Transport::new(
-      &Tensor::one_alternating(grade, Variance::Covariant, dim),
-      jacobian,
-    );
+    let transport = Transport::new(&one_alternating(grade, Variance::Covariant, dim), jacobian);
 
     for (tau, form) in parent.handle(coarse_complex).faces(grade).zip(&basis_forms) {
       let block = ProlongedBasisForm {

@@ -2,7 +2,7 @@
 
 use approx::assert_relative_eq;
 use multialgebra::tensor::Slots;
-use multialgebra::tensor::{pairing, wedge_pairing};
+use multialgebra::tensor::{one_alternating, pairing, wedge_pairing};
 use multialgebra::{
   Factor, Matrix, Slot, Symmetry, Tensor, Variance, Vector, exterior_bases, exterior_dim,
 };
@@ -15,7 +15,7 @@ fn probe_matrix(nrows: usize, ncols: usize, seed: usize) -> Matrix {
 }
 fn probe_element(dim: usize, grade: usize, seed: usize, variance: Variance) -> Tensor {
   Tensor::new(
-    Tensor::one_alternating(grade, variance, dim),
+    one_alternating(grade, variance, dim),
     Vector::from_fn(exterior_dim(dim, grade), |i, _| {
       ((seed + 5 * i) % 7) as f64 - 3.0
     }),
@@ -120,7 +120,7 @@ fn the_trivial_ends_are_total() {
       let grade = multialgebra::ExteriorGrade::new(grade);
       assert_eq!(exterior_dim(dim, grade), 0);
       assert_eq!(exterior_bases(dim, grade).count(), 0);
-      let zero = Tensor::zero(Tensor::one_alternating(grade, Variance::Covariant, dim));
+      let zero: Tensor = Tensor::zero(one_alternating(grade, Variance::Covariant, dim));
       assert_eq!(zero.components().len(), 0);
     }
     // A degree-zero slot, not the empty tensor product: contracting out of it
@@ -325,13 +325,13 @@ fn the_wedge_pairing_is_graded_symmetric_and_nondegenerate() {
 
       let (rows, cols) = (exterior_dim(dim, grade), exterior_dim(dim, complement));
       let matrix = Matrix::from_fn(rows, cols, |i, j| {
-        let ei = Tensor::from_blade_signed(
+        let ei: Tensor = Tensor::from_blade_signed(
           dim,
           Sign::Pos,
           exterior_bases(dim, grade).nth(i).unwrap(),
           Variance::Covariant,
         );
-        let ej = Tensor::from_blade_signed(
+        let ej: Tensor = Tensor::from_blade_signed(
           dim,
           Sign::Pos,
           exterior_bases(dim, complement).nth(j).unwrap(),
@@ -367,7 +367,7 @@ fn the_full_tensor_power_is_slots_of_degree_one() {
         Variance::Covariant,
         dim,
       );
-      let tensor = Tensor::zero(slots);
+      let tensor: Tensor = Tensor::zero(slots);
 
       assert_eq!(
         tensor.components().len(),
@@ -417,7 +417,7 @@ fn the_free_power_is_the_unquotiented_one() {
       assert!(Factor::symmetric(degree).multidim(dim) <= free.multidim(dim));
 
       let slots = uniform_slots([free], Variance::Covariant, dim);
-      let tensor = Tensor::zero(slots);
+      let tensor: Tensor = Tensor::zero(slots);
       assert!(tensor.slots()[0].symmetry().is_free());
       assert!(!tensor.is_alternating() && !tensor.is_symmetric() || degree == 0);
     }

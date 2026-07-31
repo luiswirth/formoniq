@@ -2,7 +2,10 @@
 
 use multiindex::{Degree, Dim, MonoIndex, MultiIndex, Radix, Sign, Word};
 
-use crate::{Factor, Matrix, Slot, Symmetry, Variance, Vector, basis_multiplicity};
+use crate::{
+  Factor, Matrix, RationalAlgebra, Ring, Slot, Symmetry, Variance, Vector, basis_multiplicity,
+  from_integer, from_sign,
+};
 
 /// The slots of a [`Tensor`], inline: one or two slots is the common case, and
 /// a heap allocation per element in the assembly loop would cost more than the
@@ -29,9 +32,9 @@ pub type Basis = tinyvec::TinyVec<[MultiIndex; 2]>;
 /// [`Factor`], except the Hodge star: a symmetric power has no top degree to
 /// complement against.
 #[derive(Debug, Clone)]
-pub struct Tensor {
+pub struct Tensor<R = f64> {
   slots: Slots,
-  components: Vector,
+  components: Vector<R>,
 }
 
 /// The dimension of $times.circle_i F_i (RR^n)$: the product of the per-factor
@@ -122,8 +125,8 @@ pub fn tensor_strides(slots: &[Slot]) -> Strides {
   )
 }
 
-impl Tensor {
-  pub fn new(slots: impl Into<Slots>, components: Vector) -> Self {
+impl<R: Ring> Tensor<R> {
+  pub fn new(slots: impl Into<Slots>, components: Vector<R>) -> Self {
     let slots = slots.into();
     assert_eq!(
       components.len(),
@@ -144,7 +147,7 @@ impl Tensor {
   /// Over no space in particular. An empty product names none, which is what
   /// distinguishes it from [`Self::one`], the unit of the exterior algebra of a
   /// given space.
-  pub fn scalar(value: f64) -> Self {
+  pub fn scalar(value: R) -> Self {
     Self::new(Slots::new(), Vector::from_element(1, value))
   }
 
@@ -157,33 +160,30 @@ impl Tensor {
   ///
   /// # Panics
   /// If the tensor is not one-dimensional.
-  pub fn as_scalar(&self) -> f64 {
+  pub fn as_scalar(&self) -> R {
     assert_eq!(
       self.components.len(),
       1,
       "a scalar is a one-dimensional tensor"
     );
-    self.components[0]
+    self.components[0].clone()
   }
 
   /// A grade-one element of the space itself, where the two symmetries coincide.
-  pub fn line(components: Vector, variance: Variance) -> Self {
+  pub fn line(components: Vector<R>, variance: Variance) -> Self {
     let dim = components.len();
-    Self::new(Self::one_alternating(1, variance, dim), components)
+    Self::new(one_alternating(1, variance, dim), components)
   }
 
   /// A multiform: one covariant alternating slot, $Lambda^k V^*$.
-  pub fn multiform(components: Vector, dim: impl Into<Dim>, grade: impl Into<Degree>) -> Self {
-    Self::new(
-      Self::one_alternating(grade, Variance::Covariant, dim),
-      components,
-    )
+  pub fn multiform(components: Vector<R>, dim: impl Into<Dim>, grade: impl Into<Degree>) -> Self {
+    Self::new(one_alternating(grade, Variance::Covariant, dim), components)
   }
 
   /// A multivector: one contravariant alternating slot, $Lambda^k V$.
-  pub fn multivector(components: Vector, dim: impl Into<Dim>, grade: impl Into<Degree>) -> Self {
+  pub fn multivector(components: Vector<R>, dim: impl Into<Dim>, grade: impl Into<Degree>) -> Self {
     Self::new(
-      Self::one_alternating(grade, Variance::Contravariant, dim),
+      one_alternating(grade, Variance::Contravariant, dim),
       components,
     )
   }
@@ -204,10 +204,10 @@ impl Tensor {
   /// The variance is the frame's own: a frame of tangent vectors gives a
   /// multivector, one of covectors a multiform. Nothing here derives it
   /// (invariant 4), so it is stated.
-  pub fn blade_of(frame: &Matrix, variance: Variance) -> Self {
+  pub fn blade_of(frame: &Matrix<R>, variance: Variance) -> Self {
     let (dim, grade) = (frame.nrows(), frame.ncols());
     Self::new(
-      Self::one_alternating(grade, variance, dim),
+      one_alternating(grade, variance, dim),
       crate::exterior_power(frame, grade).column(0).into(),
     )
   }
@@ -220,22 +220,22 @@ impl Tensor {
     variance: Variance,
   ) -> Self {
     let (dim, grade) = (dim.into(), blade.card());
-    let mut element = Self::zero(Self::one_alternating(grade, variance, dim));
+    let mut element = Self::zero(one_alternating(grade, variance, dim));
     let rank = MonoIndex::from(blade).rank();
-    element.components[rank] = sign.as_f64();
+    element.components[rank] = from_sign(sign);
     element
   }
 
   /// The zero multiform of a grade: one covariant alternating slot.
   pub fn multiform_zero(dim: impl Into<Dim>, grade: impl Into<Degree>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    Self::zero(Self::one_alternating(grade, Variance::Covariant, dim))
+    Self::zero(one_alternating(grade, Variance::Covariant, dim))
   }
 
   /// The zero multivector of a grade: one contravariant alternating slot.
   pub fn multivector_zero(dim: impl Into<Dim>, grade: impl Into<Degree>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
-    Self::zero(Self::one_alternating(grade, Variance::Contravariant, dim))
+    Self::zero(one_alternating(grade, Variance::Contravariant, dim))
   }
 
   /// The unit of the exterior algebra: one covariant slot at grade 0, holding 1.
@@ -244,16 +244,7 @@ impl Tensor {
   /// are $RR$. They differ in arity, and only this one has a slot to wedge or
   /// star.
   pub fn one(dim: impl Into<Dim>) -> Self {
-    Self::multiform(Vector::from_element(1, 1.0), dim, Degree::ZERO)
-  }
-
-  /// The shape of a single alternating slot.
-  pub fn one_alternating(
-    grade: impl Into<Degree>,
-    variance: Variance,
-    dim: impl Into<Dim>,
-  ) -> Slots {
-    uniform_slots([Factor::alternating(grade)], variance, dim)
+    Self::multiform(Vector::from_element(1, R::one()), dim, Degree::ZERO)
   }
 
   pub fn slots(&self) -> &[Slot] {
@@ -360,14 +351,31 @@ impl Tensor {
   pub fn strides(&self) -> Strides {
     tensor_strides(&self.slots)
   }
-  pub fn components(&self) -> &Vector {
+  pub fn components(&self) -> &Vector<R> {
     &self.components
   }
-  pub fn components_mut(&mut self) -> &mut Vector {
+  pub fn components_mut(&mut self) -> &mut Vector<R> {
     &mut self.components
   }
-  pub fn into_components(self) -> Vector {
+  pub fn into_components(self) -> Vector<R> {
     self.components
+  }
+
+  /// Extension of scalars along a ring map $phi: R -> S$, componentwise on a
+  /// fixed shape.
+  ///
+  /// It is a natural transformation: every operation of the crate commutes
+  /// with it, $phi(omega wedge eta) = phi omega wedge phi eta$ and likewise
+  /// for the interior product, both transfers, the pairings and the
+  /// pushforward. That holds because every structure constant is $plus.minus
+  /// 1$ or a factorial, each the image of an integer, and a ring map fixes
+  /// those. So $ZZ -> QQ -> RR -> CC$ is one operation read four ways, and the
+  /// naturality is exactly the law a hardcoded coefficient would break.
+  pub fn extend_scalars<S: Ring>(&self, ring_map: impl FnMut(&R) -> S) -> Tensor<S> {
+    Tensor::new(
+      self.slots.clone(),
+      Vector::from_iterator(self.components.len(), self.components.iter().map(ring_map)),
+    )
   }
 
   /// The components in the reciprocal basis: the basis dual to the one a
@@ -387,18 +395,10 @@ impl Tensor {
   /// [`Self::components`] directly. On $Lambda^k$ the two coincide, every
   /// $alpha!$ being $1$, which is why a law swept over the alternating family
   /// alone says nothing about any of this.
-  pub fn reciprocal(&self) -> Vector {
+  pub fn reciprocal(&self) -> Vector<R> {
     self
       .components
       .component_mul(&basis_multiplicity(&self.slots))
-  }
-
-  /// A tensor from its components in the reciprocal basis: the inverse of
-  /// [`Self::reciprocal`], and what a dualizing operation ends with.
-  pub fn from_reciprocal(slots: impl Into<Slots>, reciprocal: Vector) -> Self {
-    let slots = slots.into();
-    let components = reciprocal.component_div(&basis_multiplicity(&slots));
-    Self::new(slots, components)
   }
 
   /// The dimension of the space this tensor lives in.
@@ -434,10 +434,10 @@ impl Tensor {
 
   /// Every basis element with its component, in the order the components are
   /// stored: colex per factor, first factor fastest.
-  pub fn basis_iter(&self) -> impl Iterator<Item = (f64, Basis)> + '_ {
+  pub fn basis_iter(&self) -> impl Iterator<Item = (R, Basis)> + '_ {
     let bases = self.slot_bases();
     let mut odometer = vec![0usize; self.slots.len()];
-    self.components.iter().copied().map(move |component| {
+    self.components.iter().cloned().map(move |component| {
       let basis: Basis = odometer
         .iter()
         .zip(&bases)
@@ -533,7 +533,7 @@ impl Tensor {
     }
     let mut product = Self::zero(slots);
     let levels = ProductLevel::table(&self.slots, &other.slots, &product.slots);
-    self.product_into(other, &mut product, &levels, 0, 0, 0, 1.0);
+    self.product_into(other, &mut product, &levels, 0, 0, 0, R::one());
     product
   }
 
@@ -550,11 +550,11 @@ impl Tensor {
     left_flat: usize,
     right_flat: usize,
     target_flat: usize,
-    sign: f64,
+    sign: R,
   ) {
     let [level, rest @ ..] = levels else {
       product.components[target_flat] +=
-        sign * self.components[left_flat] * other.components[right_flat];
+        sign * self.components[left_flat].clone() * other.components[right_flat].clone();
       return;
     };
 
@@ -571,7 +571,7 @@ impl Tensor {
           left_flat,
           right_flat + right_rank * level.right_stride,
           target_flat + merged.rank() * level.target_stride,
-          sign * (merge_sign * level.koszul).as_f64(),
+          sign.clone() * from_sign(merge_sign * level.koszul),
         );
       }
     }
@@ -598,7 +598,7 @@ impl Tensor {
     &self,
     span: std::ops::Range<usize>,
     replacement: impl IntoIterator<Item = Slot>,
-    scatter: impl IntoIterator<Item = (usize, usize, f64)>,
+    scatter: impl IntoIterator<Item = (usize, usize, R)>,
   ) -> Self {
     let mut slots: Slots = self.slots[..span.start].iter().copied().collect();
     slots.extend(replacement);
@@ -611,14 +611,15 @@ impl Tensor {
 
     let mut rewritten = Self::zero(slots);
     for (from, to, weight) in scatter {
-      if weight == 0.0 {
+      if weight.is_zero() {
         continue;
       }
       for block in 0..outer {
         let source = (block * source_span + from) * inner;
         let target = (block * target_span + to) * inner;
         for offset in 0..inner {
-          rewritten.components[target + offset] += weight * self.components[source + offset];
+          rewritten.components[target + offset] +=
+            weight.clone() * self.components[source + offset].clone();
         }
       }
     }
@@ -662,7 +663,7 @@ impl Tensor {
             Some((
               right_rank * left_dim + left_rank,
               product.rank(),
-              sign.as_f64(),
+              from_sign(sign),
             ))
           })
       });
@@ -684,7 +685,7 @@ impl Tensor {
   ///
   /// Total at the trivial end: contracting a degree-zero factor lands in the
   /// trivial space, the empty index having no deletions.
-  pub fn contract(&self, which: usize, dual: &Tensor) -> Self {
+  pub fn contract(&self, which: usize, dual: &Tensor<R>) -> Self {
     let slot = self.slots[which];
     assert_eq!(dual.slots.len(), 1, "contraction is with a single slot");
     assert_eq!(
@@ -703,9 +704,13 @@ impl Tensor {
     );
 
     let deletions = slot.basis().enumerate().flat_map(move |(rank, index)| {
-      index
-        .deletions()
-        .map(move |(sign, symbol, reduced)| (rank, reduced.rank(), sign.as_f64() * dual[symbol]))
+      index.deletions().map(move |(sign, symbol, reduced)| {
+        (
+          rank,
+          reduced.rank(),
+          from_sign::<R>(sign) * dual[symbol].clone(),
+        )
+      })
     });
 
     self.rewrite_span(
@@ -752,7 +757,7 @@ impl Tensor {
     let mut transferred = Self::zero(slots);
 
     for (component, basis) in self.basis_iter() {
-      if component == 0.0 {
+      if component.is_zero() {
         continue;
       }
       for (deletion_sign, symbol, reduced) in basis[from].deletions() {
@@ -767,7 +772,8 @@ impl Tensor {
         target[from] = reduced;
         target[to] = grown;
         let flat = transferred.flat_index(&target);
-        transferred.components[flat] += (deletion_sign * merge_sign).as_f64() * component;
+        transferred.components[flat] +=
+          from_sign::<R>(deletion_sign * merge_sign) * component.clone();
       }
     }
     transferred
@@ -813,7 +819,7 @@ impl Tensor {
     let mut odometer = vec![0usize; self.slots.len()];
 
     for flat in 0..expanded.components.len() {
-      let mut sign = 1.0;
+      let mut sign = R::one();
       let mut source = Basis::new();
       for ((slot, position), slot_basis) in self.slots.iter().zip(&odometer).zip(&bases) {
         let index = &slot_basis[*position];
@@ -824,20 +830,20 @@ impl Tensor {
               // The stabilizer is the multiplicity the unnormalized
               // symmetrization carries, and dropping it costs exactly that
               // factor. One on an alternating slot, where no symbol repeats.
-              sign *= canonical_sign.as_f64() * canonical.stabilizer() as f64;
+              sign *= from_sign::<R>(canonical_sign) * from_integer(canonical.stabilizer() as i64);
               source.push(MultiIndex::Mono(canonical));
             }
             // A repeated symbol in an alternating slot: the zero of the
             // quotient, hence a zero of the embedding.
             None => {
-              sign = 0.0;
+              sign = R::zero();
               break;
             }
           },
         }
       }
-      if sign != 0.0 {
-        expanded.components[flat] += sign * self.components[self.flat_index(&source)];
+      if !sign.is_zero() {
+        expanded.components[flat] += sign * self.components[self.flat_index(&source)].clone();
       }
       for (position, slot_basis) in odometer.iter_mut().zip(&bases) {
         *position += 1;
@@ -883,7 +889,7 @@ impl Tensor {
     let mut traced = Self::zero(slots);
 
     for (component, basis) in self.basis_iter() {
-      if component == 0.0 || basis[i] != basis[j] {
+      if component.is_zero() || basis[i] != basis[j] {
         continue;
       }
       let mut target: Basis = basis;
@@ -932,31 +938,6 @@ impl Tensor {
     contracted
   }
 
-  /// Evaluate a factor at a vector: contract it against that same vector once
-  /// per unit of degree, $T(x, dots, x)$, consuming the factor.
-  ///
-  /// A symmetric factor of degree $r$ is a polynomial of degree $r$, so this is
-  /// evaluation at a point, the same operation as feeding a tangent vector into
-  /// an alternating factor. On the monomial basis,
-  /// $x^alpha |-> x^alpha (v) = product_i v_i^(alpha_i)$.
-  ///
-  /// Contraction of a symmetric factor is the directional derivative
-  /// $diff_v$, so $r$ of them give $diff_v^r p = r! p(v)$ on a homogeneous $p$,
-  /// and the $r!$ is divided out. An alternating factor of degree above one
-  /// evaluates to zero, $iota_v^2 = 0$ being the antisymmetry.
-  pub fn evaluate(&self, which: usize, vector: &Tensor) -> Self {
-    let degree = self.slots[which].degree();
-    let mut value = self.clone();
-    for _ in 0..degree.index() {
-      value = value.contract(which, vector);
-    }
-    value.components /= multiindex::factorial(degree.index()) as f64;
-
-    let mut slots = value.slots.clone();
-    slots.remove(which);
-    Self::new(slots, value.components)
-  }
-
   /// Apply an endomorphism of one slot's own space, leaving the others alone:
   /// $id times.circle dots times.circle M times.circle dots times.circle id$.
   ///
@@ -970,7 +951,7 @@ impl Tensor {
   ///
   /// # Panics
   /// If the matrix is not square of the slot's extent.
-  pub fn apply_to_slot(&self, which: usize, matrix: &Matrix) -> Self {
+  pub fn apply_to_slot(&self, which: usize, matrix: &Matrix<R>) -> Self {
     let slot = self.slots[which];
     let dim = slot.multidim();
     assert_eq!(
@@ -979,8 +960,9 @@ impl Tensor {
       "a slot keeps its extent under an endomorphism of it"
     );
 
-    let entries = (0..dim)
-      .flat_map(|source| (0..dim).map(move |target| (source, target, matrix[(target, source)])));
+    let entries = (0..dim).flat_map(|source| {
+      (0..dim).map(move |target| (source, target, matrix[(target, source)].clone()))
+    });
     self.rewrite_span(which..which + 1, [slot], entries)
   }
 
@@ -995,32 +977,68 @@ impl Tensor {
     );
     self.variance()
   }
+}
 
-  pub fn eq_epsilon(&self, other: &Self, eps: f64) -> bool {
-    self.slots == other.slots
-      && (&self.components - &other.components).norm_squared() <= eps.powi(2)
+/// Exact equality: same shape, same components.
+///
+/// The right comparison over an exact ring, and the one a law over $ZZ$ or
+/// $QQ$ is stated with. Over a floating-point ring reach for
+/// [`Tensor::eq_epsilon`] instead.
+impl<R: Ring> PartialEq for Tensor<R> {
+  fn eq(&self, other: &Self) -> bool {
+    self.slots == other.slots && self.components == other.components
   }
 }
 
-impl Tensor {
-  /// Pushforward along $A: V -> W$: the covariant action of the functor.
+impl<R: Ring + na::ComplexField> Tensor<R> {
+  /// Equality up to a tolerance, for a ring carrying a norm to measure one in.
+  pub fn eq_epsilon(&self, other: &Self, eps: R::RealField) -> bool {
+    self.slots == other.slots
+      && (&self.components - &other.components).norm_squared() <= eps.clone() * eps
+  }
+}
+
+/// The operations that dualize a slot, and the only ones in the crate that
+/// divide.
+///
+/// Each ends in the reciprocal basis, whose symmetric elements are
+/// $x^alpha \/ alpha!$, so each needs the factorials inverted. On the
+/// alternating family every $alpha!$ is $1$ and no division happens, but the
+/// bound cannot see that: the symmetry of a slot is runtime data.
+/// [`RationalAlgebra`] is the honest statement of what they need.
+impl<R: RationalAlgebra> Tensor<R> {
+  /// A tensor from its components in the reciprocal basis: the inverse of
+  /// [`Self::reciprocal`], and what a dualizing operation ends with.
+  pub fn from_reciprocal(slots: impl Into<Slots>, reciprocal: Vector<R>) -> Self {
+    let slots = slots.into();
+    let components = reciprocal.component_div(&basis_multiplicity(&slots));
+    Self::new(slots, components)
+  }
+
+  /// Evaluate a factor at a vector: contract it against that same vector once
+  /// per unit of degree, $T(x, dots, x)$, consuming the factor.
   ///
-  /// # Panics
-  /// If any slot is covariant, or the slots are mixed.
-  pub fn pushforward(&self, map: &Matrix) -> Self {
-    assert_eq!(
-      self.dim(),
-      map.ncols(),
-      "one map transports a tensor whose slots share a space"
-    );
-    if let Some(variance) = self.transport_variance("pushforward") {
-      assert_eq!(
-        variance,
-        Variance::Contravariant,
-        "a covariant tensor pulls back, it does not push forward"
-      );
+  /// A symmetric factor of degree $r$ is a polynomial of degree $r$, so this is
+  /// evaluation at a point, the same operation as feeding a tangent vector into
+  /// an alternating factor. On the monomial basis,
+  /// $x^alpha |-> x^alpha (v) = product_i v_i^(alpha_i)$.
+  ///
+  /// Contraction of a symmetric factor is the directional derivative
+  /// $diff_v$, so $r$ of them give $diff_v^r p = r! p(v)$ on a homogeneous $p$,
+  /// and the $r!$ is divided out. An alternating factor of degree above one
+  /// evaluates to zero, $iota_v^2 = 0$ being the antisymmetry.
+  pub fn evaluate(&self, which: usize, vector: &Tensor<R>) -> Self {
+    let degree = self.slots[which].degree();
+    let mut value = self.clone();
+    for _ in 0..degree.index() {
+      value = value.contract(which, vector);
     }
-    Transport::new(&self.slots, map).pushforward(self)
+    let factorial: R = from_integer(multiindex::factorial(degree.index()) as i64);
+    value.components /= factorial;
+
+    let mut slots = value.slots.clone();
+    slots.remove(which);
+    Self::new(slots, value.components)
   }
 
   /// Pullback along $A: V -> W$: the contravariant action of the functor.
@@ -1030,7 +1048,7 @@ impl Tensor {
   ///
   /// # Panics
   /// If any slot is contravariant, or the slots are mixed.
-  pub fn pullback(&self, map: &Matrix) -> Self {
+  pub fn pullback(&self, map: &Matrix<R>) -> Self {
     assert_eq!(
       self.dim(),
       map.nrows(),
@@ -1044,6 +1062,28 @@ impl Tensor {
       );
     }
     Transport::new(&self.slots, map).pullback(self)
+  }
+}
+
+impl<R: Ring> Tensor<R> {
+  /// Pushforward along $A: V -> W$: the covariant action of the functor.
+  ///
+  /// # Panics
+  /// If any slot is covariant, or the slots are mixed.
+  pub fn pushforward(&self, map: &Matrix<R>) -> Self {
+    assert_eq!(
+      self.dim(),
+      map.ncols(),
+      "one map transports a tensor whose slots share a space"
+    );
+    if let Some(variance) = self.transport_variance("pushforward") {
+      assert_eq!(
+        variance,
+        Variance::Contravariant,
+        "a covariant tensor pulls back, it does not push forward"
+      );
+    }
+    Transport::new(&self.slots, map).pushforward(self)
   }
 }
 
@@ -1069,19 +1109,19 @@ impl Tensor {
 /// factors is also what keeps the shape of the transport readable rather than
 /// flattened into one index.
 #[derive(Debug, Clone)]
-pub struct Transport {
+pub struct Transport<R = f64> {
   /// The shape in the domain $V$.
   domain: Slots,
   /// The shape in the codomain $W$: the same factors over the other space.
   codomain: Slots,
   /// $F_i (A)$ for each slot, the factors of $times.circle_i F_i (A)$.
-  induced: Vec<Matrix>,
+  induced: Vec<Matrix<R>>,
   /// Their transposes, the factors of the adjoint. Stored rather than taken at
   /// every application, a transport being built once and applied many times.
-  adjoint: Vec<Matrix>,
+  adjoint: Vec<Matrix<R>>,
 }
 
-impl Transport {
+impl<R: Ring> Transport<R> {
   /// The functor of `map` on the given shape.
   ///
   /// Only the factors are read. The dimensions come from the map, and the
@@ -1089,8 +1129,8 @@ impl Transport {
   /// carries a variance rather than imposing one, so the same object serves the
   /// pullback of a form and the pushforward of a vector, which is exactly what
   /// makes the two adjoint (invariant 4).
-  pub fn new(slots: &[Slot], map: &Matrix) -> Self {
-    let induced: Vec<Matrix> = slots.iter().map(|slot| slot.factor.induced(map)).collect();
+  pub fn new(slots: &[Slot], map: &Matrix<R>) -> Self {
+    let induced: Vec<Matrix<R>> = slots.iter().map(|slot| slot.factor.induced(map)).collect();
     Self {
       domain: slots.iter().map(|s| s.with_dim(map.ncols())).collect(),
       codomain: slots.iter().map(|s| s.with_dim(map.nrows())).collect(),
@@ -1110,7 +1150,7 @@ impl Transport {
   }
   /// The per-slot functors $F_i (A)$, which is how the transport is stored and
   /// applied.
-  pub fn factors(&self) -> &[Matrix] {
+  pub fn factors(&self) -> &[Matrix<R>] {
     &self.induced
   }
 
@@ -1119,14 +1159,14 @@ impl Transport {
   ///
   /// Built on demand and deliberately not stored. To apply the transport, use
   /// [`Self::pullback`] or [`Self::pushforward`], which never form it.
-  pub fn to_matrix(&self) -> Matrix {
+  pub fn to_matrix(&self) -> Matrix<R> {
     factorwise_kronecker(&self.induced)
   }
 
   /// # Panics
   /// If the tensor's shape is not the domain shape, or it is not uniformly
   /// contravariant.
-  pub fn pushforward(&self, tensor: &Tensor) -> Tensor {
+  pub fn pushforward(&self, tensor: &Tensor<R>) -> Tensor<R> {
     self.check(tensor, &self.domain, Variance::Contravariant, "pushforward");
     Tensor::new(
       Self::carrying(&self.codomain, tensor),
@@ -1138,26 +1178,6 @@ impl Transport {
     )
   }
 
-  /// # Panics
-  /// If the tensor's shape is not the codomain shape, or it is not uniformly
-  /// covariant.
-  pub fn pullback(&self, tensor: &Tensor) -> Tensor {
-    self.check(tensor, &self.codomain, Variance::Covariant, "pullback");
-
-    // A pullback dualizes: it is the adjoint of the pushforward, so it acts on
-    // the reciprocal components and lands in the reciprocal basis of the domain.
-    // On a symmetric slot that is what makes it the transpose of the functor
-    // conjugated by alpha! rather than the bare transpose.
-    Tensor::from_reciprocal(
-      Self::carrying(&self.domain, tensor),
-      apply_factorwise(
-        &self.adjoint,
-        &Self::dims(&self.codomain),
-        &tensor.reciprocal(),
-      ),
-    )
-  }
-
   /// The component layout of a shape, in slot order.
   fn dims(shape: &Slots) -> Vec<usize> {
     shape.iter().map(Slot::multidim).collect()
@@ -1165,7 +1185,7 @@ impl Transport {
 
   /// The target shape wearing the transported tensor's variance: the factors
   /// and dimensions are the transport's, the variance is the value's.
-  fn carrying(shape: &Slots, tensor: &Tensor) -> Slots {
+  fn carrying(shape: &Slots, tensor: &Tensor<R>) -> Slots {
     shape
       .iter()
       .zip(tensor.slots())
@@ -1173,7 +1193,7 @@ impl Transport {
       .collect()
   }
 
-  fn check(&self, tensor: &Tensor, shape: &Slots, wanted: Variance, what: &str) {
+  fn check(&self, tensor: &Tensor<R>, shape: &Slots, wanted: Variance, what: &str) {
     assert!(
       tensor
         .slots()
@@ -1197,6 +1217,28 @@ impl Transport {
   }
 }
 
+impl<R: RationalAlgebra> Transport<R> {
+  /// # Panics
+  /// If the tensor's shape is not the codomain shape, or it is not uniformly
+  /// covariant.
+  pub fn pullback(&self, tensor: &Tensor<R>) -> Tensor<R> {
+    self.check(tensor, &self.codomain, Variance::Covariant, "pullback");
+
+    // A pullback dualizes: it is the adjoint of the pushforward, so it acts on
+    // the reciprocal components and lands in the reciprocal basis of the domain.
+    // On a symmetric slot that is what makes it the transpose of the functor
+    // conjugated by alpha! rather than the bare transpose.
+    Tensor::from_reciprocal(
+      Self::carrying(&self.domain, tensor),
+      apply_factorwise(
+        &self.adjoint,
+        &Self::dims(&self.codomain),
+        &tensor.reciprocal(),
+      ),
+    )
+  }
+}
+
 /// The metric-free duality pairing of two tensors of dual variance,
 /// $angle.l omega, v angle.r$.
 ///
@@ -1214,7 +1256,7 @@ impl Transport {
 /// implementation. A plain dot product of the stored components would be off by
 /// $alpha!$ on every repeated symbol, and right on $Lambda^k$, where the two
 /// bases coincide.
-pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
+pub fn pairing<R: Ring>(left: &Tensor<R>, right: &Tensor<R>) -> R {
   assert_eq!(
     left.slots().len(),
     right.slots().len(),
@@ -1249,7 +1291,7 @@ pub fn pairing(left: &Tensor, right: &Tensor) -> f64 {
 ///
 /// # Panics
 /// If either is not a single alternating slot, or the grades do not sum to $n$.
-pub fn wedge_pairing(left: &Tensor, right: &Tensor) -> f64 {
+pub fn wedge_pairing<R: Ring>(left: &Tensor<R>, right: &Tensor<R>) -> R {
   let (a, b) = (
     left
       .single()
@@ -1277,6 +1319,15 @@ pub fn wedge_pairing(left: &Tensor, right: &Tensor) -> f64 {
   // volume element and that multiple is the pairing.
   top.as_scalar()
 }
+/// The shape of a single alternating slot: $Lambda^k$ of a space, at a
+/// variance.
+///
+/// A shape and not a tensor, so it is a free function beside the other two
+/// rather than an associated one: nothing about it names a coefficient ring.
+pub fn one_alternating(grade: impl Into<Degree>, variance: Variance, dim: impl Into<Dim>) -> Slots {
+  uniform_slots([Factor::alternating(grade)], variance, dim)
+}
+
 /// Every factor at one variance: the shape of a uniform-variance tensor.
 ///
 /// The common case by far, since a mixed tensor is what you build deliberately.
@@ -1315,7 +1366,7 @@ pub fn covariant_slots(factors: impl IntoIterator<Item = Factor>, dim: impl Into
 /// $(product_i d_i)(sum_i d_i)$. Forming the product is for a caller that needs
 /// the matrix as a matrix, a congruence, a factorization, a block of a larger
 /// assembly.
-pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
+pub fn factorwise_kronecker<R: Ring>(per_slot: &[Matrix<R>]) -> Matrix<R> {
   per_slot
     .iter()
     .rev()
@@ -1344,7 +1395,11 @@ pub fn factorwise_kronecker(per_slot: &[Matrix]) -> Matrix {
 ///
 /// # Panics
 /// If the matrices, the dimensions and the component count disagree.
-pub fn apply_factorwise(per_slot: &[Matrix], dims: &[usize], components: &Vector) -> Vector {
+pub fn apply_factorwise<R: Ring>(
+  per_slot: &[Matrix<R>],
+  dims: &[usize],
+  components: &Vector<R>,
+) -> Vector<R> {
   assert_eq!(per_slot.len(), dims.len(), "one matrix per slot");
   assert_eq!(
     components.len(),
@@ -1371,9 +1426,9 @@ pub fn apply_factorwise(per_slot: &[Matrix], dims: &[usize], components: &Vector
     for a in 0..outer {
       for p in 0..to {
         for b in 0..inner {
-          next[(a * to + p) * inner + b] = (0..from)
-            .map(|q| matrix[(p, q)] * values[(a * from + q) * inner + b])
-            .sum();
+          next[(a * to + p) * inner + b] = (0..from).fold(R::zero(), |acc, q| {
+            acc + matrix[(p, q)].clone() * values[(a * from + q) * inner + b].clone()
+          });
         }
       }
     }
@@ -1383,57 +1438,61 @@ pub fn apply_factorwise(per_slot: &[Matrix], dims: &[usize], components: &Vector
   values
 }
 
-impl std::ops::Add for Tensor {
+impl<R: Ring> std::ops::Add for Tensor<R> {
   type Output = Self;
   fn add(mut self, other: Self) -> Self {
     self += other;
     self
   }
 }
-impl std::ops::AddAssign for Tensor {
+impl<R: Ring> std::ops::AddAssign for Tensor<R> {
   fn add_assign(&mut self, other: Self) {
     assert_eq!(self.slots, other.slots);
     self.components += other.components;
   }
 }
-impl std::ops::Sub for Tensor {
+impl<R: Ring> std::ops::Sub for Tensor<R> {
   type Output = Self;
   fn sub(mut self, other: Self) -> Self {
     self -= other;
     self
   }
 }
-impl std::ops::SubAssign for Tensor {
+impl<R: Ring> std::ops::SubAssign for Tensor<R> {
   fn sub_assign(&mut self, other: Self) {
     assert_eq!(self.slots, other.slots);
     self.components -= other.components;
   }
 }
-impl std::ops::Mul<f64> for Tensor {
+impl<R: Ring> std::ops::Mul<R> for Tensor<R> {
   type Output = Self;
-  fn mul(mut self, scalar: f64) -> Self {
+  fn mul(mut self, scalar: R) -> Self {
     self *= scalar;
     self
   }
 }
-impl std::ops::MulAssign<f64> for Tensor {
-  fn mul_assign(&mut self, scalar: f64) {
+impl<R: Ring> std::ops::MulAssign<R> for Tensor<R> {
+  fn mul_assign(&mut self, scalar: R) {
     self.components *= scalar;
   }
 }
-impl std::ops::Mul<Tensor> for f64 {
-  type Output = Tensor;
-  fn mul(self, tensor: Tensor) -> Tensor {
+/// The scalar action written on the left, for the ground ring alone.
+///
+/// A blanket `impl<R: Ring> Mul<Tensor<R>> for R` is not allowed (`R` is not a
+/// local type), so the left action is spelled out per ring rather than derived.
+impl std::ops::Mul<Tensor<f64>> for f64 {
+  type Output = Tensor<f64>;
+  fn mul(self, tensor: Tensor<f64>) -> Tensor<f64> {
     tensor * self
   }
 }
-impl std::ops::Index<usize> for Tensor {
-  type Output = f64;
-  fn index(&self, index: usize) -> &f64 {
+impl<R: Ring> std::ops::Index<usize> for Tensor<R> {
+  type Output = R;
+  fn index(&self, index: usize) -> &R {
     &self.components[index]
   }
 }
-impl std::iter::Sum for Tensor {
+impl<R: Ring> std::iter::Sum for Tensor<R> {
   fn sum<I: Iterator<Item = Self>>(mut iter: I) -> Self {
     let mut sum = iter.next().expect("an empty sum has no shape to take");
     for tensor in iter {
@@ -1512,7 +1571,7 @@ mod test {
   #[test]
   fn the_euclidean_gramian_reads_off_the_multiplicities() {
     for dim in 1..=4 {
-      let euclidean = Matrix::identity(dim, dim);
+      let euclidean: Matrix = Matrix::identity(dim, dim);
       for degree in 0..=3 {
         let alternating = Factor::alternating(degree);
         let identity = Matrix::identity(alternating.multidim(dim), alternating.multidim(dim));
@@ -1800,12 +1859,12 @@ mod test {
   #[test]
   fn exterior_is_single_slot_not_merely_alternating() {
     let dim = 3;
-    let single = Tensor::zero(covariant_slots([Factor::alternating(2)], dim));
+    let single: Tensor = Tensor::zero(covariant_slots([Factor::alternating(2)], dim));
     assert!(single.is_exterior());
     assert!(single.is_alternating());
     assert_eq!(single.single().map(|s| s.degree()), Some(Degree::from(2)));
 
-    let paired = Tensor::zero(covariant_slots(
+    let paired: Tensor = Tensor::zero(covariant_slots(
       [Factor::alternating(1), Factor::alternating(1)],
       dim,
     ));
@@ -1816,7 +1875,7 @@ mod test {
     );
     assert!(paired.single().is_none());
 
-    let mixed = Tensor::zero(covariant_slots(
+    let mixed: Tensor = Tensor::zero(covariant_slots(
       [Factor::symmetric(2), Factor::alternating(1)],
       dim,
     ));

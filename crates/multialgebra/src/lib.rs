@@ -6,8 +6,11 @@ pub mod tensor;
 pub mod variance;
 
 use multiindex::{
-  Composition, MonoIndex, MultiIndex, MultiIndices, Repetition, Word, binomial, combinations,
+  Composition, MonoIndex, MultiIndex, MultiIndices, Permutation, Repetition, Sign, Word, binomial,
+  combinations,
 };
+use num_traits::{FromPrimitive, One, Zero};
+use std::ops::Neg;
 
 pub use multiindex::{Degree, Dim};
 pub use tensor::Tensor;
@@ -15,6 +18,98 @@ pub use variance::Variance;
 
 pub type Vector<T = f64> = na::DVector<T>;
 pub type Matrix<T = f64> = na::DMatrix<T>;
+
+/// The coefficient ring of a [`Tensor`]: any commutative ring.
+///
+/// A blanket alias, so a ring is a coefficient ring by being one. The algebra
+/// is defined over one and needs nothing more: the wedge, the interior
+/// product, both directions of [`Tensor::transfer`], the pairings, the
+/// pushforward and the functors of [`Factor::induced`] have $plus.minus 1$ and
+/// factorials for structure constants, and each of those is the image of an
+/// integer under the unique ring map $ZZ -> R$ ([`from_integer`]). So the
+/// algebra is division-free, and over $ZZ$ or $QQ$ its laws hold exactly
+/// rather than to a tolerance.
+///
+/// One caveat is on the prose and not the code. The stored basis is the free
+/// module on the multi-indices, which is the right $Lambda^k$ over any
+/// commutative ring, but reading $Lambda$ and $"Sym"$ as the quotients by the
+/// two characters of $S_k$ needs $2$ to be a non-zero-divisor. In
+/// characteristic $2$ the description degenerates where the construction does
+/// not.
+pub trait Ring:
+  na::Scalar
+  + Zero
+  + One
+  + FromPrimitive
+  + na::ClosedAddAssign
+  + na::ClosedSubAssign
+  + na::ClosedMulAssign
+  + Neg<Output = Self>
+{
+}
+impl<R> Ring for R where
+  R: na::Scalar
+    + Zero
+    + One
+    + FromPrimitive
+    + na::ClosedAddAssign
+    + na::ClosedSubAssign
+    + na::ClosedMulAssign
+    + Neg<Output = Self>
+{
+}
+
+/// A ring in which the positive integers are invertible: a $QQ$-algebra.
+///
+/// The one thing in the library that needs division, and it needs it in one
+/// place. The stored basis is multiplicative, so the reciprocal basis element
+/// of a symmetric slot is $x^alpha \/ alpha!$, and over $ZZ$ the module those
+/// span is the divided power algebra $Gamma^d$ rather than $"Sym"^d$:
+/// $"Sym"^d (V)^* tilde.equals Gamma^d (V^*)$, with equality only once the
+/// factorials are inverted. That is the mathematical content of this bound,
+/// not a limitation of the encoding. Every $alpha!$ is $1$ on the alternating
+/// family, where $Lambda^k (V)^* tilde.equals Lambda^k (V^*)$ over any ring,
+/// so nothing purely exterior asks for it.
+///
+/// Stated rather than derived, in the pattern of [`Variance`]: a division
+/// operator carries no promise that it is exact, and $ZZ$ has one that
+/// truncates. So a ring is a $QQ$-algebra by saying so, and the blanket bound
+/// that would have admitted $ZZ$ silently is deliberately not written:
+///
+/// ```compile_fail
+/// // i64 has a division operator, and it is not the one this promises.
+/// fn dualizes<R: multialgebra::RationalAlgebra>() {}
+/// dualizes::<i64>();
+/// ```
+///
+/// while the ring itself is fine, and so is an exact $QQ$:
+///
+/// ```
+/// fn algebra<R: multialgebra::Ring>() {}
+/// fn dualizes<R: multialgebra::RationalAlgebra>() {}
+/// algebra::<i64>();
+/// dualizes::<num_rational::Rational64>();
+/// ```
+pub trait RationalAlgebra: Ring + na::ClosedDivAssign {}
+impl RationalAlgebra for f32 {}
+impl RationalAlgebra for f64 {}
+impl<T> RationalAlgebra for num_complex::Complex<T> where
+  num_complex::Complex<T>: Ring + na::ClosedDivAssign
+{
+}
+impl<T> RationalAlgebra for num_rational::Ratio<T> where
+  num_rational::Ratio<T>: Ring + na::ClosedDivAssign
+{
+}
+
+/// The image of an integer under the unique ring map $ZZ -> R$.
+///
+/// Every ring is a $ZZ$-algebra in exactly one way, so this is structure and
+/// not a conversion a caller chooses. It is how the signs and factorials that
+/// are the algebra's structure constants enter a coefficient.
+pub fn from_integer<R: Ring>(n: i64) -> R {
+  R::from_i64(n).expect("a ring receives the integers")
+}
 
 /// The symmetry a slot imposes on its positions: none, or one of the two
 /// quotients by a character of $S_k$.
@@ -187,21 +282,23 @@ impl Factor {
   /// So under a Euclidean metric the alternating basis is orthonormal and the
   /// symmetric one merely orthogonal, $norm(x^alpha)^2 = alpha!$, the
   /// multiplicity a repeated slot carries.
-  pub fn induced_form(&self, single: &Matrix) -> Matrix {
+  pub fn induced_form<R: Ring>(&self, single: &Matrix<R>) -> Matrix<R> {
     assert_eq!(single.nrows(), single.ncols(), "a bilinear form is square");
     let dim = single.nrows();
     let basis: Vec<MultiIndex> = self.basis(dim).collect();
     let entry = |row: &MultiIndex, col: &MultiIndex| {
       let minor = Matrix::from_fn(self.degree.index(), self.degree.index(), |i, j| {
-        single[(row.symbol(i), col.symbol(j))]
+        single[(row.symbol(i), col.symbol(j))].clone()
       });
       match self.symmetry {
-        Symmetry::Alternating => minor.determinant(),
+        Symmetry::Alternating => determinant(&minor),
         Symmetry::Symmetric => permanent(&minor),
         // The free power induces the tensor power of the inner product, so an
         // entry is the plain product down the diagonal: no sum over
         // permutations, because there is no permutation to sum over.
-        Symmetry::Free => (0..self.degree.index()).map(|i| minor[(i, i)]).product(),
+        Symmetry::Free => {
+          (0..self.degree.index()).fold(R::one(), |acc, i| acc * minor[(i, i)].clone())
+        }
       }
     };
     Matrix::from_fn(basis.len(), basis.len(), |i, j| entry(&basis[i], &basis[j]))
@@ -216,7 +313,7 @@ impl Factor {
   ///
   /// Functoriality $F(A B) = F(A) F(B)$ holds for both: Cauchy-Binet on the
   /// alternating side, its permanental counterpart on the symmetric one.
-  pub fn induced(&self, map: &Matrix) -> Matrix {
+  pub fn induced<R: Ring>(&self, map: &Matrix<R>) -> Matrix<R> {
     match self.symmetry {
       Symmetry::Alternating => exterior_power(map, self.degree),
       Symmetry::Symmetric => symmetric_power(map, self.degree),
@@ -327,6 +424,37 @@ pub fn exterior_bases(
   })
 }
 
+/// A sign as a ring element: the image of $plus.minus 1$ under $ZZ -> R$.
+pub fn from_sign<R: Ring>(sign: Sign) -> R {
+  match sign {
+    Sign::Pos => R::one(),
+    Sign::Neg => -R::one(),
+  }
+}
+
+/// The determinant over a commutative ring, by the Leibniz formula
+/// $det A = sum_(sigma in S_n) "sgn"(sigma) product_i A_(i sigma(i))$.
+///
+/// The definition rather than an elimination, and deliberately so: Gaussian
+/// elimination divides, which a ring does not offer, and it is why
+/// `nalgebra`'s determinant asks for a field. What is asked of this is the
+/// $k times k$ minors of [`exterior_power`], whose order is a grade and so is
+/// bounded by the dimension of the space.
+///
+/// Total at the degenerate end: the determinant of the empty matrix is $1$,
+/// the empty product, which is what makes $Lambda^0 A = "id"$ fall out rather
+/// than being special-cased.
+pub fn determinant<R: Ring>(matrix: &Matrix<R>) -> R {
+  let n = matrix.nrows();
+  assert_eq!(n, matrix.ncols(), "the determinant is of a square matrix");
+  Permutation::all(n)
+    .map(|sigma| {
+      let product = (0..n).fold(R::one(), |acc, i| acc * matrix[(i, sigma.apply(i))].clone());
+      from_sign::<R>(sigma.sign()) * product
+    })
+    .fold(R::zero(), |acc, term| acc + term)
+}
+
 /// The permanent: the determinant with every sign made positive,
 /// $"per" A = sum_sigma product_i A_(i sigma(i))$.
 ///
@@ -334,28 +462,27 @@ pub fn exterior_bases(
 /// Still exponential, the permanent being #P-hard, so it is confined to the
 /// $k times k$ minors of a Gramian and is not how [`symmetric_power`]
 /// computes.
-pub fn permanent(matrix: &Matrix) -> f64 {
+pub fn permanent<R: Ring>(matrix: &Matrix<R>) -> R {
   let n = matrix.nrows();
   assert_eq!(n, matrix.ncols(), "the permanent is of a square matrix");
   if n == 0 {
-    return 1.0;
+    return R::one();
   }
-  let mut total = 0.0;
+  let mut total = R::zero();
   for subset in 1..(1u64 << n) {
     let selected = subset.count_ones() as usize;
-    let product: f64 = (0..n)
+    let product = (0..n)
       .map(|row| {
         (0..n)
           .filter(|col| subset & (1 << col) != 0)
-          .map(|col| matrix[(row, col)])
-          .sum::<f64>()
+          .fold(R::zero(), |acc, col| acc + matrix[(row, col)].clone())
       })
-      .product();
-    total += if (n - selected).is_multiple_of(2) {
-      product
+      .fold(R::one(), |acc, row_sum| acc * row_sum);
+    if (n - selected).is_multiple_of(2) {
+      total += product;
     } else {
-      -product
-    };
+      total -= product;
+    }
   }
   total
 }
@@ -363,7 +490,7 @@ pub fn permanent(matrix: &Matrix) -> f64 {
 /// The exterior power functor $Lambda^k$ applied to a linear map: the $k$-th
 /// compound matrix, $(Lambda^k A)_(I J) = det A[I, J]$, on colex-ordered
 /// subsets.
-pub fn exterior_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
+pub fn exterior_power<R: Ring>(map: &Matrix<R>, degree: impl Into<Degree>) -> Matrix<R> {
   let degree = degree.into();
   let factor = Factor::alternating(degree);
   let (nrows, ncols) = (factor.multidim(map.nrows()), factor.multidim(map.ncols()));
@@ -377,10 +504,10 @@ pub fn exterior_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
     for (j, cols) in combinations(map.ncols(), degree.index()).enumerate() {
       for (ii, row) in rows.iter().enumerate() {
         for (jj, col) in cols.iter().enumerate() {
-          minor[(ii, jj)] = map[(row, col)];
+          minor[(ii, jj)] = map[(row, col)].clone();
         }
       }
-      power[(i, j)] = minor.determinant();
+      power[(i, j)] = determinant(&minor);
     }
   }
   power
@@ -391,7 +518,7 @@ pub fn exterior_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
 ///
 /// The simplest of the three, and the one the other two are quotients of:
 /// no minors, no signs, just the product down each word.
-pub fn tensor_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
+pub fn tensor_power<R: Ring>(map: &Matrix<R>, degree: impl Into<Degree>) -> Matrix<R> {
   let degree = degree.into();
   if degree.get() < 0 {
     let factor = Factor::new(Symmetry::Free, degree);
@@ -409,7 +536,7 @@ pub fn tensor_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
 /// expanding the image of a basis monomial,
 /// $product_j (sum_i A_(i j) f_i)^(beta_j)$, is polynomial and is what runs
 /// here.
-pub fn symmetric_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
+pub fn symmetric_power<R: Ring>(map: &Matrix<R>, degree: impl Into<Degree>) -> Matrix<R> {
   let degree = degree.into();
   let factor = Factor::symmetric(degree);
   let (nrows, ncols) = (factor.multidim(map.nrows()), factor.multidim(map.ncols()));
@@ -427,7 +554,7 @@ pub fn symmetric_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
       .flat_map(|(col, &multiplicity)| std::iter::repeat_n(col, multiplicity));
     let poly = variables
       .enumerate()
-      .fold(Vector::from_element(1, 1.0), |poly, (spent, col)| {
+      .fold(Vector::from_element(1, R::one()), |poly, (spent, col)| {
         multiply_by_linear(&poly, spent, &map.column(col).into_owned())
       });
     power.column_mut(j).copy_from(&poly);
@@ -442,17 +569,17 @@ pub fn symmetric_power(map: &Matrix, degree: impl Into<Degree>) -> Matrix {
 /// times a variable is another monomial, so the product is a scatter over
 /// [`Composition::rank`] with no sign, where the alternating side would carry
 /// one and cancel repetitions.
-fn multiply_by_linear(poly: &Vector, degree: usize, linear: &Vector) -> Vector {
+fn multiply_by_linear<R: Ring>(poly: &Vector<R>, degree: usize, linear: &Vector<R>) -> Vector<R> {
   let nparts = linear.len();
   let mut product = Vector::zeros(Composition::count(nparts, degree + 1));
   for (coeff, monomial) in poly.iter().zip(Composition::all(nparts, degree)) {
-    if *coeff == 0.0 {
+    if coeff.is_zero() {
       continue;
     }
     for (part, weight) in linear.iter().enumerate() {
       let mut parts = monomial.parts().to_vec();
       parts[part] += 1;
-      product[Composition::new(parts).rank()] += coeff * weight;
+      product[Composition::new(parts).rank()] += coeff.clone() * weight.clone();
     }
   }
   product
@@ -476,15 +603,15 @@ fn multiply_by_linear(poly: &Vector, degree: usize, linear: &Vector) -> Vector {
 /// multiplicative basis and its reciprocal, and the only ways to spend it are
 /// [`Tensor::reciprocal`] and [`Tensor::from_reciprocal`], which say which
 /// basis they mean.
-pub(crate) fn basis_multiplicity(slots: &[Slot]) -> Vector {
-  let per_slot: Vec<Matrix> = slots
+pub(crate) fn basis_multiplicity<R: Ring>(slots: &[Slot]) -> Vector<R> {
+  let per_slot: Vec<Matrix<R>> = slots
     .iter()
     .map(|slot| {
       let weights = slot
         .basis()
         .map(|index| match slot.symmetry().repetition() {
-          Some(_) => index.stabilizer() as f64,
-          None => 1.0,
+          Some(_) => from_integer(index.stabilizer() as i64),
+          None => R::one(),
         });
       Matrix::from_iterator(slot.multidim(), 1, weights)
     })

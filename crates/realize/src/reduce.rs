@@ -329,7 +329,7 @@ mod tests {
     for dim in 2..=4 {
       let metric = Metric::euclidean(dim);
       for grade in 1..dim {
-        let ncoeffs = Tensor::multiform_zero(dim, grade).components().len();
+        let ncoeffs = Tensor::<f64>::multiform_zero(dim, grade).components().len();
         for i in 0..ncoeffs {
           let mut coeffs = na::DVector::zeros(ncoeffs);
           coeffs[i] = 2.0;
