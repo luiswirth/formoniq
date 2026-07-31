@@ -46,11 +46,10 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VsOut {
 // and it is load-bearing rather than a tuning preference. Everything below 1.0
 // is a mark that fits in the display and is not emitting: a colormapped fill
 // (clamped to $[0, 1]$ by `saturate_color`), a black wireframe, a white
-// glyph. Only a deposit-lifted fill exceeds 1.0. A knee reaching
-// under 1.0 therefore does not soften the selection, it *breaks* it -- at
-// `KNEE = 0.6` against `THRESHOLD = 1.0` the ramp opened at 0.4 and the fill's
-// own bright end bled a sixth of itself into the glow, haloing the heatmap into
-// its neighbors.
+// glyph. Only a deposit-lifted fill exceeds 1.0. A knee reaching under 1.0
+// therefore does not soften the selection, it *breaks* it: the ramp opens onto
+// the fill's own bright end, which then bleeds into the glow and halos the
+// heatmap into its neighbors.
 //
 // These put the ramp at exactly $[1.0, 1.6]$: nothing displayable glows, and
 // what overflows glows in proportion to its overflow.
