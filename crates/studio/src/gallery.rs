@@ -467,34 +467,103 @@ pub enum Study {
   /// The harmonic shell is nonzero exactly on a mesh with grade-1 homology, so
   /// this is the study that shows the topology of the surface directly.
   HodgeDecomposition,
-  /// The heat flow $diff_t u = -Delta u$ of a localized bump, as a sampled
-  /// trajectory: the parabolic smoothing of the Hodge-Laplacian shown directly
-  /// rather than through its spectrum. `nsteps` samples over `final_time`.
-  Heat {
-    grade: ExteriorGrade,
-    nsteps: usize,
-    final_time: f64,
-  },
-  /// The wave equation $diff_(t t) u = -Delta u$ of a localized bump at rest, as
-  /// a sampled trajectory: the hyperbolic counterpart of [`Self::Heat`], fronts
-  /// propagating and reflecting off any boundary.
-  Wave {
-    grade: ExteriorGrade,
-    nsteps: usize,
-    final_time: f64,
-  },
-  /// Linear advection $diff_t u + cal(L)_v u = 0$ of a localized bump along a
-  /// rigid rotation, as a sampled trajectory: transport rather than diffusion
-  /// or propagation. The scheme is central, so the bump is carried without
-  /// damping and the dispersive oscillation is visible in its wake.
-  Advection {
+  /// The evolution of a localized bump under one of the time-dependent
+  /// equations, as a sampled trajectory of `nsteps` frames over `final_time`.
+  /// Which equation is a parameter like the others, because it is the only
+  /// thing the three differ in.
+  Evolve {
+    equation: Evolution,
     grade: ExteriorGrade,
     nsteps: usize,
     final_time: f64,
   },
 }
 
+/// The equation a [`Study::Evolve`] evolves by.
+///
+/// One study at three equations rather than three studies: they take the same
+/// initial condition, the same sampling, the same grade and produce the same
+/// kind of trajectory, and what distinguishes them is the operator, plus the
+/// time scale that operator settles on. A new equation is a variant here, and
+/// the picker, the CLI and the inspector pick it up from `ALL` rather than each
+/// growing a fourth spelling.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+pub enum Evolution {
+  /// $diff_t u = -Delta u$: the parabolic smoothing of the Hodge-Laplacian
+  /// shown directly rather than through its spectrum.
+  Heat,
+  /// $diff_(t t) u = -Delta u$ from rest: the hyperbolic counterpart, fronts
+  /// propagating and reflecting off any boundary.
+  Wave,
+  /// $diff_t u + cal(L)_v u = 0$ along a rigid rotation: transport rather than
+  /// diffusion or propagation. The scheme is central, so the bump is carried
+  /// without damping and the dispersive oscillation is visible in its wake.
+  Advection,
+}
+
+impl Evolution {
+  pub const ALL: [Self; 3] = [Self::Heat, Self::Wave, Self::Advection];
+
+  /// The name the picker shows and, lowercased, the stem the CLI reads.
+  pub fn name(self) -> &'static str {
+    match self {
+      Self::Heat => "Heat",
+      Self::Wave => "Wave",
+      Self::Advection => "Advection",
+    }
+  }
+
+  /// The one-line equation, for the inspector's caption.
+  pub fn equation(self) -> &'static str {
+    match self {
+      Self::Heat => "∂ₜu = −Δu · parabolic",
+      Self::Wave => "∂ₜₜu = −Δu · hyperbolic",
+      Self::Advection => "∂ₜu + ℒᵥu = 0 · transport",
+    }
+  }
+
+  /// How long the trajectory runs. One parameter per equation, because they
+  /// evolve on different scales: the parabolic smoothing settles quickly, the
+  /// hyperbolic fronts want several periods to propagate and reflect, and the
+  /// transport is measured in laps of a unit-speed field.
+  pub fn final_time(self) -> Param<f64> {
+    match self {
+      Self::Heat => HEAT_FINAL_TIME,
+      Self::Wave => WAVE_FINAL_TIME,
+      Self::Advection => ADVECTION_FINAL_TIME,
+    }
+  }
+
+  /// The solve, the one place the three genuinely part ways.
+  fn solve(
+    self,
+    topology: Complex,
+    coords: MeshCoords,
+    grade: ExteriorGrade,
+    nsteps: usize,
+    final_time: f64,
+  ) -> Scene {
+    match self {
+      Self::Heat => Scene::heat(topology, coords, grade, nsteps, final_time),
+      Self::Wave => Scene::wave(topology, coords, grade, nsteps, final_time),
+      Self::Advection => Scene::advection(topology, coords, grade, nsteps, final_time),
+    }
+  }
+}
+
 impl Study {
+  /// An evolution study at its equation's own defaults: the value the picker,
+  /// the CLI and every preset reach for, so a new equation needs no new
+  /// spelling of what its defaults are.
+  pub fn evolve(equation: Evolution, grade: ExteriorGrade) -> Study {
+    Study::Evolve {
+      equation,
+      grade,
+      nsteps: TRAJECTORY_STEPS.default,
+      final_time: equation.final_time().default,
+    }
+  }
+
   /// The study the viewer opens on: grade-0 eigenmodes.
   pub(crate) fn start() -> Study {
     Study::Eigenmodes {
@@ -509,10 +578,7 @@ impl Study {
   /// reads the grade off its data (an explicit cochain list).
   pub(crate) fn grade(&self) -> Option<ExteriorGrade> {
     match self {
-      Study::Eigenmodes { grade, .. }
-      | Study::Heat { grade, .. }
-      | Study::Wave { grade, .. }
-      | Study::Advection { grade, .. } => Some(*grade),
+      Study::Eigenmodes { grade, .. } | Study::Evolve { grade, .. } => Some(*grade),
       Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => None,
     }
   }
@@ -523,9 +589,9 @@ impl Study {
       Study::WhitneyBasis => "Whitney basis".to_string(),
       Study::Cochains(_) => "Cochains".to_string(),
       Study::HodgeDecomposition => "Hodge decomposition".to_string(),
-      Study::Heat { grade, .. } => format!("Heat equation, grade {grade}"),
-      Study::Wave { grade, .. } => format!("Wave equation, grade {grade}"),
-      Study::Advection { grade, .. } => format!("Advection, grade {grade}"),
+      Study::Evolve {
+        equation, grade, ..
+      } => format!("{}, grade {grade}", equation.name()),
     }
   }
 
@@ -540,33 +606,12 @@ impl Study {
       Study::WhitneyBasis => Scene::whitney_basis_mesh(topology.clone(), coords.clone()),
       Study::Cochains(specs) => Scene::cochains(topology.clone(), coords.clone(), specs),
       Study::HodgeDecomposition => Scene::hodge_decomposition(topology.clone(), coords.clone()),
-      Study::Heat {
+      Study::Evolve {
+        equation,
         grade,
         nsteps,
         final_time,
-      } => Scene::heat(
-        topology.clone(),
-        coords.clone(),
-        *grade,
-        *nsteps,
-        *final_time,
-      ),
-      Study::Wave {
-        grade,
-        nsteps,
-        final_time,
-      } => Scene::wave(
-        topology.clone(),
-        coords.clone(),
-        *grade,
-        *nsteps,
-        *final_time,
-      ),
-      Study::Advection {
-        grade,
-        nsteps,
-        final_time,
-      } => Scene::advection(
+      } => equation.solve(
         topology.clone(),
         coords.clone(),
         *grade,
@@ -724,11 +769,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       name: "Heat equation",
       description: "Parabolic smoothing of a localized bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
-      study: Study::Heat {
-        grade: Dim::ZERO,
-        nsteps: TRAJECTORY_STEPS.default,
-        final_time: HEAT_FINAL_TIME.default,
-      },
+      study: Study::evolve(Evolution::Heat, Dim::ZERO),
       selection: None,
       marks: None,
     },
@@ -736,11 +777,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       name: "Wave equation",
       description: "Hyperbolic propagation and reflection of a bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
-      study: Study::Wave {
-        grade: Dim::ZERO,
-        nsteps: TRAJECTORY_STEPS.default,
-        final_time: WAVE_FINAL_TIME.default,
-      },
+      study: Study::evolve(Evolution::Wave, Dim::ZERO),
       selection: None,
       marks: None,
     },
@@ -748,11 +785,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       name: "Advection",
       description: "A bump carried around the sphere by a rigid rotation, the central scheme's dispersion trailing it",
       mesh: MeshSource::START,
-      study: Study::Advection {
-        grade: Dim::ZERO,
-        nsteps: TRAJECTORY_STEPS.default,
-        final_time: ADVECTION_FINAL_TIME.default,
-      },
+      study: Study::evolve(Evolution::Advection, Dim::ZERO),
       selection: None,
       marks: None,
     },
