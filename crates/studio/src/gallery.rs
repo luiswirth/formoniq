@@ -704,19 +704,17 @@ pub(crate) struct Preset {
 /// point in the platform's product, which is exactly what a [`Preset`] is. Kept
 /// as one constructor used from both places so the opening view and the entry
 /// in the browser cannot drift apart.
-///
-/// The pure curl on the triforce, with both of a line field's marks: the glyphs
-/// state what the field is at a point and the particles what it does over time,
-/// and a rotational field is where seeing the two at once says most.
-///
-/// It opens on the default marks, which is the glyphs alone. The particles are
-/// not a thing a preset should switch on for a reader: their cost is the same
-/// on every mesh (see [`Marks`]), so no preset is in a position to decide the
-/// reader can afford them.
 pub(crate) fn start_preset() -> Preset {
   curl_on_triforce()
 }
 
+/// The pure curl on the triforce: a rotational grade-1 field, which is where a
+/// line field's marks say most.
+///
+/// It opens on the default marks, the glyphs alone. The particles are not a
+/// thing a preset should switch on for a reader: their cost is the same on
+/// every mesh (see [`Marks`]), so no preset is in a position to decide the
+/// reader can afford them.
 fn curl_on_triforce() -> Preset {
   Preset {
     name: "Constant / curl / div",
@@ -858,13 +856,13 @@ pub(crate) struct Gallery {
 }
 
 impl Gallery {
-  /// Opens on the starting study of `source`, returning the cheap placeholder
-  /// scene to show at once while that pair's real build runs in the background
-  /// (delivered later by [`Self::poll`]). The placeholder shares the loader's
-  /// mesh, so the window is up on the first frame without waiting on any
-  /// eigensolve.
   /// Opens on `preset`, so the starting point is the same configuration the
   /// browser offers rather than a second hardcoded pair beside it.
+  ///
+  /// Returns the cheap placeholder scene to show at once while that pair's real
+  /// build runs in the background (delivered later by [`Self::poll`]). The
+  /// placeholder shares the loader's mesh, so the window is up on the first
+  /// frame without waiting on any eigensolve.
   pub(crate) fn new(preset: &Preset) -> (Self, Scene) {
     let mesh = Arc::new(preset.mesh.build().expect("the starting mesh builds"));
     let placeholder = Scene::placeholder_on(mesh.0.clone(), mesh.1.clone());
@@ -978,16 +976,13 @@ impl Gallery {
     self.error = None;
     self.mesh_source = source;
     self.mesh = Arc::new(mesh);
-    let shown = self.shown();
-    if let Some(scene) = self.cached(&shown) {
-      self.loading = None;
-      return Some(scene);
-    }
-    self.spawn(shown);
-    Some(Scene::placeholder_on(
-      self.mesh.0.clone(),
-      self.mesh.1.clone(),
-    ))
+    // The same request every axis change makes; what a mesh change adds is
+    // something to show meanwhile, since the geometry is already in hand.
+    Some(
+      self
+        .request()
+        .unwrap_or_else(|| Scene::placeholder_on(self.mesh.0.clone(), self.mesh.1.clone())),
+    )
   }
 
   pub(crate) fn set_error(&mut self, error: String) {
