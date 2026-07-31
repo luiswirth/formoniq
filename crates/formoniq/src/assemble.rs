@@ -1,6 +1,5 @@
 use crate::operators::{ElMatProvider, ElVecProvider};
 
-use itertools::Itertools;
 use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
   linalg::{CooMatrix, Vector},
@@ -8,6 +7,41 @@ use simplicial::{
 };
 
 use rayon::prelude::*;
+
+/// A coordinate-format matrix under construction: the three parallel arrays
+/// [`CooMatrix`] is built from, accumulated rather than transposed into.
+///
+/// Only a scatter needs this. It exists so an assembly can hand back the arrays
+/// in the shape the format already asks for, and so a parallel run can
+/// accumulate one set per thread and concatenate in cell order, which keeps the
+/// summation order of duplicate entries independent of how the work was split.
+#[derive(Default)]
+struct Triplets {
+  rows: Vec<usize>,
+  cols: Vec<usize>,
+  values: Vec<f64>,
+}
+impl Triplets {
+  fn reserve(&mut self, additional: usize) {
+    self.rows.reserve(additional);
+    self.cols.reserve(additional);
+    self.values.reserve(additional);
+  }
+  fn push(&mut self, row: usize, col: usize, value: f64) {
+    self.rows.push(row);
+    self.cols.push(col);
+    self.values.push(value);
+  }
+  fn concat(mut self, other: Self) -> Self {
+    self.rows.extend(other.rows);
+    self.cols.extend(other.cols);
+    self.values.extend(other.values);
+    self
+  }
+  fn into_arrays(self) -> (Vec<usize>, Vec<usize>, Vec<f64>) {
+    (self.rows, self.cols, self.values)
+  }
+}
 
 pub type GalMat = CooMatrix;
 /// Assembly algorithm for the Galerkin Matrix.
@@ -30,35 +64,40 @@ pub fn assemble_galmat(
   let nsimps_col = topology.skeleton(col_grade).len();
 
   let cells = topology.cells();
-  // `flat_map_iter`, not `flat_map`: the parallelism is over cells, and each
-  // cell's triplets number $binom(n+1, k)^2$, single digits at the grades and
-  // dimensions in reach. `flat_map` would hand every such handful back to rayon
-  // as a splittable parallel job, paying scheduler overhead per cell to divide
-  // work that fits in cache. Measured ~2x on a 64k-cell 3D grid at grade 0.
-  let triplets: Vec<(usize, usize, f64)> = cells
+  // `fold`/`reduce`, so each thread scatters straight into the three parallel
+  // arrays the COO format is and the arrays are concatenated in cell order.
+  // Collecting triplets instead would materialize a `Vec` of tuples and then
+  // transpose it into those arrays, one pass of the whole matrix twice over,
+  // for a layout that is decided before the first cell is visited.
+  //
+  // The parallelism stays at cell granularity. A cell's contribution is
+  // $binom(n+1, k+1) binom(n+1, k'+1)$ entries, single digits at the grades and
+  // dimensions in reach, so handing one back to rayon as a splittable job would
+  // pay scheduler overhead to divide work that fits in cache.
+  let (rows, cols, values) = cells
     .handle_par_iter()
-    .flat_map_iter(|cell| {
+    .fold(Triplets::default, |mut acc, cell| {
       let metric = geometry.cell_metric(cell);
       let elmat = elmat.eval(&metric, cell);
 
       let row_subs: Vec<_> = cell.faces(row_grade).collect();
       let col_subs: Vec<_> = cell.faces(col_grade).collect();
 
-      let mut local_triplets = Vec::with_capacity(row_subs.len() * col_subs.len());
-      for (ilocal, &iglobal) in row_subs.iter().enumerate() {
-        for (jlocal, &jglobal) in col_subs.iter().enumerate() {
+      acc.reserve(row_subs.len() * col_subs.len());
+      for (ilocal, iglobal) in row_subs.iter().enumerate() {
+        for (jlocal, jglobal) in col_subs.iter().enumerate() {
           let val = elmat[(ilocal, jlocal)];
           if val != 0.0 {
-            local_triplets.push((iglobal.kidx(), jglobal.kidx(), val));
+            acc.push(iglobal.kidx(), jglobal.kidx(), val);
           }
         }
       }
 
-      local_triplets
+      acc
     })
-    .collect();
+    .reduce(Triplets::default, Triplets::concat)
+    .into_arrays();
 
-  let (rows, cols, values) = triplets.into_iter().multiunzip();
   GalMat::try_from_triplets(nsimps_row, nsimps_col, rows, cols, values).unwrap()
 }
 
