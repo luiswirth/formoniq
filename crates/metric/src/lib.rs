@@ -91,21 +91,39 @@ pub struct Metric {
   matrix: Matrix,
 }
 impl Metric {
+  /// The metric with the given matrix, whose two hypotheses, symmetry and
+  /// non-degeneracy, are the caller's to hold.
+  ///
+  /// Stating them is the normal case and verifying them is the exception,
+  /// which is why this is the plain constructor: most metrics arrive from a
+  /// construction that makes both structural (a polarization writing each
+  /// off-diagonal pair once, a pullback $J^top g J$ of a form already known
+  /// non-degenerate along an injective $J$), and confirming non-degeneracy
+  /// costs a symmetric eigendecomposition, out of all proportion to the
+  /// arithmetic that built the matrix and paid once per cell where it sits on
+  /// an assembly path. Where the hypotheses are genuinely in question, at an
+  /// input boundary or on data a user supplied, [`Self::new_checked`] asks.
+  ///
+  /// Deliberately unchecked in every build profile, debug included. A
+  /// constructor whose cost and whose panics depend on how the code was
+  /// compiled is a worse trap than an unchecked one: it makes a debug run
+  /// asymptotically slower than the release run it is supposed to mirror, and
+  /// it puts a failure in the test suite that the shipped code cannot produce.
+  /// The check is a named predicate now, so a caller that wants it asks for it
+  /// by name.
   pub fn new(variance: Variance, matrix: Matrix) -> Self {
-    assert!(is_symmetric(&matrix), "Matrix must be symmetric.");
-    let this = Self { variance, matrix };
-    assert!(
-      this.is_nondegenerate(),
-      "Matrix must be non-degenerate (invertible)."
-    );
-    this
+    Self { variance, matrix }
   }
-  pub fn new_unchecked(variance: Variance, matrix: Matrix) -> Self {
-    if cfg!(debug_assertions) {
-      Self::new(variance, matrix)
-    } else {
-      Self { variance, matrix }
-    }
+
+  /// The metric with the given matrix, or `None` if it is not one: the
+  /// constructor that verifies what [`Self::new`] takes on contract.
+  ///
+  /// Holding the result *is* the proof that the matrix is a metric, in the
+  /// sense the simplex roles are proofs, so a boundary checks here once
+  /// instead of every operation re-asking.
+  pub fn new_checked(variance: Variance, matrix: Matrix) -> Option<Self> {
+    let this = Self { variance, matrix };
+    this.is_valid().then_some(this)
   }
   /// The metric a family of vectors (as columns) induces by being measured in a
   /// Euclidean ambient: $g = V^top V$. Covariant, being a metric on the domain
@@ -113,12 +131,12 @@ impl Metric {
   pub fn from_euclidean_vectors(vectors: Matrix) -> Self {
     assert!(is_full_rank(&vectors, 1e-9), "Matrix must be full rank.");
     let matrix = vectors.transpose() * vectors;
-    Self::new_unchecked(Variance::Covariant, matrix)
+    Self::new(Variance::Covariant, matrix)
   }
   /// Orthonormal euclidean metric. Self-dual, $g = g^(-1) = I$.
   pub fn euclidean(dim: usize) -> Self {
     let matrix = Matrix::identity(dim, dim);
-    Self::new_unchecked(Variance::Covariant, matrix)
+    Self::new(Variance::Covariant, matrix)
   }
   /// The flat pseudo-Euclidean form of signature $(p, q)$:
   /// $"diag"(+1, dots.c, +1, -1, dots.c, -1)$ with $p$ pluses followed by $q$
@@ -129,7 +147,7 @@ impl Metric {
     for i in p..dim {
       matrix[(i, i)] = -1.0;
     }
-    Self::new_unchecked(Variance::Covariant, matrix)
+    Self::new(Variance::Covariant, matrix)
   }
   /// The Minkowski metric $eta = "diag"(-1, +1, dots.c, +1)$ in the mostly-plus
   /// convention: the timelike direction is basis vector $0$, the remaining
@@ -140,7 +158,7 @@ impl Metric {
     assert!(dim >= 1, "Minkowski space has at least the time axis.");
     let mut matrix = Matrix::identity(dim, dim);
     matrix[(0, 0)] = -1.0;
-    Self::new_unchecked(Variance::Covariant, matrix)
+    Self::new(Variance::Covariant, matrix)
   }
 
   pub fn matrix(&self) -> &Matrix {
@@ -185,7 +203,33 @@ impl Metric {
   pub fn is_riemannian(&self) -> bool {
     na::Cholesky::new(self.matrix.clone()).is_some()
   }
-  fn is_nondegenerate(&self) -> bool {
+  /// Whether the matrix is a metric at all: symmetric and non-degenerate, the
+  /// definition, and exactly the contract [`Self::new`] takes on trust and
+  /// [`Self::new_checked`] verifies.
+  ///
+  /// The one place the hypotheses are stated together, so a caller that has
+  /// built a `Metric` through the plain constructor and wants to discharge the
+  /// contract afterwards asks this rather than remembering that there are two
+  /// of them.
+  pub fn is_valid(&self) -> bool {
+    self.is_symmetric() && self.is_nondegenerate()
+  }
+
+  /// Whether the form is symmetric, $g = g^top$: the first of the two
+  /// hypotheses [`Self::new`] takes on contract.
+  pub fn is_symmetric(&self) -> bool {
+    is_symmetric(&self.matrix)
+  }
+
+  /// Whether the form is non-degenerate, so that $v |-> g(v, dot)$ is
+  /// injective: the second hypothesis, and the one that separates a metric of
+  /// any signature from a merely symmetric form.
+  ///
+  /// Read off the spectrum rather than the determinant, which is why it is not
+  /// free: a determinant near zero is scale-dependent where a smallest
+  /// eigenvalue small against the largest is not. Total on the zero-dimensional
+  /// space, where the empty form is non-degenerate.
+  pub fn is_nondegenerate(&self) -> bool {
     if self.matrix.is_empty() {
       return true;
     }
@@ -209,7 +253,7 @@ impl Metric {
       .clone()
       .try_inverse()
       .expect("Non-degenerate is always invertible.");
-    Self::new_unchecked(self.variance.dual(), matrix)
+    Self::new(self.variance.dual(), matrix)
   }
 
   /// The metric that measures a slot of the given variance: $g$ for a
@@ -234,7 +278,7 @@ impl Metric {
   /// variance is inherited rather than chosen. One method over both families,
   /// which is why there is no separate exterior version.
   pub fn induced(&self, factor: Factor) -> Self {
-    Self::new_unchecked(self.variance, factor.induced_form(&self.matrix))
+    Self::new(self.variance, factor.induced_form(&self.matrix))
   }
 
   /// The metric induced on one slot's own basis, its variance choosing $g$ or
@@ -267,7 +311,7 @@ impl Metric {
   /// $g$ unless $J$ is invertible. Take the dual after pulling back, not
   /// before.
   pub fn pullback(&self, jacobian: &Matrix) -> Self {
-    Self::new_unchecked(self.variance, self.inner_mat(jacobian, jacobian))
+    Self::new(self.variance, self.inner_mat(jacobian, jacobian))
   }
 }
 
@@ -387,7 +431,7 @@ mod tests {
     for i in 0..dim {
       m[(i, i)] = 2.0;
     }
-    Metric::new_unchecked(Variance::Covariant, m)
+    Metric::new(Variance::Covariant, m)
   }
 
   // A deterministic full-column-rank `nrows x ncols` matrix (ncols <= nrows):
@@ -555,23 +599,23 @@ mod tests {
     close(metric.dual().matrix(), metric.matrix());
   }
 
-  /// A symmetric but degenerate matrix is not a metric.
+  /// The two hypotheses, each violated on its own, are each rejected, and a
+  /// matrix meeting both is accepted. Stated through the checking constructor
+  /// rather than as a panic, so the law holds in either build profile: the
+  /// plain constructor takes the contract on trust and asserts only in debug.
   #[test]
-  #[should_panic(expected = "non-degenerate")]
-  fn degenerate_is_rejected() {
-    Metric::new(
-      Variance::Covariant,
-      Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 0.0]),
-    );
-  }
+  fn a_metric_is_exactly_a_symmetric_nondegenerate_matrix() {
+    let degenerate = Matrix::from_row_slice(2, 2, &[1.0, 0.0, 0.0, 0.0]);
+    let nonsymmetric = Matrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0]);
+    let good = Matrix::from_row_slice(2, 2, &[2.0, 1.0, 1.0, 2.0]);
 
-  /// A non-symmetric matrix is not a bilinear form of ours.
-  #[test]
-  #[should_panic(expected = "symmetric")]
-  fn nonsymmetric_is_rejected() {
-    Metric::new(
-      Variance::Covariant,
-      Matrix::from_row_slice(2, 2, &[1.0, 1.0, 0.0, 1.0]),
-    );
+    for bad in [degenerate, nonsymmetric] {
+      assert!(Metric::new_checked(Variance::Covariant, bad.clone()).is_none());
+      // The predicate and the constructor decide the same question.
+      assert!(!Metric::new(Variance::Covariant, bad).is_valid());
+    }
+
+    let metric = Metric::new_checked(Variance::Covariant, good).unwrap();
+    assert!(metric.is_valid());
   }
 }

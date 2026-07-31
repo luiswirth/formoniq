@@ -228,7 +228,7 @@ impl MeshCoords {
     for i in old_dim..dim.index() {
       ambient[(i, i)] = 1.0;
     }
-    self.ambient = Metric::new_unchecked(self.ambient.variance(), ambient);
+    self.ambient = Metric::new(self.ambient.variance(), ambient);
     self
   }
 }
