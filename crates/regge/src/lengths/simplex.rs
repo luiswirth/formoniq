@@ -63,7 +63,7 @@ impl SimplexLengthsSq {
       .map(|edge| if edge.contains(0) { 1.0 } else { 2.0 })
       .collect();
 
-    Self::new_unchecked(lengths_sq.into(), dim)
+    Self::new(lengths_sq.into(), dim)
   }
   pub fn dim(&self) -> Dim {
     self.dim
@@ -301,7 +301,7 @@ impl SimplexLengthsSq {
         metric[(j, i)] = val;
       }
     }
-    Metric::new_unchecked(Variance::Covariant, metric)
+    Metric::new(Variance::Covariant, metric)
   }
 }
 #[cfg(test)]
