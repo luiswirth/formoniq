@@ -30,24 +30,23 @@
 //! space of an SPD problem is preconditioned to precondition CG, and there is no
 //! use here for a piece that would break that.
 
-use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
+use crate::{ApproxInverse, CsrMatrix, Field, SelfAdjoint, Vector, adjoint};
 
 /// One auxiliary correction: a space tied to the main one by a transfer, with an
 /// approximate inverse of the operator restricted to it.
 ///
-/// `prolong` is $Pi: RR^(n_"aux") -> RR^(n_"main")$, the inclusion of the
-/// auxiliary space into the main one; `restrict` is $Pi^T$, cached at
+/// `prolong` is $Pi: W_"aux" -> V_"main"$, the inclusion of the
+/// auxiliary space into the main one; `restrict` is $Pi^H$, cached at
 /// construction. `inverse` is $B approx A_"aux"^(-1)$ on the auxiliary space,
-/// self-adjoint so the correction $Pi B Pi^T$ is symmetric positive
-/// semidefinite.
-struct Correction {
-  prolong: CsrMatrix,
-  restrict: CsrMatrix,
-  inverse: Box<dyn SelfAdjoint<Space = Vector>>,
+/// self-adjoint so the correction $Pi B Pi^H$ is positive semidefinite.
+struct Correction<T> {
+  prolong: CsrMatrix<T>,
+  restrict: CsrMatrix<T>,
+  inverse: Box<dyn SelfAdjoint<Space = Vector<T>>>,
 }
 
-impl Correction {
-  fn apply(&self, r: &Vector) -> Vector {
+impl<T: Field> Correction<T> {
+  fn apply(&self, r: &Vector<T>) -> Vector<T> {
     &self.prolong * self.inverse.apply(&(&self.restrict * r))
   }
 }
@@ -62,12 +61,12 @@ impl Correction {
 /// corrections boxed (they differ in type: a discrete-gradient block and a
 /// vector-nodal block are not the same solver). The dispatch is off the assembly
 /// hot path, one apply per Krylov step against matvec-dominated cost.
-pub struct AuxiliarySpace<S> {
+pub struct AuxiliarySpace<S, T = f64> {
   smoother: S,
-  corrections: Vec<Correction>,
+  corrections: Vec<Correction<T>>,
 }
 
-impl<S: SelfAdjoint<Space = Vector>> AuxiliarySpace<S> {
+impl<T: Field, S: SelfAdjoint<Space = Vector<T>>> AuxiliarySpace<S, T> {
   /// A preconditioner from a smoother alone, corrections added by
   /// [`with_correction`](Self::with_correction).
   pub fn new(smoother: S) -> Self {
@@ -79,7 +78,7 @@ impl<S: SelfAdjoint<Space = Vector>> AuxiliarySpace<S> {
 
   /// Add an auxiliary correction: the transfer $Pi$ from the auxiliary space
   /// into the main one, and a self-adjoint approximate inverse of the operator
-  /// there. Its transpose is the restriction.
+  /// there. Its adjoint is the restriction.
   ///
   /// # Panics
   /// If `prolong` does not map into the main space (its row count must match the
@@ -88,8 +87,8 @@ impl<S: SelfAdjoint<Space = Vector>> AuxiliarySpace<S> {
   #[must_use]
   pub fn with_correction(
     mut self,
-    prolong: CsrMatrix,
-    inverse: Box<dyn SelfAdjoint<Space = Vector>>,
+    prolong: CsrMatrix<T>,
+    inverse: Box<dyn SelfAdjoint<Space = Vector<T>>>,
   ) -> Self {
     assert_eq!(
       prolong.nrows(),
@@ -101,7 +100,7 @@ impl<S: SelfAdjoint<Space = Vector>> AuxiliarySpace<S> {
       inverse.dim(),
       "prolongation must map out of the auxiliary space"
     );
-    let restrict = prolong.transpose();
+    let restrict = adjoint(&prolong);
     self.corrections.push(Correction {
       prolong,
       restrict,
@@ -111,12 +110,12 @@ impl<S: SelfAdjoint<Space = Vector>> AuxiliarySpace<S> {
   }
 }
 
-impl<S: SelfAdjoint<Space = Vector>> ApproxInverse for AuxiliarySpace<S> {
-  type Space = Vector;
+impl<T: Field, S: SelfAdjoint<Space = Vector<T>>> ApproxInverse for AuxiliarySpace<S, T> {
+  type Space = Vector<T>;
   fn dim(&self) -> usize {
     self.smoother.dim()
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &Vector<T>) -> Vector<T> {
     self
       .corrections
       .iter()
@@ -124,13 +123,13 @@ impl<S: SelfAdjoint<Space = Vector>> ApproxInverse for AuxiliarySpace<S> {
   }
 }
 
-/// Self-adjoint whenever the smoother is: each correction $Pi B Pi^T$ is
+/// Self-adjoint whenever the smoother is: each correction $Pi B Pi^H$ is
 /// symmetric (a congruence of the self-adjoint $B$) and positive semidefinite,
 /// and a sum of self-adjoint operators is self-adjoint. Positive-definiteness is
 /// the smoother's promise, the corrections only adding to it, exactly the
 /// pattern the rest of the crate follows. It is what lets this preconditioner
 /// drive [`cg`](crate::krylov::cg).
-impl<S: SelfAdjoint<Space = Vector>> SelfAdjoint for AuxiliarySpace<S> {}
+impl<T: Field, S: SelfAdjoint<Space = Vector<T>>> SelfAdjoint for AuxiliarySpace<S, T> {}
 
 #[cfg(test)]
 mod tests {
