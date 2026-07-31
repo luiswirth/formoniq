@@ -22,9 +22,9 @@
 @group(1) @binding(0) var volume: texture_3d<f32>;
 @group(1) @binding(1) var volume_sampler: sampler;
 
-// A coarse grid holding, per block, the maximum occupancy over that block --
-// `max |value|` normalized by the grid's peak magnitude, precomputed on the CPU
-// (see `VolumeBatch`). It is the empty-space acceleration structure: where a
+// A coarse grid holding, per block, `max |value|` over that block in units of
+// `coarse_scale`, precomputed on the CPU (see `VolumeBatch`). It is the
+// empty-space acceleration structure: where a
 // whole block is empty the ray steps over it in one iteration instead of paying
 // a fine sample per step through vacuum. Nearest-sampled, so a lookup reads the
 // containing block's own maximum rather than a blend across the boundary.
@@ -115,20 +115,32 @@ fn interleaved_gradient_noise(pixel: vec2<f32>) -> f32 {
 // two lobes are equally present as medium, and only the *color* distinguishes
 // them. Normalizing against whichever end of the range is further from zero
 // keeps that symmetric.
+fn occupancy_scale(m: VolumeMaterial) -> f32 {
+    return max(max(abs(m.min_val), abs(m.max_val)), 1e-12);
+}
+
 fn occupancy(m: VolumeMaterial, value: f32) -> f32 {
-    let scale = max(abs(m.min_val), abs(m.max_val));
-    return clamp(abs(value) / max(scale, 1e-12), 0.0, 1.0);
+    return clamp(abs(value) / occupancy_scale(m), 0.0, 1.0);
 }
 
 // The maximum occupancy over the coarse block containing `x`, read from the
-// acceleration grid. Directly comparable to `MIN_OCCUPANCY`: the CPU normalizes
-// it by the grid's peak, which equals the shader's own occupancy scale. It is a
-// conservative upper bound on every fine sample in the block -- encoded with a
-// ceil, and the wave only shrinks a value ($|u cos| <= |u|$) -- so a block it
-// reports empty truly contributes nothing and skipping it drops no medium.
-fn block_occupancy(x: vec3<f32>) -> f32 {
-    let uvw = (x - volume_material.origin.xyz) / volume_material.size.xyz;
-    return textureSampleLevel(coarse, coarse_sampler, uvw, 0.0).r;
+// acceleration grid.
+//
+// The texel holds `max |value|` over the block in units of `coarse_scale`, a
+// magnitude in field units, and the conversion into occupancy is this one
+// division -- the same scale `occupancy` divides by. The two must not be
+// normalized separately: the display's range is the *boundary trace's* where
+// the medium shows the field itself, so a block measured against the grid's own
+// peak instead would under-report every interior antinode the boundary never
+// sees, and the skip would drop medium it was supposed to bound.
+//
+// Given the shared scale it is a conservative upper bound on every fine sample
+// in the block -- encoded with a ceil, and the wave only shrinks a value
+// ($|u cos| <= |u|$) -- so a block it reports empty truly contributes nothing.
+fn block_occupancy(m: VolumeMaterial, x: vec3<f32>) -> f32 {
+    let uvw = (x - m.origin.xyz) / m.size.xyz;
+    let texel = textureSampleLevel(coarse, coarse_sampler, uvw, 0.0).r;
+    return clamp(texel * m.coarse_scale / occupancy_scale(m), 0.0, 1.0);
 }
 
 // Advance `t` past the far boundary of the coarse block containing `x`, so an
@@ -202,7 +214,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         // does). The coarse grid steps over a whole empty block at once, so the
         // vacuum costs no fine sample at all -- most of the frame's
         // speed on a solid that only half-fills its bounds.
-        if (block_occupancy(x) <= MIN_OCCUPANCY) {
+        if (block_occupancy(m, x) <= MIN_OCCUPANCY) {
             t = skip_block(m, x, dir, t);
             continue;
         }

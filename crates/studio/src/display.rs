@@ -914,6 +914,7 @@ impl FieldDisplay {
         // anything the grid does not already, and a coarser one walks over
         // features the bake paid for.
         step_size: 0.5 * batch.voxel,
+        coarse_scale: batch.peak,
         ..VolumeMaterial::default()
       };
       VolumeDisplay { batch, material }

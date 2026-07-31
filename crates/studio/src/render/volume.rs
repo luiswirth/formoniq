@@ -36,11 +36,15 @@ const COARSE_BLOCK: usize = 4;
 /// `COARSE_BLOCK`-cubed fine voxels, normalized by the grid's peak magnitude and
 /// `ceil`-encoded into `R8Unorm`. Returned with its extent for upload.
 ///
-/// The normalization matches the shader's occupancy scale (the peak is that
-/// scale, being `max |value|`), so a texel decodes straight to the block's
-/// maximum occupancy. `ceil` rounds any nonzero block up rather than down, so the
-/// bound is conservative: a block the grid calls empty has every fine sample
-/// below `MIN_OCCUPANCY`, and the march never skips medium it should have drawn.
+/// The peak is carried alongside as the texel's unit ([`VolumeBatch::peak`]),
+/// and the shader converts a block's bound into occupancy against the same
+/// scale the fine samples use. Normalizing here against a scale of this grid's
+/// own choosing would not do: the display's range is the boundary trace's
+/// wherever the medium shows the field itself, and the two need not agree.
+///
+/// `ceil` rounds any nonzero block up rather than down, so the bound is
+/// conservative: a block the march skips has every fine sample below
+/// `MIN_OCCUPANCY`, and no medium it should have drawn is dropped.
 fn coarse_occupancy(grid: &VolumeGrid) -> (Vec<u8>, wgpu::Extent3d) {
   let [rx, ry, rz] = grid.resolution;
   let cres = grid.resolution.map(|r| r.div_ceil(COARSE_BLOCK).max(1));
@@ -141,8 +145,10 @@ pub struct VolumeMaterial {
   /// Filled by the renderer from the frame, never by the display: see
   /// `inv_view_proj`.
   pub time: f32,
+  /// The units the coarse grid's texels are stored in: [`VolumeBatch::peak`].
+  pub coarse_scale: f32,
   /// Public only so a caller may spread `..Default::default()`; never read.
-  pub _pad: [f32; 2],
+  pub _pad: f32,
 }
 
 impl Default for VolumeMaterial {
@@ -161,7 +167,8 @@ impl Default for VolumeMaterial {
       step_size: 1.0,
       wave_omega: 0.0,
       time: 0.0,
-      _pad: [0.0; 2],
+      coarse_scale: 0.0,
+      _pad: 0.0,
     }
   }
 }
@@ -188,6 +195,11 @@ pub struct VolumeBatch {
   /// A voxel's world-space diagonal: the length scale a march should not step
   /// past, since a longer step walks over voxels the bake resolved.
   pub voxel: f32,
+  /// The field units the coarse grid's texels are stored in, its peak
+  /// magnitude. Carried with the texture that determined it for the same reason
+  /// the decoding is: the shader converts a block's bound into occupancy with
+  /// it, and pairing it with another grid's would break the bound.
+  pub peak: f32,
 }
 
 impl VolumeBatch {
@@ -256,9 +268,9 @@ impl VolumeBatch {
 
     // The coarse empty-space grid: each block holds the maximum occupancy over
     // its `COARSE_BLOCK`-cubed fine voxels, `max |value|` normalized by the
-    // grid's peak so it decodes to the same `[0, 1]` occupancy the shader
-    // compares against `MIN_OCCUPANCY`. `ceil`-encoded, so a block with any
-    // content is never rounded down to empty, the skip stays conservative.
+    // grid's peak, which travels with it as the unit the shader converts from.
+    // `ceil`-encoded, so a block with any content is never rounded down to
+    // empty, the skip stays conservative.
     let (coarse, coarse_extent) = coarse_occupancy(grid);
     let coarse_texture = device.create_texture(&wgpu::TextureDescriptor {
       label: Some("Volume Coarse Texture"),
@@ -332,6 +344,7 @@ impl VolumeBatch {
       origin: grid.origin,
       size: grid.size,
       voxel,
+      peak: grid.peak,
     }
   }
 }
