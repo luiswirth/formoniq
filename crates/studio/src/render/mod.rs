@@ -276,6 +276,24 @@ mod tests {
     }
   }
 
+  /// The dispatch's workgroup count is derived from
+  /// [`advect::WORKGROUP_SIZE`], so it is the shader's own `@workgroup_size`
+  /// that decides whether the population is covered. A larger declared size
+  /// leaves the tail of the population unstepped, which reads as a patch of
+  /// particles frozen in the flow rather than as a failure, so the two are
+  /// checked against each other rather than against a written number.
+  #[test]
+  fn advect_workgroup_size_matches_dispatch() {
+    let source = super::shader_source(include_str!("advect.wgsl"));
+    let module = naga::front::wgsl::parse_str(&source).expect("advect failed to parse");
+    let entry = module
+      .entry_points
+      .iter()
+      .find(|e| e.name == "advect")
+      .expect("advect has no `advect` entry point");
+    assert_eq!(entry.workgroup_size, [super::advect::WORKGROUP_SIZE, 1, 1]);
+  }
+
   /// Every uniform's WGSL struct has the size its `#[repr(C)]` Rust mirror
   /// does, as naga lays it out, the same computation wgpu validates a bind
   /// group against.
