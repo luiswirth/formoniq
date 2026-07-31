@@ -32,7 +32,7 @@ impl DownsamplePass {
     ssaa: u32,
   ) -> Self {
     let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-      label: Some("scene_color_bind_group_layout"),
+      label: Some("Scene Color Bind Group Layout"),
       entries: &[
         wgpu::BindGroupLayoutEntry {
           binding: 0,
@@ -131,7 +131,7 @@ impl DownsamplePass {
     mask: &wgpu::TextureView,
   ) -> SceneColorBinding {
     let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-      label: Some("scene_color_bind_group"),
+      label: Some("Scene Color Bind Group"),
       layout: &self.layout,
       entries: &[
         wgpu::BindGroupEntry {
