@@ -55,10 +55,10 @@ pub fn solve_heat<C: HilbertComplex>(
     &[&CooMatrix::zeros(nu, ns), &coo(&hb.mass_u)],
   ]));
   let op_block = CsrMatrix::from(&CooMatrix::block(&[
-    &[&coo(&(-&hb.mass_sigma)), &coo(&hb.codif_dn())],
+    &[&coo(&(-&hb.mass_sigma)), &coo(&hb.codif_u())],
     &[
-      &coo(&(-diffusion_coeff * &hb.dif_sigma())),
-      &coo(&(-diffusion_coeff * &hb.stiff())),
+      &coo(&(-diffusion_coeff * &hb.codif_u().transpose())),
+      &coo(&(-diffusion_coeff * &hb.codif_dif)),
     ],
   ]));
 

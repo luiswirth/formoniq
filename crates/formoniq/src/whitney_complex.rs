@@ -586,16 +586,24 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
   }
 
   /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^(k+1))$ on the
-  /// relative complex.
+  /// relative complex: the restriction $E^T (D^T M_(k+1) D) E$ of the full
+  /// complex's, which is already assembled from its element form.
   ///
-  /// Total in grade with no special case, exactly as [`WhitneyComplex`]'s:
-  /// the top-grade and out-of-range zeros fall out of the total [`Self::dif`] and
-  /// [`Self::mass`].
+  /// The restriction is exact, not an approximation of the relative operator,
+  /// and the subcomplex property is what makes it so. Writing $P = E E^T$ for
+  /// the projection onto the interior DOFs one grade up, $dif$ of a
+  /// boundary-vanishing cochain vanishes on the boundary, so $P D E = D E$, and
+  /// the two projections in
+  /// $(E^T D^T P) M (P D E)$ collapse. Hence forming the relative stiffness
+  /// from the relative mass one grade up, as the definition reads, would
+  /// assemble that mass for nothing.
+  ///
+  /// Total in grade with no special case, inherited from the full complex's.
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    let dif = self.dif(grade);
-    let mass = CsrMatrix::from(&self.mass(grade + 1));
-    GalMat::from(&(dif.transpose() * mass * dif))
+    let incl = self.inclusion(grade);
+    let stiff = CsrMatrix::from(&self.full.codif_dif(grade));
+    GalMat::from(&(incl.transpose() * stiff * incl))
   }
   /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
@@ -732,6 +740,52 @@ mod test {
             "dim {dim:?} grade {grade:?}: stiffness vanished"
           );
         }
+      }
+    }
+  }
+
+  /// The relative stiffness is the restriction of the full one, which is the
+  /// subcomplex property in matrix form and is why the relative complex never
+  /// has to assemble a mass one grade up.
+  ///
+  /// Checked against the definition it replaces, $D_"rel"^T M_"rel" D_"rel"$
+  /// built from the relative operators, on a mesh with a genuine boundary so
+  /// that the inclusion is not the identity and the law can fail.
+  #[test]
+  fn the_relative_stiffness_is_the_restriction_of_the_full_one() {
+    for dim in (1..=3).map(Dim::from) {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let relative = WhitneyComplex::new(&topology, &lengths).relative();
+
+      for grade in dim.range_inclusive() {
+        // Below the top the boundary carries simplices of that grade and the
+        // inclusion is a proper one, so the law is not two identities agreeing.
+        // At the top there are none: the boundary subcomplex has dimension
+        // $n - 1$, so no cell is constrained and the relative complex coincides
+        // with the full one there.
+        if grade < dim {
+          assert!(relative.ndofs(grade) < topology.nsimplices(grade));
+        }
+
+        let restricted = CsrMatrix::from(&relative.codif_dif(grade));
+
+        let dif = relative.dif(grade);
+        let mass = CsrMatrix::from(&relative.mass(grade + 1));
+        let by_definition = dif.transpose() * mass * dif;
+
+        let residual = (&restricted - &by_definition)
+          .values()
+          .iter()
+          .fold(0.0f64, |acc, v| acc.max(v.abs()));
+        let scale = restricted
+          .values()
+          .iter()
+          .fold(0.0f64, |acc, v| acc.max(v.abs()));
+        assert!(
+          residual <= 1e-12 * scale.max(1.0),
+          "dim {dim:?} grade {grade:?}: differs by {residual:e}"
+        );
       }
     }
   }
