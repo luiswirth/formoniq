@@ -39,7 +39,7 @@ What the `realize` pass did, so you don't redo it.
 - Deliberately left: `reduce::corner_bounds` is a normalization range rather than a reduction, but it sits where the per-corner streams are produced and every caller of one calls the other.
 - The crate's `CLAUDE.md` needed no change, which is the interesting part: on all three of these the design doc was already right and the code had drifted from it.
 
-The `studio` tail is done: everything the outline below named has now been read closely, and the pass has walked the whole ladder. What the tail found is listed after the earlier `studio` notes.
+The pass is complete. Every crate has been walked, the `studio` tail the outline below named has been read closely, and `regge/src/io/gmsh.rs`, the one file an earlier pass had skipped, has had its own. What the tail found is listed after the earlier `studio` notes; what `gmsh.rs` found is in its commit.
 
 Where `studio` stands. It is the last crate and it has its own `CLAUDE.md`, which governs `realize` too. Its test suite is slow, around three minutes, so run it in the background rather than waiting on it. The crate has been walked. Read closely: `scene.rs`, `gallery.rs`, `solve.rs`, `demos.rs`, `welcome.rs`, `display.rs`, `cli.rs`, `export.rs`, `ui.rs`, `render/mod.rs`, `render/item.rs`, the four mark passes, `render/camera.rs`, `render/renderer.rs`, `render/uniform.rs`. Read only in outline, and the place to start if the pass is resumed: `app.rs`'s input and touch handling, `render/deposit.rs`, `render/volume.rs`, `render/advect.rs`, `render/particles.rs`, `web.rs`, and the shaders.
 
@@ -71,5 +71,4 @@ What the `studio` tail did (`app.rs`'s input and touch handling, the four remain
 
 Carried notes, upstream of where the pass now is.
 - `Metric::new_unchecked` falls back to the checked constructor under `debug_assertions` and `on_slot` builds a `Metric` per slot, so a debug build does a symmetric eigendecomposition per `inner()` call. Deliberate, but it makes the debug test suite much slower than it looks.
-- `regge/src/io/gmsh.rs` was never read closely during the `regge` pass.
 - The examples under `crates/formoniq/examples/` are run by hand, not by `cargo test`, so a change reaching them has to be run. `source` is the slow one, tens of minutes.
