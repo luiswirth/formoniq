@@ -3,9 +3,8 @@
 //! A build is a request (a mesh and a study) and an outcome (the fields
 //! that study produced on it), not a closure. That shape is forced by the web:
 //! the work has to cross a `postMessage` boundary into a worker, and a closure
-//! cannot cross one. Native pays nothing for it, a thread runs
-//! [`SolveRequest::run`] and sends the outcome back, which is what it did
-//! before with a closure.
+//! cannot cross one. Native pays nothing for it: a thread runs
+//! [`SolveRequest::run`] and sends the outcome back.
 //!
 //! The request carries the mesh itself, not a descriptor of it. A descriptor
 //! would be smaller, and would work for every mesh the gallery can regenerate,
@@ -79,13 +78,10 @@ impl SolveRequest {
 impl SolveOutcome {
   /// The scene this outcome and the mesh it was solved on make together.
   pub(crate) fn into_scene(self, mesh: &Mesh) -> Scene {
-    Scene {
-      surface: realize::surface::Surface::of(&mesh.0, &mesh.1),
-      topology: mesh.0.clone(),
-      coords: mesh.1.clone(),
-      fields: self.fields,
-      line_fields: self.line_fields,
-    }
+    let mut scene = Scene::on(mesh.0.clone(), mesh.1.clone());
+    scene.fields = self.fields;
+    scene.line_fields = self.line_fields;
+    scene
   }
 }
 

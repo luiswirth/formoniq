@@ -311,16 +311,10 @@ impl Displayed {
   }
 }
 
-/// The scene's fields in the picker's order, scalars, then line fields,
-/// indexed flat, which is what `--field N` names.
+/// The scene's fields in the picker's flat order, which is what `--field N`
+/// names, and the same order the picker itself lays out.
 fn selection_at(scene: &Scene, index: usize) -> Option<Selection> {
-  if index < scene.fields.len() {
-    Some(Selection::Scalar(index))
-  } else if index - scene.fields.len() < scene.line_fields.len() {
-    Some(Selection::Line(index - scene.fields.len()))
-  } else {
-    None
-  }
+  scene.selections().nth(index)
 }
 
 fn eigenvalue_of(scene: &Scene, selection: Selection) -> Option<f64> {

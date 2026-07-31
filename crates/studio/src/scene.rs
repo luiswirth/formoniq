@@ -316,7 +316,7 @@ impl Scene {
   /// The surface reduction is fixed here, before any field exists, because the
   /// mark a field gets is chosen against the surface's dimension and not the
   /// mesh's.
-  fn on(topology: Complex, coords: MeshCoords) -> Self {
+  pub(crate) fn on(topology: Complex, coords: MeshCoords) -> Self {
     Self {
       surface: Surface::of(&topology, &coords),
       topology,
@@ -701,6 +701,18 @@ impl Scene {
       Selection::Scalar(i) => &self.fields[i].cochain,
       Selection::Line(i) => &self.line_fields[i].cochain,
     }
+  }
+
+  /// Every field of the scene, in the picker's flat order: the scalars, then
+  /// the line fields.
+  ///
+  /// One order, stated once. It is what the mode picker lays out and what
+  /// `--field N` indexes, and those two have to be the same order or a name on
+  /// the command line means a different field than the one on screen.
+  pub(crate) fn selections(&self) -> impl Iterator<Item = Selection> + use<'_> {
+    (0..self.fields.len())
+      .map(Selection::Scalar)
+      .chain((0..self.line_fields.len()).map(Selection::Line))
   }
 
   /// Reconstructs a cochain as the render mark its reduced grade
@@ -1326,11 +1338,8 @@ mod tests {
   fn the_medium_is_offered_exactly_on_a_solid() {
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
-      let selections = (0..scene.fields.len())
-        .map(Selection::Scalar)
-        .chain((0..scene.line_fields.len()).map(Selection::Line));
       let mut asked = 0;
-      for selection in selections {
+      for selection in scene.selections() {
         assert_eq!(
           scene.offers(selection).volume,
           dim >= 3,

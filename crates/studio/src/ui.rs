@@ -539,11 +539,6 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
   });
 }
 
-/// The render mark a grade-$k$ field is drawn with on an $n$-manifold, named
-/// for the UI: its reduced grade $min(k, n-k)$ decides between a scalar density
-/// and a tangent line field (discussion #101). Whether the reduction went
-/// through a Hodge star ($k$ above the fold) is noted so the top-grade section
-/// reads as a density arrived at by $star$, not a bare 0-form.
 /// One titled, collapsible group of controls.
 ///
 /// The sidebars are a list of sections and nothing else, so the reader's unit
@@ -608,9 +603,10 @@ fn skeleton_hover(k: usize) -> &'static str {
   }
 }
 
-/// A grade tab's label: the grade, and the mark a field of it is drawn with.
-/// Starred where the reduction actually stars, so a reader can see which side
-/// of $k <-> n-k$ the mark came from.
+/// A grade tab's label: the grade, and the mark a field of it is drawn with
+/// ([`Mark`](crate::scene::Mark)). Starred where the reduction goes through the
+/// Hodge star ($k$ above the fold), so the top grade reads as a density arrived
+/// at by $star$ rather than as a bare 0-form.
 pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
   let mark = crate::scene::Mark::of(grade, n).label();
   if grade <= n - grade {
