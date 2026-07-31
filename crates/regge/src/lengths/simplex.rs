@@ -276,6 +276,14 @@ impl SimplexLengthsSq {
   /// $g_(i j) = (s_(0, i+1) + s_(0, j+1) - s_(i+1, j+1)) \/ 2$, rational in
   /// the Regge data and valid on any signature, which is why the squared
   /// length, not the length, is the primitive.
+  ///
+  /// Both hypotheses of [`Metric`] hold by construction here rather than by
+  /// inspection, so this builds unchecked. Symmetry is structural: the
+  /// polarization writes each off-diagonal pair from a single value. And
+  /// non-degeneracy is this type's own constructor invariant, already
+  /// established when the lengths were built, so re-deriving it would run a
+  /// symmetric eigendecomposition once per cell to reconfirm a proof already
+  /// in hand. The debug build still asserts both.
   pub fn metric(&self) -> Metric {
     let mut metric = Matrix::zeros(self.dim().index(), self.dim().index());
     for i in 0..self.dim().index() {
@@ -293,7 +301,7 @@ impl SimplexLengthsSq {
         metric[(j, i)] = val;
       }
     }
-    Metric::new(Variance::Covariant, metric)
+    Metric::new_unchecked(Variance::Covariant, metric)
   }
 }
 #[cfg(test)]
