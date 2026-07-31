@@ -717,8 +717,8 @@ mod test {
         // The Hodge–Laplacian $Delta_h u|_k = M_k^(-1)(K^"up" + K^"dn") u_k$.
         let hb = HodgeBlocks::compute(&whitney, grade);
         let uk = u.grade(grade).coeffs();
-        let up = hb.stiff() * uk;
-        let dn = &hb.dif_sigma() * hb.codif(uk);
+        let up = &hb.codif_dif * uk;
+        let dn = &hb.codif_u().transpose() * hb.codif(uk);
         let lap = chol[grade.index()].solve(&(up + dn));
 
         let lhs = d2u.grade(grade).coeffs();
@@ -855,11 +855,11 @@ mod test {
       for grade in dim.range_inclusive() {
         let hb = HodgeBlocks::compute(&whitney, grade);
         let uk = u.grade(grade).coeffs();
-        let up = hb.stiff() * uk;
+        let up = &hb.codif_dif * uk;
         let dn = if hb.n_sigma > 0 {
           let s =
-            crate::linalg::faer::FaerLu::new(hb.mass_sigma.clone()).solve(&(&hb.codif_dn() * uk));
-          &hb.dif_sigma() * s
+            crate::linalg::faer::FaerLu::new(hb.mass_sigma.clone()).solve(&(&hb.codif_u() * uk));
+          &hb.codif_u().transpose() * s
         } else {
           Vector::zeros(hb.n_u)
         };
