@@ -212,6 +212,28 @@ fn billboard_corner(world_a: vec3<f32>, world_b: vec3<f32>, perp: vec3<f32>, hal
     let self_world = select(world_a, world_b, billboard_is_b(vertex_index));
     return self_world + perp * half_width * billboard_side(vertex_index);
 }
+
+// A mark occludes the medium exactly to the extent it is opaque, and a depth
+// buffer can only say "fully" or "not at all". Two separate conditions decide
+// it, and conflating them costs either the silhouette or the occlusion:
+//
+// `SILHOUETTE_EPS` cuts the quad's *shape*. A billboard is far wider than the
+// mark drawn inside it, and that transparent margin must stay out of the depth
+// buffer or it carves a rectangular hole in the medium around every ribbon. The
+// threshold is near zero on purpose: the one-pixel `fwidth` gradient that
+// resolves the edge is kept intact, so the depth written overshoots the visible
+// mark by well under a pixel and the antialiasing is untouched.
+//
+// `OPAQUE_ENOUGH` asks whether the mark is see-through at all -- a ribbon faded
+// toward a standing-wave node, a tracer tapered to its tail. Those should not
+// occlude, because one can see through them, and the fog behind correctly shows
+// through too.
+//
+// One pair for every billboarded mark, beside the billboard itself: two marks
+// disagreeing about what counts as opaque would occlude the medium differently
+// for no reason a reader could see.
+const SILHOUETTE_EPS: f32 = 0.02;
+const OPAQUE_ENOUGH: f32 = 0.5;
 // A particle, i.e. a `MeshPoint`, plus what respawning it needs.
 //
 // `vec4` carries the weights for every intrinsic dimension the ambient reaches:
