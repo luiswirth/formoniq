@@ -31,9 +31,9 @@ one fact (it damps high-frequency error and only that) read against three job de
   The central trait.
   Solvers, preconditioners and smoothers all are one.
 - `SelfAdjoint`:
-  a marker on `ApproxInverse` asserting `B` is a fixed symmetric positive-definite operator.
+  a marker on `ApproxInverse` asserting `B` is a fixed self-adjoint positive-definite operator.
   Conjugate gradients accepts a preconditioner only through this bound,
-  so a non-symmetric approximate inverse is rejected at compile time
+  so a one-sided approximate inverse is rejected at compile time
   rather than silently breaking convergence.
 
 Entry-needing preconditioners (a diagonal, a triangular sweep)
@@ -44,6 +44,26 @@ Consumers are generic over the operator and the preconditioner, monomorphized.
 The one boxed piece is an auxiliary-space correction,
 where the spaces genuinely differ in type,
 and it costs one dispatch per Krylov step against a matvec-dominated apply.
+
+## Scalars
+
+Real and complex are one implementation, not two.
+The inner product is the Hermitian one, conjugate-linear in its first argument,
+and every recurrence is written once against it:
+conjugation is the identity on the reals,
+so a real solve is the instance where the involution is trivial
+rather than a separate code path.
+The restriction paired with a prolongation is the adjoint for the same reason,
+and coincides with the transpose only over the reals.
+
+Scalars are `f32`, `f64` or `Complex` of either.
+Tolerances, norms and residuals live in the real subfield whether or not the vectors are complex,
+and so do all of MINRES's Lanczos and rotation coefficients,
+which are real for a self-adjoint operator.
+
+What the two cases sharing one implementation costs
+is that a misplaced conjugate is invisible over the reals,
+so the laws are stated over both fields.
 
 Two composition objects build a strong preconditioner from these pieces:
 `VCycle`, a geometric multigrid hierarchy that coarsens in space,

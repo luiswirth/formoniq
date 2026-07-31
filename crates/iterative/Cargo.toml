@@ -11,5 +11,7 @@ keywords = ["iterative-solver", "krylov", "multigrid", "preconditioner"]
 categories = ["mathematics"]
 
 [dependencies]
+approx = "0.5.1"
 nalgebra = "0.35.0"
 nalgebra-sparse = "0.12.0"
+num-traits = "0.2.19"

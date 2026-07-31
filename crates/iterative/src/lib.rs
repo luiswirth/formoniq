@@ -15,14 +15,48 @@ pub use multigrid::{Level, VCycle};
 pub use precond::{BlockDiagonal, Identity, Jacobi};
 pub use stationary::Stationary;
 
-/// A dense real vector, the currency of every apply.
-pub type Vector = na::DVector<f64>;
-/// A sparse real matrix in compressed-row storage: the assembled operator, and
-/// the source a diagonal or triangular preconditioner reads its entries from.
-pub type CsrMatrix = nas::CsrMatrix<f64>;
+use na::ComplexField;
+use num_traits::{One, Zero};
 
-/// A real inner product space: the structure a Krylov method asks of its
-/// vectors, and nothing more.
+/// A dense vector over the scalar field, the currency of every apply.
+pub type Vector<T = f64> = na::DVector<T>;
+/// A sparse matrix in compressed-row storage: the assembled operator, and
+/// the source a diagonal or triangular preconditioner reads its entries from.
+pub type CsrMatrix<T = f64> = nas::CsrMatrix<T>;
+
+/// The scalar field a solve runs over: $RR$ or $CC$, in any precision.
+///
+/// A blanket alias, so a field is one by being one. `Copy` beyond the field
+/// structure: a scalar on a Krylov inner loop is a machine word, and the
+/// recurrences read each coefficient two or three times per step. It admits
+/// every field a solve here runs over and keeps the numerics written as the
+/// mathematics.
+pub trait Field: na::ComplexField<RealField: Copy> + Copy {}
+impl<T: na::ComplexField<RealField: Copy> + Copy> Field for T {}
+
+/// The adjoint $A^H$: the conjugate transpose, and the plain transpose over
+/// $RR$.
+///
+/// The restriction that accompanies a prolongation is this, not the bare
+/// transpose. What makes an intergrid correction $Pi B Pi^H$ self-adjoint is
+/// adjointness, and the two coincide only over $RR$.
+pub fn adjoint<T: Field>(a: &CsrMatrix<T>) -> CsrMatrix<T> {
+  let mut adjoint = a.transpose();
+  adjoint
+    .values_mut()
+    .iter_mut()
+    .for_each(|v| *v = v.conjugate());
+  adjoint
+}
+
+/// The scalar field of an inner product space.
+pub type ScalarOf<S> = <S as InnerProductSpace>::Scalar;
+/// The real subfield of an inner product space's scalars: where a norm, a
+/// residual and a tolerance live, whether or not the space itself is complex.
+pub type RealOf<S> = <ScalarOf<S> as na::ComplexField>::RealField;
+
+/// An inner product space over $RR$ or $CC$: the structure a Krylov method asks
+/// of its vectors, and nothing more.
 ///
 /// Conjugate gradients and MINRES scale a vector, add a scaled one to it, and
 /// take inner products. They never index an entry, never slice, never name a
@@ -40,14 +74,34 @@ pub type CsrMatrix = nas::CsrMatrix<f64>;
 /// because a dimension does not determine a vector: a device vector needs an
 /// allocator to exist, and the solution of $A x = b$ lives in the space $b$
 /// does. That is also why the trait carries no dimension of its own.
+///
+/// The real and the complex case are one trait, not two, because the
+/// recurrences are literally the same once the inner product is the Hermitian
+/// one: the conjugation is the identity on $RR$, so a real space is the
+/// instance where the involution is trivial rather than a separate code path.
+/// The cost of that is that a misplaced conjugate is invisible over $RR$, which
+/// is why the laws here are stated over both fields.
 pub trait InnerProductSpace: Clone {
+  /// The scalar field, real or complex.
+  type Scalar: Field;
   /// The zero vector of the space this one lives in: the additive identity,
   /// and the only element a Krylov method can name without being handed one.
   fn zeros_like(&self) -> Self;
-  /// The inner product $angle.l x, y angle.r$.
-  fn dot(&self, other: &Self) -> f64;
+  /// The Hermitian inner product $angle.l x, y angle.r$, **conjugate-linear in
+  /// its first argument** and linear in its second.
+  ///
+  /// Which argument carries the conjugate is a convention, and it has to be
+  /// this one rather than left to the implementor: every method in the crate
+  /// reads $angle.l r, z angle.r$ and $angle.l p, A p angle.r$ in that order,
+  /// and the opposite convention conjugates each of them. Over $RR$ the two
+  /// agree, so nothing here can detect the mistake.
+  ///
+  /// Positive definiteness, $angle.l x, x angle.r > 0$ for $x != 0$, is part of
+  /// the structure, so that quantity is real and [`norm`](Self::norm) may take
+  /// its real part.
+  fn dot(&self, other: &Self) -> Self::Scalar;
   /// $x <- alpha x$, the scalar action.
-  fn scale(&mut self, alpha: f64);
+  fn scale(&mut self, alpha: Self::Scalar);
   /// $y <- y + alpha x$, the addition, fused with the scaling of its argument.
   ///
   /// Fused rather than composed out of [`scale`](Self::scale) and
@@ -56,29 +110,33 @@ pub trait InnerProductSpace: Clone {
   /// scaled copy would allocate a vector per step.
   ///
   /// `x` is a distinct vector from `self`.
-  fn add_scaled(&mut self, alpha: f64, x: &Self);
+  fn add_scaled(&mut self, alpha: Self::Scalar, x: &Self);
   /// $y <- y + x$.
   fn add(&mut self, x: &Self) {
-    self.add_scaled(1.0, x);
+    self.add_scaled(Self::Scalar::one(), x);
   }
-  /// The induced norm $norm(x) = sqrt(angle.l x, x angle.r)$.
-  fn norm(&self) -> f64 {
-    self.dot(self).sqrt()
+  /// The induced norm $norm(x) = sqrt(angle.l x, x angle.r)$, an element of the
+  /// real subfield.
+  fn norm(&self) -> RealOf<Self> {
+    self.dot(self).real().sqrt()
   }
 }
 
-impl InnerProductSpace for Vector {
+impl<T: Field> InnerProductSpace for Vector<T> {
+  type Scalar = T;
   fn zeros_like(&self) -> Self {
     Vector::zeros(self.len())
   }
-  fn dot(&self, other: &Self) -> f64 {
-    na::DVector::dot(self, other)
+  fn dot(&self, other: &Self) -> T {
+    // `dotc` conjugates `self`, which is the convention the trait fixes;
+    // nalgebra's `dot` is the bilinear one and would be wrong over CC.
+    self.dotc(other)
   }
-  fn scale(&mut self, alpha: f64) {
+  fn scale(&mut self, alpha: T) {
     *self *= alpha;
   }
-  fn add_scaled(&mut self, alpha: f64, x: &Self) {
-    self.axpy(alpha, x, 1.0);
+  fn add_scaled(&mut self, alpha: T, x: &Self) {
+    self.axpy(alpha, x, T::one());
   }
 }
 
@@ -128,17 +186,20 @@ pub trait ApproxInverse {
 pub trait SelfAdjoint: ApproxInverse {}
 
 /// When to stop iterating: a relative residual target and an iteration ceiling.
+///
+/// Parameterized by the *real* subfield rather than by the scalars: a tolerance
+/// is a magnitude, and it is one whether the space is real or complex.
 #[derive(Clone, Copy, Debug)]
-pub struct StopCriterion {
+pub struct StopCriterion<R = f64> {
   /// Stop once $norm(r_k) <= "rtol" dot norm(b)$.
-  pub rtol: f64,
+  pub rtol: R,
   /// Stop unconditionally after this many iterations.
   pub max_iters: usize,
 }
 
-impl StopCriterion {
+impl<R> StopCriterion<R> {
   /// A relative-residual target with a generous iteration ceiling.
-  pub fn rtol(rtol: f64) -> Self {
+  pub fn rtol(rtol: R) -> Self {
     Self {
       rtol,
       max_iters: 10_000,
@@ -148,11 +209,11 @@ impl StopCriterion {
 
 /// The outcome of a solve: how far it got and whether it met the tolerance.
 #[derive(Clone, Copy, Debug)]
-pub struct Report {
+pub struct Report<R = f64> {
   /// Iterations actually taken.
   pub iters: usize,
   /// The final relative residual $norm(r) / norm(b)$.
-  pub residual: f64,
+  pub residual: R,
   /// Whether [`StopCriterion::rtol`] was met before the ceiling.
   pub converged: bool,
 }
@@ -163,12 +224,12 @@ pub struct Report {
 /// answered. A relative residual is measured against $norm(b)$, which is the
 /// only quantity in the crate that a caller can make zero, so the answer is
 /// read off rather than computed.
-pub(crate) fn trivial_solve<S: InnerProductSpace>(b: &S) -> (S, Report) {
+pub(crate) fn trivial_solve<S: InnerProductSpace>(b: &S) -> (S, Report<RealOf<S>>) {
   (
     b.zeros_like(),
     Report {
       iters: 0,
-      residual: 0.0,
+      residual: RealOf::<S>::zero(),
       converged: true,
     },
   )
@@ -176,41 +237,41 @@ pub(crate) fn trivial_solve<S: InnerProductSpace>(b: &S) -> (S, Report) {
 
 #[cfg(test)]
 mod testutil {
-  use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
+  use crate::{ApproxInverse, CsrMatrix, Field, SelfAdjoint, Vector};
   use na::DMatrix;
 
   /// A dense direct inverse: the exact $A^(-1)$, standing in for the
   /// factorization a consumer supplies at the bottom of a V-cycle or on an
-  /// auxiliary space. Self-adjoint for a symmetric operator.
-  pub struct DenseInverse {
-    inv: DMatrix<f64>,
+  /// auxiliary space. Self-adjoint for a self-adjoint operator.
+  pub struct DenseInverse<T = f64> {
+    inv: DMatrix<T>,
   }
-  impl DenseInverse {
-    pub fn new(a: &DMatrix<f64>) -> Self {
+  impl<T: Field> DenseInverse<T> {
+    pub fn new(a: &DMatrix<T>) -> Self {
       Self {
         inv: a.clone().try_inverse().expect("nonsingular"),
       }
     }
   }
-  impl ApproxInverse for DenseInverse {
-    type Space = Vector;
+  impl<T: Field> ApproxInverse for DenseInverse<T> {
+    type Space = Vector<T>;
     fn dim(&self) -> usize {
       self.inv.nrows()
     }
-    fn apply(&self, r: &Vector) -> Vector {
+    fn apply(&self, r: &Vector<T>) -> Vector<T> {
       &self.inv * r
     }
   }
-  impl SelfAdjoint for DenseInverse {}
+  impl<T: Field> SelfAdjoint for DenseInverse<T> {}
 
   /// Sparse operator from a dense one, via triplets. Small-system test glue.
-  pub fn csr(dense: &DMatrix<f64>) -> CsrMatrix {
+  pub fn csr<T: Field>(dense: &DMatrix<T>) -> CsrMatrix<T> {
     let (r, c) = dense.shape();
     let mut coo = nas::CooMatrix::new(r, c);
     for j in 0..c {
       for i in 0..r {
         let v = dense[(i, j)];
-        if v != 0.0 {
+        if !v.is_zero() {
           coo.push(i, j, v);
         }
       }
@@ -248,7 +309,7 @@ mod testutil {
   }
 
   /// Direct dense solve, the reference an iterative method must reproduce.
-  pub fn dense_solve(a: &DMatrix<f64>, b: &Vector) -> Vector {
+  pub fn dense_solve<T: Field>(a: &DMatrix<T>, b: &Vector<T>) -> Vector<T> {
     a.clone().lu().solve(b).expect("nonsingular")
   }
 }

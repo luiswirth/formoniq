@@ -20,33 +20,33 @@
 //! The cycle here is geometric and generic: it asks only for the assembled
 //! operator, a smoother, and the intergrid transfer matrices on each level. What
 //! those transfers are, for FEEC, the Whitney prolongation and its
-//! transpose, is the consumer's business, supplied as plain
+//! adjoint, is the consumer's business, supplied as plain
 //! [`CsrMatrix`]es. This crate stays backend-free and knows nothing of meshes or
 //! forms.
 
-use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector, stationary};
+use crate::{ApproxInverse, CsrMatrix, Field, SelfAdjoint, Vector, adjoint, stationary};
 
 /// One level of the hierarchy: its operator, its smoother, and the transfer to
 /// the next-coarser level.
 ///
-/// The transfer is the prolongation $P: RR^(n_"coarse") -> RR^(n_"fine")$, the
+/// The transfer is the prolongation $P: V_"coarse" -> V_"fine"$, the
 /// inclusion of the coarser space into this one, and the restriction is its
-/// transpose, formed here rather than supplied. That the two are adjoint is
+/// adjoint $P^H$, formed here rather than supplied. That the two are adjoint is
 /// half of what makes a symmetric cycle self-adjoint, so it is a property of
 /// the level and not a promise a caller keeps. The operator is this level's
 /// $A$, and `smoother` any approximate inverse of it. The coarsest level
 /// carries no transfer: it is the [`VCycle`]'s coarse solver, not a `Level`.
-pub struct Level<S> {
-  operator: CsrMatrix,
+pub struct Level<S, T = f64> {
+  operator: CsrMatrix<T>,
   smoother: S,
-  prolong: CsrMatrix,
-  restrict: CsrMatrix,
+  prolong: CsrMatrix<T>,
+  restrict: CsrMatrix<T>,
 }
 
-impl<S> Level<S> {
+impl<S, T: Field> Level<S, T> {
   /// A level from its operator, smoother and the prolongation from the coarser
   /// level below it.
-  pub fn new(operator: CsrMatrix, smoother: S, prolong: CsrMatrix) -> Self {
+  pub fn new(operator: CsrMatrix<T>, smoother: S, prolong: CsrMatrix<T>) -> Self {
     debug_assert_eq!(
       operator.nrows(),
       operator.ncols(),
@@ -57,7 +57,7 @@ impl<S> Level<S> {
       operator.nrows(),
       "prolongation maps into this level"
     );
-    let restrict = prolong.transpose();
+    let restrict = adjoint(&prolong);
     Self {
       operator,
       smoother,
@@ -84,16 +84,18 @@ impl<S> Level<S> {
 /// With no levels at all it degrades to the coarse solver alone, the totality
 /// base case, a hierarchy of one grid being a plain direct solve with no
 /// special-casing.
-pub struct VCycle<S, C> {
-  levels: Vec<Level<S>>,
+pub struct VCycle<S, C, T = f64> {
+  levels: Vec<Level<S, T>>,
   coarse: C,
   sweeps: usize,
 }
 
-impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<S, C> {
+impl<T: Field, S: ApproxInverse<Space = Vector<T>>, C: ApproxInverse<Space = Vector<T>>>
+  VCycle<S, C, T>
+{
   /// A V-cycle over the levels, with `sweeps` smoothing steps on the way down
   /// and the same number on the way up.
-  pub fn new(levels: Vec<Level<S>>, coarse: C, sweeps: usize) -> Self {
+  pub fn new(levels: Vec<Level<S, T>>, coarse: C, sweeps: usize) -> Self {
     Self {
       levels,
       coarse,
@@ -103,12 +105,12 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<
 
   /// One V-cycle starting at level `i`, returning the approximate solution of
   /// `operator x = r` on that level.
-  fn cycle(&self, i: usize, r: &Vector) -> Vector {
+  fn cycle(&self, i: usize, r: &Vector<T>) -> Vector<T> {
     let Some(level) = self.levels.get(i) else {
       return self.coarse.apply(r);
     };
     let mut x = Vector::zeros(level.operator.nrows());
-    let smooth = |x: &mut Vector| {
+    let smooth = |x: &mut Vector<T>| {
       stationary::sweeps(&level.operator, &level.smoother, r, x, self.sweeps);
     };
     smooth(&mut x);
@@ -121,31 +123,34 @@ impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> VCycle<
   }
 }
 
-impl<S: ApproxInverse<Space = Vector>, C: ApproxInverse<Space = Vector>> ApproxInverse
-  for VCycle<S, C>
+impl<T: Field, S: ApproxInverse<Space = Vector<T>>, C: ApproxInverse<Space = Vector<T>>>
+  ApproxInverse for VCycle<S, C, T>
 {
-  type Space = Vector;
+  type Space = Vector<T>;
   fn dim(&self) -> usize {
     self
       .levels
       .first()
       .map_or_else(|| self.coarse.dim(), |l| l.operator.nrows())
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &Vector<T>) -> Vector<T> {
     self.cycle(0, r)
   }
 }
 
 /// Self-adjoint exactly when the smoother and the coarse solver are: the
 /// down-sweep and the up-sweep are mutual adjoints, since the cycle carries one
-/// sweep count, and the coarse correction $P C R = P C P^T$ is self-adjoint
-/// whenever $C$ is, since a [`Level`] forms its restriction as the transpose of
+/// sweep count, and the coarse correction $P C R = P C P^H$ is self-adjoint
+/// whenever $C$ is, since a [`Level`] forms its restriction as the adjoint of
 /// its prolongation.
 ///
 /// Both of those are structural, so this marker rests on the markers of its
 /// parts and on nothing a caller has to remember. As everywhere in the crate,
 /// positive definiteness stays the constructor's promise.
-impl<S: SelfAdjoint<Space = Vector>, C: SelfAdjoint<Space = Vector>> SelfAdjoint for VCycle<S, C> {}
+impl<T: Field, S: SelfAdjoint<Space = Vector<T>>, C: SelfAdjoint<Space = Vector<T>>> SelfAdjoint
+  for VCycle<S, C, T>
+{
+}
 
 #[cfg(test)]
 mod tests {

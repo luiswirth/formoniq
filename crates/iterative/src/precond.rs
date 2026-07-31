@@ -1,4 +1,7 @@
-use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
+use crate::{ApproxInverse, CsrMatrix, Field, InnerProductSpace, SelfAdjoint, Vector};
+
+use num_traits::One;
+use std::marker::PhantomData;
 
 /// The trivial approximate inverse $B = I$: apply is the identity.
 ///
@@ -6,28 +9,36 @@ use crate::{ApproxInverse, CsrMatrix, SelfAdjoint, Vector};
 /// what makes an unpreconditioned Krylov solve a special case rather than a
 /// separate code path. Self-adjoint by construction, and the totality base case
 /// (it is defined at every order, including zero).
+///
+/// Generic over the space rather than fixed to [`Vector`]: the identity is
+/// defined wherever an [`InnerProductSpace`] is, and pinning it to one would
+/// make an unpreconditioned solve on any other space impossible.
 #[derive(Clone, Copy, Debug)]
-pub struct Identity {
+pub struct Identity<S = Vector> {
   dim: usize,
+  space: PhantomData<S>,
 }
 
-impl Identity {
+impl<S> Identity<S> {
   pub fn new(dim: usize) -> Self {
-    Self { dim }
+    Self {
+      dim,
+      space: PhantomData,
+    }
   }
 }
 
-impl ApproxInverse for Identity {
-  type Space = Vector;
+impl<S: InnerProductSpace> ApproxInverse for Identity<S> {
+  type Space = S;
   fn dim(&self) -> usize {
     self.dim
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &S) -> S {
     r.clone()
   }
 }
 
-impl SelfAdjoint for Identity {}
+impl<S: InnerProductSpace> SelfAdjoint for Identity<S> {}
 
 /// The Jacobi approximate inverse $B = D^(-1)$, the reciprocal of the diagonal.
 ///
@@ -36,19 +47,20 @@ impl SelfAdjoint for Identity {}
 /// leaves the low-frequency ones nearly untouched, which is exactly what a
 /// multigrid level asks of it and exactly why it is a poor standalone solver. On
 /// a diagonal operator it is the exact inverse. Self-adjoint whenever the
-/// diagonal is positive, as it is for a positive-definite operator.
+/// diagonal is positive, as it is for a positive-definite operator: over $CC$
+/// that means real and positive, which the diagonal of a Hermitian operator is.
 #[derive(Clone, Debug)]
-pub struct Jacobi {
-  inv_diag: Vector,
+pub struct Jacobi<T = f64> {
+  inv_diag: Vector<T>,
 }
 
-impl Jacobi {
+impl<T: Field> Jacobi<T> {
   /// Read the diagonal of the assembled operator and invert it.
   ///
   /// Panics on a zero diagonal entry: $D^(-1)$ does not exist, and a
   /// positive-definite operator has none.
-  pub fn new(a: &CsrMatrix) -> Self {
-    Self::weighted(a, 1.0)
+  pub fn new(a: &CsrMatrix<T>) -> Self {
+    Self::weighted(a, T::RealField::one())
   }
 
   /// The weighted (damped) Jacobi inverse $B = omega D^(-1)$.
@@ -60,12 +72,15 @@ impl Jacobi {
   /// damps the whole upper half of the spectrum, which is exactly the error a
   /// multigrid level must remove before coarsening. Self-adjoint for any
   /// $omega > 0$ on a positive diagonal.
-  pub fn weighted(a: &CsrMatrix, omega: f64) -> Self {
+  ///
+  /// The weight is real: it is a damping factor, and a complex one would turn
+  /// the smoother into something that is not self-adjoint.
+  pub fn weighted(a: &CsrMatrix<T>, omega: T::RealField) -> Self {
     let n = a.nrows();
     let mut diag = Vector::zeros(n);
-    for (i, j, &v) in a.triplet_iter() {
+    for (i, j, v) in a.triplet_iter() {
       if i == j {
-        diag[i] = v;
+        diag[i] = *v;
       }
     }
     Self::from_diagonal(&diag, omega)
@@ -74,8 +89,8 @@ impl Jacobi {
   /// The Jacobi *smoother*: the weight $omega = 2\/3$ above, which is the
   /// classic optimum for a second-order operator on a regular grid and the
   /// weight a multigrid level wants rather than the undamped one.
-  pub fn smoother(a: &CsrMatrix) -> Self {
-    Self::weighted(a, 2.0 / 3.0)
+  pub fn smoother(a: &CsrMatrix<T>) -> Self {
+    Self::weighted(a, na::convert(2.0 / 3.0))
   }
 
   /// The weighted Jacobi inverse of an operator given by its diagonal alone.
@@ -83,28 +98,29 @@ impl Jacobi {
   /// The diagonal is the whole datum, so an operator that never forms its
   /// entries still has one to offer: the diagonal of a sum is the sum of the
   /// diagonals, which a matrix-free operator can gather from its parts.
-  pub fn from_diagonal(diag: &Vector, omega: f64) -> Self {
+  pub fn from_diagonal(diag: &Vector<T>, omega: T::RealField) -> Self {
     assert!(
-      diag.iter().all(|&d| d != 0.0),
+      diag.iter().all(|d| !d.is_zero()),
       "Jacobi needs a nonzero diagonal"
     );
+    let omega = T::from_real(omega);
     Self {
       inv_diag: diag.map(|d| omega / d),
     }
   }
 }
 
-impl ApproxInverse for Jacobi {
-  type Space = Vector;
+impl<T: Field> ApproxInverse for Jacobi<T> {
+  type Space = Vector<T>;
   fn dim(&self) -> usize {
     self.inv_diag.len()
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &Vector<T>) -> Vector<T> {
     r.component_mul(&self.inv_diag)
   }
 }
 
-impl SelfAdjoint for Jacobi {}
+impl<T: Field> SelfAdjoint for Jacobi<T> {}
 
 /// A block-diagonal approximate inverse $B = "diag"(B_0, dots, B_(m-1))$: apply
 /// each block's inverse to the corresponding contiguous slice of the vector.
@@ -123,19 +139,19 @@ pub struct BlockDiagonal<B> {
   blocks: Vec<B>,
 }
 
-impl<B: ApproxInverse<Space = Vector>> BlockDiagonal<B> {
+impl<B> BlockDiagonal<B> {
   /// The block inverses, in the order their spaces are stacked in the vector.
   pub fn new(blocks: Vec<B>) -> Self {
     Self { blocks }
   }
 }
 
-impl<B: ApproxInverse<Space = Vector>> ApproxInverse for BlockDiagonal<B> {
-  type Space = Vector;
+impl<T: Field, B: ApproxInverse<Space = Vector<T>>> ApproxInverse for BlockDiagonal<B> {
+  type Space = Vector<T>;
   fn dim(&self) -> usize {
     self.blocks.iter().map(ApproxInverse::dim).sum()
   }
-  fn apply(&self, r: &Vector) -> Vector {
+  fn apply(&self, r: &Vector<T>) -> Vector<T> {
     let mut out = Vector::zeros(self.dim());
     let mut offset = 0;
     for block in &self.blocks {
@@ -148,7 +164,7 @@ impl<B: ApproxInverse<Space = Vector>> ApproxInverse for BlockDiagonal<B> {
   }
 }
 
-impl<B: SelfAdjoint<Space = Vector>> SelfAdjoint for BlockDiagonal<B> {}
+impl<T: Field, B: SelfAdjoint<Space = Vector<T>>> SelfAdjoint for BlockDiagonal<B> {}
 
 #[cfg(test)]
 mod tests {
@@ -168,7 +184,7 @@ mod tests {
   /// Totality at the degenerate boundary: order zero is a defined, trivial op.
   #[test]
   fn identity_is_total_at_zero() {
-    let id = Identity::new(0);
+    let id = Identity::<Vector>::new(0);
     assert_eq!(id.apply(&Vector::zeros(0)), Vector::zeros(0));
   }
 

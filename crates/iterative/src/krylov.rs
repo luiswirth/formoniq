@@ -1,4 +1,11 @@
-use crate::{InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterion, trivial_solve};
+use crate::{
+  InnerProductSpace, LinearOperator, RealOf, Report, ScalarOf, SelfAdjoint, StopCriterion,
+  trivial_solve,
+};
+
+use approx::AbsDiffEq;
+use na::{ComplexField, RealField};
+use num_traits::{One, Zero};
 
 /// Solve $A x = b$ by preconditioned conjugate gradients, started from zero.
 ///
@@ -32,14 +39,20 @@ use crate::{InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterio
 /// The operator's own positive-definiteness is the caller's promise, as
 /// everywhere; passing an indefinite operator breaks the method (use a
 /// symmetric-indefinite Krylov method for those).
+///
+/// Over $CC$ the hypothesis is that $A$ is *Hermitian* positive-definite,
+/// $A = A^H$. A complex-*symmetric* operator $A = A^T$, which is what a lossy
+/// or perfectly-matched-layer time-harmonic problem produces, is not Hermitian
+/// and this method does not apply to it: it will stagnate rather than fail, so
+/// the distinction is the caller's to keep.
 pub fn cg<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   op: &O,
   precond: &M,
   b: &O::Space,
-  stop: StopCriterion,
-) -> (O::Space, Report) {
+  stop: StopCriterion<RealOf<O::Space>>,
+) -> (O::Space, Report<RealOf<O::Space>>) {
   let b_norm = b.norm();
-  if b_norm == 0.0 {
+  if b_norm.is_zero() {
     return trivial_solve(b);
   }
   let mut x = b.zeros_like();
@@ -101,15 +114,22 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   op: &O,
   precond: &M,
   b: &O::Space,
-  stop: StopCriterion,
-) -> (O::Space, Report) {
-  let eps = f64::EPSILON;
+  stop: StopCriterion<RealOf<O::Space>>,
+) -> (O::Space, Report<RealOf<O::Space>>) {
+  // Every Lanczos and rotation coefficient below is *real*, in any signature:
+  // the Lanczos coefficients of a self-adjoint operator are real, and the
+  // Givens rotations that follow are built from them. Only the vectors are
+  // complex, and the scalars enter them through `from_real`.
+  type R<O> = RealOf<<O as LinearOperator>::Space>;
+  let real = |re: R<O>| ScalarOf::<O::Space>::from_real(re);
+  let (zero, one) = (R::<O>::zero(), R::<O>::one());
+  let eps = R::<O>::default_epsilon();
 
   // First Lanczos vector, in the M^{-1} inner product.
   let mut r1 = b.clone();
   let mut y = precond.apply(&r1);
-  let beta1_sq = r1.dot(&y);
-  if beta1_sq <= 0.0 {
+  let beta1_sq = r1.dot(&y).real();
+  if beta1_sq <= zero {
     // b is zero. A negative value would signal a non-positive-definite
     // preconditioner, which the SelfAdjoint bound forbids.
     return trivial_solve(b);
@@ -117,18 +137,18 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
   let mut x = b.zeros_like();
   let beta1 = beta1_sq.sqrt();
 
-  let mut oldb = 0.0;
+  let mut oldb = zero;
   let mut beta = beta1;
-  let mut dbar = 0.0;
-  let mut epsln = 0.0;
+  let mut dbar = zero;
+  let mut epsln = zero;
   let mut phibar = beta1;
-  let mut cs = -1.0;
-  let mut sn = 0.0;
+  let mut cs = -one;
+  let mut sn = zero;
   let mut w = b.zeros_like();
   let mut w2 = b.zeros_like();
   let mut r2 = r1.clone();
 
-  let mut residual = 1.0;
+  let mut residual = one;
   let mut converged = false;
   let mut iters = 0;
   while iters < stop.max_iters {
@@ -136,18 +156,20 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
 
     // Lanczos step in the M^{-1} inner product.
     let mut v = y.clone();
-    v.scale(beta.recip());
+    v.scale(real(beta.recip()));
     let mut y_next = op.apply(&v);
     if iters >= 2 {
-      y_next.add_scaled(-beta / oldb, &r1);
+      y_next.add_scaled(real(-beta / oldb), &r1);
     }
-    let alfa = v.dot(&y_next);
-    y_next.add_scaled(-alfa / beta, &r2);
+    // Real because the operator is self-adjoint: taking the real part is that
+    // hypothesis, not a discarded remainder.
+    let alfa = v.dot(&y_next).real();
+    y_next.add_scaled(real(-alfa / beta), &r2);
     r1 = r2;
     r2 = y_next;
     y = precond.apply(&r2);
     oldb = beta;
-    beta = r2.dot(&y).max(0.0).sqrt();
+    beta = r2.dot(&y).real().max(zero).sqrt();
 
     // Apply the previous rotation, then compute and apply the next one.
     let oldeps = epsln;
@@ -165,12 +187,12 @@ pub fn minres<O: LinearOperator, M: SelfAdjoint<Space = O::Space>>(
     // Update the solution. Entering, `w` holds w_{k-1} and `w2` holds w_{k-2};
     // oldeps multiplies the older, delta the newer.
     let mut wnew = v;
-    wnew.add_scaled(-oldeps, &w2);
-    wnew.add_scaled(-delta, &w);
-    wnew.scale(gamma.recip());
+    wnew.add_scaled(real(-oldeps), &w2);
+    wnew.add_scaled(real(-delta), &w);
+    wnew.scale(real(gamma.recip()));
     w2 = w;
     w = wnew;
-    x.add_scaled(phi, &w);
+    x.add_scaled(real(phi), &w);
 
     residual = phibar / beta1;
     if residual <= stop.rtol {
@@ -297,6 +319,173 @@ mod tests {
   }
 }
 
+/// The same laws over $CC$, where a misplaced conjugate is visible.
+///
+/// Conjugation is the identity on $RR$, so every test above passes on an
+/// implementation whose inner product is bilinear rather than Hermitian, or
+/// whose adjoint is a bare transpose. None of them can tell the difference,
+/// which is exactly why these exist: the complex case is not an extra feature
+/// being checked, it is the only place the convention is observable.
+#[cfg(test)]
+mod complex {
+  use super::*;
+  use crate::testutil::{csr, dense_solve};
+  use crate::{Identity, InnerProductSpace, Jacobi, StopCriterion, Vector, adjoint};
+  use na::{Complex, DMatrix};
+
+  type C = Complex<f64>;
+
+  fn c(re: f64, im: f64) -> C {
+    Complex::new(re, im)
+  }
+
+  /// A Hermitian matrix with a prescribed (necessarily real) spectrum,
+  /// $A = Q Lambda Q^H$ with $Q$ a deterministic unitary factor.
+  ///
+  /// Genuinely complex: $Q$ has a nonzero imaginary part, so $A^T != A^H$ and
+  /// the two conventions disagree on it.
+  fn hermitian_from_spectrum(eigs: &[f64]) -> DMatrix<C> {
+    let n = eigs.len();
+    let seed = DMatrix::from_fn(n, n, |i, j| {
+      c(
+        ((i * 7 + j * 13) % 11) as f64 - 5.0,
+        ((i * 5 + j * 3) % 7) as f64 - 3.0,
+      )
+    });
+    let q = seed.qr().q();
+    let lambda = DMatrix::from_diagonal(&Vector::from_iterator(n, eigs.iter().map(|&e| c(e, 0.0))));
+    &q * lambda * q.adjoint()
+  }
+
+  fn rhs(n: usize) -> Vector<C> {
+    Vector::from_fn(n, |i, _| c((i as f64 + 1.0).sqrt(), (i as f64 - 2.0).cos()))
+  }
+
+  /// The inner product is sesquilinear, conjugate-linear in its first argument:
+  /// $angle.l i x, y angle.r = -i angle.l x, y angle.r$ and
+  /// $angle.l x, i y angle.r = i angle.l x, y angle.r$.
+  ///
+  /// The two halves must be checked separately. A bilinear `dot` satisfies
+  /// neither, and a `dot` conjugating the *other* argument satisfies both with
+  /// the signs exchanged, which is the mistake a single-sided test misses.
+  #[test]
+  fn the_inner_product_is_conjugate_linear_in_its_first_argument() {
+    // Spelled through the trait, never as `x.dot(&y)`: nalgebra's inherent
+    // `dot` is the *bilinear* product and wins method resolution on a concrete
+    // vector, so the shorthand would test nalgebra rather than the trait. The
+    // generic code cannot make this mistake, having no inherent method to find.
+    let dot = InnerProductSpace::dot;
+    let (x, y) = (
+      rhs(5),
+      Vector::from_fn(5, |i, _| c((i as f64).sin(), 1.0 - i as f64)),
+    );
+    let xy = dot(&x, &y);
+    let i = c(0.0, 1.0);
+
+    assert!((dot(&(x.clone() * i), &y) - (-i) * xy).norm() < 1e-12);
+    assert!((dot(&x, &(y.clone() * i)) - i * xy).norm() < 1e-12);
+    // And it is positive definite, so the induced norm is real.
+    assert!(dot(&x, &x).im.abs() < 1e-12 && dot(&x, &x).re > 0.0);
+  }
+
+  /// The adjoint is the conjugate transpose, $(A^H)_(i j) = overline(A_(j i))$,
+  /// and it is what makes $angle.l A x, y angle.r = angle.l x, A^H y angle.r$.
+  /// The bare transpose satisfies neither over $CC$.
+  #[test]
+  fn the_adjoint_is_the_conjugate_transpose() {
+    let dense = DMatrix::from_fn(4, 3, |i, j| c(i as f64 - 1.0, 2.0 * j as f64 - 1.0));
+    let a = csr(&dense);
+    let dot = InnerProductSpace::dot;
+    let (x, y) = (rhs(3), rhs(4));
+    let ax = &dense * &x;
+    let ahy = &DMatrix::from(&adjoint(&a)) * &y;
+    assert!((dot(&ax, &y) - dot(&x, &ahy)).norm() < 1e-12);
+  }
+
+  /// CG's defining theorem over $CC$: on an $n times n$ Hermitian
+  /// positive-definite system it reaches the exact solution in at most $n$
+  /// steps. Swept over orders with the degenerate $n = 0, 1$ included.
+  ///
+  /// This is the test a bilinear inner product fails: the recurrence is no
+  /// longer conjugate-orthogonal, so it neither terminates nor converges.
+  #[test]
+  fn cg_terminates_on_a_hermitian_positive_definite_system() {
+    for n in 0..=8 {
+      let eigs: Vec<f64> = (0..n).map(|k| 1.0 + k as f64).collect();
+      let dense = hermitian_from_spectrum(&eigs);
+      let a = csr(&dense);
+      let b = rhs(n);
+
+      let stop = StopCriterion {
+        rtol: 1e-10,
+        max_iters: n.max(1),
+      };
+      let (x, report) = cg(&a, &Identity::new(n), &b, stop);
+      assert!(report.converged, "n = {n} did not converge in {n} steps");
+      if n > 0 {
+        assert!((x - dense_solve(&dense, &b)).norm() < 1e-7, "n = {n}");
+      }
+    }
+  }
+
+  /// MINRES solves a Hermitian *indefinite* complex system, the case CG cannot,
+  /// reproducing the direct solve. Its Lanczos and rotation coefficients are
+  /// real throughout, which is what self-adjointness buys.
+  #[test]
+  fn minres_solves_a_hermitian_indefinite_system() {
+    for n in 0..=8 {
+      let eigs: Vec<f64> = (0..n)
+        .map(|k| (k / 2 + 1) as f64 * if k % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
+      let dense = hermitian_from_spectrum(&eigs);
+      let a = csr(&dense);
+      let b = rhs(n);
+
+      let (x, report) = minres(&a, &Identity::new(n), &b, StopCriterion::rtol(1e-11));
+      assert!(report.converged, "n = {n} did not converge");
+      if n > 0 {
+        assert!((x - dense_solve(&dense, &b)).norm() < 1e-7, "n = {n}");
+      }
+    }
+  }
+
+  /// Preconditioning a complex system changes the path, never the fixed point.
+  /// Jacobi reads a Hermitian operator's diagonal, which is real.
+  #[test]
+  fn preconditioning_preserves_the_complex_solution() {
+    let dense = hermitian_from_spectrum(&[1.0, 2.0, 3.5, 6.0, 11.0, 14.0]);
+    let a = csr(&dense);
+    let b = rhs(6);
+    let stop = StopCriterion::rtol(1e-12);
+
+    let (x_plain, _) = cg(&a, &Identity::new(6), &b, stop);
+    let (x_jacobi, _) = cg(&a, &Jacobi::new(&a), &b, stop);
+    assert!((&x_plain - dense_solve(&dense, &b)).norm() < 1e-9);
+    assert!((x_plain - x_jacobi).norm() < 1e-9);
+  }
+
+  /// A real system embedded in $CC$ has the real solution: extension of scalars
+  /// commutes with the solve, so the complex instantiation is a generalization
+  /// of the real one rather than a parallel implementation of it.
+  #[test]
+  fn a_real_system_solved_over_the_complexes_stays_real() {
+    let dense = crate::testutil::symmetric_from_spectrum(&[1.0, 2.0, 4.0, 7.0, 9.0]);
+    let b = Vector::from_fn(5, |i, _| (i as f64 + 1.0).ln());
+    let stop = StopCriterion::rtol(1e-12);
+    let (x_real, _) = cg(&csr(&dense), &Identity::new(5), &b, stop);
+
+    let dense_c = dense.map(|v| c(v, 0.0));
+    let (x_complex, _) = cg(
+      &csr(&dense_c),
+      &Identity::new(5),
+      &b.map(|v| c(v, 0.0)),
+      StopCriterion::rtol(1e-12),
+    );
+    assert!(x_complex.iter().all(|z| z.im.abs() < 1e-12));
+    assert!((x_complex.map(|z| z.re) - x_real).norm() < 1e-12);
+  }
+}
+
 #[cfg(test)]
 mod abstract_space {
   use crate::{
@@ -315,6 +504,7 @@ mod abstract_space {
   struct Coords(Vec<f64>);
 
   impl InnerProductSpace for Coords {
+    type Scalar = f64;
     fn zeros_like(&self) -> Self {
       Coords(vec![0.0; self.0.len()])
     }

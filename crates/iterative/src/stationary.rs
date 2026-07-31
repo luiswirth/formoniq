@@ -1,7 +1,9 @@
 use crate::{
-  ApproxInverse, InnerProductSpace, LinearOperator, Report, SelfAdjoint, StopCriterion,
-  trivial_solve,
+  ApproxInverse, InnerProductSpace, LinearOperator, RealOf, Report, ScalarOf, SelfAdjoint,
+  StopCriterion, trivial_solve,
 };
+
+use num_traits::{One, Zero};
 
 /// Solve $A x = b$ by the stationary (preconditioned Richardson) iteration
 /// $x_(k+1) = x_k + B(b - A x_k)$, started from zero.
@@ -17,10 +19,10 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   op: &O,
   precond: &B,
   b: &O::Space,
-  stop: StopCriterion,
-) -> (O::Space, Report) {
+  stop: StopCriterion<RealOf<O::Space>>,
+) -> (O::Space, Report<RealOf<O::Space>>) {
   let b_norm = b.norm();
-  if b_norm == 0.0 {
+  if b_norm.is_zero() {
     return trivial_solve(b);
   }
   let mut x = b.zeros_like();
@@ -28,7 +30,7 @@ pub fn solve<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
   let mut iters = 0;
   let residual = loop {
     let mut r = op.apply(&x);
-    r.scale(-1.0);
+    r.scale(-ScalarOf::<O::Space>::one());
     r.add(b);
     let residual = r.norm() / b_norm;
     converged = residual <= stop.rtol;
@@ -65,7 +67,7 @@ pub fn sweeps<O: LinearOperator, B: ApproxInverse<Space = O::Space>>(
 ) {
   for _ in 0..count {
     let mut residual = op.apply(x);
-    residual.scale(-1.0);
+    residual.scale(-ScalarOf::<O::Space>::one());
     residual.add(b);
     x.add(&precond.apply(&residual));
   }
