@@ -1800,14 +1800,14 @@ mod tests {
   #[test]
   fn hodge_decomposition_splits_orthogonally() {
     use crate::gallery::MeshSource;
-    use crate::gallery::{QUOTIENT_CELLS_DEFAULT, QuotientSurface};
+    use crate::gallery::{QUOTIENT_CELLS, QuotientSurface};
     use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
     use simplicial::linalg::CsrMatrix;
 
     let torus = || {
       MeshSource::Quotient {
         surface: QuotientSurface::Donut,
-        cells_axis: QUOTIENT_CELLS_DEFAULT,
+        cells_axis: QUOTIENT_CELLS.default,
       }
       .build()
       .unwrap()

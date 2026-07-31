@@ -13,10 +13,9 @@ use clap::{Parser, Subcommand};
 use derham::Cochain;
 use formoniq_studio::export::{ExportSpec, export};
 use formoniq_studio::gallery::{
-  ADVECTION_FINAL_TIME, BuiltinMesh, CochainSpec, DEFAULT_NMODES, DEFAULT_TRAJECTORY_STEPS,
-  GRID_DIM_DEFAULT, GRID_DIM_MAX, HEAT_FINAL_TIME, MeshSource, NamedCochain,
-  QUOTIENT_CELLS_DEFAULT, QuotientSurface, REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX, Study,
-  WAVE_FINAL_TIME,
+  ADVECTION_FINAL_TIME, BuiltinMesh, CochainSpec, EIGENMODES_NMODES, GRID_DIM, HEAT_FINAL_TIME,
+  MeshSource, NamedCochain, Param, QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, Study,
+  TRAJECTORY_STEPS, WAVE_FINAL_TIME,
 };
 use realize::io::vtu;
 use simplicial::Dim;
@@ -171,27 +170,27 @@ fn parse_graded_study(s: &str) -> Option<Study> {
   if let Some(grade) = s.strip_prefix("grade").and_then(|g| g.parse().ok()) {
     return Some(Study::Eigenmodes {
       grade,
-      nmodes: DEFAULT_NMODES,
+      nmodes: EIGENMODES_NMODES.default,
     });
   }
   if let Some(grade) = graded("heat") {
     return Some(Study::Heat {
       grade,
-      nsteps: DEFAULT_TRAJECTORY_STEPS,
-      final_time: HEAT_FINAL_TIME,
+      nsteps: TRAJECTORY_STEPS.default,
+      final_time: HEAT_FINAL_TIME.default,
     });
   }
   if let Some(grade) = graded("wave") {
     return Some(Study::Wave {
       grade,
-      nsteps: DEFAULT_TRAJECTORY_STEPS,
-      final_time: WAVE_FINAL_TIME,
+      nsteps: TRAJECTORY_STEPS.default,
+      final_time: WAVE_FINAL_TIME.default,
     });
   }
   graded("advection").map(|grade| Study::Advection {
     grade,
-    nsteps: DEFAULT_TRAJECTORY_STEPS,
-    final_time: ADVECTION_FINAL_TIME,
+    nsteps: TRAJECTORY_STEPS.default,
+    final_time: ADVECTION_FINAL_TIME.default,
   })
 }
 
@@ -204,27 +203,28 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
   // digit, `grid3` is a cube of tetrahedra, `refcell1` a single edge, so one
   // spelling reaches every dimension the fixed ambient RR^3 embeds, no separate
   // name per dimension.
-  let dimensioned = |stem: &str, default: usize, max: usize| -> Option<Result<usize, String>> {
+  let dimensioned = |stem: &str, dim: Param<usize>| -> Option<Result<usize, String>> {
     let rest = s.strip_prefix(stem)?;
     if rest.is_empty() {
-      return Some(Ok(default));
+      return Some(Ok(dim.default));
     }
     Some(match rest.parse::<usize>() {
-      Ok(d) if (1..=max).contains(&d) => Ok(d),
+      Ok(d) if dim.range().contains(&d) => Ok(d),
       _ => Err(format!(
-        "`{stem}` dimension must be 1..={max}, got `{rest}`"
+        "`{stem}` dimension must be {}..={}, got `{rest}`",
+        dim.min, dim.max
       )),
     })
   };
 
-  if let Some(dim) = dimensioned("grid", GRID_DIM_DEFAULT, GRID_DIM_MAX) {
+  if let Some(dim) = dimensioned("grid", GRID_DIM) {
     return dim.map(|dim| MeshSource::Grid {
       dim,
       cells_axis: 16,
     });
   }
-  if let Some(dim) = dimensioned("refcell", REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX)
-    .or_else(|| dimensioned("reference", REFERENCE_CELL_DIM, REFERENCE_CELL_DIM_MAX))
+  if let Some(dim) = dimensioned("refcell", REFERENCE_CELL_DIM)
+    .or_else(|| dimensioned("reference", REFERENCE_CELL_DIM))
   {
     return dim.map(|dim| MeshSource::ReferenceCell { dim });
   }
@@ -234,7 +234,7 @@ fn parse_mesh(s: &str) -> Result<MeshSource, String> {
     "triforce" => Ok(MeshSource::Triforce),
     _ if QuotientSurface::from_name(s).is_some() => Ok(MeshSource::Quotient {
       surface: QuotientSurface::from_name(s).unwrap(),
-      cells_axis: QUOTIENT_CELLS_DEFAULT,
+      cells_axis: QUOTIENT_CELLS.default,
     }),
     _ if Path::new(s).is_dir() => Ok(MeshSource::File(PathBuf::from(s))),
     _ => BuiltinMesh::from_name(s)
