@@ -13,7 +13,7 @@
 use crate::{
   assemble::{GalMat, assemble_galmat},
   linalg::faer::FaerLu,
-  operators::HodgeMassElmat,
+  operators::{HodgeMassElmat, WhitneyPairElmat},
 };
 use regge::subcomplex::SubcomplexExt;
 
@@ -358,15 +358,30 @@ impl HilbertComplex for WhitneyComplex<'_> {
   ///
   /// the stiffness matrix $D^T M_(k+1) D$ of the up-part of the Hodge-Laplacian.
   ///
+  /// Assembled from the element form directly, not as the global product of
+  /// three assembled matrices. The exterior derivative of a Whitney form is the
+  /// coboundary of the *reference* cell, a $plus.minus 1$ incidence, so
+  /// $D^T M_(k+1) D$ is already local to a cell and
+  /// [`WhitneyPairElmat::codif_dif`] is that local sandwich. Routing it through
+  /// the global matrices instead materializes the whole grade-$(k+1)$ mass,
+  /// over a skeleton the answer never mentions, only to contract it away: at
+  /// grade $0$ in 3D that is the mass on the edges, six times the entries per
+  /// cell of the four-by-four this produces.
+  ///
   /// Total in grade with no special case: at the top grade $dif: Lambda^n ->
-  /// Lambda^(n+1)$ has a trivial codomain, so $M_(n+1)$ is $0 times 0$ and the
-  /// product is the honest $"ndofs"(n)^2$ zero. The same falls out past either
-  /// end from the total [`Self::dif`] and [`Self::mass`].
+  /// Lambda^(n+1)$ has a trivial codomain, so the boundary operator of the
+  /// reference cell is empty there and the element matrix is the honest zero,
+  /// as it is past either end of the complex.
   fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
     let grade = grade.into();
-    let dif = self.dif(grade);
-    let mass = CsrMatrix::from(&self.mass(grade + 1));
-    GalMat::from(&(dif.transpose() * mass * dif))
+    if !grade.in_range(self.dim()) {
+      return GalMat::new(self.ndofs(grade), self.ndofs(grade));
+    }
+    assemble_galmat(
+      self.topology,
+      self.geometry,
+      WhitneyPairElmat::codif_dif(self.dim(), grade),
+    )
   }
   /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
@@ -670,6 +685,56 @@ mod test {
   use regge::mesher::cartesian::CartesianGrid;
   use simplicial::Dim;
   use simplicial::linalg::Vector;
+
+  /// The stiffness is one matrix with two routes to it: the element-local
+  /// sandwich that [`HilbertComplex::codif_dif`] assembles, and the global
+  /// product $D^T M_(k+1) D$ of three separately assembled matrices.
+  ///
+  /// They agree because the exterior derivative of a Whitney form is the
+  /// coboundary of the reference cell, so the contraction commutes with the
+  /// scatter. Swept over every dimension and grade, the extremes included:
+  /// at the top grade both sides are the zero operator, which is the case a
+  /// route that special-cased the empty codomain would get wrong.
+  #[test]
+  fn codif_dif_local_and_global_routes_agree() {
+    for dim in (1..=3).map(Dim::from) {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+      let whitney = WhitneyComplex::new(&topology, &lengths);
+
+      for grade in dim.range_inclusive() {
+        let local = CsrMatrix::from(&whitney.codif_dif(grade));
+
+        let dif = whitney.dif(grade);
+        let mass = CsrMatrix::from(&whitney.mass(grade + 1));
+        let global = dif.transpose() * mass * dif;
+
+        assert_eq!(local.nrows(), global.nrows());
+        assert_eq!(local.ncols(), global.ncols());
+        let residual = (&local - &global)
+          .values()
+          .iter()
+          .fold(0.0f64, |acc, v| acc.max(v.abs()));
+        let scale = local
+          .values()
+          .iter()
+          .fold(0.0f64, |acc, v| acc.max(v.abs()));
+        assert!(
+          residual <= 1e-12 * scale.max(1.0),
+          "dim {dim:?} grade {grade:?}: routes differ by {residual:e}"
+        );
+        // The law must be able to fail: at every grade below the top the
+        // stiffness is a nonzero operator, so agreement is not two zeros
+        // matching.
+        if grade < dim {
+          assert!(
+            scale > 1e-6,
+            "dim {dim:?} grade {grade:?}: stiffness vanished"
+          );
+        }
+      }
+    }
+  }
 
   /// The full $H Lambda(dif)$ norm is the Pythagorean sum of the $L^2$ norm and
   /// the $dif$ seminorm, and its Gram matrix [`HilbertComplex::hdif_gram`]
