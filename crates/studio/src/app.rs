@@ -464,7 +464,16 @@ impl State {
   /// change installs nothing. A build failure is recorded on the gallery and
   /// shown in the panel, leaving the current mesh in place.
   fn set_mesh_source(&mut self, source: MeshSource) {
-    match self.gallery.select_mesh(source) {
+    let built = self.gallery.select_mesh(source);
+    self.install_built(built);
+  }
+
+  /// Installs what a mesh-building gallery call handed back: a scene to show
+  /// now, nothing at all for a no-op, or a build failure to surface. The three
+  /// outcomes are the same three wherever a mesh is built, so they are answered
+  /// in one place.
+  fn install_built(&mut self, built: Result<Option<Scene>, String>) {
+    match built {
       Ok(Some(scene)) => self.install_scene(scene),
       Ok(None) => {}
       Err(error) => self.gallery.set_error(error),
@@ -486,11 +495,8 @@ impl State {
     if let Some(marks) = self.presets[index].marks {
       self.field_view.marks = marks;
     }
-    match self.gallery.select_preset(&self.presets[index]) {
-      Ok(Some(scene)) => self.install_scene(scene),
-      Ok(None) => {}
-      Err(error) => self.gallery.set_error(error),
-    }
+    let built = self.gallery.select_preset(&self.presets[index]);
+    self.install_built(built);
   }
 
   /// Loads a user-picked OBJ file as a custom mesh: reads it, parses it through

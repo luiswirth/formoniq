@@ -608,14 +608,12 @@ fn skeleton_hover(k: usize) -> &'static str {
   }
 }
 
+/// A grade tab's label: the grade, and the mark a field of it is drawn with.
+/// Starred where the reduction actually stars, so a reader can see which side
+/// of $k <-> n-k$ the mark came from.
 pub(crate) fn grade_mark_label(grade: ExteriorGrade, n: Dim) -> String {
-  let reduced = grade.min(n - grade);
-  let mark = match reduced.index() {
-    0 => "density",
-    1 => "line field",
-    _ => "sheet",
-  };
-  if grade == reduced {
+  let mark = crate::scene::Mark::of(grade, n).label();
+  if grade <= n - grade {
     format!("grade {grade} · {mark}")
   } else {
     format!("grade {grade} · {mark} (*)")
