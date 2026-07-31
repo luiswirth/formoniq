@@ -39,13 +39,16 @@ What the `realize` pass did, so you don't redo it.
 - Deliberately left: `reduce::corner_bounds` is a normalization range rather than a reduction, but it sits where the per-corner streams are produced and every caller of one calls the other.
 - The crate's `CLAUDE.md` needed no change, which is the interesting part: on all three of these the design doc was already right and the code had drifted from it.
 
-Where `studio` stands. It is the last crate and it has its own `CLAUDE.md`, which governs `realize` too. Its test suite is slow, around three minutes, so run it in the background rather than waiting on it. Surveyed and done so far: `scene.rs`, and the parts of `display.rs` and `bake.rs` those changes reached. Not yet surveyed: `gallery.rs`, `app.rs`, `ui.rs`, `export.rs`, `cli.rs`, `solve.rs`, `render/`, the shaders.
+Where `studio` stands. It is the last crate and it has its own `CLAUDE.md`, which governs `realize` too. Its test suite is slow, around three minutes, so run it in the background rather than waiting on it. Surveyed and done so far: `scene.rs`, `gallery.rs`, and the parts of `display.rs`, `cli.rs`, `ui.rs` and `bake.rs` those changes reached. Not yet surveyed: `app.rs`, `ui.rs` beyond the study panel, `export.rs`, `solve.rs`, `render/`, the shaders.
 
 What the `studio` pass has done so far.
 - Nine `Scene` constructors each opened a `Surface`, two empty vectors and a struct literal, four of them under a verbatim copy of the same comment about why the surface comes first. `Scene::on` is that opening and `Scene::file` a method on it.
 - `Scene::file` read the reduction's `n` off the surface-or-parent choice while asking the surface for orientability either way, so a volume density on a solid reduced against one manifold and was checked against another, under a comment claiming they could not disagree. The manifold the mark is drawn on is chosen once.
 - `spherical_harmonics`, `sphere_placeholder` and grade-0 `eigenmodes` are gone: unreachable outside the tests, and the first was a curated view as its own code path, which the crate's `CLAUDE.md` explicitly refuses.
-- `ambient_bump`'s doc comment sat on `LOWEST_MODES`, two hundred lines away.
+- `Heat`, `Wave` and `Advection` were three `Study` variants over the same three parameters, spelled out in seven places. They are `Study::Evolve` at an `Evolution`. Two things had already fallen out of the parallel spellings, which is the argument for the unification and not an aside: advection had no entry in the study picker at all, and the CLI's error message listed heat and wave alone.
+- Ten mesh and study parameters were twenty-two constants, a default beside a floor beside a ceiling under two naming conventions, and three of the floors were written at the slider instead. `Param` is the datum and `range()` is what a control asks.
+- Doc comments on the wrong item, four so far: `ambient_bump`'s three paragraphs on `LOWEST_MODES` two hundred lines away, `hodge_probe_form`'s glued above `hodge_probe_input`'s, the opening preset's on `start_preset`, and a stale first paragraph above `Gallery::new`'s. Worth grepping for more.
+- `Gallery::install_mesh` spelled out the cache lookup and spawn that `request` already is.
 - A dozen doc comments explained the current design by naming an older one. Nine others broke a line before a comma instead of after it.
 - Deliberately left: `ScalarField` and `LineField` are field-for-field identical, and unifying them is tempting. They are two types because the two lists *are* the reduction, made once at construction, so a consumer reads which mark a field landed in instead of dispatching on grade again. Merging them would put a grade dispatch back at every consumer, which the crate's anti-goals name.
 
