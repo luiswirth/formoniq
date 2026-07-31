@@ -8,9 +8,9 @@ use multialgebra::ExteriorGrade;
 use simplicial::{Dim, topology::simplex::Simplex};
 
 use crate::gallery::{
-  ADVECTION_FINAL_TIME, BuiltinMesh, EIGENMODES_NMODES, GRID_CELLS, GRID_DIM, HEAT_FINAL_TIME,
-  MeshSource, Preset, QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, SPHERE_SUBDIVISIONS,
-  Study, TRAJECTORY_STEPS, WAVE_FINAL_TIME,
+  BuiltinMesh, EIGENMODES_NMODES, Evolution, GRID_CELLS, GRID_DIM, MeshSource, Preset,
+  QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, SPHERE_SUBDIVISIONS, Study,
+  TRAJECTORY_STEPS,
 };
 use crate::scene::{FieldOffers, dof_label};
 
@@ -676,34 +676,15 @@ fn study_params(ui: &mut egui::Ui, study: &mut Study, max_grade: Dim) -> bool {
       let commit = grade_tabs(ui, grade, max_grade);
       commit | commit_slider(ui, nmodes, EIGENMODES_NMODES.range(), "modes")
     }
-    Study::Heat {
+    Study::Evolve {
+      equation,
       grade,
       nsteps,
       final_time,
     } => {
       let grade_changed = grade_tabs(ui, grade, max_grade);
       let steps = commit_slider(ui, nsteps, TRAJECTORY_STEPS.range(), "steps");
-      let time = commit_slider(ui, final_time, HEAT_FINAL_TIME.range(), "final t");
-      grade_changed | steps | time
-    }
-    Study::Wave {
-      grade,
-      nsteps,
-      final_time,
-    } => {
-      let grade_changed = grade_tabs(ui, grade, max_grade);
-      let steps = commit_slider(ui, nsteps, TRAJECTORY_STEPS.range(), "steps");
-      let time = commit_slider(ui, final_time, WAVE_FINAL_TIME.range(), "final t");
-      grade_changed | steps | time
-    }
-    Study::Advection {
-      grade,
-      nsteps,
-      final_time,
-    } => {
-      let grade_changed = grade_tabs(ui, grade, max_grade);
-      let steps = commit_slider(ui, nsteps, TRAJECTORY_STEPS.range(), "steps");
-      let time = commit_slider(ui, final_time, ADVECTION_FINAL_TIME.range(), "final t");
+      let time = commit_slider(ui, final_time, equation.final_time().range(), "final t");
       grade_changed | steps | time
     }
     Study::WhitneyBasis | Study::HodgeDecomposition | Study::Cochains(_) => false,
@@ -718,9 +699,7 @@ fn study_equation(study: &Study) -> &'static str {
     Study::Eigenmodes { .. } => "Δu = λu · standing modes",
     Study::WhitneyBasis => "grade × DOF · the Whitney basis",
     Study::HodgeDecomposition => "ω = dα + δβ + h",
-    Study::Heat { .. } => "∂ₜu = −Δu · parabolic",
-    Study::Wave { .. } => "∂ₜₜu = −Δu · hyperbolic",
-    Study::Advection { .. } => "∂ₜu + ℒᵥu = 0 · transport",
+    Study::Evolve { equation, .. } => equation.equation(),
     Study::Cochains(_) => "explicit cochains",
   }
 }
@@ -1076,8 +1055,8 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
         });
 
         // The study axis: which computation to run on the mesh. Eigenmodes, the
-        // Whitney basis, the Hodge decomposition and the two time-dependent
-        // solves are the generic studies picked here. An explicit cochain list
+        // Whitney basis, the Hodge decomposition and the time-dependent solves
+        // are the generic studies picked here. An explicit cochain list
         // has no generic form to pick, so it shows as the selected study only
         // when a preset installed it. The parameters of the picked study are the
         // inspector's, not this list's.
@@ -1100,21 +1079,13 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
           {
             requested_study = Study::HodgeDecomposition;
           }
-          let on_heat = matches!(model.study, Study::Heat { .. });
-          if ui.selectable_label(on_heat, "Heat").clicked() && !on_heat {
-            requested_study = Study::Heat {
-              grade: model.last_grade,
-              nsteps: TRAJECTORY_STEPS.default,
-              final_time: HEAT_FINAL_TIME.default,
-            };
-          }
-          let on_wave = matches!(model.study, Study::Wave { .. });
-          if ui.selectable_label(on_wave, "Wave").clicked() && !on_wave {
-            requested_study = Study::Wave {
-              grade: model.last_grade,
-              nsteps: TRAJECTORY_STEPS.default,
-              final_time: WAVE_FINAL_TIME.default,
-            };
+          // Every equation, from the list itself: an evolution that exists is
+          // one the reader can pick.
+          for equation in Evolution::ALL {
+            let on_it = matches!(model.study, Study::Evolve { equation: e, .. } if e == equation);
+            if ui.selectable_label(on_it, equation.name()).clicked() && !on_it {
+              requested_study = Study::evolve(equation, model.last_grade);
+            }
           }
           if matches!(model.study, Study::Cochains(_)) {
             let _ = ui.selectable_label(true, "Cochains");

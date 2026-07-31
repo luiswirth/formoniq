@@ -13,9 +13,8 @@ use clap::{Parser, Subcommand};
 use derham::Cochain;
 use formoniq_studio::export::{ExportSpec, export};
 use formoniq_studio::gallery::{
-  ADVECTION_FINAL_TIME, BuiltinMesh, CochainSpec, EIGENMODES_NMODES, GRID_DIM, HEAT_FINAL_TIME,
-  MeshSource, NamedCochain, Param, QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, Study,
-  TRAJECTORY_STEPS, WAVE_FINAL_TIME,
+  BuiltinMesh, CochainSpec, EIGENMODES_NMODES, Evolution, GRID_DIM, MeshSource, NamedCochain,
+  Param, QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, Study,
 };
 use realize::io::vtu;
 use simplicial::Dim;
@@ -148,7 +147,16 @@ fn parse_study(s: &str) -> Result<Study, String> {
     "hodge" | "decomposition" => Ok(Study::HodgeDecomposition),
     "triforce-examples" => Ok(Study::Cochains(formoniq_studio::demos::triforce_examples())),
     _ => parse_graded_study(s).ok_or_else(|| {
-      format!("expected `grade<k>`, `whitney`, `hodge`, `heat[<k>]` or `wave[<k>]`, got `{s}`")
+      // The evolutions name themselves, so the message cannot fall behind the
+      // list of them the parser above accepts.
+      let equations: Vec<String> = Evolution::ALL
+        .into_iter()
+        .map(|e| format!("`{}[<k>]`", e.name().to_lowercase()))
+        .collect();
+      format!(
+        "expected `grade<k>`, `whitney`, `hodge` or one of {}, got `{s}`",
+        equations.join(", ")
+      )
     }),
   }
 }
@@ -173,24 +181,10 @@ fn parse_graded_study(s: &str) -> Option<Study> {
       nmodes: EIGENMODES_NMODES.default,
     });
   }
-  if let Some(grade) = graded("heat") {
-    return Some(Study::Heat {
-      grade,
-      nsteps: TRAJECTORY_STEPS.default,
-      final_time: HEAT_FINAL_TIME.default,
-    });
-  }
-  if let Some(grade) = graded("wave") {
-    return Some(Study::Wave {
-      grade,
-      nsteps: TRAJECTORY_STEPS.default,
-      final_time: WAVE_FINAL_TIME.default,
-    });
-  }
-  graded("advection").map(|grade| Study::Advection {
-    grade,
-    nsteps: TRAJECTORY_STEPS.default,
-    final_time: ADVECTION_FINAL_TIME.default,
+  // Every equation by its own name, so a new one is reachable here the moment
+  // it exists rather than when someone remembers to add a branch.
+  Evolution::ALL.into_iter().find_map(|equation| {
+    graded(&equation.name().to_lowercase()).map(|grade| Study::evolve(equation, grade))
   })
 }
 
