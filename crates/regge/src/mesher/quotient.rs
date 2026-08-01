@@ -422,7 +422,9 @@ impl FlatQuotient {
       lengths_sq.iter().all(|l| !l.is_nan()),
       "Every quotient edge is the image of a grid edge."
     );
-    MeshLengthsSq::new(lengths_sq, complex)
+    // The grid is non-degenerate and the identification is by an isometry,
+    // asserted above, so every quotient cell inherits a grid cell's metric.
+    MeshLengthsSq::new(lengths_sq)
   }
 
   /// The unidentified grid the quotient is built from: the fundamental domain

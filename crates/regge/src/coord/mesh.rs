@@ -199,6 +199,12 @@ impl MeshCoords {
   /// A 0-manifold is a discrete set of points: its 1-skeleton is empty, so its
   /// geometry is the empty vector, which the total accessor gives rather than
   /// a guard.
+  ///
+  /// Non-degeneracy is inherited from the embedding rather than established
+  /// here: a coordinate realization with a flat or repeated cell yields a
+  /// degenerate geometry, and this conversion faithfully reports it. A caller
+  /// holding coordinates of unknown provenance, an imported mesh file above
+  /// all, discharges [`MeshLengthsSq::is_valid`] on the result.
   pub fn to_edge_lengths_sq(&self, topology: &Complex) -> MeshLengthsSq {
     let edges = topology.skeleton(Dim::ONE);
     let mut edge_lengths_sq = Vector::zeros(edges.len());
@@ -206,8 +212,7 @@ impl MeshCoords {
       let (vi, vj) = edge.role::<roles::Edge>().endpoints();
       edge_lengths_sq[iedge] = self.ambient.norm_sq(&(vj.coord(self) - vi.coord(self)));
     }
-    // SAFETY: Squared lengths come from a coordinate realization.
-    MeshLengthsSq::new_unchecked(edge_lengths_sq)
+    MeshLengthsSq::new(edge_lengths_sq)
   }
 }
 

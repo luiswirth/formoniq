@@ -132,7 +132,10 @@ impl CellGramians {
         }
       }
     }
-    Some(MeshLengthsSq::new_unchecked(edge_lengths_sq))
+    // Every edge length was read off a cell's own lengths, whose
+    // non-degeneracy is that type's constructor contract, and the loop above
+    // established that two cells agree wherever they share an edge.
+    Some(MeshLengthsSq::new(edge_lengths_sq))
   }
 
   /// Whether these per-cell metrics lie in the Regge space: whether two cells

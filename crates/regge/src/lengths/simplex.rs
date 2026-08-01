@@ -33,27 +33,48 @@ pub struct SimplexLengthsSq {
 }
 
 impl SimplexLengthsSq {
-  /// The invariant is non-degeneracy of the induced metric tensor, the
-  /// squared lengths must describe a simplex of some signature, Euclidean
-  /// realizability ([`Self::is_coordinate_realizable`]) being the Riemannian
-  /// special case, not the requirement.
+  /// The simplex of the given signed squared edge lengths.
+  ///
+  /// The hypothesis is non-degeneracy of the induced metric tensor
+  /// ([`Self::is_degenerate`]): the lengths must describe a simplex of some
+  /// signature, Euclidean realizability ([`Self::is_coordinate_realizable`])
+  /// being the Riemannian special case and not the requirement. It is the
+  /// caller's to hold, and it usually holds upstream by construction: the
+  /// lengths of a face of a non-degenerate simplex, the lengths a
+  /// non-degenerate metric induces, the restriction of a mesh whose cells were
+  /// checked once. Where they are genuinely in question, on a file or on data a
+  /// user supplied, [`Self::new_checked`] asks.
+  ///
+  /// Verifying costs a Cayley-Menger determinant, out of all proportion to the
+  /// arithmetic that built the lengths and paid once per simplex where it sits
+  /// on an assembly path. Unchecked in every build profile, debug included: a
+  /// constructor whose cost and whose panics depend on how the code was
+  /// compiled is a worse trap than an unchecked one.
+  ///
+  /// # Panics
+  /// If the number of lengths is not the number of edges of a `dim`-simplex.
+  /// That is a shape mismatch rather than a hypothesis: the value could not be
+  /// laid out at all, so there is nothing for a predicate to decide.
   pub fn new(lengths_sq: Vector, dim: impl Into<Dim>) -> Self {
     let dim = dim.into();
     assert_eq!(lengths_sq.len(), nedges(dim), "Wrong number of edges.");
-    let this = Self { lengths_sq, dim };
-    assert!(
-      !this.is_degenerate(),
-      "Simplex metric must be non-degenerate."
-    );
-    this
+    Self { lengths_sq, dim }
   }
-  pub fn new_unchecked(lengths_sq: Vector, dim: impl Into<Dim>) -> Self {
-    let dim = dim.into();
-    if cfg!(debug_assertions) {
-      Self::new(lengths_sq, dim)
-    } else {
-      Self { lengths_sq, dim }
-    }
+  /// The simplex of those lengths, or `None` if they degenerate: the
+  /// constructor that verifies what [`Self::new`] takes on contract.
+  ///
+  /// Holding the result *is* the proof that the induced metric is
+  /// non-degenerate, so a boundary checks here once instead of every operation
+  /// re-asking.
+  pub fn new_checked(lengths_sq: Vector, dim: impl Into<Dim>) -> Option<Self> {
+    let this = Self::new(lengths_sq, dim);
+    this.is_valid().then_some(this)
+  }
+  /// Whether these lengths describe a simplex at all: non-degeneracy of the
+  /// induced metric, which is exactly the contract [`Self::new`] takes on trust
+  /// and [`Self::new_checked`] verifies.
+  pub fn is_valid(&self) -> bool {
+    !self.is_degenerate()
   }
   /// The unit simplex: edges at the origin vertex are unit, all others
   /// connect two standard basis vertices with squared length $2$.
@@ -283,7 +304,7 @@ impl SimplexLengthsSq {
   /// non-degeneracy is this type's own constructor invariant, already
   /// established when the lengths were built, so re-deriving it would run a
   /// symmetric eigendecomposition once per cell to reconfirm a proof already
-  /// in hand. The debug build still asserts both.
+  /// in hand.
   pub fn metric(&self) -> Metric {
     let mut metric = Matrix::zeros(self.dim().index(), self.dim().index());
     for i in 0..self.dim().index() {
@@ -365,6 +386,29 @@ mod test {
         lengths.vector_mut()[edge_index(1, 2)] = 0.0;
         assert!(lengths.is_degenerate());
       }
+    }
+  }
+
+  /// The checked constructor decides the hypothesis it is named for: it accepts
+  /// the unit simplex and rejects the same lengths with two vertices collapsed.
+  ///
+  /// Both directions, so that a constructor returning `Some` unconditionally
+  /// would fail. Non-degeneracy, not definiteness: the Minkowski simplex is
+  /// accepted too, and it is not Euclidean-realizable.
+  #[test]
+  fn new_checked_decides_non_degeneracy() {
+    for dim in (2..=4usize).map(Dim::from) {
+      let unit = SimplexLengthsSq::unit(dim);
+      assert!(unit.is_valid());
+      assert!(SimplexLengthsSq::new_checked(unit.vector().clone(), dim).is_some());
+
+      let lorentzian = SimplexLengthsSq::from_metric(&Metric::minkowski(dim.index()));
+      assert!(!lorentzian.is_coordinate_realizable());
+      assert!(SimplexLengthsSq::new_checked(lorentzian.into_vector(), dim).is_some());
+
+      let mut collapsed = unit.into_vector();
+      collapsed[edge_index(1, 2)] = 0.0;
+      assert!(SimplexLengthsSq::new_checked(collapsed, dim).is_none());
     }
   }
 

@@ -30,7 +30,9 @@ impl SubcomplexExt for Subcomplex {
       .iter()
       .map(|&iedge| parent[iedge])
       .collect();
-    MeshLengthsSq::new_unchecked(lengths_sq.into())
+    // A cell of the subcomplex is a face of a parent cell, and a face of a
+    // non-degenerate simplex is non-degenerate.
+    MeshLengthsSq::new(lengths_sq.into())
   }
 
   fn trace_coords(&self, parent: &MeshCoords) -> MeshCoords {

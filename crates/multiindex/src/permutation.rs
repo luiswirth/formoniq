@@ -24,16 +24,37 @@ impl Permutation {
 
   /// From one-line notation.
   ///
-  /// # Panics
-  /// If the entries are not a permutation of ${0, dots, n-1}$.
+  /// The hypothesis is that the word is a bijection of ${0, dots, n-1}$
+  /// ([`Self::is_valid`]), and it is the caller's to hold. It usually holds by
+  /// construction: an enumeration of $S_n$, a composition or an inverse of
+  /// permutations already in hand, the sorting order of a word. Where the word
+  /// comes from outside, [`Self::new_checked`] asks.
+  ///
+  /// A word that is not a bijection still builds, and every operation on it
+  /// then returns a meaningless answer or panics on an out-of-range index.
+  /// Nothing here is unsafe, and nothing silently reads out of bounds.
   pub fn new(parts: impl IntoIterator<Item = usize>) -> Self {
-    let parts: Vec<usize> = parts.into_iter().collect();
-    let mut seen = vec![false; parts.len()];
-    for &p in &parts {
-      assert!(p < parts.len(), "entry out of range");
-      assert!(!std::mem::replace(&mut seen[p], true), "entry repeats");
-    }
-    Self(parts)
+    Self(parts.into_iter().collect())
+  }
+  /// The permutation of that word, or `None` if it is not one: the constructor
+  /// that verifies what [`Self::new`] takes on contract.
+  pub fn new_checked(parts: impl IntoIterator<Item = usize>) -> Option<Self> {
+    let this = Self::new(parts);
+    this.is_valid().then_some(this)
+  }
+  /// Whether the stored word is a permutation at all: a bijection of
+  /// ${0, dots, n-1}$, every entry in range and none repeating, which is
+  /// exactly the contract [`Self::new`] takes on trust and
+  /// [`Self::new_checked`] verifies.
+  ///
+  /// One pass and one scratch bitvector: injectivity on a finite set of its own
+  /// cardinality is already surjectivity, so there is nothing further to check.
+  pub fn is_valid(&self) -> bool {
+    let mut seen = vec![false; self.0.len()];
+    self
+      .0
+      .iter()
+      .all(|&p| p < seen.len() && !std::mem::replace(&mut seen[p], true))
   }
 
   pub fn len(&self) -> usize {
@@ -174,6 +195,25 @@ impl FromIterator<usize> for Permutation {
 #[cfg(test)]
 mod test {
   use super::*;
+
+  /// The checked constructor decides bijectivity: it accepts a one-line word
+  /// and rejects the two ways of failing, an entry out of range and an entry
+  /// that repeats.
+  ///
+  /// Both directions, so that a constructor returning `Some` unconditionally
+  /// would fail. Every permutation the enumeration produces is valid, which is
+  /// what says the generator and the predicate agree.
+  #[test]
+  fn new_checked_decides_bijectivity() {
+    for n in 0..=5 {
+      for p in Permutation::all(n) {
+        assert!(p.is_valid());
+        assert!(Permutation::new_checked(p.into_parts()).is_some());
+      }
+    }
+    assert!(Permutation::new_checked([0, 1, 3]).is_none());
+    assert!(Permutation::new_checked([0, 1, 1]).is_none());
+  }
 
   /// The frozen enumeration order, stated explicitly rather than derived, so a
   /// change to the generator is a test failure and not a silent renumbering.
