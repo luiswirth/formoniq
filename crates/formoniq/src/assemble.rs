@@ -152,7 +152,7 @@ pub fn assemble_galvec(
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::operators::HodgeMassElmat;
+  use crate::operators::WhitneyPairing;
   use simplicial::Dim;
 
   use simplicial::linalg::Matrix;
@@ -176,12 +176,12 @@ mod test {
       let from_lengths = Matrix::from(&assemble_galmat(
         &topology,
         &lengths,
-        HodgeMassElmat::new(dim, grade),
+        WhitneyPairing::mass(dim, grade),
       ));
       let from_round_trip = Matrix::from(&assemble_galmat(
         &topology,
         &round_trip,
-        HodgeMassElmat::new(dim, grade),
+        WhitneyPairing::mass(dim, grade),
       ));
       approx::assert_relative_eq!(from_lengths, from_round_trip, epsilon = 1e-12);
     }
@@ -212,12 +212,12 @@ mod test {
         let a = Matrix::from(&assemble_galmat(
           &topology,
           &from_coords,
-          HodgeMassElmat::new(dim, grade),
+          WhitneyPairing::mass(dim, grade),
         ));
         let b = Matrix::from(&assemble_galmat(
           &topology,
           &from_gramians,
-          HodgeMassElmat::new(dim, grade),
+          WhitneyPairing::mass(dim, grade),
         ));
         approx::assert_relative_eq!(a, b, epsilon = 1e-12);
       }

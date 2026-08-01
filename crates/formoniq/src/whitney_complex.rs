@@ -13,7 +13,7 @@
 use crate::{
   assemble::{GalMat, assemble_galmat},
   linalg::faer::FaerLu,
-  operators::{HodgeMassElmat, WhitneyPairElmat},
+  operators::WhitneyPairing,
 };
 use regge::subcomplex::SubcomplexExt;
 
@@ -348,7 +348,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
     assemble_galmat(
       self.topology,
       self.geometry,
-      HodgeMassElmat::new(self.dim(), grade),
+      WhitneyPairing::mass(self.dim(), grade),
     )
   }
 
@@ -374,7 +374,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
   /// three assembled matrices. The exterior derivative of a Whitney form is the
   /// coboundary of the *reference* cell, a $plus.minus 1$ incidence, so
   /// $D^T M_(k+1) D$ is already local to a cell and
-  /// [`WhitneyPairElmat::codif_dif`] is that local sandwich. Routing it through
+  /// [`WhitneyPairing::dif_both`] is that local sandwich. Routing it through
   /// the global matrices instead materializes the whole grade-$(k+1)$ mass,
   /// over a skeleton the answer never mentions, only to contract it away: at
   /// grade $0$ in 3D that is the mass on the edges, six times the entries per
@@ -392,7 +392,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
     assemble_galmat(
       self.topology,
       self.geometry,
-      WhitneyPairElmat::codif_dif(self.dim(), grade),
+      WhitneyPairing::dif_both(self.dim(), grade + 1),
     )
   }
 
@@ -411,7 +411,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
     assemble_galmat(
       self.topology,
       self.geometry,
-      WhitneyPairElmat::codif(self.dim(), grade),
+      WhitneyPairing::dif_test(self.dim(), grade),
     )
   }
   /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.

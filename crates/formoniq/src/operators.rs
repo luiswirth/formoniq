@@ -44,9 +44,14 @@ impl ElMatProvider for ScalarLumpedMassElmat {
   }
 }
 
-/// Element Matrix for the weak Hodge star operator / the mass bilinear form.
+/// The grade-$k$ Whitney mass matrix, the weak Hodge star,
 ///
-/// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$
+/// $M = [inner(star lambda_tau, lambda_sigma)_(L^2 Lambda^k (K))]_(sigma,tau in Delta_k (K))$.
+///
+/// The kernel every [`WhitneyPairing`] sandwiches, and reached as an element
+/// matrix through [`WhitneyPairing::mass`] rather than directly: the mass is
+/// the pairing whose two sides are both undifferentiated, not a separate
+/// operator.
 ///
 /// The integrand splits into a blade half and a polynomial half, so
 /// $M = vol_K C^top (H times.circle Q) C$, with $H = D (Lambda^k g^(-1)) D^top$
@@ -77,16 +82,11 @@ impl HodgeMassElmat {
       bary_gramian: unit_bary_gramian(dim),
     }
   }
-}
-impl ElMatProvider for HodgeMassElmat {
-  fn row_grade(&self) -> ExteriorGrade {
-    self.grade
-  }
-  fn col_grade(&self) -> ExteriorGrade {
-    self.grade
-  }
 
-  fn eval(&self, metric: &Metric, _chart: Chart) -> Matrix {
+  /// Chart-free: every chart of the atlas is the reference cell up to the
+  /// labelling of its vertices, so the geometry enters through the metric
+  /// alone.
+  pub fn eval(&self, metric: &Metric) -> Matrix {
     assert_eq!(self.dim, metric.dim());
 
     // $H$: the Gramian of the barycentric $k$-blades $lambda^* (e_I)$, one
@@ -99,74 +99,108 @@ impl ElMatProvider for HodgeMassElmat {
   }
 }
 
+/// Which family a side of a [`WhitneyPairing`] ranges over: the grade-$k$
+/// shape functions themselves, or the exterior derivatives of those one grade
+/// below.
+///
+/// [`Difs`](Self::Difs) is metric-free (the exterior derivative of a Whitney
+/// form is the coboundary of the reference cell, a $plus.minus 1$ incidence),
+/// which is why the geometry of a pairing enters through its mass alone.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WhitneyFamily {
+  /// $lambda_sigma$, $sigma in Delta_k (K)$.
+  Forms,
+  /// $dif lambda_sigma$, $sigma in Delta_(k-1) (K)$.
+  Difs,
+}
+impl WhitneyFamily {
+  /// How far below the pairing's grade this family's degrees of freedom sit.
+  fn grade_offset(self) -> ExteriorGrade {
+    ExteriorGrade::from(usize::from(self == Self::Difs))
+  }
+}
+
 /// Element matrix of a bilinear form pairing two Whitney families in the
 /// grade-$k$ inner product,
 ///
 /// $A = R^top M_k C$,
 ///
-/// where each side is either the shape functions of grade $k$ themselves or,
-/// one grade below, their exterior derivative, $C = D$ the coboundary of the
-/// reference cell and $R^top = D^top = diff$ its boundary. The three mixed
-/// forms of the Hodge-Laplace complex are the three remaining choices,
-/// [`WhitneyPairElmat::dif`], [`codif`](Self::codif) and
-/// [`codif_dif`](Self::codif_dif); the fourth, both sides undifferentiated, is
-/// [`HodgeMassElmat`] itself.
+/// with $C$ the trial side and $R$ the test side, each either the shape
+/// functions of grade $k$ or, one grade below, their exterior derivative
+/// $D$, the coboundary of the reference cell; $R^top = D^top = diff$ is then
+/// its boundary. The four choices are the four blocks a problem posed around
+/// grade $k$ is built from, and they are named by the differentiated side:
+/// [`mass`](Self::mass), [`dif_trial`](Self::dif_trial),
+/// [`dif_test`](Self::dif_test) and [`dif_both`](Self::dif_both).
 ///
-/// A side is metric-free (the exterior derivative on Whitney forms is the
-/// coboundary, a $plus.minus 1$ incidence), so the geometry enters through the
-/// mass alone.
-pub struct WhitneyPairElmat {
+/// The grade argument is the grade of the *inner product* in all four, so it
+/// is the grade of $M_k$ and never that of the degrees of freedom, which sit
+/// one below on a differentiated side.
+pub struct WhitneyPairing {
   mass: HodgeMassElmat,
+  test: WhitneyFamily,
+  trial: WhitneyFamily,
   /// $diff$, applied on the left, where the rows are one grade below the mass.
   row: Option<Matrix>,
   /// $D$, applied on the right, where the columns are.
   col: Option<Matrix>,
 }
 
-impl WhitneyPairElmat {
-  fn new(dim: Dim, mass_grade: ExteriorGrade, row_dif: bool, col_dif: bool) -> Self {
-    let boundary = || unit_boundary_operator(dim, mass_grade);
+impl WhitneyPairing {
+  /// The pairing of `test` against `trial` in the grade-`grade` inner product.
+  pub fn new(
+    dim: impl Into<Dim>,
+    grade: impl Into<ExteriorGrade>,
+    test: WhitneyFamily,
+    trial: WhitneyFamily,
+  ) -> Self {
+    let (dim, grade) = (dim.into(), grade.into());
+    let boundary = || unit_boundary_operator(dim, grade);
     Self {
-      mass: HodgeMassElmat::new(dim, mass_grade),
-      row: row_dif.then(boundary),
-      col: col_dif.then(|| boundary().transpose()),
+      mass: HodgeMassElmat::new(dim, grade),
+      test,
+      trial,
+      row: (test == WhitneyFamily::Difs).then(boundary),
+      col: (trial == WhitneyFamily::Difs).then(|| boundary().transpose()),
     }
+  }
+
+  /// The mass form $(u, v)$,
+  /// $A = [inner(lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I,J in Delta_k (K))$.
+  pub fn mass(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    Self::new(dim, grade, WhitneyFamily::Forms, WhitneyFamily::Forms)
   }
 
   /// The weak mixed exterior derivative $(dif sigma, v)$,
   /// $A = [inner(dif lambda_J, lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_k, J in Delta_(k-1) (K))$.
-  pub fn dif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
-    Self::new(dim.into(), grade.into(), false, true)
+  pub fn dif_trial(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    Self::new(dim, grade, WhitneyFamily::Forms, WhitneyFamily::Difs)
   }
 
   /// The weak mixed codifferential $(u, dif tau)$,
-  /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$.
-  pub fn codif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
-    Self::new(dim.into(), grade.into(), true, false)
+  /// $A = [inner(lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I in Delta_(k-1), J in Delta_k (K))$,
+  /// the transpose of [`dif_trial`](Self::dif_trial) at the same grade.
+  pub fn dif_test(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    Self::new(dim, grade, WhitneyFamily::Difs, WhitneyFamily::Forms)
   }
 
-  /// The $(dif u, dif v)$ form on grade $k$,
-  /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^(k+1) (K))]_(I,J in Delta_k (K))$,
-  /// whose inner product is therefore taken one grade up.
-  pub fn codif_dif(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
-    let (dim, grade) = (dim.into(), grade.into());
-    Self::new(dim, grade + 1, true, true)
-  }
-
-  fn grade_of(&self, side: &Option<Matrix>) -> ExteriorGrade {
-    self.mass.grade - ExteriorGrade::from(usize::from(side.is_some()))
+  /// The stiffness form $(dif u, dif v)$,
+  /// $A = [inner(dif lambda_J, dif lambda_I)_(L^2 Lambda^k (K))]_(I,J in Delta_(k-1) (K))$,
+  /// whose degrees of freedom therefore sit at grade $k-1$.
+  pub fn dif_both(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
+    Self::new(dim, grade, WhitneyFamily::Difs, WhitneyFamily::Difs)
   }
 }
 
-impl ElMatProvider for WhitneyPairElmat {
+impl ElMatProvider for WhitneyPairing {
   fn row_grade(&self) -> ExteriorGrade {
-    self.grade_of(&self.row)
+    self.mass.grade - self.test.grade_offset()
   }
   fn col_grade(&self) -> ExteriorGrade {
-    self.grade_of(&self.col)
+    self.mass.grade - self.trial.grade_offset()
   }
-  fn eval(&self, metric: &Metric, chart: Chart) -> Matrix {
-    let mass = self.mass.eval(metric, chart);
+  fn eval(&self, metric: &Metric, _chart: Chart) -> Matrix {
+    let mass = self.mass.eval(metric);
     let mass = match &self.col {
       Some(dif) => mass * dif,
       None => mass,
@@ -874,7 +908,7 @@ mod test {
         let coefficient = WhitneyInterpolant::new(cochain, &complex);
 
         for grade in dim.range_inclusive() {
-          let exact = HodgeMassElmat::new(dim, grade).eval(&metric, chart);
+          let exact = HodgeMassElmat::new(dim, grade).eval(&metric);
           let quadrature =
             WeightedHodgeMassElmat::new(&coefficient, grade, Some(SimplexQuadRule::degree(dim, 2)))
               .eval(&metric, chart);
@@ -888,9 +922,7 @@ mod test {
   fn hodge_mass0_is_scalar_mass() {
     for dim in (0..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::unit(dim);
-      let refcomplex = Complex::unit(dim);
-      let hodge_mass =
-        HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric(), refchart(&refcomplex));
+      let hodge_mass = HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric());
       let metric = geo.metric();
       let scalar_mass = cell_volume(&metric) * unit_bary_gramian(dim);
       assert_relative_eq!(&hodge_mass, &scalar_mass);
@@ -902,8 +934,7 @@ mod test {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
-    let refcomplex = Complex::unit(dim);
-    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric());
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
       1./6.,1./3.,0.   ;
@@ -913,12 +944,12 @@ mod test {
   }
 
   #[test]
-  fn dif_n2_k1() {
+  fn dif_trial_n2_k1() {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
-    let computed = WhitneyPairElmat::dif(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed = WhitneyPairing::dif_trial(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
@@ -928,12 +959,12 @@ mod test {
   }
 
   #[test]
-  fn codif_n2_k1() {
+  fn dif_test_n2_k1() {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
-    let computed = WhitneyPairElmat::codif(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed = WhitneyPairing::dif_test(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
@@ -943,13 +974,13 @@ mod test {
   }
 
   #[test]
-  fn dif_dif_is_norm_of_difwhitneys() {
+  fn dif_both_is_gramian_of_difwhitneys() {
     for dim in (1..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::unit(dim);
       let refcomplex = Complex::unit(dim);
       for grade in dim.range() {
         let difdif =
-          WhitneyPairElmat::codif_dif(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+          WhitneyPairing::dif_both(dim, grade + 1).eval(&geo.metric(), refchart(&refcomplex));
 
         let difwhitneys: Vec<_> = WhitneyLsf::basis(dim, grade).map(|lsf| lsf.dif()).collect();
         let mut gramian = Matrix::zeros(difwhitneys.len(), difwhitneys.len());

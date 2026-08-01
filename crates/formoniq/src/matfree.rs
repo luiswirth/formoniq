@@ -189,10 +189,7 @@ pub fn jacobi<E: ElMatProvider>(op: &ElementOperator<'_, E>, omega: f64) -> Jaco
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{
-    assemble::assemble_galmat,
-    operators::{HodgeMassElmat, WhitneyPairElmat},
-  };
+  use crate::{assemble::assemble_galmat, operators::WhitneyPairing};
 
   use iterative::{Identity, StopCriterion, krylov::cg};
   use regge::lengths::mesh::MeshLengthsSq;
@@ -234,16 +231,20 @@ mod test {
     for dim in 1..=3 {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
-        agrees(&topology, &geometry, || HodgeMassElmat::new(dim, grade));
+        agrees(&topology, &geometry, || WhitneyPairing::mass(dim, grade));
         if grade >= 1 {
           // Rectangular: a confusion of the row and column incidences would
           // pass unnoticed on the square forms alone.
-          agrees(&topology, &geometry, || WhitneyPairElmat::dif(dim, grade));
-          agrees(&topology, &geometry, || WhitneyPairElmat::codif(dim, grade));
+          agrees(&topology, &geometry, || {
+            WhitneyPairing::dif_trial(dim, grade)
+          });
+          agrees(&topology, &geometry, || {
+            WhitneyPairing::dif_test(dim, grade)
+          });
         }
         if grade < dim {
           agrees(&topology, &geometry, || {
-            WhitneyPairElmat::codif_dif(dim, grade)
+            WhitneyPairing::dif_both(dim, grade + 1)
           });
         }
       }
@@ -257,8 +258,8 @@ mod test {
     // Refinement 2, not 1: an unrefined triangle has as many edges as vertices,
     // and the shapes would coincide for a reason that says nothing.
     let (topology, geometry) = mesh(2, 2);
-    let dif = ElementOperator::new(&topology, &geometry, WhitneyPairElmat::dif(2, 1));
-    let codif = ElementOperator::new(&topology, &geometry, WhitneyPairElmat::codif(2, 1));
+    let dif = ElementOperator::new(&topology, &geometry, WhitneyPairing::dif_trial(2, 1));
+    let codif = ElementOperator::new(&topology, &geometry, WhitneyPairing::dif_test(2, 1));
     assert_ne!(dif.nrows(), dif.ncols());
     assert_ne!(codif.nrows(), codif.ncols());
   }
@@ -271,8 +272,8 @@ mod test {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
         let assembled: CsrMatrix =
-          assemble_galmat(&topology, &geometry, HodgeMassElmat::new(dim, grade));
-        let op = ElementOperator::new(&topology, &geometry, HodgeMassElmat::new(dim, grade));
+          assemble_galmat(&topology, &geometry, WhitneyPairing::mass(dim, grade));
+        let op = ElementOperator::new(&topology, &geometry, WhitneyPairing::mass(dim, grade));
         let expected = Vector::from_fn(op.nrows(), |i, _| {
           assembled.get_entry(i, i).unwrap().into_value()
         });
@@ -293,8 +294,8 @@ mod test {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
         let assembled: CsrMatrix =
-          assemble_galmat(&topology, &geometry, HodgeMassElmat::new(dim, grade));
-        let op = ElementOperator::new(&topology, &geometry, HodgeMassElmat::new(dim, grade));
+          assemble_galmat(&topology, &geometry, WhitneyPairing::mass(dim, grade));
+        let op = ElementOperator::new(&topology, &geometry, WhitneyPairing::mass(dim, grade));
         let b = probe(op.nrows());
         let stop = StopCriterion::rtol(1e-10);
 
@@ -311,7 +312,7 @@ mod test {
   #[test]
   fn the_matrix_free_jacobi_preconditions() {
     let (topology, geometry) = mesh(3, 2);
-    let op = ElementOperator::new(&topology, &geometry, WhitneyPairElmat::codif_dif(3, 0));
+    let op = ElementOperator::new(&topology, &geometry, WhitneyPairing::dif_both(3, 1));
     let b = probe(op.nrows());
     let stop = StopCriterion::rtol(1e-10);
 
