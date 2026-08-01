@@ -108,6 +108,6 @@ fn feec_galmat(nboxes_per_dim: usize) -> Matrix {
   let grid = CartesianGrid::new_unit(DIM, nboxes_per_dim);
   let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
-  let galmat = WhitneyComplex::new(&topology, &metric).codif_dif(Dim::ZERO);
+  let galmat = WhitneyComplex::new(&topology, &metric).dif_both(1);
   (&galmat).into()
 }

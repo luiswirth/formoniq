@@ -24,7 +24,7 @@ use iterative::ApproxInverse;
 ///
 /// The $omega = dif u in Lambda^(k+1)$ space is present in the mathematics and
 /// absent from the data, deliberately. It reaches the block system only through
-/// $codif_dif$, which the complex produces from its element form without ever
+/// `dif_both`, which the complex produces from its element form without ever
 /// building $M_(k+1)$, so holding the up-mass here to contract it away would
 /// assemble the largest skeleton in reach for a matrix no problem asks for: at
 /// grade $0$ in 3D, the mass on the edges to make an operator on the vertices.
@@ -40,22 +40,23 @@ pub struct HodgeBlocks {
   pub mass_sigma: CsrMatrix,
   /// $M_k$, the mass on the $u$ space.
   pub mass_u: CsrMatrix,
-  /// $(D^(k-1))^T M_k$, the weak codifferential
-  /// $angle.l delta u, tau angle.r = angle.l u, dif tau angle.r$, shape
-  /// $n_sigma times n_u$: the $sigma <- u$ block.
+  /// $(D^(k-1))^T M_k$, the grade-$k$ pairing with the exterior derivative on
+  /// the test side, $angle.l u, dif tau angle.r$, shape $n_sigma times n_u$:
+  /// the $sigma <- u$ block, and what a weak codifferential is.
   ///
   /// The opposite block $u <- sigma$ is this transposed, and is not a second
   /// matrix: the mass is symmetric on every signature, so $(D^T M)^T = M D$.
   /// That adjointness is exactly what makes the saddle point symmetric, so a
   /// caller transposing states it where a second field would duplicate it.
-  pub codif_u: CsrMatrix,
-  /// $(D^k)^T M_(k+1) D^k$, the Galerkin matrix of $(dif u, dif v)$, shape
-  /// $n_u^2$. The up-Laplacian $delta dif$, zero at top grade where $dif u = 0$.
+  pub dif_test: CsrMatrix,
+  /// $(D^k)^T M_(k+1) D^k$, the grade-$(k+1)$ pairing with the exterior
+  /// derivative on both sides, $(dif u, dif v)$, shape $n_u^2$: the
+  /// up-Laplacian $delta dif$, zero at top grade where $dif u = 0$.
   ///
   /// Named for the form it is rather than for stiffness, which is a word from
   /// structural mechanics and says nothing here: it is
-  /// [`HilbertComplex::codif_dif`], and one object carries one name.
-  pub codif_dif: CsrMatrix,
+  /// [`HilbertComplex::dif_both`], and one object carries one name.
+  pub dif_both: CsrMatrix,
 }
 impl HodgeBlocks {
   pub fn compute<C: HilbertComplex>(complex: &C, grade: ExteriorGrade) -> Self {
@@ -65,8 +66,8 @@ impl HodgeBlocks {
       n_u: complex.ndofs(grade),
       mass_sigma: complex.mass(grade - 1),
       mass_u: complex.mass(grade),
-      codif_u: complex.codif(grade),
-      codif_dif: complex.codif_dif(grade),
+      dif_test: complex.dif_test(grade),
+      dif_both: complex.dif_both(grade + 1),
     }
   }
 
@@ -83,7 +84,7 @@ impl HodgeBlocks {
     if self.n_sigma == 0 {
       return Vector::zeros(0);
     }
-    DirectInverse::new(self.mass_sigma.clone()).apply(&(&self.codif_u * u))
+    DirectInverse::new(self.mass_sigma.clone()).apply(&(&self.dif_test * u))
   }
 
   /// The mixed Hodge-Laplacian $mat(M_(k-1), -(D^(k-1))^T M_k; M_k D^(k-1), K)$
@@ -92,8 +93,8 @@ impl HodgeBlocks {
   pub fn mixed_hodge_laplacian(&self) -> CooMatrix {
     let coo = |m: &CsrMatrix| CooMatrix::from(m);
     CooMatrix::block(&[
-      &[&coo(&self.mass_sigma), &coo(&self.codif_u).neg()],
-      &[&coo(&self.codif_u.transpose()), &coo(&self.codif_dif)],
+      &[&coo(&self.mass_sigma), &coo(&self.dif_test).neg()],
+      &[&coo(&self.dif_test.transpose()), &coo(&self.dif_both)],
     ])
   }
 }

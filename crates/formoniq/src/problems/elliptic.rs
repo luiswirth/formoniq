@@ -1,4 +1,4 @@
-use crate::{assemble::GalVec, hodge::HodgeBlocks, whitney_complex::HilbertComplex};
+use crate::{galerkin::GalerkinVector, hodge::HodgeBlocks, whitney_complex::HilbertComplex};
 
 use {
   crate::linalg::{
@@ -53,7 +53,7 @@ fn mixed_block_preconditioner<C: HilbertComplex>(
 /// and the $sigma$/$u$ block lengths.
 fn assemble_mixed_kkt<C: HilbertComplex>(
   complex: &C,
-  source_galvec: GalVec,
+  source_galvec: GalerkinVector,
   grade: ExteriorGrade,
   harmonics: &Matrix,
 ) -> (CsrMatrix, Vector, usize, usize) {
@@ -129,7 +129,7 @@ fn assemble_mixed_kkt<C: HilbertComplex>(
 /// [`RelativeWhitneyComplex`]: crate::whitney_complex::RelativeWhitneyComplex
 pub fn solve_source<C: HilbertComplex>(
   complex: &C,
-  source_galvec: GalVec,
+  source_galvec: GalerkinVector,
   grade: impl Into<ExteriorGrade>,
 ) -> Result<(Cochain, Cochain, Cochain), EigenError> {
   let grade = grade.into();

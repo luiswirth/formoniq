@@ -2,8 +2,8 @@
 //! vector field.
 
 use crate::{
-  assemble::assemble_galmat,
-  operators::{LieDerivativeElmat, WhitneyPairing},
+  galerkin::BilinearForm,
+  operators::{LieDerivative, WhitneyPairing},
   time::{LinearIrk, Tableau},
 };
 
@@ -28,22 +28,15 @@ pub struct Transport<'a, V> {
 /// transport system $M dot(u) = -A u$.
 ///
 /// $A$ is the central discretization: conservative, and dispersive for it.
-/// See [`LieDerivativeElmat`].
+/// See [`LieDerivative`].
 pub fn assemble_transport<V: Sync + Section>(
   topology: &Complex,
   geometry: &MeshLengthsSq,
   transport: &Transport<V>,
 ) -> (CsrMatrix, CsrMatrix) {
-  let mass = assemble_galmat(
-    topology,
-    geometry,
-    WhitneyPairing::mass(topology.dim(), transport.grade),
-  );
-  let lie = assemble_galmat(
-    topology,
-    geometry,
-    LieDerivativeElmat::new(transport.velocity, transport.grade, transport.quad_degree),
-  );
+  let mass = WhitneyPairing::mass(topology.dim(), transport.grade).assemble(topology, geometry);
+  let lie = LieDerivative::new(transport.velocity, transport.grade, transport.quad_degree)
+    .assemble(topology, geometry);
   (mass, lie)
 }
 

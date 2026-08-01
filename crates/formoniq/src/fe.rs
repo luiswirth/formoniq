@@ -36,8 +36,8 @@ use {
 };
 
 use crate::{
-  assemble::assemble_galvec,
-  operators::SourceElVec,
+  galerkin::LinearForm,
+  operators::SourceForm,
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 
@@ -92,11 +92,7 @@ pub fn l2_projection<F: Sync + Section>(
 ) -> Cochain {
   let grade = field.grade();
   let mass = whitney.mass(grade);
-  let load: Vector = assemble_galvec(
-    whitney.topology(),
-    whitney.geometry(),
-    SourceElVec::new(field, qr),
-  );
+  let load: Vector = SourceForm::new(field, qr).assemble(whitney.topology(), whitney.geometry());
 
   // The mass is SPD only on a Riemannian geometry. There conjugate gradients
   // solves it far faster than a factorization, the mass is well conditioned

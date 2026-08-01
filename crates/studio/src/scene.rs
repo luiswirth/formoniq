@@ -626,7 +626,7 @@ impl Scene {
   /// The velocity is exactly divergence-free with
   /// single-valued facet flux, so grade 0 and top grade are conservative on any
   /// mesh. The scheme is central and dispersive
-  /// ([`LieDerivativeElmat`](formoniq::operators::LieDerivativeElmat)), so what
+  /// ([`LieDerivative`](formoniq::operators::LieDerivative)), so what
   /// the trajectory shows next to the transport is the oscillation that costs.
   pub fn advection(
     topology: Complex,
@@ -1186,14 +1186,10 @@ fn project_onto(
   topology: &Complex,
   metric: &MeshLengthsSq,
 ) -> Option<Cochain> {
-  use formoniq::{assemble::assemble_galmat, operators::WhitneyPairing};
+  use formoniq::{galerkin::BilinearForm, operators::WhitneyPairing};
 
   let grade = reference.grade();
-  let mass = assemble_galmat(
-    topology,
-    metric,
-    WhitneyPairing::mass(topology.dim(), grade),
-  );
+  let mass = WhitneyPairing::mass(topology.dim(), grade).assemble(topology, metric);
   let weighted = &mass * space;
   let gram = space.transpose() * &weighted;
   let rhs = weighted.transpose() * reference.coeffs();

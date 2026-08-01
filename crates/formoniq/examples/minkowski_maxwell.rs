@@ -58,9 +58,9 @@ extern crate nalgebra as na;
 use coorder::Coord;
 use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::{
-  assemble::assemble_galvec,
   fe::fe_l2_error,
-  operators::SourceElVec,
+  galerkin::LinearForm,
+  operators::SourceForm,
   problems::dirac::{MixedField, solve_dirac_source},
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
@@ -198,11 +198,8 @@ fn convergence(dim: usize, nsubs: &[usize]) {
             let section = source.pullback_on(&topology, &euclidean);
             Cochain::new(
               1,
-              assemble_galvec(
-                &topology,
-                &regge,
-                SourceElVec::new(&section, Some(SimplexQuadRule::degree(dim, 3))),
-              ),
+              SourceForm::new(&section, Some(SimplexQuadRule::degree(dim, 3)))
+                .assemble(&topology, &regge),
             )
           } else {
             Cochain::new(k, Vector::zeros(whitney.ndofs(k)))

@@ -37,7 +37,7 @@ impl WaveState {
     let sigma = hb.codif(&u);
     0.5
       * (quadratic_form_sparse(&hb.mass_sigma, &sigma)
-        + quadratic_form_sparse(&hb.codif_dif, &u)
+        + quadratic_form_sparse(&hb.dif_both, &u)
         + quadratic_form_sparse(&hb.mass_u, &w))
   }
 }
@@ -90,11 +90,11 @@ pub fn solve_wave<C: HilbertComplex>(
     &[&z(nu, ns), &z(nu, nu), &mass_u],
   ]));
   let op_block = CsrMatrix::from(&CooMatrix::block(&[
-    &[&coo(&(-&hb.mass_sigma)), &coo(&hb.codif_u), &z(ns, nu)],
+    &[&coo(&(-&hb.mass_sigma)), &coo(&hb.dif_test), &z(ns, nu)],
     &[&z(nu, ns), &z(nu, nu), &mass_u],
     &[
-      &coo(&(-&hb.codif_u.transpose())),
-      &coo(&(-&hb.codif_dif)),
+      &coo(&(-&hb.dif_test.transpose())),
+      &coo(&(-&hb.dif_both)),
       &z(nu, nu),
     ],
   ]));
