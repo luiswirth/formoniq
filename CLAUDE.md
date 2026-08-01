@@ -786,6 +786,14 @@ where applying costs their product times their sum.
 Exploiting sparsity in a map *into* the product is a different matter
 and belongs to whoever owns the map.
 
+**A constructor states its hypotheses, a predicate decides them.**
+`new` builds and checks nothing, its doc naming the hypotheses and where they come from.
+`is_valid` is their conjunction, public, each named hypothesis a predicate of its own.
+`new_checked` is `is_valid().then_some(this)`, so holding the result is the proof.
+Never under `cfg(debug_assertions)`:
+a constructor whose cost and panics depend on the build profile is the worse trap.
+A shape mismatch is not a hypothesis and stays an assert.
+
 **One datum, derived not stored.**
 Where one value determines another, the second is computed at the point of use
 and never held beside the first:
