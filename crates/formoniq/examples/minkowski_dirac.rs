@@ -299,7 +299,8 @@ fn convergence(dim: usize, nsubs: &[usize]) {
       loads.push(Cochain::new(
         k,
         SourceForm::new(&source_section, Some(SimplexQuadRule::degree(dim, 3)))
-          .assemble(&topology, &regge),
+          .assemble(&topology, &regge)
+          .into_coeffs(),
       ));
       exact_sections.push(exact);
     }

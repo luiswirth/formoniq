@@ -92,6 +92,7 @@ pub fn solve_heat<C: HilbertComplex>(
 #[cfg(test)]
 mod test {
   use super::*;
+  use crate::galerkin::GalerkinVector;
   use crate::linalg::quadratic_form_sparse;
   use crate::problems::elliptic::solve_source;
   use crate::whitney_complex::WhitneyComplex;
@@ -159,7 +160,7 @@ mod test {
     let source = Cochain::new(grade, &inclusion * &f_rel);
 
     let mass_rel = relative.mass(grade);
-    let galvec = &inclusion * (&mass_rel * &f_rel);
+    let galvec = GalerkinVector::new(grade, &inclusion * (&mass_rel * &f_rel));
     let (_sigma, u_static, _p) = solve_source(&relative, galvec, grade).expect("static solve");
 
     // Radau IIA's fixed point is exactly the steady state, so a large step

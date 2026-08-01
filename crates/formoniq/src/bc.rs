@@ -31,7 +31,7 @@
 use iterative::ApproxInverse;
 
 use crate::{
-  galerkin::LinearForm,
+  galerkin::{GalerkinVector, LinearForm},
   operators::SourceForm,
   whitney_complex::{BoundaryWhitneyComplex, HilbertComplex, RelativeWhitneyComplex},
 };
@@ -84,8 +84,11 @@ impl LiftedSystem {
     }
   }
 
-  pub fn solve(&self, rhs: &Vector) -> Cochain {
-    let rhs_relative = self.inclusion.transpose() * (rhs - &self.system * &self.lift);
+  /// The right-hand side is a functional on the unconstrained space; the
+  /// solution is an element of it. The lifting term $A hat(g)$ is a functional
+  /// too, which is why it may be subtracted.
+  pub fn solve(&self, rhs: &GalerkinVector) -> Cochain {
+    let rhs_relative = self.inclusion.transpose() * (rhs.coeffs() - &self.system * &self.lift);
     let solution_relative = self.inverse.apply(&rhs_relative);
     Cochain::new(self.grade, &self.inclusion * solution_relative + &self.lift)
   }
@@ -97,7 +100,7 @@ pub fn solve_with_essential_bc(
   relative: &RelativeWhitneyComplex,
   boundary: &BoundaryWhitneyComplex,
   system: CsrMatrix,
-  rhs: &Vector,
+  rhs: &GalerkinVector,
   boundary_values: &Cochain,
 ) -> Cochain {
   LiftedSystem::new(relative, boundary, system, boundary_values).solve(rhs)
@@ -123,10 +126,17 @@ pub fn neumann_load(
   boundary: &BoundaryWhitneyComplex,
   data: &(impl Section + Sync),
   qr: Option<SimplexQuadRule>,
-) -> Vector {
+) -> GalerkinVector {
   assert_eq!(data.dim(), boundary.topology().dim());
+  let grade = data.grade();
   let load = SourceForm::new(data, qr).assemble(boundary.topology(), boundary.geometry());
-  boundary.trace(data.grade()).transpose() * load
+  // A functional on the boundary space, pulled back along the trace to one on
+  // the parent: $"tr"^T$ is the dual of the restriction, which is why the load
+  // travels the opposite way to a cochain.
+  GalerkinVector::new(
+    grade,
+    boundary.trace(grade).transpose() * load.into_coeffs(),
+  )
 }
 
 /// The boundary mass matrix $"tr"^T M_(diff K)^k "tr"$ of the bilinear form

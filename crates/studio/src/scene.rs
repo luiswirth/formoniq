@@ -957,6 +957,7 @@ pub(crate) fn hodge_decompose(
   input: &Cochain,
 ) -> Result<HodgeParts, formoniq::linalg::eigen::EigenError> {
   use formoniq::{
+    galerkin::GalerkinVector,
     problems::elliptic::{solve_harmonics, solve_source},
     whitney_complex::{HilbertComplex, WhitneyComplex},
   };
@@ -968,7 +969,7 @@ pub(crate) fn hodge_decompose(
   // The load vector of the source problem is the Riesz representation of the
   // functional $angle.l omega, dot.c angle.r$, i.e. $M_k omega$.
   let mass = complex.mass(grade);
-  let source_galvec = &mass * input.coeffs();
+  let source_galvec = GalerkinVector::new(grade, &mass * input.coeffs());
 
   let (sigma, _u, p) = solve_source(&complex, source_galvec, grade)?;
   let harmonics = solve_harmonics(&complex, grade)?;

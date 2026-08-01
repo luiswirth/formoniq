@@ -14,6 +14,7 @@
 //! $A = sum_K P_K^top A_K P_K$ of the first over all cells, with $P_K$ the
 //! local-to-global map the cell's faces already enumerate.
 
+use derham::Cochain;
 use metric::Metric;
 use multialgebra::ExteriorGrade;
 use regge::lengths::mesh::MeshLengthsSq;
@@ -186,7 +187,93 @@ pub fn assemble_matrix(
   GalerkinMatrix::from(&coo)
 }
 
-pub type GalerkinVector = Vector;
+/// An assembled linear form: the functional $ell in (cal(W) Lambda^k)^*$ whose
+/// coefficients are its values on the basis, $ell_sigma = ell(lambda_sigma)$.
+///
+/// Not a [`Cochain`], and the distinction is the reason this is a type rather
+/// than a bare vector. Both are one number per $k$-simplex, and nothing about
+/// the stored coefficients tells them apart, but they are values of different
+/// integrals: a cochain is $integral_sigma f$, the de Rham map, integration
+/// over the simplex itself, topological and metric-free; this is
+/// $integral_K inner(f, lambda_sigma) vol$, an $L^2$ pairing against a shape
+/// function, which needs the metric. A cochain *is* a discrete form; this is a
+/// functional *on* them.
+///
+/// Reading one as the other composes two different identifications, the
+/// analytic $M$ and the topological de Rham map, and the composite is
+/// meaningless: it reads a load vector as a homology class.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GalerkinVector {
+  grade: ExteriorGrade,
+  coeffs: Vector,
+}
+
+impl GalerkinVector {
+  pub fn new(grade: impl Into<ExteriorGrade>, coeffs: Vector) -> Self {
+    Self {
+      grade: grade.into(),
+      coeffs,
+    }
+  }
+  /// The grade of the space this is a functional on.
+  pub fn grade(&self) -> ExteriorGrade {
+    self.grade
+  }
+  pub fn coeffs(&self) -> &Vector {
+    &self.coeffs
+  }
+  /// The coefficients, for the linear algebra a solve is performed in, where
+  /// the grading no longer survives: a block system is one operator over a sum
+  /// of graded spaces.
+  pub fn into_coeffs(self) -> Vector {
+    self.coeffs
+  }
+
+  /// $ell(u)$, the functional evaluated at a discrete form: the duality
+  /// pairing, and the reason a load vector exists.
+  ///
+  /// Metric-free, as a duality pairing is. The metric was already spent in
+  /// assembling the functional; pairing it against an element of the space it
+  /// is a functional on spends nothing further.
+  ///
+  /// # Panics
+  /// If the grades disagree, or the cochain is not of this complex.
+  pub fn pair(&self, u: &Cochain) -> f64 {
+    assert_eq!(
+      self.grade,
+      u.grade(),
+      "a functional pairs with the space it is a functional on"
+    );
+    assert_eq!(
+      self.coeffs.len(),
+      u.coeffs().len(),
+      "a functional pairs over the degrees of freedom it was assembled on"
+    );
+    self.coeffs.dot(u.coeffs())
+  }
+}
+
+/// Functionals on one space add, which is what makes a right-hand side the sum
+/// of a source load and a natural boundary load.
+///
+/// # Panics
+/// If the grades disagree.
+impl std::ops::AddAssign<GalerkinVector> for GalerkinVector {
+  fn add_assign(&mut self, rhs: GalerkinVector) {
+    assert_eq!(
+      self.grade, rhs.grade,
+      "functionals add within one graded space"
+    );
+    self.coeffs += rhs.coeffs;
+  }
+}
+impl std::ops::Add<GalerkinVector> for GalerkinVector {
+  type Output = GalerkinVector;
+  fn add(mut self, rhs: GalerkinVector) -> GalerkinVector {
+    self += rhs;
+    self
+  }
+}
 /// Assembly algorithm for the Galerkin vector, reached as
 /// [`LinearForm::assemble`].
 pub fn assemble_vector(
@@ -221,7 +308,7 @@ pub fn assemble_vector(
   for (irow, val) in entries {
     galvec[irow] += val;
   }
-  galvec
+  GalerkinVector::new(grade, galvec)
 }
 
 #[cfg(test)]
@@ -233,6 +320,55 @@ mod test {
   use simplicial::linalg::Matrix;
 
   use regge::{lengths::CellGramians, mesher::cartesian::CartesianGrid};
+
+  /// The defining law of an assembled linear form: its pairing against a
+  /// discrete form is the form evaluated there, $ell(u) = sum_sigma u_sigma
+  /// ell(lambda_sigma)$, by linearity in the basis.
+  ///
+  /// Checked against the $L^2$ pairing it represents: with the source itself a
+  /// Whitney form $lambda_tau$, the load is the column $tau$ of the mass, so
+  /// pairing it with $u$ is $u^top M e_tau$, the $L^2$ inner product of $u$
+  /// with $lambda_tau$. That is the statement that a Galerkin vector is the
+  /// $L^2$ functional and not the de Rham cochain: the two agree nowhere, and
+  /// a swept comparison against $u_tau$ would fail.
+  #[test]
+  fn a_load_pairs_as_the_l2_functional_it_represents() {
+    use crate::operators::SourceForm;
+    use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
+    use simplicial::linalg::Vector;
+
+    for dim in (1..=3).map(Dim::from) {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths = coords.to_edge_lengths_sq(&topology);
+
+      for grade in dim.range_inclusive() {
+        let ndofs = topology.nsimplices(grade);
+        let u = Cochain::new(grade, Vector::from_fn(ndofs, |i, _| ((i % 7) as f64) - 3.0));
+        // The source is the Whitney form of a fixed basis cochain, so the load
+        // it induces is a known column of the mass matrix.
+        let tau = ndofs / 2;
+        let basis = Cochain::new(grade, Vector::from_fn(ndofs, |i, _| f64::from(i == tau)));
+        let field = WhitneyInterpolant::new(basis.clone(), &topology);
+
+        let qr = simplicial::atlas::SimplexQuadRule::degree(dim, 4);
+        let load = SourceForm::new(&field, Some(qr)).assemble(&topology, &lengths);
+        let mass = WhitneyPairing::mass(dim, grade).assemble(&topology, &lengths);
+
+        let paired = load.pair(&u);
+        let expected = u.coeffs().dot(&(&mass * basis.coeffs()));
+        approx::assert_relative_eq!(paired, expected, epsilon = 1e-9);
+
+        // The same field read the other way, by the de Rham map, is the basis
+        // cochain itself. The load is the mass column instead, so the two
+        // differ, which is what makes the law above a statement about which
+        // integral was taken rather than about coefficients.
+        assert!(
+          (load.coeffs() - basis.coeffs()).norm() > 1e-9,
+          "dim={dim} grade={grade}: the L2 load coincided with the de Rham cochain"
+        );
+      }
+    }
+  }
 
   /// Assembly consumes the edge-length primitive, so representation
   /// independence is a property of the conversions into it: routing a
