@@ -165,7 +165,7 @@ fn relative_inclusion_is_cochain_map() {
 #[test]
 fn lifted_homogeneous_dirichlet_is_relative_solve() {
   use derham::section::CoordFieldExt;
-  use formoniq::{assemble, bc, linalg::faer::FaerCholesky, operators::SourceElVec};
+  use formoniq::{bc, galerkin::LinearForm, linalg::faer::FaerCholesky, operators::SourceForm};
   use glatt::field::DiffFormClosure;
   use simplicial::linalg::Vector;
 
@@ -177,11 +177,11 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   let source = DiffFormClosure::constant_scalar(1.0, dim);
   let source = source.pullback_on(&topology, &coords);
-  let galvec = assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, None));
+  let galvec = SourceForm::new(&source, None).assemble(&topology, &metric);
 
   // Affine-lifting path with zero boundary values.
   let zero_values = Cochain::new(Dim::ZERO, Vector::zeros(boundary.ndofs(Dim::ZERO)));
-  let laplace = whitney.codif_dif(Dim::ZERO);
+  let laplace = whitney.dif_both(1);
   let sol_lifted = bc::solve_with_essential_bc(
     &whitney.relative(),
     &boundary,
@@ -192,7 +192,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
 
   // Direct solve on C^0(K, dK), extended by zero.
   let relative: RelativeWhitneyComplex = whitney.relative();
-  let laplace_relative = relative.codif_dif(Dim::ZERO);
+  let laplace_relative = relative.dif_both(1);
   let rhs_relative = relative.restrict(&Cochain::new(Dim::ZERO, galvec));
   let sol_relative = FaerCholesky::new(laplace_relative).solve(rhs_relative.coeffs());
   let sol_relative = relative.extend_by_zero(&Cochain::new(Dim::ZERO, sol_relative));

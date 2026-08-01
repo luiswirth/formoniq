@@ -31,8 +31,8 @@
 use iterative::ApproxInverse;
 
 use crate::{
-  assemble::assemble_galvec,
-  operators::SourceElVec,
+  galerkin::LinearForm,
+  operators::SourceForm,
   whitney_complex::{BoundaryWhitneyComplex, HilbertComplex, RelativeWhitneyComplex},
 };
 
@@ -125,8 +125,7 @@ pub fn neumann_load(
   qr: Option<SimplexQuadRule>,
 ) -> Vector {
   assert_eq!(data.dim(), boundary.topology().dim());
-  let elvec = SourceElVec::new(data, qr);
-  let load = assemble_galvec(boundary.topology(), boundary.geometry(), elvec);
+  let load = SourceForm::new(data, qr).assemble(boundary.topology(), boundary.geometry());
   boundary.trace(data.grade()).transpose() * load
 }
 

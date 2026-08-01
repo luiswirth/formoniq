@@ -3,9 +3,9 @@
 extern crate nalgebra as na;
 extern crate nalgebra_sparse as nas;
 
-pub mod assemble;
 pub mod bc;
 pub mod fe;
+pub mod galerkin;
 pub mod harmonic;
 pub mod hodge;
 pub mod hx;

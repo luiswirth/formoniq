@@ -1,12 +1,82 @@
-use crate::operators::{ElMatProvider, ElVecProvider};
+//! The Galerkin discretization: a form, a finite-dimensional subspace, and the
+//! matrix the first becomes on the second.
+//!
+//! A [`BilinearForm`] is the continuous object $b(v, u)$; Galerkin is what
+//! happens when it is restricted to a subspace, $A_h = i^* b i$, so the word
+//! names the passage and the matrix, never the form. The restriction is
+//! metric-free and purely a change of what the arguments range over, which is
+//! why the same form serves a cell, a mesh, and a mesh with boundary conditions
+//! imposed.
+//!
+//! A form is evaluated at two scopes, and they are the same object read
+//! twice: [`BilinearForm::element`] on one cell in its own chart, and
+//! [`BilinearForm::assemble`] over the whole mesh. Assembly is the sum
+//! $A = sum_K P_K^top A_K P_K$ of the first over all cells, with $P_K$ the
+//! local-to-global map the cell's faces already enumerate.
 
+use metric::Metric;
+use multialgebra::ExteriorGrade;
 use regge::lengths::mesh::MeshLengthsSq;
 use simplicial::{
-  linalg::{CooMatrix, CsrMatrix, Vector},
+  atlas::Chart,
+  linalg::{CooMatrix, CsrMatrix, Matrix, Vector},
   topology::complex::Complex,
 };
 
 use rayon::prelude::*;
+
+/// A bilinear form $b(v, u)$ on the discrete de Rham complex, with $v$ the test
+/// argument and $u$ the trial one.
+///
+/// The two arguments stand on the left and the right of the form, and the
+/// matrix keeps them there: $A_(sigma tau) = b(v_sigma, u_tau)$, so the test
+/// side indexes rows, the trial side columns, and the pairing is $v^top A u$
+/// with nothing transposed anywhere. A form whose test side carries the
+/// exterior derivative therefore has fewer rows than columns by one grade,
+/// which is $angle.l u, dif tau angle.r$ read literally.
+///
+/// The two methods are one form at two scopes, local and global. An
+/// implementor writes the local one, on a single cell in that cell's own
+/// chart, and assembly over the mesh follows from it.
+pub trait BilinearForm: Sync {
+  /// The grade of the test argument, hence of the rows.
+  fn test_grade(&self) -> ExteriorGrade;
+  /// The grade of the trial argument, hence of the columns.
+  fn trial_grade(&self) -> ExteriorGrade;
+
+  /// The form on one cell, in that cell's chart: the element matrix.
+  fn element(&self, metric: &Metric, chart: Chart) -> Matrix;
+
+  /// The form on the whole mesh: the Galerkin matrix.
+  fn assemble(&self, topology: &Complex, geometry: &MeshLengthsSq) -> GalerkinMatrix
+  where
+    Self: Sized,
+  {
+    assemble_matrix(topology, geometry, self)
+  }
+}
+
+/// A linear form $ell(v)$ on the discrete de Rham complex: a [`BilinearForm`]
+/// with one argument fewer, and the one it keeps is the test argument.
+///
+/// A functional, so its Galerkin realization is a vector of the values it takes
+/// on the basis, $ell_sigma = ell(v_sigma)$, indexed exactly as the rows of a
+/// bilinear form are.
+pub trait LinearForm: Sync {
+  /// The grade of the test argument, hence of the entries.
+  fn test_grade(&self) -> ExteriorGrade;
+
+  /// The form on one cell, in that cell's chart: the element vector.
+  fn element(&self, metric: &Metric, chart: Chart) -> Vector;
+
+  /// The form on the whole mesh: the Galerkin vector.
+  fn assemble(&self, topology: &Complex, geometry: &MeshLengthsSq) -> GalerkinVector
+  where
+    Self: Sized,
+  {
+    assemble_vector(topology, geometry, self)
+  }
+}
 
 /// A coordinate-format matrix under construction: the three parallel arrays
 /// [`CooMatrix`] is built from, accumulated rather than transposed into.
@@ -51,8 +121,12 @@ impl Triplets {
 /// those is a compressed-format operation. Handing back the triplet container
 /// would export the assembly's own intermediate and leave the same conversion
 /// at every call site.
-pub type GalMat = CsrMatrix;
-/// Assembly algorithm for the Galerkin Matrix.
+pub type GalerkinMatrix = CsrMatrix;
+/// Assembly algorithm for the Galerkin matrix, the sum
+/// $A = sum_K P_K^top A_K P_K$ of a form's element matrices.
+///
+/// Reached as [`BilinearForm::assemble`]; a free function because it is the
+/// algorithm rather than the form's own business.
 ///
 /// The local-to-global map is streamed per cell rather than taken from a
 /// materialized [`FaceIncidence`](simplicial::topology::incidence::FaceIncidence).
@@ -60,16 +134,16 @@ pub type GalMat = CsrMatrix;
 /// where that type's reason to exist is holding the converse alongside it: the
 /// gather of [`crate::matfree`] is what needs both. Building it here costs
 /// about twice the assembly time on a 3D grid of 80k cells and buys nothing.
-pub fn assemble_galmat(
+pub fn assemble_matrix(
   topology: &Complex,
   geometry: &MeshLengthsSq,
-  elmat: impl ElMatProvider,
-) -> GalMat {
-  let row_grade = elmat.row_grade();
-  let col_grade = elmat.col_grade();
+  form: &impl BilinearForm,
+) -> GalerkinMatrix {
+  let test_grade = form.test_grade();
+  let trial_grade = form.trial_grade();
 
-  let nsimps_row = topology.skeleton(row_grade).len();
-  let nsimps_col = topology.skeleton(col_grade).len();
+  let nsimps_test = topology.skeleton(test_grade).len();
+  let nsimps_trial = topology.skeleton(trial_grade).len();
 
   let cells = topology.cells();
   // `fold`/`reduce`, so each thread scatters straight into the three parallel
@@ -86,14 +160,14 @@ pub fn assemble_galmat(
     .handle_par_iter()
     .fold(Triplets::default, |mut acc, cell| {
       let metric = geometry.cell_metric(cell);
-      let elmat = elmat.eval(&metric, cell);
+      let elmat = form.element(&metric, cell);
 
-      let row_subs: Vec<_> = cell.faces(row_grade).collect();
-      let col_subs: Vec<_> = cell.faces(col_grade).collect();
+      let test_subs: Vec<_> = cell.faces(test_grade).collect();
+      let trial_subs: Vec<_> = cell.faces(trial_grade).collect();
 
-      acc.reserve(row_subs.len() * col_subs.len());
-      for (ilocal, iglobal) in row_subs.iter().enumerate() {
-        for (jlocal, jglobal) in col_subs.iter().enumerate() {
+      acc.reserve(test_subs.len() * trial_subs.len());
+      for (ilocal, iglobal) in test_subs.iter().enumerate() {
+        for (jlocal, jglobal) in trial_subs.iter().enumerate() {
           let val = elmat[(ilocal, jlocal)];
           if val != 0.0 {
             acc.push(iglobal.kidx(), jglobal.kidx(), val);
@@ -106,20 +180,21 @@ pub fn assemble_galmat(
     .reduce(Triplets::default, Triplets::concat)
     .into_arrays();
 
-  let coo = CooMatrix::try_from_triplets(nsimps_row, nsimps_col, rows, cols, values).unwrap();
+  let coo = CooMatrix::try_from_triplets(nsimps_test, nsimps_trial, rows, cols, values).unwrap();
   // The one place the triplets are summed and compressed, rather than once per
   // caller. Duplicate entries at a shared face add here, which is the scatter.
-  GalMat::from(&coo)
+  GalerkinMatrix::from(&coo)
 }
 
-pub type GalVec = Vector;
-/// Assembly algorithm for the Galerkin Vector.
-pub fn assemble_galvec(
+pub type GalerkinVector = Vector;
+/// Assembly algorithm for the Galerkin vector, reached as
+/// [`LinearForm::assemble`].
+pub fn assemble_vector(
   topology: &Complex,
   geometry: &MeshLengthsSq,
-  elvec: impl ElVecProvider,
-) -> GalVec {
-  let grade = elvec.grade();
+  form: &impl LinearForm,
+) -> GalerkinVector {
+  let grade = form.test_grade();
   let nsimps = topology.skeleton(grade).len();
 
   let cells = topology.cells();
@@ -127,7 +202,7 @@ pub fn assemble_galvec(
     .handle_par_iter()
     .flat_map_iter(|cell| {
       let metric = geometry.cell_metric(cell);
-      let elvec = elvec.eval(&metric, cell);
+      let elvec = form.element(&metric, cell);
 
       let subs: Vec<_> = cell.faces(grade).collect();
 
@@ -173,16 +248,10 @@ mod test {
     let round_trip = CellGramians::from_lengths(&topology, &lengths).to_edge_lengths_sq(&topology);
 
     for grade in dim.range_inclusive() {
-      let from_lengths = Matrix::from(&assemble_galmat(
-        &topology,
-        &lengths,
-        WhitneyPairing::mass(dim, grade),
-      ));
-      let from_round_trip = Matrix::from(&assemble_galmat(
-        &topology,
-        &round_trip,
-        WhitneyPairing::mass(dim, grade),
-      ));
+      let from_lengths =
+        Matrix::from(&WhitneyPairing::mass(dim, grade).assemble(&topology, &lengths));
+      let from_round_trip =
+        Matrix::from(&WhitneyPairing::mass(dim, grade).assemble(&topology, &round_trip));
       approx::assert_relative_eq!(from_lengths, from_round_trip, epsilon = 1e-12);
     }
   }
@@ -209,16 +278,8 @@ mod test {
         .to_edge_lengths_sq(&topology);
 
       for grade in dim.range_inclusive() {
-        let a = Matrix::from(&assemble_galmat(
-          &topology,
-          &from_coords,
-          WhitneyPairing::mass(dim, grade),
-        ));
-        let b = Matrix::from(&assemble_galmat(
-          &topology,
-          &from_gramians,
-          WhitneyPairing::mass(dim, grade),
-        ));
+        let a = Matrix::from(&WhitneyPairing::mass(dim, grade).assemble(&topology, &from_coords));
+        let b = Matrix::from(&WhitneyPairing::mass(dim, grade).assemble(&topology, &from_gramians));
         approx::assert_relative_eq!(a, b, epsilon = 1e-12);
       }
     }

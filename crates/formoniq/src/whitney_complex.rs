@@ -11,7 +11,7 @@
 //! the honest structural difference, not a separate code path.
 
 use crate::{
-  assemble::{GalMat, assemble_galmat},
+  galerkin::{BilinearForm, GalerkinMatrix},
   linalg::faer::FaerLu,
   operators::WhitneyPairing,
 };
@@ -45,24 +45,25 @@ use std::collections::HashSet;
 /// (the identity for the full complex) is what lets the solver take its source
 /// and return its solution in the ambient $cal(W) Lambda^k$ regardless: it
 /// restricts the right-hand side by $E^T$ and extends the solution by $E$.
+///
+/// The four pairings of the complex are provided, not required: they are one
+/// [`WhitneyPairing`] each, put through [`Self::assemble`], and that one method
+/// is where an implementor says which space it is. They carry the same four
+/// names as the local forms and the same grade convention, the grade of the
+/// inner product, so a block reads identically whether it is wanted on one
+/// cell, on the mesh, or on the mesh with boundary conditions imposed.
 pub trait HilbertComplex {
   fn dim(&self) -> Dim;
   fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize;
-  fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat;
   fn dif(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix;
-  fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat;
 
-  /// Galerkin matrix of the weak codifferential
-  /// $angle.l delta u, tau angle.r = angle.l u, dif tau angle.r$, that is
-  /// $(D^(k-1))^T M_k$, shape $"ndofs"(k-1) times "ndofs"(k)$.
+  /// The Galerkin matrix of a bilinear form *on this complex*, which is the
+  /// one thing distinguishing an implementor from any other.
   ///
-  /// The mixed block of every problem posed around grade $k$, and the fourth of
-  /// the four pairings of a Whitney family against another: both sides
-  /// undifferentiated is [`Self::mass`], both differentiated is
-  /// [`Self::codif_dif`], and this is one of each. Weak in the same sense
-  /// `codif_dif` is: the mass inverse that would make it the codifferential
-  /// itself is left to whoever solves with it, so this stays sparse.
-  fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat;
+  /// The form knows nothing of boundary conditions; a complex is the subspace
+  /// it is restricted to, so this is the $i^* b i$ of the Galerkin
+  /// discretization with $i$ this complex's [`inclusion`](Self::inclusion).
+  fn assemble(&self, form: &impl BilinearForm) -> GalerkinMatrix;
 
   /// The dimension of the discrete harmonic space $cal(H)^k$: the Betti number
   /// of the complex by the discrete Hodge theorem ($b_k (K)$ for the full
@@ -102,6 +103,73 @@ pub trait HilbertComplex {
   /// boundary. The identity on the full complex.
   fn inclusion(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix;
 
+  /// A [`WhitneyPairing`] on this complex, with the degenerate grades answered
+  /// by the correctly shaped empty matrix rather than by an empty assembly.
+  ///
+  /// Total in grade, and once here rather than in each of the four: a pairing
+  /// whose test or trial space is trivial has no entries to assemble, which
+  /// happens past either end of the complex and at the ends themselves, where a
+  /// differentiated side sits one grade outside.
+  fn pairing(&self, form: &WhitneyPairing) -> GalerkinMatrix {
+    let (rows, cols) = (
+      self.ndofs(form.test_grade()),
+      self.ndofs(form.trial_grade()),
+    );
+    if rows == 0 || cols == 0 {
+      return GalerkinMatrix::zeros(rows, cols);
+    }
+    self.assemble(form)
+  }
+
+  /// Galerkin matrix of the $L^2 Lambda^k$ inner product $(u, v)$,
+  ///
+  /// $M_k = [inner(lambda_tau, lambda_sigma)_(L^2 Lambda^k)]_(sigma tau)$.
+  ///
+  /// Symmetric positive definite on a Riemannian geometry, symmetric
+  /// non-degenerate on any other.
+  fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalerkinMatrix {
+    self.pairing(&WhitneyPairing::mass(self.dim(), grade))
+  }
+
+  /// Galerkin matrix of $(dif u, v)_(L^2 Lambda^k)$, that is $M_k D^(k-1)$,
+  /// shape $"ndofs"(k) times "ndofs"(k-1)$: the exterior derivative on the
+  /// trial side.
+  ///
+  /// The transpose of [`dif_test`](Self::dif_test) at the same grade, since the
+  /// mass is symmetric on every signature. That adjointness is what makes the
+  /// mixed saddle point symmetric.
+  fn dif_trial(&self, grade: impl Into<ExteriorGrade>) -> GalerkinMatrix {
+    self.pairing(&WhitneyPairing::dif_trial(self.dim(), grade))
+  }
+
+  /// Galerkin matrix of $(u, dif tau)_(L^2 Lambda^k)$, that is
+  /// $(D^(k-1))^T M_k$, shape $"ndofs"(k-1) times "ndofs"(k)$: the exterior
+  /// derivative on the test side.
+  ///
+  /// This is what a weak codifferential is, and it is not the codifferential:
+  /// the mass inverse that would make it one is left to whoever solves with it
+  /// ([`codif_cochain`](Self::codif_cochain)), which is exactly what keeps this
+  /// sparse.
+  fn dif_test(&self, grade: impl Into<ExteriorGrade>) -> GalerkinMatrix {
+    self.pairing(&WhitneyPairing::dif_test(self.dim(), grade))
+  }
+
+  /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^k)$, that is
+  /// $(D^(k-1))^T M_k D^(k-1)$, shape $"ndofs"(k-1)^2$: the exterior derivative
+  /// on both sides, hence the up-Laplacian $delta dif$ one grade below.
+  ///
+  /// Assembled from the element form directly, not as the global product of
+  /// three assembled matrices. The exterior derivative of a Whitney form is the
+  /// coboundary of the *reference* cell, a $plus.minus 1$ incidence, so the
+  /// sandwich is already local to a cell. Routing it through the global
+  /// matrices instead materializes the whole grade-$k$ mass, over a skeleton
+  /// the answer never mentions, only to contract it away: for the vertex
+  /// Laplacian in 3D that is the mass on the edges, six times the entries per
+  /// cell of the four-by-four this produces.
+  fn dif_both(&self, grade: impl Into<ExteriorGrade>) -> GalerkinMatrix {
+    self.pairing(&WhitneyPairing::dif_both(self.dim(), grade))
+  }
+
   /// Gram matrix of the full $H Lambda^k (dif)$ inner product,
   /// $M_k + D^T M_(k+1) D$: the $L^2$ mass plus the up-stiffness.
   ///
@@ -111,7 +179,7 @@ pub trait HilbertComplex {
   /// since $dif$ is metric-free and no mass inverse enters.
   fn hdif_gram(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
-    &self.mass(grade) + &self.codif_dif(grade)
+    &self.mass(grade) + &self.dif_both(grade + 1)
   }
 
   /// The discrete codifferential $delta: Lambda^k -> Lambda^(k-1)$, the
@@ -135,7 +203,7 @@ pub trait HilbertComplex {
       return Cochain::new(lower, Vector::zeros(0));
     }
     let mass_lower = self.mass(lower);
-    let coupling = self.codif(grade);
+    let coupling = self.dif_test(grade);
     let sigma = FaerLu::new(mass_lower).solve(&(coupling * u.coeffs()));
     Cochain::new(lower, sigma)
   }
@@ -334,22 +402,10 @@ impl HilbertComplex for WhitneyComplex<'_> {
     }
   }
 
-  /// Galerkin mass matrix of the $L^2 Lambda^k$ inner product,
-  ///
-  /// $M = [inner(lambda_tau, lambda_sigma)_(L^2 Lambda^k)]_(sigma tau)$
-  ///
-  /// Total in grade: the $0 times 0$ empty matrix outside $[0, n]$, the mass on
-  /// the trivial space $Lambda^k = 0$.
-  fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    if !grade.in_range(self.dim()) {
-      return GalMat::zeros(0, 0);
-    }
-    assemble_galmat(
-      self.topology,
-      self.geometry,
-      WhitneyPairing::mass(self.dim(), grade),
-    )
+  /// The form assembled over the mesh, with no restriction: the full complex
+  /// is the whole Whitney space, so its inclusion is the identity.
+  fn assemble(&self, form: &impl BilinearForm) -> GalerkinMatrix {
+    form.assemble(self.topology, self.geometry)
   }
 
   /// Exterior derivative $dif: cal(W) Lambda^k -> cal(W) Lambda^(k+1)$.
@@ -366,54 +422,6 @@ impl HilbertComplex for WhitneyComplex<'_> {
     CsrMatrix::from(&self.topology.coboundary_operator(grade))
   }
 
-  /// Galerkin matrix of the bilinear form $(dif u, dif v)_(L^2 Lambda^(k+1))$,
-  ///
-  /// the stiffness matrix $D^T M_(k+1) D$ of the up-part of the Hodge-Laplacian.
-  ///
-  /// Assembled from the element form directly, not as the global product of
-  /// three assembled matrices. The exterior derivative of a Whitney form is the
-  /// coboundary of the *reference* cell, a $plus.minus 1$ incidence, so
-  /// $D^T M_(k+1) D$ is already local to a cell and
-  /// [`WhitneyPairing::dif_both`] is that local sandwich. Routing it through
-  /// the global matrices instead materializes the whole grade-$(k+1)$ mass,
-  /// over a skeleton the answer never mentions, only to contract it away: at
-  /// grade $0$ in 3D that is the mass on the edges, six times the entries per
-  /// cell of the four-by-four this produces.
-  ///
-  /// Total in grade with no special case: at the top grade $dif: Lambda^n ->
-  /// Lambda^(n+1)$ has a trivial codomain, so the boundary operator of the
-  /// reference cell is empty there and the element matrix is the honest zero,
-  /// as it is past either end of the complex.
-  fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    if !grade.in_range(self.dim()) {
-      return GalMat::zeros(self.ndofs(grade), self.ndofs(grade));
-    }
-    assemble_galmat(
-      self.topology,
-      self.geometry,
-      WhitneyPairing::dif_both(self.dim(), grade + 1),
-    )
-  }
-
-  /// Assembled from its element form, like [`Self::codif_dif`] and for the same
-  /// reason: $(D^(k-1))^T M_k$ is a pairing of two Whitney families over one
-  /// cell, so nothing global has to be built and multiplied to reach it.
-  ///
-  /// Total in grade: at grade $0$ and past either end of the complex one of the
-  /// two spaces is trivial, and the correctly shaped empty matrix is the answer.
-  fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let (rows, cols) = (self.ndofs(grade - 1), self.ndofs(grade));
-    if rows == 0 || cols == 0 {
-      return GalMat::zeros(rows, cols);
-    }
-    assemble_galmat(
-      self.topology,
-      self.geometry,
-      WhitneyPairing::dif_test(self.dim(), grade),
-    )
-  }
   /// The absolute harmonic space $H^k (K)$: the Betti number $b_k (K)$.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize {
@@ -599,12 +607,20 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
     }
   }
 
-  /// Galerkin mass matrix on the relative complex: $E^T M E$.
-  fn mass(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let incl = self.inclusion(grade);
-    let mass = self.full.mass(grade);
-    incl.transpose() * mass * incl
+  /// The form assembled on the full complex and restricted to the interior
+  /// degrees of freedom, $E_"test"^T A E_"trial"$, which is the Galerkin
+  /// discretization on the subspace read literally.
+  ///
+  /// The restriction is exact, not an approximation of the relative operator,
+  /// and the subcomplex property is what makes it so. Writing $P = E E^T$ for
+  /// the projection onto the interior DOFs, $dif$ of a boundary-vanishing
+  /// cochain vanishes on the boundary, so $P D E = D E$, and a projection
+  /// standing between a form's two factors collapses. Hence a differentiated
+  /// side needs no relative mass of its own, and none is assembled.
+  fn assemble(&self, form: &impl BilinearForm) -> GalerkinMatrix {
+    let test = self.inclusion(form.test_grade());
+    let trial = self.inclusion(form.trial_grade());
+    test.transpose() * self.full.assemble(form) * trial
   }
 
   /// Exterior derivative on the relative complex: $E_(k+1)^T D E_k$.
@@ -616,39 +632,6 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
     self.inclusion(grade + 1).transpose() * self.full.dif(grade) * self.inclusion(grade)
   }
 
-  /// Galerkin matrix of $(dif u, dif v)_(L^2 Lambda^(k+1))$ on the
-  /// relative complex: the restriction $E^T (D^T M_(k+1) D) E$ of the full
-  /// complex's, which is already assembled from its element form.
-  ///
-  /// The restriction is exact, not an approximation of the relative operator,
-  /// and the subcomplex property is what makes it so. Writing $P = E E^T$ for
-  /// the projection onto the interior DOFs one grade up, $dif$ of a
-  /// boundary-vanishing cochain vanishes on the boundary, so $P D E = D E$, and
-  /// the two projections in
-  /// $(E^T D^T P) M (P D E)$ collapse. Hence forming the relative stiffness
-  /// from the relative mass one grade up, as the definition reads, would
-  /// assemble that mass for nothing.
-  ///
-  /// Total in grade with no special case, inherited from the full complex's.
-  fn codif_dif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let incl = self.inclusion(grade);
-    let stiff = self.full.codif_dif(grade);
-    incl.transpose() * stiff * incl
-  }
-
-  /// Galerkin matrix of the weak codifferential on the relative complex:
-  /// $E_(k-1)^T ((D^(k-1))^T M_k) E_k$, the restriction of the full complex's.
-  ///
-  /// Exact for the same subcomplex reason as [`Self::codif_dif`]: with
-  /// $P = E_k E_k^T$, $dif$ of a boundary-vanishing $(k-1)$-cochain vanishes on
-  /// the boundary, so $P D E_(k-1) = D E_(k-1)$ and the projection between the
-  /// two factors collapses.
-  fn codif(&self, grade: impl Into<ExteriorGrade>) -> GalMat {
-    let grade = grade.into();
-    let codif = self.full.codif(grade);
-    self.inclusion(grade - 1).transpose() * codif * self.inclusion(grade)
-  }
   /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize {
@@ -739,7 +722,7 @@ mod test {
   use simplicial::linalg::Vector;
 
   /// The stiffness is one matrix with two routes to it: the element-local
-  /// sandwich that [`HilbertComplex::codif_dif`] assembles, and the global
+  /// sandwich that [`HilbertComplex::dif_both`] assembles, and the global
   /// product $D^T M_(k+1) D$ of three separately assembled matrices.
   ///
   /// They agree because the exterior derivative of a Whitney form is the
@@ -748,14 +731,14 @@ mod test {
   /// at the top grade both sides are the zero operator, which is the case a
   /// route that special-cased the empty codomain would get wrong.
   #[test]
-  fn codif_dif_local_and_global_routes_agree() {
+  fn dif_both_local_and_global_routes_agree() {
     for dim in (1..=3).map(Dim::from) {
       let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
       let lengths = coords.to_edge_lengths_sq(&topology);
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       for grade in dim.range_inclusive() {
-        let local = whitney.codif_dif(grade);
+        let local = whitney.dif_both(grade + 1);
 
         let dif = whitney.dif(grade);
         let mass = whitney.mass(grade + 1);
@@ -789,7 +772,7 @@ mod test {
   }
 
   /// The weak codifferential has the same two routes as the stiffness, and
-  /// they agree: the element-local pairing that [`HilbertComplex::codif`]
+  /// they agree: the element-local pairing that [`HilbertComplex::dif_test`]
   /// assembles, and the global product $(D^(k-1))^T M_k$ of two assembled
   /// matrices. Swept over every dimension and grade, the degenerate grade $0$
   /// included, where the $sigma$ space is empty and both are the $0 times
@@ -802,7 +785,7 @@ mod test {
       let whitney = WhitneyComplex::new(&topology, &lengths);
 
       for grade in dim.range_inclusive() {
-        let local = whitney.codif(grade);
+        let local = whitney.dif_test(grade);
         let global = whitney.dif(grade - 1).transpose() * &whitney.mass(grade);
 
         assert_eq!(local.nrows(), global.nrows());
@@ -855,7 +838,7 @@ mod test {
           assert!(relative.ndofs(grade) < topology.nsimplices(grade));
         }
 
-        let restricted = relative.codif_dif(grade);
+        let restricted = relative.dif_both(grade + 1);
 
         let dif = relative.dif(grade);
         let mass = relative.mass(grade + 1);
@@ -1019,7 +1002,7 @@ mod test {
         let mass = whitney.mass(ghost);
         assert_eq!((mass.nrows(), mass.ncols()), (0, 0));
 
-        let ldd = whitney.codif_dif(ghost);
+        let ldd = whitney.dif_both(ghost + 1);
         assert_eq!((ldd.nrows(), ldd.ncols()), (0, 0));
 
         let incl = HilbertComplex::inclusion(&whitney, ghost);
@@ -1036,7 +1019,7 @@ mod test {
 
       // The top-grade stiffness is the honest $"ndofs"(n)^2$ zero operator, from
       // the general formula with no special case.
-      let ldd_top = whitney.codif_dif(dim);
+      let ldd_top = whitney.dif_both(dim + 1);
       assert_eq!((ldd_top.nrows(), ldd_top.ncols()), (ndofs_top, ndofs_top));
 
       assert!(ldd_top.values().iter().all(|&v| v == 0.0), "dim={dim}");

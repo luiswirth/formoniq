@@ -1,6 +1,6 @@
 extern crate nalgebra as na;
 
-use formoniq::operators::{self, ElMatProvider};
+use formoniq::{galerkin::BilinearForm, operators};
 use regge::lengths::simplex::SimplexLengthsSq;
 use simplicial::linalg::Matrix;
 use simplicial::{Dim, atlas::unit_simplex_volume, topology::complex::Complex};
@@ -9,7 +9,7 @@ use approx::assert_relative_eq;
 
 fn check_ref_elmat<F, G, E>(elmat: G, unit_elmat: F)
 where
-  E: ElMatProvider,
+  E: BilinearForm,
   F: Fn(Dim) -> Option<Matrix>,
   G: Fn(Dim) -> E,
 {
@@ -22,7 +22,7 @@ where
     let refcell = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
     let refchart = refcomplex.cells().handle_iter().next().unwrap();
-    let computed_elmat = elmat.eval(&refcell.metric(), refchart);
+    let computed_elmat = elmat.element(&refcell.metric(), refchart);
 
     assert_relative_eq!(&computed_elmat, &expected_elmat);
   }
@@ -80,7 +80,7 @@ fn unit_mass(dim: Dim) -> Option<Matrix> {
 
 #[test]
 fn lumped_mass_refcell() {
-  check_ref_elmat(|_| operators::ScalarLumpedMassElmat, unit_lumped_mass);
+  check_ref_elmat(|_| operators::ScalarLumpedMass, unit_lumped_mass);
 }
 fn unit_lumped_mass(dim: Dim) -> Option<Matrix> {
   let nvertices = (dim + 1).index();

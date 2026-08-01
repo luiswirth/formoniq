@@ -11,8 +11,9 @@ extern crate nalgebra as na;
 use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{
-  assemble, bc,
-  operators::SourceElVec,
+  bc,
+  galerkin::LinearForm,
+  operators::SourceForm,
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 use glatt::field::DiffFormClosure;
@@ -38,7 +39,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
-    let laplace = whitney.codif_dif(Dim::ZERO);
+    let laplace = whitney.dif_both(1);
     let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(Dim::ZERO));
 
     let solution = bc::solve_with_essential_bc(
@@ -69,15 +70,14 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
 
     // System: (grad u, grad v) + (u, v).
-    let system = whitney.codif_dif(Dim::ZERO) + whitney.mass(Dim::ZERO);
+    let system = whitney.dif_both(1) + whitney.mass(Dim::ZERO);
 
     // Source load (u, v) side: f = x_1. The integrand f phi_i is
     // quadratic, so an order-3 quadrature keeps it exact.
     let source = DiffFormClosure::coord_component(0, dim);
     let source = source.pullback_on(&topology, &coords);
     let qr = simplicial::atlas::SimplexQuadRule::degree(dim, 3);
-    let mut rhs =
-      assemble::assemble_galvec(&topology, &metric, SourceElVec::new(&source, Some(qr)));
+    let mut rhs = SourceForm::new(&source, Some(qr)).assemble(&topology, &metric);
 
     // Natural boundary load: h = du/dn = -1 on x_1 = 0, +1 on x_1 = 1,
     // 0 on the remaining faces.
@@ -132,7 +132,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
     let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
-    let laplace = whitney.codif_dif(Dim::ZERO);
+    let laplace = whitney.dif_both(1);
     let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(Dim::ZERO));
 
     let solution = bc::solve_with_essential_bc(
@@ -185,7 +185,7 @@ fn robin_reproduces_linear_solution() {
       topology.boundary_facets().into_iter().partition(is_x_facet);
 
     let gamma_robin = whitney.boundary_part(robin_facets);
-    let system = whitney.codif_dif(Dim::ZERO) + alpha * bc::boundary_mass(&gamma_robin, Dim::ZERO);
+    let system = whitney.dif_both(1) + alpha * bc::boundary_mass(&gamma_robin, Dim::ZERO);
     let boundary_coords = gamma_robin.boundary_complex().trace_coords(&coords);
     let robin_data = robin_data.pullback_on(gamma_robin.topology(), &boundary_coords);
     let rhs = bc::neumann_load(&gamma_robin, &robin_data, None);

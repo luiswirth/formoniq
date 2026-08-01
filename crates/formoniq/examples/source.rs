@@ -28,9 +28,9 @@ mod util;
 use {
   derham::section::CoordFieldExt,
   formoniq::{
-    assemble::assemble_galvec,
     fe::fe_l2_error,
-    operators::SourceElVec,
+    galerkin::LinearForm,
+    operators::SourceForm,
     problems::elliptic,
     whitney_complex::{HilbertComplex, WhitneyComplex},
   },
@@ -106,7 +106,7 @@ fn main() {
           let solution = solution_field.pullback_on(&topology, &coords);
           let load = load_field.pullback_on(&topology, &coords);
 
-          let source = assemble_galvec(&topology, &metric, SourceElVec::new(&load, None));
+          let source = SourceForm::new(&load, None).assemble(&topology, &metric);
           // Absolute BC is the full Whitney complex, relative BC its subcomplex of
           // boundary-vanishing cochains. The solver is one piece of code over both.
           let (_, galsol, _) = match bc {

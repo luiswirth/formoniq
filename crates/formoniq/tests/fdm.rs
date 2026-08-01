@@ -198,7 +198,7 @@ fn feec_galmat_full(dim: Dim, nboxes_axis: usize) -> Matrix {
   let (topology, coords) = grid.triangulate();
   let metric = coords.to_edge_lengths_sq(&topology);
   let whitney = WhitneyComplex::new(&topology, &metric);
-  let mut galmat = Matrix::from(&whitney.codif_dif(Dim::ZERO));
+  let mut galmat = Matrix::from(&whitney.dif_both(1));
   let mass = Matrix::from(&whitney.mass(Dim::ZERO));
   let mut galvec = mass * Vector::from_element(topology.vertices().len(), 1.0);
   normalize_galerkin_lse(&mut galmat, &mut galvec);

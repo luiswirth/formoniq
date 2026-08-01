@@ -16,7 +16,7 @@
 //! speed and the winning one for size: it is how a problem whose assembled
 //! matrix does not fit still gets solved. What it costs in capability is that a
 //! direct factorization and an eigensolve need entries, so those still want
-//! [`assemble_galmat`](crate::assemble::assemble_galmat).
+//! [`assemble_matrix`](crate::galerkin::assemble_matrix).
 //!
 //! # Gather, not scatter
 //!
@@ -33,7 +33,7 @@
 //! slot, disjoint by construction, and each degree of freedom then sums the
 //! slots incident to it.
 
-use crate::operators::ElMatProvider;
+use crate::galerkin::BilinearForm;
 
 #[cfg(test)]
 use approx::assert_relative_eq;
@@ -52,34 +52,34 @@ use rayon::prelude::*;
 ///
 /// Holds the per-cell metrics and the incidence of both grades, and nothing
 /// per nonzero. This is the same operator
-/// [`assemble_galmat`](crate::assemble::assemble_galmat) produces, which is a
+/// [`assemble_matrix`](crate::galerkin::assemble_matrix) produces, which is a
 /// law the tests state rather than a remark.
 ///
 /// Rectangular in general, since a mixed form pairs two grades; it is a
 /// [`LinearOperator`] exactly when the two agree.
 pub struct ElementOperator<'a, E> {
   topology: &'a Complex,
-  elmat: E,
+  form: E,
   /// One per cell, in cell order: the whole geometry the apply reads.
   metrics: Vec<Metric>,
   rows: FaceIncidence,
   cols: FaceIncidence,
 }
 
-impl<'a, E: ElMatProvider> ElementOperator<'a, E> {
+impl<'a, E: BilinearForm> ElementOperator<'a, E> {
   /// Walk the mesh once, here. Every later apply is arithmetic on what this
   /// produced.
-  pub fn new(topology: &'a Complex, geometry: &MeshLengthsSq, elmat: E) -> Self {
+  pub fn new(topology: &'a Complex, geometry: &MeshLengthsSq, form: E) -> Self {
     let metrics = topology
       .cells()
       .handle_iter()
       .map(|cell| geometry.cell_metric(cell))
       .collect();
     Self {
-      rows: FaceIncidence::new(topology, elmat.row_grade()),
-      cols: FaceIncidence::new(topology, elmat.col_grade()),
+      rows: FaceIncidence::new(topology, form.test_grade()),
+      cols: FaceIncidence::new(topology, form.trial_grade()),
       topology,
-      elmat,
+      form,
       metrics,
     }
   }
@@ -106,7 +106,7 @@ impl<'a, E: ElMatProvider> ElementOperator<'a, E> {
       .handle_par_iter()
       .flat_map_iter(|cell| {
         let icell = cell.kidx();
-        let elmat = self.elmat.eval(&self.metrics[icell], cell);
+        let elmat = self.form.element(&self.metrics[icell], cell);
         let gathered = Vector::from_iterator(
           ncols_local,
           self.cols.cell_faces(icell).iter().map(|&idof| x[idof]),
@@ -134,7 +134,7 @@ impl<'a, E: ElMatProvider> ElementOperator<'a, E> {
 
 /// Square exactly when the form pairs one grade with itself, which the
 /// dimension asserts, as it does for the assembled matrix.
-impl<E: ElMatProvider> LinearOperator for ElementOperator<'_, E> {
+impl<E: BilinearForm> LinearOperator for ElementOperator<'_, E> {
   type Space = Vector;
   fn dim(&self) -> usize {
     debug_assert_eq!(self.nrows(), self.ncols(), "operator must be square");
@@ -152,14 +152,14 @@ impl<E: ElMatProvider> LinearOperator for ElementOperator<'_, E> {
 /// position $i$ takes in it. So the preconditioner a Krylov method most often
 /// wants survives the matrix-free path, even though the trait that reads
 /// entries does not.
-pub fn diagonal<E: ElMatProvider>(op: &ElementOperator<'_, E>) -> Vector {
+pub fn diagonal<E: BilinearForm>(op: &ElementOperator<'_, E>) -> Vector {
   assert_eq!(op.nrows(), op.ncols(), "a diagonal needs a square operator");
   let cells = op.topology.cells();
   let nlocal = op.rows.nlocal();
   let diagonals: Vec<f64> = cells
     .handle_par_iter()
     .flat_map_iter(|cell| {
-      let elmat = op.elmat.eval(&op.metrics[cell.kidx()], cell);
+      let elmat = op.form.element(&op.metrics[cell.kidx()], cell);
       (0..nlocal).map(move |i| elmat[(i, i)]).collect::<Vec<_>>()
     })
     .collect();
@@ -182,14 +182,14 @@ pub fn diagonal<E: ElMatProvider>(op: &ElementOperator<'_, E>) -> Vector {
 /// D^(-1)$: the ordinary [`Jacobi`], handed the diagonal [`diagonal`] gathered
 /// instead of one read off an assembled matrix. A preconditioner does not care
 /// where its diagonal came from.
-pub fn jacobi<E: ElMatProvider>(op: &ElementOperator<'_, E>, omega: f64) -> Jacobi {
+pub fn jacobi<E: BilinearForm>(op: &ElementOperator<'_, E>, omega: f64) -> Jacobi {
   Jacobi::from_diagonal(&diagonal(op), omega)
 }
 
 #[cfg(test)]
 mod test {
   use super::*;
-  use crate::{assemble::assemble_galmat, operators::WhitneyPairing};
+  use crate::operators::WhitneyPairing;
 
   use iterative::{Identity, StopCriterion, krylov::cg};
   use regge::lengths::mesh::MeshLengthsSq;
@@ -217,13 +217,9 @@ mod test {
   #[test]
   fn the_matrix_free_apply_is_the_assembled_matvec() {
     /// One operator, both ways, on the same probe.
-    fn agrees<E: ElMatProvider>(
-      topology: &Complex,
-      geometry: &MeshLengthsSq,
-      elmat: impl Fn() -> E,
-    ) {
-      let assembled: CsrMatrix = assemble_galmat(topology, geometry, elmat());
-      let op = ElementOperator::new(topology, geometry, elmat());
+    fn agrees<E: BilinearForm>(topology: &Complex, geometry: &MeshLengthsSq, form: impl Fn() -> E) {
+      let assembled: CsrMatrix = form().assemble(topology, geometry);
+      let op = ElementOperator::new(topology, geometry, form());
       let x = probe(op.ncols());
       assert_relative_eq!(op.apply(&x), assembled * &x, epsilon = 1e-9);
     }
@@ -259,9 +255,9 @@ mod test {
     // and the shapes would coincide for a reason that says nothing.
     let (topology, geometry) = mesh(2, 2);
     let dif = ElementOperator::new(&topology, &geometry, WhitneyPairing::dif_trial(2, 1));
-    let codif = ElementOperator::new(&topology, &geometry, WhitneyPairing::dif_test(2, 1));
+    let mixed = ElementOperator::new(&topology, &geometry, WhitneyPairing::dif_test(2, 1));
     assert_ne!(dif.nrows(), dif.ncols());
-    assert_ne!(codif.nrows(), codif.ncols());
+    assert_ne!(mixed.nrows(), mixed.ncols());
   }
 
   /// The gathered diagonal is the assembled diagonal, so the one preconditioner
@@ -271,8 +267,7 @@ mod test {
     for dim in 1..=3 {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
-        let assembled: CsrMatrix =
-          assemble_galmat(&topology, &geometry, WhitneyPairing::mass(dim, grade));
+        let assembled: CsrMatrix = WhitneyPairing::mass(dim, grade).assemble(&topology, &geometry);
         let op = ElementOperator::new(&topology, &geometry, WhitneyPairing::mass(dim, grade));
         let expected = Vector::from_fn(op.nrows(), |i, _| {
           assembled.get_entry(i, i).unwrap().into_value()
@@ -293,8 +288,7 @@ mod test {
     for dim in 1..=3 {
       let (topology, geometry) = mesh(dim, 2);
       for grade in 0..=dim {
-        let assembled: CsrMatrix =
-          assemble_galmat(&topology, &geometry, WhitneyPairing::mass(dim, grade));
+        let assembled: CsrMatrix = WhitneyPairing::mass(dim, grade).assemble(&topology, &geometry);
         let op = ElementOperator::new(&topology, &geometry, WhitneyPairing::mass(dim, grade));
         let b = probe(op.nrows());
         let stop = StopCriterion::rtol(1e-10);

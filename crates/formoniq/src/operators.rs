@@ -1,3 +1,5 @@
+use crate::galerkin::{BilinearForm, LinearForm};
+
 use {
   derham::{
     interpolate::{form::WhitneyExpansion, samples::LsfSamples},
@@ -20,24 +22,17 @@ use {
   },
 };
 
-pub type ElMat = Matrix;
-pub trait ElMatProvider: Sync {
-  fn row_grade(&self) -> ExteriorGrade;
-  fn col_grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &Metric, chart: Chart) -> ElMat;
-}
-
-/// Approximated Element Matrix Provider for scalar mass bilinear form,
-/// obtained through trapezoidal quadrature rule.
-pub struct ScalarLumpedMassElmat;
-impl ElMatProvider for ScalarLumpedMassElmat {
-  fn row_grade(&self) -> ExteriorGrade {
+/// The scalar mass form under the trapezoidal rule, whose element matrix is
+/// diagonal: the lumped mass.
+pub struct ScalarLumpedMass;
+impl BilinearForm for ScalarLumpedMass {
+  fn test_grade(&self) -> ExteriorGrade {
     Dim::ZERO
   }
-  fn col_grade(&self) -> ExteriorGrade {
+  fn trial_grade(&self) -> ExteriorGrade {
     Dim::ZERO
   }
-  fn eval(&self, metric: &Metric, _chart: Chart) -> ElMat {
+  fn element(&self, metric: &Metric, _chart: Chart) -> Matrix {
     let n = metric.dim() + 1;
     let v = cell_volume(metric) / n as f64;
     Matrix::from_diagonal_element(n, n, v)
@@ -60,7 +55,7 @@ impl ElMatProvider for ScalarLumpedMassElmat {
 /// and $C$ the coefficient map of the deletion formula
 /// $W_sigma = k! sum_i (-1)^i lambda_(sigma_i) dif lambda_(sigma without sigma_i)$.
 /// Only $H$ depends on the metric, so $M$ is linear in $Lambda^k g^(-1)$.
-pub struct HodgeMassElmat {
+pub struct HodgeMass {
   dim: Dim,
   grade: ExteriorGrade,
   /// $C$, the Whitney basis as a map into blades times coordinates.
@@ -71,7 +66,7 @@ pub struct HodgeMassElmat {
   /// $Q$, the barycentric half, at unit volume.
   bary_gramian: Matrix,
 }
-impl HodgeMassElmat {
+impl HodgeMass {
   pub fn new(dim: impl Into<Dim>, grade: impl Into<ExteriorGrade>) -> Self {
     let (dim, grade) = (dim.into(), grade.into());
     Self {
@@ -86,7 +81,7 @@ impl HodgeMassElmat {
   /// Chart-free: every chart of the atlas is the reference cell up to the
   /// labelling of its vertices, so the geometry enters through the metric
   /// alone.
-  pub fn eval(&self, metric: &Metric) -> Matrix {
+  pub fn element(&self, metric: &Metric) -> Matrix {
     assert_eq!(self.dim, metric.dim());
 
     // $H$: the Gramian of the barycentric $k$-blades $lambda^* (e_I)$, one
@@ -107,7 +102,7 @@ impl HodgeMassElmat {
 /// form is the coboundary of the reference cell, a $plus.minus 1$ incidence),
 /// which is why the geometry of a pairing enters through its mass alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum WhitneyFamily {
+enum WhitneyFamily {
   /// $lambda_sigma$, $sigma in Delta_k (K)$.
   Forms,
   /// $dif lambda_sigma$, $sigma in Delta_(k-1) (K)$.
@@ -137,7 +132,7 @@ impl WhitneyFamily {
 /// is the grade of $M_k$ and never that of the degrees of freedom, which sit
 /// one below on a differentiated side.
 pub struct WhitneyPairing {
-  mass: HodgeMassElmat,
+  mass: HodgeMass,
   test: WhitneyFamily,
   trial: WhitneyFamily,
   /// $diff$, applied on the left, where the rows are one grade below the mass.
@@ -148,7 +143,11 @@ pub struct WhitneyPairing {
 
 impl WhitneyPairing {
   /// The pairing of `test` against `trial` in the grade-`grade` inner product.
-  pub fn new(
+  ///
+  /// Private, with the four combinations as the constructors: which family a
+  /// side ranges over is not a free parameter a caller has an opinion about,
+  /// it is which of the four blocks is wanted.
+  fn new(
     dim: impl Into<Dim>,
     grade: impl Into<ExteriorGrade>,
     test: WhitneyFamily,
@@ -157,7 +156,7 @@ impl WhitneyPairing {
     let (dim, grade) = (dim.into(), grade.into());
     let boundary = || unit_boundary_operator(dim, grade);
     Self {
-      mass: HodgeMassElmat::new(dim, grade),
+      mass: HodgeMass::new(dim, grade),
       test,
       trial,
       row: (test == WhitneyFamily::Difs).then(boundary),
@@ -192,15 +191,15 @@ impl WhitneyPairing {
   }
 }
 
-impl ElMatProvider for WhitneyPairing {
-  fn row_grade(&self) -> ExteriorGrade {
+impl BilinearForm for WhitneyPairing {
+  fn test_grade(&self) -> ExteriorGrade {
     self.mass.grade - self.test.grade_offset()
   }
-  fn col_grade(&self) -> ExteriorGrade {
+  fn trial_grade(&self) -> ExteriorGrade {
     self.mass.grade - self.trial.grade_offset()
   }
-  fn eval(&self, metric: &Metric, _chart: Chart) -> Matrix {
-    let mass = self.mass.eval(metric);
+  fn element(&self, metric: &Metric, _chart: Chart) -> Matrix {
+    let mass = self.mass.element(metric);
     let mass = match &self.col {
       Some(dif) => mass * dif,
       None => mass,
@@ -245,13 +244,13 @@ impl CellQuadrature {
   }
 
   /// $[integral_K f(x, W_sigma (x)) vol]_sigma$.
-  pub fn integrate<F>(&self, shapes: &LsfSamples, chart: Chart, vol: f64, f: F) -> ElVec
+  pub fn integrate<F>(&self, shapes: &LsfSamples, chart: Chart, vol: f64, f: F) -> Vector
   where
     F: Fn(&MeshPoint, &Tensor) -> f64,
   {
     assert_eq!(shapes.nnodes(), self.nodes.len());
 
-    let mut elvec = ElVec::zeros(shapes.ndofs());
+    let mut elvec = Vector::zeros(shapes.ndofs());
     for (inode, weight) in self.qr.weights().iter().enumerate() {
       let point = self.point(chart, inode);
       for (i, value) in shapes.at_node(inode).iter().enumerate() {
@@ -271,14 +270,14 @@ impl CellQuadrature {
     chart: Chart,
     vol: f64,
     f: F,
-  ) -> ElMat
+  ) -> Matrix
   where
     F: Fn(&MeshPoint, &Tensor, &Tensor) -> f64,
   {
     assert_eq!(rows.nnodes(), self.nodes.len());
     assert_eq!(cols.nnodes(), self.nodes.len());
 
-    let mut elmat = ElMat::zeros(rows.ndofs(), cols.ndofs());
+    let mut elmat = Matrix::zeros(rows.ndofs(), cols.ndofs());
     for (inode, weight) in self.qr.weights().iter().enumerate() {
       let point = self.point(chart, inode);
       for (i, row) in rows.at_node(inode).iter().enumerate() {
@@ -401,14 +400,20 @@ impl BoundaryQuadrature {
   /// It is a family indexed by pairs of degrees of freedom, so it cannot be one
   /// [`Section`]. That is the whole difference between this and
   /// [`Self::integrate_form`].
-  pub fn integrate_pair<F>(&self, rows: &LsfSamples, cols: &LsfSamples, chart: Chart, f: F) -> ElMat
+  pub fn integrate_pair<F>(
+    &self,
+    rows: &LsfSamples,
+    cols: &LsfSamples,
+    chart: Chart,
+    f: F,
+  ) -> Matrix
   where
     F: Fn(&MeshPoint, &Tensor, &Tensor) -> Tensor,
   {
     assert_eq!(rows.nnodes(), self.nodes.len());
     assert_eq!(cols.nnodes(), self.nodes.len());
 
-    let mut elmat = ElMat::zeros(rows.ndofs(), cols.ndofs());
+    let mut elmat = Matrix::zeros(rows.ndofs(), cols.ndofs());
     for (inode, bary) in self.nodes.iter().enumerate() {
       let facet = &self.facets[inode / self.npoints];
       let point = chart.point(bary.clone());
@@ -428,18 +433,18 @@ impl BoundaryQuadrature {
 /// coefficient field,
 /// $[integral_K alpha inner(W_sigma, W_tau)_(Lambda^k) vol]_(sigma tau)$.
 ///
-/// The varying-coefficient counterpart of [`HodgeMassElmat`], which is exact
+/// The varying-coefficient counterpart of [`HodgeMass`], which is exact
 /// where this is a quadrature: with $alpha equiv 1$ the two agree to the
 /// accuracy of the rule. Intrinsic, like every element integral here, the
 /// coefficient is a grade-0 section of the manifold, so a metric never enters
 /// through it, only through the inner product on $Lambda^k$.
-pub struct WeightedHodgeMassElmat<'a, F> {
+pub struct WeightedHodgeMass<'a, F> {
   coefficient: &'a F,
   grade: ExteriorGrade,
   quad: CellQuadrature,
   shapes: LsfSamples,
 }
-impl<'a, F: Section> WeightedHodgeMassElmat<'a, F> {
+impl<'a, F: Section> WeightedHodgeMass<'a, F> {
   /// Panics unless the coefficient is a grade-0 section: a weight is a scalar.
   pub fn new(
     coefficient: &'a F,
@@ -462,14 +467,14 @@ impl<'a, F: Section> WeightedHodgeMassElmat<'a, F> {
     }
   }
 }
-impl<F: Sync + Section> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
-  fn row_grade(&self) -> ExteriorGrade {
+impl<F: Sync + Section> BilinearForm for WeightedHodgeMass<'_, F> {
+  fn test_grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn col_grade(&self) -> ExteriorGrade {
+  fn trial_grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
+  fn element(&self, metric: &Metric, chart: Chart) -> Matrix {
     self.quad.integrate_pair(
       &self.shapes,
       &self.shapes,
@@ -509,7 +514,7 @@ impl<F: Sync + Section> ElMatProvider for WeightedHodgeMassElmat<'_, F> {
 /// per cell at $k = n$. Dispersive throughout, it damps nothing, so the phase
 /// error of barely resolved modes persists as oscillation, which conservation
 /// does not see.
-pub struct LieDerivativeElmat<'a, V> {
+pub struct LieDerivative<'a, V> {
   velocity: &'a V,
   grade: ExteriorGrade,
   volume: CellQuadrature,
@@ -523,7 +528,7 @@ pub struct LieDerivativeElmat<'a, V> {
   boundary_trial: LsfSamples,
 }
 
-impl<'a, V: Section> LieDerivativeElmat<'a, V> {
+impl<'a, V: Section> LieDerivative<'a, V> {
   /// One `quad_degree` serves both integrals, at their own dimensions.
   ///
   /// Degree $2 + p$ is exact for a velocity of polynomial degree $p$: the
@@ -556,15 +561,15 @@ impl<'a, V: Section> LieDerivativeElmat<'a, V> {
   }
 }
 
-impl<V: Sync + Section> ElMatProvider for LieDerivativeElmat<'_, V> {
-  fn row_grade(&self) -> ExteriorGrade {
+impl<V: Sync + Section> BilinearForm for LieDerivative<'_, V> {
+  fn test_grade(&self) -> ExteriorGrade {
     self.grade
   }
-  fn col_grade(&self) -> ExteriorGrade {
+  fn trial_grade(&self) -> ExteriorGrade {
     self.grade
   }
 
-  fn eval(&self, metric: &Metric, chart: Chart) -> ElMat {
+  fn element(&self, metric: &Metric, chart: Chart) -> Matrix {
     let interior = self.volume.integrate_pair(
       &self.test,
       &self.trial_dif,
@@ -591,12 +596,6 @@ impl<V: Sync + Section> ElMatProvider for LieDerivativeElmat<'_, V> {
   }
 }
 
-pub type ElVec = Vector;
-pub trait ElVecProvider: Sync {
-  fn grade(&self) -> ExteriorGrade;
-  fn eval(&self, metric: &Metric, chart: Chart) -> ElVec;
-}
-
 /// Element vector of the source load
 /// $[integral_K inner(f, W_sigma)_(Lambda^k) vol]_(sigma in Delta_k (K))$.
 ///
@@ -605,12 +604,12 @@ pub trait ElVecProvider: Sync {
 /// reference frame under the induced inner product $Lambda^k g^(-1)$ of the
 /// cell metric. Source assembly therefore runs on Regge geometry, with no
 /// coordinates in sight.
-pub struct SourceElVec<'a, F> {
+pub struct SourceForm<'a, F> {
   source: &'a F,
   quad: CellQuadrature,
   shapes: LsfSamples,
 }
-impl<'a, F: Section> SourceElVec<'a, F> {
+impl<'a, F: Section> SourceForm<'a, F> {
   pub fn new(source: &'a F, qr: Option<SimplexQuadRule>) -> Self {
     let quad = CellQuadrature::new(source.dim(), qr);
     let shapes = LsfSamples::whitney(source.dim(), source.grade(), quad.nodes());
@@ -621,11 +620,11 @@ impl<'a, F: Section> SourceElVec<'a, F> {
     }
   }
 }
-impl<F: Sync + Section> ElVecProvider for SourceElVec<'_, F> {
-  fn grade(&self) -> ExteriorGrade {
+impl<F: Sync + Section> LinearForm for SourceForm<'_, F> {
+  fn test_grade(&self) -> ExteriorGrade {
     self.source.grade()
   }
-  fn eval(&self, metric: &Metric, chart: Chart) -> ElVec {
+  fn element(&self, metric: &Metric, chart: Chart) -> Vector {
     self.quad.integrate(
       &self.shapes,
       chart,
@@ -818,7 +817,7 @@ mod test {
         ),
       };
 
-      let elmat = LieDerivativeElmat::new(&velocity, Dim::ZERO, 2).eval(&metric, chart);
+      let elmat = LieDerivative::new(&velocity, Dim::ZERO, 2).element(&metric, chart);
       let constant = Vector::from_element(elmat.ncols(), 1.0);
 
       assert_relative_eq!((elmat * constant).norm(), 0.0, epsilon = 1e-12);
@@ -870,7 +869,7 @@ mod test {
       let boundary = BoundaryQuadrature::new(dim, Some(SimplexQuadRule::degree(dim - 1, 2)));
 
       for grade in dim.range_inclusive() {
-        let elmat = LieDerivativeElmat::new(&velocity, grade, 2).eval(&metric, chart);
+        let elmat = LieDerivative::new(&velocity, grade, 2).element(&metric, chart);
         let symmetric_part = &elmat + elmat.transpose();
 
         let shapes = LsfSamples::whitney(dim, grade, boundary.nodes());
@@ -888,7 +887,7 @@ mod test {
 
   /// The varying-coefficient path against the closed form it generalizes: on a
   /// constant $alpha equiv c$ the quadrature must return $c$ times the exact
-  /// [`HodgeMassElmat`], at every dimension and grade.
+  /// [`HodgeMass`], at every dimension and grade.
   ///
   /// The coefficient is a [`WhitneyInterpolant`], so nothing in this test has
   /// an embedding: the section is the interpolation of a cochain on a Regge
@@ -908,10 +907,10 @@ mod test {
         let coefficient = WhitneyInterpolant::new(cochain, &complex);
 
         for grade in dim.range_inclusive() {
-          let exact = HodgeMassElmat::new(dim, grade).eval(&metric);
+          let exact = HodgeMass::new(dim, grade).element(&metric);
           let quadrature =
-            WeightedHodgeMassElmat::new(&coefficient, grade, Some(SimplexQuadRule::degree(dim, 2)))
-              .eval(&metric, chart);
+            WeightedHodgeMass::new(&coefficient, grade, Some(SimplexQuadRule::degree(dim, 2)))
+              .element(&metric, chart);
           assert_relative_eq!(&quadrature, &(c * exact), epsilon = 1e-12);
         }
       }
@@ -922,7 +921,7 @@ mod test {
   fn hodge_mass0_is_scalar_mass() {
     for dim in (0..=3).map(Dim::from) {
       let geo = SimplexLengthsSq::unit(dim);
-      let hodge_mass = HodgeMassElmat::new(dim, Dim::ZERO).eval(&geo.metric());
+      let hodge_mass = HodgeMass::new(dim, Dim::ZERO).element(&geo.metric());
       let metric = geo.metric();
       let scalar_mass = cell_volume(&metric) * unit_bary_gramian(dim);
       assert_relative_eq!(&hodge_mass, &scalar_mass);
@@ -934,7 +933,7 @@ mod test {
     let dim = Dim::new(2);
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
-    let computed = HodgeMassElmat::new(dim, grade).eval(&geo.metric());
+    let computed = HodgeMass::new(dim, grade).element(&geo.metric());
     let expected = na::dmatrix![
       1./3.,1./6.,0.   ;
       1./6.,1./3.,0.   ;
@@ -949,7 +948,8 @@ mod test {
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
-    let computed = WhitneyPairing::dif_trial(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed =
+      WhitneyPairing::dif_trial(dim, grade).element(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., 1./3.,1./6.;
       -1./2., 1./6.,1./3.;
@@ -964,7 +964,8 @@ mod test {
     let grade = Dim::new(1);
     let geo = SimplexLengthsSq::unit(dim);
     let refcomplex = Complex::unit(dim);
-    let computed = WhitneyPairing::dif_test(dim, grade).eval(&geo.metric(), refchart(&refcomplex));
+    let computed =
+      WhitneyPairing::dif_test(dim, grade).element(&geo.metric(), refchart(&refcomplex));
     let expected = na::dmatrix![
       -1./2., -1./2., 0.   ;
        1./3.,  1./6.,-1./6.;
@@ -980,7 +981,7 @@ mod test {
       let refcomplex = Complex::unit(dim);
       for grade in dim.range() {
         let difdif =
-          WhitneyPairing::dif_both(dim, grade + 1).eval(&geo.metric(), refchart(&refcomplex));
+          WhitneyPairing::dif_both(dim, grade + 1).element(&geo.metric(), refchart(&refcomplex));
 
         let difwhitneys: Vec<_> = WhitneyLsf::basis(dim, grade).map(|lsf| lsf.dif()).collect();
         let mut gramian = Matrix::zeros(difwhitneys.len(), difwhitneys.len());
