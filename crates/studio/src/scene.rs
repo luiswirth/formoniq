@@ -1186,10 +1186,14 @@ fn project_onto(
   topology: &Complex,
   metric: &MeshLengthsSq,
 ) -> Option<Cochain> {
-  use formoniq::{assemble::assemble_galmat, operators::HodgeMassElmat};
+  use formoniq::{assemble::assemble_galmat, operators::WhitneyPairing};
 
   let grade = reference.grade();
-  let mass = assemble_galmat(topology, metric, HodgeMassElmat::new(topology.dim(), grade));
+  let mass = assemble_galmat(
+    topology,
+    metric,
+    WhitneyPairing::mass(topology.dim(), grade),
+  );
   let weighted = &mass * space;
   let gram = space.transpose() * &weighted;
   let rhs = weighted.transpose() * reference.coeffs();

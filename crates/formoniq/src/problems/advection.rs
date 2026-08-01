@@ -3,7 +3,7 @@
 
 use crate::{
   assemble::assemble_galmat,
-  operators::{HodgeMassElmat, LieDerivativeElmat},
+  operators::{LieDerivativeElmat, WhitneyPairing},
   time::{LinearIrk, Tableau},
 };
 
@@ -37,7 +37,7 @@ pub fn assemble_transport<V: Sync + Section>(
   let mass = assemble_galmat(
     topology,
     geometry,
-    HodgeMassElmat::new(topology.dim(), transport.grade),
+    WhitneyPairing::mass(topology.dim(), transport.grade),
   );
   let lie = assemble_galmat(
     topology,

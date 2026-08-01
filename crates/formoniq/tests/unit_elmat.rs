@@ -31,7 +31,7 @@ where
 #[test]
 fn laplacian_refcell() {
   check_ref_elmat(
-    |dim| operators::WhitneyPairElmat::codif_dif(dim, Dim::ZERO),
+    |dim| operators::WhitneyPairing::dif_both(dim, 1),
     unit_laplacian,
   );
 }
@@ -51,7 +51,7 @@ fn unit_laplacian(dim: Dim) -> Option<Matrix> {
 #[test]
 fn mass_refcell() {
   check_ref_elmat(
-    |dim| operators::HodgeMassElmat::new(dim, Dim::ZERO),
+    |dim| operators::WhitneyPairing::mass(dim, Dim::ZERO),
     unit_mass,
   );
 }
