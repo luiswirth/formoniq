@@ -199,7 +199,8 @@ fn convergence(dim: usize, nsubs: &[usize]) {
             Cochain::new(
               1,
               SourceForm::new(&section, Some(SimplexQuadRule::degree(dim, 3)))
-                .assemble(&topology, &regge),
+                .assemble(&topology, &regge)
+                .into_coeffs(),
             )
           } else {
             Cochain::new(k, Vector::zeros(whitney.ndofs(k)))

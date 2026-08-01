@@ -30,7 +30,6 @@ use {
   regge::{cell_volume, lengths::mesh::MeshLengthsSq},
   simplicial::{
     atlas::{MeshPoint, SimplexQuadRule},
-    linalg::Vector,
     topology::complex::Complex,
   },
 };
@@ -92,7 +91,7 @@ pub fn l2_projection<F: Sync + Section>(
 ) -> Cochain {
   let grade = field.grade();
   let mass = whitney.mass(grade);
-  let load: Vector = SourceForm::new(field, qr).assemble(whitney.topology(), whitney.geometry());
+  let load = SourceForm::new(field, qr).assemble(whitney.topology(), whitney.geometry());
 
   // The mass is SPD only on a Riemannian geometry. There conjugate gradients
   // solves it far faster than a factorization, the mass is well conditioned
@@ -105,6 +104,10 @@ pub fn l2_projection<F: Sync + Section>(
     .cells()
     .handle_iter()
     .all(|cell| whitney.geometry().cell_metric(cell).is_riemannian());
+  // The mass solve is the Riesz crossing back, $u = M^(-1) ell$: the load is a
+  // functional on the Whitney space and the projection is an element of it.
+  // A Krylov method works in coefficients, so the grading is spent here.
+  let load = load.into_coeffs();
   let coeffs = if riemannian {
     cg(
       &mass,
@@ -122,7 +125,7 @@ pub fn l2_projection<F: Sync + Section>(
 #[cfg(test)]
 mod test {
   use super::*;
-  use simplicial::Dim;
+  use simplicial::{Dim, linalg::Vector};
 
   use derham::section::CoordFieldExt;
   use glatt::field::DiffFormClosure;

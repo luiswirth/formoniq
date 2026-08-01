@@ -12,7 +12,7 @@ use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{
   bc,
-  galerkin::LinearForm,
+  galerkin::{GalerkinVector, LinearForm},
   operators::SourceForm,
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
@@ -20,7 +20,7 @@ use glatt::field::DiffFormClosure;
 use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;
 use regge::subcomplex::SubcomplexExt;
-use simplicial::Dim;
+use simplicial::{Dim, linalg::Vector};
 
 use approx::assert_relative_eq;
 
@@ -40,7 +40,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
 
     let boundary_values = boundary.trace_cochain(&exact_cochain);
     let laplace = whitney.dif_both(1);
-    let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(Dim::ZERO));
+    let rhs = GalerkinVector::new(Dim::ZERO, Vector::zeros(whitney.ndofs(Dim::ZERO)));
 
     let solution = bc::solve_with_essential_bc(
       &whitney.relative(),
@@ -99,7 +99,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
     let flux = flux.pullback_on(boundary.topology(), &boundary_coords);
     rhs += bc::neumann_load(&boundary, &flux, None);
 
-    let solution = FaerCholesky::new(system).solve(&rhs);
+    let solution = FaerCholesky::new(system).solve(rhs.coeffs());
 
     assert_relative_eq!(solution, exact_cochain.coeffs(), epsilon = 1e-9);
   }
@@ -133,7 +133,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
     let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
 
     let laplace = whitney.dif_both(1);
-    let rhs = simplicial::linalg::Vector::zeros(whitney.ndofs(Dim::ZERO));
+    let rhs = GalerkinVector::new(Dim::ZERO, Vector::zeros(whitney.ndofs(Dim::ZERO)));
 
     let solution = bc::solve_with_essential_bc(
       &whitney.relative_to(&gamma_dirichlet),
@@ -192,7 +192,7 @@ fn robin_reproduces_linear_solution() {
 
     let solution = if dirichlet_facets.is_empty() {
       // 1d: pure Robin.
-      Cochain::new(Dim::ZERO, FaerCholesky::new(system).solve(&rhs))
+      Cochain::new(Dim::ZERO, FaerCholesky::new(system).solve(rhs.coeffs()))
     } else {
       let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
       let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);

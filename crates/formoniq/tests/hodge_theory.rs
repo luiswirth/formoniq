@@ -193,7 +193,7 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   // Direct solve on C^0(K, dK), extended by zero.
   let relative: RelativeWhitneyComplex = whitney.relative();
   let laplace_relative = relative.dif_both(1);
-  let rhs_relative = relative.restrict(&Cochain::new(Dim::ZERO, galvec));
+  let rhs_relative = relative.restrict(&Cochain::new(Dim::ZERO, galvec.into_coeffs()));
   let sol_relative = FaerCholesky::new(laplace_relative).solve(rhs_relative.coeffs());
   let sol_relative = relative.extend_by_zero(&Cochain::new(Dim::ZERO, sol_relative));
 

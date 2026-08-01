@@ -87,8 +87,10 @@ fn assemble_mixed_kkt<C: HilbertComplex>(
 
   // Restrict the ambient right-hand side to this complex's DOFs, $E^T f$: the
   // identity on the full complex, a restriction to interior DOFs on the
-  // relative one.
-  let source = complex.inclusion(grade).transpose() * source_galvec;
+  // relative one. The grading stops here, and has to: below, the three spaces
+  // are stacked into one block system, an operator over their direct sum,
+  // which no single grade names.
+  let source = complex.inclusion(grade).transpose() * source_galvec.into_coeffs();
 
   #[allow(clippy::toplevel_ref_arg)]
   let rhs = na::stack![
@@ -263,7 +265,10 @@ mod test {
 
       for grade in dim.range_inclusive() {
         let harmonics = solve_harmonics(&relative, grade).unwrap();
-        let source = Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0);
+        let source = GalerkinVector::new(
+          grade,
+          Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0),
+        );
         let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
 
         let precond = mixed_block_preconditioner(&relative, grade, harmonics.ncols())
@@ -298,7 +303,10 @@ mod test {
 
       for grade in dim.range_inclusive() {
         let harmonics = solve_harmonics(&relative, grade).unwrap();
-        let source = Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0);
+        let source = GalerkinVector::new(
+          grade,
+          Vector::from_fn(topology.nsimplices(grade), |i, _| (i % 7) as f64 - 3.0),
+        );
         let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
         let n = a.nrows();
 
@@ -335,9 +343,12 @@ mod test {
       let lengths = coords.to_edge_lengths_sq(&topology);
       let relative = WhitneyComplex::new(&topology, &lengths).relative();
       let harmonics = solve_harmonics(&relative, grade).unwrap();
-      let source = Vector::from_fn(topology.nsimplices(grade), |i, _| {
-        ((i % 5) as f64 - 2.0) * 0.3
-      });
+      let source = GalerkinVector::new(
+        grade,
+        Vector::from_fn(topology.nsimplices(grade), |i, _| {
+          ((i % 5) as f64 - 2.0) * 0.3
+        }),
+      );
       let (a, b, _, _) = assemble_mixed_kkt(&relative, source, grade, &harmonics);
       let precond = mixed_block_preconditioner(&relative, grade, harmonics.ncols()).unwrap();
       let (_, report) = minres(&a, &precond, &b, StopCriterion::rtol(1e-10));
