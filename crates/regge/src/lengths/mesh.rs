@@ -54,27 +54,52 @@ impl LengthsSq for MeshLengthsSq {
   }
 }
 impl MeshLengthsSq {
-  /// The invariant is per-cell non-degeneracy of the induced metric, checked
-  /// over the cell skeleton. The signature is whatever the data describes.
-  pub fn new(vector: Vector, complex: &Complex) -> Self {
-    let this = Self { vector };
-    assert!(
-      this.is_nondegenerate(complex.cells().get()),
-      "Squared edge lengths must induce non-degenerate cell metrics."
-    );
-    this
-  }
-  pub fn try_new(vector: Vector, complex: &Complex) -> Option<Self> {
-    let this = Self { vector };
-    this.is_nondegenerate(complex.cells().get()).then_some(this)
-  }
-  pub fn new_unchecked(vector: Vector) -> Self {
+  /// The geometry given by signed squared lengths on the 1-skeleton, one per
+  /// edge in colex order.
+  ///
+  /// The hypothesis is per-cell non-degeneracy of the induced metric
+  /// ([`Self::is_valid`]), and it is the caller's to hold. It usually holds
+  /// upstream by construction: an embedding of a mesh whose cells are
+  /// non-degenerate induces it, and a refinement or a subcomplex inherits it
+  /// from the geometry it was cut from. Where it is genuinely in question, on a
+  /// mesh file or on lengths a user supplied, [`Self::new_checked`] asks.
+  ///
+  /// Verifying costs a Cayley-Menger determinant per cell, a sweep over the
+  /// whole mesh. Unchecked in every build profile, debug included: a
+  /// constructor whose cost and whose panics depend on how the code was
+  /// compiled is a worse trap than an unchecked one.
+  ///
+  /// The complex is not an argument, deliberately. The lengths are a vector
+  /// over the 1-skeleton and mean nothing else; only the hypothesis is
+  /// relational, which is why the complex enters at [`Self::is_valid`] and at
+  /// the checked constructor.
+  pub fn new(vector: Vector) -> Self {
     Self { vector }
   }
+  /// The geometry, or `None` if some cell degenerates: the constructor that
+  /// verifies what [`Self::new`] takes on contract.
+  ///
+  /// Holding the result *is* the proof that every cell metric is
+  /// non-degenerate, so an import checks here once instead of every element
+  /// computation re-asking.
+  pub fn new_checked(vector: Vector, complex: &Complex) -> Option<Self> {
+    let this = Self::new(vector);
+    this.is_valid(complex).then_some(this)
+  }
+  /// Whether these lengths are a geometry on `complex`: every cell metric
+  /// non-degenerate, which is exactly the contract [`Self::new`] takes on trust
+  /// and [`Self::new_checked`] verifies.
+  ///
+  /// The signature is whatever the data describes; non-degeneracy is the
+  /// hypothesis, definiteness is not.
+  pub fn is_valid(&self, complex: &Complex) -> bool {
+    self.is_nondegenerate(complex.cells().get())
+  }
+  /// The unit simplex as a one-cell mesh, non-degenerate by construction.
   pub fn unit(dim: impl Into<Dim>) -> MeshLengthsSq {
     let dim = dim.into();
     let vector = SimplexLengthsSq::unit(dim).into_vector();
-    Self::new_unchecked(vector)
+    Self::new(vector)
   }
 
   pub fn vector(&self) -> &Vector {
@@ -131,8 +156,9 @@ impl MeshLengthsSq {
       .map(|edge| edge.length_sq(self))
       .collect_vec()
       .into();
-    // SAFETY: Non-degeneracy was checked at construction.
-    SimplexLengthsSq::new_unchecked(lengths_sq, simplex.dim())
+    // A face of a non-degenerate cell is non-degenerate, and the cells were
+    // established as such when this geometry was built.
+    SimplexLengthsSq::new(lengths_sq, simplex.dim())
   }
 
   /// The intrinsic metric tensor of any simplex, of any grade: the Gramian
@@ -279,6 +305,7 @@ mod test {
   use super::*;
   use crate::mesher::cartesian::CartesianGrid;
   use multiindex::Dim;
+  use simplicial::topology::simplex::edge_index;
 
   /// The mesh's local length scale halves when every edge is split: it tracks
   /// the refinement, which is exactly what distinguishes it from the extent of
@@ -297,6 +324,42 @@ mod test {
         );
       }
       previous = Some(mean);
+    }
+  }
+
+  /// The checked constructor decides per-cell non-degeneracy: it accepts the
+  /// geometry a grid embedding induces and rejects the same geometry with one
+  /// edge collapsed.
+  ///
+  /// Both directions, so that a constructor returning `Some` unconditionally
+  /// would fail. The hypothesis is relational, which is why the complex enters
+  /// here and not at [`MeshLengthsSq::new`]: the same vector is a geometry or
+  /// not depending on which cells are asked about.
+  ///
+  /// The perturbation identifies two vertices of one cell, which makes two rows
+  /// of its distance matrix agree and its Cayley-Menger determinant vanish.
+  /// Merely zeroing one edge would not do: it leaves a length set no Euclidean
+  /// configuration realizes, whose determinant is negative rather than zero, so
+  /// the simplex is non-degenerate of indefinite signature and rightly
+  /// accepted. Non-degeneracy is the hypothesis, realizability is not.
+  #[test]
+  fn new_checked_decides_cell_non_degeneracy() {
+    for dim in (1..=3usize).map(Dim::from) {
+      let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
+      let lengths_sq = coords.to_edge_lengths_sq(&topology);
+      assert!(lengths_sq.is_valid(&topology));
+
+      let vector = lengths_sq.into_vector();
+      assert!(MeshLengthsSq::new_checked(vector.clone(), &topology).is_some());
+
+      let cell = topology.cells().handle_iter().next().unwrap();
+      let edge_kidxs: Vec<_> = cell.get().edges().map(|edge| edge.kidx()).collect();
+      let mut collapsed = vector.clone();
+      collapsed[edge_kidxs[edge_index(0, 1)]] = 0.0;
+      for other in 2..=dim.index() {
+        collapsed[edge_kidxs[edge_index(1, other)]] = vector[edge_kidxs[edge_index(0, other)]];
+      }
+      assert!(MeshLengthsSq::new_checked(collapsed, &topology).is_none());
     }
   }
 

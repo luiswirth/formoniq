@@ -48,19 +48,46 @@ pub struct MeshPoint {
 }
 
 impl MeshPoint {
-  /// The barycentric weights must be affine, $sum_i lambda_i = 1$: this is the
-  /// one boundary where raw weights enter a point, and it is the contract that
-  /// keeps a `MeshPoint` on the affine hull of its cell. A weight vector off the
-  /// hull is not a point of the manifold. The check is a `debug_assert` with
-  /// tolerance rather than a hard type gate, because the weights are only ever
-  /// floating-point affine and legitimate drift must not be rejected.
+  /// The point of a cell's chart at the given barycentric weights.
+  ///
+  /// The hypothesis is that the weights are affine, $sum_i lambda_i = 1$
+  /// ([`Self::is_valid`]): this is the one boundary where raw weights enter a
+  /// point, and it is what keeps a `MeshPoint` on the affine hull of its cell.
+  /// A weight vector off the hull is not a point of the manifold. It is the
+  /// caller's to hold, and every constructor here discharges it structurally,
+  /// [`Self::barycenter`] and [`Self::from_local`] by how they build the
+  /// weights, [`Self::on_face`] by scattering weights that already summed to
+  /// one.
+  ///
+  /// Unchecked in every build profile, debug included. The weights are only
+  /// ever floating-point affine, so the predicate carries a tolerance, and a
+  /// tolerance is exactly the wrong thing to trip a panic that appears only
+  /// under `cfg(debug_assertions)`: legitimate drift would fail the test suite
+  /// on code the release build runs happily.
+  ///
+  /// # Panics
+  /// If the number of weights is not the number of vertices of the cell. That
+  /// is a shape mismatch rather than a hypothesis: the weights are not
+  /// barycentric coordinates of this cell at all.
   pub fn new(cell: SimplexIdx, bary: Bary) -> Self {
     assert_eq!(bary.dim(), cell.dim() + 1, "Wrong number of barycentrics.");
-    debug_assert!(
-      approx::relative_eq!(bary.view().sum(), 1.0, epsilon = 1e-9),
-      "Barycentric weights must sum to one."
-    );
     Self { cell, bary }
+  }
+  /// The point, or `None` if the weights are not affine: the constructor that
+  /// verifies what [`Self::new`] takes on contract.
+  pub fn new_checked(cell: SimplexIdx, bary: Bary) -> Option<Self> {
+    let this = Self::new(cell, bary);
+    this.is_valid().then_some(this)
+  }
+  /// Whether the weights are affine, $sum_i lambda_i = 1$, up to a relative
+  /// tolerance: the contract [`Self::new`] takes on trust and
+  /// [`Self::new_checked`] verifies.
+  ///
+  /// Affine, not convex. A weight outside $[0, 1]$ puts the point on the affine
+  /// hull outside the cell, which is a point of the chart's extension and a
+  /// legitimate value, the one an extrapolating evaluation returns.
+  pub fn is_valid(&self) -> bool {
+    approx::relative_eq!(self.bary.view().sum(), 1.0, epsilon = 1e-9)
   }
   /// From the local (cartesian) coordinates of the cell chart.
   pub fn from_local<'a>(cell: SimplexIdx, local: impl Into<LocalRef<'a>>) -> Self {
@@ -152,7 +179,38 @@ impl MeshPoint {
 mod test {
   use super::*;
   use crate::Dim;
+  use crate::linalg::Vector;
   use crate::topology::complex::Complex;
+
+  /// The checked constructor decides affineness of the weights: it accepts what
+  /// the structural constructors build and rejects a weight vector off the
+  /// affine hull.
+  ///
+  /// Affine and not convex, so a point extrapolated outside the cell is
+  /// accepted: it is a point of the chart's extension, which is what makes the
+  /// hypothesis the sum and not the range.
+  #[test]
+  fn new_checked_decides_affineness() {
+    for dim in (0..=3usize).map(Dim::from) {
+      let cell = Complex::unit(dim)
+        .cells()
+        .handle_iter()
+        .next()
+        .unwrap()
+        .idx();
+      assert!(MeshPoint::barycenter(cell).is_valid());
+
+      if dim.index() > 0 {
+        let mut outside = Vector::zeros(dim.index() + 1);
+        outside[0] = 2.0;
+        outside[1] = -1.0;
+        assert!(MeshPoint::new_checked(cell, Bary::new(outside)).is_some());
+      }
+
+      let off_hull = Vector::zeros(dim.index() + 1);
+      assert!(MeshPoint::new_checked(cell, Bary::new(off_hull)).is_none());
+    }
+  }
 
   /// The charts of the atlas are the cells: resolving a point whose simplex is a
   /// face, not a cell, is a contract violation and not a supported case.
