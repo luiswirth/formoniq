@@ -279,11 +279,6 @@ pub struct GlyphMaterial {
   /// coarse mesh and a refined one. The quad is sized from the same product in
   /// the bake.
   pub width_fraction: f32,
-  /// Opacity at the standing wave's node, relative to the crest: the glyphs of
-  /// an eigenmode fade where the field vanishes and an arrow is meaningless. A
-  /// static field passes 1.
-  pub fade_floor: f32,
-  pub wave_omega: f32,
   /// The arrowhead's length as a fraction of the arrow's own, and the shaft's
   /// half-width as a fraction of the head's base: the proportions of the drawn
   /// arrow, self-similar since both are fractions.
@@ -293,6 +288,4 @@ pub struct GlyphMaterial {
   /// rim scales with the arrow like every other proportion, drawn black so it
   /// separates from either colormap beneath it. Zero draws no rim.
   pub outline_width_fraction: f32,
-  pub _pad0: f32,
-  pub _pad1: f32,
 }

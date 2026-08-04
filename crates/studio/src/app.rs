@@ -399,7 +399,7 @@ impl State {
   /// this method's: the display owns what depends on the field's value, and a
   /// caller that rewrote a chosen subset would leave the rest of the marks
   /// standing at the initial condition.
-  fn rebake_trajectory(&self) {
+  fn rebake_trajectory(&mut self) {
     let time_model = self.scene.field_time(self.selection);
     let Some(duration) = time_model.duration() else {
       return;

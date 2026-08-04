@@ -140,12 +140,6 @@ const GLYPH_INK: [f32; 4] = [1.0, 1.0, 1.0, 0.75];
 /// shader's own doc gives for not colormapping the ink itself.
 const GLYPH_OUTLINE_WIDTH_FRACTION: f32 = 0.27;
 
-/// The opacity the glyphs of an eigenmode fade to at the standing wave's node,
-/// where the field vanishes and an arrow is meaningless, never fully, since
-/// the glyph lattice of a standing mode is the same set at every phase, and
-/// blinking it out entirely would read as the geometry changing.
-const GLYPH_NODE_OPACITY: f32 = 0.25;
-
 /// How fast the fastest particle crosses the object: scene radii per second, at
 /// the field's peak magnitude.
 ///
@@ -606,13 +600,14 @@ pub(crate) struct FieldDisplay {
 /// for the same reason in both cases: a mark whose own reference moves reports
 /// nothing. The spacing fixes the lattice, so the arrows stay where they are
 /// and the eye follows the field rather than the sample points; the peak fixes
-/// what full opacity means, so a decaying field fades instead of being
-/// renormalized back to full brightness at every instant.
+/// the scale a magnitude counts as noise against, so a decaying field keeps its
+/// arrows where it still has a direction instead of having its own roundoff
+/// renormalized into one at every instant.
 pub(crate) struct GlyphDisplay {
   batch: GlyphBatch,
   /// The lattice's target spacing in world units.
   spacing: f64,
-  /// The magnitude a glyph's opacity and length are read against.
+  /// The magnitude a glyph's direction floor is read against.
   peak: f64,
 }
 
@@ -622,7 +617,7 @@ impl GlyphDisplay {
   /// The same bake [`FieldDisplay::build`] ran, on another frame of the same
   /// field: same surface, same lattice, same reference magnitude, so the only
   /// thing that moves is the field.
-  fn rebake(&self, queue: &wgpu::Queue, scene: &Scene, cochain: &derham::Cochain) {
+  fn rebake(&mut self, queue: &wgpu::Queue, scene: &Scene, cochain: &derham::Cochain) {
     let Some(traced) = scene.surface.trace(&scene.topology, cochain) else {
       return;
     };
@@ -791,7 +786,11 @@ impl FieldDisplay {
           })
           .unwrap_or_default();
         let glyphs = GlyphDisplay {
-          batch: GlyphBatch::new(&ctx.device, &vertices),
+          batch: GlyphBatch::new(
+            &ctx.device,
+            &vertices,
+            realize::glyph::lattice_size(surface_topology, surface_coords, spacing),
+          ),
           spacing,
           peak,
         };
@@ -993,23 +992,20 @@ impl FieldDisplay {
         diverging: point_diverging,
         colored: 0.0,
       },
-      // The glyphs share the surface's clock but not its displacement: the
-      // samples sit on the undisplaced surface, so only the node fade reads the
-      // mode. The outline rides the same material, `glyph.wgsl` composites the
-      // rim under the ink in one pass. Every dimension here is a proportion of
+      // The glyphs read neither the surface's displacement nor its clock: the
+      // samples sit on the undisplaced surface, and an arrow reports a
+      // direction, which the standing wave's scalar factor does not turn. The
+      // outline rides the same material, `glyph.wgsl` composites the rim under
+      // the ink in one pass. Every dimension here is a proportion of
       // the arrow's own length, which the bake sets per cell, so the mark is
       // self-similar at any refinement and none of it is a world size.
       // The clip to the cell is intrinsic to the flat mark and needs no flag.
       glyph: GlyphMaterial {
         color: GLYPH_INK,
         width_fraction: GLYPH_WIDTH_FRACTION,
-        fade_floor: GLYPH_NODE_OPACITY,
-        wave_omega: surface.wave_omega,
         head_length_fraction: GLYPH_HEAD_LENGTH_FRACTION,
         shaft_width_fraction: GLYPH_SHAFT_WIDTH_FRACTION,
         outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION,
-        _pad0: 0.0,
-        _pad1: 0.0,
       },
     };
     (display, attributes)
@@ -1029,7 +1025,7 @@ impl FieldDisplay {
   /// standing wave's evolution is a scalar factor the GPU applies, so both are
   /// baked once.
   pub(crate) fn rebake(
-    &self,
+    &mut self,
     queue: &wgpu::Queue,
     scene: &Scene,
     mesh: &MeshDisplay,
@@ -1043,7 +1039,7 @@ impl FieldDisplay {
       mesh.segments(),
     );
     mesh.write_attributes(queue, &attributes);
-    if let Some(glyphs) = self.glyphs.as_ref() {
+    if let Some(glyphs) = self.glyphs.as_mut() {
       glyphs.rebake(queue, scene, cochain);
     }
   }

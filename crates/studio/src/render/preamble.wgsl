@@ -88,13 +88,9 @@ struct SegmentMaterial {
 struct GlyphMaterial {
     color: vec4<f32>,
     width_fraction: f32,
-    fade_floor: f32,
-    wave_omega: f32,
     head_length_fraction: f32,
     shaft_width_fraction: f32,
     outline_width_fraction: f32,
-    _pad0: f32,
-    _pad1: f32,
 };
 
 // The standing wave's instantaneous phase factor $cos(omega t)$: the one

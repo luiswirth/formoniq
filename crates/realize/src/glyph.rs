@@ -14,12 +14,18 @@
 //!
 //! [`Transition`]: simplicial::atlas::Transition
 //!
-//! Length never encodes magnitude. The mark carries the direction and the fill
-//! beneath it carries the magnitude, which is why `segments.wgsl` does not
-//! colormap them: scaling by $|V|$ would restate the fill and shrink the field
-//! where it is small, which is where its direction is most worth seeing.
-//! Magnitude controls opacity instead, so a vanishing field fades out rather
-//! than pointing somewhere arbitrary.
+//! Neither length nor opacity encodes magnitude. The mark carries the direction
+//! and the fill beneath it carries the magnitude, which is why `segments.wgsl`
+//! does not colormap them: scaling by $|V|$ would restate the fill and shrink
+//! the field where it is small, which is where its direction is most worth
+//! seeing. An arrow is therefore drawn at full opacity wherever it is drawn at
+//! all, so a weak direction reads as well as a strong one.
+//!
+//! What a magnitude does decide is whether there is a direction at all. A
+//! vanishing field points nowhere, and a field that vanishes only up to roundoff
+//! points somewhere arbitrary, so a sample below [`GLYPH_DIRECTION_FLOOR`] times
+//! the field's peak emits no arrow rather than an arrow with an invented
+//! heading.
 //!
 //! A glyph is centered on its sample and sized to a fixed fraction
 //! ([`GLYPH_LENGTH_FRACTION`]) of the lattice's tightest spacing (the shortest
@@ -59,6 +65,17 @@ pub const GLYPH_REFINEMENT_MAX: usize = 8;
 /// arrow as its own mark while still filling most of the room the lattice gives
 /// it.
 pub const GLYPH_LENGTH_FRACTION: f64 = 2.0 / 3.0;
+
+/// The magnitude, relative to the field's peak, below which a sample is taken to
+/// have no direction and gets no arrow.
+///
+/// Relative rather than absolute, because a magnitude carries the field's own
+/// units and only a ratio is scale-free. The value sits far above double
+/// roundoff, which the interpolation, the musical and the pushforward each
+/// contribute to, and far below anything a field does where it is genuinely
+/// nonzero: what it excludes is a direction computed out of noise, which is
+/// arbitrary and moves from frame to frame while looking like data.
+pub const GLYPH_DIRECTION_FLOOR: f64 = 1e-9;
 
 /// The world-space diameter of a cell (greatest inter-vertex distance) and its
 /// shortest edge (least). Cheap, since a cell has only `dim + 1` vertices.
@@ -124,12 +141,35 @@ pub fn glyph_refinement(dim: simplicial::Dim, diameter: f64, target_spacing: f64
   raw.clamp((dim + 1).index(), GLYPH_REFINEMENT_MAX)
 }
 
+/// The number of lattice points [`bake_glyphs`] samples on this mesh at this
+/// spacing, hence the greatest number of arrows any field on it can produce.
+///
+/// A function of the mesh and the spacing alone, which is exactly what makes it
+/// the bound a consumer sizes a fixed buffer by: the arrows a given instant
+/// produces are the samples where the field has a direction, a subset that moves
+/// with the field, while the lattice under them does not move at all.
+pub fn lattice_size(topology: &Complex, coords: &MeshCoords, target_spacing: f64) -> usize {
+  topology
+    .cells()
+    .handle_iter()
+    .map(|cell| {
+      let (_, diameter) = cell_extent(&cell.coord_simplex(coords));
+      unit_lattice_bary(
+        cell.dim(),
+        glyph_refinement(cell.dim(), diameter, target_spacing),
+      )
+      .count()
+    })
+    .sum()
+}
+
 /// The glyphs of a line field, baked as flat arrow quads: one arrow per lattice
 /// point of each cell, centered on the point and lying in the cell's own plane.
 ///
 /// `target_spacing` is the world spacing the per-cell lattice aims for (see
 /// [`glyph_refinement`]); `peak` is the field's greatest magnitude, which the
-/// fade is measured against. The arrow's proportions are not passed: they are
+/// direction floor is measured against. The arrow's proportions are not passed:
+/// they are
 /// fractions of its own length, applied in the vertex shader when it generates
 /// the quad, so the bake decides only where each arrow is, which way it points
 /// and how long it is.
@@ -189,8 +229,10 @@ pub fn bake_glyphs(
         .map(|v| v.view().into_owned())
         .collect();
 
+      let floor = GLYPH_DIRECTION_FLOOR * peak;
+
       unit_lattice_bary(cell.dim(), refinement)
-        .map(|bary| {
+        .filter_map(|bary| {
           let point = MeshPoint::new(cell.idx(), bary);
           let field = reduced_form(interpolant.eval(&point), &metric, sign).musical(&metric);
           // Sharped, hence contravariant, so it genuinely pushes forward: the
@@ -200,22 +242,14 @@ pub fn bake_glyphs(
             .components()
             .clone();
           let magnitude = ambient.norm();
-          let opacity = if peak > 0.0 {
-            (magnitude / peak).clamp(0.0, 1.0)
-          } else {
-            0.0
-          };
+          if magnitude <= floor {
+            return None;
+          }
 
-          // The arrow's in-plane frame. A field that vanishes here points
-          // nowhere, and its arrow is invisible (opacity 0), so any direction
-          // does, the first spanning edge stands in. The perpendicular is an
-          // in-plane vector with the field component removed, so the whole
-          // arrow lies in the cell.
-          let direction = if magnitude > 0.0 {
-            &ambient / magnitude
-          } else {
-            (&cell_verts[1] - &cell_verts[0]).normalize()
-          };
+          // The arrow's in-plane frame. The perpendicular is an in-plane vector
+          // with the field component removed, so the whole arrow lies in the
+          // cell.
+          let direction = &ambient / magnitude;
           let across = cell_verts[1..]
             .iter()
             .map(|v| v - &cell_verts[0])
@@ -250,17 +284,17 @@ pub fn bake_glyphs(
           let c = to_vec3(&center);
           let d = to_vec3(&direction);
           let a = to_vec3(&across);
-          GlyphInstance {
+          Some(GlyphInstance {
             center: [c.x as f32, c.y as f32, c.z as f32],
             length: length as f32,
             direction: [d.x as f32, d.y as f32, d.z as f32],
-            opacity: opacity as f32,
+            opacity: 1.0,
             across: [a.x as f32, a.y as f32, a.z as f32],
             _pad0: 0.0,
             bary_center,
             bary_along: gradient(&direction),
             bary_across: gradient(&across),
-          }
+          })
         })
         .collect::<Vec<_>>()
         .into_iter()
@@ -358,23 +392,50 @@ mod tests {
     }
   }
 
-  /// One instance per lattice point, six corners generated per instance in the
-  /// shader: the bake stores arrows, not corners.
+  /// One instance per lattice point where the field has a direction, six corners
+  /// generated per instance in the shader: the bake stores arrows, not corners.
   #[test]
   fn the_bake_emits_one_instance_per_lattice_point() {
     let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
     let cochain = Cochain::constant(1.0, topology.skeleton(1));
     let instances = bake_glyphs(&topology, &coords, &cochain, 0.06, 1.0);
 
-    let expected: usize = topology
-      .cells()
-      .handle_iter()
-      .map(|cell| {
-        let (_, diameter) = cell_extent(&cell.coord_simplex(&coords));
-        unit_lattice_bary(cell.dim(), glyph_refinement(cell.dim(), diameter, 0.06)).count()
-      })
-      .sum();
-    assert_eq!(instances.len(), expected);
+    // The constant cochain has a direction everywhere on this mesh, so the
+    // bound is attained and the two counts are equal.
+    assert_eq!(instances.len(), lattice_size(&topology, &coords, 0.06));
+  }
+
+  /// A field with no direction gets no arrow, and roundoff is not a direction.
+  ///
+  /// Both halves are the same statement at two scales. The zero field is the
+  /// exact case, where a heading would have to be invented outright. The scaled
+  /// one is the case that actually occurs: a field that ought to vanish arrives
+  /// at a few ulp of the peak instead, through the interpolation and the
+  /// pushforward, and its normalized direction is then pure noise. Drawn at full
+  /// opacity that noise is indistinguishable from data, which is why the floor
+  /// is a threshold on the bake rather than a fade in the shader.
+  ///
+  /// The peak the floor is read against is the caller's, so the second half also
+  /// pins that the comparison is relative: the same cochain against a peak of
+  /// its own size is a field, against a much larger one it is noise.
+  #[test]
+  fn a_directionless_sample_gets_no_arrow() {
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(2);
+    let edges = topology.skeleton(1);
+
+    let zero = Cochain::constant(0.0, edges);
+    assert!(
+      bake_glyphs(&topology, &coords, &zero, 0.06, 0.0).is_empty(),
+      "the zero field points nowhere"
+    );
+
+    let one = Cochain::constant(1.0, edges);
+    assert!(!bake_glyphs(&topology, &coords, &one, 0.06, 1.0).is_empty());
+    let noise = Cochain::new(1, one.coeffs() * (0.1 * GLYPH_DIRECTION_FLOOR));
+    assert!(
+      bake_glyphs(&topology, &coords, &noise, 0.06, 1.0).is_empty(),
+      "a field at a fraction of the floor is noise, not a direction"
+    );
   }
 
   /// The lattice is a function of the mesh and the target spacing, the arrows
