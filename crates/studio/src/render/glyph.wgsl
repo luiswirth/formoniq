@@ -127,11 +127,6 @@ struct FsOut {
 
 @fragment
 fn fs_main(in: VertexOutput) -> FsOut {
-    // Fade toward the standing-wave node, where the field vanishes and an arrow
-    // is meaningless -- but never fully, since the lattice of a standing mode is
-    // the same set at every phase. A static field passes `fade_floor = 1`.
-    let env = abs(wave_osc(frame, material.wave_omega));
-
     // The quad is cut down to the arrow's silhouette, one screen pixel of
     // gradient wide, so the edge is resolved rather than aliased.
     let head_len = material.head_length_fraction * in.length;
@@ -155,10 +150,14 @@ fn fs_main(in: VertexOutput) -> FsOut {
     let clip = smoothstep(-clip_edge, clip_edge, min_bary);
 
     // Standard alpha compositing of the ink (the material's own color) over the
-    // rim (opaque black), both faded by the envelope, the mark's opacity and the
-    // clip -- so the rim fades out with the ink it outlines rather than staying a
-    // black skeleton once the ink above it is gone.
-    let envelope = in.opacity * clip * mix(material.fade_floor, 1.0, env);
+    // rim (opaque black), both faded by the mark's opacity and the clip -- so the
+    // rim fades out with the ink it outlines rather than staying a black skeleton
+    // once the ink above it is gone.
+    //
+    // An arrow reports a direction, which a magnitude neither weakens nor
+    // strengthens, so nothing here reads the field's size: no wave envelope, and
+    // the bake emits no arrow at all where there is no direction to report.
+    let envelope = in.opacity * clip;
     let ink_a = material.color.a * envelope * ink;
     let rim_a = envelope * max(rim - ink, 0.0);
     let alpha = ink_a + rim_a * (1.0 - ink_a);

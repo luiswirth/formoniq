@@ -400,6 +400,11 @@ impl PointBatch {
 /// way a mesh edge is, and the arrow-frame coordinate differs per corner anyway.
 pub struct GlyphBatch {
   instances: wgpu::Buffer,
+  /// How many arrows the buffer holds room for: the lattice's size, which is
+  /// the mesh's and does not move with the field.
+  capacity: u32,
+  /// How many of them the current frame draws. At most the capacity, and below
+  /// it wherever the field has no direction to point.
   ninstances: u32,
 }
 
@@ -408,11 +413,20 @@ pub struct GlyphBatch {
 const GLYPH_CORNERS: u32 = 6;
 
 impl GlyphBatch {
-  /// One instance per arrow. An empty stream is a valid batch that draws
-  /// nothing.
-  pub fn new(device: &wgpu::Device, instances: &[GlyphInstance]) -> Self {
+  /// One instance per arrow, in a buffer sized by `capacity`, the lattice the
+  /// arrows are sampled on ([`realize::glyph::lattice_size`]). Sized by the
+  /// lattice rather than by `instances` because the arrows are a field-dependent
+  /// subset of it: sizing to the first instant would leave a later one, with a
+  /// direction where this one had none, nowhere to go.
+  ///
+  /// An empty stream is a valid batch that draws nothing.
+  pub fn new(device: &wgpu::Device, instances: &[GlyphInstance], capacity: usize) -> Self {
+    assert!(instances.len() <= capacity);
+    let mut padded = instances.to_vec();
+    padded.resize(capacity, GlyphInstance::default());
     Self {
-      instances: vertex_buffer(device, "Glyph Instances", instances),
+      instances: vertex_buffer(device, "Glyph Instances", &padded),
+      capacity: capacity as u32,
       ninstances: instances.len() as u32,
     }
   }
@@ -420,15 +434,18 @@ impl GlyphBatch {
   /// Rewrites the arrows in place, for a field whose value has moved.
   ///
   /// The lattice the arrows sit on is a function of the mesh and the target
-  /// spacing alone, so the instance count is the same at every instant of a
-  /// field's evolution and only the direction and length of each arrow change.
-  /// A differing count is therefore a shape mismatch, not a case to handle.
-  pub fn write_instances(&self, queue: &wgpu::Queue, instances: &[GlyphInstance]) {
-    assert_eq!(
-      instances.len() as u32,
-      self.ninstances,
-      "the glyph lattice is fixed by the mesh, so a re-bake has the same count"
+  /// spacing alone, so it bounds the count at every instant of a field's
+  /// evolution. The count itself is the field's: a sample where the field has no
+  /// direction emits no arrow, and where that happens moves with the field. So
+  /// the buffer is sized once by the lattice and the draw range is the frame's,
+  /// and a re-bake exceeding the lattice is a shape mismatch, not a case to
+  /// handle.
+  pub fn write_instances(&mut self, queue: &wgpu::Queue, instances: &[GlyphInstance]) {
+    assert!(
+      instances.len() as u32 <= self.capacity,
+      "a re-bake cannot exceed the lattice the buffer was sized by"
     );
+    self.ninstances = instances.len() as u32;
     write_stream(queue, &self.instances, instances);
   }
 
