@@ -390,11 +390,15 @@ impl State {
     phase * duration
   }
 
-  /// Re-bakes the displayed field's stream from its interpolated frame at the
-  /// current clock time, when that field is a trajectory. A no-op otherwise:
-  /// a static field and a standing wave are baked once and re-timed on the GPU,
-  /// so only a sampled trajectory owes a per-frame CPU rewrite, exactly the
-  /// "scrubbing a trajectory rewrites only the field stream" the bake draws.
+  /// Re-bakes the displayed field from its interpolated frame at the current
+  /// clock time, when that field is a trajectory. A no-op otherwise: a static
+  /// field and a standing wave are baked once and re-timed on the GPU, so only
+  /// a sampled trajectory owes a per-frame CPU rewrite.
+  ///
+  /// Which streams that touches is [`FieldDisplay::rebake`]'s to know, not
+  /// this method's: the display owns what depends on the field's value, and a
+  /// caller that rewrote a chosen subset would leave the rest of the marks
+  /// standing at the initial condition.
   fn rebake_trajectory(&self) {
     let time_model = self.scene.field_time(self.selection);
     let Some(duration) = time_model.duration() else {
@@ -402,16 +406,9 @@ impl State {
     };
     let base = self.scene.field_cochain(self.selection);
     let cochain = time_model.frame_at(base, self.trajectory_solve_time(duration));
-    let (attributes, _) = crate::display::field_attributes(
-      &self.scene.topology,
-      &self.scene.coords,
-      &cochain,
-      self.mesh_display.fill_triangles(),
-      self.mesh_display.segments(),
-    );
     self
-      .mesh_display
-      .write_attributes(&self.ctx.queue, &attributes);
+      .display
+      .rebake(&self.ctx.queue, &self.scene, &self.mesh_display, &cochain);
   }
 
   /// Displays `selection` of the current scene, rebuilding exactly the pieces

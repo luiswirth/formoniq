@@ -376,4 +376,36 @@ mod tests {
       .sum();
     assert_eq!(instances.len(), expected);
   }
+
+  /// The lattice is a function of the mesh and the target spacing, the arrows
+  /// on it a function of the field: two instants of an evolving field give the
+  /// same count of arrows, pointing differently.
+  ///
+  /// Both halves matter, and they fail in opposite directions. A count that
+  /// moved with the field would mean the arrows cannot be rewritten in place,
+  /// so a consumer holding a fixed buffer would have to rebuild it. Directions
+  /// that did not move would mean the arrows are not reading the field at all,
+  /// which is what a mark baked once from an initial condition looks like: it
+  /// is on screen, it is plausible, and it is the same picture forever.
+  #[test]
+  fn the_lattice_is_the_meshs_and_the_arrows_are_the_fields() {
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(2);
+    let edges = topology.skeleton(1);
+    let one = Cochain::constant(1.0, edges);
+    // A different field on the same mesh, not a rescaling of the first: a
+    // uniform factor would move no direction and prove nothing.
+    let other = Cochain::new(
+      1,
+      na::DVector::from_iterator(edges.len(), (0..edges.len()).map(|i| (i as f64).sin())),
+    );
+
+    let baked = |cochain| bake_glyphs(&topology, &coords, cochain, 0.06, 1.0);
+    let (a, b) = (baked(&one), baked(&other));
+    assert!(!a.is_empty());
+    assert_eq!(a.len(), b.len(), "the lattice does not move with the field");
+    assert!(
+      a.iter().zip(&b).any(|(x, y)| x.direction != y.direction),
+      "the arrows do not read the field"
+    );
+  }
 }
