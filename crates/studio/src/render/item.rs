@@ -417,6 +417,21 @@ impl GlyphBatch {
     }
   }
 
+  /// Rewrites the arrows in place, for a field whose value has moved.
+  ///
+  /// The lattice the arrows sit on is a function of the mesh and the target
+  /// spacing alone, so the instance count is the same at every instant of a
+  /// field's evolution and only the direction and length of each arrow change.
+  /// A differing count is therefore a shape mismatch, not a case to handle.
+  pub fn write_instances(&self, queue: &wgpu::Queue, instances: &[GlyphInstance]) {
+    assert_eq!(
+      instances.len() as u32,
+      self.ninstances,
+      "the glyph lattice is fixed by the mesh, so a re-bake has the same count"
+    );
+    write_stream(queue, &self.instances, instances);
+  }
+
   pub fn layouts<'a>() -> [wgpu::VertexBufferLayout<'a>; 1] {
     [wgpu::VertexBufferLayout {
       array_stride: size_of::<GlyphInstance>() as wgpu::BufferAddress,

@@ -499,10 +499,10 @@ pub(crate) const TRAJECTORY_LOOP_SECONDS: f64 = 6.0;
 
 /// The two field streams for a cochain, the per-corner cell-local colormap
 /// value and the per-vertex continuous displacement height, together with the
-/// colormap's raw range. Extracted from [`FieldDisplay::build`] so a trajectory's
-/// caller can recompute them per frame from an interpolated frame and rewrite
-/// them into the mesh, which is the whole of scrubbing a trajectory.
-pub(crate) fn field_attributes(
+/// colormap's raw range. Split out of [`FieldDisplay::build`] so that
+/// [`FieldDisplay::rebake`] recomputes exactly the same streams from an
+/// interpolated frame, which is half of scrubbing a trajectory.
+fn field_attributes(
   topology: &simplicial::topology::complex::Complex,
   coords: &regge::coord::mesh::MeshCoords,
   cochain: &derham::Cochain,
@@ -574,7 +574,7 @@ pub(crate) struct FieldDisplay {
   /// evaluated, at points the atlas places (the barycentric lattice of each
   /// cell, boundary included: see [`realize::glyph`]) rather than a tracer's
   /// seeding or a population's respawn.
-  glyphs: Option<GlyphBatch>,
+  glyphs: Option<GlyphDisplay>,
   /// The advected particles of a line field, absent for a scalar field and for
   /// a field that vanishes everywhere (which seeds nowhere).
   ///
@@ -598,6 +598,43 @@ pub(crate) struct FieldDisplay {
   /// a segment mark differ only in primitive, not in what drives them.
   points: SegmentMaterial,
   glyph: GlyphMaterial,
+}
+
+/// A line field's arrows, and what re-baking them at another instant needs.
+///
+/// The two parameters are pinned to the display, not recomputed per frame, and
+/// for the same reason in both cases: a mark whose own reference moves reports
+/// nothing. The spacing fixes the lattice, so the arrows stay where they are
+/// and the eye follows the field rather than the sample points; the peak fixes
+/// what full opacity means, so a decaying field fades instead of being
+/// renormalized back to full brightness at every instant.
+pub(crate) struct GlyphDisplay {
+  batch: GlyphBatch,
+  /// The lattice's target spacing in world units.
+  spacing: f64,
+  /// The magnitude a glyph's opacity and length are read against.
+  peak: f64,
+}
+
+impl GlyphDisplay {
+  /// Re-bakes the arrows from `cochain` and rewrites them in place.
+  ///
+  /// The same bake [`FieldDisplay::build`] ran, on another frame of the same
+  /// field: same surface, same lattice, same reference magnitude, so the only
+  /// thing that moves is the field.
+  fn rebake(&self, queue: &wgpu::Queue, scene: &Scene, cochain: &derham::Cochain) {
+    let Some(traced) = scene.surface.trace(&scene.topology, cochain) else {
+      return;
+    };
+    let vertices = realize::glyph::bake_glyphs(
+      scene.surface.complex(&scene.topology),
+      scene.surface.coords(&scene.coords),
+      &traced,
+      self.spacing,
+      self.peak,
+    );
+    self.batch.write_instances(queue, &vertices);
+  }
 }
 
 /// The sampled medium and how it is read: the two halves the volume pass takes.
@@ -745,20 +782,19 @@ impl FieldDisplay {
         // surface at all, no triangles, hence no arrows.
         let surface_topology = scene.surface.complex(&scene.topology);
         let surface_coords = scene.surface.coords(&scene.coords);
+        let spacing = f64::from(GLYPH_SPACING_FRACTION * amplitude_scale);
         let vertices = scene
           .surface
           .trace(&scene.topology, &field.cochain)
           .map(|traced| {
-            realize::glyph::bake_glyphs(
-              surface_topology,
-              surface_coords,
-              &traced,
-              f64::from(GLYPH_SPACING_FRACTION * amplitude_scale),
-              peak,
-            )
+            realize::glyph::bake_glyphs(surface_topology, surface_coords, &traced, spacing, peak)
           })
           .unwrap_or_default();
-        let glyphs = GlyphBatch::new(&ctx.device, &vertices);
+        let glyphs = GlyphDisplay {
+          batch: GlyphBatch::new(&ctx.device, &vertices),
+          spacing,
+          peak,
+        };
 
         let particles = (peak > 0.0)
           .then(|| {
@@ -979,6 +1015,39 @@ impl FieldDisplay {
     (display, attributes)
   }
 
+  /// Rewrites every stream that carries the field's value, from `cochain`: the
+  /// mesh's attribute streams and, for a line field, its arrows.
+  ///
+  /// What a display is built from and what it re-reads per instant is one
+  /// list, so a mark that moves with the field is caught here rather than
+  /// staying at the value it was born with. The materials are untouched: they
+  /// are the field's fixed references (its colormap range, its peak
+  /// magnitude), and re-deriving them per frame would renormalize each instant
+  /// against itself.
+  ///
+  /// Only a sampled trajectory needs this. A static field never moves, and a
+  /// standing wave's evolution is a scalar factor the GPU applies, so both are
+  /// baked once.
+  pub(crate) fn rebake(
+    &self,
+    queue: &wgpu::Queue,
+    scene: &Scene,
+    mesh: &MeshDisplay,
+    cochain: &derham::Cochain,
+  ) {
+    let (attributes, _) = field_attributes(
+      &scene.topology,
+      &scene.coords,
+      cochain,
+      mesh.fill_triangles(),
+      mesh.segments(),
+    );
+    mesh.write_attributes(queue, &attributes);
+    if let Some(glyphs) = self.glyphs.as_ref() {
+      glyphs.rebake(queue, scene, cochain);
+    }
+  }
+
   /// The frame's items, in submission order: the surface writes depth, and the
   /// marks over it, a line field's glyphs, then the wireframe, only test
   /// against it, so they blend in the order given.
@@ -1039,7 +1108,7 @@ impl FieldDisplay {
       items.push(RenderItem::Surface(batch, surface));
     }
     if let Some(glyphs) = self.glyphs.as_ref().filter(|_| field_view.marks.glyphs) {
-      items.push(RenderItem::Glyphs(glyphs, self.glyph));
+      items.push(RenderItem::Glyphs(&glyphs.batch, self.glyph));
     }
     if mesh_view.skeleton(1).visible {
       items.push(RenderItem::Segments(&mesh.segments, edges));
