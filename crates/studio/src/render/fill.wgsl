@@ -39,7 +39,7 @@ fn vs_main(model: VertexInput) -> VertexOutput {
     var out: VertexOutput;
     out.value = model.value;
     out.deposit_uv = model.deposit_uv;
-    let osc = wave_osc(frame, material.wave_omega);
+    let osc = wave_osc(frame, material.wave_omega, material.wave_phase);
     let position = wave_displace(material.wave_amplitude, osc, model.position, model.normal, model.height, model.max_displacement);
     out.clip_position = frame.view_proj * vec4<f32>(position, 1.0);
     return out;
@@ -99,7 +99,7 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // so cos(0) = 1 leaves the color static.
     // The field's colormap where the faces reflect it, else a flat neutral
     // geometry ink -- the 2-skeleton's coloring toggle, the same the marks carry.
-    let field_ink = colormap_in(material, in.value * wave_osc(frame, material.wave_omega));
+    let field_ink = colormap_in(material, in.value * wave_osc(frame, material.wave_omega, material.wave_phase));
     let ink = select(vec3<f32>(0.34, 0.34, 0.36), field_ink, material.colored > 0.5);
     // The flow's illumination: trails brighten the surface under them, in
     // radiance, before the tone map. Hue stays the colormap's -- the data --

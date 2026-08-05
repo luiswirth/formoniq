@@ -41,7 +41,7 @@ fn vs_main(p: Point, @builtin(vertex_index) vertex_index: u32) -> VertexOutput {
     // The same standing-wave displacement the fill and the segments apply, so
     // the points track the displaced surface. A point not on a displaced surface
     // carries a zero normal, and the displacement is the identity on it.
-    let osc = wave_osc(frame, material.wave_omega);
+    let osc = wave_osc(frame, material.wave_omega, material.wave_phase);
     let world = wave_displace(material.wave_amplitude, osc, p.position, p.normal, p.height, p.max_displacement);
 
     // A billboard frame in the view plane: two axes perpendicular to the
@@ -71,7 +71,7 @@ struct FsOut {
 
 @fragment
 fn fs_main(in: VertexOutput) -> FsOut {
-    let env = abs(wave_osc(frame, material.wave_omega));
+    let env = abs(wave_osc(frame, material.wave_omega, material.wave_phase));
 
     // The square quad cut to a disc, one screen pixel of gradient at the rim so
     // the circle is resolved rather than aliased -- `fwidth` in the quad's own
@@ -85,7 +85,7 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // the segment mark makes. Kept in [0, 1] (`unbounded = 0`).
     let field_rgb = colormap_sample(
         material.min_val, material.max_val, material.diverging,
-        in.color_value * wave_osc(frame, material.wave_omega),
+        in.color_value * wave_osc(frame, material.wave_omega, material.wave_phase),
     );
     let rgb = select(material.color.rgb, field_rgb, material.colored > 0.5);
 

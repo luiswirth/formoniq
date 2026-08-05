@@ -6,7 +6,6 @@ use simplicial::Sign;
 use simplicial::linalg::{Matrix, Vector};
 use simplicial::topology::orientation::Orientation;
 
-use crate::ui::Selection;
 use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use multialgebra::{Blade, ExteriorGrade, Tensor, Variance};
 use realize::surface::Surface;
@@ -68,8 +67,20 @@ pub struct Scene {
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub enum FieldTime {
   Static,
-  StandingWave { eigenvalue: f64 },
-  Trajectory { dt: f64, frames: Vec<Cochain> },
+  StandingWave {
+    eigenvalue: f64,
+    /// The phase offset $phi$ of $cos(sqrt(lambda) t + phi)$, in radians.
+    ///
+    /// Zero for a mode standing on its own. A paired mode sets one
+    /// half to $-pi\/2$, turning its cosine into a sine, which is what makes
+    /// the two run in quadrature on a single clock instead of on two that
+    /// would drift.
+    phase: f64,
+  },
+  Trajectory {
+    dt: f64,
+    frames: Vec<Cochain>,
+  },
 }
 
 impl FieldTime {
@@ -79,8 +90,18 @@ impl FieldTime {
   /// degeneracy pyramid and the transport frequency readout.
   pub fn eigenvalue(&self) -> Option<f64> {
     match self {
-      FieldTime::StandingWave { eigenvalue } => Some(*eigenvalue),
+      FieldTime::StandingWave { eigenvalue, .. } => Some(*eigenvalue),
       _ => None,
+    }
+  }
+
+  /// The standing wave's phase offset, which the GPU adds inside the cosine.
+  /// Zero for anything that is not one, so a field with no phase runs the same
+  /// arithmetic rather than a branch.
+  pub fn wave_phase(&self) -> f32 {
+    match self {
+      FieldTime::StandingWave { phase, .. } => *phase as f32,
+      _ => 0.0,
     }
   }
 
@@ -142,6 +163,67 @@ impl FieldTime {
   }
 }
 
+/// One field of a scene, named by which of its two lists holds it. The reduced
+/// grade decided that list when the field was filed, so this
+/// is a field's identity, not a second statement of its mark.
+#[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
+pub enum FieldRef {
+  Scalar(usize),
+  Line(usize),
+}
+
+/// What is on display: one field per render channel.
+///
+/// The render surface carries two independent channels, and they were fed by
+/// one field only because a line field had nowhere but the surface to state
+/// its magnitude. Now that an arrow carries its own colormap, the two are
+/// genuinely separable, and a `Selection` is the pair:
+///
+/// - [`Self::fill`] colors the surface and, where it is a scalar field,
+///   displaces it. Any field reduces to a density, so a line field may fill
+///   the surface with its own magnitude; that is what a lone line field does,
+///   and it stays available as a way to read one.
+/// - [`Self::glyphs`] draws the arrows and advects the particles, and is a
+///   line field or nothing.
+///
+/// Two *different* fields in the two channels is what shows a Hodge-Dirac
+/// pair, whose halves live one grade apart and therefore land in different
+/// channels by the grade reduction alone. That is why this is a pair rather
+/// than a case: nothing here knows about Dirac.
+///
+/// `PartialEq` so `egui::Ui::radio_value` can bind directly to it.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Selection {
+  pub fill: FieldRef,
+  pub glyphs: Option<usize>,
+}
+
+impl Selection {
+  /// A scalar field alone: it fills the surface, and there are no arrows.
+  pub fn scalar(index: usize) -> Self {
+    Self {
+      fill: FieldRef::Scalar(index),
+      glyphs: None,
+    }
+  }
+
+  /// A line field alone: its arrows are drawn, and it also fills the surface
+  /// beneath them with its own magnitude.
+  pub fn line(index: usize) -> Self {
+    Self {
+      fill: FieldRef::Line(index),
+      glyphs: Some(index),
+    }
+  }
+
+  /// The field a readout, a clock or an export means when it says "the" field:
+  /// the one filling the surface. The glyph channel is the second field, never
+  /// the one a single answer is about.
+  pub fn primary(self) -> FieldRef {
+    self.fill
+  }
+}
+
 /// A named scalar field on the surface: the reduced-grade-0 mark, a density
 /// coloring the surface and displacing it as a standing wave.
 ///
@@ -175,6 +257,11 @@ pub struct ScalarField {
   /// [`Self::name`]. Kept as the simplex, not its rendered label, so the DOF is
   /// a typed value the UI formats rather than a string the model commits to.
   pub dof: Option<Simplex>,
+  /// The other half of a pair meant to be shown together, in the other render
+  /// channel. See [`LineField::partner`].
+  pub partner: Option<FieldRef>,
+  /// See [`LineField::derived`].
+  pub derived: bool,
 }
 
 /// A named line field on the surface: the reduced-grade-1 mark, drawn as arrow
@@ -207,6 +294,22 @@ pub struct LineField {
   pub time: FieldTime,
   /// See [`ScalarField::dof`].
   pub dof: Option<Simplex>,
+  /// The other half of a pair meant to be shown together, in the other render
+  /// channel: picking either puts both on screen.
+  ///
+  /// A relation between two filed fields, not a property of one, so it is
+  /// symmetric and whoever files the pair sets both ends. The Hodge-Dirac
+  /// partner of an eigenmode is the case that motivates it: two fields one
+  /// grade apart, oscillating in quadrature, that mean nothing separately.
+  pub partner: Option<FieldRef>,
+  /// Whether this field is the *derived* half of a pair, which the picker
+  /// leaves off its list because picking its partner
+  /// already shows it.
+  ///
+  /// Not a display preference: a derived field carries its partner's
+  /// eigenvalue, so listing it would put two entries in every degeneracy shell
+  /// and claim a multiplicity the spectrum does not have.
+  pub derived: bool,
 }
 
 /// The vertex-tuple label of a DOF simplex, e.g. `013` for the face
@@ -273,6 +376,29 @@ struct FieldMeta {
   name: String,
   time: FieldTime,
   dof: Option<Simplex>,
+  gauge: Gauge,
+}
+
+/// Whether a field's overall sign is free, and hence pinned for
+/// reproducibility, or is already determined by something outside the field.
+///
+/// The distinction is not about how the field was produced but about what else
+/// refers to it. A sign may be canonicalized exactly when flipping it changes
+/// nothing anyone can observe, which is to say when the field stands alone.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Gauge {
+  /// Free, so [`canonical_sign`] pins it: an eigenmode, defined only up to a
+  /// scalar, which a solver may hand back either way round on a whim.
+  Free,
+  /// Fixed elsewhere, so the cochain is filed exactly as given.
+  ///
+  /// A trajectory's sign is physical, it solved from an initial condition. A
+  /// shell of a Hodge decomposition is fixed by the sum
+  /// $omega = dif alpha + delta beta + h$ it is one term of. A Hodge-Dirac
+  /// partner is $dif phi$ of a mode already filed. In each case a second,
+  /// independent flip would contradict the relation the field was filed to
+  /// show.
+  Fixed,
 }
 
 /// What the selected field offers to be read with, which of
@@ -326,23 +452,24 @@ impl Scene {
     }
   }
 
-  /// The reduced grade's answer to what its field can be read with, and the one
-  /// place it is asked outside the display: a selection already is the
-  /// reduction (which list it indexes is which mark it landed in), so this
-  /// reads it off rather than dispatching on grade a second time.
+  /// The reduced grade's answer to what a selection can be read with, and the
+  /// one place it is asked outside the display: a selection already is the
+  /// reduction (which list each channel indexes is which mark it landed in),
+  /// so this reads it off rather than dispatching on grade a second time.
+  ///
+  /// Asked per channel, which is what makes it total on a pair: the surface's
+  /// knob is the fill's answer and the arrows' is the glyph channel's, so both
+  /// are live exactly when both channels are occupied.
   pub(crate) fn offers(&self, selection: Selection) -> FieldOffers {
-    let volume = self.topology.dim() >= 3;
-    match selection {
-      Selection::Scalar(index) => FieldOffers {
-        displacement: self.fields[index].time.animates(),
-        marks: false,
-        volume,
+    FieldOffers {
+      // A line field fills the surface with an unsigned magnitude, which has
+      // no signed height to ride, so only a genuine scalar field displaces.
+      displacement: match selection.fill {
+        FieldRef::Scalar(index) => self.fields[index].time.animates(),
+        FieldRef::Line(_) => false,
       },
-      Selection::Line(_) => FieldOffers {
-        displacement: false,
-        marks: true,
-        volume,
-      },
+      marks: selection.glyphs.is_some(),
+      volume: self.topology.dim() >= 3,
     }
   }
 
@@ -356,6 +483,9 @@ impl Scene {
   /// A failed eigensolve contributes no fields and is reported on stderr: an
   /// iteration budget too small for one mesh is not a reason to take the
   /// viewer down.
+  ///
+  /// Each mode is filed with its Hodge-Dirac partner, one grade up, where it
+  /// has one; see [`Self::file_dirac_partner`].
   fn file_eigenmodes(&mut self, grade: ExteriorGrade, nmodes: usize) {
     use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
 
@@ -370,15 +500,99 @@ impl Scene {
     };
 
     for (i, (&lambda, col)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate() {
-      self.file(
+      let mode = Cochain::new(grade, col.into_owned());
+      let Some(filed) = self.file(
         FieldMeta {
           name: format!("mode {i} (grade {grade}, lambda = {lambda:.2})"),
-          time: FieldTime::StandingWave { eigenvalue: lambda },
+          time: FieldTime::StandingWave {
+            eigenvalue: lambda,
+            phase: 0.0,
+          },
           dof: None,
+          gauge: Gauge::Free,
         },
-        Cochain::new(grade, col.into_owned()),
-      );
+        mode,
+      ) else {
+        continue;
+      };
+      // From the *filed* cochain, not the solved one: filing pins a free sign,
+      // and $eta = dif phi$ has to be the differential of the $phi$ actually on
+      // screen or the two would rotate against each other.
+      let filed_mode = self.field_cochain(filed).clone();
+      self.file_dirac_partner(filed, &filed_mode, lambda, i);
     }
+  }
+
+  /// Files $dif phi$ beside an eigenmode $phi$ as its Hodge-Dirac partner, and
+  /// links the two.
+  ///
+  /// The Hodge-Dirac operator $sans(D) = dif - delta$ squares to $-Delta$, and
+  /// on the plane spanned by a coexact eigenmode $phi$ and $eta = dif phi$ it
+  /// acts as a rotation: $sans(D) phi = eta$ and $sans(D) eta = -lambda phi$,
+  /// with eigenvalues $plus.minus i sqrt(lambda)$. So the Dirac flow
+  /// $diff_t u = sans(D) u$ through $phi$ is
+  ///
+  /// $ u(t) = cos(sqrt(lambda) t) phi
+  ///        + 1/sqrt(lambda) sin(sqrt(lambda) t) eta, $
+  ///
+  /// closed-form, which is why this needs no solve beyond the eigensolve that
+  /// produced $phi$: the pair is filed as two standing waves of one $omega =
+  /// sqrt(lambda)$, a quarter period apart, and the GPU re-times both. The
+  /// energy visibly moves between the two grades rather than one field being
+  /// rescaled, which a single eigenmode alone cannot show.
+  ///
+  /// The partner is filed at grade $k+1$, so the grade reduction sends it to
+  /// the other render channel and the two are drawn at once. Nothing here says
+  /// so: it follows from $min(k, n-k)$, and the case where both halves reduce
+  /// to the same channel is handled by [`Self::select`] showing one alone.
+  ///
+  /// Three degeneracies leave a mode unpartnered, and each is the mathematics
+  /// rather than a guard. A harmonic mode has $lambda = 0$, hence $dif phi = 0$
+  /// and no rotation to show. At the top grade $dif$ lands in $C^(n+1) = 0$. And
+  /// an *exact* eigenmode is already some other mode's $eta$, so its own $dif$
+  /// vanishes by $dif compose dif = 0$. All three are read off $eta$ being zero,
+  /// one test rather than three cases.
+  fn file_dirac_partner(
+    &mut self,
+    mode: FieldRef,
+    cochain: &Cochain,
+    eigenvalue: f64,
+    index: usize,
+  ) {
+    if eigenvalue <= 0.0 {
+      return;
+    }
+    let grade = cochain.grade();
+    let dif = cochain.dif(&self.topology);
+    // Against the mode's own scale, so the test is about $dif phi$ vanishing
+    // rather than about the units the eigensolver normalized $phi$ in.
+    let scale = cochain.coeffs().norm();
+    if dif.coeffs().norm() <= 1e-9 * scale.max(f64::MIN_POSITIVE) {
+      return;
+    }
+
+    // The $1\/sqrt(lambda)$ of the flow above: the amplitude the two halves
+    // genuinely exchange, not a normalization chosen for the picture.
+    let partner = Cochain::new(dif.grade(), dif.coeffs() / eigenvalue.sqrt());
+    let Some(filed) = self.file(
+      FieldMeta {
+        name: format!(
+          "mode {index} partner (grade {}, dif of grade {grade})",
+          dif.grade()
+        ),
+        time: FieldTime::StandingWave {
+          eigenvalue,
+          // $cos(omega t - pi\/2) = sin(omega t)$: the quadrature half.
+          phase: -std::f64::consts::FRAC_PI_2,
+        },
+        dof: None,
+        gauge: Gauge::Fixed,
+      },
+      partner,
+    ) else {
+      return;
+    };
+    self.link(mode, filed);
   }
 
   /// The solve-free placeholder on a mesh: a single flat field, so the viewer
@@ -394,6 +608,8 @@ impl Scene {
       cochain: Cochain::new(Dim::ZERO, na::DVector::zeros(nvertices)),
       time: FieldTime::Static,
       dof: None,
+      partner: None,
+      derived: false,
     });
     scene
   }
@@ -462,6 +678,7 @@ impl Scene {
           name: named.name.clone(),
           time: FieldTime::Static,
           dof: None,
+          gauge: Gauge::Fixed,
         },
         cochain,
       );
@@ -503,6 +720,7 @@ impl Scene {
           name: name.to_string(),
           time: FieldTime::Static,
           dof: None,
+          gauge: Gauge::Fixed,
         },
         cochain,
       );
@@ -534,6 +752,7 @@ impl Scene {
             name: format!("W^{grade}_{}", dof_label(&dof)),
             time: FieldTime::Static,
             dof: Some(dof),
+            gauge: Gauge::Free,
           },
           Cochain::new(grade, coeffs),
         );
@@ -679,40 +898,91 @@ impl Scene {
         name: "trajectory".to_string(),
         time: FieldTime::Trajectory { dt, frames },
         dof: None,
+        gauge: Gauge::Fixed,
       },
       initial,
     );
     scene
   }
 
-  /// The displayed field's temporal model, for the transport clock and the
-  /// per-frame re-bake the caller drives.
-  pub(crate) fn field_time(&self, selection: Selection) -> &FieldTime {
-    match selection {
-      Selection::Scalar(i) => &self.fields[i].time,
-      Selection::Line(i) => &self.line_fields[i].time,
+  /// A field's temporal model, for the transport clock and the per-frame
+  /// re-bake the caller drives.
+  pub(crate) fn field_time(&self, field: FieldRef) -> &FieldTime {
+    match field {
+      FieldRef::Scalar(i) => &self.fields[i].time,
+      FieldRef::Line(i) => &self.line_fields[i].time,
     }
   }
 
-  /// The displayed field's spatial representative cochain, the `base` a
+  /// A field's spatial representative cochain, the `base` a
   /// [`FieldTime::frame_at`] reads at each instant.
-  pub(crate) fn field_cochain(&self, selection: Selection) -> &Cochain {
-    match selection {
-      Selection::Scalar(i) => &self.fields[i].cochain,
-      Selection::Line(i) => &self.line_fields[i].cochain,
+  pub(crate) fn field_cochain(&self, field: FieldRef) -> &Cochain {
+    match field {
+      FieldRef::Scalar(i) => &self.fields[i].cochain,
+      FieldRef::Line(i) => &self.line_fields[i].cochain,
     }
   }
 
-  /// Every field of the scene, in the picker's flat order: the scalars, then
-  /// the line fields.
+  /// The field recorded as this one's partner, the other half of a pair meant
+  /// to be shown together. `None` for a field that stands alone.
+  pub(crate) fn partner_of(&self, field: FieldRef) -> Option<FieldRef> {
+    match field {
+      FieldRef::Scalar(i) => self.fields[i].partner,
+      FieldRef::Line(i) => self.line_fields[i].partner,
+    }
+  }
+
+  /// What picking `field` puts on display: the field itself, plus its partner
+  /// in the other channel where it has one.
+  ///
+  /// The two channels are filled by the grade reduction, not by a rule stated
+  /// here: a partner that reduces to a line field draws the arrows and the
+  /// picked field fills the surface, and a partner that reduces to a density
+  /// fills the surface under the picked field's arrows. A pair whose halves
+  /// reduce to the *same* channel cannot be shown at once, and then the
+  /// picked field is shown alone rather than displacing its own partner.
+  pub(crate) fn select(&self, field: FieldRef) -> Selection {
+    let alone = match field {
+      FieldRef::Scalar(i) => Selection::scalar(i),
+      FieldRef::Line(i) => Selection::line(i),
+    };
+    match (field, self.partner_of(field)) {
+      (FieldRef::Scalar(_), Some(FieldRef::Line(glyphs))) => Selection {
+        fill: field,
+        glyphs: Some(glyphs),
+      },
+      (FieldRef::Line(i), Some(fill @ FieldRef::Scalar(_))) => Selection {
+        fill,
+        glyphs: Some(i),
+      },
+      _ => alone,
+    }
+  }
+
+  /// Every *pickable* field of the scene, in the picker's flat order: the
+  /// scalars, then the line fields.
   ///
   /// One order, stated once. It is what the mode picker lays out and what
   /// `--field N` indexes, and those two have to be the same order or a name on
   /// the command line means a different field than the one on screen.
-  pub(crate) fn selections(&self) -> impl Iterator<Item = Selection> + use<'_> {
-    (0..self.fields.len())
-      .map(Selection::Scalar)
-      .chain((0..self.line_fields.len()).map(Selection::Line))
+  ///
+  /// The derived half of a pair is not among them: it is shown by picking its
+  /// partner, and listing it would double every entry of a spectrum.
+  pub(crate) fn field_refs(&self) -> impl Iterator<Item = FieldRef> + use<'_> {
+    let scalars = (0..self.fields.len())
+      .map(FieldRef::Scalar)
+      .filter(|&f| !self.is_derived(f));
+    let lines = (0..self.line_fields.len())
+      .map(FieldRef::Line)
+      .filter(|&f| !self.is_derived(f));
+    scalars.chain(lines)
+  }
+
+  fn is_derived(&self, field: FieldRef) -> bool {
+    match field {
+      FieldRef::Scalar(i) => self.fields[i].derived,
+      FieldRef::Line(i) => self.line_fields[i].derived,
+    }
   }
 
   /// The scene's fields as the mode picker reads them, in [`Self::selections`]'s
@@ -723,22 +993,22 @@ impl Scene {
   /// the other does not share.
   pub(crate) fn entries(&self) -> Vec<crate::ui::Entry<'_>> {
     self
-      .selections()
-      .map(|selection| {
-        let (name, grade, dof) = match selection {
-          Selection::Scalar(i) => {
-            let field = &self.fields[i];
-            (field.name.as_str(), field.grade, field.dof.as_ref())
+      .field_refs()
+      .map(|field| {
+        let (name, grade, dof) = match field {
+          FieldRef::Scalar(i) => {
+            let scalar = &self.fields[i];
+            (scalar.name.as_str(), scalar.grade, scalar.dof.as_ref())
           }
-          Selection::Line(i) => {
-            let field = &self.line_fields[i];
-            (field.name.as_str(), field.grade, field.dof.as_ref())
+          FieldRef::Line(i) => {
+            let line = &self.line_fields[i];
+            (line.name.as_str(), line.grade, line.dof.as_ref())
           }
         };
         crate::ui::Entry {
-          selection,
+          field,
           grade,
-          eigenvalue: self.field_time(selection).eigenvalue(),
+          eigenvalue: self.field_time(field).eigenvalue(),
           dof,
           name,
         }
@@ -770,15 +1040,16 @@ impl Scene {
   /// $C^k (diff M) = 0$): a volume density is not a surface quantity, so it
   /// reduces against the parent and is drawn by sampling the cells behind the
   /// boundary, until a volume mark exists to own it.
-  fn file(&mut self, meta: FieldMeta, cochain: Cochain) {
-    let FieldMeta { name, time, dof } = meta;
-    // A mode's sign is arbitrary, so it is pinned. A trajectory's is physical
-    // (it solved from an initial condition), and its frames are what the
-    // display reads, so flipping the representative alone would desync it.
-    let cochain = if time.is_trajectory() {
-      cochain
-    } else {
-      canonical_sign(cochain)
+  fn file(&mut self, meta: FieldMeta, cochain: Cochain) -> Option<FieldRef> {
+    let FieldMeta {
+      name,
+      time,
+      dof,
+      gauge,
+    } = meta;
+    let cochain = match gauge {
+      Gauge::Free => canonical_sign(cochain),
+      Gauge::Fixed => cochain,
     };
     let k = cochain.grade();
     // The manifold the mark is drawn on, named once: a grade that does not
@@ -805,7 +1076,7 @@ impl Scene {
         "field '{name}' (grade {k} of {n}) needs the Hodge star to be drawn, \
          and the mesh is non-orientable: no global volume form, so it is skipped"
       );
-      return;
+      return None;
     }
 
     match Mark::of(k, n) {
@@ -820,7 +1091,10 @@ impl Scene {
           cochain,
           time,
           dof,
+          partner: None,
+          derived: false,
         });
+        Some(FieldRef::Scalar(self.fields.len() - 1))
       }
       Mark::LineField => {
         self.line_fields.push(LineField {
@@ -829,12 +1103,37 @@ impl Scene {
           cochain,
           time,
           dof,
+          partner: None,
+          derived: false,
         });
+        Some(FieldRef::Line(self.line_fields.len() - 1))
       }
       Mark::Sheet => {
         // No render mark yet: it files into no list rather than panicking.
+        None
       }
     }
+  }
+
+  /// Records two filed fields as each other's partner, so picking either shows
+  /// both ([`Self::select`]).
+  ///
+  /// Symmetric, and written from one place, because a partnership that held in
+  /// only one direction would show a pair from one side and a single field from
+  /// the other.
+  fn link(&mut self, primary: FieldRef, derived: FieldRef) {
+    let set = |scene: &mut Self, field: FieldRef, to: FieldRef, is_derived: bool| match field {
+      FieldRef::Scalar(i) => {
+        scene.fields[i].partner = Some(to);
+        scene.fields[i].derived = is_derived;
+      }
+      FieldRef::Line(i) => {
+        scene.line_fields[i].partner = Some(to);
+        scene.line_fields[i].derived = is_derived;
+      }
+    };
+    set(self, primary, derived, false);
+    set(self, derived, primary, true);
   }
 }
 
@@ -1364,9 +1663,9 @@ mod tests {
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
       let mut asked = 0;
-      for selection in scene.selections() {
+      for field in scene.field_refs() {
         assert_eq!(
-          scene.offers(selection).volume,
+          scene.offers(scene.select(field)).volume,
           dim >= 3,
           "dimension {dim} offered the wrong medium"
         );
@@ -1497,6 +1796,103 @@ mod tests {
     assert!(
       (0.5..2.0).contains(&ratio),
       "transport lost or gained the bump: ratio {ratio}"
+    );
+  }
+
+  /// The Hodge-Dirac pair, at every grade a mesh has one: the derived half of
+  /// a filed eigenmode is exactly $eta = dif phi \/ sqrt(lambda)$, it sits one
+  /// grade up, and the two carry the same $omega$ a quarter period apart.
+  ///
+  /// That is the whole content of $sans(D) phi = eta$, $sans(D) eta = -lambda
+  /// phi$: on the plane the two span, $sans(D)$ is a rotation, so the flow
+  /// through $phi$ is $cos(sqrt(lambda) t) phi + sin(sqrt(lambda) t) eta$ with
+  /// no solve of its own. Checked against the coboundary computed here rather
+  /// than against a stored number, and checked on the *filed* cochain, since
+  /// filing pins a free sign and $eta$ must be the differential of the $phi$
+  /// actually shown.
+  #[test]
+  fn a_dirac_partner_is_the_differential_of_its_mode() {
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
+    for grade in topology.dim().range_inclusive() {
+      let scene = Scene::eigenmodes(&topology, &coords, grade, 4);
+      let mut paired = 0;
+      for field in scene.field_refs() {
+        let Some(partner) = scene.partner_of(field) else {
+          continue;
+        };
+        paired += 1;
+        let FieldTime::StandingWave { eigenvalue, phase } = *scene.field_time(field) else {
+          panic!("an eigenmode is a standing wave");
+        };
+        assert_eq!(phase, 0.0, "the mode itself carries no phase offset");
+
+        let mode = scene.field_cochain(field);
+        let eta = scene.field_cochain(partner);
+        assert_eq!(
+          eta.grade(),
+          mode.grade() + 1,
+          "the partner sits one grade up"
+        );
+
+        let expected = mode.dif(&scene.topology).coeffs() / eigenvalue.sqrt();
+        let error = (eta.coeffs() - &expected).norm();
+        assert!(
+          error <= 1e-9 * expected.norm().max(1.0),
+          "grade {grade}: the partner is not dif(mode)/sqrt(lambda), off by {error}"
+        );
+
+        // One clock, a quarter period apart: cos and sin of the same argument.
+        let FieldTime::StandingWave {
+          eigenvalue: partner_lambda,
+          phase: partner_phase,
+        } = *scene.field_time(partner)
+        else {
+          panic!("a partner is a standing wave too");
+        };
+        assert_eq!(partner_lambda, eigenvalue, "one omega for the pair");
+        assert_eq!(partner_phase, -std::f64::consts::FRAC_PI_2);
+
+        // Filed one grade apart, so the reduction sends them to different
+        // render channels and both are drawn at once.
+        let selection = scene.select(field);
+        assert!(
+          selection.glyphs.is_some(),
+          "grade {grade}: a pair occupies the glyph channel"
+        );
+        assert_ne!(
+          FieldRef::Line(selection.glyphs.unwrap()),
+          selection.fill,
+          "grade {grade}: the two channels must read different fields"
+        );
+      }
+      // The top grade has no room for a partner ($dif$ lands in zero), which is
+      // a degeneracy to exercise, not a case to skip: the sweep asserts a pair
+      // exists strictly below it.
+      if grade < topology.dim() {
+        assert!(paired > 0, "grade {grade} produced no Dirac pair");
+      } else {
+        assert_eq!(paired, 0, "the top grade has no partner to file");
+      }
+    }
+  }
+
+  /// A derived field is shown with its mode, never listed beside it: a partner
+  /// carries its mode's eigenvalue, so listing it would put two entries in
+  /// every degeneracy shell and claim a multiplicity the spectrum does not
+  /// have.
+  #[test]
+  fn a_dirac_partner_is_not_separately_pickable() {
+    let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
+    let scene = Scene::eigenmodes(&topology, &coords, Dim::ZERO, 4);
+    let listed = scene.field_refs().count();
+    let filed = scene.fields.len() + scene.line_fields.len();
+    assert!(
+      filed > listed,
+      "the sweep must actually file partners, else it proves nothing"
+    );
+    assert!(
+      scene.field_refs().all(|f| !scene.is_derived(f)),
+      "no derived field is pickable"
     );
   }
 
@@ -1656,7 +2052,7 @@ mod tests {
       l2(frames.last().unwrap()) < l2(&frames[0]),
       "the heat flow damps the bump"
     );
-    assert!(scene.offers(Selection::Scalar(0)).displacement);
+    assert!(scene.offers(Selection::scalar(0)).displacement);
     assert!(scene.fields[0].time.eigenvalue().is_none());
   }
 
@@ -1708,7 +2104,7 @@ mod tests {
       frames.iter().all(|f| l2(f) <= 4.0 * initial),
       "the conservative wave flow stays bounded"
     );
-    assert!(scene.offers(Selection::Scalar(0)).displacement);
+    assert!(scene.offers(Selection::scalar(0)).displacement);
   }
 
   /// Both evolutions are posed at every grade of the de Rham complex, not just
@@ -1776,11 +2172,11 @@ mod tests {
     for dim in 1..=3 {
       let scene = Scene::whitney_basis(dim);
       for index in 0..scene.fields.len() {
-        let offers = scene.offers(Selection::Scalar(index));
+        let offers = scene.offers(Selection::scalar(index));
         assert!(!offers.marks, "dim {dim}: a density has no mark of its own");
       }
       for index in 0..scene.line_fields.len() {
-        let offers = scene.offers(Selection::Line(index));
+        let offers = scene.offers(Selection::line(index));
         assert!(offers.marks, "dim {dim}: a line field offers its marks");
         assert!(
           !offers.displacement,
@@ -1801,10 +2197,10 @@ mod tests {
     let basis = Scene::whitney_basis(2);
     for index in 0..basis.fields.len() {
       assert!(
-        !basis.offers(Selection::Scalar(index)).displacement,
+        !basis.offers(Selection::scalar(index)).displacement,
         "a Whitney basis function is no eigenmode: its amplitude is already zero"
       );
-      assert!(!basis.offers(Selection::Scalar(index)).any());
+      assert!(!basis.offers(Selection::scalar(index)).any());
     }
 
     let (topology, coords) = crate::gallery::MeshSource::Grid {
@@ -1820,7 +2216,7 @@ mod tests {
     );
     for index in 0..scene.fields.len() {
       assert!(
-        scene.offers(Selection::Scalar(index)).displacement,
+        scene.offers(Selection::scalar(index)).displacement,
         "a grade-0 eigenmode has a wave to ride"
       );
     }

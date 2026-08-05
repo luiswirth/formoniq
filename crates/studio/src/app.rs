@@ -30,7 +30,8 @@ use crate::display::{FieldDisplay, MeshDisplay, default_camera, scene_extent};
 use crate::gallery::{Gallery, MeshSource, Preset, Study, presets};
 use crate::render::{DEFAULT_SSAA_SCALE, FrameView, GpuContext, Renderer, camera::Camera};
 use crate::scene::Scene;
-use crate::ui::{PanelModel, Selection};
+use crate::scene::{FieldRef, Selection};
+use crate::ui::PanelModel;
 
 use egui_wgpu::{
   Renderer as EguiRenderer, RendererOptions as EguiRendererOptions, ScreenDescriptor,
@@ -209,7 +210,7 @@ pub(crate) struct State {
   /// The field a just-requested preset means to open on, applied when its scene
   /// lands ([`Self::install_scene`]). `None` for any other install, which opens
   /// on the scene's own first mode.
-  pending_selection: Option<Selection>,
+  pending_field: Option<FieldRef>,
   /// Fixed at scene-build time: the object's coordinate extent (its radius),
   /// which sets the standing-wave displacement scale for whichever field is on
   /// display and the world-space width of the segment marks, an
@@ -343,7 +344,7 @@ impl State {
       scene,
       selection,
       presets: presets(),
-      pending_selection: start.selection,
+      pending_field: start.field,
       amplitude_scale,
       egui_ctx,
       egui_winit_state,
@@ -400,15 +401,14 @@ impl State {
   /// caller that rewrote a chosen subset would leave the rest of the marks
   /// standing at the initial condition.
   fn rebake_trajectory(&mut self) {
-    let time_model = self.scene.field_time(self.selection);
+    let time_model = self.scene.field_time(self.selection.primary());
     let Some(duration) = time_model.duration() else {
       return;
     };
-    let base = self.scene.field_cochain(self.selection);
-    let cochain = time_model.frame_at(base, self.trajectory_solve_time(duration));
+    let t = self.trajectory_solve_time(duration);
     self
       .display
-      .rebake(&self.ctx.queue, &self.scene, &self.mesh_display, &cochain);
+      .rebake(&self.ctx.queue, &self.scene, &self.mesh_display, t);
   }
 
   /// Displays `selection` of the current scene, rebuilding exactly the pieces
@@ -488,7 +488,7 @@ impl State {
   /// names none leaves the reader's current toggles alone, only an explicit
   /// opening view overrides them.
   fn set_preset(&mut self, index: usize) {
-    self.pending_selection = self.presets[index].selection;
+    self.pending_field = self.presets[index].field;
     if let Some(marks) = self.presets[index].marks {
       self.field_view.marks = marks;
     }
@@ -534,10 +534,10 @@ impl State {
     // otherwise the scene's own first mode. A placeholder (one scalar field)
     // does not satisfy a line-field preset selection, so the pending choice is
     // kept until the real scene it belongs to lands.
-    let selection = match self.pending_selection {
-      Some(sel) if selection_in_range(&scene, sel) => {
-        self.pending_selection = None;
-        sel
+    let selection = match self.pending_field {
+      Some(field) if field_in_range(&scene, field) => {
+        self.pending_field = None;
+        scene.select(field)
       }
       _ => default_selection(&scene),
     };
@@ -967,7 +967,7 @@ impl State {
     // The displayed field's temporal model, for the transport readouts: an
     // eigenvalue gives the standing wave a frequency to report; a trajectory
     // gives a solve-time position within its duration. At most one is `Some`.
-    let time_model = self.scene.field_time(self.selection);
+    let time_model = self.scene.field_time(self.selection.primary());
     let eigenvalue = time_model.eigenvalue();
     let trajectory = time_model
       .duration()
@@ -991,7 +991,7 @@ impl State {
         .collect(),
       entries,
       mesh_error: self.gallery.error.clone(),
-      selection: self.selection,
+      picked: self.selection.primary(),
       mesh_view: self.mesh_view,
       field_view: self.field_view,
       offers: self.scene.offers(self.selection),
@@ -1115,7 +1115,7 @@ impl State {
       } else if response.requested_study != study {
         self.set_study(response.requested_study);
       } else {
-        self.set_field(response.selection);
+        self.set_field(self.scene.select(response.picked));
         if response.orthographic && !self.camera.orthographic {
           self.camera.snap_top_down();
         }
@@ -1141,7 +1141,7 @@ impl State {
     // fraction of `TRAJECTORY_LOOP_SECONDS`. Guarded by the field actually
     // being a trajectory, so a stale request cannot move a static field's clock.
     if let Some(target) = response.scrub_time
-      && let Some(duration) = self.scene.field_time(self.selection).duration()
+      && let Some(duration) = self.scene.field_time(self.selection.primary()).duration()
       && duration > 0.0
     {
       let clock = (target / duration) * crate::display::TRAJECTORY_LOOP_SECONDS;
@@ -1380,12 +1380,11 @@ impl State {
   /// will change until the reader acts, so the loop parks. egui's own repaint
   /// need is folded in last, so a widget animation still runs over a still scene.
   fn next_frame(&self, egui_repaint: std::time::Duration) -> NextFrame {
-    let field_animates = match self.selection {
-      // Particles advect through a line field while the clock runs, whatever its
-      // `FieldTime`. A scalar field moves only if its own time model does.
-      Selection::Line(_) => true,
-      Selection::Scalar(_) => self.scene.field_time(self.selection).animates(),
-    };
+    // Particles advect through a line field while the clock runs, whatever its
+    // `FieldTime`, so an occupied glyph channel is live on its own. Otherwise
+    // the surface moves only if its own field's time model does.
+    let field_animates =
+      self.selection.glyphs.is_some() || self.scene.field_time(self.selection.primary()).animates();
     let live = self.gallery.is_loading()
       || !self.keys_held.is_empty()
       || (self.clock.playing && field_animates);
@@ -1469,14 +1468,14 @@ impl WaveClock {
   }
 }
 
-/// Whether `selection` indexes a field the scene actually has, the guard a
+/// Whether `field` indexes a field the scene actually has, the guard a
 /// preset's opening field goes through, since a placeholder (one scalar field)
-/// cannot satisfy a line-field selection and a selection valid in one study can
-/// be out of range in another.
-fn selection_in_range(scene: &Scene, selection: Selection) -> bool {
-  match selection {
-    Selection::Scalar(i) => i < scene.fields.len(),
-    Selection::Line(i) => i < scene.line_fields.len(),
+/// cannot satisfy a line-field preset and a field valid in one study can be
+/// out of range in another.
+fn field_in_range(scene: &Scene, field: FieldRef) -> bool {
+  match field {
+    FieldRef::Scalar(i) => i < scene.fields.len(),
+    FieldRef::Line(i) => i < scene.line_fields.len(),
   }
 }
 

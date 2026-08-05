@@ -22,8 +22,9 @@ use simplicial::topology::{complex::Complex, simplex::Simplex};
 
 use regge::mesher::quotient::Identification;
 
+use crate::scene::FieldRef;
 use crate::scene::Scene;
-use crate::ui::{Marks, Selection};
+use crate::ui::Marks;
 
 /// A numeric parameter of a mesh source or a study: the value it opens on and
 /// the range a control offers.
@@ -691,7 +692,7 @@ pub(crate) struct Preset {
   pub(crate) study: Study,
   /// The field the preset opens on, or `None` to open on the scene's first
   /// mode (the platform's own default).
-  pub(crate) selection: Option<Selection>,
+  pub(crate) field: Option<FieldRef>,
   /// The marks the preset opens with, or `None` for the platform default.
   /// Still configuration, not a code path: a preset may say which readings of
   /// its field it is worth first seeing together (a line field whose glyphs
@@ -724,7 +725,7 @@ fn curl_on_triforce() -> Preset {
     study: Study::Cochains(crate::demos::triforce_examples()),
     // The second of the three (constant, curl, div), all grade 1 and so all
     // line fields, in the order `triforce_examples` builds them.
-    selection: Some(Selection::Line(1)),
+    field: Some(FieldRef::Line(1)),
     marks: None,
   }
 }
@@ -742,7 +743,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Grade-0 Hodge-Laplace eigenmodes of the sphere: the spherical-harmonic multiplets, laid out as the orbital pyramid",
       mesh: MeshSource::START,
       study: Study::start(),
-      selection: None,
+      field: None,
       marks: None,
     },
     Preset {
@@ -752,7 +753,7 @@ pub(crate) fn presets() -> Vec<Preset> {
         dim: REFERENCE_CELL_DIM.default,
       },
       study: Study::WhitneyBasis,
-      selection: None,
+      field: None,
       marks: None,
     },
     Preset {
@@ -760,7 +761,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "The Whitney basis on the multi-cell triforce: the global shape functions, whose support spans several cells",
       mesh: MeshSource::Triforce,
       study: Study::WhitneyBasis,
-      selection: None,
+      field: None,
       marks: None,
     },
     curl_on_triforce(),
@@ -769,7 +770,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Parabolic smoothing of a localized bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::evolve(Evolution::Heat, Dim::ZERO),
-      selection: None,
+      field: None,
       marks: None,
     },
     Preset {
@@ -777,7 +778,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "Hyperbolic propagation and reflection of a bump on the sphere, sampled as a scrubbable trajectory",
       mesh: MeshSource::START,
       study: Study::evolve(Evolution::Wave, Dim::ZERO),
-      selection: None,
+      field: None,
       marks: None,
     },
     Preset {
@@ -785,7 +786,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "A bump carried around the sphere by a rigid rotation, the central scheme's dispersion trailing it",
       mesh: MeshSource::START,
       study: Study::evolve(Evolution::Advection, Dim::ZERO),
-      selection: None,
+      field: None,
       marks: None,
     },
   ];
@@ -801,7 +802,7 @@ pub(crate) fn presets() -> Vec<Preset> {
           grade: Dim::ONE,
           nmodes: EIGENMODES_NMODES.default,
         },
-        selection: None,
+        field: None,
         marks: None,
       },
     );
@@ -814,7 +815,7 @@ pub(crate) fn presets() -> Vec<Preset> {
       description: "A grade-1 field split into exact, coexact and harmonic parts on a genus-1 surface; opens on the harmonic shell",
       mesh: MeshSource::Builtin(bob),
       study: Study::HodgeDecomposition,
-      selection: Some(Selection::Line(3)),
+      field: Some(FieldRef::Line(3)),
       marks: None,
     });
   }
@@ -1089,7 +1090,7 @@ mod tests {
     let preset = start_preset();
     let mesh = preset.mesh.build().expect("the starting mesh builds");
     let scene = preset.study.build(&mesh);
-    let Some(Selection::Line(index)) = preset.selection else {
+    let Some(FieldRef::Line(index)) = preset.field else {
       panic!("the start preset opens on a line field");
     };
     assert_eq!(scene.line_fields[index].name, "pure curl");
@@ -1171,7 +1172,7 @@ mod tests {
     .build()
     .expect("a generated mesh always builds");
     let scene = hodge.study.build(&mesh);
-    let Some(Selection::Line(index)) = hodge.selection else {
+    let Some(FieldRef::Line(index)) = hodge.field else {
       panic!("the Hodge preset opens on a line field");
     };
     assert!(
