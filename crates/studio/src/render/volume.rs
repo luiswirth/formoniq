@@ -142,13 +142,16 @@ pub struct VolumeMaterial {
   pub emission: f32,
   pub step_size: f32,
   pub wave_omega: f32,
+  /// The standing wave's phase offset, exactly as
+  /// [`super::uniform::SurfaceMaterial::wave_phase`]: the medium reads the same
+  /// oscillator the fill does, so a field shown in both cannot pulse in two
+  /// different phases.
+  pub wave_phase: f32,
   /// Filled by the renderer from the frame, never by the display: see
   /// `inv_view_proj`.
   pub time: f32,
   /// The units the coarse grid's texels are stored in: [`VolumeBatch::peak`].
   pub coarse_scale: f32,
-  /// Public only so a caller may spread `..Default::default()`; never read.
-  pub _pad: f32,
 }
 
 impl Default for VolumeMaterial {
@@ -167,8 +170,8 @@ impl Default for VolumeMaterial {
       step_size: 1.0,
       wave_omega: 0.0,
       time: 0.0,
+      wave_phase: 0.0,
       coarse_scale: 0.0,
-      _pad: 0.0,
     }
   }
 }

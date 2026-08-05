@@ -12,7 +12,7 @@ use crate::gallery::{
   QUOTIENT_CELLS, QuotientSurface, REFERENCE_CELL_DIM, SPHERE_SUBDIVISIONS, Study,
   TRAJECTORY_STEPS,
 };
-use crate::scene::{FieldOffers, dof_label};
+use crate::scene::{FieldOffers, FieldRef, dof_label};
 
 /// How much of the scene's light survives to the display.
 ///
@@ -304,26 +304,14 @@ impl Default for Marks {
   }
 }
 
-/// Which field of a scene is on display: its reduced grade decides the mark
-/// ([`crate::scene::Scene`]'s own rule), and this is that choice's UI-facing
-/// form, a scalar field colors the surface with its own value; a line field
-/// colors the surface with its nodal magnitude and draws its glyphs and
-/// particles on top. `PartialEq` so `egui::Ui::radio_value` can bind directly to
-/// it.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Selection {
-  Scalar(usize),
-  Line(usize),
-}
-
-/// One mode of the currently shown scene, as the picker needs it: the field's
-/// [`Selection`], its original grade (before the reduction to a render mark),
+/// One mode of the currently shown scene, as the picker needs it: the field
+/// itself, its original grade (before the reduction to a render mark),
 /// its eigenvalue (for the degeneracy layout), its DOF simplex (for the basis
-/// grid) and its full name (for the hover). The render mark the selection
+/// grid) and its full name (for the hover). The render mark the field
 /// resolves to is decided elsewhere by the reduced grade; here a mode is just
 /// a selectable cell.
 pub(crate) struct Entry<'a> {
-  pub(crate) selection: Selection,
+  pub(crate) field: FieldRef,
   pub(crate) grade: ExteriorGrade,
   pub(crate) eigenvalue: Option<f64>,
   pub(crate) dof: Option<&'a Simplex>,
@@ -416,16 +404,16 @@ fn dof_text(entry: &Entry) -> String {
     .unwrap_or_else(|| entry.name.to_string())
 }
 
-fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
+fn render_modes(ui: &mut egui::Ui, entries: &[Entry], picked: &mut FieldRef, n: Dim) {
   if let Some(shells) = degeneracy_shells(entries.iter().map(|e| e.eigenvalue)) {
-    pyramid(ui, &shells, entries, selection);
+    pyramid(ui, &shells, entries, picked);
   } else if entries.iter().all(|e| e.dof.is_some()) {
-    dof_picker(ui, entries, selection, n);
+    dof_picker(ui, entries, picked, n);
   } else {
     for entry in entries {
-      let selected = *selection == entry.selection;
+      let selected = *picked == entry.field;
       if ui.selectable_label(selected, entry.name).clicked() {
-        *selection = entry.selection;
+        *picked = entry.field;
       }
     }
   }
@@ -440,10 +428,10 @@ fn render_modes(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection,
 /// on the mesh. The active grade is read off
 /// the current selection, so switching tabs jumps to that grade's first DOF
 /// and the next frame's tab highlight follows it.
-fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n: Dim) {
+fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], picked: &mut FieldRef, n: Dim) {
   let current_grade = entries
     .iter()
-    .find(|e| e.selection == *selection)
+    .find(|e| e.field == *picked)
     .map_or(Dim::ZERO, |e| e.grade);
 
   let mut active_grade = current_grade;
@@ -469,13 +457,13 @@ fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
     return;
   };
   if active_grade != current_grade {
-    *selection = entries[first_member].selection;
+    *picked = entries[first_member].field;
   }
 
   let selected_idx = members
     .iter()
     .copied()
-    .find(|&i| entries[i].selection == *selection)
+    .find(|&i| entries[i].field == *picked)
     .unwrap_or(first_member);
   let selected_entry = &entries[selected_idx];
   egui::ComboBox::from_id_salt("whitney-dof")
@@ -483,9 +471,9 @@ fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
     .show_ui(ui, |ui| {
       for &idx in &members {
         let entry = &entries[idx];
-        let selected = *selection == entry.selection;
+        let selected = *picked == entry.field;
         if ui.selectable_label(selected, dof_text(entry)).clicked() {
-          *selection = entry.selection;
+          *picked = entry.field;
         }
       }
     });
@@ -496,7 +484,7 @@ fn dof_picker(ui: &mut egui::Ui, entries: &[Entry], selection: &mut Selection, n
 /// each cell a mode selector labeled by its centered within-shell offset (the
 /// magnetic index $m in -l..=l$ on the sphere's $2l+1$-fold grade-0 multiplet).
 /// Hovering a cell shows the mode's full name and eigenvalue.
-fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &mut Selection) {
+fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], picked: &mut FieldRef) {
   // A fixed cell size lines the columns up into a grid; a fixed-width label
   // gutter on the left holds the shell's eigenvalue and keeps the columns
   // aligned across rows. `vertical_centered` then centers each row within the
@@ -525,13 +513,13 @@ fn pyramid(ui: &mut egui::Ui, shells: &[Shell], entries: &[Entry], selection: &m
             format!("{m:+}")
           };
           let entry = &entries[idx];
-          let selected = *selection == entry.selection;
+          let selected = *picked == entry.field;
           if ui
             .add_sized(CELL, egui::Button::selectable(selected, label))
             .on_hover_text(entry.name)
             .clicked()
           {
-            *selection = entry.selection;
+            *picked = entry.field;
           }
         }
       });
@@ -717,7 +705,7 @@ pub(crate) struct PanelModel<'a> {
   pub(crate) simplex_counts: Vec<usize>,
   pub(crate) entries: Vec<Entry<'a>>,
   pub(crate) mesh_error: Option<String>,
-  pub(crate) selection: Selection,
+  pub(crate) picked: FieldRef,
   pub(crate) mesh_view: MeshView,
   pub(crate) field_view: FieldView,
   /// Which of `field_view`'s settings the selected field actually offers, the
@@ -756,7 +744,7 @@ pub(crate) struct PanelResponse {
   /// A preset sets both axes and the opening field at once, so the caller
   /// applies it in preference to the individual `requested_*` fields.
   pub(crate) requested_preset: Option<usize>,
-  pub(crate) selection: Selection,
+  pub(crate) picked: FieldRef,
   pub(crate) mesh_view: MeshView,
   pub(crate) field_view: FieldView,
   pub(crate) post: Post,
@@ -835,7 +823,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
   let mut requested_mesh = model.mesh_source.clone();
   let mut requested_study = model.study.clone();
   let mut requested_preset = None;
-  let mut selection = model.selection;
+  let mut picked = model.picked;
   let mut mesh_view = model.mesh_view;
   let mut field_view = model.field_view;
   let mut post = model.post;
@@ -1125,7 +1113,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
               }
             });
           } else {
-            render_modes(ui, &model.entries, &mut selection, model.scene_dim);
+            render_modes(ui, &model.entries, &mut picked, model.scene_dim);
           }
         });
 
@@ -1311,7 +1299,7 @@ pub(crate) fn panel(ui: &mut egui::Ui, model: &PanelModel) -> PanelResponse {
     requested_mesh,
     requested_study,
     requested_preset,
-    selection,
+    picked,
     mesh_view,
     field_view,
     post,

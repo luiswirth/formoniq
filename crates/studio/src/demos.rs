@@ -11,14 +11,17 @@ pub use regge::mesher::teaching::triforce;
 
 use crate::gallery::{CochainSpec, NamedCochain};
 use crate::scene::Scene;
-use crate::ui::Selection;
+use crate::scene::Selection;
 
 /// The field a freshly shown scene opens on: its first mode. A single mesh
 /// grade carries only one render mark, so exactly one of the two lists is
 /// nonempty. A scene with neither (never produced here) falls back harmlessly
 /// to the first scalar slot.
 pub(crate) fn default_selection(scene: &Scene) -> Selection {
-  scene.selections().next().unwrap_or(Selection::Scalar(0))
+  scene
+    .field_refs()
+    .next()
+    .map_or_else(|| Selection::scalar(0), |field| scene.select(field))
 }
 
 /// The constant / pure-curl / pure-divergence worked grade-1 fields on the

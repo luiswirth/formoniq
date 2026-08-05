@@ -220,7 +220,7 @@ fn fs_main(in: VsOut) -> @location(0) vec4<f32> {
         }
         // The standing wave, applied to the sampled value before anything reads
         // it, so the palette and the opacity pulse together the way the fill's do.
-        let value = field_at(m, x) * cos(m.wave_omega * m.time);
+        let value = field_at(m, x) * cos(m.wave_omega * m.time + m.wave_phase);
         let a = occupancy(m, value);
         if (a > MIN_OCCUPANCY) {
             let sigma = m.density * a;

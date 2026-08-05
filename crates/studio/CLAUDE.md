@@ -203,6 +203,40 @@ An arrow glyph is the sharp case,
 because a flat mark needs a plane to lie in and a determined perpendicular,
 and a tetrahedron supplies neither.
 
+**A mark states its own field value, and the surface is a mark like any other.**
+The render surface carries two channels, the fill's colormap and the marks drawn over it,
+and each is fed by a field of its own.
+A mark that leaned on the fill to say what its magnitude was would spend the surface
+on a field the mark already is,
+so a glyph is colormapped by its own magnitude exactly as a colored skeleton is by its trace.
+What this buys is that the fill is then *free*:
+a selection names one field per channel rather than one field,
+and a line field tinting the surface with its own magnitude
+becomes one available reading rather than the only thing a line field can do.
+
+Two fields at once is not a second mode of display, it is the general case,
+and it is what shows a **Hodge-Dirac pair**.
+The pair is $phi$ and $eta = dif phi$ for an eigenmode $Delta phi = lambda phi$,
+on which $sans(D) = dif - delta$ acts as a rotation with eigenvalues $plus.minus i sqrt(lambda)$,
+so the flow through $phi$ is
+$u(t) = cos(sqrt(lambda) t) phi + 1/sqrt(lambda) sin(sqrt(lambda) t) eta$,
+closed-form and therefore no solve beyond the eigensolve.
+The two halves are one grade apart,
+so the grade reduction sends them to different channels with nothing said about Dirac,
+and the animation shows energy moving between two grades
+where a single eigenmode can only be rescaled,
+which is the standing wave's own definition and not a defect to work around.
+What makes them one motion rather than two is that a standing wave carries a *phase*:
+one $omega$ and a $-pi\/2$ between them, never two clocks that would drift.
+
+The corollary is a rule about **gauge**, and it generalizes the one it replaces.
+A field's sign is pinned canonically exactly when nothing else refers to it,
+an eigenmode being defined only up to a scalar.
+A trajectory's sign is physical, a Hodge shell's is fixed by the sum it is a term of,
+and a Dirac partner's is fixed by the mode it is the differential of:
+each would be contradicted by an independent flip,
+so the question is not how a field was produced but what else depends on it.
+
 **The trace is total in grade but vanishes at the top**, since $C^n (diff M) = 0$.
 A top-grade density is a *volume* quantity,
 and reading it on the boundary is a sampling of the cells behind it, never a trace:

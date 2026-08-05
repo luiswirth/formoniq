@@ -290,7 +290,7 @@ pub fn bake_glyphs(
             direction: [d.x as f32, d.y as f32, d.z as f32],
             opacity: 1.0,
             across: [a.x as f32, a.y as f32, a.z as f32],
-            _pad0: 0.0,
+            magnitude: magnitude as f32,
             bary_center,
             bary_along: gradient(&direction),
             bary_across: gradient(&across),
