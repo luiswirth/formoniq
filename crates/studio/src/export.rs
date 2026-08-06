@@ -20,7 +20,7 @@ use crate::display::{FieldDisplay, MeshDisplay, default_camera, scene_extent};
 use crate::gallery::{MeshSource, Study};
 use crate::render::{FrameView, GpuContext, Renderer};
 use crate::scene::Scene;
-use crate::scene::Selection;
+use crate::ui::Selection;
 
 /// The texture format every export renders and encodes at.
 ///
@@ -314,14 +314,11 @@ impl Displayed {
 /// The scene's fields in the picker's flat order, which is what `--field N`
 /// names, and the same order the picker itself lays out.
 fn selection_at(scene: &Scene, index: usize) -> Option<Selection> {
-  scene
-    .field_refs()
-    .nth(index)
-    .map(|field| scene.select(field))
+  scene.selections().nth(index)
 }
 
 fn eigenvalue_of(scene: &Scene, selection: Selection) -> Option<f64> {
-  scene.field_time(selection.primary()).eigenvalue()
+  scene.field_time(selection).eigenvalue()
 }
 
 /// Renders `spec` and writes it to `path`, as a PNG still or, for an `.mp4`, a

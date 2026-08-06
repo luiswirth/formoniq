@@ -25,10 +25,6 @@ struct GlyphInstance {
     @location(2) direction: vec3<f32>,
     @location(3) opacity: f32,
     @location(4) across: vec3<f32>,
-    // The field's magnitude at this arrow, in field units: the value the ink
-    // is colormapped from. Constant over the arrow, since an arrow reports the
-    // field at one sample.
-    @location(8) magnitude: f32,
     // The cell-barycentric clip coordinate at the arrow's center, and its
     // gradients along the two frame axes. `global2bary` is affine and the quad
     // is planar, so this reproduces the coordinate over the whole arrow exactly.
@@ -49,7 +45,6 @@ struct VertexOutput {
     // ones. Interpolated exactly, since the quad lies in the cell's plane and
     // barycentric coordinates are affine in position.
     @location(3) cell_bary: vec4<f32>,
-    @location(4) @interpolate(flat) magnitude: f32,
 };
 
 // The signed distance from `p` to the arrow polygon (iq's `sdPolygon`), negative
@@ -122,7 +117,6 @@ fn vs_main(instance: GlyphInstance, @builtin(vertex_index) index: u32) -> Vertex
     out.cell_bary = instance.bary_center
         + instance.bary_along * (x - instance.length * 0.5)
         + instance.bary_across * y;
-    out.magnitude = instance.magnitude;
     return out;
 }
 
@@ -160,22 +154,14 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // rim fades out with the ink it outlines rather than staying a black skeleton
     // once the ink above it is gone.
     //
-    // A magnitude neither weakens nor strengthens an arrow: the envelope reads
-    // no field size, there is no wave fade, and the bake emits no arrow at all
-    // where there is no direction to report. What a magnitude does decide is
-    // the *hue*, below, so the mark states the field's strength without dimming
-    // the heading that is its subject.
-    let field_rgb = colormap_sample(
-        material.min_val, material.max_val, material.diverging,
-        in.magnitude * wave_osc(frame, material.wave_omega, material.wave_phase),
-    );
-    let color = select(material.color.rgb, field_rgb, material.colored > 0.5);
-
+    // An arrow reports a direction, which a magnitude neither weakens nor
+    // strengthens, so nothing here reads the field's size: no wave envelope, and
+    // the bake emits no arrow at all where there is no direction to report.
     let envelope = in.opacity * clip;
     let ink_a = material.color.a * envelope * ink;
     let rim_a = envelope * max(rim - ink, 0.0);
     let alpha = ink_a + rim_a * (1.0 - ink_a);
-    let rgb = color * (ink_a / max(alpha, 1e-5));
+    let rgb = material.color.rgb * (ink_a / max(alpha, 1e-5));
 
     var out: FsOut;
     out.color = vec4<f32>(rgb, alpha);

@@ -99,15 +99,7 @@ pub struct GlyphInstance {
   pub opacity: f32,
   /// The in-plane unit vector across the arrow, completing its frame.
   pub across: [f32; 3],
-  /// The field's magnitude here, in the field's own units: what the arrow's
-  /// ink is colormapped from, against a range the material carries.
-  ///
-  /// Beside [`Self::opacity`], which is the same quantity normalized to its
-  /// peak, and not a duplicate of it: an opacity is a fraction by definition,
-  /// while a colormap reads a value against a range chosen for the whole
-  /// field, and the two coincide only when that range happens to start at
-  /// zero.
-  pub magnitude: f32,
+  pub _pad0: f32,
   /// The cell barycentric coordinate at the arrow's center, padded to four with
   /// ones so a cell of intrinsic dimension below three never trips the clip.
   pub bary_center: [f32; 4],
