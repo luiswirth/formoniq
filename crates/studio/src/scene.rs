@@ -487,20 +487,52 @@ impl Scene {
   /// Each mode is filed with its Hodge-Dirac partner, one grade up, where it
   /// has one; see [`Self::file_dirac_partner`].
   fn file_eigenmodes(&mut self, grade: ExteriorGrade, nmodes: usize) {
-    use formoniq::{problems::elliptic::solve_evp, whitney_complex::WhitneyComplex};
+    use formoniq::{
+      hodge::HodgeBlocks, problems::elliptic::solve_evp, whitney_complex::WhitneyComplex,
+    };
 
     let metric = self.coords.to_edge_lengths_sq(&self.topology);
-    let solved = solve_evp(&WhitneyComplex::new(&self.topology, &metric), grade, nmodes);
-    let (eigenvals, _, eigenfuncs) = match solved {
+    let whitney = WhitneyComplex::new(&self.topology, &metric);
+    let solved = solve_evp(&whitney, grade, nmodes);
+    // The mixed eigensolve already carries $sigma = delta u$ alongside each
+    // mode: it is the saddle point's own first block, slaved to $u$ by
+    // $M_(k-1) sigma = (D^(k-1))^T M_k u$. So how much of a mode is exact costs
+    // nothing beyond reading it.
+    let (eigenvals, eigen_sigmas, eigenfuncs) = match solved {
       Ok(solved) => solved,
       Err(err) => {
         eprintln!("grade {grade} eigensolve failed: {err}");
         return;
       }
     };
+    let blocks = HodgeBlocks::compute(&whitney, grade);
+    let l2_sq = |mass: &simplicial::linalg::CsrMatrix, x: &Vector| x.dot(&(mass * x));
 
-    for (i, (&lambda, col)) in eigenvals.iter().zip(eigenfuncs.column_iter()).enumerate() {
+    for (i, ((&lambda, col), sigma)) in eigenvals
+      .iter()
+      .zip(eigenfuncs.column_iter())
+      .zip(eigen_sigmas.column_iter())
+      .enumerate()
+    {
       let mode = Cochain::new(grade, col.into_owned());
+      // The fraction of the mode's energy sitting in the exact sector.
+      //
+      // Writing $phi = phi_"ex" + phi_"co"$, the two are $L^2$-orthogonal,
+      // $dif phi_"ex" = 0$ and $delta phi_"co" = 0$, so
+      // $lambda norm(phi_"ex")^2 = angle.l Delta phi_"ex", phi_"ex" angle.r
+      // = norm(delta phi)^2$ and this quotient is exactly
+      // $norm(phi_"ex")^2 \/ norm(phi)^2$. Dimensionless and in $[0, 1]$,
+      // where comparing $norm(delta phi)$ to $norm(phi)$ directly would be
+      // comparing two different units.
+      //
+      // Zero at grade 0 by construction: the $sigma$ space is empty there, so
+      // the degenerate end needs no case of its own.
+      let energy = lambda * l2_sq(&blocks.mass_u, &col.into_owned());
+      let exact_fraction = if energy > 0.0 {
+        l2_sq(&blocks.mass_sigma, &sigma.into_owned()) / energy
+      } else {
+        0.0
+      };
       let Some(filed) = self.file(
         FieldMeta {
           name: format!("mode {i} (grade {grade}, lambda = {lambda:.2})"),
@@ -519,7 +551,7 @@ impl Scene {
       // and $eta = dif phi$ has to be the differential of the $phi$ actually on
       // screen or the two would rotate against each other.
       let filed_mode = self.field_cochain(filed).clone();
-      self.file_dirac_partner(filed, &filed_mode, lambda, i);
+      self.file_dirac_partner(filed, &filed_mode, lambda, exact_fraction, i);
     }
   }
 
@@ -546,20 +578,49 @@ impl Scene {
   /// so: it follows from $min(k, n-k)$, and the case where both halves reduce
   /// to the same channel is handled by [`Self::select`] showing one alone.
   ///
-  /// Three degeneracies leave a mode unpartnered, and each is the mathematics
-  /// rather than a guard. A harmonic mode has $lambda = 0$, hence $dif phi = 0$
-  /// and no rotation to show. At the top grade $dif$ lands in $C^(n+1) = 0$. And
-  /// an *exact* eigenmode is already some other mode's $eta$, so its own $dif$
-  /// vanishes by $dif compose dif = 0$. All three are read off $eta$ being zero,
-  /// one test rather than three cases.
+  /// **Coexactness is the hypothesis, and `exact_fraction` decides it.** The
+  /// rotation above needs $delta phi = 0$: matching the $cos$ terms of
+  /// $diff_t u = sans(D) u$ gives exactly that, with no slack. A $phi$ carrying
+  /// an exact part has $sans(D) phi = dif phi - delta phi$ picking up a third
+  /// component at grade $k-1$, so $"span"{phi, dif phi}$ is not
+  /// $sans(D)$-invariant and the two fields would animate a projection of the
+  /// flow rather than the flow. Such a mode is filed unpartnered instead: one
+  /// standing wave, which is less to look at and true.
+  ///
+  /// A simple eigenvalue never trips this. The exact and coexact subspaces are
+  /// $Delta$-invariant and $L^2$-orthogonal, so a one-dimensional eigenspace
+  /// lies wholly inside one of them. It is degeneracy *across the two sectors*
+  /// that produces a mixture, and then the eigensolver's basis vector within
+  /// that eigenspace is arbitrary. The sphere at grade 1 is the standing
+  /// example: $dif f$ and $star dif f$ are an exact and a coexact 1-form at the
+  /// same $lambda$, so every grade-1 eigenspace there is half of each.
+  ///
+  /// A mixed mode is really a superposition of two Dirac pairs, its coexact
+  /// part rotating up with $dif phi$ and its exact part down with $delta phi$,
+  /// so splitting it would recover both. That is a larger change, and this is
+  /// the predicate the split would replace, not a step toward it.
+  ///
+  /// Three further degeneracies leave a mode unpartnered, and each is the
+  /// mathematics rather than a guard. A harmonic mode has $lambda = 0$, hence
+  /// $dif phi = 0$ and no rotation to show. At the top grade $dif$ lands in
+  /// $C^(n+1) = 0$. And a purely exact eigenmode is already some other mode's
+  /// $eta$, so its own $dif$ vanishes by $dif compose dif = 0$. All three are
+  /// read off $eta$ being zero, one test rather than three cases.
   fn file_dirac_partner(
     &mut self,
     mode: FieldRef,
     cochain: &Cochain,
     eigenvalue: f64,
+    exact_fraction: f64,
     index: usize,
   ) {
     if eigenvalue <= 0.0 {
+      return;
+    }
+    // Far looser than the solve's own accuracy: a coexact mode lands at
+    // roundoff and a mixed one at a fraction of order 1, so nothing sits near
+    // the threshold and its exact value decides nothing.
+    if exact_fraction > 1e-6 {
       return;
     }
     let grade = cochain.grade();
@@ -1812,7 +1873,11 @@ mod tests {
   /// actually shown.
   #[test]
   fn a_dirac_partner_is_the_differential_of_its_mode() {
+    use formoniq::{hodge::HodgeBlocks, whitney_complex::WhitneyComplex};
+
     let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
+    let lengths = coords.to_edge_lengths_sq(&topology);
+    let whitney = WhitneyComplex::new(&topology, &lengths);
     for grade in topology.dim().range_inclusive() {
       let scene = Scene::eigenmodes(&topology, &coords, grade, 4);
       let mut paired = 0;
@@ -1832,6 +1897,21 @@ mod tests {
           eta.grade(),
           mode.grade() + 1,
           "the partner sits one grade up"
+        );
+
+        // The hypothesis the rotation rests on, checked on what was actually
+        // filed: $delta phi = 0$. Without this the pair could be the
+        // differential of a mode whose flow leaves the plane they span, which
+        // $eta = dif phi \/ sqrt(lambda)$ below would not notice, being true of
+        // any $phi$ at all.
+        let blocks = HodgeBlocks::compute(&whitney, mode.grade());
+        let sigma = blocks.codif(mode.coeffs());
+        let exact_energy = sigma.dot(&(&blocks.mass_sigma * &sigma));
+        let energy = eigenvalue * mode.coeffs().dot(&(&blocks.mass_u * mode.coeffs()));
+        assert!(
+          exact_energy <= 1e-6 * energy,
+          "grade {grade}: a paired mode must be coexact, exact energy fraction {}",
+          exact_energy / energy
         );
 
         let expected = mode.dif(&scene.topology).coeffs() / eigenvalue.sqrt();
@@ -1865,12 +1945,16 @@ mod tests {
           "grade {grade}: the two channels must read different fields"
         );
       }
-      // The top grade has no room for a partner ($dif$ lands in zero), which is
-      // a degeneracy to exercise, not a case to skip: the sweep asserts a pair
-      // exists strictly below it.
-      if grade < topology.dim() {
-        assert!(paired > 0, "grade {grade} produced no Dirac pair");
-      } else {
+      // Grade 0 always pairs: $delta$ is identically zero on $Lambda^0$, so
+      // every eigenfunction is coexact and the hypothesis holds for free. That
+      // is what keeps the sweep above from being vacuous.
+      //
+      // The top grade never pairs: $dif$ lands in $C^(n+1) = 0$. Between them
+      // the count is the mesh's business, not a law, since whether a grade's
+      // eigenspaces mix the two sectors is a fact about that spectrum.
+      if grade == Dim::ZERO {
+        assert!(paired > 0, "grade 0 must pair: every mode there is coexact");
+      } else if grade == topology.dim() {
         assert_eq!(paired, 0, "the top grade has no partner to file");
       }
     }
