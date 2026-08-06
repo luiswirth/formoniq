@@ -63,7 +63,7 @@ fn vs_main(a: EndpointA, b: EndpointB, @builtin(vertex_index) vertex_index: u32)
     // tracks the displaced surface instead of the flat rest mesh. A mark that
     // does not sit on a displaced surface -- a curve's own cells -- carries a
     // zero normal, and the displacement is the identity on it.
-    let osc = wave_osc(frame, material.wave_omega, material.wave_phase);
+    let osc = wave_osc(frame, material.wave_omega);
     let world_a = wave_displace(material.wave_amplitude, osc, a.position, a.normal, a.height, a.max_displacement);
     let world_b = wave_displace(material.wave_amplitude, osc, b.position, b.normal, b.height, b.max_displacement);
     let perp = billboard_perp(world_a, world_b, frame.view_dir.xyz);
@@ -93,7 +93,7 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // standing mode are the same set at every phase and blinking them out
     // entirely would read as the geometry changing. A mark with no such story to
     // tell passes `fade_floor = 1`, and the envelope is constant.
-    let env = abs(wave_osc(frame, material.wave_omega, material.wave_phase));
+    let env = abs(wave_osc(frame, material.wave_omega));
 
     // The quad is cut down to the ribbon's silhouette, one screen pixel of
     // gradient wide, so the edge is resolved rather than aliased. `fwidth` is
@@ -108,7 +108,7 @@ fn fs_main(in: VertexOutput) -> FsOut {
     // untouched -- `unbounded = 0`), exactly as the geometry ink does.
     let field_rgb = colormap_sample(
         material.min_val, material.max_val, material.diverging,
-        in.color_value * wave_osc(frame, material.wave_omega, material.wave_phase),
+        in.color_value * wave_osc(frame, material.wave_omega),
     );
     let rgb = select(material.color.rgb, field_rgb, material.colored > 0.5);
 

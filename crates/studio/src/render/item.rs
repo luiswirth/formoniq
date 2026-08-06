@@ -71,17 +71,16 @@ const fn segment_attributes(loc: u32) -> [wgpu::VertexAttribute; 4] {
   [p, n, m, attribute(28, loc + 3, wgpu::VertexFormat::Float32)]
 }
 
-/// A `GlyphInstance`'s nine: the arrow's center and length, its in-plane
-/// frame, opacity and colormapped magnitude, then the three vectors the
-/// cell-barycentric clip coordinate is affine in.
-const fn glyph_attributes() -> [wgpu::VertexAttribute; 9] {
+/// A `GlyphInstance`'s eight: the arrow's center and length, its in-plane
+/// frame and opacity, then the three vectors the cell-barycentric clip
+/// coordinate is affine in.
+const fn glyph_attributes() -> [wgpu::VertexAttribute; 8] {
   [
     attribute(0, 0, wgpu::VertexFormat::Float32x3),
     attribute(12, 1, wgpu::VertexFormat::Float32),
     attribute(16, 2, wgpu::VertexFormat::Float32x3),
     attribute(28, 3, wgpu::VertexFormat::Float32),
     attribute(32, 4, wgpu::VertexFormat::Float32x3),
-    attribute(44, 8, wgpu::VertexFormat::Float32),
     attribute(48, 5, wgpu::VertexFormat::Float32x4),
     attribute(64, 6, wgpu::VertexFormat::Float32x4),
     attribute(80, 7, wgpu::VertexFormat::Float32x4),
@@ -103,7 +102,7 @@ const SEGMENT_HEIGHT_A: [wgpu::VertexAttribute; 1] = value_attribute(8);
 const SEGMENT_HEIGHT_B: [wgpu::VertexAttribute; 1] = value_attribute(9);
 const SEGMENT_COLOR_A: [wgpu::VertexAttribute; 1] = value_attribute(10);
 const SEGMENT_COLOR_B: [wgpu::VertexAttribute; 1] = value_attribute(11);
-const GLYPH: [wgpu::VertexAttribute; 9] = glyph_attributes();
+const GLYPH: [wgpu::VertexAttribute; 8] = glyph_attributes();
 
 /// A filled triangle surface: per-corner vertex streams, three corners per
 /// triangle, unshared.

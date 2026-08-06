@@ -197,11 +197,6 @@ pub struct SurfaceMaterial {
   pub max_val: f32,
   pub wave_amplitude: f32,
   pub wave_omega: f32,
-  /// The standing wave's phase offset $phi$ in radians: the oscillator is
-  /// $cos(omega t + phi)$. Zero for a field that stands on its own; $-pi/2$
-  /// turns the cosine into a sine, which is what puts the two halves of a
-  /// Hodge-Dirac pair a quarter period apart on one clock.
-  pub wave_phase: f32,
   pub diverging: f32,
   /// The fill's radiance is the colormap times
   /// `deposit_floor + deposit_gain * D`, with $D$ the deposit atlas sample:
@@ -216,9 +211,6 @@ pub struct SurfaceMaterial {
   /// same one the segment and point marks carry, so all three skeletons are
   /// peers.
   pub colored: f32,
-  pub _pad0: f32,
-  pub _pad1: f32,
-  pub _pad2: f32,
 }
 
 /// How the scene's radiance reaches the display: the WGSL `Post`.
@@ -259,11 +251,6 @@ pub struct SegmentMaterial {
   pub fade_floor: f32,
   pub wave_amplitude: f32,
   pub wave_omega: f32,
-  /// The standing wave's phase offset $phi$ in radians: the oscillator is
-  /// $cos(omega t + phi)$. Zero for a field that stands on its own; $-pi/2$
-  /// turns the cosine into a sine, which is what puts the two halves of a
-  /// Hodge-Dirac pair a quarter period apart on one clock.
-  pub wave_phase: f32,
   /// The colormap range the per-endpoint trace value normalizes against, and
   /// whether it is diverging, the segment's own, independent of the fill's,
   /// since a $k$-skeleton traces a different-grade density on a different scale.
@@ -275,9 +262,6 @@ pub struct SegmentMaterial {
   /// structural geometry ink (`0.0`). The one bit that turns the wireframe into
   /// a colored 1-skeleton and back, a material flag, not a second pipeline.
   pub colored: f32,
-  pub _pad0: f32,
-  pub _pad1: f32,
-  pub _pad2: f32,
 }
 
 /// How an arrow glyph is drawn: a flat mark lying in its surface cell, the
@@ -295,17 +279,6 @@ pub struct GlyphMaterial {
   /// coarse mesh and a refined one. The quad is sized from the same product in
   /// the bake.
   pub width_fraction: f32,
-  /// The standing wave the arrow's *ink* rides, $cos(omega t + phi)$.
-  ///
-  /// It pulses the colormap below and nothing else. An eigenmode's scalar
-  /// factor does not turn an arrow, so it moves neither the heading nor the
-  /// opacity, and there is no node fade: the mark is drawn at full opacity
-  /// wherever it is drawn at all.
-  ///
-  /// The phase is what puts the two halves of a Hodge-Dirac pair a quarter
-  /// period apart on one clock, $-pi/2$ turning the cosine into a sine.
-  pub wave_omega: f32,
-  pub wave_phase: f32,
   /// The arrowhead's length as a fraction of the arrow's own, and the shaft's
   /// half-width as a fraction of the head's base: the proportions of the drawn
   /// arrow, self-similar since both are fractions.
@@ -315,19 +288,4 @@ pub struct GlyphMaterial {
   /// rim scales with the arrow like every other proportion, drawn black so it
   /// separates from either colormap beneath it. Zero draws no rim.
   pub outline_width_fraction: f32,
-  /// The colormap range the arrow's own magnitude is read against, and which
-  /// palette reads it, exactly as a segment mark carries them: the glyph is a
-  /// colored mark like any other, and `colored` is the toggle between the
-  /// field's colormap and the flat ink of [`Self::color`].
-  ///
-  /// Hue, never opacity or length. A weak direction reads as well as a strong
-  /// one, which is the whole reason opacity stopped encoding magnitude, and
-  /// tinting says how big the field is without dimming the mark that says
-  /// where it points. That is what frees the fill beneath for a second field.
-  pub min_val: f32,
-  pub max_val: f32,
-  pub diverging: f32,
-  pub colored: f32,
-  pub _pad0: f32,
-  pub _pad1: f32,
 }

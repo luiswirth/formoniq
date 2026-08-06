@@ -56,14 +56,10 @@ struct SurfaceMaterial {
     max_val: f32,
     wave_amplitude: f32,
     wave_omega: f32,
-    wave_phase: f32,
     diverging: f32,
     deposit_floor: f32,
     deposit_gain: f32,
     colored: f32,
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
 };
 
 // How a segment mark is drawn: its ink (`rgb` plus a base opacity), its
@@ -79,14 +75,10 @@ struct SegmentMaterial {
     fade_floor: f32,
     wave_amplitude: f32,
     wave_omega: f32,
-    wave_phase: f32,
     min_val: f32,
     max_val: f32,
     diverging: f32,
     colored: f32,
-    _pad0: f32,
-    _pad1: f32,
-    _pad2: f32,
 };
 
 // How an arrow glyph is drawn: a flat mark in its surface cell, not a billboard.
@@ -96,29 +88,16 @@ struct SegmentMaterial {
 struct GlyphMaterial {
     color: vec4<f32>,
     width_fraction: f32,
-    wave_omega: f32,
-    wave_phase: f32,
     head_length_fraction: f32,
     shaft_width_fraction: f32,
     outline_width_fraction: f32,
-    min_val: f32,
-    max_val: f32,
-    diverging: f32,
-    colored: f32,
-    _pad0: f32,
-    _pad1: f32,
 };
 
-// The standing wave's instantaneous factor $cos(omega t + phi)$: the one
+// The standing wave's instantaneous phase factor $cos(omega t)$: the one
 // oscillator the displacement, the colormap pulse and the segment fade all read,
-// so the marks of one field cannot drift out of phase with each other.
-//
-// The phase is what lets two *different* fields share the clock at a fixed
-// offset, which is the whole content of a Hodge-Dirac pair: its two halves are
-// $cos$ and $sin$ of the same $sqrt(lambda) t$, so they are one $omega$ and a
-// $-pi\/2$ between them, never two clocks that would drift.
-fn wave_osc(frame: Frame, omega: f32, phase: f32) -> f32 {
-    return cos(omega * frame.time + phase);
+// so they cannot drift out of phase.
+fn wave_osc(frame: Frame, omega: f32) -> f32 {
+    return cos(omega * frame.time);
 }
 
 // The wave-displaced world position of one vertex.
@@ -434,7 +413,6 @@ struct VolumeMaterial {
     // A field with no eigenvalue has `wave_omega = 0`, and $cos(0) = 1$ leaves
     // it static through the same arithmetic.
     wave_omega: f32,
-    wave_phase: f32,
     // Seconds into that wave. A frame fact rather than a material choice, like
     // `inv_view_proj`, and filled by the renderer from the same `FrameView`.
     time: f32,
@@ -442,4 +420,5 @@ struct VolumeMaterial {
     // (the grid's peak magnitude), so a block's bound can be converted into the
     // one occupancy the fine samples are measured against.
     coarse_scale: f32,
+    _pad0: f32,
 };

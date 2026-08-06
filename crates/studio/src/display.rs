@@ -23,9 +23,8 @@ use crate::render::{
   uniform::{GlyphMaterial, PostUniform, SegmentMaterial, SurfaceMaterial},
   volume::{VolumeBatch, VolumeMaterial},
 };
-
-use crate::scene::{FieldRef, Scene, Selection};
-use crate::ui::{FieldView, MeshView, Post};
+use crate::scene::Scene;
+use crate::ui::{FieldView, MeshView, Post, Selection};
 use realize::bake::{self, BakedMesh};
 use realize::deposit::DepositLayout;
 use regge::coord::locate::PointLocator;
@@ -447,8 +446,11 @@ pub(crate) struct FieldAttributes {
 /// With this in force the shader's clamp is a guard that does not fire in
 /// normal operation, rather than the mechanism, it stays for the case no
 /// bound anticipates (a mesh whose reach the estimator could not resolve).
-fn safe_amplitude(scene: &Scene, mesh: &MeshDisplay, field: FieldRef) -> f32 {
-  amplitude_bound(mesh.displacement_ceilings(), &peak_heights(scene, field))
+fn safe_amplitude(scene: &Scene, mesh: &MeshDisplay, selection: Selection) -> f32 {
+  amplitude_bound(
+    mesh.displacement_ceilings(),
+    &peak_heights(scene, selection),
+  )
 }
 
 /// The bound itself, over the per-vertex ceilings and peaks: `INFINITY` where
@@ -466,9 +468,9 @@ fn amplitude_bound(ceilings: impl Iterator<Item = f32>, peaks: &[f32]) -> f32 {
 /// the field's whole time evolution. The nodal (continuous) height throughout:
 /// it is what the segments ride, and it bounds the per-cell rigid height too,
 /// being an average of the same per-cell values.
-fn peak_heights(scene: &Scene, field: FieldRef) -> Vec<f32> {
+fn peak_heights(scene: &Scene, selection: Selection) -> Vec<f32> {
   let nvertices = scene.coords.nvertices();
-  let cochain = scene.field_cochain(field);
+  let cochain = scene.field_cochain(selection);
   let mut peaks = vec![0.0f32; nvertices];
   let mut absorb = |cochain: &derham::Cochain| {
     let heights = realize::reduce::nodal_heights(&scene.topology, &scene.coords, cochain);
@@ -476,7 +478,7 @@ fn peak_heights(scene: &Scene, field: FieldRef) -> Vec<f32> {
       *peak = peak.max(h.abs() as f32);
     }
   };
-  match scene.field_time(field) {
+  match scene.field_time(selection) {
     crate::scene::FieldTime::Trajectory { frames, .. } => frames.iter().for_each(&mut absorb),
     _ => absorb(cochain),
   }
@@ -590,10 +592,6 @@ pub(crate) struct FieldDisplay {
   /// a segment mark differ only in primitive, not in what drives them.
   points: SegmentMaterial,
   glyph: GlyphMaterial,
-  /// Which fields feed the two channels, kept so a per-instant re-bake reads
-  /// each one through its own time model rather than the caller's single
-  /// notion of "the" field.
-  selection: Selection,
 }
 
 /// A line field's arrows, and what re-baking them at another instant needs.
@@ -660,7 +658,10 @@ impl FieldDisplay {
     // the surface does not tear. Both are functions of the field, computed once
     // here for either mark. The colormap range follows from the colors so it
     // spans exactly what is drawn.
-    let cochain = scene.field_cochain(selection.fill);
+    let cochain = match selection {
+      Selection::Scalar(index) => &scene.fields[index].cochain,
+      Selection::Line(index) => &scene.line_fields[index].cochain,
+    };
     let (attributes, ranges) = field_attributes(
       &scene.topology,
       &scene.coords,
@@ -686,80 +687,88 @@ impl FieldDisplay {
       }
     };
 
-    // The surface, from the fill channel alone, and from whichever list that
-    // field came from: any grade reduces to a density, so there is nothing
-    // here that has to know which. A line field filling the surface is that
-    // reduction applied to its magnitude, not a second way of drawing one.
-    let fill_time = scene.field_time(selection.fill);
-    let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
-    // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
-    // Whitney basis function): no dispersion relation to animate at, so the
-    // wave collapses to no displacement rather than a special case here.
-    let wave_omega = fill_time.wave_omega();
-    // Only a genuine scalar field displaces the surface. A line field's
-    // density is an unsigned magnitude, which has no signed height to ride,
-    // and the arrows sit on the undisplaced surface regardless.
-    //
-    // Two ceilings, and the amplitude is whichever binds first. The aesthetic
-    // one normalizes by the field's own peak so every mode reaches the same
-    // displacement, a fraction of the object's extent, not its mesh width, so
-    // the lobes read at orbital scale regardless of resolution. The geometric
-    // one is the mesh's reach, and it is what keeps a shape with thin features
-    // from displacing through itself.
-    let displaces = matches!(selection.fill, FieldRef::Scalar(_)) && fill_time.animates();
-    let wave_amplitude = if displaces {
-      let aesthetic = WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale;
-      aesthetic.min(safe_amplitude(scene, mesh, selection.fill))
-    } else {
-      0.0
-    };
-    // An eigenmode's color pulses by $cos(sqrt(lambda) t)$ through zero, so its
-    // colormap range is symmetric $[-s, s]$ about the midpoint. A static field
-    // keeps its own asymmetric range: widening it to symmetric would spend half
-    // the span on values the field never takes.
-    let (min_val, max_val) = if fill_time.animates() {
-      (-field_scale, field_scale)
-    } else {
-      (raw_min, raw_max)
-    };
-    let mut surface = SurfaceMaterial {
-      min_val,
-      max_val,
-      wave_amplitude,
-      wave_omega,
-      wave_phase: fill_time.wave_phase(),
-      // Diverging exactly where the range above was widened to symmetric: a
-      // signed eigenmode pulse, not an unsigned magnitude.
-      diverging: f32::from(fill_time.animates()),
-      // The identity until the deposit below exists; patched then.
-      deposit_floor: 1.0,
-      deposit_gain: 0.0,
-      // Overridden per frame from the 2-skeleton's coloring toggle.
-      colored: 1.0,
-      _pad0: 0.0,
-      _pad1: 0.0,
-      _pad2: 0.0,
-    };
+    let (glyphs, particles, speed_ratio, mut surface) = match selection {
+      Selection::Scalar(index) => {
+        let field = &scene.fields[index];
 
-    // The arrows and the flow, from the glyph channel: its own field, its own
-    // clock and its own colormap range, since it need not be the field filling
-    // the surface. An unoccupied channel draws neither, by having nothing to
-    // draw rather than by a flag.
-    let glyph_field = selection.glyphs.map(|index| &scene.line_fields[index]);
-    let (glyphs, particles, speed_ratio, glyph_material) = match glyph_field {
-      None => (None, None, 0.0, None),
-      Some(field) => {
-        // The particles flow the field on the object's own clock: the peak
-        // magnitude sets what "one step" is worth, so the fastest speck covers
-        // `PARTICLE_SPEED_FRACTION` of the object's radius each second whatever
-        // the cochain's units. A field that vanishes everywhere has no scale to
-        // divide by and simply does not move.
-        //
-        // The same peak is the glyph fade's reference: an arrow's opacity is
-        // its own magnitude against the field's greatest, so the mark reports
-        // where the field is strong without spending its length on it.
+        let field_scale = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
+        // A field with no eigenvalue is not a standing-wave mode (e.g. a raw
+        // Whitney basis function): no dispersion relation to animate at, so
+        // the wave collapses to no displacement rather than a special case
+        // here.
+        let wave_omega = field.time.wave_omega();
+        // Two ceilings, and the amplitude is whichever binds first. The
+        // aesthetic one normalizes by the field's own peak so every mode
+        // reaches the same displacement, a fraction of the object's extent,
+        // not its mesh width, so the lobes read at orbital scale regardless of
+        // resolution. The geometric one is the mesh's reach, and it is what
+        // keeps a shape with thin features from displacing through itself.
+        let wave_amplitude = if field.time.animates() {
+          let aesthetic = WAVE_AMPLITUDE_FRACTION * amplitude_scale / field_scale;
+          aesthetic.min(safe_amplitude(scene, mesh, selection))
+        } else {
+          0.0
+        };
+        // An eigenmode's color pulses by $cos(sqrt(lambda) t)$ through zero, so
+        // its colormap range is symmetric $[-s, s]$ about the midpoint, the
+        // same reasoning as the line field's tint. A static field keeps its own
+        // asymmetric range.
+        let (min_val, max_val) = if field.time.animates() {
+          (-field_scale, field_scale)
+        } else {
+          (raw_min, raw_max)
+        };
+
+        (
+          None,
+          None,
+          0.0,
+          SurfaceMaterial {
+            min_val,
+            max_val,
+            wave_amplitude,
+            wave_omega,
+            // Diverging exactly where the range above was widened to
+            // symmetric: a signed eigenmode pulse, not an unsigned magnitude.
+            diverging: f32::from(field.time.animates()),
+            // The identity: a scalar field has no particles and lays no trail.
+            deposit_floor: 1.0,
+            deposit_gain: 0.0,
+            // Overridden per frame from the 2-skeleton's coloring toggle.
+            colored: 1.0,
+          },
+        )
+      }
+      Selection::Line(index) => {
+        let field = &scene.line_fields[index];
+        // An eigenmode's tint is the signed $|V| cos(sqrt(lambda) t)$, so its
+        // colormap range is symmetric $[-m, m]$ about zero, the pulse runs
+        // through the midpoint and flips as the cosine crosses zero. A static
+        // field has no such pulse (wave_omega below is 0, cos(0) = 1), so its
+        // tint is the unsigned $|V|_g$ itself: using its true range instead of
+        // widening to symmetric keeps the colormap from spending half its
+        // span on negative values the field never takes. The glyphs are static
+        // either way, so there is no geometric displacement,
+        // `wave_amplitude` is 0 and only `wave_omega` (the tint clock) carries
+        // the mode's frequency.
+        let peak = raw_max.abs().max(raw_min.abs()).max(f32::EPSILON);
+        let (min_val, max_val) = if field.time.animates() {
+          (-peak, peak)
+        } else {
+          (raw_min, raw_max)
+        };
+
+        // The particles flow the same field, on the object's own clock: the
+        // peak magnitude sets what "one step" is worth, so the fastest speck
+        // covers `PARTICLE_SPEED_FRACTION` of the object's radius each second
+        // whatever the cochain's units. A field that vanishes everywhere has no
+        // scale to divide by and simply does not move.
         let peak = realize::advect::peak_speed(&scene.topology, &scene.coords, &field.cochain);
 
+        // The same peak the advection normalizes by, read as the glyph fade's
+        // reference: a glyph's opacity is its own magnitude against the field's
+        // greatest, so the mark reports where the field is strong without
+        // spending its length on it.
         // The glyphs are drawn on the render surface and read the field's trace
         // there: for a solid that is $diff M$, a proper closed 2-manifold whose
         // triangles are the very ones the fill draws. A line field always
@@ -804,7 +813,7 @@ impl FieldDisplay {
           .flatten();
 
         // The population's mean speed as a fraction of the peak the step is
-        // normalized to: with splats inked by arc length, this is what the
+        // normalized to: with splats inked by arc length: this is what the
         // equilibrium trail brightness actually scales with, and it is an
         // exact area-weighted quantity of the field, not a tuned ratio.
         let speed_ratio = if peak > 0.0 {
@@ -813,20 +822,25 @@ impl FieldDisplay {
           0.0
         };
 
-        // The arrows' own colormap range, over exactly what they carry: an
-        // arrow's magnitude is the unsigned $|V|_g$ at its sample, bounded by
-        // the peak the bake already measured, so no second reduction pass is
-        // needed to find it. An eigenmode's arrow pulses by
-        // $|V| cos(sqrt(lambda) t)$ through zero, hence a symmetric diverging
-        // range; a static field never leaves $[0, "peak"]$ and takes the
-        // sequential map over exactly that.
-        let peak = (peak as f32).max(f32::EPSILON);
-        let animates = field.time.animates();
         (
           Some(glyphs),
           particles,
           speed_ratio,
-          Some((if animates { -peak } else { 0.0 }, peak, animates)),
+          // The surface is the same fill a scalar field gets, tinted by the
+          // field's cell-local magnitude: the glyphs carry the direction, so the
+          // surface has only the magnitude left to say.
+          SurfaceMaterial {
+            min_val,
+            max_val,
+            wave_amplitude: 0.0,
+            wave_omega: field.time.wave_omega(),
+            diverging: f32::from(field.time.animates()),
+            // The identity until the deposit below exists; patched then.
+            deposit_floor: 1.0,
+            deposit_gain: 0.0,
+            // Overridden per frame from the 2-skeleton's coloring toggle.
+            colored: 1.0,
+          },
         )
       }
     };
@@ -877,7 +891,7 @@ impl FieldDisplay {
     // own. Diverging where the trace is signed (values cross zero, a 0-form, or
     // the manifold top form) or the mode pulses. One rule for every colored
     // skeleton, applied to each one's own range.
-    let animates = scene.field_time(selection.fill).animates();
+    let animates = scene.field_time(selection).animates();
     let colormap_range = |(raw_min, raw_max): (f32, f32)| -> (f32, f32, f32) {
       let (min_val, max_val) = if animates {
         let s = raw_min.abs().max(raw_max.abs()).max(f32::EPSILON);
@@ -942,7 +956,6 @@ impl FieldDisplay {
     });
 
     let display = Self {
-      selection,
       glyphs,
       particles,
       deposit,
@@ -960,14 +973,10 @@ impl FieldDisplay {
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
-        wave_phase: surface.wave_phase,
         min_val: segment_min,
         max_val: segment_max,
         diverging: segment_diverging,
         colored: 0.0,
-        _pad0: 0.0,
-        _pad1: 0.0,
-        _pad2: 0.0,
       },
       // The 0-skeleton rides the same wave and clock. Its disc is a few edge
       // fractions wide, and its colormap range is its own. `colored`, like the
@@ -978,14 +987,10 @@ impl FieldDisplay {
         fade_floor: 1.0,
         wave_amplitude: surface.wave_amplitude,
         wave_omega: surface.wave_omega,
-        wave_phase: surface.wave_phase,
         min_val: point_min,
         max_val: point_max,
         diverging: point_diverging,
         colored: 0.0,
-        _pad0: 0.0,
-        _pad1: 0.0,
-        _pad2: 0.0,
       },
       // The glyphs read neither the surface's displacement nor its clock: the
       // samples sit on the undisplaced surface, and an arrow reports a
@@ -998,37 +1003,16 @@ impl FieldDisplay {
       glyph: GlyphMaterial {
         color: GLYPH_INK,
         width_fraction: GLYPH_WIDTH_FRACTION,
-        // The glyph channel's own clock, not the fill's: the two fields may be
-        // different, and a pair shown together runs them a quarter period
-        // apart on purpose. It pulses the ink alone, never the opacity.
-        wave_omega: glyph_field.map_or(0.0, |field| field.time.wave_omega()),
-        wave_phase: glyph_field.map_or(0.0, |field| field.time.wave_phase()),
         head_length_fraction: GLYPH_HEAD_LENGTH_FRACTION,
         shaft_width_fraction: GLYPH_SHAFT_WIDTH_FRACTION,
         outline_width_fraction: GLYPH_OUTLINE_WIDTH_FRACTION,
-        min_val: glyph_material.map_or(0.0, |(min, _, _)| min),
-        max_val: glyph_material.map_or(1.0, |(_, max, _)| max),
-        diverging: glyph_material.map_or(0.0, |(_, _, div)| f32::from(div)),
-        // The arrows state their own magnitude, in hue, which is what leaves
-        // the fill free for another field. Off only where a reader turns the
-        // field's colormap off wholesale, which is the same per-frame toggle
-        // the skeletons read.
-        colored: 1.0,
-        _pad0: 0.0,
-        _pad1: 0.0,
       },
     };
     (display, attributes)
   }
 
-  /// Rewrites every stream that carries a field's value at solve time `t`: the
-  /// mesh's attribute streams from the fill channel, and the arrows from the
-  /// glyph channel.
-  ///
-  /// Each channel is read at `t` through its own field's time model, because
-  /// the two need not be the same field. Sharing one cochain between them
-  /// would show a pair's two halves as one, which is precisely what the two
-  /// channels exist to avoid.
+  /// Rewrites every stream that carries the field's value, from `cochain`: the
+  /// mesh's attribute streams and, for a line field, its arrows.
   ///
   /// What a display is built from and what it re-reads per instant is one
   /// list, so a mark that moves with the field is caught here rather than
@@ -1040,25 +1024,23 @@ impl FieldDisplay {
   /// Only a sampled trajectory needs this. A static field never moves, and a
   /// standing wave's evolution is a scalar factor the GPU applies, so both are
   /// baked once.
-  pub(crate) fn rebake(&mut self, queue: &wgpu::Queue, scene: &Scene, mesh: &MeshDisplay, t: f64) {
-    // Read before the arrows are borrowed mutably below; a `Selection` is
-    // `Copy`, so this is a read of the two channel names, not a clone.
-    let selection = self.selection;
-    let frame_of = |field: FieldRef| {
-      let base = scene.field_cochain(field);
-      scene.field_time(field).frame_at(base, t).into_owned()
-    };
-
+  pub(crate) fn rebake(
+    &mut self,
+    queue: &wgpu::Queue,
+    scene: &Scene,
+    mesh: &MeshDisplay,
+    cochain: &derham::Cochain,
+  ) {
     let (attributes, _) = field_attributes(
       &scene.topology,
       &scene.coords,
-      &frame_of(selection.fill),
+      cochain,
       mesh.fill_triangles(),
       mesh.segments(),
     );
     mesh.write_attributes(queue, &attributes);
-    if let (Some(glyphs), Some(index)) = (self.glyphs.as_mut(), selection.glyphs) {
-      glyphs.rebake(queue, scene, &frame_of(FieldRef::Line(index)));
+    if let Some(glyphs) = self.glyphs.as_mut() {
+      glyphs.rebake(queue, scene, cochain);
     }
   }
 

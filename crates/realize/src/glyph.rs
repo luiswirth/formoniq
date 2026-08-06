@@ -14,15 +14,12 @@
 //!
 //! [`Transition`]: simplicial::atlas::Transition
 //!
-//! Neither length nor opacity encodes magnitude: scaling or dimming by $|V|$
-//! would shrink the field where it is small, which is where its direction is
-//! most worth seeing. An arrow is drawn at full opacity wherever it is drawn at
+//! Neither length nor opacity encodes magnitude. The mark carries the direction
+//! and the fill beneath it carries the magnitude, which is why `segments.wgsl`
+//! does not colormap them: scaling by $|V|$ would restate the fill and shrink
+//! the field where it is small, which is where its direction is most worth
+//! seeing. An arrow is therefore drawn at full opacity wherever it is drawn at
 //! all, so a weak direction reads as well as a strong one.
-//!
-//! Hue does encode it. The magnitude travels on the instance
-//! ([`GlyphInstance::magnitude`]) and the shader colormaps the ink from it, so
-//! the mark says how big the field is without the shape or the opacity saying
-//! anything about it, and the fill beneath is left to a field of its own.
 //!
 //! What a magnitude does decide is whether there is a direction at all. A
 //! vanishing field points nowhere, and a field that vanishes only up to roundoff
@@ -293,7 +290,7 @@ pub fn bake_glyphs(
             direction: [d.x as f32, d.y as f32, d.z as f32],
             opacity: 1.0,
             across: [a.x as f32, a.y as f32, a.z as f32],
-            magnitude: magnitude as f32,
+            _pad0: 0.0,
             bary_center,
             bary_along: gradient(&direction),
             bary_across: gradient(&across),
