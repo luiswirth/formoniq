@@ -1,42 +1,36 @@
 {
-  description = "formoniq";
-
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+
     rust-overlay.url = "github:oxalica/rust-overlay";
+    rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
   };
 
   outputs = {
     nixpkgs,
-    flake-utils,
     rust-overlay,
     ...
-  }:
-    flake-utils.lib.eachDefaultSystem (
-      system: let
-        overlays = [
-          (import rust-overlay)
-          (self: super: {
-            rust-toolchain = self.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-          })
-        ];
-        pkgs = import nixpkgs {
-          inherit system overlays;
-        };
-      in
-        with pkgs; {
-          devShell = mkShell {
-            buildInputs = [
-              pkg-config
-              rust-toolchain
-              rust-analyzer
+  }: let
+    forEachSystem = f:
+      nixpkgs.lib.genAttrs ["aarch64-darwin" "x86_64-linux"]
+      (system:
+        f (import nixpkgs {
+          inherit system;
+          overlays = [(import rust-overlay)];
+        }));
+  in {
+    formatter = forEachSystem (pkgs: pkgs.alejandra);
 
-              bacon
-              cargo-edit
-              cargo-flamegraph
-            ];
-          };
-        }
-    );
+    devShells = forEachSystem (pkgs: {
+      default = pkgs.mkShell {
+        packages = with pkgs; [
+          (rust-bin.fromRustupToolchainFile ./rust-toolchain.toml)
+          bacon
+          cargo-edit
+          cargo-flamegraph
+          pkg-config
+        ];
+      };
+    });
+  };
 }
