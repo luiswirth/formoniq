@@ -5,7 +5,7 @@
 //! $
 //!   inner(dif omega, eta)_(L^2 Lambda^k)
 //!   = inner(omega, delta eta)_(L^2 Lambda^(k-1))
-//!   \+ integral_(diff M) "tr" omega wedge "tr" (hodge eta).
+//!   \+ integral_(partial M) "tr" omega wedge "tr" (hodge eta).
 //! $
 //! The boundary term is what a boundary condition disposes of. An essential
 //! condition constrains $"tr" omega$ and so is imposed on the trial/test space
@@ -107,11 +107,11 @@ pub fn solve_with_essential_bc(
 }
 
 /// The natural (Neumann) boundary load
-/// $[integral_(diff K) angle.l "tr" W_sigma, h angle.r vol_(diff K)]_sigma$,
+/// $[integral_(partial K) chevron.l "tr" W_sigma, h chevron.r vol_(partial K)]_sigma$,
 /// to be added to the right-hand side of the unconstrained system.
 ///
-/// The data $h$ is a $k$-form field on the boundary manifold $diff K$, not
-/// on the parent mesh, since the load is an integral over $diff K$ and only
+/// The data $h$ is a $k$-form field on the boundary manifold $partial K$, not
+/// on the parent mesh, since the load is an integral over $partial K$ and only
 /// the trace of $h$ enters it. A form given in the ambient coordinates of the
 /// parent reaches it through the pullback adapter against the trace coords:
 ///
@@ -121,7 +121,7 @@ pub fn solve_with_essential_bc(
 /// ```
 ///
 /// For the scalar Laplacian ($k = 0$) the data is the outward flux
-/// $h = diff u \/ diff n$. Homogeneous natural conditions need no call.
+/// $h = partial u \/ partial n$. Homogeneous natural conditions need no call.
 pub fn neumann_load(
   boundary: &BoundaryWhitneyComplex,
   data: &(impl Section + Sync),
@@ -139,8 +139,8 @@ pub fn neumann_load(
   )
 }
 
-/// The boundary mass matrix $"tr"^T M_(diff K)^k "tr"$ of the bilinear form
-/// $integral_(diff K) angle.l "tr" u, "tr" v angle.r vol_(diff K)$:
+/// The boundary mass matrix $"tr"^T M_(partial K)^k "tr"$ of the bilinear form
+/// $integral_(partial K) chevron.l "tr" u, "tr" v chevron.r vol_(partial K)$:
 /// scaled by the impedance $alpha$ and added to the system matrix, this
 /// imposes a Robin condition.
 pub fn boundary_mass(

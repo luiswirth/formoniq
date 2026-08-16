@@ -158,7 +158,7 @@ mod tests {
     assert!((b.apply(&r) - expected).norm() < 1e-12);
   }
 
-  /// $B$ is symmetric, $angle.l B r, s angle.r = angle.l r, B s angle.r$, with
+  /// $B$ is symmetric, $chevron.l B r, s chevron.r = chevron.l r, B s chevron.r$, with
   /// several corrections of different shapes: the precondition CG rests on.
   #[test]
   fn combiner_is_self_adjoint() {

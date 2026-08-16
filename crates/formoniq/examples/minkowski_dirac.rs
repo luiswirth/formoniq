@@ -62,7 +62,7 @@
 //!   analogue.
 //!
 //! - Dirichlet data on the whole spacetime boundary. The manufactured
-//!   problem prescribes the trace on all of $diff([0,T] times [0,1]^d)$,
+//!   problem prescribes the trace on all of $partial([0,T] times [0,1]^d)$,
 //!   final data included, which for a hyperbolic operator is a Fredholm
 //!   boundary condition, not a causal initial-value one: the continuous
 //!   problem can resonate (the massless wave $sin(pi t\/T') sin(pi x)$ with

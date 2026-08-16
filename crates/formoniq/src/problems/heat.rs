@@ -11,13 +11,13 @@ use crate::{
 use derham::Cochain;
 use multialgebra::ExteriorGrade;
 
-/// Radau IIA for the Hodge heat equation $diff_t u = -Delta u + f$ on Whitney
+/// Radau IIA for the Hodge heat equation $partial_t u = -Delta u + f$ on Whitney
 /// $k$-forms of any `grade`, with the full Hodge Laplacian
 /// $Delta = dif delta + delta dif$.
 ///
 /// The down-part $dif delta$ is reached through the mixed auxiliary
 /// $sigma = delta u in Lambda^(k-1)$, whose defining relation is algebraic
-/// (no $diff_t sigma$): the semidiscrete system
+/// (no $partial_t sigma$): the semidiscrete system
 ///
 /// $ mat(0, 0; 0, M) dot(vec(sigma, u)) = mat(-M_sigma, C_"dn"; -M D^(k-1), -K)
 ///   vec(sigma, u) + vec(0, M f) $

@@ -8,7 +8,7 @@
 //!
 //! The count of zero eigenvalues is the harmonic dimension, an exact topological
 //! prediction the discrete problem reproduces at every resolution: absolute
-//! $b_k (K)$ ($1$ at grade $0$) against relative $b_k (K, diff K)$ ($1$ at top
+//! $b_k (K)$ ($1$ at grade $0$) against relative $b_k (K, partial K)$ ($1$ at top
 //! grade) on the box, staging Poincaré--Lefschetz duality, and $b_k (T^d) =
 //! binom(d, k)$ on the torus — the only case where it is neither $0$ nor $1$,
 //! and so the only one that tests the harmonic sector rather than anchoring it.

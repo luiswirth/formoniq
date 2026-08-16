@@ -199,8 +199,8 @@ mod tests {
     assert!((b.apply(&a.apply(&x)) - &x).norm() < 1e-12);
   }
 
-  /// The law the `SelfAdjoint` marker promises: $angle.l B r, s angle.r =
-  /// angle.l r, B s angle.r$. Verified on a full (non-diagonal) SPD operator,
+  /// The law the `SelfAdjoint` marker promises: $chevron.l B r, s chevron.r =
+  /// chevron.l r, B s chevron.r$. Verified on a full (non-diagonal) SPD operator,
   /// whose diagonal Jacobi reads.
   #[test]
   fn jacobi_is_self_adjoint() {

@@ -1,4 +1,4 @@
-//! Linear advection $diff_t omega + cal(L)_v omega = 0$ on the flat box, with
+//! Linear advection $partial_t omega + cal(L)_v omega = 0$ on the flat box, with
 //! the central discretization, to measure what it does wrong.
 //!
 //! Cartan's $cal(L)_v = iota_v dif + dif iota_v$ makes one operator out of the
@@ -17,7 +17,7 @@
 //! imposed, so the bump stops short of the boundary.
 //!
 //! The drift turns out to be structural in the grade. The antisymmetry defect
-//! $integral_(diff K) inner(omega, eta) iota_v vol$ vanishes wherever
+//! $integral_(partial K) inner(omega, eta) iota_v vol$ vanishes wherever
 //! neighboring facet terms cancel, which happens at both ends and nowhere
 //! between: the shape functions are continuous at $k = 0$, and constant per
 //! cell at $k = n$, where what is left is $integral_K div v$. So the classical

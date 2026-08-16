@@ -14,7 +14,7 @@
 //! norm(delta u)^2) <= 0$ for any initial state, and Radau IIA, being L-stable,
 //! inherits the monotone decay unconditionally. The table shows $E$ falling
 //! monotonically from a starting bump (a boundary-compatible eigenform, held at
-//! zero on $diff K$ via the relative complex).
+//! zero on $partial K$ via the relative complex).
 //!
 //! At top grade $dif u = 0$ and $sigma = delta u$ is the only term; at grade
 //! $0$ there is no $sigma$ and $Delta = delta dif$, both the trivial total

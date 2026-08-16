@@ -5,7 +5,7 @@
 //! $dots.c ->^(dif^(k-1)) C^k ->^(dif^k) C^(k+1) ->^(dif^(k+1)) dots.c$
 //!
 //! is the chain complex of [`homology`](super::homology) with its arrows
-//! reversed: $dif^k$ is the transpose of $diff_(k+1)$, one incidence read the
+//! reversed: $dif^k$ is the transpose of $partial_(k+1)$, one incidence read the
 //! other way, exactly as [`chain`](super::chain) says of the two differentials.
 //! So a cohomology class $H^k = ker dif^k slash "im" dif^(k-1)$ and a homology
 //! class are the same subquotient of the same matrix, and both are
@@ -32,7 +32,7 @@ use crate::linalg::exact::{IntegerMatrix, quotient_generators};
 
 impl Complex {
   /// The integer coboundary $dif^k: C^k -> C^(k+1)$, as the transpose of
-  /// $diff_(k+1)$.
+  /// $partial_(k+1)$.
   ///
   /// Total over every grade, inheriting the totality of
   /// [`Self::integral_boundary`]: off the range it is the map between zero
@@ -64,10 +64,10 @@ impl Complex {
   }
 
   /// Representative cocycles of a basis of the free part of the relative
-  /// cohomology $H^k (K, diff K; ZZ)$, one per
+  /// cohomology $H^k (K, partial K; ZZ)$, one per
   /// [`relative_betti_number`](Self::relative_betti_number).
   ///
-  /// The relative cochains *are* the cochains vanishing on $diff K$, so the
+  /// The relative cochains *are* the cochains vanishing on $partial K$, so the
   /// relative complex is the cochain complex on the interior simplices
   /// (the interior selection) and a class is written
   /// back out as a full-length cochain by extension by zero. That embedding is
@@ -92,7 +92,7 @@ impl Complex {
   }
 }
 
-/// The Kronecker pairing matrix $P_(i j) = angle.l z^i, z_j angle.r$ of a set
+/// The Kronecker pairing matrix $P_(i j) = chevron.l z^i, z_j chevron.r$ of a set
 /// of cochains against a set of chains.
 pub fn kronecker_matrix(cocycles: &[Cochain<i64>], cycles: &[Chain<i64>]) -> Vec<Vec<i64>> {
   cocycles
@@ -259,7 +259,7 @@ mod test {
     assert_ne!(crate::topology::chain::pairing(&cocycles[0], &cycles[0]), 0);
   }
 
-  /// On a closed manifold $diff K = nothing$, so the relative and absolute
+  /// On a closed manifold $partial K = nothing$, so the relative and absolute
   /// cohomologies coincide. The 2-sphere.
   #[test]
   fn closed_manifold_relative_equals_absolute() {

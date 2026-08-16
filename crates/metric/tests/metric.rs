@@ -146,7 +146,7 @@ fn musical_isomorphisms() {
   }
 }
 
-/// Writing a tensor out on the full basis of $V^(times.circle d)$ and taking
+/// Writing a tensor out on the full basis of $V^(times.o d)$ and taking
 /// the Euclidean dot product there is the packed inner product, scaled by
 /// $product_i k_i !$.
 ///
@@ -196,7 +196,7 @@ fn the_dense_embedding_matches_the_gramian_up_to_the_factorials() {
 ///
 /// The wedge pairing is metric-free: it asks only for a top grade to land in.
 /// The Hodge star is what turns it into the inner product,
-/// $angle.l alpha, star beta angle.r_wedge = inner(alpha, beta) vol$, and that
+/// $chevron.l alpha, star beta chevron.r_wedge = inner(alpha, beta) vol$, and that
 /// step is exactly where the metric enters. Stating the two together is what
 /// keeps them from being conflated.
 #[test]
@@ -301,8 +301,8 @@ fn the_metric_pullback_is_the_tensor_pullback() {
 }
 
 /// The metric evaluated on two vectors is the duality pairing of its $"Sym"^2$
-/// reading against their symmetric product, $g(v, w) = angle.l g, v dot.circle w
-/// angle.r$: the multiplicity cancels between the two sides exactly when the
+/// reading against their symmetric product, $g(v, w) = chevron.l g, v dot.o w
+/// chevron.r$: the multiplicity cancels between the two sides exactly when the
 /// convention is uniform. Checked with $v != w$, where a stray factor of two
 /// survives.
 #[test]

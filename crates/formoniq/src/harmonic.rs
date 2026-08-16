@@ -32,7 +32,7 @@
 //! so basis vector $i$ has unit period around hole $i$ and none around any
 //! other. The periods are computed on the *cocycles*, over $ZZ$ and hence
 //! exactly, because a period does not see the projection: $h = z - D p$ and
-//! $angle.l D p, z_j angle.r = angle.l p, diff z_j angle.r = 0$ on a cycle, so
+//! $chevron.l D p, z_j chevron.r = chevron.l p, partial z_j chevron.r = 0$ on a cycle, so
 //! $h$ and $z$ have the same periods. Pinning the basis this way inherits the
 //! labelling of the cycles: it makes the correspondence to the holes explicit,
 //! it does not choose which hole is which.
@@ -79,7 +79,7 @@ pub struct Harmonics {
 /// The change of basis $H |-> H P^(-T)$ making the harmonic representatives
 /// dual to the cycles, $integral_(z_j) h^i = delta^i_j$.
 ///
-/// The period matrix $P_(i j) = angle.l z^i, z_j angle.r$ is read off the
+/// The period matrix $P_(i j) = chevron.l z^i, z_j chevron.r$ is read off the
 /// integral cocycles rather than the projected forms, exactly over $ZZ$: a
 /// period is blind to the projection, since the coboundary subtracted pairs to
 /// zero against a cycle.

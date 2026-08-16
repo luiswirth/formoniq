@@ -16,7 +16,7 @@ pub type Strides = tinyvec::TinyVec<[usize; 4]>;
 /// A basis element of a [`Tensor`]: one multi-index per factor.
 pub type Basis = tinyvec::TinyVec<[MultiIndex; 2]>;
 
-/// An element of $times.circle_i F_i (V)$, each $F_i$ an alternating or
+/// An element of $times.o_i F_i (V)$, each $F_i$ an alternating or
 /// symmetric power, all over one space of dimension $n$ and one [`Variance`].
 ///
 /// Components live on the product of the per-factor bases, a
@@ -37,7 +37,7 @@ pub struct Tensor<R = f64> {
   components: Vector<R>,
 }
 
-/// The dimension of $times.circle_i F_i (RR^n)$: the product of the per-factor
+/// The dimension of $times.o_i F_i (RR^n)$: the product of the per-factor
 /// dimensions.
 ///
 /// Total at the trivial ends: an empty product of factors is the scalars, and a
@@ -315,8 +315,8 @@ impl<R: Ring> Tensor<R> {
   /// alternating.
   ///
   /// Stricter than [`Self::is_alternating`], and deliberately.
-  /// $Lambda^a times.circle Lambda^b$ is alternating in both factors but lives
-  /// in $Lambda(V) times.circle Lambda(V)$, a bigraded algebra whose product is
+  /// $Lambda^a times.o Lambda^b$ is alternating in both factors but lives
+  /// in $Lambda(V) times.o Lambda(V)$, a bigraded algebra whose product is
   /// not the wedge. It is [`Self::merge`] that collapses the two into one, and
   /// that map is the exterior algebra's multiplication.
   pub fn is_exterior(&self) -> bool {
@@ -478,7 +478,7 @@ impl<R: Ring> Tensor<R> {
     self.contract(0, dual)
   }
 
-  /// The tensor product $times.circle$: factor lists concatenated, components
+  /// The tensor product $times.o$: factor lists concatenated, components
   /// the Kronecker product.
   ///
   /// Not the wedge: this concatenates, where [`Self::merge`] combines two
@@ -498,7 +498,7 @@ impl<R: Ring> Tensor<R> {
   ///
   /// One operation over every shape: the wedge on a single alternating factor,
   /// the polynomial product on a single symmetric one, and on
-  /// $"Sym"^r times.circle Lambda^k$ both at once,
+  /// $"Sym"^r times.o Lambda^k$ both at once,
   /// $(lambda^alpha dif lambda_I)(lambda^beta dif lambda_J)
   /// = lambda^(alpha + beta) dif lambda_I wedge dif lambda_J$.
   ///
@@ -677,7 +677,7 @@ impl<R: Ring> Tensor<R> {
 
   /// Contract factor `which` with a grade-one element of the dual variance:
   /// the interior product $iota_v$ on an alternating factor, the directional
-  /// derivative $diff_v$ on a symmetric one.
+  /// derivative $partial_v$ on a symmetric one.
   ///
   /// One implementation for both, through [`MonoIndex::deletions`]. On a
   /// symmetric factor, repeating it in every slot is evaluation,
@@ -721,11 +721,11 @@ impl<R: Ring> Tensor<R> {
   }
 
   /// Move one degree from one factor to another, summed over the basis of the
-  /// underlying space: $sum_i (diff_(e_i) "on" F_"from") times.circle
+  /// underlying space: $sum_i (partial_(e_i) "on" F_"from") times.o
   /// (e_i dot "on" F_"to")$.
   ///
   /// The exterior derivative and the Koszul operator are this one operation in
-  /// its two directions. On $"Sym"^r times.circle Lambda^k$ in barycentric
+  /// its two directions. On $"Sym"^r times.o Lambda^k$ in barycentric
   /// coordinates,
   ///
   ///   $dif (lambda^alpha dif lambda_I)
@@ -780,12 +780,12 @@ impl<R: Ring> Tensor<R> {
   }
 
   /// The same tensor with every slot's symmetry forgotten: each $F^k$ becomes
-  /// $V^(times.circle k)$, of the same degree and variance.
+  /// $V^(times.o k)$, of the same degree and variance.
   ///
   /// The embedding of the quotients back into the free power, and it stays
   /// inside the algebra rather than handing back a bare array. $Lambda$ and
   /// $"Sym"$ are compressed representations of subspaces of
-  /// $V^(times.circle k)$, and this is the map that says so. It is also the way
+  /// $V^(times.o k)$, and this is the map that says so. It is also the way
   /// out to code that knows only dense arrays: the strides of an all-free
   /// tensor are the radix, so the components are the dense array over
   /// `[dim; total degree]` with its first axis fastest and no permutation.
@@ -796,7 +796,7 @@ impl<R: Ring> Tensor<R> {
   /// alternating slot repeats a symbol.
   ///
   /// Unnormalized, matching [`Factor::induced_form`]: a basis element is
-  /// $e_I = sum_sigma "sgn"(sigma) e_(i_(sigma(1))) times.circle dots.c$ with
+  /// $e_I = sum_sigma "sgn"(sigma) e_(i_(sigma(1))) times.o dots.c$ with
   /// no $1\/k!$, so the orderings that coincide on a symmetric slot are summed
   /// rather than assigned.
   ///
@@ -859,7 +859,7 @@ impl<R: Ring> Tensor<R> {
   /// Contract slot `i` against slot `j` of this tensor, summing over the shared
   /// basis: the trace.
   ///
-  /// Metric-free, and that is the point. $"tr": V^* times.circle V -> RR$ needs
+  /// Metric-free, and that is the point. $"tr": V^* times.o V -> RR$ needs
   /// no inner product, and reaching it by raising an index instead would drag a
   /// metric into an operation that does not depend on one.
   ///
@@ -939,7 +939,7 @@ impl<R: Ring> Tensor<R> {
   }
 
   /// Apply an endomorphism of one slot's own space, leaving the others alone:
-  /// $id times.circle dots times.circle M times.circle dots times.circle id$.
+  /// $id times.o dots times.o M times.o dots times.o id$.
   ///
   /// By stride arithmetic rather than by materializing the Kronecker product,
   /// so a single slot costs exactly one application of `matrix`.
@@ -1024,7 +1024,7 @@ impl<R: RationalAlgebra> Tensor<R> {
   /// $x^alpha |-> x^alpha (v) = product_i v_i^(alpha_i)$.
   ///
   /// Contraction of a symmetric factor is the directional derivative
-  /// $diff_v$, so $r$ of them give $diff_v^r p = r! p(v)$ on a homogeneous $p$,
+  /// $partial_v$, so $r$ of them give $partial_v^r p = r! p(v)$ on a homogeneous $p$,
   /// and the $r!$ is divided out. An alternating factor of degree above one
   /// evaluates to zero, $iota_v^2 = 0$ being the antisymmetry.
   pub fn evaluate(&self, which: usize, vector: &Tensor<R>) -> Self {
@@ -1098,14 +1098,14 @@ impl<R: Ring> Tensor<R> {
 /// [`Tensor::pullback`] and [`Tensor::pushforward`], which are one-shot uses of
 /// it rather than a second implementation.
 ///
-/// Uniform over the slots, so it transports a $"Sym"^r times.circle Lambda^k$
+/// Uniform over the slots, so it transports a $"Sym"^r times.o Lambda^k$
 /// exactly as it does a bare multiform. That is the reason to have the object
 /// at all rather than a bare $Lambda^k A$ matrix: a stored matrix applied to raw
 /// components is the pullback only where the multiplicative basis is self-dual,
 /// which is to say on the alternating family alone.
 ///
 /// The per-slot functors are held apart and applied by [`apply_factorwise`]:
-/// $times.circle_i F_i (A)$ is the one thing not worth forming, and holding the
+/// $times.o_i F_i (A)$ is the one thing not worth forming, and holding the
 /// factors is also what keeps the shape of the transport readable rather than
 /// flattened into one index.
 #[derive(Debug, Clone)]
@@ -1114,7 +1114,7 @@ pub struct Transport<R = f64> {
   domain: Slots,
   /// The shape in the codomain $W$: the same factors over the other space.
   codomain: Slots,
-  /// $F_i (A)$ for each slot, the factors of $times.circle_i F_i (A)$.
+  /// $F_i (A)$ for each slot, the factors of $times.o_i F_i (A)$.
   induced: Vec<Matrix<R>>,
   /// Their transposes, the factors of the adjoint. Stored rather than taken at
   /// every application, a transport being built once and applied many times.
@@ -1154,7 +1154,7 @@ impl<R: Ring> Transport<R> {
     &self.induced
   }
 
-  /// $times.circle_i F_i (A)$ formed, for a caller that needs the matrix as a
+  /// $times.o_i F_i (A)$ formed, for a caller that needs the matrix as a
   /// matrix: a congruence, a factorization, a block of a larger assembly.
   ///
   /// Built on demand and deliberately not stored. To apply the transport, use
@@ -1240,7 +1240,7 @@ impl<R: RationalAlgebra> Transport<R> {
 }
 
 /// The metric-free duality pairing of two tensors of dual variance,
-/// $angle.l omega, v angle.r$.
+/// $chevron.l omega, v chevron.r$.
 ///
 /// Slot for slot: same factor, opposite variance. That is what "dual" means
 /// here, and it is checked rather than assumed, a pairing of two covariant
@@ -1284,7 +1284,7 @@ pub fn pairing<R: Ring>(left: &Tensor<R>, right: &Tensor<R>) -> R {
 ///
 /// Nondegenerate, so it identifies $Lambda^(n-k)$ with the dual of $Lambda^k$
 /// without ever choosing an inner product. Antisymmetric up to the grading,
-/// $angle.l beta, alpha angle.r = (-1)^(k(n-k)) angle.l alpha, beta angle.r$.
+/// $chevron.l beta, alpha chevron.r = (-1)^(k(n-k)) chevron.l alpha, beta chevron.r$.
 ///
 /// Both arguments must be single alternating slots of one variance whose grades
 /// sum to the dimension.
@@ -1376,8 +1376,8 @@ pub fn factorwise_kronecker<R: Ring>(per_slot: &[Matrix<R>]) -> Matrix<R> {
 }
 
 /// Apply one matrix per slot to a component vector: the multilinear product
-/// $(times.circle_i M_i) c$, evaluated without ever forming
-/// $times.circle_i M_i$.
+/// $(times.o_i M_i) c$, evaluated without ever forming
+/// $times.o_i M_i$.
 ///
 /// The action of a factored operator on a tensor product, slot by slot. Each
 /// $M_i$ may be rectangular, taking its slot's dimension $d_i$ to a new one
@@ -1598,7 +1598,7 @@ mod test {
 
   /// On a single factor the product is the merge of the tensor, which is what
   /// ties the algebra structure back to the two primitives:
-  /// $a b = "merge"_0 (a times.circle b)$.
+  /// $a b = "merge"_0 (a times.o b)$.
   ///
   /// Stated where it is true. With one factor a side there is no reordering, so
   /// no Koszul sign, and the factorwise product and the seam merge coincide;
@@ -1638,7 +1638,7 @@ mod test {
   /// $b a = (-1)^(abs(a) abs(b)) a b$, where the degree that counts is the
   /// alternating one, symmetric factors being even.
   ///
-  /// Checked on a mixed shape, $"Sym" times.circle Lambda$, which is where the
+  /// Checked on a mixed shape, $"Sym" times.o Lambda$, which is where the
   /// sign is a real claim: on one factor it is the wedge's antisymmetry, and on
   /// a purely symmetric shape it is plain commutativity, so neither alone
   /// exercises the rule.
@@ -1680,7 +1680,7 @@ mod test {
     );
   }
 
-  /// A homogeneous polynomial form $"Sym"^r times.circle Lambda^k$ with
+  /// A homogeneous polynomial form $"Sym"^r times.o Lambda^k$ with
   /// deterministic components.
   fn poly_form(dim: usize, r: usize, k: usize, seed: usize) -> Tensor {
     let factors = covariant_slots([Factor::symmetric(r), Factor::alternating(k)], dim);
@@ -1714,7 +1714,7 @@ mod test {
     }
   }
 
-  /// The Koszul homotopy formula: on homogeneous $"Sym"^r times.circle
+  /// The Koszul homotopy formula: on homogeneous $"Sym"^r times.o
   /// Lambda^k$, $dif kappa + kappa dif = (r + k) id$.
   ///
   /// The identity the whole polynomial de Rham complex rests on: it is what

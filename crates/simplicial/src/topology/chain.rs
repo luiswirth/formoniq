@@ -4,8 +4,8 @@
 //! oriented $k$-simplices; a [`Cochain`] is an element of $C^k (K; R) =
 //! "Hom"(C_k, R)$, one coefficient per $k$-simplex. The [`pairing`] between
 //! them is what makes the second the dual of the first, and under it the
-//! boundary $diff$ and the coboundary $dif$ are adjoint, $angle.l dif omega, c
-//! angle.r = angle.l omega, diff c angle.r$.
+//! boundary $partial$ and the coboundary $dif$ are adjoint, $chevron.l dif omega, c
+//! chevron.r = chevron.l omega, partial c chevron.r$.
 //!
 //! Both are one type, [`FreeModule`], because both *are* the free $R$-module on
 //! the $k$-simplices and nothing in the data distinguishes them. What
@@ -13,7 +13,7 @@
 //! chain transforms with the simplices and its differential lowers the grade, a
 //! cochain transforms against them and its differential raises it. The
 //! differential itself is written once. It is the signed incidence
-//! [`Complex::incidences`] read in the direction the variance names, $diff$
+//! [`Complex::incidences`] read in the direction the variance names, $partial$
 //! scattering a coface's coefficient onto its faces and $dif$ gathering a
 //! coface's coefficient from them, so the two operators are one traversal of
 //! one relation rather than two implementations that must be kept in step.
@@ -101,7 +101,7 @@ pub trait Variance {
 }
 
 /// The variance of a [`Chain`]: covariant, its differential the boundary
-/// $diff_k: C_k -> C_(k-1)$.
+/// $partial_k: C_k -> C_(k-1)$.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct Homological;
 impl Variance for Homological {
@@ -242,13 +242,13 @@ impl<V: Variance, R: Coefficient> FreeModule<V, R> {
     self.coeffs.iter().enumerate().filter(|(_, c)| !c.is_zero())
   }
 
-  /// The differential of the complex: the boundary $diff$ on a chain, the
+  /// The differential of the complex: the boundary $partial$ on a chain, the
   /// coboundary $dif$ on a cochain.
   ///
   /// One traversal of the signed incidence [`Complex::incidences`], the
   /// variance deciding which of its two ends is read from and which is written
   /// to. Exact over any ring: the incidence coefficients are $plus.minus 1$, so
-  /// $diff compose diff = 0$ and $dif compose dif = 0$ hold without rounding.
+  /// $partial compose partial = 0$ and $dif compose dif = 0$ hold without rounding.
   ///
   /// Total at both ends. Off the range $0 <= k <= n$ the complex extends by the
   /// zero module, the incidence rung is empty and the target skeleton has no
@@ -285,7 +285,7 @@ impl<V: Variance, R: Coefficient> FreeModule<V, R> {
 }
 
 impl<R: Coefficient> Chain<R> {
-  /// The boundary $diff_k: C_k -> C_(k-1)$: the incidence relation scattered
+  /// The boundary $partial_k: C_k -> C_(k-1)$: the incidence relation scattered
   /// downward, the [`differential`](FreeModule::differential) of this variance.
   pub fn boundary(&self, topology: &Complex) -> Self {
     self.differential(topology)
@@ -339,12 +339,12 @@ impl<R: Coefficient> Cochain<R> {
   }
 }
 
-/// The duality pairing $angle.l omega, c angle.r = sum_sigma omega_sigma
+/// The duality pairing $chevron.l omega, c chevron.r = sum_sigma omega_sigma
 /// c_sigma$ of a cochain with a chain of the same grade over the same ring.
 ///
-/// The pairing that makes $C^k$ the dual of $C_k$. Under it $diff$ and $dif$
-/// are adjoint, $angle.l dif omega, c angle.r = angle.l omega, diff c
-/// angle.r$, which is why the coboundary is the transpose of the boundary.
+/// The pairing that makes $C^k$ the dual of $C_k$. Under it $partial$ and $dif$
+/// are adjoint, $chevron.l dif omega, c chevron.r = chevron.l omega, partial c
+/// chevron.r$, which is why the coboundary is the transpose of the boundary.
 ///
 /// One ring, since a bilinear map is over one: a $ZZ$-chain meets an
 /// $RR$-cochain by [`extending its scalars`](FreeModule::extend_scalars) first,
@@ -387,7 +387,7 @@ pub fn pairing<R: Coefficient>(cochain: &Cochain<R>, chain: &Chain<R>) -> R {
 /// signed squared edge lengths are grade-1 columns too, but their datum is
 /// quadratic in the edge tangent and so blind to its reversal, while a
 /// cochain's is linear and changes sign with it. They sit on the two sides of
-/// $Lambda^1 times.circle Lambda^1 = Lambda^2 plus.circle "Sym"^2$: the
+/// $Lambda^1 times.o Lambda^1 = Lambda^2 plus.o "Sym"^2$: the
 /// coboundary acts on this one, and not on that one.
 impl<V: Variance, R: Coefficient> SkeletonData for FreeModule<V, R> {
   type Item<'a>
@@ -520,7 +520,7 @@ mod test {
   }
 
   /// The boundary and the coboundary are adjoint under the chain-cochain
-  /// pairing: $angle.l dif omega, c angle.r = angle.l omega, diff c angle.r$.
+  /// pairing: $chevron.l dif omega, c chevron.r = chevron.l omega, partial c chevron.r$.
   ///
   /// The statement that makes $C^k$ the dual complex of $C_k$ rather than
   /// merely a module of the same rank, and the reason the coboundary is the
@@ -549,7 +549,7 @@ mod test {
     }
   }
 
-  /// $diff compose diff = 0$ and $dif compose dif = 0$ are the same statement
+  /// $partial compose partial = 0$ and $dif compose dif = 0$ are the same statement
   /// read through the pairing, so neither can hold while the other fails.
   ///
   /// Both are checked to be nonzero one step earlier, since a pairing that
@@ -587,7 +587,7 @@ mod test {
   }
 
   /// The differentials agree with the assembled operator: $dif$ is the
-  /// transpose of $diff$ as a matrix, and both are the same incidence the
+  /// transpose of $partial$ as a matrix, and both are the same incidence the
   /// coefficient-wise sweeps read.
   #[test]
   fn the_differentials_agree_with_the_assembled_operators() {

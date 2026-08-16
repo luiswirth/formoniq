@@ -362,8 +362,8 @@ mod complex {
   }
 
   /// The inner product is sesquilinear, conjugate-linear in its first argument:
-  /// $angle.l i x, y angle.r = -i angle.l x, y angle.r$ and
-  /// $angle.l x, i y angle.r = i angle.l x, y angle.r$.
+  /// $chevron.l i x, y chevron.r = -i chevron.l x, y chevron.r$ and
+  /// $chevron.l x, i y chevron.r = i chevron.l x, y chevron.r$.
   ///
   /// The two halves must be checked separately. A bilinear `dot` satisfies
   /// neither, and a `dot` conjugating the *other* argument satisfies both with
@@ -389,7 +389,7 @@ mod complex {
   }
 
   /// The adjoint is the conjugate transpose, $(A^H)_(i j) = overline(A_(j i))$,
-  /// and it is what makes $angle.l A x, y angle.r = angle.l x, A^H y angle.r$.
+  /// and it is what makes $chevron.l A x, y chevron.r = chevron.l x, A^H y chevron.r$.
   /// The bare transpose satisfies neither over $CC$.
   #[test]
   fn the_adjoint_is_the_conjugate_transpose() {

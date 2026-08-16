@@ -124,7 +124,7 @@ impl WhitneyLsf {
 }
 
 /// The whole Whitney basis of one grade as a single linear map
-/// $C: RR^(Delta_k) -> Lambda^k (RR^(n+1)) times.circle RR^(n+1)$, sending a
+/// $C: RR^(Delta_k) -> Lambda^k (RR^(n+1)) times.o RR^(n+1)$, sending a
 /// degree of freedom to the components of $W_sigma$ on the products
 /// $dif lambda_I lambda_v$.
 ///
@@ -143,7 +143,7 @@ pub struct WhitneyExpansion {
   cell_dim: Dim,
   grade: ExteriorGrade,
   dofs: Vec<Combination>,
-  /// The codomain $Lambda^k (RR^(n+1))^* times.circle (RR^(n+1))^*$ as a shape,
+  /// The codomain $Lambda^k (RR^(n+1))^* times.o (RR^(n+1))^*$ as a shape,
   /// so the component layout is [`tensor_strides`] rather than arithmetic
   /// written out here.
   slots: Slots,
@@ -199,7 +199,7 @@ impl WhitneyExpansion {
       .map(move |(sign, vertex, blade)| (blade, vertex, sign.as_f64() * scale))
   }
 
-  /// The pullback $C^top (H times.circle Q) C$ along the basis of a bilinear
+  /// The pullback $C^top (H times.o Q) C$ along the basis of a bilinear
   /// form that factors into a part $H$ on the barycentric $k$-blades and a part
   /// $Q$ on the barycentric coordinates.
   ///
@@ -210,7 +210,7 @@ impl WhitneyExpansion {
   /// [`unit_bary_gramian`](simplicial::atlas::unit_bary_gramian), the result is
   /// the Hodge mass matrix at unit volume.
   ///
-  /// Not forming $H times.circle Q$ is the general rule
+  /// Not forming $H times.o Q$ is the general rule
   /// ([`apply_factorwise`](multialgebra::tensor::apply_factorwise)), and not
   /// what is special here. What is special is that $C$ is sparse: the
   /// deletion formula gives it $k+1$ nonzeros per column, so an entry is a sum
@@ -274,7 +274,7 @@ mod test {
     Metric::pseudo_euclidean(dim - q, q).pullback(&j)
   }
 
-  /// $C^top (H times.circle Q) C$ computed on the factors agrees with the same
+  /// $C^top (H times.o Q) C$ computed on the factors agrees with the same
   /// pullback formed through the explicit map and the explicit tensor product.
   ///
   /// The two sides are different objects, not two spellings of one: the right
@@ -301,7 +301,7 @@ mod test {
 
   /// Summing the blocks of $C$ over the vertex index collapses the Koszul
   /// contraction $kappa$ to $iota_bb(1)$, and $iota_bb(1)$ is the simplicial
-  /// boundary: the result is $k!$ times $diff$.
+  /// boundary: the result is $k!$ times $partial$.
   ///
   /// This is the $kappa$ half of a correspondence whose $dif$ half is Stokes,
   /// $R compose dif = dif compose R$. The two operators of the exterior
@@ -343,12 +343,12 @@ mod test {
 
   /// A corollary of $delta compose kappa = 0$ on constant forms, since
   /// $W_sigma = k! lambda^* (kappa e_sigma)$: on a constant form
-  /// $diff_i (kappa omega)_(j_1 dots j_k) = omega_(i j_1 dots j_k)$, so
+  /// $partial_i (kappa omega)_(j_1 dots j_k) = omega_(i j_1 dots j_k)$, so
   /// $delta kappa omega$ contracts the symmetric $g^(i j_1)$ into two
-  /// alternating slots. Lowest order only, where $diff kappa = id$.
+  /// alternating slots. Lowest order only, where $partial kappa = id$.
   ///
   /// This is why the weak Lie derivative has no volume contribution from
-  /// $dif iota_v$: Cartan's second term is supported on $diff K$ alone.
+  /// $dif iota_v$: Cartan's second term is supported on $partial K$ alone.
   ///
   /// Tested by adjointness rather than through a formula for $delta$. The
   /// bubble $b = product_i lambda_i$ vanishes on every facet, so $phi = b c$

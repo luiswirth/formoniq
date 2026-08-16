@@ -12,8 +12,8 @@ use simplicial::{
 /// Time-axis scale of a causally generic Minkowski box (axis $0$ is time).
 ///
 /// A Kuhn edge of the box spans a set $S$ of axes; under the Minkowski metric
-/// its signed squared length is $s = -rho^2 [t in S] + abs(S sect "space")$,
-/// null exactly when $t in S$ and $abs(S sect "space") = rho^2$. So no edge is
+/// its signed squared length is $s = -rho^2 [t in S] + abs(S inter "space")$,
+/// null exactly when $t in S$ and $abs(S inter "space") = rho^2$. So no edge is
 /// lightlike iff $rho^2$ is not an integer in $[0, "dim")$, and $rho = 0.7$
 /// ($rho^2 = 0.49$) misses that integer set in every dimension. Uniform
 /// refinement scales every edge by the same factor, so a refinement tower stays

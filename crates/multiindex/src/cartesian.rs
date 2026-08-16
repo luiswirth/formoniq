@@ -2,7 +2,7 @@
 //!
 //! Elements of a product $product_i {0, dots, r_i - 1}$, the index sets of
 //! tensor-product structures, and so the basis of the free tensor power
-//! $V^(times.circle d)$ itself. A cartesian index with radix 2 is exactly a
+//! $V^(times.o d)$ itself. A cartesian index with radix 2 is exactly a
 //! subset of the axes: the corners of the $d$-cube are [`Combination`]s,
 //! and the Kuhn triangulation of the cube consists of the maximal chains
 //! $emptyset subset {a_1} subset {a_1, a_2} subset dots.c$ in this subset
@@ -141,7 +141,7 @@ impl FromIterator<usize> for Radix {
   }
 }
 
-/// A word over one alphabet: a basis element of $V^(times.circle k)$.
+/// A word over one alphabet: a basis element of $V^(times.o k)$.
 ///
 /// Carries its own alphabet, unlike [`MonoIndex`](crate::MonoIndex), because a
 /// radix rank cannot be taken without one. That asymmetry is forced: the colex
@@ -158,7 +158,7 @@ pub struct Word {
   ///
   /// A word is a positional number, so storing the symbols separately would
   /// be storing the same thing twice. The packing costs no generality: a word
-  /// indexes a component of $V^(times.circle k)$, so $n^k$ has to fit in a
+  /// indexes a component of $V^(times.o k)$, so $n^k$ has to fit in a
   /// `usize` for that component to exist at all.
   rank: usize,
   degree: usize,
@@ -183,7 +183,7 @@ impl Word {
     }
   }
 
-  /// The empty word: the basis of $V^(times.circle 0) = RR$.
+  /// The empty word: the basis of $V^(times.o 0) = RR$.
   pub fn empty(radix: usize) -> Self {
     Self {
       rank: 0,
@@ -229,7 +229,7 @@ impl Word {
 
   /// The number of words of a degree over an alphabet: $n^k$.
   ///
-  /// The dimension of $V^(times.circle k)$, and the count no symmetry reduces.
+  /// The dimension of $V^(times.o k)$, and the count no symmetry reduces.
   pub fn count(radix: usize, degree: usize) -> usize {
     radix.pow(degree as u32)
   }

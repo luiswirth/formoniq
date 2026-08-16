@@ -11,7 +11,7 @@ use crate::{
 /// The three are the bases of the three symmetry types:
 /// [`Combination`](crate::Combination) a subset for $Lambda^k$,
 /// [`Composition`](crate::Composition) an exponent vector for $"Sym"^k$, and
-/// [`Word`] a word for $V^(times.circle k)$.
+/// [`Word`] a word for $V^(times.o k)$.
 ///
 /// [`MonoIndex`] covers the two monotone ones, subsets and multisets, which the
 /// shift makes a single bitset. [`Word`] covers the free one, where there
@@ -21,7 +21,7 @@ use crate::{
 pub enum MultiIndex {
   /// A subset or a multiset: the basis of $Lambda^k$ or $"Sym"^k$.
   Mono(MonoIndex),
-  /// A word: the basis of the free power $V^(times.circle k)$.
+  /// A word: the basis of the free power $V^(times.o k)$.
   Word(Word),
 }
 

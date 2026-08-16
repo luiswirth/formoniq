@@ -148,7 +148,7 @@ impl<'m> SimplexRef<'m> {
   pub fn facets(self) -> impl Iterator<Item = SimplexRef<'m>> {
     self.faces(self.idx.dim - 1)
   }
-  /// The signed boundary $diff sigma$: each facet with its incidence sign.
+  /// The signed boundary $partial sigma$: each facet with its incidence sign.
   ///
   /// Empty on a vertex, whose deletions land on the empty simplex the complex
   /// does not carry.

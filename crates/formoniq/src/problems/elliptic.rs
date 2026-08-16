@@ -48,7 +48,7 @@ fn mixed_block_preconditioner<C: HilbertComplex>(
 
 /// Assemble the augmented mixed Hodge-Laplace KKT system $(sigma, u, p)$ and its
 /// right-hand side: the saddle point of the mixed formulation, bordered by the
-/// harmonic constraint $angle.l u, M h angle.r = 0$ that fixes the solution
+/// harmonic constraint $chevron.l u, M h chevron.r = 0$ that fixes the solution
 /// against the harmonic space. Returns the system matrix, the right-hand side,
 /// and the $sigma$/$u$ block lengths.
 fn assemble_mixed_kkt<C: HilbertComplex>(

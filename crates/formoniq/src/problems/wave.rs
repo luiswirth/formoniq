@@ -22,7 +22,7 @@ impl WaveState {
   }
 
   /// The full Hodge wave energy
-  /// $E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(diff_t u)^2)
+  /// $E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(partial_t u)^2)
   ///    = 1/2 (sigma^T M_sigma sigma + u^T K u + w^T M w)$, assembled from the
   /// mixed [`HodgeBlocks`] of the `complex` at `grade`, the invariant
   /// [`solve_wave`] conserves. The down-part $norm(delta u)^2$ needs the
@@ -42,13 +42,13 @@ impl WaveState {
   }
 }
 
-/// Gauss-Legendre for the Hodge wave equation $diff_(t t) u = -Delta u + f$ on
+/// Gauss-Legendre for the Hodge wave equation $partial_(t t) u = -Delta u + f$ on
 /// Whitney $k$-forms of any `grade`, with the full Hodge Laplacian
 /// $Delta = dif delta + delta dif$.
 ///
 /// The down-part enters through the mixed auxiliary $sigma = delta u in
-/// Lambda^(k-1)$, algebraic (no $diff_t sigma$). Recast first-order in
-/// $y = (sigma, u, w)$ with $w = diff_t u$:
+/// Lambda^(k-1)$, algebraic (no $partial_t sigma$). Recast first-order in
+/// $y = (sigma, u, w)$ with $w = partial_t u$:
 ///
 /// $ mat(0,0,0; 0,M,0; 0,0,M) dot(y) = mat(-M_sigma, C_"dn", 0; 0, 0, M;
 ///   -M D^(k-1), -K, 0) y + vec(0, 0, M f). $
@@ -56,7 +56,7 @@ impl WaveState {
 /// The singular block mass makes this an index-1 DAE, but since the constraint
 /// is linear the reduced $(u, w)$ dynamics are a genuine linear Hamiltonian
 /// system with the full $Delta$, whose quadratic energy
-/// $ E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(diff_t u)^2)
+/// $ E = 1/2 (norm(delta u)^2 + norm(dif u)^2 + norm(partial_t u)^2)
 ///     = 1/2 (sigma^T M_sigma sigma + u^T K u + w^T M w) $
 /// Gauss-Legendre conserves exactly, to roundoff, not merely bounded. This
 /// is the same conserved energy as the three-field $(sigma, mu, omega)$ Hodge

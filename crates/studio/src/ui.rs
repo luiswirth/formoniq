@@ -99,7 +99,7 @@ impl CameraView {
   }
 
   /// The $(psi, theta)$ the view snaps to, about [`crate::render::camera::WORLD_UP`]
-  /// ($+z$): the top/bottom look along $mp z$, the four side views along the
+  /// ($+z$): the top/bottom look along $minus.plus z$, the four side views along the
   /// horizontal axes with $+z$ kept screen-up.
   pub(crate) fn angles(self) -> (f32, f32) {
     use std::f32::consts::{FRAC_PI_2, PI};

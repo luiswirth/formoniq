@@ -88,7 +88,7 @@ impl<S: CoordSpace> FieldClosure<S> {
       Degree::ONE,
     )
   }
-  /// A vector field $v = sum_i v^i diff_i$: the contravariant grade-1 field, of
+  /// A vector field $v = sum_i v^i partial_i$: the contravariant grade-1 field, of
   /// which [`Self::one_form`] is the covariant one.
   pub fn vector_field(
     f: impl Fn(&Coords<S>) -> Vector + Sync + 'static,

@@ -34,7 +34,7 @@ use rayon::prelude::*;
 /// side indexes rows, the trial side columns, and the pairing is $v^top A u$
 /// with nothing transposed anywhere. A form whose test side carries the
 /// exterior derivative therefore has fewer rows than columns by one grade,
-/// which is $angle.l u, dif tau angle.r$ read literally.
+/// which is $chevron.l u, dif tau chevron.r$ read literally.
 ///
 /// The two methods are one form at two scopes, local and global. An
 /// implementor writes the local one, on a single cell in that cell's own

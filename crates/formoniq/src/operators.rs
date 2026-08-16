@@ -49,7 +49,7 @@ impl BilinearForm for ScalarLumpedMass {
 /// operator.
 ///
 /// The integrand splits into a blade half and a polynomial half, so
-/// $M = vol_K C^top (H times.circle Q) C$, with $H = D (Lambda^k g^(-1)) D^top$
+/// $M = vol_K C^top (H times.o Q) C$, with $H = D (Lambda^k g^(-1)) D^top$
 /// the Gramian of the barycentric $k$-blades $dif lambda_I$,
 /// $Q_(v w) = (1 + delta_(v w)) \/ ((n+1)(n+2))$ the unit-volume scalar mass,
 /// and $C$ the coefficient map of the deletion formula
@@ -122,7 +122,7 @@ impl WhitneyFamily {
 ///
 /// with $C$ the trial side and $R$ the test side, each either the shape
 /// functions of grade $k$ or, one grade below, their exterior derivative
-/// $D$, the coboundary of the reference cell; $R^top = D^top = diff$ is then
+/// $D$, the coboundary of the reference cell; $R^top = D^top = partial$ is then
 /// its boundary. The four choices are the four blocks a problem posed around
 /// grade $k$ is built from, and they are named by the differentiated side:
 /// [`mass`](Self::mass), [`dif_trial`](Self::dif_trial),
@@ -135,7 +135,7 @@ pub struct WhitneyPairing {
   mass: HodgeMass,
   test: WhitneyFamily,
   trial: WhitneyFamily,
-  /// $diff$, applied on the left, where the rows are one grade below the mass.
+  /// $partial$, applied on the left, where the rows are one grade below the mass.
   row: Option<Matrix>,
   /// $D$, applied on the right, where the columns are.
   col: Option<Matrix>,
@@ -290,7 +290,7 @@ impl CellQuadrature {
   }
 }
 
-/// A facet of the reference cell, as $diff K$ presents it.
+/// A facet of the reference cell, as $partial K$ presents it.
 struct BoundaryFacet {
   /// The sign the boundary operator induces, $(-1)^i$ for the facet omitting
   /// the $i$-th vertex.
@@ -302,7 +302,7 @@ struct BoundaryFacet {
   trace: FaceTrace,
 }
 
-/// Quadrature over $diff K$ for an element integral: the cell's facets, each
+/// Quadrature over $partial K$ for an element integral: the cell's facets, each
 /// integrated in the cell's chart and weighted by the sign the boundary
 /// operator induces.
 ///
@@ -368,7 +368,7 @@ impl BoundaryQuadrature {
     &self.nodes
   }
 
-  /// $integral_(diff K) omega$ of a section of grade $n-1$.
+  /// $integral_(partial K) omega$ of a section of grade $n-1$.
   ///
   /// A field, not a closure: whether it is analytic data pulled back from a
   /// continuum, the interpolation of a cochain, or a combinator over either is
@@ -391,10 +391,10 @@ impl BoundaryQuadrature {
     unit_simplex_volume(self.dim - 1) * integral
   }
 
-  /// $[integral_(diff K) f(x, W_sigma, W'_tau)]_(sigma tau)$, where `f` is the
+  /// $[integral_(partial K) f(x, W_sigma, W'_tau)]_(sigma tau)$, where `f` is the
   /// pointwise integrand of the bilinear form: at each point a bilinear map
   /// $Lambda^(k_r) times Lambda^(k_c) -> Lambda^(n-1)$, hence a section of
-  /// $"Hom"(Lambda^(k_r) times.circle Lambda^(k_c), Lambda^(n-1))$ evaluated
+  /// $"Hom"(Lambda^(k_r) times.o Lambda^(k_c), Lambda^(n-1))$ evaluated
   /// against the two shape functions.
   ///
   /// It is a family indexed by pairs of degrees of freedom, so it cannot be one
@@ -499,7 +499,7 @@ impl<F: Sync + Section> BilinearForm for WeightedHodgeMass<'_, F> {
 ///
 /// The boundary term's star is taken in the cell's reference frame, and needs
 /// no coherent orientation: flipping that frame flips both the star and the
-/// induced orientation of $diff K$, and the product is what the term is. So
+/// induced orientation of $partial K$, and the product is what the term is. So
 /// assembly stays independent of a gauge it must not depend on, and the
 /// operator exists on a non-orientable mesh.
 ///
@@ -509,7 +509,7 @@ impl<F: Sync + Section> BilinearForm for WeightedHodgeMass<'_, F> {
 ///
 /// Central and unstabilized: each cell integrates its own trace of a shared
 /// facet, so no numerical flux is chosen. Conservative at both ends of the
-/// grade range, where the defect $integral_(diff K) inner(omega, eta) iota_v
+/// grade range, where the defect $integral_(partial K) inner(omega, eta) iota_v
 /// vol$ vanishes: the shape functions are continuous at $k = 0$ and constant
 /// per cell at $k = n$. Dispersive throughout, it damps nothing, so the phase
 /// error of barely resolved modes persists as oscillation, which conservation
@@ -658,7 +658,7 @@ mod test {
     complex.cells().handle_iter().next().unwrap()
   }
 
-  /// Stokes' theorem on a single cell, $integral_K dif omega = integral_(diff
+  /// Stokes' theorem on a single cell, $integral_K dif omega = integral_(partial
   /// K) omega$, which is what the boundary quadrature has to reproduce and the
   /// only check that pins its induced signs.
   ///
@@ -733,7 +733,7 @@ mod test {
   /// The identity the Lie derivative element matrix rests on: with the shape
   /// functions coclosed, integrating Cartan's second term by parts leaves it
   /// wholly on the boundary,
-  /// $integral_K inner(dif iota_v omega, eta) = integral_(diff K) (iota_v
+  /// $integral_K inner(dif iota_v omega, eta) = integral_(partial K) (iota_v
   /// omega) wedge star eta$.
   ///
   /// The left side is computed from a closed form for $dif iota_v W_tau$ at
@@ -825,7 +825,7 @@ mod test {
   }
 
   /// The exact antisymmetry defect of the Lie derivative element matrix,
-  /// $a_K (omega, eta) + a_K (eta, omega) = integral_(diff K) inner(omega, eta)
+  /// $a_K (omega, eta) + a_K (eta, omega) = integral_(partial K) inner(omega, eta)
   /// iota_v vol$.
   ///
   /// For a constant $v$ on a flat cell $cal(L)_v$ is a derivation of the inner

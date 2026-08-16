@@ -40,7 +40,7 @@ pub fn assemble_transport<V: Sync + Section>(
   (mass, lie)
 }
 
-/// $diff_t omega + cal(L)_v omega = 0$ on Whitney $k$-forms of any grade,
+/// $partial_t omega + cal(L)_v omega = 0$ on Whitney $k$-forms of any grade,
 /// stepped with Gauss-Legendre.
 ///
 /// Gauss-Legendre and not Radau: it is non-dissipative, so it neither damps nor

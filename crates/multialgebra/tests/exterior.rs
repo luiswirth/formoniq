@@ -138,7 +138,7 @@ fn the_trivial_ends_are_total() {
   }
 }
 
-/// An endomorphism $A: V -> V$ as a tensor of $V^* times.circle V$, with the
+/// An endomorphism $A: V -> V$ as a tensor of $V^* times.o V$, with the
 /// argument slot first.
 fn endomorphism(matrix: &Matrix) -> Tensor {
   let n = matrix.nrows();
@@ -302,7 +302,7 @@ fn the_dense_embedding_carries_the_symmetric_multiplicity() {
 }
 
 /// The wedge pairing is graded-symmetric,
-/// $angle.l beta, alpha angle.r = (-1)^(k(n-k)) angle.l alpha, beta angle.r$,
+/// $chevron.l beta, alpha chevron.r = (-1)^(k(n-k)) chevron.l alpha, beta chevron.r$,
 /// and nondegenerate.
 ///
 /// Nondegeneracy is the content: it is what makes $Lambda^(n-k)$ the dual of
@@ -348,7 +348,7 @@ fn the_wedge_pairing_is_graded_symmetric_and_nondegenerate() {
   }
 }
 
-/// The full tensor power $V^(times.circle d)$ needs no symmetry of its own: it is
+/// The full tensor power $V^(times.o d)$ needs no symmetry of its own: it is
 /// $d$ slots of degree one, since $Lambda^1 = "Sym"^1 = V$ and the tensor
 /// product of $d$ copies of $V$ is what a $d$-slot tensor is.
 ///
@@ -426,7 +426,7 @@ fn the_free_power_is_the_unquotiented_one() {
 
 /// The duality pairing of a quotient is the pairing of the free power it
 /// embeds into, up to the $k!$ the unnormalized embedding carries:
-/// $angle.l omega, v angle.r product_i k_i ! = angle.l "free" omega, "free" v angle.r$.
+/// $chevron.l omega, v chevron.r product_i k_i ! = chevron.l "free" omega, "free" v chevron.r$.
 ///
 /// The law that pins the $alpha!$ absolutely, where the adjointness of the
 /// pullback pins it only up to a consistent choice: both sides of an adjoint
@@ -520,7 +520,7 @@ fn probe_tensor(factors: &[Factor], variance: Variance, dim: usize, seed: usize)
 
 /// Slots may be over different spaces, which is what a rectangular map is.
 ///
-/// A linear map $A: V -> W$ is $V^* times.circle W$: one covariant slot over
+/// A linear map $A: V -> W$ is $V^* times.o W$: one covariant slot over
 /// the domain and one contravariant slot over the codomain. The dimension
 /// therefore lives on the slot and not on the tensor, which is what keeps a
 /// map inside the algebra rather than beside it as a bare matrix.
@@ -671,10 +671,10 @@ fn a_blade_vanishes_exactly_on_a_dependent_frame() {
 }
 
 /// A materialized [`Transport`] is adjoint in the same sense the one-shot
-/// transport is: $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$,
+/// transport is: $chevron.l A^* omega, v chevron.r = chevron.l omega, A_* v chevron.r$,
 /// with the pullback and the pushforward read off one stored functor.
 ///
-/// Stated on a mixed-family shape $Lambda^k times.circle "Sym"^r$, which is
+/// Stated on a mixed-family shape $Lambda^k times.o "Sym"^r$, which is
 /// the case a stored $Lambda^k A$ applied to raw components gets wrong: the
 /// multiplicative basis is self-dual on the alternating side only, so the
 /// symmetric factor is where the adjoint picks up its $alpha!$ and where an
@@ -719,7 +719,7 @@ fn a_materialized_transport_is_adjoint_on_both_families() {
 }
 
 /// Applying a factored operator slot by slot is applying its Kronecker
-/// product: $(times.circle_i M_i) c$ computed the cheap way and the formed way
+/// product: $(times.o_i M_i) c$ computed the cheap way and the formed way
 /// agree.
 ///
 /// This is what lets every measuring and transporting operation refuse to build

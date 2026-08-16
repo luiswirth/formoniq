@@ -1,7 +1,7 @@
 //! The render surface: the 2-manifold a field is actually seen on.
 //!
 //! The bake reduces an $n$-manifold to the render primitive $min(n, 2)$, and
-//! for a solid ($n >= 3$) that primitive is the boundary $diff M$, itself a
+//! for a solid ($n >= 3$) that primitive is the boundary $partial M$, itself a
 //! genuine closed $(n-1)$-manifold, carrying its own `Complex`, its own
 //! coherent orientation and its own metric, not a bag of faces. This type is
 //! that reduction named once, so every mark reads the object it is drawn on
@@ -12,13 +12,13 @@
 //! single construction, a caller asks the surface for its complex and gets
 //! either the parent or the boundary, and cannot tell which.
 //!
-//! A field reaches the surface by its trace. $i^*: C^k (M) -> C^k (diff M)$
+//! A field reaches the surface by its trace. $i^*: C^k (M) -> C^k (partial M)$
 //! ([`Subcomplex::trace_operator`]) is a cochain map, so $i^* dif = dif i^*$
-//! and the traced coefficients are a genuine Whitney form on $diff M$, not a
+//! and the traced coefficients are a genuine Whitney form on $partial M$, not a
 //! resample, not a nodal recovery. This is what makes drawing it honest.
 //!
-//! The trace is total in grade, but it is zero at the top. $diff M$ has no
-//! $n$-simplices, so $C^n (diff M) = 0$ and an $n$-form's trace vanishes
+//! The trace is total in grade, but it is zero at the top. $partial M$ has no
+//! $n$-simplices, so $C^n (partial M) = 0$ and an $n$-form's trace vanishes
 //! identically. That is the correct answer to the wrong question: the top-grade
 //! density of a solid is a volume quantity, and reading it on the boundary is
 //! a sampling of the interior, never a trace. [`Surface::traces`] is the
@@ -95,7 +95,7 @@ impl Surface {
 
   /// Whether a grade-`k` field has a nonzero trace on the surface.
   ///
-  /// False above the surface's own top grade, where $C^k (diff M) = 0$. A
+  /// False above the surface's own top grade, where $C^k (partial M) = 0$. A
   /// caller that gets `false` is holding a volume quantity and must reach for
   /// a volume mark, not trace it to zero.
   pub fn traces(&self, parent: &Complex, grade: ExteriorGrade) -> bool {
@@ -103,7 +103,7 @@ impl Surface {
   }
 
   /// The trace $i^* c$ of a cochain onto the surface: a genuine grade-$k$
-  /// cochain on $diff M$, borrowed unchanged where the reduction is the
+  /// cochain on $partial M$, borrowed unchanged where the reduction is the
   /// identity.
   ///
   /// This is [`Subcomplex::trace_operator`], gathering the parent
@@ -214,7 +214,7 @@ mod tests {
     }
   }
 
-  /// The top grade does not trace: $C^n (diff M) = 0$, so an $n$-form has no
+  /// The top grade does not trace: $C^n (partial M) = 0$, so an $n$-form has no
   /// surface representative at all. The predicate must say so rather than hand
   /// back a zero cochain that a mark would draw as a vanishing field.
   #[test]

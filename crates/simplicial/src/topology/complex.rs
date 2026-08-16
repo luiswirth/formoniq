@@ -23,14 +23,14 @@ use std::{io, path::Path};
 /// vertex-cell lists over the simplex's vertices, and all down-incidence is
 /// pure combinatorics on the vertex set.
 ///
-/// The boundary operators $diff_k$, which double as the oriented incidence
+/// The boundary operators $partial_k$, which double as the oriented incidence
 /// backbone, are computed lazily on first use and cached.
 #[derive(Default, Debug, Clone)]
 pub struct Complex {
   skeletons: Vec<Skeleton>,
   /// Per vertex, by kidx: the sorted list of cells containing it.
   vertex_cells: Vec<Vec<KSimplexIdx>>,
-  /// Cached boundary operators $diff_k: C_k -> C_(k-1)$, indexed by $k$ in
+  /// Cached boundary operators $partial_k: C_k -> C_(k-1)$, indexed by $k$ in
   /// `0..=dim + 1`.
   boundary_operators: Vec<OnceLock<CooMatrix>>,
   /// Cached coherent orientation, `None` once computed on a non-orientable
@@ -113,7 +113,7 @@ impl Complex {
       .is_some_and(|facets| facets.handle_iter().any(Facet::is_boundary))
   }
 
-  /// The boundary $diff K$ of a d-mesh: the facets bounding a single cell,
+  /// The boundary $partial K$ of a d-mesh: the facets bounding a single cell,
   /// with their [`Facet`] proofs. On a 0-complex, which has no facets and is
   /// closed, the empty answer falls out of the total accessor, not a guard.
   pub fn boundary_facets(&self) -> Vec<Facet<'_>> {
@@ -136,7 +136,7 @@ impl Complex {
   /// the subsimplices of the boundary facets.
   ///
   /// These span the boundary subcomplex. Their complement spans the
-  /// relative cochain complex of the pair $(K, diff K)$.
+  /// relative cochain complex of the pair $(K, partial K)$.
   pub fn boundary_simplices(&self, dim: impl Into<Dim>) -> Vec<SimplexIdx> {
     let dim = dim.into();
     self
@@ -157,7 +157,7 @@ impl Complex {
       .collect()
   }
 
-  /// $diff_k: Delta_k -> Delta_(k-1)$, cached after first use.
+  /// $partial_k: Delta_k -> Delta_(k-1)$, cached after first use.
   ///
   /// Defined for $0 <= k <= n + 1$, the range beyond which both sides of the
   /// operator are the zero module and there is nothing left to cache. At the
@@ -183,7 +183,7 @@ impl Complex {
   /// and the sign with which one occurs in the other's boundary.
   ///
   /// One relation, and everything built on it is a reading of it: the boundary
-  /// $diff$ scatters it downward, the coboundary $dif$ gathers it upward, and
+  /// $partial$ scatters it downward, the coboundary $dif$ gathers it upward, and
   /// [`boundary_operator`](Self::boundary_operator) is it assembled as a matrix.
   /// Empty outside $0 <= k < n$, where one of the two skeletons is the zero
   /// space.
@@ -216,7 +216,7 @@ impl Complex {
     self.boundary_operator(dim.into() + 1).clone().transpose()
   }
 
-  /// $diff_k$ as an exact integer matrix, and by transposition $dif^(k-1)$ too.
+  /// $partial_k$ as an exact integer matrix, and by transposition $dif^(k-1)$ too.
   ///
   /// The same incidence as [`boundary_operator`](Self::boundary_operator), over
   /// $ZZ$ rather than $RR$, which is what the discrete invariants in
@@ -238,11 +238,11 @@ impl Complex {
     )
   }
 
-  /// The $k$-simplices that do not lie on $diff K$, as a selection of the
+  /// The $k$-simplices that do not lie on $partial K$, as a selection of the
   /// coordinates of $C_k$.
   ///
-  /// They are a basis of the relative chain group $C_k (K, diff K) = C_k (K)
-  /// slash C_k (diff K)$, and dually of the relative cochains, which are the
+  /// They are a basis of the relative chain group $C_k (K, partial K) = C_k (K)
+  /// slash C_k (partial K)$, and dually of the relative cochains, which are the
   /// cochains vanishing on the boundary. The [`Selection`] carries both
   /// readings: the restriction that forms the relative operator, and the
   /// extension by zero that writes a relative class back out as data on the
@@ -250,7 +250,7 @@ impl Complex {
   ///
   /// The complement of the boundary subcomplex's
   /// [`inclusion`](super::subcomplex::Subcomplex::inclusion), which is the
-  /// exactness of $0 -> C(K, diff K) -> C(K) -> C(diff K) -> 0$.
+  /// exactness of $0 -> C(K, partial K) -> C(K) -> C(partial K) -> 0$.
   pub fn interior_selection(&self, grade: impl Into<Dim>) -> Selection {
     let grade = grade.into();
     Selection::excluding(

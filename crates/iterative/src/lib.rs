@@ -87,16 +87,16 @@ pub trait InnerProductSpace: Clone {
   /// The zero vector of the space this one lives in: the additive identity,
   /// and the only element a Krylov method can name without being handed one.
   fn zeros_like(&self) -> Self;
-  /// The Hermitian inner product $angle.l x, y angle.r$, **conjugate-linear in
+  /// The Hermitian inner product $chevron.l x, y chevron.r$, **conjugate-linear in
   /// its first argument** and linear in its second.
   ///
   /// Which argument carries the conjugate is a convention, and it has to be
   /// this one rather than left to the implementor: every method in the crate
-  /// reads $angle.l r, z angle.r$ and $angle.l p, A p angle.r$ in that order,
+  /// reads $chevron.l r, z chevron.r$ and $chevron.l p, A p chevron.r$ in that order,
   /// and the opposite convention conjugates each of them. Over $RR$ the two
   /// agree, so nothing here can detect the mistake.
   ///
-  /// Positive definiteness, $angle.l x, x angle.r > 0$ for $x != 0$, is part of
+  /// Positive definiteness, $chevron.l x, x chevron.r > 0$ for $x != 0$, is part of
   /// the structure, so that quantity is real and [`norm`](Self::norm) may take
   /// its real part.
   fn dot(&self, other: &Self) -> Self::Scalar;
@@ -115,7 +115,7 @@ pub trait InnerProductSpace: Clone {
   fn add(&mut self, x: &Self) {
     self.add_scaled(Self::Scalar::one(), x);
   }
-  /// The induced norm $norm(x) = sqrt(angle.l x, x angle.r)$, an element of the
+  /// The induced norm $norm(x) = sqrt(inner(x, x))$, an element of the
   /// real subfield.
   fn norm(&self) -> RealOf<Self> {
     self.dot(self).real().sqrt()
@@ -174,8 +174,8 @@ pub trait ApproxInverse {
 }
 
 /// Marker: [`ApproxInverse::apply`] is a fixed self-adjoint positive-definite
-/// linear operator, $angle.l B r, s angle.r = angle.l r, B s angle.r$ and
-/// $angle.l B r, r angle.r > 0$.
+/// linear operator, $chevron.l B r, s chevron.r = chevron.l r, B s chevron.r$ and
+/// $chevron.l B r, r chevron.r > 0$.
 ///
 /// The precondition a symmetric Krylov method rests on. Conjugate gradients
 /// takes its preconditioner only through this bound, so a non-symmetric

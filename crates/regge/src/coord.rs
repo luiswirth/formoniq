@@ -110,7 +110,7 @@ pub fn vertex_mean_curvature(topology: &Complex, coords: &MeshCoords) -> Vec<f64
 /// boundary vertex: both [`super::vertex_gaussian_curvature`] and
 /// [`vertex_mean_curvature`] are natural (Neumann) boundary quantities there,
 /// not curvature, provably so, since the coordinate function is exactly
-/// linear yet $integral_diff.Omega phi_i thin n_x thin d s != 0$ for a
+/// linear yet $integral_(partial Omega) phi_i thin n_x thin dif s != 0$ for a
 /// boundary test function even on a flat domain. Using either at the rim
 /// would clamp displacement near a flat edge for no geometric reason, so a
 /// caller relies on an independent upper bound there (e.g. the mesh's own

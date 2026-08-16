@@ -6,7 +6,7 @@
 //! $u = (u_0, u_1, u_2, u_3)$, because the Hodge–Dirac operator is grade-mixing;
 //! all of Maxwell is the one first-order flow
 //!
-//! $ diff_t u = sans(D) u = (dif - delta) u $
+//! $ partial_t u = sans(D) u = (dif - delta) u $
 //!
 //!, the mixed-grade formulation. The four grades carry the
 //! four classical equations at once: grade 1 is the electric field $E$, grade 2

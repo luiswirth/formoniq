@@ -2,14 +2,14 @@
 //! together with the inclusion $L arrow.hook K$.
 //!
 //! Three of them are the same construction, which is why there is one type: the
-//! boundary $diff K$, a part $Gamma subset.eq diff K$ carrying its own boundary
+//! boundary $partial K$, a part $Gamma subset.eq partial K$ carrying its own boundary
 //! condition, and the link of a vertex. Each is spanned by a set of facets, each
 //! renumbers its vertices monotonically, and each keeps the map back.
 //!
 //! For the boundary this is the third object of the short exact sequence of the
 //! pair,
 //!
-//! $0 -> C^k (K, diff K) -> C^k (K) -->^"tr" C^k (diff K) -> 0$,
+//! $0 -> C^k (K, partial K) -> C^k (K) -->^"tr" C^k (partial K) -> 0$,
 //!
 //! whose kernel is the relative complex. The trace (restriction of cochains
 //! to the subcomplex's simplices) is a cochain map: $"tr" compose dif = dif
@@ -30,7 +30,7 @@ use crate::linalg::{CooMatrix, Selection};
 /// its own (monotone) vertex numbering and the simplex-wise inclusion into
 /// the parent complex.
 ///
-/// For the full boundary $diff K$ this is a closed $(n-1)$-manifold; a subset
+/// For the full boundary $partial K$ this is a closed $(n-1)$-manifold; a subset
 /// $Gamma$ of the boundary facets gives the boundary part of mixed boundary
 /// conditions; and the facets opposite a vertex give its link
 /// ([`Complex::vertex_link`]).
@@ -44,7 +44,7 @@ pub struct Subcomplex {
 }
 
 impl Complex {
-  /// The boundary $diff K$ as a first-class complex.
+  /// The boundary $partial K$ as a first-class complex.
   /// `None` if the manifold is closed.
   pub fn boundary_complex(&self) -> Option<Subcomplex> {
     let facets = self.boundary_facets();
@@ -55,7 +55,7 @@ impl Complex {
   }
 
   /// The subcomplex spanned by the given facets: for a subset
-  /// $Gamma subset.eq diff K$ of the boundary facets this is the boundary
+  /// $Gamma subset.eq partial K$ of the boundary facets this is the boundary
   /// part carrying mixed (Dirichlet/Neumann/Robin) boundary conditions.
   ///
   /// The [`Facet`] witness carries the codimension-1 precondition; what it
@@ -139,7 +139,7 @@ impl Subcomplex {
     SimplexIdx::new(sub_idx.dim, self.parent_kidxs(sub_idx.dim)[sub_idx.kidx])
   }
 
-  /// The trace $"tr": C^k (K) -> C^k (diff K)$: restriction of cochains to
+  /// The trace $"tr": C^k (K) -> C^k (partial K)$: restriction of cochains to
   /// the boundary simplices. A cochain map, $"tr" compose dif = dif compose "tr"$,
   /// and the cokernel projection of the relative inclusion.
   pub fn trace_operator(&self, grade: impl Into<Dim>) -> CooMatrix {
@@ -199,7 +199,7 @@ mod test {
     }
   }
 
-  /// Exactness of $0 -> C(K, diff K) -> C(K) -> C(diff K) -> 0$: the relative
+  /// Exactness of $0 -> C(K, partial K) -> C(K) -> C(partial K) -> 0$: the relative
   /// chain group is the kernel of the trace, hence the complement of the
   /// inclusion, coordinate for coordinate and not merely in dimension.
   ///

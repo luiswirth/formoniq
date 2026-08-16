@@ -83,7 +83,7 @@ pub trait Bits:
     }
   }
 
-  /// The singleton ${bit}$.
+  /// The singleton ${"bit"}$.
   ///
   /// # Panics
   /// If the bit lies past the width.

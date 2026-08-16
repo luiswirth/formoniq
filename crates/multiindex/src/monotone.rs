@@ -466,7 +466,7 @@ impl<B: Bits> MonoIndexOver<B> {
   /// an alternating factor the positions are the symbols and the sign
   /// alternates. On a symmetric one a symbol of multiplicity $m$ occupies $m$
   /// positions and yields the same reduced word $m$ times, which is the factor
-  /// $alpha_i$ in $diff_i x^alpha = alpha_i x^(alpha - e_i)$.
+  /// $alpha_i$ in $partial_i x^alpha = alpha_i x^(alpha - e_i)$.
   ///
   /// In shifted form this is one bit operation: drop the bit and slide
   /// everything above it down by the shift the removed position carried, one
@@ -862,7 +862,7 @@ mod test {
   }
 
   /// Deleting twice cancels in pairs on an alternating factor,
-  /// $iota_v^2 = 0 = diff compose diff$, and emphatically does not on a
+  /// $iota_v^2 = 0 = partial compose partial$, and emphatically does not on a
   /// symmetric one, where the second derivative is symmetric rather than
   /// vanishing.
   ///

@@ -287,7 +287,7 @@ pub fn nodal_heights(topology: &Complex, coords: &MeshCoords, cochain: &Cochain)
 /// [`Complex::orientation`] fixes the global density, consulted here exactly as
 /// invariant 6 demands, and refused on a non-orientable mesh. Nothing fixes the
 /// sign for $0 < k < n$: a manifold orientation induces opposite
-/// co-orientations on an interior facet ($diff compose diff = 0$), so it cannot
+/// co-orientations on an interior facet ($partial compose partial = 0$), so it cannot
 /// reach the sub-top skeletons, and the honest reading there is the magnitude.
 /// The direction a magnitude drops is not lost, it lives in the line-field
 /// mark, as a genuine vector.

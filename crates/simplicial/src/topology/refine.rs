@@ -38,7 +38,7 @@ pub struct Subdivision {
   /// and the affine map into that parent's chart.
   children: SkeletonVec<Child>,
   /// The number of coarse vertices, which keep their labels in the refined
-  /// complex: the refined vertices $0..\"ncoarse\"$ are the coarse ones.
+  /// complex: the refined vertices $0.."ncoarse"$ are the coarse ones.
   ncoarse_vertices: usize,
   /// Per new refined vertex (labels $"ncoarse"..$): a coarse cell it lies in
   /// and its barycentric coordinates there, enough to place it from any

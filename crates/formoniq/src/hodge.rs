@@ -41,7 +41,7 @@ pub struct HodgeBlocks {
   /// $M_k$, the mass on the $u$ space.
   pub mass_u: CsrMatrix,
   /// $(D^(k-1))^T M_k$, the grade-$k$ pairing with the exterior derivative on
-  /// the test side, $angle.l u, dif tau angle.r$, shape $n_sigma times n_u$:
+  /// the test side, $chevron.l u, dif tau chevron.r$, shape $n_sigma times n_u$:
   /// the $sigma <- u$ block, and what a weak codifferential is.
   ///
   /// The opposite block $u <- sigma$ is this transposed, and is not a second

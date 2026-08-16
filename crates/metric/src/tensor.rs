@@ -81,7 +81,7 @@ impl Metric {
   }
 }
 
-/// The Gram matrix induced on $times.circle_i F_i$: the Kronecker product of the
+/// The Gram matrix induced on $times.o_i F_i$: the Kronecker product of the
 /// per-slot metrics, in the same slot order as the components.
 ///
 /// Each slot is measured by [`Metric::measuring`] against its own variance, so a

@@ -85,7 +85,7 @@ pub enum BoundaryCondition {
   /// complex; harmonic space $H^k (K)$ (box: grade $0$).
   Absolute,
   /// Essential / relative: $"tr" u = 0$, $"tr" dif u = 0$. The relative Whitney
-  /// complex; harmonic space $H^k (K, diff K)$ (box: top grade).
+  /// complex; harmonic space $H^k (K, partial K)$ (box: top grade).
   Relative,
 }
 
@@ -156,7 +156,7 @@ impl Manifold {
   /// number of zero eigenvalues, and a purely topological prediction.
   ///
   /// $b_k (K) = delta_(k 0)$ on the contractible box, its Lefschetz dual
-  /// $b_k (K, diff K) = delta_(k n)$ under the relative condition, and
+  /// $b_k (K, partial K) = delta_(k n)$ under the relative condition, and
   /// $b_k (T^d) = binom(d, k)$ on the torus, the one case where the number is
   /// not $0$ or $1$, so the only one that really tests the harmonic sector.
   pub fn harmonic_dim(self, dim: usize, grade: usize, bc: BoundaryCondition) -> usize {
@@ -237,7 +237,7 @@ impl BoxEigenform {
     )
   }
 
-  /// The exterior derivative $dif u = sum_j (diff_j f) dif x^j and dif x^I$, or
+  /// The exterior derivative $dif u = sum_j (partial_j f) dif x^j and dif x^I$, or
   /// `None` at top grade, where $dif u$ vanishes identically.
   pub fn dif_solution(&self) -> Option<DiffFormClosure> {
     if self.grade == self.dim {
@@ -274,7 +274,7 @@ impl BoxEigenform {
 /// The relative eigenform of the box as a cochain on the mesh: the
 /// boundary-compatible state the evolution examples start from.
 ///
-/// It vanishes on $diff K$, so homogeneous Dirichlet conditions are exactly the
+/// It vanishes on $partial K$, so homogeneous Dirichlet conditions are exactly the
 /// relative complex, and it reaches the mesh the way every continuum datum
 /// does: pulled back along the affine cell charts, then integrated by the de
 /// Rham map.
@@ -310,7 +310,7 @@ fn bump(p: &Coord, grade: usize, relative: bool) -> f64 {
     .product()
 }
 
-/// $diff_j f$, the derivative in the $j$-th coordinate.
+/// $partial_j f$, the derivative in the $j$-th coordinate.
 fn bump_partial(p: &Coord, grade: usize, j: usize, relative: bool) -> f64 {
   p.iter()
     .enumerate()

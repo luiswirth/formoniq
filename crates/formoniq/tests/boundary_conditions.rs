@@ -56,7 +56,7 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
 
 /// Inhomogeneous natural (Neumann) BC via the boundary load:
 /// $-Delta u + u = x_1$ on the unit cube with flux data
-/// $h = diff u \/ diff n = plus.minus 1$ on the faces $x_1 = 1, 0$ has the
+/// $h = partial u \/ partial n = plus.minus 1$ on the faces $x_1 = 1, 0$ has the
 /// exact solution $u = x_1$, which lies in the FE space.
 #[test]
 fn inhomogeneous_neumann_reproduces_linear_solution() {
@@ -107,7 +107,7 @@ fn inhomogeneous_neumann_reproduces_linear_solution() {
 
 /// Mixed boundary conditions: Dirichlet on the faces $x_1 = 0, 1$
 /// (where $u = x_1$ is 0 resp. 1), natural on the remaining faces
-/// (where $diff u \/ diff n = 0$, homogeneous: do nothing).
+/// (where $partial u \/ partial n = 0$, homogeneous: do nothing).
 /// The exact solution $u = x_1$ is reproduced.
 #[test]
 fn mixed_dirichlet_neumann_reproduces_linear_solution() {
@@ -147,7 +147,7 @@ fn mixed_dirichlet_neumann_reproduces_linear_solution() {
   }
 }
 
-/// Robin boundary condition $diff u \/ diff n + alpha "tr" u = h$ with
+/// Robin boundary condition $partial u \/ partial n + alpha "tr" u = h$ with
 /// $alpha = 1$ and $h$ manufactured from $u = x_1$. In 1d on the whole
 /// boundary. In higher dimensions on the faces $x_1 = 0, 1$ (where $h$ is
 /// per-face constant), combined with Dirichlet on the remaining faces,

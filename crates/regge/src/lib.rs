@@ -28,11 +28,11 @@ pub fn cell_volume(metric: &Metric) -> f64 {
 }
 
 /// Discrete Gaussian curvature at every vertex of a 2-dimensional simplicial
-/// manifold, by the angle defect: $K(v) = (2 pi - sum_(f ni v) theta_f (v)) \/
+/// manifold, by the angle defect: $K(v) = (2 pi - sum_(f in.rev v) theta_f (v)) \/
 /// A(v)$ at an interior vertex, or $(pi - sum_f theta_f (v)) \/ A(v)$ at a
 /// boundary one, the standard convention when a mesh has a rim, folding the
 /// boundary's own geodesic curvature into $K$ rather than tracking it apart.
-/// $A(v)$ is the barycentric lumped area $sum_(K ni v) "vol"(K) \/ 3$, the
+/// $A(v)$ is the barycentric lumped area $sum_(K in.rev v) "vol"(K) \/ 3$, the
 /// standard mass-lumping convention.
 ///
 /// Intrinsic: reads the Regge edge lengths, not an embedding, since

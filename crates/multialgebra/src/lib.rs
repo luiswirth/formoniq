@@ -65,10 +65,10 @@ impl<R> Ring for R where
 /// place. The stored basis is multiplicative, so the reciprocal basis element
 /// of a symmetric slot is $x^alpha \/ alpha!$, and over $ZZ$ the module those
 /// span is the divided power algebra $Gamma^d$ rather than $"Sym"^d$:
-/// $"Sym"^d (V)^* tilde.equals Gamma^d (V^*)$, with equality only once the
+/// $"Sym"^d (V)^* tilde.eq Gamma^d (V^*)$, with equality only once the
 /// factorials are inverted. That is the mathematical content of this bound,
 /// not a limitation of the encoding. Every $alpha!$ is $1$ on the alternating
-/// family, where $Lambda^k (V)^* tilde.equals Lambda^k (V^*)$ over any ring,
+/// family, where $Lambda^k (V)^* tilde.eq Lambda^k (V^*)$ over any ring,
 /// so nothing purely exterior asks for it.
 ///
 /// Stated rather than derived, in the pattern of [`Variance`]: a division
@@ -128,7 +128,7 @@ pub fn from_integer<R: Ring>(n: i64) -> R {
 /// knowing the alphabet. The cost of a family is its information content.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Symmetry {
-  /// No quotient: $V^(times.circle k)$, of dimension $n^k$.
+  /// No quotient: $V^(times.o k)$, of dimension $n^k$.
   Free,
   /// Quotient by the sign character: $Lambda^k$, of dimension $binom(n, k)$.
   #[default]
@@ -216,7 +216,7 @@ impl Factor {
   }
 
   /// $dim Lambda^k (RR^n) = binom(n, k)$, $dim "Sym"^k (RR^n) = binom(n+k-1, k)$
-  /// and $dim V^(times.circle k) = n^k$.
+  /// and $dim V^(times.o k) = n^k$.
   ///
   /// The two quotients are one binomial over the shifted alphabet, differing
   /// only in how wide the shift makes it. The free power is the count no
@@ -274,9 +274,9 @@ impl Factor {
   /// separation is real, $"per"$ being #P-hard, so the two stay separate here.
   ///
   /// The normalization is not free: both families take the inner product
-  /// $V^(times.circle k)$ induces divided by $k!$, on unnormalized products
+  /// $V^(times.o k)$ induces divided by $k!$, on unnormalized products
   /// ($v_1 wedge dots.c wedge v_k = sum_sigma "sgn"(sigma) v_(sigma(1))
-  /// times.circle dots.c$, and the same unsigned for $v_1 dots.c v_k$). Both
+  /// times.o dots.c$, and the same unsigned for $v_1 dots.c v_k$). Both
   /// quotients are $k!$, leaving $det$ against $"per"$ with no further factor.
   ///
   /// So under a Euclidean metric the alternating basis is orthonormal and the
@@ -330,7 +330,7 @@ impl Factor {
 /// and additionally a symmetry and a variance the array has no room for.
 ///
 /// A slot is simultaneously a value it holds and an argument it eats (of the
-/// dual), those being the same thing under $V tilde.equals V^(**)$, so "value"
+/// dual), those being the same thing under $V tilde.eq V^(**)$, so "value"
 /// and "argument" are readings rather than structure. What is structure is
 /// the [`Variance`], and the pattern of it across the slots.
 ///
@@ -513,8 +513,8 @@ pub fn exterior_power<R: Ring>(map: &Matrix<R>, degree: impl Into<Degree>) -> Ma
   power
 }
 
-/// The tensor power functor $V^(times.circle k)$ applied to a linear map: the
-/// $k$-fold Kronecker power $A^(times.circle k)$, on radix-ordered words.
+/// The tensor power functor $V^(times.o k)$ applied to a linear map: the
+/// $k$-fold Kronecker power $A^(times.o k)$, on radix-ordered words.
 ///
 /// The simplest of the three, and the one the other two are quotients of:
 /// no minors, no signs, just the product down each word.
@@ -687,7 +687,7 @@ mod test {
   /// per-factor ones, and is itself a functor.
   ///
   /// This is the law the crate exists for: one composition rule covering
-  /// $Lambda^k times.circle "Sym"^l$ with the symmetry consulted only per
+  /// $Lambda^k times.o "Sym"^l$ with the symmetry consulted only per
   /// factor. Mixed symmetries and unequal degrees, so neither can stand in for
   /// the other.
   #[test]

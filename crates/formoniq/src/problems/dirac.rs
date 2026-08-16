@@ -5,7 +5,7 @@
 //! The Hodge–Dirac operator
 //!
 //! $ sans(D) = dif - delta: Lambda^bullet -> Lambda^bullet, quad
-//!   Lambda^bullet = plus.circle.big_(k=0)^n Lambda^k, $
+//!   Lambda^bullet = plus.o.big_(k=0)^n Lambda^k, $
 //!
 //! is the Dirac operator of the de Rham complex: metric-free $dif$ raising grade,
 //! its formal adjoint $delta$ lowering it, acting on the full mixed-grade
@@ -16,19 +16,19 @@
 //! the two cross terms $dif^2 = delta^2 = 0$ vanishing by nilpotency; and it is
 //! skew-adjoint, $sans(D)^* = delta - dif = -sans(D)$, so the first-order flow
 //!
-//! $ diff_t u = sans(D) u = (dif - delta) u $
+//! $ partial_t u = sans(D) u = (dif - delta) u $
 //!
 //! is norm-preserving and its solutions solve the wave equation
-//! $diff_(t t) u = -Delta u$ grade by grade. This is Maxwell. Writing the field
+//! $partial_(t t) u = -Delta u$ grade by grade. This is Maxwell. Writing the field
 //! as $u = E + B$ with the electric $E in Lambda^1$ and the magnetic
-//! $B in Lambda^2$, the middle two grades of $diff_t u = sans(D) u$ are exactly
+//! $B in Lambda^2$, the middle two grades of $partial_t u = sans(D) u$ are exactly
 //!
-//! $ diff_t E = -delta B quad & "(Ampère, source-free)" \
-//!   diff_t B = dif E     quad & "(Faraday)", $
+//! $ partial_t E = -delta B quad & "(Ampère, source-free)" \
+//!   partial_t B = dif E     quad & "(Faraday)", $
 //!
 //! while the extremal grades are the two Gauss laws: the grade-0 component
-//! $diff_t u_0 = -delta E$ is the electric constraint $delta E = 0$ (no charge),
-//! the grade-$n$ component $diff_t u_n = dif B$ the magnetic constraint
+//! $partial_t u_0 = -delta E$ is the electric constraint $delta E = 0$ (no charge),
+//! the grade-$n$ component $partial_t u_n = dif B$ the magnetic constraint
 //! $dif B = 0$ (no monopoles). The four classical equations are the four grades
 //! of one Dirac evolution. The field itself is not mixed-grade: it is
 //! $E + B$, living in grades 1 and 2 (a single Faraday 2-form before the split).
@@ -46,8 +46,8 @@
 //! conjugate by the diagonal unitary $Q = i^"deg"$ (grade $k |-> i^k$), since
 //! $Q dif Q^(-1) = i dif$ and $Q delta Q^(-1) = -i delta$ give
 //! $Q (dif - delta) Q^(-1) = i (dif + delta)$. Under $psi = i^"deg" u$ the real
-//! flow $diff_t u = (dif - delta) u$ becomes the complex Schrödinger form
-//! $diff_t psi = i (dif + delta) psi$, the dimension-general Riemann–Silberstein
+//! flow $partial_t u = (dif - delta) u$ becomes the complex Schrödinger form
+//! $partial_t psi = i (dif + delta) psi$, the dimension-general Riemann–Silberstein
 //! ($E + i B$) picture. The real form is used here because it keeps the fields
 //! real and grade $1 = E$, grade $2 = B$ direct, in any dimension. The genuinely
 //! self-adjoint $dif + delta$ with $+Delta$ and no $i$ exists only without a
@@ -61,10 +61,10 @@
 //!
 //! In FEEC $dif$ is the exact coboundary $D_k$ on Whitney cochains, but $delta$
 //! is metric and lives only weakly, through the Galerkin Hodge masses $M_k$. The
-//! weak form of $diff_t u = (dif - delta) u$, tested grade by grade with
-//! $angle.l delta u, v angle.r = angle.l u, dif v angle.r$, is the linear system
+//! weak form of $partial_t u = (dif - delta) u$, tested grade by grade with
+//! $chevron.l delta u, v chevron.r = chevron.l u, dif v chevron.r$, is the linear system
 //!
-//! $ M dot(u) = A u, quad M = plus.circle.big_k M_k, quad
+//! $ M dot(u) = A u, quad M = plus.o.big_k M_k, quad
 //!   A = mat(
 //!     0, -D_0^T M_1, , ;
 //!     M_1 D_0, 0, -D_1^T M_2, ;
@@ -106,7 +106,7 @@ use simplicial::{
 };
 
 /// A field on the full de Rham complex: one cochain per grade,
-/// $u = (u_0, dots, u_n) in plus.circle.big_k C^k$.
+/// $u = (u_0, dots, u_n) in plus.o.big_k C^k$.
 ///
 /// The state the Hodge–Dirac operator evolves. In the Maxwell reading the
 /// electric field is `grade(1)`, the magnetic flux `grade(2)`; the extremal
@@ -160,7 +160,7 @@ impl MixedField {
 
 /// The discrete Hodge–Dirac operator on a Hilbert complex, assembled as the
 /// two flat global matrices its consumers share: the block-diagonal mass
-/// $M = plus.circle.big_k M_k$ and the grade-coupling $A$, weak $dif$ on the
+/// $M = plus.o.big_k M_k$ and the grade-coupling $A$, weak $dif$ on the
 /// sub-diagonal, weak $delta$ on the super-diagonal.
 ///
 /// The operator comes in its two signs, one assembly parameterized by the
@@ -184,7 +184,7 @@ pub struct HodgeDirac {
   offsets: Vec<usize>,
   /// The per-grade Galerkin masses $M_k$, kept for per-grade energies.
   masses: Vec<CsrMatrix>,
-  /// $M = plus.circle.big_k M_k$: block-diagonal, symmetric; positive
+  /// $M = plus.o.big_k M_k$: block-diagonal, symmetric; positive
   /// definite exactly when the geometry is Riemannian.
   mass_block: CsrMatrix,
   /// $A$: block-tridiagonal; skew-symmetric for $dif - delta$, symmetric for
@@ -263,7 +263,7 @@ impl HodgeDirac {
   pub fn ndofs_total(&self) -> usize {
     *self.offsets.last().unwrap()
   }
-  /// $M = plus.circle.big_k M_k$: the block-diagonal mass carrying the
+  /// $M = plus.o.big_k M_k$: the block-diagonal mass carrying the
   /// $L^2 Lambda^bullet$ pairing (indefinite on a Lorentzian geometry).
   pub fn mass_block(&self) -> &CsrMatrix {
     &self.mass_block
@@ -362,7 +362,7 @@ fn extend_field<C: HilbertComplex>(complex: &C, f: &MixedField) -> MixedField {
   )
 }
 
-/// Evolve Maxwell's equations as the Hodge–Dirac flow $diff_t u = (dif - delta)
+/// Evolve Maxwell's equations as the Hodge–Dirac flow $partial_t u = (dif - delta)
 /// u$ on the full de Rham complex, by Gauss–Legendre collocation.
 ///
 /// The semi-discrete system $M dot(u) = A u$ has SPD $M$ and skew $A$, a linear
@@ -446,7 +446,7 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 /// the signature of the metric, not in a stepping loop.
 ///
 /// The weak form is symmetric on any signature,
-/// $angle.l (dif + delta) u, v angle.r = angle.l u, (dif + delta) v angle.r$,
+/// $chevron.l (dif + delta) u, v chevron.r = chevron.l u, (dif + delta) v chevron.r$,
 /// so the assembled system $A + m M$ is symmetric (indefinite on a Lorentzian
 /// geometry, where $M$ itself is), and sparse LU solves it uniformly.
 ///
@@ -463,7 +463,7 @@ pub fn solve_dirac_leapfrog<C: HilbertComplex>(
 ///
 /// At $m = 0$ the relative operator is singular, and not by accident: its
 /// kernel is the space of relative harmonic fields, which Poincaré--Lefschetz
-/// duality pins to $H^n (M, diff M) tilde.equiv H_0 (M) = RR$ on a connected
+/// duality pins to $H^n (M, partial M) tilde.equiv H_0 (M) = RR$ on a connected
 /// mesh, one dimension, in the top grade, on any geometry and any signature.
 /// The Lorentzian signature does not remove it: it is topological, not
 /// spectral. [`top_harmonic`] writes that mode down in closed form, and this
@@ -492,7 +492,7 @@ pub fn solve_dirac_source(
   }
   let system = CsrMatrix::from(&system);
 
-  // The block inclusion $E = plus.circle.big_k E_k$ of the relative DOFs into
+  // The block inclusion $E = plus.o.big_k E_k$ of the relative DOFs into
   // the flat ambient layout.
   let n_relative: usize = relative
     .dim()
@@ -542,13 +542,13 @@ pub fn solve_dirac_source(
 /// kernel, not a member of it: a field supported in grade $n$ is annihilated by
 /// $dif + delta$ exactly when $D_(n-1)^T M_n u_n = 0$, i.e. when $M_n u_n$ is a
 /// relative $n$-cycle, and the relative $n$-cycles of a connected mesh are the
-/// multiples of the fundamental class. Hence $dim ker = dim H^n (M, diff M) = 1$
+/// multiples of the fundamental class. Hence $dim ker = dim H^n (M, partial M) = 1$
 ///, the closed form of the Poincaré--Lefschetz statement, needing no
 /// eigensolve.
 ///
 /// `None` on a non-orientable mesh, where no fundamental class exists
 /// (invariant 6: holding the orientation is the proof of orientability).
-/// There the kernel is genuinely absent, $H^n (M, diff M) = 0$ over $RR$, and
+/// There the kernel is genuinely absent, $H^n (M, partial M) = 0$ over $RR$, and
 /// the operator is invertible without deflation.
 pub fn top_harmonic(relative: &RelativeWhitneyComplex) -> Option<Vector> {
   let dim = relative.dim();
@@ -626,7 +626,7 @@ mod test {
   /// Poincaré--Lefschetz, discretely: the closed-form top-grade harmonic
   /// $h_n = M_n^(-1) z$ is annihilated by the massless self-adjoint
   /// Hodge--Dirac operator, in every dimension and on either signature. This is
-  /// the statement that $ker(dif + delta) supset.eq H^n (M, diff M)$ is realized
+  /// the statement that $ker(dif + delta) supset.eq H^n (M, partial M)$ is realized
   /// exactly on the nose by the fundamental class, with no eigensolve.
   #[test]
   fn top_harmonic_is_annihilated() {

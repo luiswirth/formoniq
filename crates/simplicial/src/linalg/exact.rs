@@ -190,7 +190,7 @@ impl IntegerMatrix {
 /// for a composable pair $A compose B = 0$ of integer matrices.
 ///
 /// The subquotient every (co)homology class lives in, computed once: with $A =
-/// diff_k$ and $B = diff_(k+1)$ it is $H_k$, and with the transposes it is
+/// partial_k$ and $B = partial_(k+1)$ it is $H_k$, and with the transposes it is
 /// $H^k$. The two are one routine because they are one construction, the
 /// incidence read in its two directions.
 ///

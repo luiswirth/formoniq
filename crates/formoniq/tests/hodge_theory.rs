@@ -6,7 +6,7 @@
 //! cross-validated against each other.
 //!
 //! With essential boundary conditions the same statement holds for the
-//! relative complex of the pair $(K, diff K)$ and relative (co)homology.
+//! relative complex of the pair $(K, partial K)$ and relative (co)homology.
 
 extern crate nalgebra as na;
 
@@ -32,7 +32,7 @@ fn dense(csr: &CsrMatrix) -> Matrix {
 }
 
 /// Dimension of the discrete harmonic space
-/// $frak(H)^k = ker dif_k sect ker (dif_(k-1)^T M_k)$:
+/// $frak(H)^k = ker dif_k inter ker (dif_(k-1)^T M_k)$:
 /// closed and weakly coclosed k-cochains.
 ///
 /// The two constraint blocks are stacked with no case for the extremal grades:
@@ -111,9 +111,9 @@ fn harmonics_are_cohomology_sphere() {
   }
 }
 
-/// Discrete Hodge theorem for the pair $(K, diff K)$ on the n-cube:
+/// Discrete Hodge theorem for the pair $(K, partial K)$ on the n-cube:
 /// relative harmonics have the dimension of the relative cohomology,
-/// $b^k (K, diff K) = delta_(k n)$ (Lefschetz duality with $b_(n-k) = delta_(k n)$).
+/// $b^k (K, partial K) = delta_(k n)$ (Lefschetz duality with $b_(n-k) = delta_(k n)$).
 #[test]
 fn relative_harmonics_are_relative_cohomology_cube() {
   for dim in (1..=3).map(Dim::from) {
@@ -142,7 +142,7 @@ fn relative_harmonics_are_relative_cohomology_cube() {
   }
 }
 
-/// The inclusion $E: C^k (K, diff K) arrow.hook C^k (K)$ is a cochain map:
+/// The inclusion $E: C^k (K, partial K) arrow.hook C^k (K)$ is a cochain map:
 /// $D E_k = E_(k+1) dif_k$.
 #[test]
 fn relative_inclusion_is_cochain_map() {
@@ -200,9 +200,9 @@ fn lifted_homogeneous_dirichlet_is_relative_solve() {
   assert_relative_eq!(sol_lifted.coeffs(), sol_relative.coeffs(), epsilon = 1e-10);
 }
 
-/// The long exact sequence of the pair $(K, diff K)$,
+/// The long exact sequence of the pair $(K, partial K)$,
 ///
-/// $dots.c -> H^k (K, diff K) -> H^k (K) -> H^k (diff K) -> H^(k+1) (K, diff K) -> dots.c$
+/// $dots.c -> H^k (K, partial K) -> H^k (K) -> H^k (partial K) -> H^(k+1) (K, partial K) -> dots.c$
 ///
 /// on an annulus (square with a square hole). Exactness forces the
 /// alternating sum of all dimensions to vanish, and the three Betti

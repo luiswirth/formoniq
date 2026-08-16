@@ -220,7 +220,7 @@ pub fn cayley_menger_factor(dim: impl Into<Dim>) -> f64 {
     / 2f64.powi(dim.index() as i32)
 }
 
-/// The symmetric square $u_e dot.circle u_e$ of each edge vector of an
+/// The symmetric square $u_e dot.o u_e$ of each edge vector of an
 /// $n$-simplex, in edge order: a basis of $"Sym"^2$ indexed by the edges.
 ///
 /// The dimension count is not a coincidence. An
@@ -228,7 +228,7 @@ pub fn cayley_menger_factor(dim: impl Into<Dim>) -> f64 {
 /// $dim "Sym"^2(RR^n) = n(n+1)\/2$, the same number, and these squares are
 /// linearly independent, hence a basis. Squared edge lengths are therefore
 /// exactly the components of the metric in the basis dual to this one:
-/// $s_e = angle.l g, u_e dot.circle u_e angle.r$, and
+/// $s_e = chevron.l g, u_e dot.o u_e chevron.r$, and
 /// [`SimplexLengthsSq::metric`] is that change of basis, the polarization
 /// identity being what it looks like written out.
 ///
@@ -461,7 +461,7 @@ mod test {
   }
 
   /// Squared edge lengths are the components of the metric in the basis dual to
-  /// the edge squares: $s_e = angle.l g, u_e dot.circle u_e angle.r$.
+  /// the edge squares: $s_e = chevron.l g, u_e dot.o u_e chevron.r$.
   ///
   /// The polarization identity of [`SimplexLengthsSq::metric`] and
   /// [`SimplexLengthsSq::from_metric`] is that change of basis, and this is

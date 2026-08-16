@@ -18,9 +18,9 @@
 //! such that adjacent cells induce opposite orientations on the facet they
 //! share:
 //!
-//! $sigma_(K_1) diff[F, K_1] + sigma_(K_2) diff[F, K_2] = 0$
+//! $sigma_(K_1) partial[F, K_1] + sigma_(K_2) partial[F, K_2] = 0$
 //!
-//! for every interior facet $F$. Equivalently $diff_n (sum_K sigma_K K)$ is
+//! for every interior facet $F$. Equivalently $partial_n (sum_K sigma_K K)$ is
 //! supported on the boundary facets alone, on a closed connected manifold
 //! that chain is the fundamental class, the generator of $H_n (K; ZZ) tilde.eq
 //! ZZ$. So orientability is not an extra structure bolted on: it is the

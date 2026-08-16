@@ -38,7 +38,7 @@ pub struct Scene {
   pub topology: Complex,
   pub coords: MeshCoords,
   /// The reduction the bake draws and every field mark is chosen against: the
-  /// mesh itself below $n = 3$, its boundary $diff M$ for a solid. Built once
+  /// mesh itself below $n = 3$, its boundary $partial M$ for a solid. Built once
   /// with the scene, because the marks are filed against its dimension, not
   /// the parent's.
   pub(crate) surface: Surface,
@@ -542,7 +542,7 @@ impl Scene {
     scene
   }
 
-  /// The heat flow $diff_t u = -kappa Delta u$ of a localized initial bump, as a
+  /// The heat flow $partial_t u = -kappa Delta u$ of a localized initial bump, as a
   /// single [`FieldTime::Trajectory`] field of grade `grade`: the sampled solution the
   /// transport scrubs and the surface re-bakes per frame. The bump diffuses and
   /// decays, the parabolic smoothing of the Hodge-Laplacian, shown directly
@@ -581,7 +581,7 @@ impl Scene {
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
 
-  /// The wave equation $diff_(t t) u = -Delta u$ of a localized initial bump at
+  /// The wave equation $partial_(t t) u = -Delta u$ of a localized initial bump at
   /// rest, as a single [`FieldTime::Trajectory`] field of grade `grade`. The bump splits
   /// and its fronts propagate, reflecting off any boundary, the hyperbolic
   /// counterpart of [`Self::heat`], on the same initial data and the same
@@ -618,7 +618,7 @@ impl Scene {
     Self::trajectory_scene(topology, coords, initial, dt, frames)
   }
 
-  /// Linear advection $diff_t omega + cal(L)_v omega = 0$ of a localized bump
+  /// Linear advection $partial_t omega + cal(L)_v omega = 0$ of a localized bump
   /// along a rotational velocity field, as a sampled trajectory: the transport
   /// counterpart of [`Self::heat`] and [`Self::wave`], on the same initial data
   /// and the same mesh-agnostic footing.
@@ -761,13 +761,13 @@ impl Scene {
   /// The grade reduces against the surface's dimension, not the mesh's, and
   /// that is what makes the mark the mark of the thing on screen. A field on a
   /// solid is seen through its boundary, so the $n$ in $min(k, n-k)$ is
-  /// $dim diff M$: a $2$-form on a $3$-manifold is a line field in the volume
+  /// $dim partial M$: a $2$-form on a $3$-manifold is a line field in the volume
   /// but the boundary's top form, hence a density, where it is actually
   /// drawn. Reducing against the parent would file it as arrows for a flux that
   /// has no direction on the surface carrying it.
   ///
   /// The exception is the grade that does not trace at all ($k = n$, where
-  /// $C^k (diff M) = 0$): a volume density is not a surface quantity, so it
+  /// $C^k (partial M) = 0$): a volume density is not a surface quantity, so it
   /// reduces against the parent and is drawn by sampling the cells behind the
   /// boundary, until a volume mark exists to own it.
   fn file(&mut self, meta: FieldMeta, cochain: Cochain) {
@@ -1572,7 +1572,7 @@ mod tests {
   }
 
   /// The harmonic top-grade form on a closed orientable surface is a multiple
-  /// of the volume form, $h = c dvol$, so its reduction $star h = c$ is
+  /// of the volume form, $h = c vol$, so its reduction $star h = c$ is
   /// constant over the whole manifold. That makes the reduced readout of the
   /// $lambda = 0$ grade-2 mode on the sphere a law with an exact answer, and
   /// the sharpest available statement that the Hodge star is being taken

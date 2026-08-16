@@ -136,7 +136,7 @@ fn the_wedge_is_a_graded_algebra<R: Ring>() {
 }
 
 /// Adjointness of the transport under the duality pairing,
-/// $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$.
+/// $chevron.l A^* omega, v chevron.r = chevron.l omega, A_* v chevron.r$.
 ///
 /// The pairing is bilinear and metric-free, and the pullback is the adjoint of
 /// the pushforward, so this is the law that pins the reciprocal basis. It

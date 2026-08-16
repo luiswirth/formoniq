@@ -38,7 +38,7 @@ impl<B: Bits> CombinationOver<B> {
   pub fn single(index: usize) -> Self {
     Self(MonoIndexOver::single(Repetition::Forbidden, index))
   }
-  /// The full set ${0, dots, card - 1}$.
+  /// The full set ${0, dots, "card" - 1}$.
   pub fn full(card: usize) -> Self {
     Self::from_bits(B::low_mask(card))
   }
@@ -291,7 +291,7 @@ mod test {
     assert_eq!(a.union_signed(a), None);
   }
 
-  /// $e_S wedge e_(S^c) = sign dot e_"full"$ consistency.
+  /// $e_S wedge e_(S^c) = sgn dot e_"full"$ consistency.
   #[test]
   fn complement_signed_wedges_to_top() {
     fn check<B: Bits>() {
@@ -312,7 +312,7 @@ mod test {
     check::<u128>();
   }
 
-  /// Double deletions cancel in pairs: $diff compose diff = 0$ at the level
+  /// Double deletions cancel in pairs: $partial compose partial = 0$ at the level
   /// of a single combination.
   #[test]
   fn deletions_square_to_zero() {

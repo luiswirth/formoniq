@@ -490,13 +490,13 @@ pub enum Study {
 /// growing a fourth spelling.
 #[derive(Clone, Copy, PartialEq, Eq, Debug, serde::Serialize, serde::Deserialize)]
 pub enum Evolution {
-  /// $diff_t u = -Delta u$: the parabolic smoothing of the Hodge-Laplacian
+  /// $partial_t u = -Delta u$: the parabolic smoothing of the Hodge-Laplacian
   /// shown directly rather than through its spectrum.
   Heat,
-  /// $diff_(t t) u = -Delta u$ from rest: the hyperbolic counterpart, fronts
+  /// $partial_(t t) u = -Delta u$ from rest: the hyperbolic counterpart, fronts
   /// propagating and reflecting off any boundary.
   Wave,
-  /// $diff_t u + cal(L)_v u = 0$ along a rigid rotation: transport rather than
+  /// $partial_t u + cal(L)_v u = 0$ along a rigid rotation: transport rather than
   /// diffusion or propagation. The scheme is central, so the bump is carried
   /// without damping and the dispersive oscillation is visible in its wake.
   Advection,

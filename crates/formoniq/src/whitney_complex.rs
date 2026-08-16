@@ -37,7 +37,7 @@ use std::collections::HashSet;
 ///
 /// Implemented by both the full [`WhitneyComplex`] (absolute / natural boundary
 /// conditions, harmonic space $H^k (K)$) and its [`RelativeWhitneyComplex`]
-/// (essential / homogeneous Dirichlet, harmonic space $H^k (K, diff K)$), so the
+/// (essential / homogeneous Dirichlet, harmonic space $H^k (K, partial K)$), so the
 /// solver is one monomorphized piece of code over both, the choice of
 /// boundary condition is just the choice of complex.
 ///
@@ -67,13 +67,13 @@ pub trait HilbertComplex {
 
   /// The dimension of the discrete harmonic space $cal(H)^k$: the Betti number
   /// of the complex by the discrete Hodge theorem ($b_k (K)$ for the full
-  /// complex, $b_k (K, diff K)$ for the relative one), an exact topological
+  /// complex, $b_k (K, partial K)$ for the relative one), an exact topological
   /// invariant.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize;
 
   /// Representative integral cocycles of a basis of the cohomology this
   /// complex's harmonic space realizes, expressed in *this* complex's DOFs:
-  /// $H^k (K; ZZ)$ for the full complex, $H^k (K, diff K; ZZ)$ for the
+  /// $H^k (K; ZZ)$ for the full complex, $H^k (K, partial K; ZZ)$ for the
   /// relative one. One per [`Self::harmonic_dim`].
   ///
   /// Metric-free, and closed exactly: the coefficients are integers and the
@@ -85,7 +85,7 @@ pub trait HilbertComplex {
 
   /// Representative integral cycles of a basis of the homology Kronecker-dual
   /// to [`Self::integral_cocycles`], in the same DOF indexing: $H_k (K; ZZ)$
-  /// for the full complex, $H_k (K, diff K; ZZ)$ for the relative one. One per
+  /// for the full complex, $H_k (K, partial K; ZZ)$ for the relative one. One per
   /// [`Self::harmonic_dim`], the two ranks agreeing by universal coefficients.
   ///
   /// These are the holes a period measures. Pairing a cochain against them
@@ -184,7 +184,7 @@ pub trait HilbertComplex {
 
   /// The discrete codifferential $delta: Lambda^k -> Lambda^(k-1)$, the
   /// $L^2$-adjoint of $dif$. $sigma = delta u$ is characterized weakly by
-  /// $angle.l sigma, tau angle.r = angle.l u, dif tau angle.r$ for all $tau$,
+  /// $chevron.l sigma, tau chevron.r = chevron.l u, dif tau chevron.r$ for all $tau$,
   /// i.e. the mass solve $M_(k-1) sigma = (D^(k-1))^T M_k u$.
   ///
   /// Total in grade: $delta$ maps $C^k$ into $C^(k-1)$, and where that codomain
@@ -261,7 +261,7 @@ pub trait HilbertComplex {
 
   /// The Hodge-Laplace energy seminorm
   /// $abs(u)^2 = norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2 =
-  /// angle.l Delta u, u angle.r$: the form the Hodge-Laplacian is coercive in
+  /// chevron.l Delta u, u chevron.r$: the form the Hodge-Laplacian is coercive in
   /// (modulo harmonics). The norm convergence rates are naturally measured in.
   fn seminorm_energy(&self, u: &Cochain) -> f64 {
     self.seminorm_hdif(u).hypot(self.seminorm_hcodif(u))
@@ -270,14 +270,14 @@ pub trait HilbertComplex {
   /// The full $H Lambda^k$ (Hodge-Dirac graph) norm
   /// $norm(u)^2 = norm(u)_(L^2)^2 + norm(dif u)_(L^2)^2 + norm(delta u)_(L^2)^2$:
   /// the graph norm of $D = dif + delta$, the complete energy space of the de
-  /// Rham complex, $H Lambda(dif) sect H^* Lambda(delta)$.
+  /// Rham complex, $H Lambda(dif) inter H^* Lambda(delta)$.
   fn norm_full(&self, u: &Cochain) -> f64 {
     self.norm_l2(u).hypot(self.seminorm_energy(u))
   }
 }
 
 /// The $L^2 Lambda^k$ pairing of two cochains of a discrete complex,
-/// $angle.l u, v angle.r_(L^2) = u^top M_k v$.
+/// $chevron.l u, v chevron.r_(L^2) = u^top M_k v$.
 ///
 /// The metric duality, where [`pairing`](derham::pairing) is the
 /// metric-free one. A chain-cochain pairing needs nothing but the incidence;
@@ -336,12 +336,12 @@ impl<'a> WhitneyComplex<'a> {
     self.geometry
   }
 
-  /// The relative complex of the pair $(K, diff K)$.
+  /// The relative complex of the pair $(K, partial K)$.
   pub fn relative(self) -> RelativeWhitneyComplex<'a> {
     RelativeWhitneyComplex::new(self)
   }
   /// The relative complex of the pair $(K, Gamma)$ for a boundary part
-  /// $Gamma subset.eq diff K$: mixed boundary conditions constrain only the
+  /// $Gamma subset.eq partial K$: mixed boundary conditions constrain only the
   /// DOFs on $Gamma$.
   pub fn relative_to(self, constrained: &BoundaryWhitneyComplex) -> RelativeWhitneyComplex<'a> {
     RelativeWhitneyComplex::with_constrained(self, |grade| {
@@ -367,14 +367,14 @@ impl<'a> WhitneyComplex<'a> {
 /// degenerate induced data, the degeneracy surfaces where a facet metric is
 /// actually built, which is the honest mathematical boundary of the concept.
 impl<'a> WhitneyComplex<'a> {
-  /// The Whitney complex of the boundary $diff K$ with the induced metric,
+  /// The Whitney complex of the boundary $partial K$ with the induced metric,
   /// together with the trace map. `None` on closed manifolds.
   pub fn boundary(&self) -> Option<BoundaryWhitneyComplex> {
     let facets = self.topology.boundary_facets();
     (!facets.is_empty()).then(|| self.boundary_part(facets))
   }
 
-  /// The Whitney complex of a boundary part $Gamma subset.eq diff K$
+  /// The Whitney complex of a boundary part $Gamma subset.eq partial K$
   /// (a set of boundary facets): the carrier of one kind of mixed boundary
   /// condition.
   pub fn boundary_part(&self, facets: Vec<Facet>) -> BoundaryWhitneyComplex {
@@ -464,7 +464,7 @@ impl HilbertComplex for WhitneyComplex<'_> {
   }
 }
 
-/// The Whitney complex of the boundary $diff K$ (the image of the trace map),
+/// The Whitney complex of the boundary $partial K$ (the image of the trace map),
 /// carrying the geometry induced from the parent mesh.
 pub struct BoundaryWhitneyComplex {
   boundary: Subcomplex,
@@ -472,7 +472,7 @@ pub struct BoundaryWhitneyComplex {
 }
 
 impl BoundaryWhitneyComplex {
-  /// The Whitney complex of $diff K$ itself, treated as any other mesh.
+  /// The Whitney complex of $partial K$ itself, treated as any other mesh.
   pub fn whitney_complex(&self) -> WhitneyComplex<'_> {
     WhitneyComplex::new(self.boundary.complex(), &self.geometry)
   }
@@ -485,7 +485,7 @@ impl BoundaryWhitneyComplex {
   pub fn boundary_complex(&self) -> &Subcomplex {
     &self.boundary
   }
-  /// Total in grade: $0$ outside $[0, dim diff K]$, where $diff K$ carries no
+  /// Total in grade: $0$ outside $[0, dim partial K]$, where $partial K$ carries no
   /// simplices of that grade.
   pub fn ndofs(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
@@ -497,7 +497,7 @@ impl BoundaryWhitneyComplex {
     }
   }
 
-  /// The trace $"tr": C^k (K) -> C^k (diff K)$, a cochain map.
+  /// The trace $"tr": C^k (K) -> C^k (partial K)$, a cochain map.
   pub fn trace(&self, grade: impl Into<ExteriorGrade>) -> CsrMatrix {
     let grade = grade.into();
     CsrMatrix::from(&self.boundary.trace_operator(grade))
@@ -513,12 +513,12 @@ impl BoundaryWhitneyComplex {
   }
 }
 
-/// The relative Whitney complex of the pair $(K, diff K)$: the subcomplex of
+/// The relative Whitney complex of the pair $(K, partial K)$: the subcomplex of
 /// cochains with vanishing trace on the boundary, realizing essential
 /// (homogeneous Dirichlet) conditions for every grade at once.
 ///
 /// All operators are conjugates $E^T A E$ by the inclusion
-/// $E: C^k (K, diff K) arrow.hook C^k (K)$. On a boundaryless mesh this
+/// $E: C^k (K, partial K) arrow.hook C^k (K)$. On a boundaryless mesh this
 /// coincides with the full complex.
 pub struct RelativeWhitneyComplex<'a> {
   full: WhitneyComplex<'a>,
@@ -528,7 +528,7 @@ pub struct RelativeWhitneyComplex<'a> {
 }
 
 impl<'a> RelativeWhitneyComplex<'a> {
-  /// Constrain the full boundary $diff K$.
+  /// Constrain the full boundary $partial K$.
   pub fn new(full: WhitneyComplex<'a>) -> Self {
     Self::with_constrained(full, |grade| {
       full
@@ -541,14 +541,14 @@ impl<'a> RelativeWhitneyComplex<'a> {
   }
   /// Constrain the given simplices per grade: the mixed complex
   /// $C^k (K, Gamma)$ of cochains whose trace vanishes on a chosen part
-  /// $Gamma subset.eq diff K$ only, the rest of the boundary carrying the
+  /// $Gamma subset.eq partial K$ only, the rest of the boundary carrying the
   /// natural condition.
   ///
   /// `constrained` must return the simplices of the closure of $Gamma$, a
   /// half-open part is not a subcomplex, and the conjugates $E^T A E$ would no
   /// longer restrict a cochain complex.
   ///
-  /// The two extremes are the familiar ones: all of $diff K$ is
+  /// The two extremes are the familiar ones: all of $partial K$ is
   /// [`Self::new`] (fully essential), the empty set the full
   /// [`WhitneyComplex`] (fully natural). The genuinely mixed choice is what a
   /// hyperbolic problem needs: on a spacetime mesh the Dirichlet part is the
@@ -632,7 +632,7 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
     self.inclusion(grade + 1).transpose() * self.full.dif(grade) * self.inclusion(grade)
   }
 
-  /// The relative harmonic space $H^k (K, diff K)$: the relative Betti number.
+  /// The relative harmonic space $H^k (K, partial K)$: the relative Betti number.
   /// Total in grade: $0$ outside $[0, n]$, where the complex is trivial.
   fn harmonic_dim(&self, grade: impl Into<ExteriorGrade>) -> usize {
     let grade = grade.into();
@@ -645,7 +645,7 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
   /// The relative cocycles, restricted to the interior DOFs by $E^T$. They are
   /// supported in the interior already, so the restriction loses nothing.
   ///
-  /// Like [`Self::harmonic_dim`], this reads the pair $(K, diff K)$ even where
+  /// Like [`Self::harmonic_dim`], this reads the pair $(K, partial K)$ even where
   /// only a part $Gamma$ is constrained: the invariants of the genuinely mixed
   /// pair $(K, Gamma)$ are not what either function returns.
   fn integral_cocycles(&self, grade: impl Into<ExteriorGrade>) -> Vec<Cochain<i64>> {
@@ -695,7 +695,7 @@ impl HilbertComplex for RelativeWhitneyComplex<'_> {
       })
       .collect()
   }
-  /// The inclusion $E: C^k (K, diff K) arrow.hook C^k (K)$,
+  /// The inclusion $E: C^k (K, partial K) arrow.hook C^k (K)$,
   /// extending interior cochains by zero onto the boundary.
   ///
   /// A cochain map: $D E_k = E_(k+1) dif_k$. Its transpose restricts
@@ -903,7 +903,7 @@ mod test {
   }
 
   /// The defining law of the codifferential: it is the $L^2$-adjoint of $dif$,
-  /// $angle.l delta u, tau angle.r_(k-1) = angle.l u, dif tau angle.r_k$ for
+  /// $chevron.l delta u, tau chevron.r_(k-1) = chevron.l u, dif tau chevron.r_k$ for
   /// every $tau in Lambda^(k-1)$. Swept over dimension and grade.
   #[test]
   fn codif_is_the_adjoint_of_dif() {

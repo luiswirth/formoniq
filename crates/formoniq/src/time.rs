@@ -21,7 +21,7 @@
 //! [`LinearIrk`] solves the coupled stage system directly (no Newton
 //! iteration: $f$ is linear, so the stage equations are linear and one linear
 //! solve is exact), assembled as a genuinely sparse block Kronecker system and
-//! factored once for repeated stepping at a fixed $dt$.
+//! factored once for repeated stepping at a fixed $Delta t$.
 
 use iterative::ApproxInverse;
 
@@ -182,11 +182,11 @@ fn map_unit(x: Vector) -> Vector {
 /// Because $f$ is linear, the coupled stage system is linear and exact in one
 /// solve, no Newton iteration. The stage system
 ///
-/// $ (I_s ⊗ M - dt med (A_"tab" ⊗ A)) k = bb(1)_s ⊗ (A y_0) + f_"stage", $
+/// $ (I_s ⊗ M - Delta t med (A_"tab" ⊗ A)) k = bb(1)_s ⊗ (A y_0) + f_"stage", $
 ///
 /// is assembled directly as a sparse block matrix (never densified: each
 /// block is a scaled copy of $M$'s or $A$'s own sparsity) and factored once,
-/// since $M$, $A$ and $dt$ are all fixed across the integration, every
+/// since $M$, $A$ and $Delta t$ are all fixed across the integration, every
 /// subsequent [`Self::step`] is then a single triangular solve.
 pub struct LinearIrk {
   tableau: Tableau,
@@ -217,7 +217,7 @@ impl LinearIrk {
 
   /// Advance `y0` (at time `t0`) by one step of the fixed `dt` this
   /// integrator was built with. `forcing` is evaluated at each stage time
-  /// $t_0 + c_i thin dt$.
+  /// $t_0 + c_i thin Delta t$.
   pub fn step(&self, y0: &Vector, t0: f64, forcing: impl Fn(f64) -> Vector) -> Vector {
     let s = self.tableau.s;
     let d = self.ndofs;
@@ -241,7 +241,7 @@ impl LinearIrk {
 }
 
 /// The sparse block Kronecker stage matrix
-/// $I_s ⊗ M - dt med (A_"tab" ⊗ A)$, assembled directly from the triplets of
+/// $I_s ⊗ M - Delta t med (A_"tab" ⊗ A)$, assembled directly from the triplets of
 /// $M$ and $A$, an $s times s$ grid of blocks, each block a scaled copy of
 /// $M$'s or $A$'s own sparsity pattern, never a dense intermediate.
 fn stage_matrix(a_tab: &Matrix, mass: &CsrMatrix, op: &CsrMatrix, dt: f64) -> CsrMatrix {
@@ -644,7 +644,7 @@ mod test {
   }
 
   /// A constant forcing steers the linear system to its steady state
-  /// $y_infty = -A^(-1) f$. Both tableaus must reach it.
+  /// $y_infinity = -A^(-1) f$. Both tableaus must reach it.
   #[test]
   fn constant_forcing_reaches_steady_state() {
     let lambda = 3.0;

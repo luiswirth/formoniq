@@ -187,7 +187,7 @@ pub fn lattice_size(topology: &Complex, coords: &MeshCoords, target_spacing: f64
 /// The complex passed here is the render surface, not the mesh (see
 /// [`crate::surface::Surface`]), and the cochain is its trace. That is what an
 /// arrow is: a mark lying in the manifold it is drawn on, which for a solid
-/// is $diff M$ and never a tetrahedron. A cell of a $3$-manifold has no plane
+/// is $partial M$ and never a tetrahedron. A cell of a $3$-manifold has no plane
 /// for a flat quad to lie in, no determined perpendicular for its `across`
 /// axis, and no side for the depth bias to lean toward, the frame built below
 /// is well posed exactly because `cell` is at most a triangle. A volume glyph
@@ -350,7 +350,7 @@ mod tests {
   /// flat quad to lie in, so glyphing the cells of a $3$-manifold would give
   /// arrows an arbitrary `across` axis, at points inside an opaque solid: the
   /// mark evaluated on an object it cannot be a mark of. Stated as a
-  /// geometric fact rather than a count: every arrow's center lies on $diff M$,
+  /// geometric fact rather than a count: every arrow's center lies on $partial M$,
   /// so none is interior. Checked against the unit cube's faces, where being on
   /// the boundary is exactly having a coordinate at 0 or 1.
   #[test]

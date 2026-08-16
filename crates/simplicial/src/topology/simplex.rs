@@ -95,7 +95,7 @@ impl Simplex {
       .map(|positions| self.select(positions))
   }
 
-  /// The boundary $diff sigma = sum_i (-1)^i (sigma without v_i)$:
+  /// The boundary $partial sigma = sum_i (-1)^i (sigma without v_i)$:
   /// alternating positional deletions, each facet with the sign it carries.
   pub fn boundary(&self) -> impl Iterator<Item = (Sign, Self)> + use<'_> {
     Combination::full(self.nvertices())
@@ -210,10 +210,10 @@ pub fn edge_index(vi: usize, vj: usize) -> usize {
   Combination::from_increasing([vi.min(vj), vi.max(vj)]).rank()
 }
 
-/// $diff_k: Delta_k (hat(K)) -> Delta_(k-1) (hat(K))$, the boundary operator
+/// $partial_k: Delta_k (hat(K)) -> Delta_(k-1) (hat(K))$, the boundary operator
 /// between the colex-ordered subsimplices of the unit `dim_cell`-simplex, built
 /// from the alternating positional deletions. Satisfies
-/// $diff compose diff = 0$.
+/// $partial compose partial = 0$.
 ///
 /// The reference-cell form of [`Complex::boundary_operator`], and the same
 /// convention: unaugmented, so at grade $0$ it is the zero map into the zero
@@ -244,7 +244,7 @@ mod test {
 
   use itertools::Itertools;
 
-  /// $diff compose diff = 0$ for the reference-cell boundary matrices, swept
+  /// $partial compose partial = 0$ for the reference-cell boundary matrices, swept
   /// over every dimension and grade including the ends, where the operator is
   /// the zero map into or out of the zero module.
   #[test]

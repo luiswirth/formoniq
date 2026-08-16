@@ -205,7 +205,7 @@ impl<S: CoordSpace> Parametrization<S> {
 
   /// The metric $g = phi^* delta = (dif phi)^T dif phi$ that $phi$ induces on
   /// the domain $Omega$ at `u`: the pullback of the ambient Euclidean metric,
-  /// the Gramian of the tangent vectors $diff_i phi$.
+  /// the Gramian of the tangent vectors $partial_i phi$.
   ///
   /// This is the distortion of the parametrization made explicit, and the datum
   /// the continuum unlocks downstream: a parametrization-induced cell metric

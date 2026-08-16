@@ -38,7 +38,7 @@ use simplicial::{
 
 use std::sync::LazyLock;
 
-/// The Kronecker sum $A_1 oplus dots.c oplus A_d = sum_i I ox dots.c ox A_i ox dots.c ox I$
+/// The Kronecker sum $A_1 plus.o dots.c plus.o A_d = sum_i I times.o dots.c times.o A_i times.o dots.c times.o I$
 /// of square matrices: the generator of the tensor-product operator each
 /// factor generates alone. Test-local: the one caller here builds the
 /// separable FDM Laplacian from its 1D stencil, this way.

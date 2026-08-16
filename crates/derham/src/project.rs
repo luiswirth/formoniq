@@ -72,7 +72,7 @@ pub fn derham_map(field: &impl Section, topology: &Complex, quad_degree: usize) 
 /// reference frame.
 ///
 /// The pullback of $omega$ to the reference $k$-simplex is
-/// $angle.l omega, v_1 wedge dots.c wedge v_k angle.r dif x^1 wedge dots.c wedge dif x^k$
+/// $chevron.l omega, v_1 wedge dots.c wedge v_k chevron.r dif x^1 wedge dots.c wedge dif x^k$
 /// for the spanning vectors $v_i$ of the face, so the integral is the
 /// quadrature of the duality pairing against the face's tangent blade,
 /// no metric anywhere.
