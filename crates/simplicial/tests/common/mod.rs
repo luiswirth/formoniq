@@ -1,6 +1,10 @@
 //! Fixture complexes shared by the topology law tests: homology,
 //! cohomology and orientation all check laws against the same combinatorial
 //! objects, so the objects live here once.
+//!
+//! Each test binary compiles this module fresh and uses only some of it,
+//! which is not dead code, just an unused export from any one binary's view.
+#![allow(dead_code)]
 
 use simplicial::mesher::grid::CartesianTopology;
 use simplicial::topology::complex::Complex;
