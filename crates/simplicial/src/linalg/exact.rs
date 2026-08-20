@@ -54,7 +54,6 @@ impl IntegerMatrix {
   }
   /// The entries. Read back out only by the tests: a computation here consumes
   /// a matrix through its rank, its kernel or its columns.
-  #[cfg(test)]
   pub fn triplets(&self) -> &[(usize, usize, i64)] {
     &self.triplets
   }
