@@ -227,7 +227,7 @@ impl Complex {
   /// Total over every grade with no case distinction, since the skeletons off
   /// $0 <= k <= n$ are empty and the incidence rung between them is too: at the
   /// ends it is the zero map to or from the zero module, of the right shape.
-  pub(crate) fn integral_boundary(&self, grade: Dim) -> IntegerMatrix {
+  pub fn integral_boundary(&self, grade: Dim) -> IntegerMatrix {
     IntegerMatrix::new(
       self.nsimplices(grade - 1),
       self.nsimplices(grade),

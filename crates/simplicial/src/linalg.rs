@@ -7,7 +7,7 @@
 //! depend on `simplicial` for real reasons, not because a `Vector`/`Matrix`
 //! alias is worth a crate of its own.
 
-pub(crate) mod exact;
+pub mod exact;
 
 mod selection;
 pub use selection::Selection;
