@@ -16,7 +16,7 @@ pub mod export;
 pub mod gallery;
 pub mod render;
 pub mod scene;
-pub(crate) mod solve;
+pub mod solve;
 pub mod ui;
 pub(crate) mod welcome;
 

@@ -39,7 +39,7 @@ use regge::coord::mesh::MeshCoords;
 /// colex order it left in, so the cochain indices in the outcome line up with
 /// the caller's own mesh.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct SolveRequest {
+pub struct SolveRequest {
   cells: Skeleton,
   coords: MeshCoords,
   study: Study,
@@ -49,13 +49,13 @@ pub(crate) struct SolveRequest {
 /// grade chose. Not a [`Scene`], that would send the mesh back to the caller
 /// that supplied it.
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct SolveOutcome {
-  pub(crate) fields: Vec<ScalarField>,
-  pub(crate) line_fields: Vec<LineField>,
+pub struct SolveOutcome {
+  pub fields: Vec<ScalarField>,
+  pub line_fields: Vec<LineField>,
 }
 
 impl SolveRequest {
-  pub(crate) fn new(mesh: &Mesh, study: Study) -> Self {
+  pub fn new(mesh: &Mesh, study: Study) -> Self {
     Self {
       cells: mesh.0.skeleton_raw(mesh.0.dim()).clone(),
       coords: mesh.1.clone(),
@@ -65,7 +65,7 @@ impl SolveRequest {
 
   /// Runs the study. The expensive call, wherever it happens to be running:
   /// this is the same function on a native thread and inside a web worker.
-  pub(crate) fn run(&self) -> SolveOutcome {
+  pub fn run(&self) -> SolveOutcome {
     let mesh: Mesh = (Complex::from_cells(self.cells.clone()), self.coords.clone());
     let scene = self.study.build(&mesh);
     SolveOutcome {
@@ -77,7 +77,7 @@ impl SolveRequest {
 
 impl SolveOutcome {
   /// The scene this outcome and the mesh it was solved on make together.
-  pub(crate) fn into_scene(self, mesh: &Mesh) -> Scene {
+  pub fn into_scene(self, mesh: &Mesh) -> Scene {
     let mut scene = Scene::on(mesh.0.clone(), mesh.1.clone());
     scene.fields = self.fields;
     scene.line_fields = self.line_fields;
@@ -91,18 +91,16 @@ impl SolveOutcome {
 /// a condition a caller can act on, so it panics rather than widening every
 /// signature with an error nobody can handle.
 ///
-/// Compiled for the web, which needs it to cross into the worker, and for the
-/// tests, which are what check that crossing is lossless. The native viewer
-/// moves the request into a thread and never encodes anything.
-#[cfg(any(target_arch = "wasm32", test))]
-pub(crate) fn encode<T: serde::Serialize>(value: &T) -> Vec<u8> {
+/// Public rather than `test`-gated: the web worker crosses it, and the
+/// round-trip tests, living outside the crate as ordinary integration tests,
+/// reach it the same way any other consumer would.
+pub fn encode<T: serde::Serialize>(value: &T) -> Vec<u8> {
   let mut bytes = Vec::new();
   ciborium::into_writer(value, &mut bytes).expect("a solve payload is plain data");
   bytes
 }
 
-#[cfg(any(target_arch = "wasm32", test))]
-pub(crate) fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
+pub fn decode<T: serde::de::DeserializeOwned>(bytes: &[u8]) -> T {
   ciborium::from_reader(bytes).expect("a solve payload round-trips")
 }
 
@@ -153,53 +151,5 @@ pub(crate) mod native {
     pub(crate) fn poll(&self) -> Option<SolveOutcome> {
       self.rx.try_recv().ok()
     }
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-  use crate::gallery::MeshSource;
-
-  /// A request survives the encoding, and the outcome it produces is the same
-  /// one it would have produced in place. This is the whole contract the worker
-  /// rests on: what crosses the boundary is the build, unchanged.
-  #[test]
-  fn a_request_solves_the_same_after_a_round_trip() {
-    let mesh = MeshSource::Sphere { subdivisions: 1 }.build().unwrap();
-    let request = SolveRequest::new(
-      &mesh,
-      Study::Eigenmodes {
-        grade: simplicial::Dim::ZERO,
-        nmodes: 4,
-      },
-    );
-
-    let direct = request.run();
-    let crossed: SolveRequest = decode(&encode(&request));
-    let indirect = crossed.run();
-
-    assert_eq!(direct.fields.len(), indirect.fields.len());
-    assert_eq!(direct.line_fields.len(), indirect.line_fields.len());
-    for (a, b) in direct.fields.iter().zip(&indirect.fields) {
-      assert_eq!(a.name, b.name);
-      assert_eq!(a.grade, b.grade);
-      assert_eq!(a.cochain.coeffs(), b.cochain.coeffs());
-    }
-  }
-
-  /// The outcome round-trips too: it is what comes back from the worker,
-  /// and rebuilds the same scene against the mesh the caller kept.
-  #[test]
-  fn an_outcome_survives_the_return_trip() {
-    let mesh = MeshSource::Sphere { subdivisions: 1 }.build().unwrap();
-    let request = SolveRequest::new(&mesh, Study::WhitneyBasis);
-    let outcome = request.run();
-    let returned: SolveOutcome = decode(&encode(&outcome));
-
-    let scene = returned.into_scene(&mesh);
-    assert_eq!(scene.topology.nsimplices(0), mesh.0.nsimplices(0));
-    assert_eq!(scene.fields.len(), outcome.fields.len());
-    assert_eq!(scene.line_fields.len(), outcome.line_fields.len());
   }
 }

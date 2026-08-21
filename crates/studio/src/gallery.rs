@@ -150,7 +150,7 @@ const MOEBIUS_WIDTH_RATIO: f64 = 1.5;
 
 /// The shared surface mesh a study solves against, built once so every
 /// per-grade eigensolve reuses it rather than remeshing.
-pub(crate) type Mesh = (Complex, MeshCoords);
+pub type Mesh = (Complex, MeshCoords);
 
 /// One of the surface meshes the studio ships, embedded in the binary (see
 /// `assets/meshes`, and its `SOURCES.md` for provenance and topology).
