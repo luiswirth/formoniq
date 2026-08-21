@@ -211,7 +211,7 @@ impl BuiltinMesh {
   /// filename, so the filename is the label, renaming the asset is how a
   /// mesh is renamed, rather than a second table of display strings that the
   /// first one could disagree with.
-  pub(crate) fn label(self) -> String {
+  pub fn label(self) -> String {
     let name = self.name();
     let mut chars = name.chars();
     match chars.next() {
@@ -225,7 +225,7 @@ impl BuiltinMesh {
   }
 
   /// The mesh, parsed by whichever reader its format calls for.
-  pub(crate) fn build(self) -> Result<(Complex, MeshCoords), String> {
+  pub fn build(self) -> Result<(Complex, MeshCoords), String> {
     let entry = self.entry();
     match entry.format {
       Format::Obj => {
@@ -269,7 +269,7 @@ pub enum QuotientSurface {
 }
 
 impl QuotientSurface {
-  pub(crate) fn label(self) -> &'static str {
+  pub fn label(self) -> &'static str {
     match self {
       Self::Donut => "Donut",
       Self::Moebius => "Möbius band",
@@ -383,7 +383,7 @@ impl MeshSource {
     subdivisions: SPHERE_SUBDIVISIONS.default,
   };
 
-  pub(crate) fn label(&self) -> String {
+  pub fn label(&self) -> String {
     match self {
       MeshSource::Sphere { .. } => "Sphere".to_string(),
       MeshSource::Grid { .. } => "Grid".to_string(),
@@ -584,7 +584,7 @@ impl Study {
     }
   }
 
-  pub(crate) fn label(&self) -> String {
+  pub fn label(&self) -> String {
     match self {
       Study::Eigenmodes { grade, .. } => format!("Eigenmodes, grade {grade}"),
       Study::WhitneyBasis => "Whitney basis".to_string(),
@@ -681,23 +681,23 @@ impl CochainSpec {
 /// configuration, never a code path of its own, the moment a curated
 /// example would need its own branch to build or display: it has stopped being
 /// a preset.
-pub(crate) struct Preset {
-  pub(crate) name: &'static str,
+pub struct Preset {
+  pub name: &'static str,
   /// A one-line gloss of what the preset shows, for the browser's hover. It
   /// names the point in the product in the reader's terms, the mathematics on
   /// the mesh, so the curated set is legible before it is clicked.
-  pub(crate) description: &'static str,
-  pub(crate) mesh: MeshSource,
-  pub(crate) study: Study,
+  pub description: &'static str,
+  pub mesh: MeshSource,
+  pub study: Study,
   /// The field the preset opens on, or `None` to open on the scene's first
   /// mode (the platform's own default).
-  pub(crate) selection: Option<Selection>,
+  pub selection: Option<Selection>,
   /// The marks the preset opens with, or `None` for the platform default.
   /// Still configuration, not a code path: a preset may say which readings of
   /// its field it is worth first seeing together (a line field whose glyphs
   /// and flow complement each other), and everything after that first frame is
   /// the ordinary toggle.
-  pub(crate) marks: Option<Marks>,
+  pub marks: Option<Marks>,
 }
 
 /// The preset the viewer opens on, and one of the curated set rather than a
@@ -705,7 +705,7 @@ pub(crate) struct Preset {
 /// point in the platform's product, which is exactly what a [`Preset`] is. Kept
 /// as one constructor used from both places so the opening view and the entry
 /// in the browser cannot drift apart.
-pub(crate) fn start_preset() -> Preset {
+pub fn start_preset() -> Preset {
   curl_on_triforce()
 }
 
@@ -731,7 +731,7 @@ fn curl_on_triforce() -> Preset {
 
 /// The curated first-wave presets, in browser order. Each is a configuration of
 /// the general platform: a mesh, a study, and the field to open on.
-pub(crate) fn presets() -> Vec<Preset> {
+pub fn presets() -> Vec<Preset> {
   // A preset naming a shipped mesh looks it up by name, and is offered only if
   // that asset is present: the mesh set is the asset directory's, so a preset
   // over a mesh nobody shipped is not a configuration that exists.
@@ -825,8 +825,8 @@ pub(crate) fn presets() -> Vec<Preset> {
 /// memoization key on. The unit the gallery caches and loads.
 #[derive(Clone, PartialEq)]
 pub(crate) struct Shown {
-  pub(crate) mesh: MeshSource,
-  pub(crate) study: Study,
+  pub mesh: MeshSource,
+  pub study: Study,
 }
 
 /// The gallery's lazy, memoized loader. Owns the current mesh; each
@@ -844,7 +844,7 @@ pub(crate) struct Gallery {
   pub(crate) mesh_source: MeshSource,
   pub(crate) mesh: Arc<Mesh>,
   /// The live study axis.
-  pub(crate) study: Study,
+  pub study: Study,
   /// The last eigenmode grade viewed, so toggling to the Whitney basis and back
   /// resumes that grade rather than resetting to 0.
   pub(crate) last_grade: ExteriorGrade,
@@ -1012,177 +1012,5 @@ impl Gallery {
     self.loading = None;
     self.cache.push((shown, scene.clone()));
     Some(scene)
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  /// The particles are opt-in, everywhere. Their cost does not scale with the
-  /// mesh: the population is a fixed count, so there is no mesh on which
-  /// assuming them is cheap, and a weak GPU should not spend it unasked. The
-  /// glyphs stay on, so a line field still has a mark.
-  #[test]
-  fn the_particles_are_opt_in() {
-    let marks = crate::ui::Marks::default();
-    assert!(!marks.particles);
-    assert!(marks.glyphs, "a line field must still carry a mark");
-    // No preset overrides that: a preset is in no position to decide the
-    // reader can afford them.
-    for preset in presets() {
-      if let Some(marks) = preset.marks {
-        assert!(
-          !marks.particles,
-          "{} switches the particles on",
-          preset.name
-        );
-      }
-    }
-  }
-
-  /// Both quotient surfaces build, in $RR^3$, with the topology their gluing
-  /// says, and the Möbius band is the gallery's non-orientable mesh,
-  /// which the donut is not.
-  ///
-  /// That contrast is the reason the band is offered at all: the reduced-grade
-  /// reduction takes a coherent orientation wherever the Hodge star fires, so
-  /// the band is the mesh on which that path is exercised rather than assumed.
-  /// A picker entry that could not be non-orientable would not test it.
-  #[test]
-  fn the_quotient_surfaces_build_and_differ_in_orientability() {
-    let cases = [
-      (QuotientSurface::Donut, vec![1, 2, 1], false, true),
-      (QuotientSurface::Moebius, vec![1, 1, 0], true, false),
-    ];
-    for (surface, betti, has_boundary, orientable) in cases {
-      let source = MeshSource::Quotient {
-        surface,
-        cells_axis: QUOTIENT_CELLS.default,
-      };
-      let (topology, coords) = source.build().expect("a generated mesh always builds");
-
-      assert_eq!(coords.dim(), 3, "{}: the fixed ambient", surface.name());
-      assert_eq!(topology.dim(), 2, "{}: a surface", surface.name());
-      assert_eq!(topology.betti_numbers(), betti, "{}", surface.name());
-      assert_eq!(topology.has_boundary(), has_boundary, "{}", surface.name());
-      assert_eq!(
-        topology.orientation().is_some(),
-        orientable,
-        "{}",
-        surface.name()
-      );
-      // The label and the CLI name reach the picker and the command line from
-      // the one enum, so neither can name a surface the other cannot.
-      assert_eq!(source.label(), surface.label());
-      assert_eq!(QuotientSurface::from_name(surface.name()), Some(surface));
-    }
-  }
-
-  /// The opening preset resolves to the field it means. Its selection is an
-  /// index into the scene's line fields, so it is exactly the kind of thing
-  /// that goes quietly wrong when the study's cochains are reordered, this
-  /// pins it to the field's name instead, which is what the preset is really
-  /// choosing.
-  #[test]
-  fn the_start_preset_opens_on_the_curl_field() {
-    let preset = start_preset();
-    let mesh = preset.mesh.build().expect("the starting mesh builds");
-    let scene = preset.study.build(&mesh);
-    let Some(Selection::Line(index)) = preset.selection else {
-      panic!("the start preset opens on a line field");
-    };
-    assert_eq!(scene.line_fields[index].name, "pure curl");
-    // And it opens on the default marks rather than choosing for the reader.
-    assert!(preset.marks.is_none());
-  }
-
-  /// Every shipped asset loads. This is what the generated table buys and what
-  /// it risks: the picker now offers whatever is in `assets/meshes`, so a file
-  /// dropped in with an unreadable body, or an extension whose reader cannot
-  /// actually parse it, becomes a broken entry in the UI rather than a compile
-  /// error. Building each one here is the check that the directory and the
-  /// readers agree.
-  ///
-  /// A closed surface is not asserted, a shipped mesh need not be closed,
-  /// but a mesh with no cells is either an unfetched LFS pointer or a file that
-  /// is not a mesh at all, and neither belongs in the picker.
-  #[test]
-  fn every_shipped_mesh_loads() {
-    assert!(
-      BuiltinMesh::all().len() > 0,
-      "the asset directory must ship at least one mesh"
-    );
-    for builtin in BuiltinMesh::all() {
-      let (topology, coords) = builtin
-        .build()
-        .unwrap_or_else(|e| panic!("{}: {e}", builtin.name()));
-      assert!(
-        topology.nsimplices(topology.dim()) > 0,
-        "{}: built empty (unfetched LFS asset?)",
-        builtin.name()
-      );
-      assert_eq!(
-        coords.nvertices(),
-        topology.nsimplices(0),
-        "{}: coordinates and vertices disagree",
-        builtin.name()
-      );
-    }
-  }
-
-  /// The names the CLI accepts are the picker's, and they are unique, the
-  /// file stems, so two assets differing only by extension would collide and
-  /// `from_name` would silently resolve to whichever sorted first.
-  #[test]
-  fn shipped_mesh_names_are_unique_and_resolve() {
-    let names: Vec<&str> = BuiltinMesh::all().map(|m| m.name()).collect();
-    let unique: std::collections::HashSet<&&str> = names.iter().collect();
-    assert_eq!(
-      unique.len(),
-      names.len(),
-      "duplicate mesh names in {names:?}"
-    );
-    for builtin in BuiltinMesh::all() {
-      assert_eq!(BuiltinMesh::from_name(builtin.name()), Some(builtin));
-    }
-  }
-
-  /// The other preset that names a field explicitly. Its `Line(3)` is an index
-  /// into the scene its study builds, so it breaks silently when the shells are
-  /// reordered, pinned here to the shell's name instead.
-  ///
-  /// Checked on the generated donut rather than on its own mesh (Bob): what the
-  /// index depends on is the shell ordering of `Study::HodgeDecomposition` and
-  /// the surface's first Betti number, and the donut has the same $b_1 = 2$ at
-  /// a few dozen vertices instead of ~3000. It is a faithful stand-in for what
-  /// is being tested, not a weaker one, and it keeps Bob's harmonic solve out
-  /// of the test suite.
-  #[test]
-  fn the_hodge_preset_opens_on_the_harmonic_shell() {
-    let hodge = presets()
-      .into_iter()
-      .find(|p| matches!(p.study, Study::HodgeDecomposition))
-      .expect("a Hodge decomposition preset");
-    let mesh = MeshSource::Quotient {
-      surface: QuotientSurface::Donut,
-      cells_axis: QUOTIENT_CELLS.default,
-    }
-    .build()
-    .expect("a generated mesh always builds");
-    let scene = hodge.study.build(&mesh);
-    let Some(Selection::Line(index)) = hodge.selection else {
-      panic!("the Hodge preset opens on a line field");
-    };
-    assert!(
-      index < scene.line_fields.len(),
-      "Hodge preset opens on line {index} of {}",
-      scene.line_fields.len()
-    );
-    assert!(
-      scene.line_fields[index].name.contains("harmonic"),
-      "the Hodge preset opens on the harmonic shell, got {:?}",
-      scene.line_fields[index].name
-    );
   }
 }

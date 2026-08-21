@@ -276,9 +276,9 @@ pub(crate) struct Sidebars {
 /// about what they are looking for, not something the code can decide from the
 /// object.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct Marks {
-  pub(crate) glyphs: bool,
-  pub(crate) particles: bool,
+pub struct Marks {
+  pub glyphs: bool,
+  pub particles: bool,
 }
 
 impl Default for Marks {
@@ -311,7 +311,7 @@ impl Default for Marks {
 /// particles on top. `PartialEq` so `egui::Ui::radio_value` can bind directly to
 /// it.
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Selection {
+pub enum Selection {
   Scalar(usize),
   Line(usize),
 }
