@@ -28,7 +28,7 @@ use crate::ui::Selection;
 /// that the target's sRGB encoding converts on write, so an export target
 /// without it would come out visibly darker than the same frame on screen. PNG
 /// is an sRGB container, so the read-back bytes are already what it wants.
-const EXPORT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+pub const EXPORT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 
 /// The supersampling factor an export renders at when its resolution leaves
 /// room for it.
@@ -38,7 +38,7 @@ const EXPORT_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 /// so the only question is what the image should look like, and the answer to
 /// that does not vary per invocation. It is therefore a property of exporting,
 /// not a knob, nobody asks for a worse still.
-const EXPORT_SSAA_SCALE_MAX: u32 = 4;
+pub const EXPORT_SSAA_SCALE_MAX: u32 = 4;
 
 /// The supersampled pixel count one export may allocate its scene pass at.
 ///
@@ -51,7 +51,7 @@ const EXPORT_SSAA_SCALE_MAX: u32 = 4;
 /// asking for one (a 4K frame at 4x is 132 megapixels), and it is the pixels
 /// that are wanted, not the samples per pixel, a large export is oversampled
 /// by its own size.
-const EXPORT_SSAA_PIXEL_BUDGET: u64 = 64 << 20;
+pub const EXPORT_SSAA_PIXEL_BUDGET: u64 = 64 << 20;
 
 /// The largest supersampling factor `size` fits inside
 /// [`EXPORT_SSAA_PIXEL_BUDGET`], never above [`EXPORT_SSAA_SCALE_MAX`] and
@@ -61,7 +61,7 @@ const EXPORT_SSAA_PIXEL_BUDGET: u64 = 64 << 20;
 ///
 /// Derived, not asked for: the factor follows from the size and the hardware's
 /// limits, both of which the code knows and the caller does not.
-fn export_ssaa_scale(size: (u32, u32)) -> u32 {
+pub fn export_ssaa_scale(size: (u32, u32)) -> u32 {
   let pixels = u64::from(size.0.max(1)) * u64::from(size.1.max(1));
   (1..=EXPORT_SSAA_SCALE_MAX)
     .take_while(|&ssaa| pixels * u64::from(ssaa) * u64::from(ssaa) <= EXPORT_SSAA_PIXEL_BUDGET)
@@ -119,7 +119,7 @@ pub fn headless_context() -> Option<GpuContext> {
 /// that stride and the padding is dropped on the way out. The scene's own width
 /// is almost never a multiple of 64 pixels, so this is the normal path, not an
 /// edge case.
-struct ExportTarget {
+pub struct ExportTarget {
   texture: wgpu::Texture,
   view: wgpu::TextureView,
   buffer: wgpu::Buffer,
@@ -128,7 +128,7 @@ struct ExportTarget {
 }
 
 impl ExportTarget {
-  fn new(ctx: &GpuContext, size: (u32, u32)) -> Self {
+  pub fn new(ctx: &GpuContext, size: (u32, u32)) -> Self {
     let (width, height) = (size.0.max(1), size.1.max(1));
     let unpadded_bytes_per_row = width * 4;
     let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
@@ -224,7 +224,7 @@ impl ExportTarget {
 ///
 /// The mesh display is kept alive alongside the field display because the draw
 /// list borrows both.
-struct Displayed {
+pub struct Displayed {
   mesh: MeshDisplay,
   field: FieldDisplay,
   camera: crate::render::camera::Camera,
@@ -237,7 +237,7 @@ struct Displayed {
 }
 
 impl Displayed {
-  fn build(ctx: &GpuContext, spec: &ExportSpec) -> Result<Self, String> {
+  pub fn build(ctx: &GpuContext, spec: &ExportSpec) -> Result<Self, String> {
     let mesh_data = spec.mesh_source.build()?;
     let scene = spec.study.build(&mesh_data);
 
@@ -363,7 +363,7 @@ pub fn export_frame_png(ctx: &GpuContext, frame: &FrameView, path: &Path) -> Res
 /// `steps` is separate from `time` because a particle population is stepped, not
 /// evaluated: the caller owns how far it has already gone. See
 /// [`crate::display::steps_at`].
-fn render_at(
+pub fn render_at(
   ctx: &GpuContext,
   renderer: &mut Renderer,
   target: &ExportTarget,
@@ -457,100 +457,4 @@ fn export_video(
     return Err(format!("ffmpeg exited with {status}"));
   }
   Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  /// The derived supersampling factor stays inside the budget it exists to
-  /// respect, at every resolution: it never allocates more than
-  /// [`EXPORT_SSAA_PIXEL_BUDGET`] unless one sample per pixel already does, it
-  /// never exceeds [`EXPORT_SSAA_SCALE_MAX`], and it is never 0 (which would
-  /// allocate an empty target). Swept over the range a caller reaches, from a
-  /// thumbnail to well past 8K, rather than the one size the default happens to
-  /// be.
-  #[test]
-  fn the_export_supersampling_factor_respects_its_budget() {
-    let sizes = [
-      (1, 1),
-      (64, 64),
-      (640, 480),
-      (1920, 1080),
-      (3840, 2160),
-      (7680, 4320),
-      (30_000, 30_000),
-    ];
-    for size in sizes {
-      let ssaa = export_ssaa_scale(size);
-      assert!(
-        (1..=EXPORT_SSAA_SCALE_MAX).contains(&ssaa),
-        "{size:?}: {ssaa}"
-      );
-      let pixels = u64::from(size.0) * u64::from(size.1);
-      let allocated = pixels * u64::from(ssaa) * u64::from(ssaa);
-      assert!(
-        allocated <= EXPORT_SSAA_PIXEL_BUDGET || ssaa == 1,
-        "{size:?}: {ssaa}x allocates {allocated} px, over budget while it could step down"
-      );
-    }
-    // The factor only falls as the resolution rises: a bigger export never
-    // supersamples harder than a smaller one.
-    assert!(export_ssaa_scale((640, 480)) >= export_ssaa_scale((3840, 2160)));
-  }
-
-  /// A headless render of a known view produces an image that is not a single
-  /// flat color, i.e. the frame graph actually drew the scene, rather than
-  /// clearing and presenting the background.
-  ///
-  /// Pointed at grade 1, not the viewer's starting grade 0: a grade-1 field
-  /// reduces to a line field, whose particle advection is what this test's
-  /// stepping exercises. Grade 0 draws scalars only and would leave that path
-  /// untested.
-  ///
-  /// Skipped, not failed, where no adapter exists: a machine without a GPU
-  /// cannot answer the question either way.
-  #[test]
-  fn headless_render_draws_the_scene() {
-    let Some(ctx) = headless_context() else {
-      eprintln!("no GPU adapter; skipping headless render test");
-      return;
-    };
-    let spec = ExportSpec {
-      study: Study::Cochains(crate::demos::triforce_examples()),
-      mesh_source: MeshSource::Triforce,
-      field: Some(0),
-      size: (64, 64),
-      frames: None,
-      fps: 30,
-    };
-    // The premise of the test, checked rather than assumed: if this study ever
-    // stopped carrying a line field, the render below would still pass while
-    // silently no longer covering the particle advection pipeline.
-    let scene = spec
-      .study
-      .build(&spec.mesh_source.build().expect("the triforce builds"));
-    assert!(
-      !scene.line_fields.is_empty(),
-      "the triforce cochains are grade-1 line fields; without one the particle \
-       advection pipeline is not what this test exercises"
-    );
-
-    let mut renderer = Renderer::new(&ctx, EXPORT_FORMAT, export_ssaa_scale(spec.size));
-    let target = ExportTarget::new(&ctx, spec.size);
-    let displayed = Displayed::build(&ctx, &spec).expect("the triforce scene builds");
-
-    // Stepped, not merely drawn. A line field carries an advected population,
-    // and with zero steps its compute pass never runs, so the dispatch, its
-    // bind group and the layout the pipeline was built against would all go
-    // unexercised while this test still passed. wgpu validates on submit, so a
-    // mismatch here is a panic rather than a silent pass.
-    let pixels = render_at(&ctx, &mut renderer, &target, &displayed, 0.0, 4);
-    assert_eq!(pixels.len(), 64 * 64 * 4);
-    let first = &pixels[..4];
-    assert!(
-      pixels.chunks_exact(4).any(|px| px != first),
-      "every pixel is identical: the scene did not draw"
-    );
-  }
 }
