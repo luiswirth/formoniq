@@ -8,7 +8,7 @@ extern crate nalgebra as na;
 
 pub mod app;
 pub mod demos;
-pub(crate) mod display;
+pub mod display;
 /// Headless PNG/MP4 rendering. Native only: it writes files and pipes to
 /// `ffmpeg`, neither of which the browser offers.
 #[cfg(not(target_arch = "wasm32"))]
