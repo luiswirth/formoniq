@@ -290,7 +290,7 @@ impl QuotientSurface {
       .find(|s| s.name() == name)
   }
 
-  pub(crate) fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
+  pub fn build(self, cells_axis: usize) -> (Complex, MeshCoords) {
     use regge::mesher::{quotient::FlatQuotient, quotient_embed};
     let cells_axis = QUOTIENT_CELLS.clamp(cells_axis);
     match self {
