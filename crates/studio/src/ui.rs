@@ -369,7 +369,7 @@ fn round_for_display(x: f64, decimals: i32) -> f64 {
 /// consecutive near-equal eigenvalues.
 ///
 /// The modes arrive sorted by eigenvalue. A run whose successive gaps stay
-/// within [`SHELL_ABS_FRAC`]$dot lambda_max + $[`SHELL_REL_GAP`]$dot lambda$ is
+/// within `SHELL_ABS_FRAC`$dot lambda_max + $`SHELL_REL_GAP`$dot lambda$ is
 /// one degenerate eigenspace, a row of the pyramid. This reads the
 /// organization straight off the spectrum, with no geometry: on $S^2$ the
 /// near-equal clusters are exactly the $(2l+1)$ spherical-harmonic shells,

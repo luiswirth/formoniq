@@ -9,8 +9,8 @@
 //! material constructed here rather than at a caller is a material the two
 //! cannot disagree on.
 //!
-//! The split within is by what a datum depends on: [`MeshDisplay`] is the bake
-//! of the mesh, rebuilt only when the scene changes, and [`FieldDisplay`] is
+//! The split within is by what a datum depends on: `MeshDisplay` is the bake
+//! of the mesh, rebuilt only when the scene changes, and `FieldDisplay` is
 //! what one field decides, its materials, its own geometry, its attribute
 //! stream. Switching modes rewrites the second alone.
 

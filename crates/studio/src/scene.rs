@@ -276,7 +276,7 @@ struct FieldMeta {
 }
 
 /// What the selected field offers to be read with, which of
-/// [`crate::ui::FieldView`]'s settings are live.
+/// `crate::ui::FieldView`'s settings are live.
 ///
 /// The mesh side has no counterpart: every scene has geometry, so its settings
 /// are always live and there is nothing to gate. Only the field is asked, and
@@ -997,7 +997,7 @@ pub fn hodge_decompose(
 }
 
 /// The probe field the decomposition study splits: the ambient swirl
-/// [`hodge_probe_form`] plus, on a mesh with grade-1 homology, an explicit copy
+/// `hodge_probe_form` plus, on a mesh with grade-1 homology, an explicit copy
 /// of a harmonic 1-form scaled to the swirl's magnitude.
 ///
 /// The swirl alone supplies rich exact and coexact shells, but its periods

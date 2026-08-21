@@ -18,8 +18,8 @@
 //! coordinates never make the return trip.
 //!
 //! Nothing here is browser-specific. The transport is one small trait's
-//! worth of behavior, and its two implementations are a thread ([`native`])
-//! and a worker ([`crate::web::worker`]), the latter living with the rest of
+//! worth of behavior, and its two implementations are a thread (`native`)
+//! and a worker (`crate::web::worker`), the latter living with the rest of
 //! the browser layer, not here. This module knows only that an outcome arrives
 //! later.
 

@@ -362,7 +362,7 @@ pub fn export_frame_png(ctx: &GpuContext, frame: &FrameView, path: &Path) -> Res
 ///
 /// `steps` is separate from `time` because a particle population is stepped, not
 /// evaluated: the caller owns how far it has already gone. See
-/// [`crate::display::steps_at`].
+/// `crate::display::steps_at`.
 pub fn render_at(
   ctx: &GpuContext,
   renderer: &mut Renderer,
