@@ -122,48 +122,32 @@ Each core crate carries its own README and is published on its own.
 
 ## Off to the side
 
-Three crates are deliberately not part of that ladder,
-because none of them models any part of FEEC.
+Two crates are deliberately not part of that ladder,
+because neither models any part of FEEC.
 
 - **[`iterative`](crates/iterative/README.md)**
   sits below the mathematics: Krylov methods, preconditioners and smoothers
   around one object, an approximate inverse.
   It depends on nothing but sparse matrices
   and would serve any PDE code equally well.
-- **`realize`** and **`studio`** sit above it,
-  consuming everything and consumed by nothing:
-  `realize` is where intrinsic data becomes extrinsic
-  (the grade reduction, the dimension reduction, the file formats, no graphics),
-  and `studio` is the viewer.
-  Both are unpublished, and the core path may not reach either.
+- **`realize`** sits above it, consuming everything and consumed by nothing:
+  it is where intrinsic data becomes extrinsic
+  (the grade reduction, the dimension reduction, the file formats, no graphics).
+  It is unpublished, and the core path may not reach it.
 
-## Visualization
-
-`studio` is the interactive viewer for the engine:
-a wgpu/winit/egui application for inspecting meshes, simplicial manifolds, cochains
-and the PDE solutions computed on them.
-It runs natively, and in the browser via WebAssembly and WebGPU with the solve running client-side,
-so the same viewer is reachable without a toolchain at [lwirth.com/formoniq](https://lwirth.com/formoniq).
-It sits at the top of the stack, depends downward on `formoniq` and below,
-and is kept off the core build's critical path (excluded from the workspace's default members),
-so a core change is never gated on the graphics stack.
+## Extrinsic output
 
 The engine is intrinsic-first and needs no embedding.
-A viewer needs one, because nothing reaches the screen until a point has a position.
-`studio` is therefore the deliberate consumer of that extrinsic carve-out.
-It is kept intrinsic as far as it can be:
-a curve integrator, for instance, works in the barycentric charts of the atlas
-and crosses between cells through their affine transition maps,
-committing to an ambient position only at the last step.
-The embedding enters at two named seams.
-The `Scene` carries the engine's own types (`Complex`, `MeshCoords`, `Cochain`)
-rather than a lossy export,
-so coloring, displacement and the choice of render mark stay decisions made on the real object.
-The bake then reduces a complex to what a rasterizer draws:
+Anything looked at needs one, because nothing reaches a screen or an interchange file
+until a point has a position.
+`realize` is the deliberate consumer of that extrinsic carve-out,
+and the embedding enters at one named seam, the bake:
+it reduces a complex to what a rasterizer draws,
 simplices of dimension ≤ 2 embedded in R³, with winding and position made explicit.
-Downstream of the bake there are no FEEC types, only ambient geometry.
+Downstream of the bake there are no FEEC types, only ambient geometry,
+and the exporters (`.vtu` for ParaView, `.obj`/`.mdd` for a mesh) are leaves that consume it.
 
-Ambient dimension is fixed at 3, the native space of the GPU,
+Ambient dimension is fixed at 3,
 while intrinsic dimension and form grade stay general within it.
 Two reductions carry this.
 Form grade reduces to a render mark through the reduced grade min(k, n−k):
@@ -171,10 +155,14 @@ a scalar density coloring, a glyph or particle line field, a standing-wave displ
 Intrinsic dimension reduces to a render primitive min(n, 2):
 a surface to wound triangles, a curve to segments, a point set to points,
 and a solid to the 2-simplices of its boundary.
-One segment pipeline then serves the wireframe overlay,
-a line field's traced ribbons and a 1-manifold's own cells,
-distinguished only by material data.
-`crates/studio/CLAUDE.md` documents the design in full.
+`crates/realize/CLAUDE.md` documents the design in full.
+
+The interactive viewer over these primitives is a separate project,
+[formoniq-studio](https://github.com/luiswirth/formoniq-studio):
+a wgpu/winit/egui application that runs natively and in the browser
+via WebAssembly and WebGPU, with the solve running client-side.
+It depends on this repository and nothing here depends on it,
+so the graphics stack is never in the engine's build.
 
 ## Origin
 

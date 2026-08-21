@@ -334,7 +334,7 @@ impl BakedMesh {
   /// rather than a case to exclude.
   ///
   /// Ambient geometry on the bake, which is exactly what a bake is for and what
-  /// `studio`'s extrinsic license covers. Against the undisplaced positions:
+  /// the extrinsic license covers. Against the undisplaced positions:
   /// the standing wave is a vertex-shader displacement, and the caller wants
   /// the point of the object, not of the frame it happened to be caught in.
   pub fn raycast(&self, origin: na::Vector3<f32>, dir: na::Vector3<f32>) -> Option<f32> {

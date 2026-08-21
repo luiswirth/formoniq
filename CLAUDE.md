@@ -78,23 +78,21 @@ a thing belongs where it is part of the crate's answer to this.
 | `iterative` | iterative solvers, and nothing else |
 | `formoniq` | the FEM engine, which bundles all of the above |
 | `realize` | intrinsic data made extrinsic: the grade reduction, the dimension reduction, the file formats |
-| `studio` | the visualizer |
 
 **Three tiers, and the difference is real.**
 The first eight are *the mathematics*, each a standalone mathematical object,
 published as such and usable by a reader who has never heard of FEEC.
 `formoniq` is *the engine*, the one crate whose subject is FEEC itself.
-The last three are not core, for two opposite reasons:
+The last two are not core, for two opposite reasons:
 `iterative` sits below the mathematics and could serve any PDE code,
 knowing nothing of meshes, forms or geometry,
-while `realize` and `studio` sit above it, consuming everything and consumed by nothing.
-Neither group models any part of FEEC,
-which is why `studio` is out of `default-members`,
-why `realize` and `studio` are unpublished
+while `realize` sits above it, consuming everything and consumed by nothing.
+Neither models any part of FEEC,
+which is why `realize` is unpublished
 and why neither may be reached from the core path.
 
 Crate ladder, each layer adding exactly one thing:
-`multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq → realize → studio`,
+`multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq → realize`,
 with `coorder` and `simplicial` joining from the side:
 `coorder` is foundational, and `simplicial` sits beside `metric`
 as the manifold `regge` adds a geometry to.
@@ -143,7 +141,6 @@ joining the ladder only where `formoniq` consumes it.
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner, the generic `VCycle` over a hierarchy of `Level`s and the additive `AuxiliarySpace` preconditioner (both problem-agnostic: the FEEC wiring is `formoniq`'s). `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Real and complex are one implementation: the inner product is Hermitian and the restriction an adjoint, while the tolerances and MINRES's rotation coefficients stay in the real subfield. Backend is `nalgebra-sparse` alone, no faer |
 | `formoniq`   | the FEM engine                      | `assemble` (rayon-parallel over cells, the face enumeration as local-to-global map) and its matrix-free peer `matfree::ElementOperator`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `fe::` (the three maps into the Whitney space, $W$, $R$ and the $L^2$ projection, and the error against an exact form), `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver; the factorizations are field-generic, nalgebra and faer agreeing on `num_complex`, while the eigensolver is real because the pencils it is asked for are), `harmonic::` (the harmonic space as the $L^2$ projection of integral cohomology generators, in its two readings, the integral basis tied to the holes and the mass-orthonormal one the saddle point assumes), `whitney_complex::HilbertComplex` and its implementations, the first-order `WhitneyComplex` with the `Boundary` and `Relative` variants, `hodge::HodgeBlocks` (the masses and coboundaries around a grade, which every problem builds its block system from), `multigrid::` (the geometric V-cycle over a `RefinementTower`, Galerkin coarse operators) and `hx::` (Hiptmair-Xu auxiliary-space preconditioning, uniform in dimension and grade), `problems::` (elliptic, dirac, heat, wave, ...) |
 | `realize`    | intrinsic data made extrinsic       | `reduce::` (the grade reduction, a $k$-form to the scalar or vector of grade $min(k, n-k)$), `Surface`/`BakedMesh` (the dimension reduction to a render primitive and its $RR^3$ bake), the mark bakes (`glyph`, `advect`, `deposit`, `volume`), `reach::` (the fold-safety bound of an $RR^3$ offset), `io::` (the `.vtu`/`.obj`/`.mdd` exporters and readers). No graphics dependency |
-| `studio`     | the visualizer                      | `Scene` (the engine↔viewer seam, carrying `Complex`/`MeshCoords`/`Cochain`), the gallery's `MeshSource × Study` product, a wgpu/winit/egui renderer over `realize`'s primitives, native and wasm |
 
 No crate exists solely to hold a shared type alias.
 `coorder` is the contrasting case, and it is what makes the rule a rule rather than a size limit:
@@ -155,7 +152,7 @@ so `metric`, `coorder`, `multialgebra` and `glatt`
 each declare their own directly from `nalgebra` rather than depending on anything for them.
 `simplicial` is the lowest crate that needs *sparse* matrices (its boundary operators),
 so that is where `CsrMatrix`/`CooMatrix` and the extension traits built on them (`CooMatrixExt`) live,
-reused upward by `regge`, `derham`, `formoniq` and `studio`
+reused upward by `regge`, `derham` and `formoniq`
 because they already depend on `simplicial` for real reasons.
 `faer` and the eigensolver go one further:
 they are needed only in `formoniq`, the one crate that runs a *direct* solve or an eigenproblem,
@@ -173,28 +170,24 @@ are independent objects, so neither depends on the other.
 Their one relation, pulling continuum data onto the mesh and the error that costs,
 is the join, and it lives in `derham`, the crate above both.
 
-`realize` and `studio` sit at the top as the I/O-and-visualization carve-out invariant 2 draws,
-and they are two crates rather than one because the carve-out has two halves
-that need different things.
-`realize` is where intrinsic data *becomes* extrinsic:
+`realize` sits at the top as the I/O-and-visualization carve-out invariant 2 draws.
+It is where intrinsic data *becomes* extrinsic:
 it spends the embedding, reduces the dimension to a drawable primitive
 and the grade to a scalar or a vector,
 and it is a pure data transformation with no GPU, no window and no rasterizer.
-`studio` is the renderer, and only it needs those.
-
-The split is what lets a headless run write a solution to disk
-with no graphics stack in the build,
-and it is why a `.vtu` for ParaView is not reached through the viewer.
+A renderer is a consumer of it and lives outside this repository,
+which is what keeps the graphics stack out of the engine's build entirely
+and why a `.vtu` for ParaView is not reached through a viewer.
 The reductions are *shared*, never duplicated:
-a mark the viewer draws and an array an exporter writes
+a mark a viewer draws and an array an exporter writes
 are the same reading of the same field,
-which is exactly what makes a disagreement between the viewer and an external tool
-a bug in one place instead of a drift between two.
+which is exactly what makes a disagreement between the two
+a bug in one place instead of a drift between them.
 
-Both are extrinsic by necessity where the core is intrinsic by discipline,
-they depend downward on `formoniq` and below, nothing depends on them,
-and `crates/studio/CLAUDE.md` carries what that inversion means.
-The parent's invariants still bind them, they are only read from the extrinsic side.
+It is extrinsic by necessity where the core is intrinsic by discipline,
+it depends downward on `formoniq` and below, nothing depends on it,
+and `crates/realize/CLAUDE.md` carries what that inversion means.
+The parent's invariants still bind it, they are only read from the extrinsic side.
 
 **Concepts float up.**
 A concept belongs in the lowest crate (or module) that can express it
@@ -945,14 +938,6 @@ cargo doc --workspace --no-deps        # doc comments carry the math: no warning
 
 CI runs the same four on every push and pull request.
 A red build is a broken commit, not a flaky one.
-
-`studio` is excluded from the workspace's `default-members`,
-so a bare `cargo test`/`clippy`/`doc` (no `--workspace`)
-skips the wgpu/winit/egui stack and covers the core crates alone, the fast inner loop.
-The `--workspace` forms above are the full bar
-and are what a cross-cutting commit must pass.
-CI splits the core checks (default members) from a separate `studio` job
-so a core change is not gated on the graphics stack.
 
 The examples are the end-to-end check and are run by hand:
 
