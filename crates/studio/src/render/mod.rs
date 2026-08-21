@@ -73,14 +73,14 @@ pub const DEFAULT_SSAA_SCALE: u32 = 2;
 /// followed by the body. Concatenated because WGSL has no `#include`; the shader
 /// test validates this same concatenation, so a preamble/body mismatch fails
 /// `cargo test` rather than pipeline creation.
-fn shader_source(body: &str) -> String {
+pub fn shader_source(body: &str) -> String {
   format!("{PREAMBLE}\n{body}")
 }
 
 /// The preamble alone: every shader's prefix, and a WGSL module in its own
 /// right, which is what lets the uniform structs it declares be laid out and
 /// checked against their Rust mirrors without a pass around them.
-const PREAMBLE: &str = include_str!("preamble.wgsl");
+pub const PREAMBLE: &str = include_str!("preamble.wgsl");
 
 /// The `SSAA_SCALE` declaration prepended to the one shader that reads it (the
 /// downsample resolve, whose box filter divides by it). Baked as a plain `const`
@@ -89,7 +89,7 @@ const PREAMBLE: &str = include_str!("preamble.wgsl");
 /// which WebGPU on WebKit fails to specialize ("Vertex library failed
 /// creation"). The factor is fixed for a pipeline's life anyway, so nothing is
 /// lost by baking it at shader-build instead of pipeline-build.
-fn ssaa_prelude(ssaa: u32) -> String {
+pub fn ssaa_prelude(ssaa: u32) -> String {
   format!("const SSAA_SCALE: i32 = {ssaa};\n")
 }
 
@@ -232,125 +232,5 @@ impl MarkPipeline<'_> {
       multiview_mask: None,
       cache: None,
     })
-  }
-}
-
-#[cfg(test)]
-mod tests {
-  /// Every WGSL source in this module parses and validates against naga's own
-  /// frontend, the one wgpu itself uses to build a pipeline, so a broken
-  /// shader fails `cargo test` instead of the pipeline-creation panic at
-  /// startup a syntax or type error would otherwise cause. Validated as the
-  /// preamble/body concatenation the pipelines are actually built from, never
-  /// the body alone.
-  #[test]
-  fn shaders_parse_and_validate() {
-    let bodies: &[(&str, &str)] = &[
-      ("fill.wgsl", include_str!("fill.wgsl")),
-      ("segments.wgsl", include_str!("segments.wgsl")),
-      ("points.wgsl", include_str!("points.wgsl")),
-      ("glyph.wgsl", include_str!("glyph.wgsl")),
-      ("downsample.wgsl", include_str!("downsample.wgsl")),
-      ("advect.wgsl", include_str!("advect.wgsl")),
-      ("bloom.wgsl", include_str!("bloom.wgsl")),
-      ("deposit.wgsl", include_str!("deposit.wgsl")),
-      ("volume.wgsl", include_str!("volume.wgsl")),
-    ];
-    for (name, body) in bodies {
-      // The downsample body reads `SSAA_SCALE`, which the pipeline bakes in as a
-      // `const` (see `ssaa_prelude`); validate the same composed source.
-      let composed = if *name == "downsample.wgsl" {
-        format!("{}{body}", super::ssaa_prelude(super::DEFAULT_SSAA_SCALE))
-      } else {
-        (*body).to_string()
-      };
-      let source = super::shader_source(&composed);
-      let module = naga::front::wgsl::parse_str(&source)
-        .unwrap_or_else(|e| panic!("{name} failed to parse: {e}"));
-      naga::valid::Validator::new(
-        naga::valid::ValidationFlags::all(),
-        naga::valid::Capabilities::all(),
-      )
-      .validate(&module)
-      .unwrap_or_else(|e| panic!("{name} failed to validate: {e}"));
-    }
-  }
-
-  /// The dispatch's workgroup count is derived from
-  /// [`advect::WORKGROUP_SIZE`], so it is the shader's own `@workgroup_size`
-  /// that decides whether the population is covered. A larger declared size
-  /// leaves the tail of the population unstepped, which reads as a patch of
-  /// particles frozen in the flow rather than as a failure, so the two are
-  /// checked against each other rather than against a written number.
-  #[test]
-  fn advect_workgroup_size_matches_dispatch() {
-    let source = super::shader_source(include_str!("advect.wgsl"));
-    let module = naga::front::wgsl::parse_str(&source).expect("advect failed to parse");
-    let entry = module
-      .entry_points
-      .iter()
-      .find(|e| e.name == "advect")
-      .expect("advect has no `advect` entry point");
-    assert_eq!(entry.workgroup_size, [super::advect::WORKGROUP_SIZE, 1, 1]);
-  }
-
-  /// Every uniform's WGSL struct has the size its `#[repr(C)]` Rust mirror
-  /// does, as naga lays it out, the same computation wgpu validates a bind
-  /// group against.
-  ///
-  /// The two languages do not share an alignment rule (a WGSL vector is
-  /// 16-aligned. A Rust array is aligned as its element), so mirrors it field"
-  /// for field" is a claim about bytes that reading the two declarations
-  /// side by side does not check. A mismatch is otherwise invisible until a
-  /// draw call fails validation at runtime, which is exactly the error this
-  /// test exists to turn into a compile-time-adjacent one.
-  #[test]
-  fn uniform_layouts_match_wgsl() {
-    use naga::proc::Layouter;
-
-    let module = naga::front::wgsl::parse_str(super::PREAMBLE).expect("preamble failed to parse");
-    naga::valid::Validator::new(
-      naga::valid::ValidationFlags::all(),
-      naga::valid::Capabilities::all(),
-    )
-    .validate(&module)
-    .expect("preamble failed to validate");
-
-    let mut layouter = Layouter::default();
-    layouter
-      .update(module.to_ctx())
-      .expect("preamble failed to lay out");
-
-    let expected: &[(&str, usize)] = &[
-      ("Frame", size_of::<super::uniform::FrameUniform>()),
-      (
-        "SurfaceMaterial",
-        size_of::<super::uniform::SurfaceMaterial>(),
-      ),
-      (
-        "SegmentMaterial",
-        size_of::<super::uniform::SegmentMaterial>(),
-      ),
-      ("GlyphMaterial", size_of::<super::uniform::GlyphMaterial>()),
-      ("Post", size_of::<super::uniform::PostUniform>()),
-      ("Particle", size_of::<super::advect::Particle>()),
-      ("Cell", size_of::<super::advect::Cell>()),
-      ("AdvectParams", size_of::<super::advect::AdvectParams>()),
-      ("DepositParams", size_of::<super::deposit::DepositParams>()),
-      ("VolumeMaterial", size_of::<super::volume::VolumeMaterial>()),
-    ];
-
-    for (name, rust_size) in expected {
-      let (handle, _) = module
-        .types
-        .iter()
-        .find(|(_, ty)| ty.name.as_deref() == Some(name))
-        .unwrap_or_else(|| panic!("preamble declares no struct `{name}`"));
-      let wgsl_size = layouter[handle].size as usize;
-      assert_eq!(
-        wgsl_size, *rust_size,
-        "`{name}`: WGSL lays it out at {wgsl_size} bytes, Rust at {rust_size}"
-      );
-    }
   }
 }
