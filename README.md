@@ -19,7 +19,7 @@ assembled from the Regge lengths with the embedding forgotten.
 Research code, under active development.
 
 An interactive build of the viewer runs in the browser, with no installation,
-at [lwirth.com/formoniq](https://lwirth.com/formoniq):
+at [lwirth.com/formoniq-studio](https://lwirth.com/formoniq-studio):
 meshes, cochains and the PDE solutions computed on them,
 solved client-side via WebAssembly and WebGPU.
 
@@ -118,7 +118,7 @@ neither of which needs a differential form.
 and `glatt` is continuum differential geometry.
 FEEC is what `derham` and `formoniq` build on top,
 not something the layers below are entangled with.
-Each core crate carries its own README and is published on its own.
+Each core crate carries its own README.
 
 ## Off to the side
 
@@ -167,10 +167,9 @@ The current version is a rebuild toward the more general library described above
 
 ## Getting started
 
-The crates are published on [crates.io](https://crates.io/crates/formoniq),
+The engine is published on [crates.io](https://crates.io/crates/formoniq),
 with documentation on [docs.rs](https://docs.rs/formoniq).
-Depend on the engine with `cargo add formoniq`,
-or on any lower crate on its own (`cargo add multialgebra`, `cargo add simplicial`, ...).
+Depend on it with `cargo add formoniq`.
 
 To build from source:
 

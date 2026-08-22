@@ -50,16 +50,16 @@ are the end-to-end convergence and spectrum checks.
 ## Place in the ecosystem
 
 `formoniq` is the engine at the top of a stack of standalone crates,
-each of which is a mathematical object in its own right and published as one:
+each of which is a mathematical object in its own right:
 [multiindex](https://crates.io/crates/multiindex) (colex combinatorics),
-[multialgebra](https://crates.io/crates/multialgebra) (the tensor power and its two quotients),
-[metric](https://crates.io/crates/metric) (metrics on a tangent space),
+multialgebra (the tensor power and its two quotients),
+metric (metrics on a tangent space),
 [coorder](https://crates.io/crates/coorder) (typed affine coordinates),
 [simplicial](https://crates.io/crates/simplicial) (the simplicial manifold),
-[regge](https://crates.io/crates/regge) (its geometry),
+regge (its geometry),
 [glatt](https://crates.io/crates/glatt) (the smooth continuum)
 and [derham](https://crates.io/crates/derham) (discrete differential forms).
-Solving is delegated to [iterative](https://crates.io/crates/iterative),
+Solving is delegated to iterative,
 which knows nothing of any of the above.
 See the [repository](https://github.com/luiswirth/formoniq) for the full picture.
 
