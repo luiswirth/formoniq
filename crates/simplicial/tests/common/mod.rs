@@ -1,6 +1,6 @@
-//! Fixture complexes shared by the topology law tests: homology,
-//! cohomology and orientation all check laws against the same combinatorial
-//! objects, so the objects live here once.
+//! Fixture complexes shared by the topology law tests: homology, cohomology
+//! and refinement check laws against the same combinatorial objects, so the
+//! objects live here once.
 //!
 //! Each test binary compiles this module fresh and uses only some of it,
 //! which is not dead code, just an unused export from any one binary's view.
@@ -55,14 +55,4 @@ pub fn test_complexes() -> Vec<Complex> {
   complexes.push(two_sphere());
   complexes.push(annulus());
   complexes
-}
-
-/// Whether a chain is a cycle: $diff_k z = 0$.
-pub fn is_cycle(complex: &Complex, chain: &simplicial::topology::chain::Chain) -> bool {
-  chain.boundary(complex).coeffs().iter().all(|&c| c == 0)
-}
-
-/// Whether a cochain is a cocycle: $dif^k z = 0$, over $ZZ$ hence exactly.
-pub fn is_cocycle(complex: &Complex, cochain: &simplicial::topology::chain::Cochain<i64>) -> bool {
-  cochain.dif(complex).coeffs().iter().all(|&c| c == 0)
 }

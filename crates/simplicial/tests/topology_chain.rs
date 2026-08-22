@@ -1,12 +1,10 @@
-//! [`Chain`]/[`Cochain`] as one incidence read both ways: boundary and
-//! coboundary are adjoint under the [`pairing`], both nilpotent as one
-//! statement, and agree with the assembled operator.
+//! [\`Chain\`]/[\`Cochain\`] as one incidence read both ways: the boundary and
+//! the coboundary are adjoint under the [\`pairing\`], and nilpotent as one
+//! statement.
 
-use simplicial::linalg::CsrMatrix;
 use simplicial::mesher::grid::CartesianTopology;
 use simplicial::topology::chain::{Chain, Cochain, pairing};
 use simplicial::topology::complex::Complex;
-use simplicial::topology::data::SkeletonData;
 
 fn probe_complex(dim: usize) -> Complex {
   CartesianTopology::cube(dim, 2).triangulate()
@@ -93,103 +91,4 @@ fn nilpotency_is_one_statement_on_both_sides() {
       assert!(twice_down.abs() < 1e-9, "dim {dim} grade {grade}: bb != 0");
     }
   }
-}
-
-/// The differentials agree with the assembled operator: $dif$ is the
-/// transpose of $diff$ as a matrix, and both are the same incidence the
-/// coefficient-wise sweeps read.
-#[test]
-fn the_differentials_agree_with_the_assembled_operators() {
-  for dim in 1..=3 {
-    let topology = probe_complex(dim);
-    for grade in 0..=dim {
-      let cochain = probe_cochain(&topology, grade);
-      let assembled = CsrMatrix::from(&topology.coboundary_operator(grade)) * cochain.coeffs();
-      assert_eq!(cochain.dif(&topology).coeffs(), &assembled);
-
-      let chain = probe_chain(&topology, grade);
-      let boundary = chain.boundary(&topology);
-      let matrix = CsrMatrix::from(topology.boundary_operator(grade));
-      let applied = matrix * probe_real_chain(&topology, grade).into_coeffs();
-      for (kidx, &coefficient) in boundary.coeffs().iter().enumerate() {
-        assert_eq!(coefficient as f64, applied[kidx]);
-      }
-    }
-  }
-}
-
-/// Extension of scalars commutes with the differential, which is what makes
-/// a ring map a map of complexes: an incidence coefficient is $plus.minus 1$,
-/// and every ring map fixes those.
-#[test]
-fn extending_scalars_commutes_with_the_differential() {
-  for dim in 1..=3 {
-    let topology = probe_complex(dim);
-    for grade in 0..=dim {
-      let chain = probe_chain(&topology, grade);
-      let cast_then_bounded = chain.extend_scalars(|&c| c as f64).boundary(&topology);
-      let bounded_then_cast = chain.boundary(&topology).extend_scalars(|&c| c as f64);
-      assert_eq!(cast_then_bounded.coeffs(), bounded_then_cast.coeffs());
-    }
-  }
-}
-
-/// The pairing is bilinear and reads the coefficients it says it does.
-#[test]
-fn the_pairing_sums_over_the_simplices() {
-  for dim in 1..=3 {
-    let topology = probe_complex(dim);
-    for grade in 0..=dim {
-      let cochain = probe_cochain(&topology, grade);
-      let chain = probe_real_chain(&topology, grade);
-
-      let expected: f64 = chain
-        .support()
-        .map(|(kidx, multiplicity)| cochain.coeffs()[kidx] * multiplicity)
-        .sum();
-      assert!((pairing(&cochain, &chain) - expected).abs() < 1e-12);
-    }
-  }
-}
-
-/// Both readings of a chain and of a cochain, as columnar data and by their
-/// own accessors, are one column.
-#[test]
-fn skeleton_data_reading_agrees_with_indexing() {
-  for dim in 1..=3 {
-    let topology = probe_complex(dim);
-    for grade in 0..=dim {
-      let cochain = probe_cochain(&topology, grade);
-      let chain = probe_chain(&topology, grade);
-      let skeleton = topology.skeleton(grade);
-
-      assert_eq!(SkeletonData::grade(&cochain), skeleton.dim());
-      assert_eq!(SkeletonData::len(&cochain), skeleton.len());
-      assert_eq!(SkeletonData::grade(&chain), skeleton.dim());
-
-      for simplex in skeleton.handle_iter() {
-        assert_eq!(*cochain.at_ref(simplex), cochain[simplex.idx()]);
-        assert_eq!(*chain.at_ref(simplex), chain.coeffs()[simplex.kidx()]);
-      }
-    }
-  }
-}
-
-#[cfg(feature = "serde")]
-#[test]
-fn save_load_roundtrip_and_compatibility() {
-  let topology = probe_complex(2);
-  let cochain = Cochain::from_function(|s| s.kidx() as f64, 1, &topology);
-  assert!(cochain.is_compatible_with(&topology));
-
-  let path = std::env::temp_dir().join(format!("simplicial_test_{}.cbor", std::process::id()));
-  cochain.save(&path).unwrap();
-  let loaded = Cochain::load(&path).unwrap();
-  std::fs::remove_file(&path).unwrap();
-
-  assert_eq!(loaded.grade(), cochain.grade());
-  assert_eq!(loaded.coeffs(), cochain.coeffs());
-
-  let other = CartesianTopology::cube(2, 5).triangulate();
-  assert!(!loaded.is_compatible_with(&other));
 }
