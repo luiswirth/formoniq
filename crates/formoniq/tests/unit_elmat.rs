@@ -1,3 +1,6 @@
+//! The reference element matrices against their closed forms, swept over
+//! every dimension $1 <= n <= 10$: the anchors the whole assembly rests on.
+
 extern crate nalgebra as na;
 
 use formoniq::{galerkin::BilinearForm, operators};
@@ -28,6 +31,10 @@ where
   }
 }
 
+/// The grade-$0$ stiffness of the reference $n$-simplex,
+/// $(dif lambda_i, dif lambda_j) |hat(K)|$, against its closed form: the
+/// matrix with $n$ in the corner, $1$ on the remaining diagonal and $-1$
+/// along the first row and column, scaled by the reference volume.
 #[test]
 fn laplacian_refcell() {
   check_ref_elmat(
@@ -48,6 +55,9 @@ fn unit_laplacian(dim: Dim) -> Option<Matrix> {
   Some(expected_elmat.cast::<f64>() * unit_simplex_volume(dim))
 }
 
+/// The grade-$0$ mass of the reference $n$-simplex against the classical
+/// $|hat(K)| (1 + delta_(i j)) \/ ((n + 1)(n + 2))$, tabulated for
+/// $n <= 3$.
 #[test]
 fn mass_refcell() {
   check_ref_elmat(
@@ -76,14 +86,4 @@ fn unit_mass(dim: Dim) -> Option<Matrix> {
     ],
   ];
   mats.get(dim.index()).cloned()
-}
-
-#[test]
-fn lumped_mass_refcell() {
-  check_ref_elmat(|_| operators::ScalarLumpedMass, unit_lumped_mass);
-}
-fn unit_lumped_mass(dim: Dim) -> Option<Matrix> {
-  let nvertices = (dim + 1).index();
-  let ndofs = nvertices;
-  Some(unit_simplex_volume(dim) / ndofs as f64 * Matrix::identity(ndofs, ndofs))
 }

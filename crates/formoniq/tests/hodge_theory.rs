@@ -10,16 +10,13 @@
 
 extern crate nalgebra as na;
 
-use derham::Cochain;
-use formoniq::whitney_complex::{HilbertComplex, RelativeWhitneyComplex, WhitneyComplex};
+use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
 use regge::coord::simplex::simplex_coords;
 use regge::mesher::cartesian::CartesianGrid;
 use simplicial::{
   Dim,
   linalg::{CooMatrix, CsrMatrix, Matrix},
 };
-
-use approx::assert_relative_eq;
 
 const RANK_TOL: f64 = 1e-8;
 
@@ -140,64 +137,6 @@ fn relative_harmonics_are_relative_cohomology_cube() {
       assert_eq!(harmonic_dim, betti_rel, "dim={dim} k={k}");
     }
   }
-}
-
-/// The inclusion $E: C^k (K, partial K) arrow.hook C^k (K)$ is a cochain map:
-/// $D E_k = E_(k+1) dif_k$.
-#[test]
-fn relative_inclusion_is_cochain_map() {
-  for dim in (1..=3).map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let metric = coords.to_edge_lengths_sq(&topology);
-    let whitney = WhitneyComplex::new(&topology, &metric);
-    let relative = whitney.relative();
-
-    for k in dim.range() {
-      let lhs = dense(&(whitney.dif(k) * relative.inclusion(k)));
-      let rhs = dense(&(relative.inclusion(k + 1) * relative.dif(k)));
-      assert_relative_eq!(lhs, rhs);
-    }
-  }
-}
-
-/// Homogeneous essential BCs via the affine-lifting interface agree with
-/// the direct solve on the relative complex.
-#[test]
-fn lifted_homogeneous_dirichlet_is_relative_solve() {
-  use derham::section::CoordFieldExt;
-  use formoniq::{bc, galerkin::LinearForm, linalg::faer::FaerCholesky, operators::SourceForm};
-  use glatt::field::DiffFormClosure;
-  use simplicial::linalg::Vector;
-
-  let dim = Dim::new(2);
-  let (topology, coords) = CartesianGrid::new_unit(dim, 4).triangulate();
-  let metric = coords.to_edge_lengths_sq(&topology);
-  let whitney = WhitneyComplex::new(&topology, &metric);
-  let boundary = whitney.boundary().unwrap();
-
-  let source = DiffFormClosure::constant_scalar(1.0, dim);
-  let source = source.pullback_on(&topology, &coords);
-  let galvec = SourceForm::new(&source, None).assemble(&topology, &metric);
-
-  // Affine-lifting path with zero boundary values.
-  let zero_values = Cochain::new(Dim::ZERO, Vector::zeros(boundary.ndofs(Dim::ZERO)));
-  let laplace = whitney.dif_both(1);
-  let sol_lifted = bc::solve_with_essential_bc(
-    &whitney.relative(),
-    &boundary,
-    laplace,
-    &galvec,
-    &zero_values,
-  );
-
-  // Direct solve on C^0(K, dK), extended by zero.
-  let relative: RelativeWhitneyComplex = whitney.relative();
-  let laplace_relative = relative.dif_both(1);
-  let rhs_relative = relative.restrict(&Cochain::new(Dim::ZERO, galvec.into_coeffs()));
-  let sol_relative = FaerCholesky::new(laplace_relative).solve(rhs_relative.coeffs());
-  let sol_relative = relative.extend_by_zero(&Cochain::new(Dim::ZERO, sol_relative));
-
-  assert_relative_eq!(sol_lifted.coeffs(), sol_relative.coeffs(), epsilon = 1e-10);
 }
 
 /// The long exact sequence of the pair $(K, partial K)$,

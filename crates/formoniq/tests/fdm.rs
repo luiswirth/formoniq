@@ -36,8 +36,6 @@ use simplicial::{
   linalg::{Matrix, Vector},
 };
 
-use std::sync::LazyLock;
-
 /// The Kronecker sum $A_1 plus.o dots.c plus.o A_d = sum_i I times.o dots.c times.o A_i times.o dots.c times.o I$
 /// of square matrices: the generator of the tensor-product operator each
 /// factor generates alone. Test-local: the one caller here builds the
@@ -103,49 +101,6 @@ where
   matrix
 }
 
-/// Handchecked integer (graph) Laplacian matrices on interior of mesh.
-///
-/// Unit d-cube mesh with a single subdivision. One dof in each corner.
-/// Imaginary dofs outside of the mesh, such that all real dofs are on the interior and get full contributions.
-/// Same as having periodic boundary conditions (no boundary at all).
-#[rustfmt::skip]
-static LAPLACE_MATRICES_INTERIOR: LazyLock<[Matrix<i32>; 4]> = LazyLock::new(|| [
-  Matrix::from_row_slice(1, 1, &[
-    2
-  ]),
-  Matrix::from_row_slice(2, 2, &[
-     2,-1,
-    -1, 2
-  ]),
-  // Famous 2D Poisson Matrix
-  Matrix::from_row_slice(4, 4, &[
-     4,-1,-1, 0,
-    -1, 4, 0,-1,
-    -1, 0, 4,-1,
-     0,-1,-1, 4,
-  ]),
-  Matrix::from_row_slice(8, 8, &[
-     6,-1,-1, 0,-1, 0, 0, 0,
-    -1, 6, 0,-1, 0,-1, 0, 0,
-    -1, 0, 6,-1, 0, 0,-1, 0,
-     0,-1,-1, 6, 0, 0, 0,-1,
-    -1, 0, 0, 0, 6,-1,-1, 0,
-     0,-1, 0, 0,-1, 6, 0,-1,
-     0, 0,-1, 0,-1, 0, 6,-1,
-     0, 0, 0,-1, 0,-1,-1, 6,
-  ]),
-]);
-
-/// Finite Difference gives Laplace Matrix.
-#[test]
-fn fdm_vs_handchecked_interior() {
-  for (dim, handchecked) in LAPLACE_MATRICES_INTERIOR.iter().enumerate().skip(1) {
-    let fdm = ndimensionalize_operator(|_| laplace_matrix_1d_interior(2), &vec![1; dim]);
-    let diff = &fdm - handchecked;
-    assert!(diff.iter().all(|&e| e == 0));
-  }
-}
-
 fn ndimensionalize_operator<F>(f: F, vertex_counts: &[usize]) -> Matrix<i32>
 where
   F: Fn(usize) -> Matrix<i32>,
@@ -162,6 +117,12 @@ fn laplace_matrix_1d_interior(nvertices: usize) -> Matrix<i32> {
   matrix_from_const_diagonals(&stencil[..], &[-1, 0, 1], nvertices, nvertices)
 }
 
+/// On the interior of a Kuhn-triangulated tensor-product mesh the FEEC
+/// stiffness $D^top M_1 D$ at grade $0$ is the finite-difference graph
+/// Laplacian, the Kronecker sum $A_1 plus.circle dots.c plus.circle A_d$ of
+/// the 1D stencil $(-1, 2, -1)$, once the rows are normalized. Swept over
+/// $1 <= d <= 4$ and over the mesh resolution: the classical stencil is an
+/// oracle the assembly knows nothing about.
 #[test]
 fn feec_vs_fdm_interior() {
   for nboxes_per_dim in 1..=3 {

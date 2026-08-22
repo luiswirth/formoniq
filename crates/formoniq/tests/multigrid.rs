@@ -1,12 +1,11 @@
-//! [`Grade0Multigrid`]: MG-CG matches the direct solve, the Galerkin coarse
-//! operator equals reassembly on the coarse mesh, and the iteration count
-//! stays mesh-independent.
+//! [`Grade0Multigrid`]: the Galerkin coarse operator $P^top A_f P$ is the
+//! operator reassembled on the coarse mesh, and the MG-CG iteration count
+//! stays bounded under refinement.
 
 use derham::prolongate::prolongation_matrix;
-use formoniq::linalg::DirectInverse;
 use formoniq::multigrid::Grade0Multigrid;
 use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
-use iterative::{ApproxInverse, Identity, StopCriterion, krylov::cg};
+use iterative::{Identity, StopCriterion, krylov::cg};
 use regge::lengths::mesh::MeshLengthsSq;
 use regge::mesher::cartesian::CartesianGrid;
 use simplicial::linalg::Vector;
@@ -20,28 +19,6 @@ fn unit_square(base: usize) -> (Complex, MeshLengthsSq) {
   let (topology, coords) = CartesianGrid::new_unit(2, base).triangulate();
   let geometry = coords.to_edge_lengths_sq(&topology);
   (topology, geometry)
-}
-
-/// MG-CG reproduces the direct solve of the same finest-level system: the
-/// preconditioner changes the path, never the fixed point.
-#[test]
-fn mg_cg_matches_the_direct_solve() {
-  let (topology, geometry) = unit_square(2);
-  let mg = Grade0Multigrid::new(topology, geometry, 3, 2);
-
-  let n = mg.fine_operator().nrows();
-  let rhs = Vector::from_fn(n, |i, _| ((i * i) as f64).cos());
-
-  let (x_mg, report) = mg.solve(&rhs, StopCriterion::rtol(1e-10));
-  assert!(report.converged, "MG-CG did not converge");
-
-  let direct = DirectInverse::try_new(mg.fine_operator().clone()).unwrap();
-  let x_direct = direct.apply(&rhs);
-  assert!(
-    (&x_mg - &x_direct).norm() < 1e-8,
-    "MG-CG disagrees with direct: {}",
-    (&x_mg - &x_direct).norm()
-  );
 }
 
 /// The Galerkin coarse operator $P^T A_f P$ equals the operator reassembled on

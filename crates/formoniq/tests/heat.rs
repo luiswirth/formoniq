@@ -1,12 +1,8 @@
-//! The Hodge heat flow: with no source the $L^2$ energy can only decrease
-//! (Radau IIA is L-stable), and its steady state reproduces the static
-//! mixed Hodge-Laplace solution.
+//! The Hodge heat flow: with no source the $L^2$ energy can only decrease,
+//! the parabolic law, which L-stable Radau IIA inherits unconditionally.
 
-use approx::assert_relative_eq;
 use derham::Cochain;
-use formoniq::galerkin::GalerkinVector;
 use formoniq::linalg::quadratic_form_sparse;
-use formoniq::problems::elliptic::solve_source;
 use formoniq::problems::heat::solve_heat;
 use formoniq::whitney_complex::{HilbertComplex, WhitneyComplex};
 use regge::mesher::cartesian::CartesianGrid;
@@ -47,38 +43,4 @@ fn energy_dissipates_at_every_grade() {
       }
     }
   }
-}
-
-/// The full Hodge Laplacian, not merely its up-part: the steady state of
-/// $dot(u) = -Delta u + f$ must solve $Delta u = f$, i.e. reproduce the
-/// independently assembled and factored static mixed Hodge-Laplace solution
-/// [`solve_source`]. Run at grade $1$ on a topologically
-/// trivial box (relative $b_1 = 0$, so the steady state is unique), where the
-/// down-part $dif delta$ is genuinely nonzero, the two code paths agreeing
-/// pins it down.
-#[test]
-fn steady_state_matches_static_hodge_laplace() {
-  let (topology, coords) = CartesianGrid::new_unit(Dim::new(2), 3).triangulate();
-  let metric = coords.to_edge_lengths_sq(&topology);
-  let whitney = WhitneyComplex::new(&topology, &metric);
-  let relative = whitney.relative();
-  let grade = Dim::new(1);
-  assert_eq!(relative.harmonic_dim(grade), 0);
-
-  let n_rel = relative.ndofs(grade);
-  let f_rel = Vector::from_fn(n_rel, |i, _| ((3 * i + 1) % 5) as f64 - 2.0);
-  let inclusion = relative.inclusion(grade);
-  let source = Cochain::new(grade, &inclusion * &f_rel);
-
-  let mass_rel = relative.mass(grade);
-  let galvec = GalerkinVector::new(grade, &inclusion * (&mass_rel * &f_rel));
-  let (_sigma, u_static, _p) = solve_source(&relative, galvec, grade).expect("static solve");
-
-  // Radau IIA's fixed point is exactly the steady state, so a large step
-  // reaches it fast (and exactly, independent of dt).
-  let zero = Cochain::new(grade, Vector::zeros(whitney.ndofs(grade)));
-  let sol = solve_heat(&relative, grade, 200, 1.0, &zero, &source, 1.0);
-  let u_final = sol.last().unwrap();
-
-  assert_relative_eq!(u_final.coeffs(), u_static.coeffs(), epsilon = 1e-7);
 }

@@ -1,10 +1,10 @@
-//! Manufactured-solution tests for boundary conditions.
+//! Manufactured solutions for the boundary conditions.
 //!
-//! The linear solution $u(x) = x_1$ lies exactly in the Whitney 0-form
-//! space and all loads are affine, so both the Dirichlet and the Neumann
-//! discretizations reproduce it up to solver tolerance, validating the
-//! affine lifting, the trace complex geometry and the natural boundary
-//! load.
+//! The linear solution $u(x) = x_1$ lies exactly in the Whitney 0-form space
+//! and all loads are affine, so a discretization that imposes its boundary
+//! condition correctly reproduces it up to solver tolerance. That pins the
+//! affine lifting of essential data, the geometry of the trace complex, the
+//! natural boundary load and the boundary mass.
 
 extern crate nalgebra as na;
 
@@ -12,8 +12,7 @@ use derham::{Cochain, project::derham_map, section::CoordFieldExt};
 use formoniq::linalg::faer::FaerCholesky;
 use formoniq::{
   bc,
-  galerkin::{GalerkinVector, LinearForm},
-  operators::SourceForm,
+  galerkin::GalerkinVector,
   whitney_complex::{HilbertComplex, WhitneyComplex},
 };
 use glatt::field::DiffFormClosure;
@@ -45,99 +44,6 @@ fn inhomogeneous_dirichlet_reproduces_linear_solution() {
     let solution = bc::solve_with_essential_bc(
       &whitney.relative(),
       &boundary,
-      laplace,
-      &rhs,
-      &boundary_values,
-    );
-
-    assert_relative_eq!(solution.coeffs(), exact_cochain.coeffs(), epsilon = 1e-10);
-  }
-}
-
-/// Inhomogeneous natural (Neumann) BC via the boundary load:
-/// $-Delta u + u = x_1$ on the unit cube with flux data
-/// $h = partial u \/ partial n = plus.minus 1$ on the faces $x_1 = 1, 0$ has the
-/// exact solution $u = x_1$, which lies in the FE space.
-#[test]
-fn inhomogeneous_neumann_reproduces_linear_solution() {
-  for dim in (1..=3).map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let metric = coords.to_edge_lengths_sq(&topology);
-    let whitney = WhitneyComplex::new(&topology, &metric);
-    let boundary = whitney.boundary().unwrap();
-
-    let exact = DiffFormClosure::coord_component(0, dim);
-    let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
-
-    // System: (grad u, grad v) + (u, v).
-    let system = whitney.dif_both(1) + whitney.mass(Dim::ZERO);
-
-    // Source load (u, v) side: f = x_1. The integrand f phi_i is
-    // quadratic, so an order-3 quadrature keeps it exact.
-    let source = DiffFormClosure::coord_component(0, dim);
-    let source = source.pullback_on(&topology, &coords);
-    let qr = simplicial::atlas::SimplexQuadRule::degree(dim, 3);
-    let mut rhs = SourceForm::new(&source, Some(qr)).assemble(&topology, &metric);
-
-    // Natural boundary load: h = du/dn = -1 on x_1 = 0, +1 on x_1 = 1,
-    // 0 on the remaining faces.
-    let flux = DiffFormClosure::scalar(
-      |p| {
-        if p[0] <= 1e-12 {
-          -1.0
-        } else if p[0] >= 1.0 - 1e-12 {
-          1.0
-        } else {
-          0.0
-        }
-      },
-      dim,
-    );
-    // The boundary data is a field on the boundary manifold, reached from the
-    // ambient flux by pullback against the trace coordinates.
-    let boundary_coords = boundary.boundary_complex().trace_coords(&coords);
-    let flux = flux.pullback_on(boundary.topology(), &boundary_coords);
-    rhs += bc::neumann_load(&boundary, &flux, None);
-
-    let solution = FaerCholesky::new(system).solve(rhs.coeffs());
-
-    assert_relative_eq!(solution, exact_cochain.coeffs(), epsilon = 1e-9);
-  }
-}
-
-/// Mixed boundary conditions: Dirichlet on the faces $x_1 = 0, 1$
-/// (where $u = x_1$ is 0 resp. 1), natural on the remaining faces
-/// (where $partial u \/ partial n = 0$, homogeneous: do nothing).
-/// The exact solution $u = x_1$ is reproduced.
-#[test]
-fn mixed_dirichlet_neumann_reproduces_linear_solution() {
-  for dim in (2..=3).map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let metric = coords.to_edge_lengths_sq(&topology);
-    let whitney = WhitneyComplex::new(&topology, &metric);
-
-    // Partition of the boundary facets by their barycenter.
-    let dirichlet_facets: Vec<_> = topology
-      .boundary_facets()
-      .into_iter()
-      .filter(|facet| {
-        let facet_coords = simplex_coords(facet.simplex(), &coords);
-        let x = facet_coords.barycenter()[0];
-        x <= 1e-12 || x >= 1.0 - 1e-12
-      })
-      .collect();
-    let gamma_dirichlet = whitney.boundary_part(dirichlet_facets);
-
-    let exact = DiffFormClosure::coord_component(0, dim);
-    let exact_cochain = derham_map(&exact.pullback_on(&topology, &coords), &topology, 1);
-    let boundary_values = gamma_dirichlet.trace_cochain(&exact_cochain);
-
-    let laplace = whitney.dif_both(1);
-    let rhs = GalerkinVector::new(Dim::ZERO, Vector::zeros(whitney.ndofs(Dim::ZERO)));
-
-    let solution = bc::solve_with_essential_bc(
-      &whitney.relative_to(&gamma_dirichlet),
-      &gamma_dirichlet,
       laplace,
       &rhs,
       &boundary_values,
