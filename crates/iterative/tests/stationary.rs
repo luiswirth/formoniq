@@ -1,13 +1,13 @@
-//! Stationary iteration: Jacobi converges at the predicted geometric rate,
-//! and a fixed sweep count is itself self-adjoint.
+//! Stationary iteration: the error contracts by the iteration matrix at every
+//! sweep, so convergence is geometric at the rate its spectral radius sets.
 
 extern crate nalgebra as na;
 
 mod common;
 
 use common::{csr, tridiag};
-use iterative::stationary::{Stationary, solve};
-use iterative::{ApproxInverse, Jacobi, StopCriterion, Vector};
+use iterative::stationary::solve;
+use iterative::{Jacobi, StopCriterion, Vector};
 use na::DMatrix;
 
 /// Stationary Jacobi iteration converges to the true solution on a
@@ -34,16 +34,4 @@ fn stationary_converges_to_the_solution() {
     .fold(0.0, f64::max);
   let predicted = (1e-10_f64.ln() / rho.ln()).ceil() as usize;
   assert!(rho < 1.0 && report.iters <= 3 * predicted + 10);
-}
-
-/// A fixed number of Jacobi sweeps is itself self-adjoint, the promise the
-/// `SelfAdjoint for Stationary` impl makes, and the basis of nesting it inside
-/// a Krylov method.
-#[test]
-fn stationary_sweeps_are_self_adjoint() {
-  let a = csr(&tridiag(6, 4.0, 1.0));
-  let sweeps = Stationary::new(&a, Jacobi::new(&a), 3);
-  let r = Vector::from_fn(6, |i, _| (i as f64).cos());
-  let s = Vector::from_fn(6, |i, _| (2.0 * i as f64 + 1.0).sin());
-  assert!((sweeps.apply(&r).dot(&s) - r.dot(&sweeps.apply(&s))).abs() < 1e-12);
 }

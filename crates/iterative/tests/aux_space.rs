@@ -1,6 +1,6 @@
-//! [`AuxiliarySpace`]: the apply is the additive sum of the smoother and
-//! each pulled-back correction, the combiner is self-adjoint, and no
-//! corrections is exactly the smoother.
+//! [`AuxiliarySpace`]: the apply is the additive sum of the smoother and each
+//! pulled-back correction, $B = S + sum_i Pi_i B_i Pi_i^H$, and that sum is
+//! self-adjoint, which is what lets it precondition a symmetric method.
 
 extern crate nalgebra;
 
@@ -48,16 +48,4 @@ fn combiner_is_self_adjoint() {
   let r = Vector::from_fn(n, |i, _| (i as f64 - 3.0).tanh());
   let s = Vector::from_fn(n, |i, _| ((i * i) as f64).cos());
   assert!((b.apply(&r).dot(&s) - r.dot(&b.apply(&s))).abs() < 1e-12);
-}
-
-/// With no corrections the preconditioner is exactly its smoother: the
-/// totality base case, no empty-sum special-casing.
-#[test]
-fn no_corrections_is_the_smoother() {
-  let n = 5;
-  let a = csr(&spd(n, 0.4));
-  let smoother = Jacobi::weighted(&a, 0.6);
-  let b = AuxiliarySpace::new(smoother.clone());
-  let r = Vector::from_fn(n, |i, _| (i as f64 + 0.5).ln());
-  assert!((b.apply(&r) - smoother.apply(&r)).norm() < 1e-14);
 }

@@ -84,3 +84,37 @@ pub fn tridiag(n: usize, diag: f64, off: f64) -> DMatrix<f64> {
 pub fn dense_solve<T: Field>(a: &DMatrix<T>, b: &Vector<T>) -> Vector<T> {
   a.clone().lu().solve(b).expect("nonsingular")
 }
+
+/// An orthonormal basis of the Krylov subspace
+/// $K_k (A, b) = "span"{b, A b, ..., A^(k-1) b}$, the space every Krylov
+/// iterate lies in and the minimization laws quantify over.
+///
+/// Orthonormalized (twice-applied Gram-Schmidt) rather than held as the raw
+/// powers: the power basis is exponentially ill-conditioned, and the law
+/// compares a minimum computed in this basis against the solver's iterate.
+/// Fewer than `k` columns come back once the space saturates, which is the
+/// honest answer there and not a truncation.
+pub fn krylov_basis(a: &DMatrix<f64>, b: &Vector, k: usize) -> DMatrix<f64> {
+  let mut cols: Vec<Vector> = Vec::new();
+  let mut next = b.clone();
+  for _ in 0..k {
+    let mut w = next.clone();
+    for _ in 0..2 {
+      for q in &cols {
+        let c = q.dot(&w);
+        w -= q * c;
+      }
+    }
+    let norm = w.norm();
+    if norm < 1e-10 {
+      break;
+    }
+    cols.push(w / norm);
+    next = a * cols.last().unwrap();
+  }
+  if cols.is_empty() {
+    DMatrix::zeros(b.len(), 0)
+  } else {
+    DMatrix::from_columns(&cols)
+  }
+}
