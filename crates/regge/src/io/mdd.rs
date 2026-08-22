@@ -3,28 +3,24 @@
 //!
 //! The format is a table of positions: the topology is fixed and lives in the
 //! `.obj` beside it (see [`obj`](super::obj)), and every frame is that same
-//! vertex table at a different place. So a solution evolving in time leaves as
-//! two files, one saying what the mesh is and one saying where it goes, which
-//! is the same split as the bake's own, static half and field half, carried
-//! into interchange.
+//! vertex table at a different place. So a manifold deforming in time leaves
+//! as two files, one saying what the mesh is and one saying where it goes.
 //!
 //! Big-endian throughout, `f32` positions and times, as the format fixes.
 
 use std::io::{self, Write};
 use std::path::Path;
 
-use regge::coord::mesh::MeshCoords;
-
-use crate::bake::to_vec3;
+use crate::coord::mesh::MeshCoords;
 
 /// Writes the frames as an MDD point cache at `path`, `times` giving each
 /// frame's instant in seconds.
 ///
 /// Every frame is the same mesh's vertex table, in the mesh's own vertex order,
-/// which is the order the OBJ writer emits and hence what makes the two files
-/// one animated object. A frame's coordinates are read in $RR^3$ like every
-/// other extrinsic quantity, a lower-dimensional embedding sitting in the zero
-/// planes of the axes it does not use.
+/// which is the order an OBJ beside it lists them in and hence what makes the
+/// two files one animated object. A frame's coordinates are padded out to
+/// $RR^3$, a lower-dimensional embedding sitting in the zero planes of the
+/// axes it does not use.
 pub fn write<'a>(
   path: impl AsRef<Path>,
   frames: impl IntoIterator<Item = &'a MeshCoords>,
@@ -36,8 +32,13 @@ pub fn write<'a>(
       coords
         .coord_iter()
         .map(|coord| {
-          let p = to_vec3(&coord.view().into_owned());
-          [p.x as f32, p.y as f32, p.z as f32]
+          // Padded out to the format's 3-tuple: an embedding of lower
+          // dimension sits in the zero planes of the axes it does not use.
+          let mut position = [0.0f32; 3];
+          for (slot, value) in position.iter_mut().zip(coord.iter()) {
+            *slot = *value as f32;
+          }
+          position
         })
         .collect()
     })

@@ -1,16 +1,17 @@
-//! Laws for [`realize::io::vtu`]: the document is the mesh it declares
+//! Laws for [`derham::io::vtu`]: the document is the mesh it declares
 //! itself to be, every point is a 3-tuple with the embedding padded rather
 //! than reinterpreted, a 0-cochain is written verbatim as point data, every
 //! grade reduces to a scalar or a vector, a mesh above three dimensions or a
 //! foreign cochain is refused, the document is balanced XML with escaped
-//! field names, and the cell-vector reduction agrees with the viewer's own.
+//! field names, and the cell-vector array is the grade reduction pushed
+//! forward into the ambient frame.
 
 use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
-use metric::tensor::TensorExt;
-use realize::{
+use derham::{
   io::vtu::{MAX_DIM, NamedCochain, VtuError, cell_type, cell_vectors, to_string},
   reduce::{admitted_reduction_sign, reduced_form},
 };
+use metric::tensor::TensorExt;
 use regge::{coord::simplex::SimplexRefExt, mesher::cartesian::CartesianGrid};
 use simplicial::{atlas::MeshPoint, linalg::Vector};
 
@@ -114,10 +115,9 @@ fn a_zero_cochain_is_point_data_verbatim() {
   }
 }
 
-/// The reduced grade $min(k, n-k)$ decides the mark, exactly as it does in the
-/// viewer: $0$ writes one number per cell and $1$ writes three. Under the
-/// dimensional cap those exhaust every grade, so the sweep leaves no grade
-/// unwritten.
+/// The reduced grade $min(k, n-k)$ decides the array: $0$ writes one number
+/// per cell and $1$ writes three. Under the dimensional cap those exhaust
+/// every grade, so the sweep leaves no grade unwritten.
 #[test]
 fn every_grade_reduces_to_a_scalar_or_a_vector() {
   for dim in 1..=MAX_DIM {
@@ -256,12 +256,12 @@ fn a_top_cochain_writes_its_density() {
   }
 }
 
-/// The vector reduction is the glyph mark's, not a second one: the same
-/// composition (reduce, sharp, push forward) evaluated at the same point has
-/// to give the same ambient vector, because a discrepancy between the viewer
-/// and ParaView is exactly what the exporter exists to expose.
+/// The vector array is the grade reduction and nothing else: reduce, sharp,
+/// push forward, evaluated at the cell barycenter. Written out here so that
+/// the file's numbers are pinned to the composition rather than to whatever
+/// the writer happens to do.
 #[test]
-fn the_vector_reduction_agrees_with_the_viewer() {
+fn the_vector_array_is_the_reduction_pushed_forward() {
   let (topology, coords) = CartesianGrid::new_unit(3, 2).triangulate();
   let nedges = topology.skeleton(1).len();
   let coeffs = Vector::from_iterator(nedges, (0..nedges).map(|i| (i as f64).sin()));

@@ -13,6 +13,7 @@
 
 pub mod locate;
 pub mod mesh;
+pub mod reach;
 pub mod simplex;
 
 pub use coorder::{Ambient, Coord, CoordRef};

@@ -1,32 +1,60 @@
-//! Laws for [`realize::io::obj`]: writing and parsing are inverse on a
-//! surface the format can hold, the tolerant reader accepts the slash
-//! reference forms, fan-triangulates a polygon, resolves negative indices,
-//! drops a degenerate face rather than the whole file, discards an
-//! unreferenced vertex, rejects a non-manifold or faceless mesh, and
-//! recovers a coherent winding as an orientation only when the file is one.
+//! Laws for [`regge::io::obj`]: a surface written out as a document parses
+//! back to the same mesh, the tolerant reader accepts the slash reference
+//! forms, fan-triangulates a polygon, resolves negative indices, drops a
+//! degenerate face rather than the whole file, discards an unreferenced
+//! vertex, rejects a non-manifold or faceless mesh, and recovers a coherent
+//! winding as an orientation only when the file is one.
 
-use realize::{
-  bake::BakedMesh,
-  io::obj::{ObjError, parse, parse_wound, to_string},
+use regge::{
+  coord::mesh::MeshCoords,
+  io::obj::{ObjError, parse, parse_wound},
 };
+use simplicial::{Sign, topology::complex::Complex};
 
-/// Writing and reading are inverse on a surface the format can hold: the
-/// document a bake writes parses back to the same mesh, same vertices, same
-/// cells, at the same positions. The winding is not recovered as such, a
-/// `Complex` stores its cells colex-sorted, but it survives as the
+/// A sphere written out as a document parses back to the same mesh: same
+/// vertices, same cells, same positions. The winding is not recovered as
+/// such, a `Complex` stores its cells colex-sorted, but it survives as the
 /// orientation the file's faces induce.
 #[test]
-fn a_baked_surface_round_trips_through_the_document() {
+fn a_surface_round_trips_through_the_document() {
   let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(1);
-  let baked = BakedMesh::new(&topology, &coords);
 
-  let (read, read_coords, orientation) = parse_wound(&to_string(&baked)).unwrap();
+  let (read, read_coords, orientation) = parse_wound(&document(&topology, &coords)).unwrap();
   assert_eq!(read.nsimplices(0), topology.nsimplices(0));
   assert_eq!(read.nsimplices(2), topology.nsimplices(2));
-  assert!(orientation.is_some(), "the bake writes a wound surface");
+  assert!(orientation.is_some(), "a coherently wound surface");
   for (before, after) in coords.coord_iter().zip(read_coords.coord_iter()) {
     assert!((before.view() - after.view()).norm() < 1e-5);
   }
+}
+
+/// The surface as an OBJ: its vertices as `v` lines and its cells as `f`
+/// lines, each wound by the manifold's own coherent orientation, which is the
+/// winding a file is expected to carry.
+fn document(topology: &Complex, coords: &MeshCoords) -> String {
+  use std::fmt::Write as _;
+  let orientation = topology.orientation().expect("a sphere is orientable");
+  let mut obj = String::new();
+  for coord in coords.coord_iter() {
+    let c = coord.view();
+    writeln!(obj, "v {} {} {}", c[0], c[1], c[2]).unwrap();
+  }
+  for cell in topology.cells().handle_iter() {
+    let mut corners = cell.simplex().vertices.clone();
+    if orientation.sign(cell) == Sign::Neg {
+      corners.swap(0, 1);
+    }
+    // OBJ indexes vertices from one.
+    writeln!(
+      obj,
+      "f {} {} {}",
+      corners[0] + 1,
+      corners[1] + 1,
+      corners[2] + 1
+    )
+    .unwrap();
+  }
+  obj
 }
 
 /// A single triangle with texture/normal references and a trailing comment
@@ -81,7 +109,7 @@ f 1 2 5
   assert!(matches!(parse(obj), Err(ObjError::NonManifold { .. })));
 }
 
-/// A file with no faces (a point cloud, or an unfetched LFS pointer) is
+/// A file with no faces (a point cloud, or the wrong kind of file) is
 /// reported empty rather than yielding a degenerate mesh.
 #[test]
 fn rejects_faceless_input() {

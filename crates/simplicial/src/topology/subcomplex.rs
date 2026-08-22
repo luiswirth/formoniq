@@ -16,6 +16,7 @@
 //! compose "tr"$.
 
 use super::{
+  chain::{Cochain, Coefficient},
   complex::Complex,
   handle::{KSimplexIdx, SimplexIdx},
   role::Facet,
@@ -24,7 +25,7 @@ use super::{
 };
 use crate::{Dim, topology::VertexIdx};
 
-use crate::linalg::{CooMatrix, Selection};
+use crate::linalg::{CooMatrix, Selection, Vector};
 
 /// A codimension-1 subcomplex of $K$ as a complex in its own right, with
 /// its own (monotone) vertex numbering and the simplex-wise inclusion into
@@ -144,5 +145,27 @@ impl Subcomplex {
   /// and the cokernel projection of the relative inclusion.
   pub fn trace_operator(&self, grade: impl Into<Dim>) -> CooMatrix {
     self.inclusion(grade).restriction()
+  }
+
+  /// The trace $"tr" c$ of a cochain, applied without materializing
+  /// [`trace_operator`](Self::trace_operator): gathering the parent
+  /// coefficients at [`parent_kidxs`](Self::parent_kidxs) is that matrix's
+  /// definition, and a select needs no sparse product.
+  ///
+  /// Metric-free, being a selection of simplices, and total over grade: the
+  /// subcomplex carries no simplices at the parent's top grade, so
+  /// $C^n (L) = 0$ and the trace of an $n$-cochain is the empty cochain.
+  pub fn trace<R: Coefficient>(&self, cochain: &Cochain<R>) -> Cochain<R> {
+    let grade = cochain.grade();
+    let parent_kidxs = self.parent_kidxs(grade);
+    Cochain::new(
+      grade,
+      Vector::from_iterator(
+        parent_kidxs.len(),
+        parent_kidxs
+          .iter()
+          .map(|&kidx| cochain.coeffs()[kidx].clone()),
+      ),
+    )
   }
 }

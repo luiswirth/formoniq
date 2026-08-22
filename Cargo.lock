@@ -463,8 +463,6 @@ dependencies = [
  "bytemuck",
  "coorder",
  "derham",
- "formoniq",
- "glatt",
  "metric",
  "multialgebra",
  "nalgebra",

@@ -1,18 +1,15 @@
-//! The reach of an embedded surface: how far it may be displaced along its
-//! own normal and still be an embedding.
+//! Federer's reach of an embedded surface: its distance to its own medial
+//! axis, hence how far it may be offset along its own normal and still be an
+//! embedding.
 //!
-//! The bound the `RR^3` bake needs and the one thing an offset cannot be
-//! taken without. It lives here rather than with the intrinsic geometry for
-//! the same reason the bake does: the normal field, the cross product and
-//! the point grid are all statements about $RR^3$, where the core is
-//! dimension-agnostic. Its local half, the curvature radius, is genuine
-//! intrinsic-plus-embedding geometry in any dimension and stays in
-//! [`regge::coord`](regge::coord::vertex_curvature_radius).
+//! Restricted to a surface in $RR^3$, and the restriction is the concept's:
+//! the estimate is taken against a normal *line* field, which a hypersurface
+//! has and a submanifold of higher codimension does not, its normal bundle
+//! having no canonical axis. The local half of the bound, the curvature
+//! radius ([`vertex_curvature_radius`]), is not so restricted.
 
-use regge::coord::{mesh::MeshCoords, vertex_curvature_radius};
+use super::{mesh::MeshCoords, vertex_curvature_radius};
 use simplicial::{Dim, topology::complex::Complex};
-
-extern crate nalgebra as na;
 
 /// How far [`vertex_reach`] looks for a bottleneck, in mean edge lengths. Sets
 /// the thickest feature the non-local term can detect, and with it the cost:
@@ -68,12 +65,12 @@ const REACH_SEARCH_EDGES: i32 = 8;
 /// shape with two sheets far apart in edge lengths but close relative to the
 /// object, such as a wide, finely meshed horseshoe.
 ///
-/// `normals` is the surface's vertex normal field, as the bake already built
-/// it. Only the *line* it spans is used, never its sign: the estimate minimizes
-/// over both sides of the surface, since a displacement swings both ways. So
-/// this is defined on a non-orientable surface too, where no coherent normal
-/// field exists but a normal line field still does, and a vertex whose normal
-/// vanishes (a surface the bake found nothing to displace along) is unbounded.
+/// `normals` is the surface's vertex normal field. Only the *line* it spans is
+/// used, never its sign: the estimate minimizes over both sides of the
+/// surface, since an offset swings both ways. So this is defined on a
+/// non-orientable surface too, where no coherent normal field exists but a
+/// normal line field still does, and a vertex whose normal vanishes is
+/// unbounded.
 pub fn vertex_reach(
   topology: &Complex,
   coords: &MeshCoords,

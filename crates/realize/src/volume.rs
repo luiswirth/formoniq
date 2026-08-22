@@ -25,7 +25,7 @@ use regge::coord::mesh::MeshCoords;
 use simplicial::topology::complex::Complex;
 use simplicial::{Dim, atlas::MeshPoint};
 
-use crate::reduce::{admitted_reduction_sign, scalarize};
+use derham::reduce::{admitted_reduction_sign, scalarize};
 
 /// Voxels per axis, chosen so one voxel is about the mesh's own mean edge
 /// length and clamped to what a texture upload should carry. Derived from the

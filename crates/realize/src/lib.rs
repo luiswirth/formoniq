@@ -39,7 +39,6 @@ pub mod bake;
 pub mod deposit;
 pub mod glyph;
 pub mod io;
-pub mod reach;
 pub mod reduce;
 pub mod surface;
 pub mod volume;

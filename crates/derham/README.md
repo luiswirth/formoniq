@@ -30,6 +30,18 @@ continuous ones.
   so a multivector field cannot be pulled back.
   Ambient sampling of sections is provided for I/O and visualization
   and is not part of the core path.
+- The grade reduction:
+  a k-form and its Hodge dual read as one datum,
+  at the grade min(k, n-k) where the pair is smallest.
+  A reduced grade of 0 is a scalar density and a reduced grade of 1 a tangent line field,
+  which is the classical identification of an (n-1)-form with a vector field
+  stated once for every n and k rather than twice for n = 3.
+  Where the star fires it needs a global volume form,
+  so the reduction asks for the coherent orientation alongside the metric.
+- Interchange:
+  a manifold and the forms on it written as VTK's `.vtu`,
+  the format ParaView and PyVista read.
+  The dimensional cap is the format's and is refused rather than projected around.
 
 ## Correctness
 

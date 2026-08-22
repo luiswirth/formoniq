@@ -12,9 +12,7 @@ name = "realize"
 
 [dependencies]
 multialgebra = { path = "../multialgebra", version = "0.2.0" }
-formoniq = { path = "../formoniq" }
 derham = { path = "../derham" }
-glatt = { path = "../glatt" }
 simplicial = { path = "../simplicial" }
 regge = { path = "../regge", version = "0.2.0" }
 coorder = { path = "../coorder" }

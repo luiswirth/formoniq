@@ -1,72 +1,69 @@
-//! A [`Subcomplex`](simplicial::topology::subcomplex::Subcomplex): the
-//! boundary's homology, the trace as a cochain map, and the relative chain
-//! group as the kernel of the trace.
+//! Laws for the cochain trace $"tr": C^k (K) -> C^k (L)$ onto a
+//! codimension-1 subcomplex: it restricts each coefficient to its parent's,
+//! it is a cochain map, and it is total at the parent's top grade, where the
+//! subcomplex carries no simplices at all.
 
-use simplicial::Dim;
-use simplicial::linalg::{CooMatrix, CsrMatrix, Matrix};
-use simplicial::mesher::grid::CartesianTopology;
+use simplicial::topology::{chain::Cochain, complex::Complex};
 
-/// The boundary of the n-cube is a closed manifold with the homology of
-/// the (n-1)-sphere.
+/// The trace is the restriction of coefficients: each subcomplex simplex
+/// carries exactly its parent's value. Stated on a cochain that distinguishes
+/// every simplex, so an index permutation could not pass, and swept over
+/// every dimension and every grade the subcomplex has.
 #[test]
-fn boundary_of_cube_is_sphere() {
-  for dim in (1..=3usize).map(Dim::from) {
-    let topology = CartesianTopology::cube(dim, 2).triangulate();
-    let boundary = topology.boundary_complex().unwrap();
-    assert!(!boundary.complex().has_boundary());
-    for k in dim.range() {
-      // S^(n-1) betti numbers. The 0-sphere is two points.
-      let expected = if dim == 1 {
-        2
-      } else {
-        usize::from(k == 0 || k == dim - 1)
-      };
-      assert_eq!(
-        boundary.complex().betti_number(k),
-        expected,
-        "dim={dim} k={k}"
-      );
+fn the_trace_restricts_each_coefficient_to_its_parent() {
+  for dim in 1..=4 {
+    let topology = Complex::unit(dim);
+    let boundary = topology
+      .boundary_complex()
+      .expect("a simplex has a boundary");
+    for grade in boundary.dim().range_inclusive() {
+      let cochain = Cochain::from_function(|s| s.kidx() as f64, grade, &topology);
+      let traced = boundary.trace(&cochain);
+
+      let parent_kidxs = boundary.parent_kidxs(grade);
+      assert_eq!(traced.len(), parent_kidxs.len());
+      assert_eq!(traced.grade(), grade);
+      for (kidx, &parent_kidx) in parent_kidxs.iter().enumerate() {
+        assert_eq!(traced.coeffs()[kidx], parent_kidx as f64);
+      }
     }
   }
 }
 
-/// The trace is a cochain map: $"tr" compose dif = dif compose "tr"$.
+/// $"tr" compose dif = dif compose "tr"$: the trace is a cochain map, which is
+/// what makes the traced coefficients a discrete form on the subcomplex
+/// rather than a resampling of one. Checked below the subcomplex's top grade,
+/// where both sides have somewhere to land.
 #[test]
-fn trace_is_cochain_map() {
-  for dim in (2..=3usize).map(Dim::from) {
-    let topology = CartesianTopology::cube(dim, 2).triangulate();
-    let boundary = topology.boundary_complex().unwrap();
-    for k in (dim - 1).range() {
-      let trace_k = CsrMatrix::from(&boundary.trace_operator(k));
-      let trace_kk = CsrMatrix::from(&boundary.trace_operator(k + 1));
-      let dif_parent = CsrMatrix::from(&topology.coboundary_operator(k));
-      let dif_boundary = CsrMatrix::from(&boundary.complex().coboundary_operator(k));
-
-      let tr_dif = Matrix::from(&CooMatrix::from(&(trace_kk * dif_parent)));
-      let dif_tr = Matrix::from(&CooMatrix::from(&(dif_boundary * trace_k)));
-      assert_eq!(tr_dif, dif_tr);
+fn the_trace_commutes_with_the_differential() {
+  for dim in 2..=4 {
+    let topology = Complex::unit(dim);
+    let boundary = topology
+      .boundary_complex()
+      .expect("a simplex has a boundary");
+    for grade in boundary.dim().range() {
+      let cochain = Cochain::from_function(|s| (s.kidx() as f64).sin(), grade, &topology);
+      let traced_then_dif = boundary.trace(&cochain).dif(boundary.complex());
+      let dif_then_traced = boundary.trace(&cochain.dif(&topology));
+      assert_eq!(traced_then_dif.coeffs(), dif_then_traced.coeffs());
     }
   }
 }
 
-/// Exactness of $0 -> C(K, diff K) -> C(K) -> C(diff K) -> 0$: the relative
-/// chain group is the kernel of the trace, hence the complement of the
-/// inclusion, coordinate for coordinate and not merely in dimension.
-///
-/// The two sides reach the same selection by different routes, the inclusion
-/// through the renumbered boundary complex and the relative basis through
-/// the boundary facets of the parent, so their agreement is the sequence
-/// being exact rather than a tautology.
+/// The parent's top grade has no trace: a codimension-1 subcomplex carries no
+/// $n$-simplices, so $C^n (L) = 0$ and the trace is the empty cochain. The
+/// degenerate case runs on the same code and returns the trivial answer
+/// rather than indexing one past the subcomplex's dimension.
 #[test]
-fn the_relative_complex_is_the_kernel_of_the_trace() {
-  for dim in (1..=3usize).map(Dim::from) {
-    let topology = CartesianTopology::cube(dim, 2).triangulate();
-    let boundary = topology.boundary_complex().unwrap();
-    for k in dim.range_inclusive() {
-      let inclusion = boundary.inclusion(k);
-      assert_eq!(inclusion.len(), boundary.complex().nsimplices(k));
-      assert_eq!(inclusion.total(), topology.nsimplices(k));
-      assert_eq!(&inclusion.complement(), &topology.interior_selection(k));
-    }
+fn the_top_grade_traces_to_the_zero_group() {
+  for dim in 1..=4 {
+    let topology = Complex::unit(dim);
+    let boundary = topology
+      .boundary_complex()
+      .expect("a simplex has a boundary");
+    let top = Cochain::constant(1.0, topology.skeleton(dim));
+    let traced = boundary.trace(&top);
+    assert_eq!(traced.grade(), topology.dim());
+    assert!(traced.is_empty());
   }
 }

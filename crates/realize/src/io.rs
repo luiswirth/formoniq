@@ -1,6 +1,3 @@
-//! Interchange: reading and writing the viewer's meshes and fields as `.obj`,
-//! `.mdd` and `.vtu`.
+//! Interchange: writing the baked surface as `.obj`.
 
-pub mod mdd;
 pub mod obj;
-pub mod vtu;

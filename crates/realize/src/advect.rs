@@ -51,7 +51,7 @@ use simplicial::{
   topology::{complex::Complex, handle::SimplexIdx, simplex::Simplex},
 };
 
-use crate::reduce::reduced_form;
+use derham::reduce::reduced_form;
 
 /// The ambient dimension's own bound on the intrinsic one, and hence on the
 /// barycentric weights: a `vec4` holds the weights of any cell an observer in
@@ -111,7 +111,7 @@ impl AdvectBake {
 
     for cell in topology.cells().handle_iter() {
       let metric = coords.cell_metric(cell);
-      let sign = crate::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
+      let sign = derham::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
       let generator = flow_generator(&interpolant, cell.idx(), &metric, sign);
 
       // One exponential, then `depth` squarings: level $k$ is $(e^(M h))^(2^k)$
@@ -168,7 +168,7 @@ fn cell_speeds(topology: &Complex, coords: &MeshCoords, cochain: &Cochain) -> Ve
     .map(|cell| {
       let metric = coords.cell_metric(cell);
       let point = MeshPoint::barycenter(cell.idx());
-      let sign = crate::reduce::admitted_reduction_sign(topology, cell, grade);
+      let sign = derham::reduce::admitted_reduction_sign(topology, cell, grade);
       let speed = reduced_form(interpolant.eval(&point), &metric, sign).norm(&metric);
       (metric.det_sqrt(), speed)
     })

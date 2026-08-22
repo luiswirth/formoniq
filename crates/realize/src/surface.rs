@@ -31,10 +31,7 @@ use std::borrow::Cow;
 use derham::Cochain;
 use multialgebra::ExteriorGrade;
 use regge::coord::mesh::MeshCoords;
-use simplicial::{
-  linalg::Vector,
-  topology::{complex::Complex, handle::KSimplexIdx, subcomplex::Subcomplex},
-};
+use simplicial::topology::{complex::Complex, handle::KSimplexIdx, subcomplex::Subcomplex};
 
 /// The 2-manifold (or lower) a scene's marks are drawn on, together with the
 /// map back to the parent's vertex numbering.
@@ -106,28 +103,18 @@ impl Surface {
   /// cochain on $partial M$, borrowed unchanged where the reduction is the
   /// identity.
   ///
-  /// This is [`Subcomplex::trace_operator`], gathering the parent
-  /// coefficients at `parent_kidxs` is that matrix's definition, applied
-  /// without materializing it, since a permutation-and-select needs no sparse
-  /// product.
+  /// [`Subcomplex::trace`] is the restriction itself; what this adds is the
+  /// identity case, where the surface is the parent and nothing is copied.
   ///
   /// Returns `None` when the grade does not trace (see [`Self::traces`]).
   pub fn trace<'a>(&self, parent: &Complex, cochain: &'a Cochain) -> Option<Cow<'a, Cochain>> {
-    let grade = cochain.grade();
-    if !self.traces(parent, grade) {
+    if !self.traces(parent, cochain.grade()) {
       return None;
     }
-    let Some(boundary) = self.boundary.as_ref() else {
-      return Some(Cow::Borrowed(cochain));
-    };
-    let coeffs = Vector::from_iterator(
-      boundary.parent_kidxs(grade).len(),
-      boundary
-        .parent_kidxs(grade)
-        .iter()
-        .map(|&parent_kidx| cochain.coeffs()[parent_kidx]),
-    );
-    Some(Cow::Owned(Cochain::new(grade, coeffs)))
+    match self.boundary.as_ref() {
+      None => Some(Cow::Borrowed(cochain)),
+      Some(boundary) => Some(Cow::Owned(boundary.trace(cochain))),
+    }
   }
 
   /// The surface's vertices in the parent's numbering, or `None` where the

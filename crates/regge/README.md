@@ -39,7 +39,10 @@ manifold with edge lengths a Regge manifold rather than an approximation of one.
 - `coord`:
   `MeshCoords`, the extrinsic realization, and the bridges that induce a metric
   and edge lengths from it. Point location lives here too, an embedding being
-  what makes it meaningful.
+  what makes it meaningful, as do the curvatures and the reach that only an
+  embedding has: Federer's reach of a surface in R³ is its distance to its own
+  medial axis, hence how far it may be offset along its normal and still be an
+  embedding.
 - `refine`:
   the geometric half of uniform refinement, keyed off `simplicial`'s
   `Subdivision`.
@@ -50,7 +53,9 @@ manifold with edge lengths a Regge manifold rather than an approximation of one.
   producing a complex and the coordinates that go with it, plus the
   hand-written meshes of `teaching`.
 - `io`:
-  mesh formats, which are a topology and its coordinates together.
+  mesh formats, which are a topology and its coordinates together — Gmsh
+  `.msh` and Wavefront `.obj` as sources, and `.mdd` for a mesh whose
+  coordinates move while its topology does not.
 - `vertex_gaussian_curvature`:
   the angle defect, exact rather than approximate — Gauss-Bonnet holds as an
   identity, with no refinement limit to converge under.

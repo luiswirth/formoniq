@@ -1,13 +1,6 @@
 //! Writing a simplicial manifold and its cochains as VTK's XML unstructured
 //! grid (`.vtu`), the interchange ParaView and PyVista read.
 //!
-//! The format is a leaf of the extrinsic side: it wants an embedding, a
-//! rendered-out vertex list and a field already reduced to a scalar or a
-//! vector, so everything the engine keeps intrinsic has to be spent before a
-//! file can be written. What it buys is a second, independent renderer for the
-//! same data, which makes a disagreement between the viewer and ParaView a
-//! visible bug rather than a silent one.
-//!
 //! VTU is hard-capped at three dimensions, and the cap is the format's, not
 //! this writer's. Its points are always 3-tuples and its cell zoo stops at
 //! the tetrahedron ([`cell_type`]), so a 4-simplex has no faithful encoding.
@@ -16,12 +9,11 @@
 //! projecting behind the caller's back: a choice of projection is a modeling
 //! decision and belongs where it can be stated.
 //!
-//! The reduction is shared with the viewer, not reimplemented. A field goes
-//! through the same `reduced_form`/`scalarize` rule the marks draw, so the
-//! two consumers cannot drift: $min(k, n-k)$ is the reduced grade, $0$ writes a
-//! scalar and $1$ a vector. Under the dimensional cap those two exhaust every
-//! grade, which is the same low-dimensional accident that lets classical vector
-//! calculus close, so no grade is left without a mark here.
+//! A form is written through the grade reduction of [`reduce`](crate::reduce)
+//! and nothing else: $min(k, n-k)$ is the reduced grade, $0$ writes a scalar
+//! and $1$ a vector. Under the dimensional cap those two exhaust every grade,
+//! which is the same low-dimensional accident that lets classical vector
+//! calculus close, so no grade is left without a reading here.
 //!
 //! A grade-0 cochain is written as point data, where its coefficients already
 //! live and where the encoding is exact. Every other grade is cell data,
@@ -33,7 +25,7 @@ use metric::tensor::TensorExt;
 use std::io;
 use std::path::Path;
 
-use derham::{Cochain, interpolate::interpolant::WhitneyInterpolant};
+use crate::{Cochain, interpolate::interpolant::WhitneyInterpolant};
 use metric::Metric;
 use multialgebra::Tensor;
 use regge::coord::{mesh::MeshCoords, simplex::SimplexRefExt};
@@ -282,7 +274,7 @@ fn push_point_data(xml: &mut String, fields: &[NamedCochain]) {
 }
 
 /// Every other grade, sampled once per cell at its barycenter and reduced by
-/// the viewer's own rule: reduced grade 0 writes a scalar, reduced grade 1 a
+/// the grade reduction: reduced grade 0 writes a scalar, reduced grade 1 a
 /// vector pushed forward into the ambient frame.
 fn push_cell_data(
   xml: &mut String,
@@ -332,7 +324,7 @@ fn push_cell_data(
 /// caller's reduction together with the cell's metric and the sign the star is
 /// read against ([`reduction_sign`], `None` where the star has no coherent
 /// orientation to fire against). The one place a cochain is evaluated, so the
-/// scalar and the vector mark cannot sample at different points.
+/// scalar and the vector reading cannot sample at different points.
 fn sample_cells<T>(
   topology: &Complex,
   coords: &MeshCoords,
@@ -353,8 +345,7 @@ fn sample_cells<T>(
 }
 
 /// The reduced grade-1 field per cell, sharped to a vector and pushed forward
-/// into ambient coordinates, padded to the format's 3-tuple. The same
-/// composition the glyph mark draws.
+/// into ambient coordinates, padded to the format's 3-tuple.
 ///
 /// The sign is required rather than defaulted: a direction has no
 /// orientation-free reading the way a magnitude does, so a starred vector field

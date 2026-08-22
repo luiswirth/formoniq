@@ -46,10 +46,8 @@ use simplicial::{
   topology::complex::Complex,
 };
 
-use crate::{
-  bake::{GlyphInstance, to_vec3},
-  reduce::reduced_form,
-};
+use crate::bake::{GlyphInstance, to_vec3};
+use derham::reduce::reduced_form;
 
 /// The refinement is capped, not left to grow with the cell: an unbounded
 /// ratio of world size to target spacing would let one degenerate huge cell
@@ -210,7 +208,7 @@ pub fn bake_glyphs(
     .into_par_iter()
     .flat_map_iter(|cell| {
       let metric = coords.cell_metric(cell);
-      let sign = crate::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
+      let sign = derham::reduce::admitted_reduction_sign(topology, cell, cochain.grade());
       // The affine parametrization $psi_K: hat(K) -> RR^N$: its differential
       // pushes the sharped field out of the cell's tangent frame into the
       // ambient one, and `global2bary` reads a point back to the weights the

@@ -1,22 +1,21 @@
-//! Laws for [`realize::reach::vertex_reach`]: on the unit sphere the reach
+//! Laws for [`regge::coord::reach::vertex_reach`]: on the unit sphere the reach
 //! is its radius, which the tangent-ball formula reproduces in closed form,
 //! and a thin flat slab has infinite curvature radius yet reach half its
 //! thickness, the non-local bottleneck the curvature half cannot see.
 
 use nalgebra as na;
-use realize::{bake::BakedMesh, reach::vertex_reach};
-use regge::coord::{mesh::MeshCoords, vertex_curvature_radius};
+use regge::coord::{mesh::MeshCoords, reach::vertex_reach, vertex_curvature_radius};
 use simplicial::{linalg::Vector, topology::complex::Complex};
 
 type Vector3 = na::Vector3<f64>;
 
-/// The vertex normal field the bake builds, which is what production hands
-/// [`vertex_reach`].
-fn normals_of(topology: &Complex, coords: &MeshCoords) -> Vec<Vector3> {
-  BakedMesh::new(topology, coords)
-    .positions
-    .iter()
-    .map(|v| Vector3::new(v.normal[0] as f64, v.normal[1] as f64, v.normal[2] as f64))
+/// The normal field is given in closed form on both fixtures rather than
+/// estimated off the mesh, so the law under test is the reach and not a
+/// normal estimator. Only the line matters, never the sign.
+fn normals_from(coords: &MeshCoords, axis: impl Fn(&[f64]) -> Vector3) -> Vec<Vector3> {
+  coords
+    .coord_iter()
+    .map(|c| axis(c.view().as_slice()))
     .collect()
 }
 
@@ -27,7 +26,9 @@ fn normals_of(topology: &Complex, coords: &MeshCoords) -> Vec<Vector3> {
 #[test]
 fn sphere_reach_is_its_radius() {
   let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(3);
-  let reach = vertex_reach(&topology, &coords, &normals_of(&topology, &coords), 10.0);
+  // The outward normal of a sphere at a point is the point itself.
+  let normals = normals_from(&coords, |c| Vector3::new(c[0], c[1], c[2]).normalize());
+  let reach = vertex_reach(&topology, &coords, &normals, 10.0);
   for &r in &reach {
     assert!(r > 0.5 && r < 1.05, "expected reach ~ 1, got {r}");
   }
@@ -44,7 +45,10 @@ fn thin_slab_reach_is_half_its_thickness() {
   for &thickness in &[0.2, 0.05] {
     let (topology, coords) = slab(thickness);
     let curvature = vertex_curvature_radius(&topology, &coords);
-    let reach = vertex_reach(&topology, &coords, &normals_of(&topology, &coords), 10.0);
+    // Both faces are level sets of $z$, so the normal line is the $z$ axis;
+    // the four sides are what the bottleneck has to be found in spite of.
+    let normals = normals_from(&coords, |_| Vector3::new(0.0, 0.0, 1.0));
+    let reach = vertex_reach(&topology, &coords, &normals, 10.0);
 
     // The interior of a face is flat, so curvature alone would not bound it.
     let flat = curvature
