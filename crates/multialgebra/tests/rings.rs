@@ -1,21 +1,21 @@
 //! The algebra over a general commutative ring, stated exactly.
 //!
-//! The laws in `exterior.rs` are the same laws over `f64`, where they hold to a
-//! tolerance because the arithmetic is inexact and not because the mathematics
-//! is approximate. Over an exact ring they are equalities, and that is how they
-//! are written here: no epsilon appears in this file.
-//!
-//! The sweep is over both rings for a reason of its own. `i64` reaches every
-//! operation that does not dualize a slot; the reciprocal basis of a symmetric
-//! slot is `x^a / a!`, which over the integers spans the divided power algebra
-//! rather than the symmetric one, so the operations that land there ask for a
-//! `RationalAlgebra` and `Rational64` is the exact ring that supplies it.
+//! Over an exact ring the laws are equalities rather than tolerances, and that
+//! is how they are written here: no epsilon appears in this file. The ring is
+//! a sweep axis of its own. `i64` reaches every operation that does not
+//! dualize a slot; the reciprocal basis of a symmetric slot is $x^alpha \/
+//! alpha!$, which over the integers spans the divided power algebra rather
+//! than the symmetric one, so the operations that land there ask for a
+//! `RationalAlgebra`. `f64` and `Complex64` are the rings the rest of the
+//! workspace runs on, and they are exact here too, not by luck: the fixtures
+//! are small integers and the operations are sums of products of them.
 
 use multialgebra::{
-  Factor, Matrix, RationalAlgebra, Ring, Symmetry, Tensor, Variance, Vector, exterior_dim,
-  exterior_power, from_integer, symmetric_power,
+  Factor, Matrix, RationalAlgebra, Ring, Symmetry, Tensor, Variance, Vector, determinant,
+  exterior_dim, exterior_power, from_integer, symmetric_power,
   tensor::{covariant_slots, one_alternating, pairing, uniform_slots},
 };
+use num_complex::Complex64;
 use num_rational::Rational64;
 
 /// A deterministic matrix with no symmetry, so a transposed index or a dropped
@@ -51,7 +51,7 @@ fn probe_symmetric<R: Ring>(dim: usize, degree: usize, seed: usize) -> Tensor<R>
 /// The minors are integer polynomials in the entries, so this is where the
 /// ring-level determinant earns its keep: `nalgebra`'s asks for a field
 /// because it eliminates, and elimination divides.
-fn exterior_power_is_functorial<R: Ring>() {
+fn exterior_power_is_functorial_over<R: Ring>() {
   for inner in 0..=3 {
     for mid in 0..=3 {
       for outer in 0..=3 {
@@ -70,7 +70,7 @@ fn exterior_power_is_functorial<R: Ring>() {
 /// The permanental counterpart on the symmetric side,
 /// $"Sym"^k (A B) = ("Sym"^k A)("Sym"^k B)$: the same law read through the
 /// other character, and equally exact.
-fn symmetric_power_is_functorial<R: Ring>() {
+fn symmetric_power_is_functorial_over<R: Ring>() {
   for inner in 0..=3 {
     for mid in 0..=3 {
       for outer in 0..=3 {
@@ -91,7 +91,7 @@ fn symmetric_power_is_functorial<R: Ring>() {
 /// A vanishing law is the kind that passes for the wrong reason, so it is
 /// paired below with the check that the first contraction does not already
 /// vanish.
-fn the_interior_product_is_nilpotent<R: Ring>() {
+fn the_interior_product_is_nilpotent_over<R: Ring>() {
   for dim in 1..=4 {
     for grade in 0..=dim {
       let form = probe_element::<R>(dim, grade, 1, Variance::Covariant);
@@ -112,7 +112,7 @@ fn the_interior_product_is_nilpotent<R: Ring>() {
 
 /// The wedge is associative and Koszul graded-commutative,
 /// $alpha wedge beta = (-1)^(k l) beta wedge alpha$.
-fn the_wedge_is_a_graded_algebra<R: Ring>() {
+fn the_wedge_is_a_graded_algebra_over<R: Ring>() {
   for dim in 0..=4 {
     for k in 0..=dim {
       for l in 0..=dim {
@@ -143,7 +143,7 @@ fn the_wedge_is_a_graded_algebra<R: Ring>() {
 /// dualizes, hence the `RationalAlgebra` bound, and it is swept over the
 /// symmetric family as well as the alternating one, where every factorial is
 /// $1$ and the law would say nothing about the change of basis.
-fn the_transport_is_adjoint<R: RationalAlgebra>() {
+fn the_transport_is_adjoint_over<R: RationalAlgebra>() {
   for source in 1..=3 {
     for target in 1..=3 {
       let map = probe::<R>(target, source, 4);
@@ -179,7 +179,7 @@ fn the_transport_is_adjoint<R: RationalAlgebra>() {
 
 /// Evaluation of a symmetric factor divides by $r!$, so it is the other
 /// operation that needs the factorials inverted, and over $QQ$ it is exact.
-fn evaluating_a_symmetric_factor_is_the_monomial<R: RationalAlgebra>() {
+fn evaluating_a_symmetric_factor_is_the_monomial_over<R: RationalAlgebra>() {
   for dim in 1..=3 {
     for degree in 0..=3 {
       let poly = probe_symmetric::<R>(dim, degree, 1);
@@ -233,79 +233,68 @@ fn extension_of_scalars_is_natural() {
   }
 }
 
-/// The integers reach every operation that does not dualize a slot.
-mod integers {
-  #[test]
-  fn exterior_power_is_functorial() {
-    super::exterior_power_is_functorial::<i64>();
-  }
-  #[test]
-  fn symmetric_power_is_functorial() {
-    super::symmetric_power_is_functorial::<i64>();
-  }
-  #[test]
-  fn the_interior_product_is_nilpotent() {
-    super::the_interior_product_is_nilpotent::<i64>();
-  }
-  #[test]
-  fn the_wedge_is_a_graded_algebra() {
-    super::the_wedge_is_a_graded_algebra::<i64>();
-  }
+#[test]
+fn exterior_power_is_functorial() {
+  exterior_power_is_functorial_over::<i64>();
+  exterior_power_is_functorial_over::<Rational64>();
+  exterior_power_is_functorial_over::<f64>();
+  exterior_power_is_functorial_over::<Complex64>();
 }
 
-/// The rationals reach the rest, exactly.
-mod rationals {
-  use super::*;
-
-  #[test]
-  fn exterior_power_is_functorial() {
-    super::exterior_power_is_functorial::<Rational64>();
-  }
-  #[test]
-  fn symmetric_power_is_functorial() {
-    super::symmetric_power_is_functorial::<Rational64>();
-  }
-  #[test]
-  fn the_interior_product_is_nilpotent() {
-    super::the_interior_product_is_nilpotent::<Rational64>();
-  }
-  #[test]
-  fn the_wedge_is_a_graded_algebra() {
-    super::the_wedge_is_a_graded_algebra::<Rational64>();
-  }
-  #[test]
-  fn the_transport_is_adjoint() {
-    super::the_transport_is_adjoint::<Rational64>();
-  }
-  #[test]
-  fn evaluating_a_symmetric_factor_is_the_monomial() {
-    super::evaluating_a_symmetric_factor_is_the_monomial::<Rational64>();
-  }
+#[test]
+fn symmetric_power_is_functorial() {
+  symmetric_power_is_functorial_over::<i64>();
+  symmetric_power_is_functorial_over::<Rational64>();
+  symmetric_power_is_functorial_over::<f64>();
+  symmetric_power_is_functorial_over::<Complex64>();
 }
 
-/// The same laws over the two floating-point rings, where they are the ones
-/// the rest of the workspace actually runs on.
+#[test]
+fn the_interior_product_is_nilpotent() {
+  the_interior_product_is_nilpotent_over::<i64>();
+  the_interior_product_is_nilpotent_over::<Rational64>();
+  the_interior_product_is_nilpotent_over::<f64>();
+  the_interior_product_is_nilpotent_over::<Complex64>();
+}
+
+#[test]
+fn the_wedge_is_a_graded_algebra() {
+  the_wedge_is_a_graded_algebra_over::<i64>();
+  the_wedge_is_a_graded_algebra_over::<Rational64>();
+  the_wedge_is_a_graded_algebra_over::<f64>();
+  the_wedge_is_a_graded_algebra_over::<Complex64>();
+}
+
+#[test]
+fn the_transport_is_adjoint() {
+  the_transport_is_adjoint_over::<Rational64>();
+  the_transport_is_adjoint_over::<f64>();
+  the_transport_is_adjoint_over::<Complex64>();
+}
+
+#[test]
+fn evaluating_a_symmetric_factor_is_the_monomial() {
+  evaluating_a_symmetric_factor_is_the_monomial_over::<Rational64>();
+}
+
+/// $det A = Lambda^n A$: the top exterior power of an endomorphism of an
+/// $n$-dimensional space is the one-by-one matrix of its determinant.
 ///
-/// Exact here too, and not by luck: the fixtures are small integers, the
-/// operations are sums of products of them, and a `f64` holds an integer of
-/// this size exactly. What the sweep checks is that the generic code produces
-/// the same values on the ring the engine uses.
-mod floating {
-  use num_complex::Complex64;
-
-  #[test]
-  fn exterior_power_is_functorial() {
-    super::exterior_power_is_functorial::<f64>();
-    super::exterior_power_is_functorial::<Complex64>();
+/// The determinant is not a separate construction but the extremal case of
+/// the functor, which is what makes Cauchy-Binet at $k = n$ the
+/// multiplicativity $det(A B) = det A dot det B$.
+#[test]
+fn the_determinant_is_the_top_exterior_power() {
+  fn check<R: Ring>() {
+    for n in 0..=4 {
+      let a = probe::<R>(n, n, 7);
+      let top = exterior_power(&a, n);
+      assert_eq!((top.nrows(), top.ncols()), (1, 1));
+      assert!(top[(0, 0)] == determinant(&a), "dim {n}");
+    }
   }
-  #[test]
-  fn the_wedge_is_a_graded_algebra() {
-    super::the_wedge_is_a_graded_algebra::<f64>();
-    super::the_wedge_is_a_graded_algebra::<Complex64>();
-  }
-  #[test]
-  fn the_transport_is_adjoint() {
-    super::the_transport_is_adjoint::<f64>();
-    super::the_transport_is_adjoint::<Complex64>();
-  }
+  check::<i64>();
+  check::<Rational64>();
+  check::<f64>();
+  check::<Complex64>();
 }
