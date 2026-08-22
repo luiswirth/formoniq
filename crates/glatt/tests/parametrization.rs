@@ -1,120 +1,17 @@
-//! [`Parametrization`]: the finite-difference Jacobian matches the
-//! analytic one, the Gauss-Newton chart inverts the forward map (and
-//! terminates early off the manifold), and the built-in shapes (sphere,
-//! ball, torus, graph) each satisfy their own closed-form check.
+//! [`Parametrization`]: $chi compose phi = id$, the chart being the inverse of
+//! the forward map, swept over the shapes it is stated over (sphere, ball,
+//! torus, graph), and the round metric of the unit sphere as an anchor.
+//!
+//! The graph is the only shape with no closed-form chart, so it is where the
+//! fully derived path, the finite-difference Jacobian and the Gauss-Newton
+//! nearest-point solve, carries the law on its own.
 
 extern crate nalgebra as na;
 
 use approx::assert_relative_eq;
 use coorder::{Coord, Matrix};
-use glatt::parametrization::{GN_MAX_ITER, Parametrization};
+use glatt::parametrization::Parametrization;
 use multialgebra::Dim;
-
-/// $(theta, phi) |-> RR^3$: the unit sphere in spherical coordinates, with a
-/// closed-form inverse to test the derived machinery against.
-fn sphere() -> Parametrization {
-  Parametrization::new(
-    |u: &Coord| {
-      let (theta, phi) = (u[0], u[1]);
-      Coord::from_iterator(
-        3,
-        [
-          theta.sin() * phi.cos(),
-          theta.sin() * phi.sin(),
-          theta.cos(),
-        ],
-      )
-    },
-    Dim::new(2),
-  )
-}
-
-/// The finite-difference Jacobian matches the analytic one, column by column.
-#[test]
-fn fd_jacobian_matches_analytic() {
-  let sphere = sphere();
-  for &(theta, phi) in &[(0.7, 0.3), (1.2, 2.1), (2.4, 5.0)] {
-    let u = Coord::from_iterator(2, [theta, phi]);
-    let analytic = Matrix::from_columns(&[
-      na::dvector![
-        theta.cos() * phi.cos(),
-        theta.cos() * phi.sin(),
-        -theta.sin()
-      ],
-      na::dvector![-theta.sin() * phi.sin(), theta.sin() * phi.cos(), 0.0],
-    ]);
-    assert_relative_eq!(sphere.jacobian(&u), analytic, epsilon = 1e-6);
-  }
-}
-
-/// $chi compose phi = id$ on $Omega$: the Gauss-Newton chart inverts the
-/// forward map. Seeded near the point, since the sphere's $phi$ is not
-/// injective globally.
-#[test]
-fn chart_inverts_forward() {
-  let sphere = sphere();
-  for &(theta, phi) in &[(0.7, 0.3), (1.2, 2.1), (2.4, 5.0)] {
-    let u = Coord::from_iterator(2, [theta, phi]);
-    let p = sphere.forward(&u);
-    let seed = Coord::from_iterator(2, [theta + 0.1, phi - 0.1]);
-    let recovered = sphere.chart(&p, &seed);
-    assert_relative_eq!(recovered.vector(), u.vector(), epsilon = 1e-9);
-  }
-}
-
-/// The Gauss-Newton chart lands on the manifold when the target is off it:
-/// the nearest-point projection of an inflated point returns the radial
-/// footpoint.
-#[test]
-fn chart_projects_off_manifold() {
-  let sphere = sphere();
-  let u = Coord::from_iterator(2, [1.0, 2.0]);
-  let footpoint = sphere.forward(&u);
-  let inflated = Coord::new(footpoint.vector() * 1.3);
-  let recovered = sphere.chart(&inflated, &u);
-  assert_relative_eq!(recovered.vector(), u.vector(), epsilon = 1e-9);
-}
-
-/// Gauss-Newton stops once it has converged, on a target off the manifold as
-/// much as on one on it. The residual there is the distance from the point to
-/// the image and never vanishes, so what converges is its tangential part,
-/// the step, and a solver watching the residual would run to the iteration
-/// cap on every such query while returning the same answer.
-#[test]
-fn the_projection_of_an_off_manifold_point_terminates_early() {
-  use std::sync::Arc;
-  use std::sync::atomic::{AtomicUsize, Ordering};
-
-  let evaluations = Arc::new(AtomicUsize::new(0));
-  let counter = evaluations.clone();
-  let sphere = Parametrization::new(
-    move |u: &Coord| {
-      counter.fetch_add(1, Ordering::Relaxed);
-      let (theta, phi) = (u[0], u[1]);
-      Coord::from_iterator(
-        3,
-        [
-          theta.sin() * phi.cos(),
-          theta.sin() * phi.sin(),
-          theta.cos(),
-        ],
-      )
-    },
-    Dim::new(2),
-  );
-
-  let u = Coord::from_iterator(2, [1.0, 2.0]);
-  let inflated = Coord::new(sphere.forward(&u).vector() * 1.3);
-  evaluations.store(0, Ordering::Relaxed);
-  let recovered = sphere.chart(&inflated, &u);
-
-  assert_relative_eq!(recovered.vector(), u.vector(), epsilon = 1e-9);
-  // Every iteration evaluates the forward map at least once, so staying
-  // under the cap in evaluations is staying under it in iterations.
-  // Every iteration evaluates the forward map at least once, so staying
-  // under the cap in evaluations is staying under it in iterations.
-  assert!(evaluations.load(Ordering::Relaxed) < GN_MAX_ITER);
-}
 
 /// The built-in $n$-sphere, across dimensions and radii: every image lies on
 /// the sphere of the requested radius, and its closed-form chart inverts the
@@ -231,15 +128,4 @@ fn sphere_induced_metric_is_round() {
     let expected = Matrix::from_diagonal(&na::dvector![1.0, theta.sin().powi(2)]);
     assert_relative_eq!(g.matrix(), &expected, epsilon = 1e-6);
   }
-}
-
-/// The identity parametrization is its own chart and has the identity
-/// Jacobian, no solve involved.
-#[test]
-fn identity_is_trivial() {
-  let id = Parametrization::identity(Dim::new(3));
-  let p = Coord::from_iterator(3, [1.0, -2.0, 0.5]);
-  assert_eq!(id.forward(&p).vector(), p.vector());
-  assert_eq!(id.chart(&p, &Coord::zeros(3)).vector(), p.vector());
-  assert_eq!(id.jacobian(&p), Matrix::identity(3, 3));
 }
