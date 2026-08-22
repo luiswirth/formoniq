@@ -77,22 +77,17 @@ a thing belongs where it is part of the crate's answer to this.
 | `derham` | discrete differential forms: cochains as forms, Whitney forms, the de Rham map, interpolation and reconstruction, the degrees of freedom |
 | `iterative` | iterative solvers, and nothing else |
 | `formoniq` | the FEM engine, which bundles all of the above |
-| `realize` | intrinsic data made extrinsic: the grade reduction, the dimension reduction, the file formats |
 
-**Three tiers, and the difference is real.**
+**Two tiers, and the difference is real.**
 The first eight are *the mathematics*, each a standalone mathematical object,
 published as such and usable by a reader who has never heard of FEEC.
 `formoniq` is *the engine*, the one crate whose subject is FEEC itself.
-The last two are not core, for two opposite reasons:
-`iterative` sits below the mathematics and could serve any PDE code,
-knowing nothing of meshes, forms or geometry,
-while `realize` sits above it, consuming everything and consumed by nothing.
-Neither models any part of FEEC,
-which is why `realize` is unpublished
-and why neither may be reached from the core path.
+`iterative` is off to the side rather than on the ladder:
+it sits below the mathematics, knows nothing of meshes, forms or geometry,
+models no part of FEEC, and could serve any PDE code.
 
 Crate ladder, each layer adding exactly one thing:
-`multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq → realize`,
+`multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq`,
 with `coorder` and `simplicial` joining from the side:
 `coorder` is foundational, and `simplicial` sits beside `metric`
 as the manifold `regge` adds a geometry to.
@@ -140,7 +135,6 @@ joining the ladder only where `formoniq` consumes it.
 | `derham`     | the de Rham complex on it           | `section::Section` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyLsf` the local shape function, `WhitneyExpansion` the map from coefficients to components, `WhitneyInterpolant` the reconstruction of a form from a cochain), `project::derham_map`, `prolongate::` (the Whitney prolongation onto a refinement), `reduce::` (the grade reduction, a $k$-form read at grade $min(k, n-k)$ through the star, with the orientation the star needs a stated argument) and `io::vtu` |
 | `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner, the generic `VCycle` over a hierarchy of `Level`s and the additive `AuxiliarySpace` preconditioner (both problem-agnostic: the FEEC wiring is `formoniq`'s). `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Real and complex are one implementation: the inner product is Hermitian and the restriction an adjoint, while the tolerances and MINRES's rotation coefficients stay in the real subfield. Backend is `nalgebra-sparse` alone, no faer |
 | `formoniq`   | the FEM engine                      | `assemble` (rayon-parallel over cells, the face enumeration as local-to-global map) and its matrix-free peer `matfree::ElementOperator`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `fe::` (the three maps into the Whitney space, $W$, $R$ and the $L^2$ projection, and the error against an exact form), `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver; the factorizations are field-generic, nalgebra and faer agreeing on `num_complex`, while the eigensolver is real because the pencils it is asked for are), `harmonic::` (the harmonic space as the $L^2$ projection of integral cohomology generators, in its two readings, the integral basis tied to the holes and the mass-orthonormal one the saddle point assumes), `whitney_complex::HilbertComplex` and its implementations, the first-order `WhitneyComplex` with the `Boundary` and `Relative` variants, `hodge::HodgeBlocks` (the masses and coboundaries around a grade, which every problem builds its block system from), `multigrid::` (the geometric V-cycle over a `RefinementTower`, Galerkin coarse operators) and `hx::` (Hiptmair-Xu auxiliary-space preconditioning, uniform in dimension and grade), `problems::` (elliptic, dirac, heat, wave, ...) |
-| `realize`    | intrinsic data made extrinsic       | `reduce::` (the grade reduction, a $k$-form to the scalar or vector of grade $min(k, n-k)$), `Surface`/`BakedMesh` (the dimension reduction to a render primitive and its $RR^3$ bake), the mark bakes (`glyph`, `advect`, `deposit`, `volume`), `reach::` (the fold-safety bound of an $RR^3$ offset), `io::` (the `.vtu`/`.obj`/`.mdd` exporters and readers). No graphics dependency |
 
 No crate exists solely to hold a shared type alias.
 `coorder` is the contrasting case, and it is what makes the rule a rule rather than a size limit:
@@ -170,24 +164,28 @@ are independent objects, so neither depends on the other.
 Their one relation, pulling continuum data onto the mesh and the error that costs,
 is the join, and it lives in `derham`, the crate above both.
 
-`realize` sits at the top as the I/O-and-visualization carve-out invariant 2 draws.
-It is where intrinsic data *becomes* extrinsic:
-it spends the embedding, reduces the dimension to a drawable primitive
-and the grade to a scalar or a vector,
-and it is a pure data transformation with no GPU, no window and no rasterizer.
-A renderer is a consumer of it and lives outside this repository,
-which is what keeps the graphics stack out of the engine's build entirely
-and why a `.vtu` for ParaView is not reached through a viewer.
-The reductions are *shared*, never duplicated:
+**The extrinsic carve-out is a boundary of each crate, not a crate of its own.**
+Invariant 2 draws a line around what needs an embedding, and it is tempting to
+make that line a crate at the top of the ladder.
+It is not one: a thing that becomes extrinsic is still *of* the object it was
+intrinsic on, so it belongs with that object, at the boundary of that object's
+crate's API.
+An OBJ and a Gmsh file are both a mesh read off disk, so both are `regge::io`;
+a VTU is a manifold *and* the forms on it, so it is `derham::io`, the lowest
+crate holding both; and Federer's reach is the geometry of an embedded
+surface, so it sits beside the curvatures in `regge::coord`.
+A crate collecting file formats would have no subject sentence to answer,
+which is what the table above is for.
+
+A renderer is the one genuine consumer of the whole carve-out at once, and it
+lives outside this repository, which is what keeps the graphics stack out of
+the engine's build entirely and why a `.vtu` for ParaView is not reached
+through a viewer.
+The grade reduction (`derham::reduce`) is *shared*, never duplicated:
 a mark a viewer draws and an array an exporter writes
 are the same reading of the same field,
 which is exactly what makes a disagreement between the two
 a bug in one place instead of a drift between them.
-
-It is extrinsic by necessity where the core is intrinsic by discipline,
-it depends downward on `formoniq` and below, nothing depends on it,
-and `crates/realize/CLAUDE.md` carries what that inversion means.
-The parent's invariants still bind it, they are only read from the extrinsic side.
 
 **Concepts float up.**
 A concept belongs in the lowest crate (or module) that can express it

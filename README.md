@@ -122,45 +122,37 @@ Each core crate carries its own README and is published on its own.
 
 ## Off to the side
 
-Two crates are deliberately not part of that ladder,
-because neither models any part of FEEC.
-
-- **[`iterative`](crates/iterative/README.md)**
-  sits below the mathematics: Krylov methods, preconditioners and smoothers
-  around one object, an approximate inverse.
-  It depends on nothing but sparse matrices
-  and would serve any PDE code equally well.
-- **`realize`** sits above it, consuming everything and consumed by nothing:
-  it is where intrinsic data becomes extrinsic
-  (the grade reduction, the dimension reduction, the file formats, no graphics).
-  It is unpublished, and the core path may not reach it.
+**[`iterative`](crates/iterative/README.md)** is deliberately not part of that ladder,
+because it models no part of FEEC.
+It sits below the mathematics: Krylov methods, preconditioners and smoothers
+around one object, an approximate inverse.
+It depends on nothing but sparse matrices
+and would serve any PDE code equally well.
 
 ## Extrinsic output
 
 The engine is intrinsic-first and needs no embedding.
 Anything looked at needs one, because nothing reaches a screen or an interchange file
 until a point has a position.
-`realize` is the deliberate consumer of that extrinsic carve-out,
-and the embedding enters at one named seam, the bake:
-it reduces a complex to what a rasterizer draws,
-simplices of dimension ≤ 2 embedded in R³, with winding and position made explicit.
-Downstream of the bake there are no FEEC types, only ambient geometry,
-and the exporters (`.vtu` for ParaView, `.obj`/`.mdd` for a mesh) are leaves that consume it.
+That carve-out is a boundary of each crate rather than a crate of its own:
+what becomes extrinsic is still *of* the object it was intrinsic on,
+so it lives with that object.
+Mesh formats (Gmsh, Wavefront OBJ, the MDD point cache) are `regge::io`,
+a mesh being a topology and its coordinates together;
+the VTU written for ParaView is `derham::io`,
+being a manifold and the discrete forms on it at once.
 
-Ambient dimension is fixed at 3,
-while intrinsic dimension and form grade stay general within it.
-Two reductions carry this.
-Form grade reduces to a render mark through the reduced grade min(k, n−k):
-a scalar density coloring, a glyph or particle line field, a standing-wave displacement height.
-Intrinsic dimension reduces to a render primitive min(n, 2):
-a surface to wound triangles, a curve to segments, a point set to points,
-and a solid to the 2-simplices of its boundary.
-`crates/realize/CLAUDE.md` documents the design in full.
+The reading a form gets on the way out is one rule and is shared, not duplicated.
+A k-form and its Hodge dual are one datum, read at the grade min(k, n−k) where the pair is smallest:
+a scalar density at 0, a tangent line field at 1.
+That is `derham::reduce`, and an exporter's data array and a viewer's mark
+are the same reading of the same field.
 
-The interactive viewer over these primitives is a separate project,
+The interactive viewer is a separate project,
 [formoniq-studio](https://github.com/luiswirth/formoniq-studio):
 a wgpu/winit/egui application that runs natively and in the browser
 via WebAssembly and WebGPU, with the solve running client-side.
+It carries its own render reductions: a complex to wound triangles in R³, and the marks over them.
 It depends on this repository and nothing here depends on it,
 so the graphics stack is never in the engine's build.
 
