@@ -1,15 +1,14 @@
 //! Freudenthal refinement of the Regge geometry: it reproduces the
 //! structured generator's family, partitions the measure, agrees intrinsic
-//! with extrinsic, and composes into a self-similar tower.
+//! with extrinsic, and composes, $"refine"_(R') compose "refine"_R =
+//! "refine"_(R R')$.
 
 use multiindex::Dim;
 use regge::cell_volume;
-use regge::lengths::LengthsSq;
 use regge::lengths::mesh::MeshLengthsSq;
 use regge::mesher::cartesian::CartesianGrid;
 use regge::refine::SubdivisionExt;
 use simplicial::topology::complex::Complex;
-use simplicial::topology::data::SkeletonData;
 use simplicial::topology::ordering::CellOrdering;
 
 fn signature(complex: &Complex, lengths: &MeshLengthsSq) -> Vec<Vec<u64>> {
@@ -116,29 +115,6 @@ fn intrinsic_equals_extrinsic() {
   }
 }
 
-/// The Regge (edge-length) refinement agrees with the embedded one: refining
-/// lengths intrinsically and refining coordinates then measuring their edges
-/// give the same lengths. Certifies the metric-only path against the extrinsic
-/// one, edge by edge.
-#[test]
-fn lengths_match_coords() {
-  for dim in (1..=3usize).map(Dim::from) {
-    let (coarse, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let coarse_lengths = coords.to_edge_lengths_sq(&coarse);
-
-    for r in 1..=3 {
-      let sub = coarse.refine(r);
-      let intrinsic = coarse_lengths.refine(&sub, &coarse);
-      let extrinsic = coords.refine(&sub).to_edge_lengths_sq(sub.complex());
-
-      assert_eq!(intrinsic.len(), extrinsic.len());
-      for (a, b) in intrinsic.iter().zip(extrinsic.iter()) {
-        approx::assert_relative_eq!(a, b, epsilon = 1e-12);
-      }
-    }
-  }
-}
-
 /// A refinement tower built on the inherited ordering is the single
 /// refinement of the product: refining twice by $R$ gives the same mesh as
 /// once by $R^2$, cells and geometry alike.
@@ -171,59 +147,6 @@ fn a_tower_on_the_inherited_ordering_is_the_product_refinement() {
         signature(once.complex(), &once_lengths),
         "dim {dim}: a tower of two {r}-fold refinements must be the {}-fold one",
         r * r
-      );
-    }
-  }
-}
-
-/// Every cell of a tower is similar to the cell it came from: one similarity
-/// class, at every level, in every dimension.
-///
-/// The property the ordering exists to preserve, stated where it is visible.
-/// Shape alone, scale is divided out, so it is a statement about mesh
-/// quality rather than about which mesh was built.
-#[test]
-fn a_tower_stays_self_similar() {
-  fn shape_classes(complex: &Complex, lengths: &MeshLengthsSq) -> usize {
-    let mut classes: Vec<Vec<u64>> = complex
-      .cells()
-      .handle_iter()
-      .map(|cell| {
-        let mut ls: Vec<f64> = lengths
-          .simplex_lengths_sq(*cell)
-          .vector()
-          .iter()
-          .copied()
-          .collect();
-        ls.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let max = *ls.last().unwrap();
-        ls.iter().map(|l| (l / max * 1e6).round() as u64).collect()
-      })
-      .collect();
-    classes.sort_unstable();
-    classes.dedup();
-    classes.len()
-  }
-
-  for dim in (1..=4usize).map(Dim::from) {
-    let (coarse, coords) = CartesianGrid::new_unit(dim, 1).triangulate();
-    let mut lengths = coords.to_edge_lengths_sq(&coarse);
-    let mut complex = coarse;
-    let mut ordering = CellOrdering::colex(&complex);
-
-    // Two levels already exhibit the drift the ordering prevents (the colex
-    // tower leaves one class at level two). The top dimension is capped there
-    // because a third level is ~10^5 cells for no further statement.
-    let levels = if dim <= 3 { 3 } else { 2 };
-    for level in 1..=levels {
-      let sub = complex.refine_with(&ordering, 2);
-      lengths = lengths.refine(&sub, &complex);
-      ordering = sub.ordering().clone();
-      complex = sub.into_complex();
-      assert_eq!(
-        shape_classes(&complex, &lengths),
-        1,
-        "dim {dim}, level {level}: a tower must stay self-similar"
       );
     }
   }

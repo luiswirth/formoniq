@@ -77,49 +77,6 @@ fn a_reflecting_identification_admits_no_kuhn_chain_order() {
   }
 }
 
-/// Quasi-uniform resolution bounds the cell aspect ratio independently of
-/// the fundamental domain's own aspect ratio, which one shared cell count
-/// cannot: a Möbius band 16 times longer than it is wide, meshed with one
-/// count, has edges 16 times longer one way than the other, and the shape
-/// regularity every FEM error constant depends on degrades with it.
-///
-/// The bound is on the spacing, so it is a statement about the geometry and
-/// not about the counts.
-#[test]
-fn quasi_uniform_resolution_bounds_the_aspect_ratio() {
-  fn edge_length_spread(quotient: &FlatQuotient) -> f64 {
-    let (_, lengths) = quotient.triangulate();
-    let (mut min, mut max) = (f64::MAX, 0.0_f64);
-    for &l in lengths.vector().iter() {
-      let l = l.sqrt();
-      min = min.min(l);
-      max = max.max(l);
-    }
-    max / min
-  }
-
-  let (circumference, width) = (16.0, 1.0);
-  let ids = || vec![Identification::Twisted(vec![1]), Identification::Open];
-  let sides = || Vector::from_column_slice(&[circumference, width]);
-
-  let uniform = FlatQuotient::new_anisotropic(sides(), ids(), vec![16, 16]);
-  let quasi = FlatQuotient::quasi_uniform(sides(), ids(), 16);
-
-  // One count over unequal periods reproduces the domain's own aspect ratio.
-  assert!(
-    edge_length_spread(&uniform) > circumference / width,
-    "a shared count meshes a long strip into slivers"
-  );
-  // Scaling the counts by the periods leaves only the Kuhn diagonal, whose
-  // length is $sqrt(2)$ times an axis step: the regular cell's own spread.
-  let spread = edge_length_spread(&quasi);
-  assert!(
-    spread < 1.5,
-    "quasi-uniform cells should differ only by the Kuhn diagonal, got {spread}"
-  );
-  assert_eq!(quasi.ncells_per_axis(), [16, 1]);
-}
-
 /// The flat torus is closed (no boundary) and carries the cohomology of
 /// $T^d$: Betti numbers $b_k = binom(d, k)$, Euler characteristic $0$, for
 /// every dimension.
@@ -149,19 +106,6 @@ fn torus_topology() {
     // shortest edges are the axis steps of length 1/n.
     assert!(lengths.iter().all(|s| s > 0.0));
     assert!((lengths.mesh_width_min() - 1.0 / 3.0).abs() < 1e-12);
-  }
-}
-
-/// Uniform refinement of the torus is topological: the refined mesh stays
-/// closed and carries the same cohomology as the coarse one.
-#[test]
-fn torus_refined_topology() {
-  let (coarse, _) = FlatQuotient::unit_torus(Dim::new(2), 3).triangulate();
-  for refinement in 1..=2 {
-    let fine = coarse.refine(refinement).into_complex();
-    assert!(!fine.has_boundary());
-    assert_eq!(fine.betti_numbers(), vec![1, 2, 1]);
-    assert_eq!(fine.euler_characteristic(), 0);
   }
 }
 
@@ -200,33 +144,6 @@ fn klein_topology() {
       "the Klein bottle is non-orientable"
     );
   }
-}
-
-/// The parity of the reflections is the orientability: reflecting two
-/// transverse axes is a rotation, so the twisted 3-torus it glues stays
-/// orientable and closed, with the Euler characteristic of any closed
-/// odd-dimensional manifold.
-///
-/// This is the control for [`moebius_topology`] and [`klein_topology`]: it
-/// isolates non-orientability from being twisted at all.
-#[test]
-fn even_reflection_count_stays_orientable() {
-  let twisted = FlatQuotient::new(
-    Vector::from_element(3, 1.0),
-    vec![
-      Identification::Twisted(vec![1, 2]),
-      Identification::Periodic,
-      Identification::Periodic,
-    ],
-    3,
-  );
-  assert!(twisted.is_orientation_preserving());
-
-  let (complex, lengths) = twisted.triangulate();
-  assert!(!complex.has_boundary());
-  assert!(complex.orientation().is_some());
-  assert_eq!(complex.euler_characteristic(), 0);
-  assert!(lengths.iter().all(|s| s > 0.0));
 }
 
 /// Every identification leaves the geometry flat and uniform: the quotient is

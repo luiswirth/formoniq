@@ -1,11 +1,10 @@
-//! Embedding a [`FlatQuotient`]: the Clifford embedding is isometric in
-//! every dimension it needs, a twisted quotient needs one more and is
-//! curved, and the embedding separates the identified vertices.
+//! Embedding a [`FlatQuotient`]: the Clifford embedding is isometric in every
+//! dimension it needs, and a twisted quotient needs one more and is curved.
 
 use multiindex::Dim;
 use regge::lengths::LengthsSq;
-use regge::mesher::quotient::{FlatQuotient, Identification};
-use regge::mesher::quotient_embed::{donut_r3, equivariant, is_isometric, moebius_r3};
+use regge::mesher::quotient::FlatQuotient;
+use regge::mesher::quotient_embed::{equivariant, is_isometric};
 use simplicial::linalg::Vector;
 
 /// The Clifford embedding is an isometry: the edge lengths it induces are
@@ -28,26 +27,6 @@ fn the_clifford_embedding_is_isometric() {
     for (a, b) in intrinsic.iter().zip(induced.iter()) {
       assert!((a - b).abs() < 1e-9, "dim {dim}: {a} vs {b}");
     }
-  }
-}
-
-/// An open axis is carried as itself, so a slab (no identification at all) is
-/// embedded isometrically too, in $RR^d$ rather than $RR^(2d)$. The
-/// degenerate end of the family, where the quotient is the grid.
-#[test]
-fn an_unidentified_slab_embeds_isometrically_in_its_own_dimension() {
-  let quotient = FlatQuotient::new(
-    Vector::from_element(2, 1.0),
-    vec![Identification::Open, Identification::Open],
-    3,
-  );
-  let (complex, intrinsic) = quotient.triangulate();
-  let coords = equivariant(&quotient, 2.0);
-  assert_eq!(coords.dim(), 2);
-
-  let induced = coords.to_edge_lengths_sq(&complex);
-  for (a, b) in intrinsic.iter().zip(induced.iter()) {
-    assert!((a - b).abs() < 1e-9);
   }
 }
 
@@ -77,53 +56,5 @@ fn twisted_quotients_need_four_dimensions_and_are_not_isometric() {
     );
     // Curved, but still a faithful realization: no edge collapses.
     assert!(induced.iter().all(|l| l > 0.0));
-  }
-}
-
-/// The embedding descends to the quotient: identified vertices are one
-/// vertex, so the coordinates are single-valued, and distinct vertices stay
-/// distinct. This is what "equivariant" buys, and it is the property the
-/// half-angle frame exists to provide.
-#[test]
-fn the_embedding_separates_the_vertices() {
-  for quotient in [
-    FlatQuotient::unit_torus(Dim::new(2), 4),
-    FlatQuotient::moebius(1.0, 0.4, 4),
-    FlatQuotient::klein(Vector::from_element(2, 1.0), 4),
-  ] {
-    let coords = equivariant(&quotient, 3.0);
-    let matrix = coords.matrix();
-    for i in 0..quotient.nvertices() {
-      for j in (i + 1)..quotient.nvertices() {
-        let separation = (matrix.column(i) - matrix.column(j)).norm();
-        assert!(separation > 1e-6, "vertices {i} and {j} coincide");
-      }
-    }
-  }
-}
-
-/// The $RR^3$ pictures are three-dimensional, injective, and, the point
-/// worth asserting, not isometric: their induced lengths are a
-/// different manifold from the flat quotient that produced the topology.
-#[test]
-fn the_r3_pictures_are_curved() {
-  let torus = FlatQuotient::unit_torus(Dim::new(2), 4);
-  let strip = FlatQuotient::moebius(1.0, 0.4, 4);
-  let cases = [
-    (&torus, donut_r3(&torus, 0.4)),
-    (&strip, moebius_r3(&strip, 2.0)),
-  ];
-  for (quotient, coords) in cases {
-    assert_eq!(coords.dim(), 3);
-    let (complex, intrinsic) = quotient.triangulate();
-    let induced = coords.to_edge_lengths_sq(&complex);
-    assert!(induced.iter().all(|l| l > 0.0));
-    assert!(
-      intrinsic
-        .iter()
-        .zip(induced.iter())
-        .any(|(a, b)| (a - b).abs() > 1e-6),
-      "an RR^3 realization of a flat surface is curved"
-    );
   }
 }

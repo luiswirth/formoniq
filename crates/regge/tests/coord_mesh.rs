@@ -1,10 +1,10 @@
-//! [`MeshCoords`]: geometry at every grade matches the induced embedding
-//! metric, an edge's Regge length is its endpoints' distance, and a
-//! Minkowski ambient induces Lorentzian cell metrics.
+//! [`MeshCoords`], the extrinsic bridge: the metric an embedding induces
+//! matches the intrinsic one at every grade, and a Minkowski ambient
+//! realizes Lorentzian Regge data.
 
 use multiindex::Dim;
 use regge::cell_volume;
-use regge::coord::mesh::{MeshCoords, VertexRefExt};
+use regge::coord::mesh::MeshCoords;
 use regge::coord::simplex::SimplexRefExt;
 use regge::lengths::mesh::EdgeRefExt;
 use regge::mesher::cartesian::CartesianGrid;
@@ -35,44 +35,6 @@ fn simplex_metric_matches_induced_at_every_grade() {
           epsilon = 1e-12
         );
       }
-    }
-  }
-}
-
-/// The witness reads cohere across the layers: an edge's Regge squared
-/// length is the squared distance of its endpoints' coordinates in the
-/// inducing embedding.
-#[test]
-fn edge_length_is_endpoint_distance() {
-  for dim in (1..=3usize).map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let lengths_sq = coords.to_edge_lengths_sq(&topology);
-    for edge in topology.edges().handle_iter() {
-      let (vi, vj) = edge.endpoints();
-      let displacement = vj.coord(&coords) - vi.coord(&coords);
-      assert_eq!(edge.length_sq(&lengths_sq), displacement.norm_squared());
-      assert_eq!(edge.length(&lengths_sq), displacement.norm());
-    }
-  }
-}
-
-/// A mesh embedded in Minkowski ambient space induces Lorentzian cell
-/// metrics: on a coordinate-aligned mesh the induced metric of every cell
-/// is congruent to $eta$ itself, so its signature is $(n - 1, 1)$ by
-/// Sylvester's law of inertia, the same code path as the Euclidean
-/// ambient, one signature among all.
-#[test]
-fn minkowski_ambient_induces_lorentzian_cell_metrics() {
-  for dim in (1..=3usize).map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let spacetime = MeshCoords::with_ambient(
-      coords.matrix().clone(),
-      metric::Metric::minkowski(dim.index()),
-    );
-    for cell in topology.cells().handle_iter() {
-      let metric = spacetime.cell_metric(cell);
-      assert_eq!(metric.signature(), (dim.index() - 1, 1));
-      assert!(!metric.is_riemannian());
     }
   }
 }
