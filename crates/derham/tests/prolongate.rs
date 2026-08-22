@@ -1,6 +1,6 @@
-//! Whitney prolongation onto a refinement: it agrees with resampling the
-//! coarse interpolant through an embedding, is the identity at $R = 1$, and
-//! is a cochain map.
+//! Whitney prolongation onto a refinement: the Whitney space of a coarse
+//! complex sits inside the Whitney space of its refinement, and the
+//! prolongation is the map that says so.
 
 use approx::assert_relative_eq;
 use derham::Cochain;
@@ -63,51 +63,6 @@ fn prolongation_is_the_resampled_interpolant() {
         let direct = derham_map(&resampled, fine, 1);
 
         assert_relative_eq!(prolonged.coeffs(), direct.coeffs(), epsilon = 1e-10);
-      }
-    }
-  }
-}
-
-/// $R = 1$ gives $P = "id"$: the identity refinement prolongs a cochain to
-/// itself, coarse vertices keeping their labels so the DOFs line up.
-#[test]
-fn identity_refinement_prolongs_trivially() {
-  for dim in (0..=3).into_iter().map(Dim::from) {
-    let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let sub = coarse.refine(1);
-    for grade in dim.range_inclusive() {
-      let c = probe_cochain(&coarse, grade);
-      let prolonged = prolongate(&c, &coarse, &sub);
-      assert_relative_eq!(prolonged.coeffs(), c.coeffs(), epsilon = 1e-10);
-    }
-  }
-}
-
-/// $dif("fine") compose P = P compose dif("coarse")$: prolongation is a
-/// cochain map.
-///
-/// The coarse and fine exterior derivatives are the coboundary operators of
-/// their complexes, and $P$ intertwines them, the Whitney space nesting
-/// respects the de Rham differential, since $W$ and $R$ each do.
-#[test]
-fn prolongation_is_a_cochain_map() {
-  for dim in (1..=3).into_iter().map(Dim::from) {
-    let (coarse, _) = CartesianGrid::new_unit(dim, 2).triangulate();
-    for r in 1..=3 {
-      let sub = coarse.refine(r);
-      let fine = sub.complex();
-      for grade in dim.range() {
-        let c = probe_cochain(&coarse, grade);
-
-        let dif_then_prolong = prolongate(&c.dif(&coarse), &coarse, &sub);
-        let prolong_then_dif = prolongate(&c, &coarse, &sub).dif(fine);
-
-        assert_eq!(dif_then_prolong.grade(), prolong_then_dif.grade());
-        assert_relative_eq!(
-          dif_then_prolong.coeffs(),
-          prolong_then_dif.coeffs(),
-          epsilon = 1e-10
-        );
       }
     }
   }

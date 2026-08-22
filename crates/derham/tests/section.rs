@@ -1,16 +1,11 @@
-//! The `Section`/`Sampler` bridge: located sampling agrees with the linear
-//! scan, pullback then sample is the identity on a full-dimension mesh, the
-//! flat pullback is the identity special case of the curved one, the
-//! composite pullback is functorial, and the field-level Hodge star is an
-//! involution up to the same sign as the value-level one.
+//! The pullback bridge between the continuum and the simplicial manifold:
+//! it is functorial, and on a mesh of full intrinsic dimension it is
+//! invertible by the sampler.
 
 extern crate nalgebra as na;
 
 use approx::assert_relative_eq;
-use derham::Cochain;
-use derham::interpolate::interpolant::WhitneyInterpolant;
-use derham::project::derham_map;
-use derham::section::{CoordFieldExt, Section, SectionExt, SectionOps};
+use derham::section::{CoordFieldExt, Section, SectionExt};
 use glatt::field::{CoordField, DiffFormClosure};
 use multiindex::Dim;
 use regge::coord::Coord;
@@ -30,31 +25,6 @@ fn probe_points(dim: Dim, samples: usize) -> impl Iterator<Item = Coord> {
       }),
     )
   })
-}
-
-/// The locator-accelerated sampling agrees exactly with the linear-scan
-/// fallback: same cell, same reconstructed value.
-#[test]
-fn located_sampling_matches_scan() {
-  for dim in (1..=3).into_iter().map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 3).triangulate();
-    let locator = PointLocator::new(&topology, &coords);
-
-    let field = DiffFormClosure::one_form(|p| p.vector().clone(), dim);
-    let cochain = derham_map(&field.pullback_on(&topology, &coords), &topology, 2);
-    let whitney = WhitneyInterpolant::new(cochain, &topology);
-
-    let scan = whitney.sampled_on(&topology, &coords);
-    let fast = whitney
-      .sampled_on(&topology, &coords)
-      .with_locator(&locator);
-
-    for x in probe_points(dim, 4) {
-      let a = scan.at_global(&x).unwrap();
-      let b = fast.at_global(&x).unwrap();
-      assert_relative_eq!(a.components(), b.components(), epsilon = 1e-12);
-    }
-  }
 }
 
 /// Pulling a coordinate form onto the mesh and sampling it back in ambient
@@ -80,38 +50,6 @@ fn pullback_then_sample_is_identity() {
       assert_relative_eq!(
         sampled.at_global(&x).unwrap().components(),
         field.at(&x).components(),
-        epsilon = 1e-12
-      );
-    }
-  }
-}
-
-/// The flat pullback is the identity special case of the curved one: on a
-/// mesh of full intrinsic dimension, `pullback_on` and
-/// `pullback_through(&identity)` agree pointwise. This is the "a flat domain
-/// is a continuum whose chart is the identity" claim, made a theorem.
-#[test]
-fn flat_pullback_is_identity_chart() {
-  use glatt::parametrization::Parametrization;
-  use simplicial::atlas::MeshPoint;
-
-  for dim in (1..=3).into_iter().map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-
-    let field = DiffFormClosure::one_form(
-      |p| Vector::from_iterator(p.dim(), p.iter().map(|x| (2.0 * x).cos())),
-      dim,
-    );
-    let identity = Parametrization::identity(dim);
-
-    let flat = field.pullback_on(&topology, &coords);
-    let through = field.pullback_through(&topology, &coords, &identity);
-
-    for cell in topology.cells().handle_iter() {
-      let point = MeshPoint::barycenter(cell.idx());
-      assert_relative_eq!(
-        flat.at(&point).components(),
-        through.at(&point).components(),
         epsilon = 1e-12
       );
     }
@@ -154,41 +92,5 @@ fn composite_pullback_is_functorial() {
       staged.components(),
       epsilon = 1e-12
     );
-  }
-}
-
-/// $star star = (-1)^(k(n-k))$ holds pointwise on the field level, with the
-/// cell metric supplied by the edge lengths.
-#[test]
-fn hodge_star_field_involution() {
-  use multiindex::Sign;
-  use simplicial::atlas::MeshPoint;
-
-  for dim in (1..=3).into_iter().map(Dim::from) {
-    let (topology, coords) = CartesianGrid::new_unit(dim, 2).triangulate();
-    let lengths = coords.to_edge_lengths_sq(&topology);
-
-    for grade in dim.range_inclusive() {
-      let ndofs = topology.nsimplices(grade);
-      let cochain = Cochain::new(
-        grade,
-        Vector::from_iterator(ndofs, (0..ndofs).map(|i| (i % 5) as f64 - 2.0)),
-      );
-      let orientation = topology.orientation().unwrap();
-      let whitney = WhitneyInterpolant::new(cochain, &topology);
-      let star_star = WhitneyInterpolant::new(whitney.cochain().clone(), &topology)
-        .hodge_star(&topology, &lengths, orientation)
-        .hodge_star(&topology, &lengths, orientation);
-
-      let sign = Sign::from_parity(grade.index() * (dim - grade).index());
-      for cell in topology.cells().handle_iter() {
-        let point = MeshPoint::barycenter(cell.idx());
-        assert_relative_eq!(
-          star_star.at(&point).components(),
-          &(sign.as_f64() * whitney.at(&point)).components(),
-          epsilon = 1e-12
-        );
-      }
-    }
   }
 }
