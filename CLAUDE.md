@@ -5,239 +5,50 @@ This file is the design doc:
 the invariants, conventions and house style an agent must uphold, and the reasons behind them.
 
 The mathematics is the design.
-Differential geometry, algebraic topology, functional analysis and category theory
-enter as types, traits and laws, not as commentary on them.
+It enters as types, traits and laws, not as commentary on them.
 Code should read the way a mathematician would write.
 
 ## Design goals
 
-- **Unification over special-casing:**
+- **Unification over special-casing.**
   One general principle covers the many classical special cases.
-  Gradient/curl/divergence are one exterior derivative.
-  Poisson/Maxwell/Hodge-Laplace are one Hodge-Laplace problem.
-  Scalar and vector FEM are Whitney forms at grade 0 and 1.
-  Riemannian and Lorentzian geometry are one pseudo-Riemannian metric of signature $(p, q)$,
-  the Hodge star reading the signature off the metric itself.
-  Never re-introduce the special cases.
-- **Arbitrary dimension, always:**
+  Never re-introduce them.
+- **Arbitrary dimension, always.**
   Nothing is hardcoded to 2D or 3D.
-  Dimension and grade are one runtime value, the `Degree` newtype in `multiindex`
-  (`Dim` and `ExteriorGrade` are aliases naming the role).
+  Dimension and grade are runtime values, the `Degree` newtype in `multiindex`.
   If you find yourself writing `if dim == 3`, the abstraction is wrong.
-  `Degree` follows one pattern worth naming,
-  *totalize the arithmetic, relationize the bound, trivialize the out-of-range*:
-  it is a signed $ZZ$ index so a computation may pass through $-1$ or $n+1$ with no special case,
-  validity is checked *relationally* against a supplied top degree at the point of use
-  (`index_in`, `None` off range) rather than baked into the representation
-  as an unsigned type would,
-  and a degree off $[0, n]$ *denotes* the trivial space $Lambda^(-1) = Lambda^(n+1) = 0$
-  instead of trapping.
-  `usize` is the boundary lingua franca and `Degree` the internal currency:
-  public grade/dim APIs take `impl Into<Degree>`
-  (any integer lifts, literals included, via `From`),
-  so a caller writes `mass(0)` and a sweep stays `for k in 0..=n`.
-  Construction is one-directional
-  (an integer lifts *into* a `Degree`, never the reverse, no `Deref`),
-  so the signed logic stays sealed.
-  Graded containers expose `Degree`-typed accessors (`ComplexVec::grade`, `Complex::skeleton`)
-  that pay the `.index()` once inside, so the raw index never surfaces at a call site.
-- **Total on the degenerate boundary:**
-  Dimensional agnosticism is the interior claim,
-  the stronger one is that the range is closed at its extremes.
+  `Degree` totalizes its arithmetic, checks bounds relationally against a supplied top degree,
+  and a degree off $[0, n]$ denotes the trivial space instead of trapping.
+  Public grade/dim APIs take `impl Into<Degree>`, so the signed logic stays sealed inside.
+- **Total on the degenerate boundary.**
   The base dimension, the extremal grades, an empty skeleton, a one-element system:
-  these are where generic code silently breaks
-  (a block sized wrong, an index one past the top, a backend's small-input path)
-  and where the special-case temptation is strongest.
-  The abstraction must be total there too:
-  an edge case runs on the same code and returns the mathematically trivial answer
-  (the empty result, the zero operator, the single harmonic mode)
-  rather than being excluded.
-  A base case that holds is a proof of the unification,
-  one that panics is a hidden `if dim == ...` the design never admitted to.
-- Directions being explored, not commitments:
-  - higher-order elements: the trimmed spaces $P^-_r Lambda^k$ and their geometric decomposition
-  - BEM and spectral methods within the same exterior-calculus frame
-  - curvature, higher-order Regge and isoparametric cells
+  an edge case runs on the same code and returns the mathematically trivial answer.
+  A base case that panics is a hidden `if dim == ...` the design never admitted to.
 
 ## Architecture
 
-**What each crate is.**
-One sentence each, and it is the first question to ask of any placement decision:
-a thing belongs where it is part of the crate's answer to this.
+The README describes every crate. The layering is:
 
-| crate | is |
-| ------------ | -- |
-| `multiindex` | the combinatorial index sets and their colex ranking |
-| `multialgebra` | the free tensor power over one vector space, and its exterior and symmetric quotients |
-| `metric` | a metric on a tangent space, and the multilinear operations needing one. Not about meshes |
-| `coorder` | the affine space as a type: points tagged by the space they live in, and the affine maps between them |
-| `simplicial` | the simplicial manifold: its topology and its piecewise structure, the atlas and the bundle the atlas determines |
-| `regge` | Regge geometry, which is geometry *on* the simplicial manifold: the metric of a piecewise-flat cell, in the edge-lengths-squared representation |
-| `glatt` | the continuum manifold and analytic data on it. No mesh |
-| `derham` | discrete differential forms: cochains as forms, Whitney forms, the de Rham map, interpolation and reconstruction, the degrees of freedom |
-| `iterative` | iterative solvers, and nothing else |
-| `formoniq` | the FEM engine, which bundles all of the above |
+```
+multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq
+```
 
-**Two tiers, and the difference is real.**
-The first eight are *the mathematics*, each a standalone mathematical object,
-published as such and usable by a reader who has never heard of FEEC.
-`formoniq` is *the engine*, the one crate whose subject is FEEC itself.
-`iterative` is off to the side rather than on the ladder:
-it sits below the mathematics, knows nothing of meshes, forms or geometry,
-models no part of FEEC, and could serve any PDE code.
+with `coorder` foundational, `simplicial` beside `metric`
+(the manifold `regge` adds a geometry to),
+and `iterative` off to the side, below the mathematics, modeling no part of FEEC.
 
-Crate ladder, each layer adding exactly one thing:
-`multiindex → multialgebra → metric → { regge, glatt } → derham → formoniq`,
-with `coorder` and `simplicial` joining from the side:
-`coorder` is foundational, and `simplicial` sits beside `metric`
-as the manifold `regge` adds a geometry to.
-`regge`/`glatt` are siblings, the discrete manifold and the continuum one.
-
-Two of those boundaries are invariants made structural rather than documented.
-**Invariant 5** splits `multialgebra` from `metric`:
-the wedge, the contraction, the transfer and both pairings need no metric,
-the inner product, the Hodge star and the musicals need nothing else,
-so an operation's crate now says what it depends on.
-The coefficient ring reads off the same boundary rather than a second one:
-`multialgebra` is generic over any commutative ring,
-while a metric is real and applying one lands in $RR$,
-so the ring-generic operations are exactly the metric-free ones.
-**Invariant 1** splits `simplicial` from `regge`:
-the complex is combinatorics, a geometry is a genuinely second input,
-and the split runs through the meshers too --
-the Kuhn triangulation of a box is combinatorial (`CartesianTopology`),
-placing its vertices is not (`CartesianGrid`).
-Both boundaries are checkable in a manifest, which is the point of making them structural:
-`multialgebra` depends on neither the metric nor a mesh, and `simplicial` on no metric.
-`simplicial` does depend on `multialgebra`, and must:
-the tangent bundle of a piecewise-affine manifold and the exterior powers over it
-are determined by the atlas alone,
-every chart being the same chart up to the labelling of its vertices,
-so the fiber over a point of a cell *is* $Lambda^bullet (RR^n)$ in that chart's frame.
-The bundle is therefore chart data of a piece with the charts,
-and the face trace, the tangent blade of a face
-and the action of a transition on a fiber value live with them.
-A reference datum typed as a metric would reintroduce the edge,
-so `unit_bary_gramian` hands back a bare matrix.
-`iterative` is off to the side:
-a standalone Krylov/preconditioner crate depending on nothing but `nalgebra-sparse`,
-joining the ladder only where `formoniq` consumes it.
-
-| crate        | is                                  | key contents |
-| ------------ | ----------------------------------- | ------------ |
-| `multiindex` | combinatorial index structures      | `MonoIndex`/`Repetition` (both multi-index families as one bitset of the *shifted* word), `Bits` (the sealed backing width both are generic over), `Combination`/`Sign` (colex-ranked subsets, the $Lambda^k$ side), `Composition` (weak compositions, the $"Sym"^d$ side), `Permutation` (the bijections, the $S_n$ side), `cartesian::` (radix multi-indices) |
-| `multialgebra` | $V^(times.circle k)$ and its two quotients $Lambda$ and $"Sym"$, as one construction | `Symmetry` (free, alternating, symmetric), `Factor` (the functor), `Slot` (the functor with its `Variance`), `Tensor` (a product of slots over one space), `product`/`merge`/`contract`/`transfer`, `exterior_power`, wedge, interior product, both pairings, `dualize_slot` (variance as a relabelling, the metric-free half of a musical), `pullback`/`pushforward` of a value along a linear map, `Transport` (the same functor materialized for a fixed shape, held as its factors), `apply_factorwise` (a factored operator applied without forming it), `blade_of` (the wedge of a frame's columns), `Ring`/`RationalAlgebra` (the coefficient ring and the $QQ$-algebra the dualizing operations need), `extend_scalars`, `determinant` (Leibniz, since a ring does not divide) |
-| `metric`     | metric structure, and the operations needing one | `Metric` (a non-degenerate symmetric bilinear form of any signature, hence a $"Sym"^2$ element; Riemannian is $q = 0$), `dual`/`measuring` ($g$ and $g^(-1)$ as one datum), `induced`/`on_slot`, `CausalType`, and the metric half of the algebra: `inner`, `tensor_metric` and `TensorExt` carrying `norm`/`hodge_star`/`star`/`musical` |
-| `coorder`    | the affine space, typed              | `Coords<S>` (a point tagged by its space, generic over owned or borrowed storage) with the affine structure: the action of a displacement, `affine_combination` and its uniform case `barycenter`; `affine::AffineTransform<From, To>` (the maps tagged by theirs, so composition and inversion are type-checked) |
-| `simplicial` | the simplicial complex and its atlas | `topology::` (`Complex`, `Skeleton`, `SimplexRef`, the `role::` witnesses `Cell`/`Facet`/..., `chain::` (`FreeModule<V, R>` over a coefficient ring `R` and a `Variance` `V`, of which `Chain`/`Cochain` are the two aliases: one signed incidence read both ways, with `Complex::incidences` the relation and the boundary operators its assembled form), `homology::`/`cohomology::` (the free ranks and representative (co)cycles over $ZZ$, one subquotient computed on the incidence and its transpose), `orientation::Orientation`, `ordering::CellOrdering`, `refine::Subdivision`, `relabel::VertexRelabelling` the gap-closing renumbering an import needs, `incidence::FaceIncidence` the cell-to-face relation in both of its readings, `manifold::` the checkable rungs of the manifold condition, `subcomplex::Subcomplex` the boundary, a boundary part and a vertex link as one construction, carrying the cochain trace onto it in both readings, the operator and the restriction applied), `atlas::` (`Chart`, `MeshPoint`, `Transition` with its action on fiber values, `Bary`/`Local`, `SimplexQuadRule`, `SimplexCoords`, and `bundle::` the exterior bundle the atlas determines: `FaceTrace`, `face_tangent_blade`), `mesher::grid::CartesianTopology` (the Kuhn triangulation, which is combinatorial), `io::cbor` (the on-disk encoding shared by every serializable type above it), and `linalg::` (the dense/sparse nalgebra aliases, the `CooMatrixExt` block-matrix builder every crate above it reuses, and `CsrMatrixExt::extend_scalars`, the operator-side twin of `FreeModule::extend_scalars`). Metric-free throughout: its own tests build every fixture combinatorially, a 2-sphere being the boundary of a tetrahedron rather than a subdivided icosahedron |
-| `regge`      | the simplicial manifold $M_h$       | the geometry a complex carries: `MeshLengthsSq` (the intrinsic Regge primitive the engine consumes), `MeshCoords` and `CellGramians` the sources that convert into it, `cell_volume`, `vertex_gaussian_curvature`, the extensions reaching down onto `simplicial`'s types (`SimplexCoordsExt`, `SubdivisionExt`, `SubcomplexExt`), `coord::reach` (Federer's reach of a surface in $RR^3$, the bound an offset along the normal cannot exceed), `mesher::` (grids with coordinates, quotient tori, sphere surfaces, hand-written teaching meshes) and `io::` (`gmsh` and `obj` as mesh sources, `mdd` for coordinates moving under a fixed topology) |
-| `glatt`    | the continuum manifold $M$          | `Parametrization` (forward map $phi$, derived nearest-point chart, `sphere`/`ball`/`torus`/`graph`), `field::CoordField<S>` (analytic data *on* $M$: `DiffFormClosure`, ...) |
-| `derham`     | the de Rham complex on it           | `section::Section` (sections over the simplicial manifold) with the `Pullback` bridge (`pullback_on`/`pullback_through`) and `Sampler`, `interpolate::` (`WhitneyLsf` the local shape function, `WhitneyExpansion` the map from coefficients to components, `WhitneyInterpolant` the reconstruction of a form from a cochain), `project::derham_map`, `prolongate::` (the Whitney prolongation onto a refinement), `reduce::` (the grade reduction, a $k$-form read at grade $min(k, n-k)$ through the star, with the orientation the star needs a stated argument) and `io::vtu` |
-| `iterative`  | matrix-free iterative solving       | one object, an approximate inverse, reused as solver, preconditioner or smoother: stationary iteration, `Jacobi`, preconditioned `CG`, `MINRES` (symmetric indefinite), block-diagonal preconditioner, the generic `VCycle` over a hierarchy of `Level`s and the additive `AuxiliarySpace` preconditioner (both problem-agnostic: the FEEC wiring is `formoniq`'s). `InnerProductSpace` is the structure the Krylov methods ask of their vectors, so they run wherever those live. Real and complex are one implementation: the inner product is Hermitian and the restriction an adjoint, while the tolerances and MINRES's rotation coefficients stay in the real subfield. Backend is `nalgebra-sparse` alone, no faer |
-| `formoniq`   | the FEM engine                      | `galerkin::` (`BilinearForm`, a bilinear form restricted to the discrete complex, at element scope or assembled; `assemble_matrix`/`assemble_vector`, the rayon-parallel sum over cells with the face enumeration as local-to-global map) and its matrix-free peer `matfree::ElementOperator`, `operators` (`ElMatProvider`/`ElVecProvider`), `bc`, `fe::` (the three maps into the Whitney space, $W$, $R$ and the $L^2$ projection, and the error against an exact form), `time` (`Tableau`, `LinearIrk` and the explicit symplectic `Leapfrog`: structure-preserving time integration), `linalg::` (the faer bridge for direct sparse LU/Cholesky and shift-invert eigensolving, the one crate carrying a *direct* solver and an eigensolver; the factorizations are field-generic, nalgebra and faer agreeing on `num_complex`, while the eigensolver is real because the pencils it is asked for are), `harmonic::` (the harmonic space as the $L^2$ projection of integral cohomology generators, in its two readings, the integral basis tied to the holes and the mass-orthonormal one the saddle point assumes), `whitney_complex::HilbertComplex` and its implementations, the first-order `WhitneyComplex` with the `Boundary` and `Relative` variants, `hodge::HodgeBlocks` (the masses and coboundaries around a grade, which every problem builds its block system from), `multigrid::` (the geometric V-cycle over a `RefinementTower`, Galerkin coarse operators) and `hx::` (Hiptmair-Xu auxiliary-space preconditioning, uniform in dimension and grade), `problems::` (elliptic, dirac, heat, wave, ...) |
-
-No crate exists solely to hold a shared type alias.
-`coorder` is the contrasting case, and it is what makes the rule a rule rather than a size limit:
-it is small, but `Coords<Ambient>` must be *the same type* in `simplicial`, `regge` and `glatt`,
-none of which may depend on another,
-and that shared nominal identity is exactly what a crate is for.
-`Vector`/`Matrix` (dense nalgebra) are trivial aliases with no nominal identity to share,
-so `metric`, `coorder`, `multialgebra` and `glatt`
-each declare their own directly from `nalgebra` rather than depending on anything for them.
-`simplicial` is the lowest crate that needs *sparse* matrices (its boundary operators),
-so that is where `CsrMatrix`/`CooMatrix` and the extension traits built on them (`CooMatrixExt`) live,
-reused upward by `regge`, `derham` and `formoniq`
-because they already depend on `simplicial` for real reasons.
-`faer` and the eigensolver go one further:
-they are needed only in `formoniq`, the one crate that runs a *direct* solve or an eigenproblem,
-so they live there rather than in a shared base every leaf would then compile for nothing.
-*Iterative* solving is the exception that proves the rule:
-it needs nothing but `nalgebra-sparse`,
-so it lives in its own standalone `iterative` crate rather than in `formoniq`,
-and `formoniq` depends on it like any other building block.
-
-Dependencies flow strictly downward.
-A lower crate never learns about a higher one:
-`multialgebra` must never hear about meshes or metrics, `simplicial` never about either.
-`regge` (the simplicial $M_h$) and `glatt` (the smooth $M$ it approximates)
-are independent objects, so neither depends on the other.
-Their one relation, pulling continuum data onto the mesh and the error that costs,
-is the join, and it lives in `derham`, the crate above both.
-
-**The extrinsic carve-out is a boundary of each crate, not a crate of its own.**
-Invariant 2 draws a line around what needs an embedding, and it is tempting to
-make that line a crate at the top of the ladder.
-It is not one: a thing that becomes extrinsic is still *of* the object it was
-intrinsic on, so it belongs with that object, at the boundary of that object's
-crate's API.
-An OBJ and a Gmsh file are both a mesh read off disk, so both are `regge::io`;
-a VTU is a manifold *and* the forms on it, so it is `derham::io`, the lowest
-crate holding both; and Federer's reach is the geometry of an embedded
-surface, so it sits beside the curvatures in `regge::coord`.
-A crate collecting file formats would have no subject sentence to answer,
-which is what the table above is for.
-
-A renderer is the one genuine consumer of the whole carve-out at once, and it
-lives outside this repository, which is what keeps the graphics stack out of
-the engine's build entirely and why a `.vtu` for ParaView is not reached
-through a viewer.
-The grade reduction (`derham::reduce`) is *shared*, never duplicated:
-a mark a viewer draws and an array an exporter writes
-are the same reading of the same field,
-which is exactly what makes a disagreement between the two
-a bug in one place instead of a drift between them.
-
-**Concepts float up.**
-A concept belongs in the lowest crate (or module) that can express it
-with the dependencies it already has.
-If expressing it there would need a new downward dependency,
-it belongs one level up instead, in the crate that joins the two,
-which is why `derham` exists, where the algebra, `regge` and `glatt` all meet.
-Never widen a lower crate's dependencies to make a method fit.
-
-The test is what determines the concept, not what happens to be convenient:
-a new downward dependency is right exactly when the concept is *of* the lower object,
-and then the old placement was the accident.
-That is why `simplicial` takes `multialgebra`:
-the bundle is determined by the atlas and by nothing else,
-so it was sitting in `derham` because `simplicial` had no algebra,
-which is a fact about a manifest and not about mathematics.
-The two readings are told apart by the same question invariant 5 asks,
-what the concept's inputs actually are.
-
-**The building-block crates are standalone, and published as such.**
-Concepts floating up leaves each lower crate a self-contained mathematical object,
-not FEEC-internal plumbing:
-`multialgebra` is a multilinear-algebra library,
-`simplicial` a simplicial-topology one and `regge` its metric geometry,
-`multiindex` colex combinatorics,
-`glatt` continuum differential geometry,
-each usable, and released, on its own,
-with FEEC only the thing `derham` and `formoniq` build on top.
-This is a goal to uphold, not just an emergent property:
-a lower crate must earn its keep for a reader who has never heard of FEEC.
-So its public docs explain it in its own terms:
-the FEEC application is never a crate's stated reason for existing,
-and a higher concept (assembly, Whitney forms, cochains as discrete forms)
-never stands in for what the code means intrinsically.
-The one exception is a crate-level architecture doc naming its neighbors to place itself:
-there the cross-crate relation *is* the content, and naming it is right.
-
-Composition therefore reaches down from above:
-a free function in the joining crate by default,
-or a thin `...Ext` trait where method syntax carries the math better:
-`CoordFieldExt::pullback_through` (and its identity special case `pullback_on`)
-and `SectionExt::sampled_on` (a `glatt` field meeting a `simplicial` mesh, in `derham`),
-`SimplexRefExt` (geometry methods on a topology handle,
-which is how invariant 1 is upheld inside `simplicial`, below crate granularity).
-
-The rule bites *within* a crate too, not just between crates.
-`metric` must not import `coord`:
-an embedding induces a metric, a metric induces no embedding,
-so `MeshCoords::cell_metric` (and `to_edge_lengths_sq`) belongs on the `coord` side.
-And the atlas sits below both:
-the reference cell, its barycentric coordinates and quadrature over it
-need neither a metric nor an embedding, so they must live in neither layer.
+Dependencies flow strictly downward; a lower crate never learns about a higher one.
+Two boundaries are invariants made structural, checkable in a manifest:
+`multialgebra` depends on neither the metric nor a mesh (invariant 5),
+`simplicial` on no metric (invariant 1).
+A concept belongs in the lowest crate that can express it with the dependencies it already has;
+needing a new downward dependency puts it in the joining crate.
+What becomes extrinsic (I/O formats, anything embedding-dependent)
+stays at the boundary of the crate owning the intrinsic object, never a crate of its own.
+The lower crates are standalone mathematical objects,
+documented for readers who have never heard of FEEC.
+Composition reaches down from above: a free function in the joining crate by default,
+a thin `...Ext` trait where method syntax carries the math better.
 
 ## The load-bearing invariants
 
@@ -245,700 +56,153 @@ These are the design, not preferences.
 Breaking one is a bug even if it compiles and passes tests.
 
 1. **Topology ⊥ Geometry.**
-   The `Complex` is pure combinatorics:
-   it knows incidence, orientation, boundary, nothing metric.
-   Geometry is a *separate* input,
-   carried by `MeshLengthsSq` (signed squared edge lengths on the 1-skeleton)
-   and reaching assembly as the per-cell metric its `cell_metric(cell) -> Metric` derives.
-   There is deliberately **no `Geometry` trait**:
-   a trait over geometry representations buys only lazy per-cell streaming,
-   which is negligible next to element-matrix evaluation,
-   at the cost of the totality edge lengths give for free.
-   So the engine speaks one concrete intrinsic type,
-   and the other representations convert into it.
-
-   This separation is the privileged one, and it is privileged because it is *mathematical*:
-   the boundary operator, the exterior derivative, the wedge and homology are metric-free facts,
-   and the metric is a genuine second input that no amount of combinatorics derives.
-   A mesh carries other data too, a coherent `Orientation`, a `CellOrdering`,
-   and keeping those separate is good design, but they are not peers of this split.
-   Orientation is *derivable*
-   (`Complex::orientation` computes it,
-   external winding only picks which of the $2^c$ generators is meant),
-   and ordering carries no invariant content about the manifold at all.
-   Both are presentation, not mathematics.
-   Do not let the list of things a mesh carries flatten into one axis.
-
+   The `Complex` is pure combinatorics; geometry is a separate input,
+   consumed as `MeshLengthsSq`, reaching assembly as the per-cell `cell_metric`.
+   There is deliberately no `Geometry` trait:
+   the engine speaks one concrete intrinsic type, other representations convert into it.
 2. **Intrinsic first, extrinsic second, and edge lengths are the primitive.**
-   The engine consumes `MeshLengthsSq`, never coordinates:
-   it is the Regge primitive, the source of truth,
-   and the one representation *total over every grade* (see below).
-   The *signed squared* length (positive spacelike, zero null, negative timelike,
-   mirroring `norm_sq`) is what keeps Regge geometry total over every metric signature:
-   Regge calculus was invented for Lorentzian spacetimes,
-   and an unsquared length would lose the causal sign.
-   `MeshCoords` (an embedding) and `CellGramians` (raw per-cell metrics)
-   are *sources*, not engine currencies:
-   each converts to edge lengths at the boundary of the API (`to_edge_lengths_sq`),
-   on equal footing precisely because they reduce to the same primitive.
-   `CellGramians` also serves as the materialized cell column (`from_lengths`)
-   that refinement pulls back.
-   Anything that *requires* an embedding is a wrapper for I/O, visualization or convenience:
-   it must not sit in the core path.
-   A feature that only works on embedded meshes is an unfinished feature.
-
-   **Geometry is defined on every simplex, the chart only on the cells.**
-   The metric of any subsimplex, an edge's length, a facet's area, a hinge's metric,
-   is the Gramian of that simplex's own edges
-   (`MeshLengthsSq::simplex_metric`, `simplex_volume`),
-   well defined from the shared edge data with no containing cell consulted.
-   This is why edge lengths, not `CellGramians`, is the primitive:
-   it answers geometry at every grade,
-   which is what the boundary trace, DEC-style constructions
-   and higher-dimensional Regge curvature need.
-
-   And that totality is a fact about a *basis*, not a property of the code.
-   An $n$-simplex has $binom(n+1,2) = dim "Sym"^2(RR^n)$ edges,
-   and the symmetric squares of its edge vectors are a basis of $"Sym"^2$
-   indexed by the edges (`unit_edge_squares`),
-   so a squared length is a component of the metric in the dual of that basis,
-   $s_e = angle.l g, u_e dot.circle u_e angle.r$,
-   and `SimplexLengthsSq::metric` is that change of basis
-   with the polarization identity as its written-out form.
-   A face's edges being a subset of the simplex's,
-   restriction to a face is *selecting the components at that face's edge indices*,
-   where the cartesian frame needs a projection.
-   The edge basis is the one adapted to the face lattice, which is the whole claim.
-   A *chart*, by contrast, exists only on a top-dimensional simplex (invariant 3):
-   pinning a metric accessor to the `Cell` witness would conflate
-   *has a metric* (all simplices) with *carries a frame* (cells only).
-
-   A **point of the simplicial manifold** is therefore `MeshPoint`,
-   a `Chart` plus barycentric coordinates,
-   never a global coordinate, which on a Regge manifold does not exist.
-   A **field** is a `Section<V>`:
-   a section of the exterior bundle, evaluated at a `MeshPoint`,
-   valued in the reference frame of that chart.
-   The `CoordField<V, S>` of analytic data on the *continuum* (exact solutions, sources)
-   is a *different* concept, living in `glatt`,
-   and reaches the mesh only through the `Pullback` bridge,
-   pulled through a cell's parametrization and the continuum chart,
-   the flat domain being the identity special case.
-   Sampling back into ambient coordinates (`Sampler`) is not canonical
-   (it extends the value along the pseudo-inverse of the cell parametrization)
-   and is confined to I/O.
-
-   **The cells are an atlas** (`simplicial::atlas`), and it is a real one.
-   A `Chart` *is* a cell, literally:
-   the name is a type alias of the `Cell` role witness,
-   so top-dimensionality holds by construction.
-   A face carries no chart, so there is no frame on one in which to express a value.
-   Two charts overlap in the face they share,
-   and the `Transition` between them is the affine relabelling of barycentric weights:
-   metric-free, exact, and obeying the cocycle law.
-   Its differential is the change of frame on the tangent space of the overlap,
-   which is why only the *tangential* part of a section is chart-independent,
-   and hence why the de Rham map is well defined on a face
-   while a pointwise Whitney value is not.
-   Anything claiming chart-independence owes a `Transition` argument,
-   and that argument is an operation rather than a remark:
-   a transition acts on the values of the bundle
-   (`Transition::pullback` and `Transition::pushforward`),
-   faithfully on the tangential part (`Transition::overlap_trace`) and nowhere else.
-   The remaining components of a transported value are an artifact of the affine extension,
-   which is testable rather than merely stated:
-   another route between the same two charts contradicts them,
-   and agrees exactly after the trace.
-
-   The chart's own structure (reference vertices, barycentric differentials, volume, quadrature)
-   is a function of `Dim` alone (the `unit_*` functions), and deliberately so:
-   **every chart of the atlas is the same chart up to the labelling of its vertices.**
-   That is exactly why element matrices are computed once on the reference cell
-   and reused on every cell of the mesh.
-   What differs between charts is the labelling,
-   and the labelling is what a `Transition` is made of.
-   Do not bind reference-cell data to a cell.
-
+   Signed squared edge lengths are total over every grade and every metric signature;
+   coordinates and raw per-cell metrics are sources converting into them at the API boundary.
+   Anything requiring an embedding stays out of the core path.
+   Geometry is defined on every simplex (the Gramian of its own edges), a chart only on cells.
+   A point is a `MeshPoint`, chart plus barycentric coordinates, never a global coordinate.
+   The cells form an atlas, and every chart is the same chart up to vertex labelling:
+   reference data is a function of dimension alone, element matrices computed once.
+   A claim of chart-independence owes a `Transition` argument, applied as an operation.
 3. **Coordinate spaces are type-level.**
-   Barycentric weights `Bary` ($lambda in RR^(n+1)$),
-   the cartesian `Local` coordinates of a chart ($x in RR^n$)
-   and the `Ambient` coordinates of an embedding ($RR^N$) are three different spaces,
-   and `coorder::Coords<S>` tags each with the space it lives in.
-   The maps between them therefore have to be written down,
-   and the wrong composition does not compile.
-   A bare `Vector` is a displacement or raw linear algebra, never a point.
-
-   **A point is not a vector, and the operations available say so.**
-   The difference of two points is a displacement, a point displaced by one is a point,
-   and the only combination of points is the affine one, `Coords::affine_combination`,
-   whose weights sum to one so that it is independent of any origin.
-   Barycentric coordinates *are* that combination on a simplex's vertices,
-   which is why the chart is affine and not linear,
-   and anything summing points by hand has dropped the distinction.
-
-   **The morphisms are tagged too, not just the points.**
-   `AffineTransform<From, To>` carries its direction,
-   so composition demands a shared middle space
-   and `pseudo_inverse` returns the map the other way round:
-   the parametrization/chart distinction is a type, not a naming convention.
-   Its linear part stays a bare `Matrix`, deliberately,
-   because it maps *displacements*, which are untagged for the reason above.
-
+   Barycentric, local cartesian and ambient coordinates are different spaces,
+   tagged by `coorder::Coords`, and the maps between them carry their direction,
+   so the wrong composition does not compile.
+   A point is not a vector; the only combination of points is the affine one.
 4. **Variance is per-slot, and stated rather than derived.**
-   Covariant slots (forms) and contravariant ones (vectors) stand on fully equal footing,
-   and a `Tensor` may mix them: that is what an endomorphism, a torsion or a trace *is*.
-   Variance decides the functorial direction (pullback vs. pushforward),
-   the duality pairing, the musical isomorphisms and the choice of $g$ vs. $g^(-1)$.
-   Never collapse the two, and never choose between $g$ and $g^(-1)$ by hand:
-   go through `Metric::measuring` / `Metric::on_slot` /
-   `multiform_metric` / `multivector_metric`.
-
-   It is the one datum with **no representational footprint**:
-   $dim Lambda^k (V) = dim Lambda^k (V^*)$,
-   so no shape check catches a wrong one and nothing derives it.
-   Operations therefore check it (`pairing` demands the dual slot for slot,
-   `contract` the dual variance, `pullback` a uniformly covariant tensor),
-   and construction *states* it.
-   A constructor that guesses is a bug, and the guess will be plausible.
-
-   The uniform case is what buys functoriality along an arbitrary linear map.
-   A mixed tensor's covariant slots pull back while its contravariant ones push forward,
-   opposite directions, so it transports only along an isomorphism,
-   and `pullback`/`pushforward` refuse it.
-   That is mathematics, not a limitation of the encoding.
-
+   It is the one datum with no representational footprint,
+   so nothing derives it: construction states it and the operations check it.
+   Never choose between $g$ and $g^(-1)$ by hand; go through the measuring operations.
 5. **Depend on the weakest structure that determines the concept.**
-   The exterior derivative, the boundary operator, the wedge, the interior product,
-   the duality pairing and the de Rham map involve *no* metric.
-   Only the Hodge star, the musicals and inner products do.
-   Do not let a `Metric` leak into a signature that does not mathematically need one.
-   Asking for less than determines the answer is the same failure read backwards,
-   and the worse one: the signature compiles and silently returns one of several.
-   Metric-free is the sharpest instance, not the only one:
-   orientation, volume and the connection are each a weaker datum than the metric,
-   and a concept resting on one of them says so.
-
+   The derivative, boundary, wedge and pairings need no metric;
+   star, musicals and inner products do.
+   Asking for less than determines the answer compiles and silently returns one of several.
 6. **Orientation is a gauge inside the complex and a datum outside it.**
-   A `Skeleton` stores every simplex in colex vertex order,
-   so each cell's orientation is fixed by the indexing convention
-   and is unrelated to its neighbors'.
-   That is not a defect:
-   flipping a cell sends $omega_K |-> -omega_K$,
-   every assembled operator transforms by the diagonal congruence $A |-> S A S$
-   with $S = "diag"(plus.minus 1)$,
-   and the chain complex, the spectrum and the homology are all invariant.
-   **No assembly, solve or homology computation may depend on a coherent orientation.**
-   If one does, it has a bug, not a missing input.
-
-   The gauge becomes physical exactly when a question is asked about the manifold
-   *as a whole* rather than cell by cell:
-   a global volume form, hence $star: Lambda^n -> Lambda^0$ on a top-grade form,
-   hence $integral_M$.
-   Those are one question.
-   Its answer is `Complex::orientation`,
-   the coherent orientation propagated across interior facets,
-   and it is `None` on a non-orientable complex,
-   so holding an `&Orientation` *is* the proof of orientability,
-   in the same sense as the `role::` witnesses.
-   **A star whose result is compared between cells takes that orientation,
-   at every grade,
-   and code that cannot get one refuses rather than proceeding per cell.**
-   Without it the value carries $plus.minus$ the true one,
-   the sign flipping wherever colex disagrees with the manifold,
-   which is plausible on screen and wrong.
-   A star confined to one cell's own integral does not:
-   the induced orientation of its boundary flips with it and the two cancel,
-   which is why assembly stays independent of the gauge.
-   Orientability is per connected component,
-   and the orientation is fixed only up to a global sign on each,
-   the ordinary ambiguity of a fundamental class, not a choice the code could avoid.
-
+   No assembly, solve or homology may depend on a coherent orientation.
+   Questions asked about the manifold as a whole
+   (global volume form, a star whose result is compared between cells)
+   take `Complex::orientation`; holding it is the proof of orientability,
+   and code that cannot get one refuses rather than proceeding per cell.
 7. **A generator's vertex ordering is data, and the mesh cannot recreate it.**
-   A `Skeleton` stores every simplex colex-sorted,
-   which fixes each cell's vertex order from the *global numbering*, a labelling, hence gauge.
-   A mesh generator usually produces each cell in an order of its own that carries structure
-   (the maximal chain of a Kuhn simplex, an external mesher's node order),
-   and the sort discards it.
-   It is not recoverable afterwards:
-   a per-cell order is strictly more expressive than the restriction of any global numbering,
-   so relabelling the vertices however cleverly does not bring it back.
-   `CellOrdering` therefore carries it alongside the complex, never inside it,
-   and colex is the trivial ordering a mesh has implicitly.
-
-   The orderings of a mesh are not independent:
-   they must agree on shared faces (`is_face_consistent`),
-   or two cells subdivide their common face differently and the refinement is non-conforming.
-   That law is what makes an ordering a structure rather than a bag of permutations.
-   Its *parity* is a second, weaker reading of the same datum:
-   the winding a mesh file means by the order it lists a face's corners, hence an `Orientation`,
-   validated through `Complex::orient_by`
-   so a miswound file yields `None` rather than a witness that lies.
-
-   **Nothing in assembly, solving or homology may consult an ordering.**
-   Those are invariant under relabelling, and a dependence there is a bug,
-   exactly as in invariant 6.
-   It exists for the algorithms whose *output* is a mesh,
-   and the reason it must exist is uniform refinement:
-   Freudenthal subdivision composes,
-   $"refine"_(R') compose "refine"_R = "refine"_(R R')$,
-   only when each child is subdivided in the order the reference pattern emitted its corners.
-   Re-deriving that order by sorting reproduces it at the first level and drifts after,
-   leaving the family the generator produced,
-   invisibly in dimension two, where the sort happens to agree, and badly above it.
-   The composition law is affine, hence true of any mesh.
-   What is special to a Kuhn grid is that the children are *similar* to the parent,
-   so a tower there stays self-similar.
-
-   An ordering is therefore a partial datum, not a guaranteed one,
-   and `is_face_consistent` is what decides.
-   The Kuhn triangulation of a box is not invariant under reflection
-   (mirroring an axis exchanges the diagonal),
-   so a mesh glued along a *reflecting* seam is conforming
-   but admits no face-consistent Kuhn order,
-   and its generator returns `None` rather than an ordering that lies.
-   The mesh is still fully usable.
-   What is lost is only the self-similarity of a refinement tower.
-
+   `CellOrdering` carries it beside the complex, under the face-consistency law;
+   nothing in assembly, solving or homology may consult an ordering.
+   It exists so uniform refinement composes.
 8. **Zero-cost abstractions.**
-   Generics and monomorphization, not `dyn` and runtime dispatch,
-   in anything on the assembly hot path.
-   HPC is a requirement, not an afterthought
-   (`rayon`-parallel assembly is already the norm).
+   Generics and monomorphization on the assembly hot path,
+   rayon-parallel assembly the norm.
 
-**Invariant 3 is a proof, not a convention**, Lean 4 style:
-a precondition that is a property of a value (the space a coordinate lives in)
-becomes a type-level witness, not an assertion repeated at each call.
-The type demands the property, the check happens once where the witness is built,
-and the wrong composition fails to compile.
-
-Variance (invariant 4) was once encoded this way and deliberately is not any more.
-A type parameter cannot carry a *per-slot* datum when the number of slots is runtime,
-and a mixed tensor is the point of having variance at all.
-What a type parameter bought there was never verification
-(the compiler cannot tell a covariant $RR^n$ from a contravariant one either)
-but *propagation* of an assertion made once,
-and the runtime checks inside the operations propagate it too.
-The residue is that omission is silent:
-a check not written is a check not made, where the compiler applied the rule everywhere.
-So the operations check, and construction states.
-Reach for this wherever a "trust me, this is an *X*" comment sits in a signature.
-The simplex roles of `topology::role` are the same pattern on a runtime dimension:
-a `Roled<R>` (`Cell`, `Facet`, ...) is a `SimplexRef` plus the proof of its dimension proposition,
-produced for free by navigation (`cells()`, `facets()`, `vertices()`, `edges()`)
-and checked once at the index boundary (`role()`).
-`Chart` is a type *alias* of the `Cell` witness (the atlas operations live in `ChartExt`),
-and `MeshLengthsSq::cell_metric` consumes it,
-so "this simplex is a cell" is a type, never a repeated assertion
-(the `Cell` witness marks the *chart*, the metric itself is total over every grade
-through `simplex_metric`).
-A role's one datum is its `RoleDim`, a dimension pinned absolutely or by codimension,
-and `Complex::role_skeleton::<R>()` is the total accessor derived from it:
-`None` where the complex has no such dimension,
-which is how the degenerate boundary stays total (a point has no facets, not an underflow).
-Roles are propositions, not a partition:
-the edge of a 1-complex is an `Edge` *and* a `Cell`.
-A proof speaks only for the complex object it was built from.
-`SimplexRef::belongs_to` is the identity check consumed where handles cross between complexes.
+A precondition that is a property of a value becomes a type-level witness,
+checked once where the witness is built (`coorder`'s spaces, `topology::role`),
+never an assertion repeated at each call.
 
 ## Conventions
 
-**Doc comments carry the math, in Typst notation.**
-This is the house style, match it exactly
-(`multialgebra/src/tensor.rs` holds the canonical examples):
-
-```rust
-/// The interior product (contraction)
-/// $iota_v: Lambda^k -> Lambda^(k-1)$ with a grade-1 element of the dual
-/// variance.
-///
-/// Metric-free. An antiderivation of degree -1 with $iota_v^2 = 0$: the
-/// dual of the wedge. With the all-ones vector it IS the boundary
-/// operator, $diff = iota_bb(1)$.
-```
-
-Not LaTeX, not unicode soup.
-State *what the object is* mathematically, the laws it obeys,
-and the invariants and contracts the code cannot show.
+**Doc comments carry the math, in Typst notation** (`multialgebra/src/tensor.rs` canonical):
+what the object is, the laws it obeys, the contracts the code cannot show.
 Never narrate what the next line does.
+A crate overview is its README pulled in verbatim, plain Unicode markdown there,
+the sole place Unicode stands in for Typst.
 
-The one exception is the **crate-level overview**,
-which is the crate's `README.md` pulled in verbatim by `#![doc = include_str!("../README.md")]`,
-one source of truth for the docs.rs landing page and the GitHub/crates.io README,
-never two hand-synced copies.
-A README is rendered by GitHub and crates.io,
-which know neither Typst nor rustdoc's intra-doc links,
-so the shared text is plain **Unicode** markdown
-(the sole place Unicode stands in for Typst), prose,
-with no intra-doc links and only the little math notation that genuinely helps.
-Type- and module-level navigation stays on the item docs,
-where the links resolve and the Typst renders as house style.
+**Tests are theorems**, and correctness is established here by the test suite.
+Each field contributes its most famous theorems;
+a law is swept over every axis it is stated over and trusted once made to fail.
 
-**Tests are theorems.**
-The test suite is a machine-checked statement of the mathematics,
-and it is how correctness is actually established here.
-Each field the implementation rests on contributes its most famous theorems
-and little else.
-A law is swept over every axis it is stated over rather than fixed at one case,
-and it is trusted only once it has been made to fail.
+**$Lambda$ and $"Sym"$ are one construction** under `Symmetry`,
+every operation written once over all variants;
+the Hodge star is the sole genuine exception.
+Never a second implementation of either family.
 
-**$Lambda$ and $"Sym"$ are siblings, and one construction, under $V^(times.circle k)$.**
-They are the two quotients of the free tensor power by a character of $S_k$,
-which lands in an abelian group and so factors through the abelianization,
-$ZZ\/2$ for $k >= 2$:
-the sign character gives $Lambda^k$ and the trivial one $"Sym"^k$,
-and those are the whole list rather than a pair chosen out of many.
-The free power sits above them both, unquotiented.
-So a single `Symmetry` carries the distinction, in three variants and not two,
-and every operation is written once over all of them.
-The Hodge star is the sole exception, and genuinely so: $"Sym"$ has no top
-degree to complement against, so the star exists on an alternating factor and
-refuses on a symmetric one.
-The exterior derivative and the Koszul operator are likewise one operation,
-`Tensor::transfer`, in its two directions.
-Never re-introduce a second implementation of either family.
+**The stored basis is multiplicative, hence self-dual only on $Lambda^k$.**
+Anything dualizing a symmetric slot goes through `Tensor::reciprocal`,
+never components, never a factorial written by hand.
+Integer structure constants make the algebra ring-generic;
+only the dualizing operations ask for a `RationalAlgebra`.
+A law that dualizes is swept over both families.
 
-**The stored basis is multiplicative, hence not self-dual.**
-$x^alpha x^beta = x^(alpha+beta)$ and $e_I wedge e_J = plus.minus e_(I union J)$
-with unit coefficients, which is what lets the two families be one construction.
-The price is $norm(x^alpha)^2 = alpha!$ on a symmetric slot,
-so anything that *dualizes* one reads `Tensor::reciprocal`
-and lands through `Tensor::from_reciprocal`,
-never `components` and never a factorial written by hand.
-Both bases are rational; an orthonormal one would need $sqrt(alpha!)$, and none is used.
-Every $alpha!$ is $1$ on $Lambda^k$, where the two bases coincide,
-so a law swept over the alternating family alone says nothing about any of this:
-**a law that dualizes is swept over both families.**
-
-That $alpha!$ is also what decides how much of a field the coefficients have to be.
-Every structure constant of the algebra is $plus.minus 1$ or a factorial,
-each the image of an integer under the unique ring map $ZZ -> R$,
-so the algebra is division-free and `Tensor<R>` runs over any commutative `Ring`,
-$ZZ$ included, where the metric-free laws are exact equalities rather than tolerances.
-The dualizing operations are the one exception, and they are the only one:
-over $ZZ$ the reciprocal basis of a symmetric slot spans the divided power algebra,
-$"Sym"^d (V)^* tilde.equals Gamma^d (V^*)$,
-with equality only once the factorials are inverted,
-so `from_reciprocal`, `evaluate` and the pullback ask for a `RationalAlgebra`
-and nothing else does.
-That bound is *stated* rather than derived, in the pattern of invariant 4:
-$ZZ$ has a division operator and it truncates,
-so a blanket bound over the operations available would have admitted it silently.
-`extend_scalars` is the map between rings,
-and its naturality is the law a hardcoded coefficient breaks.
-
-**Combinations and compositions are different objects.**
-A `Combination` is a subset, the basis of $Lambda^k$:
-repetition forbidden, order carrying a `Sign`.
-A `Composition` is an exponent vector, the basis of $"Sym"^d$:
-the graded monoid $x^k x^(k') = x^(k + k')$, no sign.
-A `Permutation` is a bijection, the group $S_n$:
-the one of the three carrying $"sgn"$ as a homomorphism
-rather than as the sign of a reordering.
-
-Stars and bars is the *representation* of `MonoIndex`, deliberately.
-The shift $w_i |-> w_i + i$ makes a weakly increasing word strictly increasing,
-so in shifted form both families are sets and one bitset serves both:
-ranking, enumeration, deletion and the complement become the same bit operations,
-and the family is consulted only for the sign.
-The cost is a ceiling on the *shifted* alphabet $n + k - 1$,
-so a degree is bounded where it was not.
-Taken with the numbers in hand: it is what closed a five-fold gap
-against the standalone exterior algebra to well under two.
-
-**The width of that bitset is machine data, so it is a parameter and not a constant.**
-`MonoIndexOver<B>` and `CombinationOver<B>` are generic over a sealed `Bits`,
-the primitive unsigned integers and nothing else,
-and `MonoIndex`/`Combination` are the aliases at the default width the workspace reads,
-in the way `DMatrix` stands for a `Matrix` in nalgebra.
-The alias is forced rather than a convenience:
-a default type parameter applies in type position but not in inference,
-so a constructor taking no `B` would be ambiguous against the bare generic.
-Sealing is load-bearing:
-the derived `Ord` compares bitsets numerically,
-which at equal cardinality *is* colex order,
-and a storage that is not a primitive integer is exactly what would lose it.
-The parameter stops inside the crate,
-nothing above `multiindex` names a width,
-and a law swept over the widths is what keeps the narrow boundary exercised.
-
-**The combinatorics is the library's own.**
-The enumeration order of these objects is load-bearing:
-it fixes basis indices,
-and through the Kuhn and Freudenthal constructions
-it fixes which child of a refinement gets which cell index.
-So it is defined, documented and tested here,
-never inherited from a dependency's unspecified iteration order.
-An external crate may still be a convenience adapter over an iterator.
-It may not be the definition of an index.
-
-**Colexicographic order is the one indexing convention.**
-Basis blades, combinations, simplex vertices and the simplices within a skeleton
-are all colex-ordered, with `Combination::rank()` as the canonical index:
-that shared order is what lines up the coefficients of an `ExteriorElement`,
-the local faces of a cell, and global position in a `Skeleton`.
-Lexicographic order compiles just as well and silently means something else.
-A new ordered structure is colex.
-
-The convention earns its keep by making a rank independent of the ambient size,
-so growing the ambient never renumbers what is already there.
-`Combination::rank` is the combinatorial number system $sum_i binom(c_i, i+1)$
-and `Permutation::rank` the factorial number system $sum_j d_j dot j!$
-with $d_j = \#{i < j : p_i < p_j}$, neither formula mentions $n$.
-`cartesian::grid` is the same order on radix digits, least significant axis fastest.
-
-**Assembled and matrix-free are peers; scatter and gather are the other axis.**
-$A = sum_K P_K^top M_K P_K$ can be summed once and stored, or summed on every apply,
-and either way the sum can be performed by visiting cells and pushing into shared faces
-or by visiting faces and pulling from the cells at each.
-The two axes are independent, and only the second decides whether a race exists.
-Both directions are readings of one `FaceIncidence`, so a traversal picks the direction
-rather than the algorithm.
-Peers as operators, not as objects:
-a direct factorization and an eigensolve need entries,
-so the assembled form is strictly the more capable one.
-
-**A real problem's operator is real, whatever field its unknowns live in.**
-The geometry is real (invariant 2), and so are the Whitney forms and the metric,
-so every element matrix and every assembled operator of a real-coefficient problem is real.
-Complex enters through the source, the boundary data,
-a material or frequency coefficient and the solution, never through assembly.
-A complex solve therefore *extends the scalars* of the operator it already has,
-`CsrMatrixExt::extend_scalars` on the operator side
-and `FreeModule::extend_scalars` on the coefficient side,
-rather than assembling a second one,
-and the two commute with applying the operator.
-The consequence to keep in view is a solver one:
-$K - (omega^2 + i omega sigma) M$ built this way is complex *symmetric*, $S = S^T$,
-and not self-adjoint,
-so no symmetric Krylov method applies to it however Hermitian its real part looks,
-and the direct factorization is what solves it.
+**Colexicographic order is the one indexing convention**, `Combination::rank()` canonical.
+Combinations ($Lambda$), compositions ($"Sym"$) and permutations ($S_n$) are different objects.
+The combinatorics is the library's own: the enumeration order is load-bearing,
+defined and tested here, never inherited from a dependency,
+and a backing width is machine data, parameterized inside `multiindex`, named by nothing above it.
 
 **A `Tensor` is for the geometric space, never for the space of unknowns.**
-`multialgebra` models the tangent and cotangent space of a point and their powers:
-dimension $n$, grade at most $n$, everything about it sized by the manifold's dimension
-and fixed once the dimension is.
-A degree-of-freedom space is a different kind of object.
-It is sized by the mesh and the polynomial degree, it has no grade,
-no variance and no wedge, and it grows without bound under refinement.
-So a cochain, a load vector, an element matrix and an assembled operator
-are linear algebra (`Vector`, `Matrix`, `CsrMatrix`), and never tensors,
-however much a bilinear form on them looks like one.
-The map between the two kinds is where the geometry enters a discretization,
-and it is an ordinary matrix (`WhitneyExpansion`), not a functor.
+Cochains, load vectors, element matrices and assembled operators are linear algebra.
+And a tensorial computation runs through the operations of `multialgebra` and `metric`,
+never on pulled-out components: component code is exact on $Lambda$
+and silently off by $alpha!$ on $"Sym"$.
 
-**A tensorial computation runs on the tensor, never on its components.**
-The inner product, the transport, the star, the musicals and the pairings
-are operations of `multialgebra` and `metric`,
-and a caller reaches them by name rather than by pulling `components()`
-and applying a matrix it chose itself.
-The storage may be whatever it needs to be:
-what a type owes is a conversion into a `Tensor`,
-not that it hold one.
+**A Kronecker product is never formed to be applied:** hold factors, apply slotwise.
 
-The reason is not tidiness.
-The stored basis is multiplicative, hence self-dual on $Lambda$ and nowhere else,
-so *every* component-level shortcut is exactly right on the alternating family
-and silently off by $alpha!$ on a symmetric one.
-Component code is therefore correct until $"Sym"$ arrives, which $P^-_r Lambda^k$ does,
-and the failure is a plausible wrong number rather than a mismatch anything catches.
-The operations know the difference in one place, and that is the whole point of them.
-Reading components to *lay out* a value, scattering a blade into a sparse matrix,
-writing a column to a file, is the exception, and it is storage, not mathematics.
-
-**A Kronecker product is never formed to be applied.**
-The Gram matrix of a tensor product is the product of the Gram matrices
-and the functor of a map is the product of the per-slot functors,
-so both are held as their factors and applied slot by slot (`apply_factorwise`),
-never built and multiplied.
-Forming costs the square of the product of the slot dimensions
-where applying costs their product times their sum.
-`tensor_gramian` and `Transport::to_matrix` are for a caller that needs a matrix
-*as* a matrix, a congruence or a factorization, and for nothing else.
-Exploiting sparsity in a map *into* the product is a different matter
-and belongs to whoever owns the map.
-
-**A constructor states its hypotheses, a predicate decides them.**
-`new` builds and checks nothing, its doc naming the hypotheses and where they come from.
-`is_valid` is their conjunction, public, each named hypothesis a predicate of its own.
-`new_checked` is `is_valid().then_some(this)`, so holding the result is the proof.
-Never under `cfg(debug_assertions)`:
-a constructor whose cost and panics depend on the build profile is the worse trap.
-A shape mismatch is not a hypothesis and stays an assert.
+**A constructor states its hypotheses, a predicate decides them**
+(`new` unchecked, `is_valid` public, `new_checked` proving);
+never under `cfg(debug_assertions)`.
 
 **One datum, derived not stored.**
-Where one value determines another, the second is computed at the point of use
-and never held beside the first:
-$g$ determines $g^(-1)$, so `Metric` holds one matrix and a variance
-and `dual` is the passage between them.
-A stored pair is one datum in two places,
-kept in step by construction alone, and it pushes the choice between the two onto every caller.
-Caching is the exception and needs the measurement to justify it,
-not the other way round.
+Caching is the exception and needs measurement to justify it.
 
 **Linalg backends by role.**
-nalgebra dense (`Matrix`/`Vector`) for element-local math
-(Gramians, element matrices, exterior powers).
-`nalgebra-sparse` (`CooMatrix`) for globally assembled operators,
-aliased in `simplicial::linalg`,
-and the matrix representation the `iterative` crate's Krylov methods (`CG`, `MINRES`)
-and preconditioners run on.
-faer for *direct* solves and eigenproblems
-(sparse LU and Cholesky, and a self-adjoint dense eigensolve for the projected subspace).
-Which crate each backend lives in, and why, is the Architecture section above.
-The workspace is pure Rust, with no external solver toolchain.
+nalgebra dense for element-local math, `nalgebra-sparse` for assembled operators
+(aliased in `simplicial::linalg`) and behind `iterative`,
+faer only in `formoniq`, for direct solves and eigenproblems.
+No external solver toolchain.
+
+**Assembled and matrix-free are peers; scatter vs gather is the other axis**,
+the one deciding whether a race exists.
+
+**A real problem's operator is real**, whatever field the unknowns live in.
+Complex enters by extending scalars, never through assembly.
+Built so, the shifted mass system is complex symmetric and not self-adjoint:
+no symmetric Krylov method applies, the direct factorization is what solves it.
 
 **Naming reflects the mathematics.**
-`SimplexRef`, `Cochain`, `MultiForm`, `CellGramians`:
-a reader who knows the math should recognize every type immediately,
-and one who does not should be able to look it up.
 Where a word has a precise meaning, it is used precisely,
 and two words that mean different things never stand in for each other.
 
-**Affine, flat, linear are three different claims.**
-*Affine* is about the **maps**:
-the cell charts are $x |-> v_0 + A x$,
-the barycentric weights are an affine combination,
-the transition maps are affine gluings.
-It is metric-free, and it is what the atlas is, *piecewise affine*, never "piecewise flat".
-*Flat* is about the **curvature**, so it presupposes a metric:
-a Regge manifold is piecewise flat,
-curvature vanishing on cell interiors and concentrating on the codimension-2 hinges.
-*Linear* is neither, and is wrong here:
-$lambda_i$ is affine, not linear, and "piecewise linear FEM" is the classical abuse.
-Don't inherit it:
-the affine/linear distinction is exactly why barycentric coordinates are the right chart.
-
-**A chart and a parametrization point opposite ways.**
-A *chart* maps the manifold **out to** coordinates,
-a *parametrization* maps coordinates **in to** the manifold.
-They are inverse, and the direction is the whole content of the words.
-The `Chart` of a cell is barycentric, intrinsic, and exists on every geometry.
-The `SimplexCoords<S>` of a cell is its affine *parametrization* $hat(K) -> S$
-into a coordinate space, never call it a chart.
-It is generic over that space (invariant 3):
-`SimplexCoords<Ambient>`
-(the default, and the lowest module, `atlas::simplex_coords`, that defines it)
-is the extrinsic realization $hat(K) -> RR^N$, and only *it* presupposes an embedding.
-The metric and edge lengths it induces are the `regge::coord` bridges
-bolted onto that instantiation.
-`SimplexCoords<LocalCartesian>` is the metric-free realization in a chart's own cartesian frame,
-the reference cell (`standard`) and a refinement child in its parent's frame,
-which is why the affine core lives in `simplicial::atlas`, reachable by `topology`,
-not in `regge::coord`.
-A curvilinear coordinate system on the manifold being approximated
-(spherical on $S^2$, polar on a disk) is likewise a parametrization:
-it is written $(theta, phi) |-> RR^3$,
-and the fact that it must carry its own inverse as separate data
-is the tell that the inverse is the chart.
-
-**Mesh, simplicial manifold, manifold are three different objects.**
-The *mesh* **is** the simplicial complex,
-one object, two words, never used as though they were two things.
-The *simplicial manifold* is that complex realized with a geometry:
-the piecewise-affine object,
-on which `Chart` is a chart, `MeshPoint` a point and `Section` a field.
-The *manifold* is the continuous thing the simplicial one approximates,
-possibly smooth, possibly given by a parametrization,
-possibly identical to the simplicial one.
-What is exact on the simplicial manifold need not be exact on the manifold,
-and a name that blurs the two hides precisely that gap.
+**Affine, flat, linear are three different claims** (maps, curvature, neither):
+piecewise affine, piecewise flat, never "piecewise linear".
+A chart maps the manifold out to coordinates, a parametrization maps coordinates in,
+and the direction is the whole content of the words.
+Mesh = simplicial complex = one object;
+the simplicial manifold and the manifold it approximates are distinct.
 
 **Rust style.**
-2-space indent (`rustfmt.toml`), clean under default clippy lints,
-with `clippy::pedantic` applied selectively rather than enforced.
-Idiomatic and expressive, concise and self-explanatory.
-Prefer the iterator chain that states the intent over the loop that states the mechanics.
-
-## Public artifacts
-
-The README, this file, the doc comments, the issues and the commit messages
-are all read by people.
-Write them for a skeptical senior reader, because that is who shows up.
-
-- **No superlatives, no marketing register.**
-  "The ultimate library" is not a claim, it is a tell.
-  State what the code does and let the reader judge.
-  The work is strong enough that overselling it only subtracts credibility.
-- **Roadmap is direction, not promise.**
-  Say what is being explored, not what is coming.
-- **Argue from the mathematics and the design, never from this file.**
-  An issue that cites CLAUDE.md as its authority documents a process, not a reason.
-  The reason has to stand on its own.
-- **Verify before asserting.**
-  Every number, flag and capability gets checked against the code first.
-  A confident unverified specific is worse than none.
-- **Fetch, don't recall.**
-  Anything with a canonical source
-  (a license text, a version pin, a CI action version, an external API)
-  is retrieved, never reproduced from memory.
-  Recall yields the plausible, which is indistinguishable from the correct on the page,
-  and therefore survives review.
-- **Keep the tooling out of the content.**
-  AI assistance here is deliberate and disclosed, in commit trailers.
-  That is what transparency looks like,
-  it does not mean narrating the assistant inside a README, an issue or a doc comment.
-- **Plain prose.**
-  No emoji, no decorative dividers, no headers over three-line sections,
-  no bold on every other phrase.
+Clean at default clippy, idiomatic and concise,
+the iterator chain stating intent over the loop stating mechanics.
 
 ## Anti-goals
 
 - No hacks.
-  If a test fails, the mathematics or the abstraction is wrong:
-  fix that, never paper over it with a fudge, a tolerance bump or a special case.
-  The rule is about diagnosis and does not stop at the math:
-  find the root cause in the build, the tooling and the environment too.
+  If a test fails, the mathematics or the abstraction is wrong; diagnose before fixing.
   A change that removes the symptom without explaining it is not a fix.
 - No dimension- or grade-specific code paths in the core.
-- No classical vector-calculus fallback
-  (no separate grad/curl/div, no cross-product-flavored shortcuts).
-- No embedding assumptions in the core path (see invariant 2).
+- No classical vector-calculus fallback.
+- No embedding assumptions in the core path.
 - No comments that restate the code.
-  Comments carry invariants, contracts and mathematical context only.
-- Nothing transient in this file.
-  It carries architecture, invariants, conventions and anti-goals, what stays true.
-  Never current state, in-flight plans, tooling wire-ups, personal details,
-  or pointers to things that move.
-  Those belong in issues, commits and the code itself.
+- Nothing transient in this file:
+  architecture, invariants, conventions and anti-goals only.
 
 ## Workflow
 
-Every commit passes all four.
-They are the bar, not a suggestion:
+Every commit passes all four:
 
 ```sh
-cargo fmt --all                        # rustfmt.toml: 2-space indent
-cargo clippy --workspace --all-targets # clean at default lints
-cargo test --workspace                 # law tests + integration tests; stay green
-cargo doc --workspace --no-deps        # doc comments carry the math: no warnings,
-                                       # intra-doc links must resolve
+cargo fmt --all
+cargo clippy --workspace --all-targets
+cargo test --workspace
+cargo doc --workspace --no-deps
 ```
 
-CI runs the same four on every push and pull request.
-A red build is a broken commit, not a flaky one.
-
-The examples are the end-to-end check and are run by hand:
-
-```sh
-cargo run --release --example source
-```
+CI runs the same four; a red build is a broken commit.
+The examples are the end-to-end check and are run by hand.
 
 Commit messages: `scope: imperative summary`,
-e.g. `simplicial: cache boundary operators lazily`.
-Keep commits structurally coherent, one idea each
-where that's easily reached from what's already staged or in progress.
-Splitting unrelated changes is not worth contorting history over,
-so bundling a few into one commit is fine when separating them would be the more artificial move.
-
-A change to the design is not finished until this file reflects it, in the same commit.
+one idea per commit where easily reached,
+bundling fine when separating would be the more artificial move.
+A change to the design updates this file in the same commit.
 Where CLAUDE.md and the code disagree, one of them is a bug,
-and it is usually worth asking which,
-because an invariant that the code has quietly outgrown
-is a design decision nobody made deliberately.
-
-## Origin
-
-v0.1 was a BSc-thesis implementation,
-focused on the elliptic Hodge-Laplace problem with the first-order Whitney basis.
-v0.2 is the rebuild toward the library described above.
-Where thesis-era code still contradicts the invariants, the invariants win.
+and it is usually worth asking which.
