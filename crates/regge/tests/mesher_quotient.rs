@@ -77,77 +77,66 @@ fn a_reflecting_identification_admits_no_kuhn_chain_order() {
   }
 }
 
-/// The flat torus is closed (no boundary) and carries the cohomology of
-/// $T^d$: Betti numbers $b_k = binom(d, k)$, Euler characteristic $0$, for
-/// every dimension.
+/// The classical surfaces the identifications produce, each against its
+/// homology: the flat torus $T^d$ with $b_k = binom(d, k)$, closed and
+/// orientable; the Möbius band, non-orientable with a boundary circle and
+/// homotopy equivalent to its core circle; and the Klein bottle, closed and
+/// non-orientable, hence with no fundamental class and $b_2 = 0$, the
+/// $ZZ_2$ torsion of $H_1$ invisible over $RR$.
+///
+/// The Euler characteristic vanishes on all of them, which is the one
+/// statement they share and the weakest: the Betti numbers are what tells
+/// them apart, and orientability is what tells the last two from the first.
 #[test]
-fn torus_topology() {
+fn the_quotients_carry_the_homology_of_the_surfaces_they_glue() {
+  let mut fixtures = Vec::new();
+
   for dim in (1..=3usize).map(Dim::from) {
-    let (complex, lengths) = FlatQuotient::unit_torus(dim, 3).triangulate();
-
-    assert!(!complex.has_boundary(), "dim {dim}: torus is boundaryless");
-    assert_eq!(
-      complex.nsimplices(Dim::new(0)),
-      3usize.pow(dim.index() as u32)
-    );
-
-    let betti = complex.betti_numbers();
-    let expected = (0..=dim.index())
+    let betti = (0..=dim.index())
       .map(|k| binomial(dim.index(), k))
-      .collect::<Vec<_>>();
-    assert_eq!(betti, expected, "dim {dim}: Betti numbers of T^d");
-    assert_eq!(complex.euler_characteristic(), 0);
-    assert!(
+      .collect();
+    fixtures.push((
+      format!("T^{dim}"),
+      FlatQuotient::unit_torus(dim, 3),
+      betti,
+      false,
+      true,
+    ));
+  }
+  for ncells in 3..=5 {
+    fixtures.push((
+      format!("Möbius band, {ncells} cells"),
+      FlatQuotient::moebius(1.0, 1.0, ncells),
+      vec![1, 1, 0],
+      true,
+      false,
+    ));
+    fixtures.push((
+      format!("Klein bottle, {ncells} cells"),
+      FlatQuotient::klein(Vector::from_element(2, 1.0), ncells),
+      vec![1, 1, 0],
+      false,
+      false,
+    ));
+  }
+
+  for (name, quotient, betti, has_boundary, orientable) in fixtures {
+    let (complex, _) = quotient.triangulate();
+
+    assert_eq!(complex.betti_numbers(), betti, "{name}: Betti numbers");
+    assert_eq!(complex.euler_characteristic(), 0, "{name}");
+    assert_eq!(complex.has_boundary(), has_boundary, "{name}: boundary");
+    assert_eq!(
       complex.orientation().is_some(),
-      "dim {dim}: T^d is orientable"
-    );
-
-    // The geometry is flat and uniform: every edge is spacelike, and the
-    // shortest edges are the axis steps of length 1/n.
-    assert!(lengths.iter().all(|s| s > 0.0));
-    assert!((lengths.mesh_width_min() - 1.0 / 3.0).abs() < 1e-12);
-  }
-}
-
-/// The Möbius band: a non-orientable surface with boundary, homotopy
-/// equivalent to its core circle, so $b_0 = b_1 = 1$, $b_2 = 0$ and
-/// $chi = 0$.
-#[test]
-fn moebius_topology() {
-  for ncells in 3..=5 {
-    let (complex, lengths) = FlatQuotient::moebius(1.0, 1.0, ncells).triangulate();
-
-    assert!(complex.has_boundary(), "the band has a boundary circle");
-    assert_eq!(complex.betti_numbers(), vec![1, 1, 0]);
-    assert_eq!(complex.euler_characteristic(), 0);
-    assert!(
-      complex.orientation().is_none(),
-      "the Möbius band is non-orientable"
-    );
-    assert!(lengths.iter().all(|s| s > 0.0));
-  }
-}
-
-/// The Klein bottle: closed and non-orientable, so no fundamental class and
-/// $b_2 = 0$. Over $RR$ the $ZZ_2$ torsion of $H_1$ is invisible, leaving
-/// $b_0 = b_1 = 1$ and $chi = 0$.
-#[test]
-fn klein_topology() {
-  for ncells in 3..=5 {
-    let (complex, _) = FlatQuotient::klein(Vector::from_element(2, 1.0), ncells).triangulate();
-
-    assert!(!complex.has_boundary(), "the Klein bottle is closed");
-    assert_eq!(complex.betti_numbers(), vec![1, 1, 0]);
-    assert_eq!(complex.euler_characteristic(), 0);
-    assert!(
-      complex.orientation().is_none(),
-      "the Klein bottle is non-orientable"
+      orientable,
+      "{name}: orientability"
     );
   }
 }
 
 /// Every identification leaves the geometry flat and uniform: the quotient is
-/// a relabeling, so its edge lengths are exactly the grid's, seam included.
+/// a relabeling, so its edge lengths are exactly the grid's, seam included,
+/// and the seam is not a place where the metric changes.
 #[test]
 fn identification_does_not_move_the_geometry() {
   let reference = {

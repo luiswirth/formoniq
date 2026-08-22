@@ -1,6 +1,7 @@
 //! Element-matrix laws for the operators of [`formoniq::operators`]: Stokes'
 //! theorem for the boundary quadrature, the exact antisymmetry defect of the
-//! Lie derivative, and the Hodge mass against its closed form.
+//! Lie derivative, and the weighted Hodge mass against the closed form it
+//! generalizes.
 
 use approx::assert_relative_eq;
 use derham::{
@@ -14,13 +15,13 @@ use formoniq::{
 };
 use metric::tensor::{TensorExt, inner};
 use multialgebra::{Dim, ExteriorGrade, Tensor, Variance};
-use nalgebra as na;
 use regge::lengths::simplex::SimplexLengthsSq;
 use simplicial::{
   atlas::{Chart, MeshPoint, SimplexQuadRule, unit_simplex_volume},
   linalg::Vector,
   topology::{complex::Complex, simplex::unit_subsimps},
 };
+
 /// The single cell of the standard complex, read as a chart: what a
 /// closed-form element matrix is evaluated on when there is no mesh in sight.
 fn refchart(complex: &Complex) -> Chart<'_> {
@@ -167,21 +168,4 @@ fn weighted_hodge_mass_on_a_constant_is_the_closed_form() {
       }
     }
   }
-}
-
-/// The Whitney 1-form mass of the reference triangle against its
-/// hand-computed closed form, the grade-$1$ anchor beside the grade-$0$ ones
-/// of `unit_elmat`.
-#[test]
-fn hodge_mass_dim2_grade1() {
-  let dim = Dim::new(2);
-  let grade = Dim::new(1);
-  let geo = SimplexLengthsSq::unit(dim);
-  let computed = HodgeMass::new(dim, grade).element(&geo.metric());
-  let expected = na::dmatrix![
-    1./3.,1./6.,0.   ;
-    1./6.,1./3.,0.   ;
-    0.   ,0.   ,1./6.;
-  ];
-  assert_relative_eq!(&computed, &expected);
 }

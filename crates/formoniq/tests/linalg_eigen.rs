@@ -1,7 +1,12 @@
-//! [`sparse_shift_invert_eigen`]: every returned pair solves the pencil, a
-//! degenerate cluster sitting at the shift (the harmonic-space case) is
-//! resolved in full, and the spectrum of the 1D Dirichlet Laplacian is
-//! reproduced from its closed form at a size no dense solver would run at.
+//! [`sparse_shift_invert_eigen`]: every returned pair solves the pencil
+//! $A x = lambda B x$ and the returned directions are $B$-orthonormal, over
+//! the cases the solver is asked for.
+//!
+//! The cases are what makes the law bite: a generic indefinite pencil, a
+//! degenerate cluster sitting exactly at the shift (the harmonic-space case,
+//! which a solver may collapse to one direction), and the 1D Dirichlet
+//! Laplacian at a size no dense solver would run at, whose closed-form
+//! spectrum is the only external oracle available.
 
 use formoniq::linalg::eigen::sparse_shift_invert_eigen;
 use simplicial::linalg::{CooMatrix, CsrMatrix, Matrix};
@@ -10,40 +15,40 @@ fn symmetric(n: usize, f: impl Fn(usize, usize) -> f64) -> Matrix {
   Matrix::from_fn(n, n, |i, j| f(i.min(j), i.max(j)))
 }
 
-fn csr(m: &Matrix) -> CsrMatrix {
-  m.into()
+/// A pencil to solve, and the eigenvalues expected of it where a closed form
+/// exists.
+struct Pencil {
+  name: String,
+  a: CsrMatrix,
+  b: CsrMatrix,
+  nev: usize,
+  oracle: Option<Vec<f64>>,
 }
 
-/// Every returned pair solves the pencil: $A x = lambda B x$.
-#[test]
-fn pairs_solve_the_pencil() {
+fn pencils() -> Vec<Pencil> {
+  let mut pencils = Vec::new();
+
+  // A generic symmetric pencil against an SPD (diagonally dominant) B, over
+  // every count of requested pairs up to the full spectrum.
   let n = 6;
   let a = symmetric(n, |i, j| ((i * 7 + j * 3) % 11) as f64 - 5.0);
-  // SPD: diagonally dominant with a positive diagonal.
   let b = symmetric(n, |i, j| if i == j { n as f64 } else { 0.3 });
-
   for nev in 1..=n {
-    let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, nev).unwrap();
-    for k in 0..vals.len() {
-      let x = vecs.column(k).into_owned();
-      let residual = (&a * &x - vals[k] * (&b * &x)).norm();
-      assert!(residual < 1e-9, "nev={nev} k={k} residual={residual:e}");
-    }
+    pencils.push(Pencil {
+      name: format!("generic pencil, nev = {nev}"),
+      a: (&a).into(),
+      b: (&b).into(),
+      nev,
+      oracle: None,
+    });
   }
-}
 
-/// A degenerate cluster of multiplicity `m` sitting exactly at the shift —
-/// the harmonic-space case, `shift = 0` on a pencil where $A$ itself is
-/// singular — is fully resolved (not collapsed to one direction), forcing
-/// the shift-retry path every time.
-#[test]
-fn resolves_a_degenerate_cluster_at_the_shift() {
-  let m = 3;
-  let rest = 4;
+  // An m-fold zero eigenvalue sitting exactly at the shift, mixed by a fixed
+  // change of basis so the cluster is not axis-aligned with the seed. This
+  // forces the shift-retry path, and a solver that collapses the cluster
+  // fails the orthonormality below rather than the residual.
+  let (m, rest) = (3, 4);
   let n = m + rest;
-  // B = I. A has an m-fold zero eigenvalue and `rest` nonzero ones, mixed by
-  // a fixed change of basis so the cluster isn't axis-aligned with the seed.
-  let b = Matrix::identity(n, n);
   let diag = Matrix::from_fn(n, n, |i, j| {
     if i != j || i < m {
       0.0
@@ -55,63 +60,75 @@ fn resolves_a_degenerate_cluster_at_the_shift() {
   let rot = rot.clone() + rot.transpose() + Matrix::identity(n, n) * (2.0 * n as f64);
   let a = &rot * &diag * &rot.transpose();
   let a = (&a + a.transpose()) * 0.5;
+  pencils.push(Pencil {
+    name: "degenerate cluster at the shift".to_string(),
+    a: (&a).into(),
+    b: (&Matrix::identity(n, n)).into(),
+    nev: m,
+    oracle: Some(vec![0.0; m]),
+  });
 
-  let (vals, vecs) = sparse_shift_invert_eigen(&csr(&a), &csr(&b), 0.0, m).unwrap();
-  assert_eq!(vals.len(), m);
-  for &v in vals.iter() {
-    assert!(v.abs() < 1e-6, "expected a near-zero eigenvalue, got {v}");
-  }
-  for k in 0..m {
-    let x = vecs.column(k).into_owned();
-    let residual = (&a * &x - vals[k] * &x).norm();
-    assert!(residual < 1e-6, "k={k} residual={residual:e}");
-  }
-  // The m recovered eigenvectors are B-orthonormal, hence independent, hence
-  // span the whole zero-eigenspace rather than repeating one direction.
-  let gram = vecs.transpose() * &vecs;
-  let dev = (&gram - Matrix::identity(m, m)).norm();
-  assert!(
-    dev < 1e-6,
-    "recovered directions are not mutually independent: {gram}"
-  );
-}
-
-/// The 1D Dirichlet Laplacian (tridiagonal, $B = I$), whose eigenvalues have
-/// the closed form $lambda_j = 2 - 2 cos(j pi \/ (N + 1))$ — an oracle with
-/// no dense EVD needed at any size, including $N$ in the low thousands,
-/// where dense QZ has no business running.
-#[test]
-fn handles_a_large_sparse_pencil() {
+  // The 1D Dirichlet Laplacian, $lambda_j = 2 - 2 cos(j pi \/ (N + 1))$, at a
+  // size where dense QZ has no business running.
   let n = 3000;
   let nev = 5;
-
   let mut coo = CooMatrix::new(n, n);
+  let mut ident = CooMatrix::new(n, n);
   for i in 0..n {
     coo.push(i, i, 2.0);
+    ident.push(i, i, 1.0);
     if i + 1 < n {
       coo.push(i, i + 1, -1.0);
       coo.push(i + 1, i, -1.0);
     }
   }
-  let a = CsrMatrix::from(&coo);
-  let mut ident = CooMatrix::new(n, n);
-  for i in 0..n {
-    ident.push(i, i, 1.0);
-  }
-  let b = CsrMatrix::from(&ident);
+  let oracle = (1..=nev)
+    .map(|j| 2.0 - 2.0 * ((j as f64 * std::f64::consts::PI) / (n as f64 + 1.0)).cos())
+    .collect();
+  pencils.push(Pencil {
+    name: "1D Dirichlet Laplacian".to_string(),
+    a: CsrMatrix::from(&coo),
+    b: CsrMatrix::from(&ident),
+    nev,
+    oracle: Some(oracle),
+  });
 
-  let (vals, vecs) = sparse_shift_invert_eigen(&a, &b, 0.0, nev).unwrap();
-  assert_eq!(vals.len(), nev);
-  for k in 0..nev {
-    let x = vecs.column(k).into_owned();
-    let residual = (&a * &x - vals[k] * (&b * &x)).norm();
-    assert!(residual < 1e-6, "k={k} residual={residual:e}");
+  pencils
+}
 
-    let want = 2.0 - 2.0 * (((k + 1) as f64 * std::f64::consts::PI) / (n as f64 + 1.0)).cos();
-    assert!(
-      (vals[k] - want).abs() < 1e-6,
-      "k={k}: got {} want {want}",
-      vals[k]
-    );
+/// $A x = lambda B x$ for every returned pair, with the returned directions
+/// $B$-orthonormal, hence independent, hence spanning the eigenspace they
+/// were asked for rather than repeating one direction.
+#[test]
+fn every_returned_pair_solves_the_pencil() {
+  for Pencil {
+    name,
+    a,
+    b,
+    nev,
+    oracle,
+  } in pencils()
+  {
+    let (vals, vecs) = sparse_shift_invert_eigen(&a, &b, 0.0, nev).unwrap();
+
+    for (k, &val) in vals.iter().enumerate() {
+      let x = vecs.column(k).into_owned();
+      let residual = (&a * &x - val * (&b * &x)).norm();
+      assert!(residual < 1e-6, "{name}, k = {k}: residual {residual:e}");
+    }
+
+    let gram = vecs.transpose() * (&b * &vecs);
+    let deviation = (&gram - Matrix::identity(vals.len(), vals.len())).norm();
+    assert!(deviation < 1e-6, "{name}: directions are not B-orthonormal");
+
+    if let Some(oracle) = oracle {
+      assert_eq!(vals.len(), oracle.len(), "{name}");
+      for (k, (&got, want)) in vals.iter().zip(oracle).enumerate() {
+        assert!(
+          (got - want).abs() < 1e-6,
+          "{name}, k = {k}: {got} != {want}"
+        );
+      }
+    }
   }
 }

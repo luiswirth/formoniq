@@ -3,11 +3,12 @@
 
 use multiindex::Repetition;
 
-/// Enumeration and ranking are inverse, for both families: the position in
-/// [`Repetition::words`] is the word's [`Repetition::rank`], and the count
-/// is the number enumerated.
+/// Ranking and unranking are mutually inverse enumerations, for both
+/// families: the position of a word in [`Repetition::words`] is its
+/// [`Repetition::rank`], [`Repetition::word_from_rank`] returns it without
+/// walking the enumeration, and the count is the number enumerated.
 #[test]
-fn rank_is_the_position_in_the_enumeration() {
+fn ranking_and_unranking_invert_the_enumeration() {
   for repetition in [Repetition::Forbidden, Repetition::Allowed] {
     for nsymbols in 0..=5 {
       for degree in 0..=4 {
@@ -17,20 +18,7 @@ fn rank_is_the_position_in_the_enumeration() {
           assert!(repetition.is_monotone(word));
           assert!(word.iter().all(|&symbol| symbol < nsymbols));
           assert_eq!(repetition.rank(word), position);
-        }
-      }
-    }
-  }
-}
-
-/// Ranking inverts the enumeration for both families, without walking it.
-#[test]
-fn word_from_rank_inverts_rank() {
-  for repetition in [Repetition::Forbidden, Repetition::Allowed] {
-    for nsymbols in 0..=5 {
-      for degree in 0..=4 {
-        for (position, word) in repetition.words(nsymbols, degree).enumerate() {
-          assert_eq!(repetition.word_from_rank(nsymbols, degree, position), word);
+          assert_eq!(&repetition.word_from_rank(nsymbols, degree, position), word);
         }
       }
     }

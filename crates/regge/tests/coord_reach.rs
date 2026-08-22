@@ -1,7 +1,6 @@
-//! Laws for [`regge::coord::reach::vertex_reach`]: on the unit sphere the reach
-//! is its radius, which the tangent-ball formula reproduces in closed form,
-//! and a thin flat slab has infinite curvature radius yet reach half its
-//! thickness, the non-local bottleneck the curvature half cannot see.
+//! Federer's reach of an embedded surface: the largest offset along the
+//! normal that stays injective, the smaller of the curvature radius and half
+//! the distance to a non-local bottleneck.
 
 use nalgebra as na;
 use regge::coord::{mesh::MeshCoords, reach::vertex_reach, vertex_curvature_radius};
@@ -9,60 +8,94 @@ use simplicial::{linalg::Vector, topology::complex::Complex};
 
 type Vector3 = na::Vector3<f64>;
 
-/// The normal field is given in closed form on both fixtures rather than
-/// estimated off the mesh, so the law under test is the reach and not a
-/// normal estimator. Only the line matters, never the sign.
-fn normals_from(coords: &MeshCoords, axis: impl Fn(&[f64]) -> Vector3) -> Vec<Vector3> {
-  coords
-    .coord_iter()
-    .map(|c| axis(c.view().as_slice()))
-    .collect()
-}
+/// The normal field in closed form, so the law under test is the reach and
+/// not a normal estimator. Only the line matters, never the sign.
+type Normals = Box<dyn Fn(&[f64]) -> Vector3>;
 
-/// On the unit sphere the reach is the radius, and it is the curvature
-/// half that says so: the medial axis is the center point. The tangent-ball
-/// formula returns exactly $R$ for every pair on a sphere, so this also
-/// checks the estimator against its one closed form.
+/// The reach is the smaller of the two bounds, the curvature radius and half
+/// the distance to a non-local bottleneck, on fixtures sitting on either side
+/// of that minimum.
+///
+/// The unit sphere is curvature-limited: its medial axis is the center point,
+/// so the reach is the radius, and the tangent-ball formula returns exactly
+/// $R$ for every pair on a sphere. A thin flat slab is the other side: its
+/// faces are planes, of infinite curvature radius, and the reach is half the
+/// thickness, because the opposite face is what an offset runs into. That is
+/// the case that collapses a mesh when a displacement is bounded by curvature
+/// alone.
 #[test]
-fn sphere_reach_is_its_radius() {
+fn the_reach_is_the_bottleneck_the_curvature_cannot_see() {
   let (topology, coords) = regge::mesher::sphere::mesh_sphere_surface(3);
   // The outward normal of a sphere at a point is the point itself.
-  let normals = normals_from(&coords, |c| Vector3::new(c[0], c[1], c[2]).normalize());
-  let reach = vertex_reach(&topology, &coords, &normals, 10.0);
-  for &r in &reach {
-    assert!(r > 0.5 && r < 1.05, "expected reach ~ 1, got {r}");
-  }
-}
-
-/// The half curvature cannot see. A thin flat slab has infinite curvature
-/// radius on its faces: they are planes, and reach $t \/ 2$, because the
-/// opposite face is what the offset runs into. This is the case that
-/// collapses a mesh when a displacement is bounded by curvature alone: the
-/// bound has to come from the thickness rather than from the (absent)
-/// curvature.
-#[test]
-fn thin_slab_reach_is_half_its_thickness() {
-  for &thickness in &[0.2, 0.05] {
+  let normal_of_sphere: Normals = Box::new(|c| Vector3::new(c[0], c[1], c[2]).normalize());
+  // The sphere's window is wide below: the tangent-ball estimator reads the
+  // reach off pairs of mesh vertices, so a coarse mesh underestimates it.
+  let mut fixtures = vec![(
+    "unit sphere".to_string(),
+    topology,
+    coords,
+    normal_of_sphere,
+    1.0,
+    (0.5, 1.05),
+    true,
+  )];
+  for thickness in [0.2, 0.05] {
     let (topology, coords) = slab(thickness);
-    let curvature = vertex_curvature_radius(&topology, &coords);
     // Both faces are level sets of $z$, so the normal line is the $z$ axis;
     // the four sides are what the bottleneck has to be found in spite of.
-    let normals = normals_from(&coords, |_| Vector3::new(0.0, 0.0, 1.0));
+    let normal_of_face: Normals = Box::new(|_| Vector3::z());
+    fixtures.push((
+      format!("slab of thickness {thickness}"),
+      topology,
+      coords,
+      normal_of_face,
+      thickness / 2.0,
+      (0.8, 1.2),
+      false,
+    ));
+  }
+
+  for (name, topology, coords, normal, expected, (lo, hi), curvature_limited) in fixtures {
+    let normals: Vec<Vector3> = coords
+      .coord_iter()
+      .map(|c| normal(c.view().as_slice()))
+      .collect();
+
     let reach = vertex_reach(&topology, &coords, &normals, 10.0);
-
-    // The interior of a face is flat, so curvature alone would not bound it.
-    let flat = curvature
-      .iter()
-      .filter(|r| r.is_infinite() || **r > 1.0)
-      .count();
-    assert!(flat > 0, "the slab's faces must be curvature-unbounded");
-
-    let smallest = reach.iter().cloned().fold(f64::INFINITY, f64::min);
-    let expected = thickness / 2.0;
+    let smallest = reach.iter().copied().fold(f64::INFINITY, f64::min);
     assert!(
-      (smallest - expected).abs() < 0.2 * expected,
-      "thickness {thickness}: expected reach ~ {expected}, got {smallest}"
+      smallest >= lo * expected,
+      "{name}: the reach fell below {expected}, to {smallest}"
     );
+    assert!(
+      smallest <= hi * expected,
+      "{name}: the bound {expected} is never attained, the smallest reach is {smallest}"
+    );
+
+    // Which of the two bounds binds is what separates the fixtures: on the
+    // sphere the curvature is the reach, on the slab it does not see it.
+    let curvature = vertex_curvature_radius(&topology, &coords);
+    let tightest = curvature.iter().copied().fold(f64::INFINITY, f64::min);
+    if curvature_limited {
+      assert!(
+        (tightest - smallest).abs() < 1e-9,
+        "{name}: the reach {smallest} is not the curvature radius {tightest}"
+      );
+    } else {
+      // At a vertex of a face, where the curvature radius says nothing, the
+      // reach is still half the thickness: the bound comes from the opposite
+      // face and from nowhere else.
+      let flat_reach = reach
+        .iter()
+        .zip(&curvature)
+        .filter(|(_, radius)| **radius > 1.0)
+        .map(|(reach, _)| *reach)
+        .fold(f64::INFINITY, f64::min);
+      assert!(
+        (flat_reach - expected).abs() < 0.2 * expected,
+        "{name}: a curvature-unbounded vertex has reach {flat_reach}, not {expected}"
+      );
+    }
   }
 }
 
