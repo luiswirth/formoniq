@@ -576,30 +576,10 @@ where the links resolve and the Typst renders as house style.
 **Tests are theorems.**
 The test suite is a machine-checked statement of the mathematics,
 and it is how correctness is actually established here.
-New math ships with the law that characterizes it, not with a golden number:
-
-- functoriality: $Lambda^k (A B) = (Lambda^k A)(Lambda^k B)$ (Cauchy-Binet)
-- adjointness: $angle.l A^* omega, v angle.r = angle.l omega, A_* v angle.r$
-- nilpotency: $iota_v^2 = 0$, $diff compose diff = 0$, $dif compose dif = 0$
-- involution: $star star = (-1)^(k(n-k))$
-- Whitney's theorem: $R compose W = id$
-- Stokes: $R compose dif = dif compose R$
-- commuting subcomplex: $dif compose W = W compose dif$
-
-Sweep over all dimensions and grades (`for dim in 0..=4`, `for grade in 0..=dim`)
-rather than fixing one case.
-Check that a law can fail before trusting that it holds:
-one asserting a quantity vanishes
-passes on an implementation that returns zero for the wrong reason.
-
-The scalars are a sweep axis of the same kind, for the same reason:
-conjugation is the identity on $RR$,
-so a bilinear inner product, a transpose standing in for an adjoint
-and a conjugate in the wrong slot are all invisible there.
-**A law that conjugates is swept over both fields.**
-The examples in `crates/formoniq/examples/` are the end-to-end check,
-convergence rates, spectra,
-but they are run and read by hand, not asserted by `cargo test`.
+Each field the implementation rests on contributes its most famous theorems
+and little else.
+A law is swept over every axis it is stated over rather than fixed at one case,
+and it is trusted only once it has been made to fail.
 
 **$Lambda$ and $"Sym"$ are siblings, and one construction, under $V^(times.circle k)$.**
 They are the two quotients of the free tensor power by a character of $S_k$,
