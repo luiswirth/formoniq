@@ -204,5 +204,5 @@ Commit messages: `scope: imperative summary`,
 one idea per commit where easily reached,
 bundling fine when separating would be the more artificial move.
 A change to the design updates this file in the same commit.
-Where CLAUDE.md and the code disagree, one of them is a bug,
+Where AGENTS.md and the code disagree, one of them is a bug,
 and it is usually worth asking which.
