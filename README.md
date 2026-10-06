@@ -19,7 +19,7 @@ assembled from the Regge lengths with the embedding forgotten.
 Research code, under active development.
 
 An interactive build of the viewer runs in the browser, with no installation,
-at [lwirth.com/formoniq-studio](https://lwirth.com/formoniq-studio):
+at [formoniq-studio.lwirth.com](https://formoniq-studio.lwirth.com):
 meshes, cochains and the PDE solutions computed on them,
 solved client-side via WebAssembly and WebGPU.
 
