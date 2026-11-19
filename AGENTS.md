@@ -1,5 +1,6 @@
 # formoniq
 
+formoniq: my coordinate-free, structure-preserving Finite Element Exterior Calculus engine in Rust, and this file its design doc.
 `README.md` says what the library is and does.
 This file is the design doc:
 the invariants, conventions and house style an agent must uphold, and the reasons behind them.
